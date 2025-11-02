@@ -55,6 +55,7 @@ import type { AppApplicationService } from '@/ddd/application/services/puck/app-
 import type { PuckPageApplicationService } from '@/ddd/application/services/puck/puck-page-application-service';
 import type { ViewRepository as IViewRepository } from '@/ddd/domain/views/repositories/view-repository';
 import type { ViewApplicationService } from '@/ddd/application/services/views/view-application-service';
+import type { ITokenUsageRepository } from '@/ddd/domain/billing/repositories/token-usage-repository';
 
 import { DIContainer } from './container';
 
@@ -125,6 +126,9 @@ type ServiceMap = {
 
   // Tool Services
   IToolRegistryService: IToolRegistryService;
+
+  // Billing Services
+  TokenUsageRepository: ITokenUsageRepository;
 };
 
 /**
@@ -264,3 +268,6 @@ export const getViewRepository = createGetter('ViewRepository');
 
 // Data Source application service getters
 export const getViewApplicationService = createGetter('ViewApplicationService');
+
+// Billing domain repository getters
+export const getTokenUsageRepository = createGetter('TokenUsageRepository');

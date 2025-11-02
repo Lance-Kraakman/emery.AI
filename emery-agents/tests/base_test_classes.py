@@ -99,8 +99,6 @@ class BaseModelProviderTest(BaseDDDTest):
         provider.get_model_for_step_type = Mock()
         provider.get_model_by_type = Mock()
         provider.get_default_model_for_capability = Mock()
-        provider.list_available_models = Mock(return_value=['Qwen/Qwen2.5-14B-Instruct'])
-        provider.is_model_available = Mock(return_value=True)
         return provider
     
     def assert_model_type_mapping(self, model_provider, step_type, expected_model_type):

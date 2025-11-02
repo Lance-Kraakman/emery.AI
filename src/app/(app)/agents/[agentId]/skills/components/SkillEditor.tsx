@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp, Save, Plus, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Save, Plus, X, Settings } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ModelSelector } from '@/components/ai/ModelSelector';
 import { InstructionsInput } from './editor/InstructionsInput';
 import { ToolsSection } from './editor/ToolsSection';
 import { SkillInputsSection } from './editor/SkillInputsSection';
@@ -20,6 +21,7 @@ export interface SkillFormData {
   outputs: SkillOutput[];
   instructions: string;
   tools: ToolConfigDTO[];
+  model?: string | null; // Optional model override for this skill
 }
 
 interface SkillEditorProps {
@@ -29,6 +31,9 @@ interface SkillEditorProps {
   skillId?: number;
   onSave?: () => void;
   isSaving?: boolean;
+  agentDefaultModel?: string | null; // Agent's default model for inheritance display
+  organizationTier?: 'free' | 'pro' | 'enterprise'; // For filtering available models
+  availableModels?: string[]; // Organization's whitelist of allowed models
 }
 
 /**
@@ -46,10 +51,14 @@ export function SkillEditor({
   agentId,
   skillId,
   onSave,
-  isSaving
+  isSaving,
+  agentDefaultModel,
+  organizationTier = 'free',
+  availableModels,
 }: SkillEditorProps) {
   const [localValue, setLocalValue] = useState(value);
   const [showDescription, setShowDescription] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Sync with external value changes
   useEffect(() => {
@@ -199,6 +208,51 @@ export function SkillEditor({
           </div>
         </div>
       )}
+
+      {/* Advanced Settings Section */}
+      <div className="space-y-3 border-t pt-6">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+        >
+          {showAdvanced ? (
+            <>
+              <ChevronUp className="h-3 w-3 mr-1" />
+              Hide advanced settings
+            </>
+          ) : (
+            <>
+              <Settings className="h-3 w-3 mr-1" />
+              Advanced settings
+            </>
+          )}
+        </Button>
+
+        {showAdvanced && (
+          <div className="space-y-4">
+            {/* Model Selection */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">AI Model</Label>
+              <ModelSelector
+                value={localValue.model}
+                onChange={(model) => handleChange({ model })}
+                organizationTier={organizationTier}
+                availableModels={availableModels}
+                showInherit={true}
+                inheritLabel="Inherit from agent"
+                inheritFromModel={agentDefaultModel || 'IBM Granite 3.3 8B'}
+                requiredCapabilities={['toolCalling']}
+              />
+              <p className="text-xs text-muted-foreground">
+                Override the AI model used for this skill. Different models have different costs and capabilities.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -610,7 +610,7 @@ export function EmeryChat() {
   const isFullWidth = canvasState === 'collapsed'
 
   return (
-    <div className={`relative flex bg-card border-l border-border flex-shrink-0 ${isFullWidth ? 'h-screen' : 'h-full'}`} style={{ width: isFullWidth ? '100%' : `${chatWidth}px` }}>
+    <div className={`relative flex bg-card border-l border-border flex-shrink-0 h-screen`} style={{ width: isFullWidth ? '100%' : `${chatWidth}px` }}>
       {/* Resize handle */}
       {!isFullWidth && (
         <RightPanelResizeHandle
@@ -621,7 +621,7 @@ export function EmeryChat() {
       )}
 
       {/* Chat Section - now full width without sidebar */}
-      <div className={`flex flex-col w-full ${isFullWidth ? 'h-screen' : 'h-full'}`}>
+      <div className={`flex flex-col w-full h-screen`}>
         <EmeryChatHeader 
           domainType={chatContext?.domainType}
           domainName={chatContext?.domainName}

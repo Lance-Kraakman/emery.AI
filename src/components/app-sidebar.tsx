@@ -15,6 +15,7 @@ import {
   Workflow,
   Plug,
   SlidersHorizontal,
+  Activity,
 } from "lucide-react"
 
 import {
@@ -506,6 +507,14 @@ export function AppSidebar({
                       <Link href="/organization/settings/permissions">
                         <Users className="h-4 w-4" />
                         <span className="group-data-[collapsible=icon]:hidden">Permissions</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={pathname === "/settings/usage"} className="h-6">
+                      <Link href="/settings/usage">
+                        <Activity className="h-4 w-4" />
+                        <span className="group-data-[collapsible=icon]:hidden">Usage & Billing</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

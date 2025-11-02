@@ -15,9 +15,8 @@ from enum import Enum
 class ModelType(Enum):
     """Standardized model types for different use cases."""
     CHAT = "chat"                    # General conversation and interaction
-    CODE = "code"                    # Code generation and programming tasks
     TOOL_CALLING = "tool_calling"    # Tool execution and function calling
-    FAST = "fast"                    # Quick responses and simple tasks
+    DEFAULT = "default"              # Default/fallback model
 
 
 class IModelProviderService(ABC):
@@ -78,39 +77,23 @@ class IModelProviderService(ABC):
             Configured AI model instance (implementation-specific type)
         """
         pass
-    
+
     @abstractmethod
-    def get_model_info(self, model_name: str) -> dict[str, Any]:
+    def resolve_model_selection(
+        self,
+        skill_model: Optional[str] = None,
+        agent_model: Optional[str] = None,
+        org_model: Optional[str] = None,
+    ) -> str:
         """
-        Get information about a specific model.
-        
+        Resolve model selection using hierarchy: skill > agent > org > default.
+
         Args:
-            model_name: Name of the model to get info for
-            
+            skill_model: Model override from skill configuration
+            agent_model: Default model from agent configuration
+            org_model: Default model from organization configuration
+
         Returns:
-            Dictionary with model metadata (name, max_tokens, temperature, etc.)
-        """
-        pass
-    
-    @abstractmethod
-    def list_available_models(self) -> list[str]:
-        """
-        List all available model names.
-        
-        Returns:
-            List of available model identifiers
-        """
-        pass
-    
-    @abstractmethod
-    def is_model_available(self, model_name: str) -> bool:
-        """
-        Check if a specific model is available.
-        
-        Args:
-            model_name: Name of the model to check
-            
-        Returns:
-            True if model is available, False otherwise
+            Model ID to use for execution
         """
         pass

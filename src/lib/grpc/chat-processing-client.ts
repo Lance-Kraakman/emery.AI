@@ -102,6 +102,7 @@ export class ChatProcessingClient {
       userId: userId,
       organizationId: organizationId,
       conversationHistory: conversationHistory,
+      model: '', // Empty model - will be resolved by worker using hierarchy
       tools: (options.tools || []).map(tool => ({
         name: tool.name,
         version: '', // Empty version since ToolConfig no longer has version

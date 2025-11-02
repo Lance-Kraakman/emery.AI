@@ -4,6 +4,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
+import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
+import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 import type { CreateTaskDTO } from '@/app/dtos/task.dto';
 
 /**
@@ -53,6 +55,30 @@ export async function POST(request: NextRequest) {
         success: false,
         error: 'Missing required fields: agentId, name, skillName'
       }, { status: 400 });
+    }
+
+    // Check token quota before creating task
+    const organizationId = authResult.user.organizationId!;
+    const tokenUsageRepo = getTokenUsageRepository();
+    const tokenUsageService = new TokenUsageApplicationService(tokenUsageRepo);
+    const quotaCheck = await tokenUsageService.checkQuota(organizationId);
+
+    if (quotaCheck.quotaExceeded) {
+      return NextResponse.json({
+        success: false,
+        error: 'Monthly token quota exceeded',
+        message: 'Your organization has exceeded its monthly token quota. Please upgrade your plan or wait until the quota resets.',
+        currentUsage: quotaCheck.currentUsage,
+        monthlyQuota: quotaCheck.monthlyQuota,
+        percentageUsed: quotaCheck.percentageUsed
+      }, {
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': quotaCheck.monthlyQuota?.toString() || 'unlimited',
+          'X-RateLimit-Remaining': Math.max(0, (quotaCheck.monthlyQuota || 0) - quotaCheck.currentUsage).toString(),
+          'X-RateLimit-Reset': new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        }
+      });
     }
 
     // Use AgentTaskApplicationService for task creation (service accepts primitives)

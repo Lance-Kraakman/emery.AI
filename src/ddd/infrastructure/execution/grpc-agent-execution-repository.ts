@@ -12,6 +12,8 @@ import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/l
 import { getAgentDisplayName, type Agent } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, UserId, OrganizationId, TaskStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
+import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 
 export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
   // Track active executions for status queries
@@ -160,6 +162,36 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
           finalStatus = 'completed';
           finalOutputData = taskUpdate.result;
           completedAt = new Date();
+
+          // Record token usage for billing
+          if (progress.tokenUsage) {
+            const tokenUsage = progress.tokenUsage;
+            const tokenUsageRepo = getTokenUsageRepository();
+            const tokenUsageService = new TokenUsageApplicationService(tokenUsageRepo);
+
+            const orgId = typeof targetOrganizationId === 'number'
+              ? targetOrganizationId
+              : targetOrganizationId.value;
+
+            tokenUsageService.recordTokenUsage({
+              organizationId: orgId,
+              userId: agent.ownerId.value,
+              agentId: agent.id.value,
+              entityType: 'task' as const,
+              entityId: executionId,
+              modelName: tokenUsage.modelName,
+              inputTokens: tokenUsage.inputTokens,
+              outputTokens: tokenUsage.outputTokens,
+              metadata: {
+                taskName: skillName || 'instruction_based',
+                skillName: skillName,
+                success: true
+              }
+            }).catch((error) => {
+              console.error('[GRPC-EXECUTION-REPO] Failed to record token usage:', error);
+              // Don't fail the task execution if token recording fails
+            });
+          }
         } else if (taskUpdate.status?.value === 'failed') {
           console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Task FAILED!`);
           finalStatus = 'failed';

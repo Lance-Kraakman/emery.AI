@@ -39,6 +39,7 @@ message TaskProgress {
   string error_message = 6;        // Error details if failed
   int64 timestamp_ms = 7;          // Update timestamp
   float progress_percent = 8;      // Completion percentage (0-100)
+  TokenUsage token_usage = 9;      // Token usage for this task (set when completed)
 }
 
 // Task execution status enum
@@ -94,6 +95,15 @@ message ErrorResponse {
   string message = 2;              // Human-readable error message
   string details = 3;              // Additional error details
 }
+
+// Token usage tracking for billing
+message TokenUsage {
+  string model_name = 1;             // Model used for this operation
+  int32 input_tokens = 2;            // Input/prompt tokens consumed
+  int32 output_tokens = 3;           // Output/completion tokens generated
+  int32 total_tokens = 4;            // Total tokens (input + output)
+  double cost_usd = 5;               // Estimated cost in USD
+}
 // Complete agent configuration
 message AgentConfig {
   string name = 1;
@@ -114,6 +124,7 @@ message SkillConfig {
   repeated SkillOutput outputs = 4;
   string instructions = 5;
   repeated ToolConfig tools = 6;
+  string model = 7;                    // Optional: model override for this skill
 }
 
 // Skill input parameter
@@ -152,6 +163,7 @@ message InstructionConfig {
   string instructions = 1;           // Natural language instructions
   repeated ToolConfig tools = 2;     // Optional tools for this task
   repeated ServerConfig servers = 3; // Optional servers for this task
+  string model = 4;                  // Optional: model override for this instruction
 }
 
 // gRPC Chat Processing Service - AI operations only (stateless)
@@ -175,6 +187,8 @@ message ProcessMessageRequest {
 
   // Tools for ToolCallingAgent execution (can be empty)
   repeated ToolConfig tools = 6;
+
+  string model = 7;                  // Optional: model override for this chat message
 }
 
 // Streaming response from AI processing
@@ -220,10 +234,11 @@ message RagSource {
 
 // Processing completion marker
 message ProcessingComplete {
-  string model_used = 1;             // AI model used for generation
-  int32 total_tokens = 2;            // Total tokens processed
+  string model_used = 1;             // AI model used for generation (deprecated - use token_usage.model_name)
+  int32 total_tokens = 2;            // Total tokens processed (deprecated - use token_usage.total_tokens)
   int32 processing_time_ms = 3;      // Processing time in milliseconds
-  map<string, string> metadata = 4; // Additional processing metadata
+  map<string, string> metadata = 4;  // Additional processing metadata
+  TokenUsage token_usage = 5;        // Detailed token usage and cost tracking
 }
 
 // Processing error information

@@ -25,6 +25,13 @@ export interface Organization {
   stripeSubscriptionId?: string | null;
   stripeSubscriptionStatus?: string | null;
   analysisCapabilities?: OrganizationAnalysisCapabilities | null;
+  // Model and billing configuration
+  tier?: 'free' | 'pro' | 'enterprise';
+  defaultModel?: string | null;
+  availableModels?: string[] | null;
+  tokenQuotaMonthly?: number | null;
+  tokenUsageCurrentMonth?: number;
+  quotaResetAt?: Date | null;
   createdAt?: Date | null;
   // Note: No updatedAt field - not present in organizations table schema
 }
