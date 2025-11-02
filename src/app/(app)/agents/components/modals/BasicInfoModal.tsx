@@ -14,6 +14,8 @@ import { UserSelect } from '@/components/ui/UserSelect';
 import { getOrganizationMembers } from '@/app/actions/invitations';
 import { checkPermission } from '@/app/actions/permissions';
 import { useSession } from 'next-auth/react';
+import { AvatarPicker } from '@/components/agents/AvatarPicker';
+import type { AvatarConfigV1 } from '@/lib/avatars';
 
 interface BasicInfoModalProps {
   isOpen: boolean;
@@ -28,6 +30,7 @@ interface FormData {
   description: string;
   status: string;
   ownerId: string;
+  avatarConfig?: AvatarConfigV1 | null;
 }
 
 interface User {
@@ -44,7 +47,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
     role: '',
     description: '',
     status: 'active',
-    ownerId: ''
+    ownerId: '',
+    avatarConfig: null
   });
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -68,7 +72,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
         role: agent.role || '',
         description: agent.description || '',
         status: agent.status || 'active',
-        ownerId: agent.ownerId || ''
+        ownerId: agent.ownerId || '',
+        avatarConfig: agent.avatarConfig || null
       };
       setFormData(initialData);
       setHasChanges(false);
@@ -112,7 +117,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
         formData.role !== (agent.role || '') ||
         formData.description !== (agent.description || '') ||
         formData.status !== (agent.status || 'active') ||
-        formData.ownerId !== (agent.ownerId || '')
+        formData.ownerId !== (agent.ownerId || '') ||
+        JSON.stringify(formData.avatarConfig) !== JSON.stringify(agent.avatarConfig)
       );
       setHasChanges(hasChanged);
     }
@@ -131,6 +137,7 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
         role: formData.role.trim(),
         description: formData.description.trim(),
         status: formData.status as 'active' | 'inactive' | 'archived',
+        avatarConfig: formData.avatarConfig,
         ...(canManageAgents && formData.ownerId && { ownerId: formData.ownerId })
       });
 
@@ -195,6 +202,17 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
       closeOnOutsideClick={!hasChanges}
     >
       <div className="p-6 space-y-6">
+        {/* Avatar Picker */}
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">
+            Avatar
+          </Label>
+          <AvatarPicker
+            value={formData.avatarConfig}
+            onChange={(config) => setFormData(prev => ({ ...prev, avatarConfig: config }))}
+          />
+        </div>
+
         {/* Agent Name */}
         <div className="space-y-2">
           <Label htmlFor="name" className="text-sm font-medium">

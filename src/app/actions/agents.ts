@@ -260,7 +260,8 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
           return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
             ? statusValue as 'active' | 'inactive' | 'archived'
             : undefined;
-        })()
+        })(),
+        avatarConfig: data.avatarConfig
       };
 
       const result = await agentApplicationService.updateAgent(dto);

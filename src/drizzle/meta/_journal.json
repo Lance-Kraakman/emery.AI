@@ -148,6 +148,13 @@
       "when": 1762036488958,
       "tag": "0020_flippant_silvermane",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1762112436809,
+      "tag": "0021_complex_agent_brand",
+      "breakpoints": true
     }
   ]
 }

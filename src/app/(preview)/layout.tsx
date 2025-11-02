@@ -17,7 +17,7 @@ export default async function PreviewLayout({
   }
 
   return (
-    <div className="h-screen w-screen bg-white">
+    <div key="preview-layout" className="h-screen w-screen bg-white">
       {children}
       <Toaster position="bottom-right" />
     </div>
