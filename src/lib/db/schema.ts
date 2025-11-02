@@ -238,7 +238,11 @@ export const organizations = pgTable("organizations", {
   analysisCapabilities: jsonb("analysis_capabilities").$type<OrganizationAnalysisCapabilities>(), // Type-safe organizational analysis configuration
 
   // Model configuration fields for AI billing and access control
-  defaultModel: text("default_model"), // Organization-wide default model
+  // AIDEV-NOTE: Model selection hierarchy - see /docs/model-selection-hierarchy.md
+  // Chat System: Uses organization.defaultModel → System Default
+  // Agent Tasks: Uses agent.defaultModel → organization.defaultModel → System Default
+  // Skill Execution: Uses skill.model → agent.defaultModel → organization.defaultModel → System Default
+  defaultModel: text("default_model"), // Organization-wide default model (used by chat and as fallback for agents/skills)
   availableModels: jsonb("available_models").$type<string[]>().default(sql`'[]'::jsonb`), // Models available to this organization
   tokenQuotaMonthly: integer("token_quota_monthly"), // Monthly token quota (null = unlimited)
   tokenUsageCurrentMonth: integer("token_usage_current_month").default(0), // Current month's token usage
@@ -545,7 +549,10 @@ export const agents = pgTable("agents", {
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
 
   // Model configuration
-  defaultModel: text("default_model"), // Agent-specific default model (overrides organization default)
+  // AIDEV-NOTE: Used for agent task execution, NOT for chat conversations
+  // Hierarchy: agent.defaultModel → organization.defaultModel → System Default
+  // See /docs/model-selection-hierarchy.md for complete context-specific hierarchies
+  defaultModel: text("default_model"), // Agent-specific default model (overrides organization default for task execution only)
 
   // Avatar configuration (JSON for extensibility)
   avatarConfig: jsonb("avatar_config").$type<{
@@ -716,7 +723,11 @@ export const skills = pgTable("skills", {
   tools: jsonb("tools").default('[]').notNull(),
 
   // Model configuration
-  model: text("model"), // Skill-specific model override (highest priority)
+  // AIDEV-NOTE: Used for skill tool execution (future implementation)
+  // Hierarchy: skill.model → agent.defaultModel → organization.defaultModel → System Default
+  // See /docs/model-selection-hierarchy.md for complete context-specific hierarchies
+  // Status: Schema field exists, NOT yet mapped to Skill entity or exposed in UI
+  model: text("model"), // Skill-specific model override (highest priority for skill execution)
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

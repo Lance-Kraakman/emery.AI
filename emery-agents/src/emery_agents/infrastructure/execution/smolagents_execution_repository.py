@@ -107,7 +107,7 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
                 }
 
                 # Create smolagents agent for this capability (single instruction)
-                smolagents_agent = await self._create_capability_agent(capability, context_id)
+                smolagents_agent = await self._create_capability_agent(capability, context, context_id)
 
                 # Execute the single instruction
                 yield {
@@ -196,18 +196,24 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
     async def _create_direct_execution_agent(self, context: ExecutionContext) -> Union[CodeAgent, ToolCallingAgent]:
         """
         Create agent for direct tool execution.
-        
+
         AIDEV-NOTE: Updated to use centralized model provider instead of hardcoded model creation.
         Updated to pass agent API key and environment context to Pipedream tools.
+        Uses model selection hierarchy: agent → organization → system default.
         """
         # Load tools from context with enhanced configuration for Pipedream tools
         tools = []
         if context.available_tools:
             tool_configs = self._create_tool_configs_with_context(context.available_tools, context)
             tools = self.tool_registry_repository.load_tools(tool_configs)
-        
-        # Get appropriate model from simplified provider
-        model = self.model_provider.get_model('tool_calling')
+
+        # Resolve model using hierarchy: agent_model → org_model → system default
+        # (skill_model is None for direct execution)
+        model_id = self.model_provider.resolve_model_selection(
+            agent_model=context.agent_model,
+            org_model=context.org_model
+        )
+        model = self.model_provider.get_model(model_id)
         
         agent = ToolCallingAgent(
             tools=tools,
@@ -220,12 +226,12 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
         
         return agent
     
-    async def _create_capability_agent(self, capability: SkillConfig, context_id: str) -> Union[CodeAgent, ToolCallingAgent]:
+    async def _create_capability_agent(self, capability: SkillConfig, context: ExecutionContext, context_id: str) -> Union[CodeAgent, ToolCallingAgent]:
         """
         Create smolagents agent from skill configuration (single-instruction model).
 
         AIDEV-NOTE: Simplified for single-instruction model - no step agents, just direct tool execution.
-        Uses centralized model provider.
+        Uses centralized model provider with model selection hierarchy.
         """
         if context_id in self.agent_cache:
             return self.agent_cache[context_id]
@@ -239,8 +245,15 @@ class SmolAgentsExecutionRepository(IExecutionRepository):
             except Exception as e:
                 logger.warning(f"Failed to load some tools for capability {capability.name}: {e}")
 
-        # Get appropriate model from provider
-        model = self.model_provider.get_model('tool_calling' if tools else 'default')
+        # Resolve model using hierarchy: skill_model → agent_model → org_model → system default
+        # Extract skill model from capability if it exists
+        skill_model = getattr(capability, 'model', None)
+        model_id = self.model_provider.resolve_model_selection(
+            skill_model=skill_model,
+            agent_model=context.agent_model,
+            org_model=context.org_model
+        )
+        model = self.model_provider.get_model(model_id)
 
         # Create ToolCallingAgent if we have tools, otherwise CodeAgent
         if tools:

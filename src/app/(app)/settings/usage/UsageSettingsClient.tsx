@@ -9,6 +9,8 @@ import { ModelSelector } from '@/components/ai/ModelSelector';
 import { UsageStatsCard } from '@/components/billing/UsageStatsCard';
 import { Sparkles, Save, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { updateOrganizationSettings } from '@/app/actions/organizations';
+import { toast } from 'sonner';
 
 export interface UsageSettingsClientProps {
   organizationId: number;
@@ -55,150 +57,128 @@ export function UsageSettingsClient({
     try {
       setIsSaving(true);
 
-      const response = await fetch('/api/organization/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          organizationId,
-          defaultModel: defaultModel || null,
-          tokenQuotaMonthly: monthlyQuota ? parseInt(monthlyQuota) : null,
-        }),
+      const result = await updateOrganizationSettings({
+        organizationId,
+        defaultModel: defaultModel || null,
+        tokenQuotaMonthly: monthlyQuota ? parseInt(monthlyQuota) : null,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to save settings');
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save settings');
       }
 
-      // Show success message (you can add toast notification here)
-      console.log('Settings saved successfully');
+      toast.success('Settings saved successfully');
     } catch (error) {
       console.error('Failed to save settings:', error);
-      // Show error message (you can add toast notification here)
+      toast.error(error instanceof Error ? error.message : 'Failed to save settings');
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       {/* Current Usage Section */}
-      <div className="space-y-4">
-        <h2 className="text-2xl font-semibold">Current Usage</h2>
-        <UsageStatsCard
-          stats={usageStats || {
-            currentUsage: 0,
-            monthlyQuota: tokenQuota || undefined,
-            totalCost: 0,
-            executionCount: 0,
-            modelBreakdown: []
-          }}
-          loading={isLoadingStats}
-          showDetails={true}
-          detailsHref="/organization/settings/usage/details"
-        />
-      </div>
+      <UsageStatsCard
+        stats={usageStats || {
+          currentUsage: 0,
+          monthlyQuota: tokenQuota || undefined,
+          totalCost: 0,
+          executionCount: 0,
+          modelBreakdown: []
+        }}
+        loading={isLoadingStats}
+        showDetails={false}
+      />
 
-      {/* Model Configuration Section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
-            <CardTitle>Model Configuration</CardTitle>
-          </div>
-          <CardDescription>
-            Configure the default AI model for your organization and set token quotas
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Default Model Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="default-model">Default AI Model</Label>
-            <ModelSelector
-              value={defaultModel}
-              onChange={setDefaultModel}
-              organizationTier={organizationTier}
-              availableModels={availableModels.length > 0 ? availableModels : undefined}
-              showInherit={false}
-              requiredCapabilities={['toolCalling']}
-            />
-            <p className="text-xs text-muted-foreground">
-              This model will be used by default for all agents and skills in your organization.
-              Individual agents and skills can override this setting.
-            </p>
-          </div>
+      {/* Model Configuration & Billing - Side by side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Model Configuration Section */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              <CardTitle className="text-base">Model Configuration</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Default Model Selection */}
+            <div className="space-y-1.5">
+              <Label htmlFor="default-model" className="text-sm">Default AI Model</Label>
+              <ModelSelector
+                value={defaultModel}
+                onChange={setDefaultModel}
+                organizationTier={organizationTier}
+                availableModels={availableModels.length > 0 ? availableModels : undefined}
+                showInherit={false}
+                requiredCapabilities={['toolCalling']}
+              />
+            </div>
 
-          {/* Monthly Token Quota */}
-          <div className="space-y-2">
-            <Label htmlFor="monthly-quota">Monthly Token Quota</Label>
-            <Input
-              id="monthly-quota"
-              type="number"
-              value={monthlyQuota}
-              onChange={(e) => setMonthlyQuota(e.target.value)}
-              placeholder="Leave empty for unlimited"
-              min="0"
-            />
-            <p className="text-xs text-muted-foreground">
-              Set a monthly token limit to control costs. Leave empty for unlimited usage.
-              Current tier: <span className="font-medium">{organizationTier.toUpperCase()}</span>
-            </p>
-          </div>
+            {/* Monthly Token Quota */}
+            <div className="space-y-1.5">
+              <Label htmlFor="monthly-quota" className="text-sm">Monthly Token Quota</Label>
+              <Input
+                id="monthly-quota"
+                type="number"
+                value={monthlyQuota}
+                onChange={(e) => setMonthlyQuota(e.target.value)}
+                placeholder="Unlimited"
+                min="0"
+                className="h-9"
+              />
+            </div>
 
-          {/* Save Button */}
-          <div className="flex items-center justify-between pt-4 border-t">
-            <p className="text-sm text-muted-foreground">
-              Changes will apply to new executions immediately
-            </p>
-            <Button onClick={handleSave} disabled={isSaving}>
+            {/* Save Button */}
+            <Button onClick={handleSave} disabled={isSaving} className="w-full mt-2" size="sm">
               {isSaving ? (
                 <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
                   Saving...
                 </>
               ) : (
                 <>
-                  <Save className="h-4 w-4 mr-2" />
+                  <Save className="h-3 w-3 mr-2" />
                   Save Changes
                 </>
               )}
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Billing Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Billing Information</CardTitle>
-          <CardDescription>
-            View and manage your billing details
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
+        {/* Billing Information */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Billing Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium">Current Plan</p>
-                <p className="text-sm text-muted-foreground capitalize">
+                <p className="text-sm font-medium">Current Plan</p>
+                <p className="text-xs text-muted-foreground capitalize">
                   {organizationTier} tier
                 </p>
               </div>
-              <Button variant="outline">Upgrade Plan</Button>
+              <Button variant="outline" size="sm">Upgrade</Button>
             </div>
 
             {tokenQuota && (
-              <div className="flex items-center justify-between pt-4 border-t">
-                <div>
-                  <p className="font-medium">Monthly Quota</p>
-                  <p className="text-sm text-muted-foreground">
-                    {tokenQuota.toLocaleString()} tokens per month
-                  </p>
-                </div>
+              <div className="pt-3 border-t">
+                <p className="text-sm font-medium">Monthly Quota</p>
+                <p className="text-xs text-muted-foreground">
+                  {tokenQuota.toLocaleString()} tokens/month
+                </p>
               </div>
             )}
-          </div>
-        </CardContent>
-      </Card>
+
+            <div className="pt-3 border-t">
+              <p className="text-xs text-muted-foreground">
+                Current tier: <span className="font-medium">{organizationTier.toUpperCase()}</span>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

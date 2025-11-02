@@ -28,6 +28,7 @@ message TaskRequest {
   string owner_id = 7;             // Agent owner ID for OAuth credentials
   int32 timeout_seconds = 8;       // Task execution timeout (default: 300)
   string name = 10;
+  string organization_model = 11;  // Organization default model (fallback for agent)
 }
 
 // AIDEV-NOTE: Simplified for single-instruction execution (removed step_id and step_type)
@@ -113,6 +114,7 @@ message AgentConfig {
   repeated ToolConfig tools = 5;
   repeated ServerConfig servers = 6;
   repeated SkillConfig skills = 7;
+  string default_model = 8;              // Agent-specific default model (overrides organization default)
 }
 
 // AIDEV-NOTE: Simplified single-instruction skill model (removed multi-step workflow)

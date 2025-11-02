@@ -68,6 +68,7 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
     role: agent.role || '',
     description: agent.description || '',
     persona: agent.persona || '',
+    defaultModel: agent.defaultModel || '', // Agent-specific model override for task execution
     tools: [], // Tools are now defined per-task (in skills and schedule configurations)
     servers: [], // Servers removed from agent-level configuration
     skills: [] // Skills queried separately from skills table
@@ -108,6 +109,7 @@ export function createTaskRequest(params: {
   organizationId: string;
   ownerId: string;
   timeoutSeconds?: number;
+  organizationModel?: string; // Organization default model (fallback for agent model)
 }): TaskRequest {
   // Convert trigger data to string map format expected by proto
   const triggerPayload: Record<string, string> = {};
@@ -128,7 +130,8 @@ export function createTaskRequest(params: {
     triggerData: triggerData as any,
     organizationId: params.organizationId,
     ownerId: params.ownerId,
-    timeoutSeconds: params.timeoutSeconds || 300
+    timeoutSeconds: params.timeoutSeconds || 300,
+    organizationModel: params.organizationModel || '' // Organization default model for fallback
   };
 
   // Set execution mode (oneof field)

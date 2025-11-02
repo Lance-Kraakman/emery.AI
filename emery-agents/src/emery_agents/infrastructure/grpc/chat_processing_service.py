@@ -165,11 +165,19 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             else:
                 logger.info("  No tools received from frontend")
 
+            # Extract organization model from request (if provided)
+            org_model = request.model if request.model else None
+            if org_model:
+                logger.info(f"🔧 Using organization model override: {org_model}")
+            else:
+                logger.info("🔧 No organization model specified, will use system default")
+
             async for chunk in self._stream_tool_calling_agent_response(
                 conversation_messages,
                 tools_to_use,
                 rag_context_data,
-                domain_context=request.context
+                domain_context=request.context,
+                org_model=org_model
             ):
                 total_content += chunk
 
@@ -278,7 +286,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         conversation_messages: List[Dict[str, str]],
         tools: List['agent_worker_pb2.ToolConfig'],
         rag_context_data: Optional['RagContextData'],
-        domain_context: Optional['agent_worker_pb2.ChatContext'] = None
+        domain_context: Optional['agent_worker_pb2.ChatContext'] = None,
+        org_model: Optional[str] = None
     ) -> AsyncIterator[str]:
         """
         Stream AI response using ToolCallingAgent with proper streaming support.
@@ -300,8 +309,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             smolagents_tools = self._convert_tools_to_smolagents(tools)
             logger.info(f"🔧 Converted {len(smolagents_tools)} tools for ToolCallingAgent")
 
-            # 3. Create ToolCallingAgent with model provider
-            agent = self._create_agent_with_model_provider(smolagents_tools)
+            # 3. Create ToolCallingAgent with model provider and organization model override
+            agent = self._create_agent_with_model_provider(smolagents_tools, org_model=org_model)
             logger.info(f"🤖 Created ToolCallingAgent with {len(smolagents_tools)} tools")
 
             # 4. Build conversation prompt
@@ -312,10 +321,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info("🚀 Executing ToolCallingAgent...")
             result = agent.run(full_prompt)  # This is synchronous in smolagents
             logger.info(f"✅ Execution completed: {len(result)} chars")
+            logger.info(f"📝 Result type: {type(result)}")
+            logger.info(f"📝 Result preview: {str(result)[:200]}...")
 
             # 6. Stream the result by chunks to simulate streaming
+            chunk_count = 0
             async for chunk in self._stream_text_chunks(result):
+                chunk_count += 1
+                logger.info(f"📤 Yielding chunk {chunk_count}: {len(chunk)} chars")
                 yield chunk
+
+            logger.info(f"✅ Streamed {chunk_count} chunks total")
 
         except Exception as e:
             logger.error(f"❌ ToolCallingAgent execution failed: {e}")
@@ -401,11 +417,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.error(f"❌ Tool conversion traceback: {traceback.format_exc()}")
             return []
 
-    def _create_agent_with_model_provider(self, smolagents_tools: List[Any]) -> ToolCallingAgent:
-        """Create ToolCallingAgent using simplified model provider."""
+    def _create_agent_with_model_provider(self, smolagents_tools: List[Any], org_model: Optional[str] = None) -> ToolCallingAgent:
+        """Create ToolCallingAgent using simplified model provider with organization model override."""
         # Use simplified model provider
         model_provider = SmolagentsModelProvider()
-        model = model_provider.get_model('tool_calling')
+
+        # Resolve model selection: use org_model if provided, otherwise use default
+        model_id = model_provider.resolve_model_selection(org_model=org_model)
+        model = model_provider.get_model(model_id=model_id)
+        logger.info(f"🤖 Creating ToolCallingAgent with model: {model_id}")
 
         agent = ToolCallingAgent(
             tools=smolagents_tools,  # Can be empty list
@@ -413,7 +433,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             max_steps=10
         )
         agent.name = "chat_tool_calling"
-        agent.description = f"Chat agent with {len(smolagents_tools)} tools available"
+        agent.description = f"Chat agent with {len(smolagents_tools)} tools available ({model_id})"
 
         return agent
 

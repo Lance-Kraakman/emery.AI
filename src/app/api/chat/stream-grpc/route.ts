@@ -23,7 +23,7 @@ import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
-import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository } from '@/ddd/application/di/container';
+import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository } from '@/ddd/application/di/container';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 import type { CreateChatDTO, SendMessageDTO } from '@/app/dtos/chat.dto';
@@ -256,6 +256,13 @@ export async function POST(req: NextRequest) {
       resolvedDomainId = null;
     }
 
+    // 5.5 Get organization's default AI model
+    console.log('[CHAT-GRPC-API] Fetching organization default model');
+    const orgRepository = getOrganizationRepository();
+    const organization = await orgRepository.findById(OrganizationId.fromNumber(organizationId));
+    const defaultModel = organization?.defaultModel || null;
+    console.log('[CHAT-GRPC-API] Organization default model:', defaultModel || 'not set (will use system default)');
+
     // 5.1 Enrich tools with user API key for chat-based tool execution
     let enrichedTools: any[] = tools;
     if (tools.length > 0 && userId) {
@@ -329,7 +336,8 @@ export async function POST(req: NextRequest) {
       ragThreshold: 0.3,
       maxRagDocs: 5,
       primaryRagWeight: 0.7,
-      tools: enrichedTools // DDD-enriched tools with user API key authentication
+      tools: enrichedTools, // DDD-enriched tools with user API key authentication
+      defaultModel: defaultModel // Organization's default AI model
     };
 
     console.log('[CHAT-GRPC-API] Chat processing options:', processingOptions);

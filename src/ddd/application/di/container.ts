@@ -14,6 +14,7 @@ import type { RepositoryRegistry } from './registry';
 
 // Import registration modules
 import { registerCoreServices, type CoreServices } from './modules/core-registration';
+import { registerBillingServices, type BillingServices } from './modules/billing-registration';
 import { registerAgentServices, type AgentServices } from './modules/agent-registration';
 import { registerSkillServices, type SkillServices } from './modules/skill-registration';
 import { registerDatabaseServices, type DatabaseServices } from './modules/database-registration';
@@ -73,7 +74,12 @@ export class DIContainer {
     const coreServices = registerCoreServices({ db });
     this.registerServices('core', coreServices);
 
-    // Phase 2: Register agent services
+    // Phase 2: Register billing services (token usage tracking)
+    // Minimal dependencies
+    const billingServices = registerBillingServices({ db });
+    this.registerServices('billing', billingServices);
+
+    // Phase 3: Register agent services
     // Depends on: team repository
     const agentServices = registerAgentServices({
       db,
@@ -175,7 +181,7 @@ export class DIContainer {
    */
   private registerServices(
     domain: string,
-    services: CoreServices | AgentServices | SkillServices | DatabaseServices | ViewServices | ChatServices | ToolsServices | RagServices | ConnectionServices | DelegationServices | PuckServices
+    services: CoreServices | BillingServices | AgentServices | SkillServices | DatabaseServices | ViewServices | ChatServices | ToolsServices | RagServices | ConnectionServices | DelegationServices | PuckServices
   ): void {
     // Map service names to container keys
     const serviceKeyMappings: Record<string, string> = {
@@ -188,6 +194,9 @@ export class DIContainer {
       'teamApplicationService': 'TeamApplicationService',
       'userRoleApplicationService': 'UserRoleApplicationService',
       'invitationApplicationService': 'InvitationApplicationService',
+
+      // Billing domain
+      'tokenUsageRepository': 'ITokenUsageRepository',
 
       // Agent domain
       'agentRepository': 'IAgentRepository',
@@ -336,6 +345,9 @@ export {
   // Chat domain repositories
   getChatRepository,
   getChatMessageRepository,
+
+  // Billing domain repositories
+  getTokenUsageRepository,
 
   // Domain services
   getDynamicTableService,

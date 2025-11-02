@@ -642,7 +642,8 @@ proto.emery.agents.TaskRequest.toObject = function(includeInstance, msg) {
     organizationId: jspb.Message.getFieldWithDefault(msg, 6, ""),
     ownerId: jspb.Message.getFieldWithDefault(msg, 7, ""),
     timeoutSeconds: jspb.Message.getFieldWithDefault(msg, 8, 0),
-    name: jspb.Message.getFieldWithDefault(msg, 10, "")
+    name: jspb.Message.getFieldWithDefault(msg, 10, ""),
+    organizationModel: jspb.Message.getFieldWithDefault(msg, 11, "")
   };
 
   if (includeInstance) {
@@ -721,6 +722,10 @@ proto.emery.agents.TaskRequest.deserializeBinaryFromReader = function(msg, reade
     case 10:
       var value = /** @type {string} */ (reader.readString());
       msg.setName(value);
+      break;
+    case 11:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setOrganizationModel(value);
       break;
     default:
       reader.skipField();
@@ -821,6 +826,13 @@ proto.emery.agents.TaskRequest.serializeBinaryToWriter = function(message, write
   if (f.length > 0) {
     writer.writeString(
       10,
+      f
+    );
+  }
+  f = message.getOrganizationModel();
+  if (f.length > 0) {
+    writer.writeString(
+      11,
       f
     );
   }
@@ -1079,6 +1091,24 @@ proto.emery.agents.TaskRequest.prototype.getName = function() {
  */
 proto.emery.agents.TaskRequest.prototype.setName = function(value) {
   return jspb.Message.setProto3StringField(this, 10, value);
+};
+
+
+/**
+ * optional string organization_model = 11;
+ * @return {string}
+ */
+proto.emery.agents.TaskRequest.prototype.getOrganizationModel = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 11, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.agents.TaskRequest} returns this
+ */
+proto.emery.agents.TaskRequest.prototype.setOrganizationModel = function(value) {
+  return jspb.Message.setProto3StringField(this, 11, value);
 };
 
 
@@ -2737,7 +2767,8 @@ proto.emery.agents.AgentConfig.toObject = function(includeInstance, msg) {
     serversList: jspb.Message.toObjectList(msg.getServersList(),
     proto.emery.agents.ServerConfig.toObject, includeInstance),
     skillsList: jspb.Message.toObjectList(msg.getSkillsList(),
-    proto.emery.agents.SkillConfig.toObject, includeInstance)
+    proto.emery.agents.SkillConfig.toObject, includeInstance),
+    defaultModel: jspb.Message.getFieldWithDefault(msg, 8, "")
   };
 
   if (includeInstance) {
@@ -2804,6 +2835,10 @@ proto.emery.agents.AgentConfig.deserializeBinaryFromReader = function(msg, reade
       var value = new proto.emery.agents.SkillConfig;
       reader.readMessage(value,proto.emery.agents.SkillConfig.deserializeBinaryFromReader);
       msg.addSkills(value);
+      break;
+    case 8:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setDefaultModel(value);
       break;
     default:
       reader.skipField();
@@ -2884,6 +2919,13 @@ proto.emery.agents.AgentConfig.serializeBinaryToWriter = function(message, write
       7,
       f,
       proto.emery.agents.SkillConfig.serializeBinaryToWriter
+    );
+  }
+  f = message.getDefaultModel();
+  if (f.length > 0) {
+    writer.writeString(
+      8,
+      f
     );
   }
 };
@@ -3072,6 +3114,24 @@ proto.emery.agents.AgentConfig.prototype.addSkills = function(opt_value, opt_ind
  */
 proto.emery.agents.AgentConfig.prototype.clearSkillsList = function() {
   return this.setSkillsList([]);
+};
+
+
+/**
+ * optional string default_model = 8;
+ * @return {string}
+ */
+proto.emery.agents.AgentConfig.prototype.getDefaultModel = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 8, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.agents.AgentConfig} returns this
+ */
+proto.emery.agents.AgentConfig.prototype.setDefaultModel = function(value) {
+  return jspb.Message.setProto3StringField(this, 8, value);
 };
 
 

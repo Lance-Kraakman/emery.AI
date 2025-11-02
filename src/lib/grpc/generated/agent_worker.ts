@@ -162,6 +162,8 @@ export interface TaskRequest {
   /** Task execution timeout (default: 300) */
   timeoutSeconds: number;
   name: string;
+  /** Organization default model (fallback for agent) */
+  organizationModel: string;
 }
 
 /**
@@ -257,6 +259,8 @@ export interface AgentConfig {
   tools: ToolConfig[];
   servers: ServerConfig[];
   skills: SkillConfig[];
+  /** Agent-specific default model (overrides organization default) */
+  defaultModel: string;
 }
 
 /**
@@ -480,6 +484,7 @@ function createBaseTaskRequest(): TaskRequest {
     ownerId: "",
     timeoutSeconds: 0,
     name: "",
+    organizationModel: "",
   };
 }
 
@@ -514,6 +519,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     }
     if (message.name !== "") {
       writer.uint32(82).string(message.name);
+    }
+    if (message.organizationModel !== "") {
+      writer.uint32(90).string(message.organizationModel);
     }
     return writer;
   },
@@ -605,6 +613,14 @@ export const TaskRequest: MessageFns<TaskRequest> = {
           message.name = reader.string();
           continue;
         }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.organizationModel = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -628,6 +644,7 @@ export const TaskRequest: MessageFns<TaskRequest> = {
       ownerId: isSet(object.ownerId) ? globalThis.String(object.ownerId) : "",
       timeoutSeconds: isSet(object.timeoutSeconds) ? globalThis.Number(object.timeoutSeconds) : 0,
       name: isSet(object.name) ? globalThis.String(object.name) : "",
+      organizationModel: isSet(object.organizationModel) ? globalThis.String(object.organizationModel) : "",
     };
   },
 
@@ -663,6 +680,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     if (message.name !== "") {
       obj.name = message.name;
     }
+    if (message.organizationModel !== "") {
+      obj.organizationModel = message.organizationModel;
+    }
     return obj;
   },
 
@@ -687,6 +707,7 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     message.ownerId = object.ownerId ?? "";
     message.timeoutSeconds = object.timeoutSeconds ?? 0;
     message.name = object.name ?? "";
+    message.organizationModel = object.organizationModel ?? "";
     return message;
   },
 };
@@ -1469,7 +1490,7 @@ export const TokenUsage: MessageFns<TokenUsage> = {
 };
 
 function createBaseAgentConfig(): AgentConfig {
-  return { name: "", role: "", description: "", persona: "", tools: [], servers: [], skills: [] };
+  return { name: "", role: "", description: "", persona: "", tools: [], servers: [], skills: [], defaultModel: "" };
 }
 
 export const AgentConfig: MessageFns<AgentConfig> = {
@@ -1494,6 +1515,9 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     }
     for (const v of message.skills) {
       SkillConfig.encode(v!, writer.uint32(58).fork()).join();
+    }
+    if (message.defaultModel !== "") {
+      writer.uint32(66).string(message.defaultModel);
     }
     return writer;
   },
@@ -1561,6 +1585,14 @@ export const AgentConfig: MessageFns<AgentConfig> = {
           message.skills.push(SkillConfig.decode(reader, reader.uint32()));
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.defaultModel = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1581,6 +1613,7 @@ export const AgentConfig: MessageFns<AgentConfig> = {
         ? object.servers.map((e: any) => ServerConfig.fromJSON(e))
         : [],
       skills: globalThis.Array.isArray(object?.skills) ? object.skills.map((e: any) => SkillConfig.fromJSON(e)) : [],
+      defaultModel: isSet(object.defaultModel) ? globalThis.String(object.defaultModel) : "",
     };
   },
 
@@ -1607,6 +1640,9 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     if (message.skills?.length) {
       obj.skills = message.skills.map((e) => SkillConfig.toJSON(e));
     }
+    if (message.defaultModel !== "") {
+      obj.defaultModel = message.defaultModel;
+    }
     return obj;
   },
 
@@ -1622,6 +1658,7 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.servers = object.servers?.map((e) => ServerConfig.fromPartial(e)) || [];
     message.skills = object.skills?.map((e) => SkillConfig.fromPartial(e)) || [];
+    message.defaultModel = object.defaultModel ?? "";
     return message;
   },
 };

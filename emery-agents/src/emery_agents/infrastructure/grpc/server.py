@@ -60,12 +60,27 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         }
 
         try:
+            # Extract model parameters from proto request for model selection hierarchy
+            agent_model = None
+            if hasattr(task_request, 'agent_config') and task_request.agent_config:
+                agent_model = getattr(task_request.agent_config, 'default_model', None)
+                if agent_model:
+                    logger.info(f"🔧 [TASK-{task_request.task_id[:8]}] Agent model override: {agent_model}")
+
+            org_model = getattr(task_request, 'organization_model', None)
+            if org_model:
+                logger.info(f"🔧 [TASK-{task_request.task_id[:8]}] Organization model: {org_model}")
+
             # Convert TaskRequest to ExecutionContext for DDD execution
             from ...domain.execution.services.capability_routing_service import CapabilityRoutingService
             from ...domain.execution.repositories.execution_repository import IExecutionRepository
-            
+
             routing_service = CapabilityRoutingService()
             execution_context = routing_service.determine_execution_context(task_request)
+
+            # Add model parameters to execution context
+            execution_context.agent_model = agent_model
+            execution_context.org_model = org_model
             
             # Get execution repository from DI container
             from ...application.di.container import container

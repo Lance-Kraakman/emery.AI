@@ -23,10 +23,10 @@ import type {
   ProcessingError
 } from './generated/agent_worker';
 
-// Load protobuf definition  
+// Load protobuf definition
 const PROTO_PATH = path.join(process.cwd(), 'proto', 'agent_worker.proto');
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
-  keepCase: true,
+  keepCase: false, // Convert snake_case to camelCase to match TypeScript generated types
   longs: String,
   enums: String,
   defaults: true,
@@ -46,6 +46,7 @@ export interface ChatProcessingOptions {
   assembledRagContext?: string;  // Pre-assembled RAG context from DualContextRagService
   ragSources?: string[];         // RAG source summary
   tools?: ToolConfig[];          // Available tools for the chat
+  defaultModel?: string | null;  // Organization's default AI model
 }
 
 export interface StreamingChatResponse {
@@ -102,7 +103,7 @@ export class ChatProcessingClient {
       userId: userId,
       organizationId: organizationId,
       conversationHistory: conversationHistory,
-      model: '', // Empty model - will be resolved by worker using hierarchy
+      model: options.defaultModel || '', // Pass organization's default model or empty string for system default
       tools: (options.tools || []).map(tool => ({
         name: tool.name,
         version: '', // Empty version since ToolConfig no longer has version
@@ -130,15 +131,16 @@ export class ChatProcessingClient {
       const call = this.client.ProcessMessage(request);
 
       call.on('data', (response: ProcessMessageResponse) => {
-        // console.log(`[CHAT-GRPC-CLIENT] Received streaming response:`, {
-        //   hasContentChunk: !!response.content_chunk,
-        //   hasRagContext: !!response.rag_context,
-        //   hasComplete: !!response.complete,
-        //   hasError: !!response.error,
-        //   timestamp: response.timestamp
-        // });
+        console.log(`[CHAT-GRPC-CLIENT] Received streaming response:`, {
+          hasContentChunk: !!response.contentChunk,
+          hasRagContext: !!response.ragContext,
+          hasComplete: !!response.complete,
+          hasError: !!response.error,
+          timestamp: response.timestamp
+        });
 
         // Convert gRPC response to standardized streaming response
+        // AIDEV-NOTE: keepCase:false converts snake_case proto fields to camelCase at runtime
         let streamingResponse: StreamingChatResponse;
 
         if (response.contentChunk) {

@@ -13,7 +13,7 @@ import { getAgentDisplayName, type Agent } from '@/ddd/domain/agents/entities/ag
 import { AgentId, UserId, OrganizationId, TaskStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
-import { getTokenUsageRepository } from '@/ddd/application/di/getters';
+import { getTokenUsageRepository, getOrganizationRepository } from '@/ddd/application/di/getters';
 
 export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
   // Track active executions for status queries
@@ -50,7 +50,15 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         throw new Error(`Agent ${agentId} not found`);
       }
 
-      // 2. Determine organization context
+      // 2. Load organization for model selection hierarchy
+      const orgRepository = getOrganizationRepository();
+      const organization = await orgRepository.findById(agent.organizationId);
+      const organizationModel = organization?.defaultModel || null;
+
+      console.log(`[GRPC-EXECUTION-REPO] Agent model: ${agent.defaultModel || 'not set (will use org/system default)'}`);
+      console.log(`[GRPC-EXECUTION-REPO] Organization model: ${organizationModel || 'not set (will use system default)'}`);
+
+      // 3. Determine organization context
       const targetOrganizationId = organizationId || agent.organizationId;
       const organizationIdStr = targetOrganizationId.toString();
 
@@ -72,7 +80,8 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
             triggerData: {}, // Empty for proto compatibility
             organizationId: organizationIdStr,
             ownerId: agent.ownerId.value,
-            timeoutSeconds: timeoutSeconds || 300
+            timeoutSeconds: timeoutSeconds || 300,
+            organizationModel: organizationModel || undefined // Pass organization model for hierarchy
           })
         : createTaskRequest({
             taskId: executionId,
@@ -87,7 +96,8 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
             triggerData: {}, // Empty for proto compatibility
             organizationId: organizationIdStr,
             ownerId: agent.ownerId.value,
-            timeoutSeconds: timeoutSeconds || 300
+            timeoutSeconds: timeoutSeconds || 300,
+            organizationModel: organizationModel || undefined // Pass organization model for hierarchy
           });
 
       // AIDEV-DEBUG: Log what we're actually sending to Python
