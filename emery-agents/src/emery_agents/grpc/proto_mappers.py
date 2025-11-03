@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 from dataclasses import dataclass
 
-from ...grpc.generated import agent_worker_pb2
+from .generated import agent_worker_pb2
 
 
 @dataclass

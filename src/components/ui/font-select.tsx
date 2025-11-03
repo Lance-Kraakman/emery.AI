@@ -32,11 +32,13 @@ export interface FontOption {
   category: "system" | "sans-serif" | "serif" | "monospace";
 }
 
+// AIDEV-NOTE: Using system fonts only - no web font loading required
+// These are universally available across platforms without external resources
 const FONT_OPTIONS: FontOption[] = [
   {
     value: "system-default",
     label: "System Default",
-    fontFamily: "system-ui, -apple-system, sans-serif",
+    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     category: "system",
   },
   {
@@ -45,76 +47,85 @@ const FONT_OPTIONS: FontOption[] = [
     fontFamily: "system-ui, sans-serif",
     category: "system",
   },
+  // Sans-Serif fonts
   {
-    value: "inter",
-    label: "Inter",
-    fontFamily: "Inter, system-ui, sans-serif",
+    value: "helvetica",
+    label: "Helvetica Neue",
+    fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
     category: "sans-serif",
   },
   {
-    value: "roboto",
-    label: "Roboto",
-    fontFamily: "Roboto, system-ui, sans-serif",
+    value: "arial",
+    label: "Arial",
+    fontFamily: "Arial, 'Helvetica Neue', Helvetica, sans-serif",
     category: "sans-serif",
   },
   {
-    value: "open-sans",
-    label: "Open Sans",
-    fontFamily: "'Open Sans', system-ui, sans-serif",
+    value: "segoe-ui",
+    label: "Segoe UI",
+    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     category: "sans-serif",
   },
   {
-    value: "lato",
-    label: "Lato",
-    fontFamily: "Lato, system-ui, sans-serif",
+    value: "verdana",
+    label: "Verdana",
+    fontFamily: "Verdana, Geneva, Tahoma, sans-serif",
     category: "sans-serif",
   },
   {
-    value: "poppins",
-    label: "Poppins",
-    fontFamily: "Poppins, system-ui, sans-serif",
+    value: "trebuchet",
+    label: "Trebuchet MS",
+    fontFamily: "'Trebuchet MS', 'Lucida Grande', 'Lucida Sans Unicode', sans-serif",
     category: "sans-serif",
   },
+  // Serif fonts
   {
-    value: "montserrat",
-    label: "Montserrat",
-    fontFamily: "Montserrat, system-ui, sans-serif",
-    category: "sans-serif",
-  },
-  {
-    value: "playfair",
-    label: "Playfair Display",
-    fontFamily: "'Playfair Display', serif",
+    value: "georgia",
+    label: "Georgia",
+    fontFamily: "Georgia, 'Times New Roman', Times, serif",
     category: "serif",
   },
   {
-    value: "merriweather",
-    label: "Merriweather",
-    fontFamily: "Merriweather, serif",
+    value: "times",
+    label: "Times New Roman",
+    fontFamily: "'Times New Roman', Times, Georgia, serif",
     category: "serif",
   },
   {
-    value: "lora",
-    label: "Lora",
-    fontFamily: "Lora, serif",
+    value: "palatino",
+    label: "Palatino",
+    fontFamily: "Palatino, 'Palatino Linotype', 'Book Antiqua', Georgia, serif",
     category: "serif",
   },
   {
-    value: "fira-code",
-    label: "Fira Code",
-    fontFamily: "'Fira Code', monospace",
+    value: "garamond",
+    label: "Garamond",
+    fontFamily: "Garamond, Baskerville, 'Baskerville Old Face', 'Hoefler Text', serif",
+    category: "serif",
+  },
+  // Monospace fonts
+  {
+    value: "menlo",
+    label: "Menlo",
+    fontFamily: "Menlo, Monaco, 'Courier New', Courier, monospace",
     category: "monospace",
   },
   {
-    value: "jetbrains-mono",
-    label: "JetBrains Mono",
-    fontFamily: "'JetBrains Mono', monospace",
+    value: "monaco",
+    label: "Monaco",
+    fontFamily: "Monaco, Menlo, Consolas, 'Courier New', monospace",
     category: "monospace",
   },
   {
-    value: "source-code-pro",
-    label: "Source Code Pro",
-    fontFamily: "'Source Code Pro', monospace",
+    value: "consolas",
+    label: "Consolas",
+    fontFamily: "Consolas, Monaco, 'Lucida Console', 'Liberation Mono', monospace",
+    category: "monospace",
+  },
+  {
+    value: "courier",
+    label: "Courier New",
+    fontFamily: "'Courier New', Courier, 'Lucida Sans Typewriter', monospace",
     category: "monospace",
   },
 ];

@@ -24,14 +24,24 @@ const logger = createDebugLogger('DataLake');
  * Convert field name to field ID for Delta Lake queries
  * Delta Lake columns use numeric field IDs (79, 80), not field names ('test', 'name')
  *
+ * AIDEV-NOTE: System columns (id, created_at, updated_at) are special - they exist on all rows
+ * and use their literal names in Delta Lake, not numeric field IDs.
+ *
  * @param fieldName - Human-readable field name
  * @param fields - Table field definitions
- * @returns Numeric field ID as string, or null if field not found
+ * @returns Numeric field ID as string for user fields, literal name for system columns, or null if not found
  */
 function convertFieldNameToId(
   fieldName: string,
   fields: readonly TableField[]
 ): string | null {
+  // AIDEV-NOTE: System columns don't need conversion - they use literal names in Delta Lake
+  const systemColumns = ['id', 'created_at', 'updated_at'];
+  if (systemColumns.includes(fieldName)) {
+    logger.debug('System column - no conversion needed', { fieldName });
+    return fieldName; // Return as-is for system columns
+  }
+
   const field = fields.find(f => f.name === fieldName);
 
   if (field) {
@@ -52,6 +62,8 @@ function convertFieldNameToId(
 /**
  * Convert filter field names to field IDs for Delta Lake queries
  *
+ * AIDEV-NOTE: System columns (id, created_at, updated_at) are passed through unchanged.
+ *
  * @param filters - Array of filters using field names
  * @param fields - Table field definitions
  * @returns Filters with field names converted to field IDs
@@ -61,6 +73,13 @@ function convertFiltersToFieldIds(
   fields: readonly TableField[]
 ): any[] {
   return filters.map(filter => {
+    // System columns don't need ID conversion
+    const systemColumns = ['id', 'created_at', 'updated_at'];
+    if (systemColumns.includes(filter.field)) {
+      logger.debug('System column filter - no conversion needed', { field: filter.field });
+      return filter; // Keep system columns as-is
+    }
+
     const fieldId = convertFieldNameToId(filter.field, fields);
 
     if (!fieldId) {

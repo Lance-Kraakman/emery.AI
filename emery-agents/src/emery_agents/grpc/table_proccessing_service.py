@@ -16,7 +16,7 @@ import pyarrow as pa
 from deltalake import write_deltalake, DeltaTable
 from google.protobuf.json_format import Parse, MessageToJson
 from google.protobuf.struct_pb2 import ListValue
-from ...grpc.generated import table_service_pb2, table_service_pb2_grpc
+from .generated import table_service_pb2, table_service_pb2_grpc
 
 logger = logging.getLogger(__name__)
 

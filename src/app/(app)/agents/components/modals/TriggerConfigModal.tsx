@@ -283,9 +283,16 @@ export function TriggerConfigModal({
 
       // Step 3: Update schedules array based on mode
       let updatedSchedules: ScheduleConfigurationDTO[];
-      if (mode === 'create') {
+
+      // BUGFIX: If in edit mode but the schedule doesn't exist at the index, treat as create
+      const scheduleExists = agent.schedules && agent.schedules[scheduleIndex] !== undefined;
+
+      if (mode === 'create' || !scheduleExists) {
         // Append new schedule to existing schedules
-        updatedSchedules = [...agent.schedules, newSchedule];
+        if (!scheduleExists && mode === 'edit') {
+          console.warn(`[TriggerConfigModal] Edit mode but schedule ${scheduleIndex} doesn't exist. Treating as create.`);
+        }
+        updatedSchedules = [...(agent.schedules || []), newSchedule];
       } else {
         // Replace schedule at specific index
         updatedSchedules = agent.schedules.map((schedule, i) =>
