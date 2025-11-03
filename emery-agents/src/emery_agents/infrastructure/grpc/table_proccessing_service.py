@@ -72,7 +72,13 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         return pa.schema(delta_table.schema().to_arrow())
 
     def _build_schema_from_table_fields(self, table_fields: List[table_service_pb2.TableField]) -> pa.Schema:
-        """Convert protobuf TableField messages to PyArrow schema for Delta Lake."""
+        """Convert protobuf TableField messages to PyArrow schema for Delta Lake.
+
+        AIDEV-NOTE: Schema structure for numeric field IDs:
+        - First column: "id" (string) - REQUIRED for Delta Lake merge operations
+        - Other columns: "1", "2", "3", etc. (numeric field IDs)
+        - The "id" field from table_fields is SKIPPED - we add "id" column manually
+        """
         try:
             # Map protobuf field types to PyArrow types
             type_mapping = {
@@ -84,11 +90,23 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 table_service_pb2.FIELD_TYPE_RELATION: pa.string(), # Store as JSON
                 table_service_pb2.FIELD_TYPE_DOCUMENT: pa.string(), # Store as JSON
             }
-            
+
             arrow_fields = []
+
+            # CRITICAL: Always add "id" column first for Delta Lake merge compatibility
+            # This column stores the row UUID and is required for merge operations
+            arrow_fields.append(pa.field("id", pa.string(), nullable=False))
+            logger.debug(f"[_build_schema_from_table_fields] Added 'id' column (string, required)")
+
+            # Add data fields with numeric column names
             for field in table_fields:
+                # Skip the special "id" field - we've already added it
+                if field.name == 'id':
+                    logger.debug(f"[_build_schema_from_table_fields] Skipping field 'id' (field_id={field.field_id}) - already added as system column")
+                    continue
+
                 dtype = type_mapping.get(field.type, pa.string())
-                # CRITICAL: Use numeric field ID as column name (immutable identifier)
+                # Use numeric field ID as column name (immutable identifier)
                 column_name = str(field.field_id)
                 arrow_fields.append(pa.field(column_name, dtype, nullable=not field.required))
                 logger.debug(f"[_build_schema_from_table_fields] Field: id={field.field_id}, name={field.name}, column={column_name}, type={dtype}")
