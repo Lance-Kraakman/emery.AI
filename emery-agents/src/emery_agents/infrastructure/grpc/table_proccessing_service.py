@@ -947,21 +947,10 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             if filter_obj.operator in (table_service_pb2.FILTER_OP_LIKE, table_service_pb2.FILTER_OP_ILIKE):
                 continue
 
-            # CRITICAL FIX: Check if field is string_view and cast to large_string for filter compatibility
-            # PyArrow filter kernels don't support string_view comparison
-            import pyarrow.types as pat
-            try:
-                column_type = schema.field(filter_obj.field).type
-                if pat.is_string_view(column_type):
-                    # Cast string_view field to large_string for filter compatibility
-                    field_ref = pc.field(filter_obj.field).cast(pa.large_string())
-                else:
-                    field_ref = pc.field(filter_obj.field)
-            except KeyError:
-                # Field not in schema, skip
-                logger.warning(f"Filter field '{filter_obj.field}' not found in schema during field cast")
-                continue
-
+            # AIDEV-NOTE: string_view columns are now handled by bypassing PyArrow predicates entirely
+            # See QueryRows method - if string_view is detected, we load all data and filter with Polars
+            # This predicate builder only runs for non-string_view columns
+            field_ref = pc.field(filter_obj.field)
             operator = filter_obj.operator
 
             # Extract value from the RowDataValue oneof
@@ -1189,7 +1178,31 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # AIDEV-NOTE: DeltaTable.to_pyarrow_table(filters=predicate) is the correct method
             # Parameter is 'filters' (plural), not 'filter'
             # Predicate only includes filters that support pushdown (not LIKE/ILIKE)
-            arrow_table = delta_table.to_pyarrow_table(filters=predicate)
+            #
+            # CRITICAL FIX: string_view columns break PyArrow filter predicates
+            # If ANY filter targets a string_view column, load ALL data without predicates
+            # then filter using Polars which handles string_view correctly
+            has_string_view_filter = False
+            if request.filters:
+                import pyarrow.types as pat
+                for filter_obj in request.filters:
+                    try:
+                        col_type = schema.field(filter_obj.field).type
+                        if pat.is_string_view(col_type):
+                            has_string_view_filter = True
+                            logger.info(f"[QueryRows] Filter on string_view field '{filter_obj.field}' detected, will apply filters in Polars")
+                            break
+                    except KeyError:
+                        continue
+
+            # Load table - with or without predicate based on string_view presence
+            if has_string_view_filter or not predicate:
+                # Load without filters if string_view involved or no valid predicates
+                arrow_table = delta_table.to_pyarrow_table()
+            else:
+                # Safe to use PyArrow predicate pushdown
+                arrow_table = delta_table.to_pyarrow_table(filters=predicate)
+
             df = pl.from_arrow(arrow_table)
 
             # Apply LIKE/ILIKE filters in-memory using Polars
@@ -1236,6 +1249,69 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                         value = filter_obj.value.text_value if filter_obj.value.HasField('text_value') else ''
                         search_term = value.replace('%', '')
                         df = df.filter(pl.col(filter_obj.field).str.contains(search_term))
+
+            # Apply non-LIKE filters using Polars if we skipped PyArrow predicate pushdown
+            # AIDEV-NOTE: When string_view columns are involved, we load all data and filter with Polars
+            # Polars handles string_view columns correctly unlike PyArrow filter predicates
+            if has_string_view_filter:
+                logger.info(f"[QueryRows] Applying {len(request.filters)} filters using Polars (string_view compatibility mode)")
+                for filter_obj in request.filters:
+                    # Skip LIKE/ILIKE - already handled above
+                    if filter_obj.operator in (table_service_pb2.FILTER_OP_LIKE, table_service_pb2.FILTER_OP_ILIKE):
+                        continue
+
+                    # Extract value
+                    value = None
+                    if filter_obj.value.HasField('text_value'):
+                        value = filter_obj.value.text_value
+                    elif filter_obj.value.HasField('number_value'):
+                        value = filter_obj.value.number_value
+                    elif filter_obj.value.HasField('boolean_value'):
+                        value = filter_obj.value.boolean_value
+                    elif filter_obj.value.HasField('date_value'):
+                        value = filter_obj.value.date_value
+                    elif filter_obj.value.HasField('json_value'):
+                        value = filter_obj.value.json_value
+
+                    # Apply filter using Polars
+                    if filter_obj.operator == table_service_pb2.FILTER_OP_EQ:
+                        df = df.filter(pl.col(filter_obj.field) == value)
+                    elif filter_obj.operator == table_service_pb2.FILTER_OP_NE:
+                        df = df.filter(pl.col(filter_obj.field) != value)
+                    elif filter_obj.operator == table_service_pb2.FILTER_OP_GT:
+                        df = df.filter(pl.col(filter_obj.field) > value)
+                    elif filter_obj.operator == table_service_pb2.FILTER_OP_GTE:
+                        df = df.filter(pl.col(filter_obj.field) >= value)
+                    elif filter_obj.operator == table_service_pb2.FILTER_OP_LT:
+                        df = df.filter(pl.col(filter_obj.field) < value)
+                    elif filter_obj.operator == table_service_pb2.FILTER_OP_LTE:
+                        df = df.filter(pl.col(filter_obj.field) <= value)
+                    elif filter_obj.operator == table_service_pb2.FILTER_OP_IN:
+                        # Extract values list
+                        values_list = []
+                        for val in filter_obj.values:
+                            if val.HasField('text_value'):
+                                values_list.append(val.text_value)
+                            elif val.HasField('number_value'):
+                                values_list.append(val.number_value)
+                            elif val.HasField('boolean_value'):
+                                values_list.append(val.boolean_value)
+                        df = df.filter(pl.col(filter_obj.field).is_in(values_list))
+                    elif filter_obj.operator == table_service_pb2.FILTER_OP_NOT_IN:
+                        # Extract values list
+                        values_list = []
+                        for val in filter_obj.values:
+                            if val.HasField('text_value'):
+                                values_list.append(val.text_value)
+                            elif val.HasField('number_value'):
+                                values_list.append(val.number_value)
+                            elif val.HasField('boolean_value'):
+                                values_list.append(val.boolean_value)
+                        df = df.filter(~pl.col(filter_obj.field).is_in(values_list))
+                    elif filter_obj.operator == table_service_pb2.FILTER_OP_IS_NULL:
+                        df = df.filter(pl.col(filter_obj.field).is_null())
+                    elif filter_obj.operator == table_service_pb2.FILTER_OP_IS_NOT_NULL:
+                        df = df.filter(pl.col(filter_obj.field).is_not_null())
 
             # AIDEV-NOTE: Aggregation support for metric/dashboard views
             # Check if aggregation is requested (new field in QueryRowsRequest)
