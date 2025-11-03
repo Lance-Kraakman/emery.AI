@@ -97,7 +97,7 @@ export class Row {
    * @param fields - Table fields to map field names to IDs
    * @returns Object with numeric field ID keys: {id: "123", 10: "value", 11: "value"}
    */
-  toPlainObject(fields: TableField[]): Record<string, any> {
+  toPlainObject(fields: readonly TableField[]): Record<string, any> {
     const obj: Record<string, any> = {
       id: this.id.value  // Include row ID in the returned data
     };
