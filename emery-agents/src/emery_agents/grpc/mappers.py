@@ -6,11 +6,47 @@ Simplified for single-instruction model - removed StepConfig/StepType mapping.
 No complex abstractions - just direct mapping functions.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TypedDict
 from .generated import agent_worker_pb2
 from ..entities.task import TaskRequest, TriggerData
 from ..entities.agent import AgentConfig
 from ..types import TaskStatus, WorkerStatus
+
+
+# Type definitions for structured return values
+class TaskProgressDict(TypedDict):
+    """Type-safe structure for task progress data."""
+    task_id: str
+    status: str
+    output_json: str
+    error_message: str
+    timestamp_ms: int
+    progress_percent: float
+
+
+class WorkerInfoDict(TypedDict):
+    """Type-safe structure for worker info data."""
+    worker_id: str
+    version: str
+    organization_id: str
+    status: str
+    capabilities: List[str]
+    active_tasks: int
+    max_concurrent_tasks: int
+    uptime_seconds: int
+    supported_tools: List[str]
+
+
+class CancelTaskRequestDict(TypedDict):
+    """Type-safe structure for cancel task request."""
+    task_id: str
+    reason: str
+
+
+class CancelTaskResponseDict(TypedDict):
+    """Type-safe structure for cancel task response."""
+    success: bool
+    message: str
 
 
 class ProtoMapper:
@@ -48,7 +84,7 @@ class ProtoMapper:
             instruction_config=instruction_config
         )
     
-    def task_progress_to_proto(self, progress: Any) -> agent_worker_pb2.TaskProgress:
+    def task_progress_to_proto(self, progress: TaskProgressDict) -> agent_worker_pb2.TaskProgress:
         """
         Convert domain TaskProgress to protobuf.
 
@@ -73,7 +109,7 @@ class ProtoMapper:
             progress_percent=progress.progress_percent
         )
     
-    def worker_info_to_proto(self, info: Any) -> agent_worker_pb2.WorkerInfo:
+    def worker_info_to_proto(self, info: WorkerInfoDict) -> agent_worker_pb2.WorkerInfo:
         """Convert domain WorkerInfo to protobuf."""
         # Map status string to protobuf enum
         status_map = {
@@ -96,38 +132,37 @@ class ProtoMapper:
             supported_tools=info.supported_tools
         )
     
-    def cancel_task_request_from_proto(self, proto: agent_worker_pb2.CancelTaskRequest) -> Any:
+    def cancel_task_request_from_proto(self, proto: agent_worker_pb2.CancelTaskRequest) -> CancelTaskRequestDict:
         """Convert protobuf CancelTaskRequest - simplified to return dict."""
         return {
             'task_id': proto.task_id,
             'reason': proto.reason
         }
     
-    def cancel_task_response_to_proto(self, response: Any) -> agent_worker_pb2.CancelTaskResponse:
+    def cancel_task_response_to_proto(self, response: CancelTaskResponseDict) -> agent_worker_pb2.CancelTaskResponse:
         """Convert domain CancelTaskResponse to protobuf."""
         return agent_worker_pb2.CancelTaskResponse(
             success=response.success,
             message=response.message
         )
     
-    def _agent_config_from_proto(self, proto: agent_worker_pb2.AgentConfig):
-        """Convert protobuf AgentConfig to simplified dict/object."""
-        # In simplified architecture, just return the protobuf object directly
-        # or convert to minimal dict if needed
-        return proto
-    
-    def _skill_config_from_proto(self, proto: agent_worker_pb2.SkillConfig):
-        """Convert protobuf SkillConfig - simplified to just return proto."""
-        return proto
-    
-    def _tool_config_from_proto(self, proto: agent_worker_pb2.ToolConfig):
-        """Convert protobuf ToolConfig - simplified to just return proto."""
+    def _agent_config_from_proto(self, proto: agent_worker_pb2.AgentConfig) -> agent_worker_pb2.AgentConfig:
+        """Convert protobuf AgentConfig - returns proto directly for simplified architecture."""
+        # In simplified architecture, just use the protobuf object directly
         return proto
 
-    def _server_config_from_proto(self, proto: agent_worker_pb2.ServerConfig):
-        """Convert protobuf ServerConfig - simplified to just return proto."""
+    def _skill_config_from_proto(self, proto: agent_worker_pb2.SkillConfig) -> agent_worker_pb2.SkillConfig:
+        """Convert protobuf SkillConfig - returns proto directly for simplified architecture."""
         return proto
-    
-    def _instruction_config_from_proto(self, proto: agent_worker_pb2.InstructionConfig):
-        """Convert protobuf InstructionConfig - simplified to just return proto."""
+
+    def _tool_config_from_proto(self, proto: agent_worker_pb2.ToolConfig) -> agent_worker_pb2.ToolConfig:
+        """Convert protobuf ToolConfig - returns proto directly for simplified architecture."""
+        return proto
+
+    def _server_config_from_proto(self, proto: agent_worker_pb2.ServerConfig) -> agent_worker_pb2.ServerConfig:
+        """Convert protobuf ServerConfig - returns proto directly for simplified architecture."""
+        return proto
+
+    def _instruction_config_from_proto(self, proto: agent_worker_pb2.InstructionConfig) -> agent_worker_pb2.InstructionConfig:
+        """Convert protobuf InstructionConfig - returns proto directly for simplified architecture."""
         return proto
