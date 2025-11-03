@@ -36,6 +36,8 @@ export function ModalManager({ onUpdate }: ModalManagerProps) {
           onClose={closeModal}
           agent={modalState.data?.agent}
           onUpdate={onUpdate}
+          mode={modalState.data?.mode || 'create'}
+          scheduleIndex={modalState.data?.scheduleIndex}
         />
       );
 

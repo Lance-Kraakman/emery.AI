@@ -418,7 +418,9 @@ export function DynamicDataSheetGrid({
           newRows.forEach(row => dispatch({ type: 'ROW_ADDED', payload: row }))
 
           // Single batch call for all new rows
-          onAddRows(newRows.map(row => dsgRowToPlainObject(row))).catch(err => {
+          const plainRows = newRows.map(row => dsgRowToPlainObject(row));
+          console.log('[DynamicDataSheetGrid] Adding rows:', { dsgRows: newRows, plainRows });
+          onAddRows(plainRows).catch(err => {
             console.error('Failed to add rows:', err)
             // TanStack Query will rollback optimistic update on error
           })
@@ -535,7 +537,11 @@ export function DynamicDataSheetGrid({
             onChange={handleChange}
             columns={columns}
             createRow={() => createEmptyDSGRow(fields)}  // ✅ CRITICAL: Preserves IDs
-            duplicateRow={({ rowData }) => ({ ...rowData, id: crypto.randomUUID() })}  // Enable context menu with row duplication
+            duplicateRow={({ rowData }) => {
+              const duplicated = { ...rowData, id: crypto.randomUUID() };
+              console.log('[DynamicDataSheetGrid] Duplicating row:', { original: rowData, duplicated });
+              return duplicated;
+            }}  // Enable context menu with row duplication
             lockRows={false}
             rowKey="id"
             rowHeight={30}  // Increased to 30 for better readability

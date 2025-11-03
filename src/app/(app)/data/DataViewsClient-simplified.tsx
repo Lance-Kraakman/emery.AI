@@ -222,6 +222,7 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
 
       // Apply field defaults to each row
       const processedRows = rowsData.map(initialData => {
+        console.log('[DataViewsClient] Processing row for creation:', { initialData, fields: fields.map(f => f.name) });
         const rowData: Record<string, any> = initialData || {}
 
         // Only add defaults for optional (non-required) fields

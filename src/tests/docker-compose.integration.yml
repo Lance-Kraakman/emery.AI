@@ -105,7 +105,7 @@ services:
         condition: service_healthy
       minio-integration:
         condition: service_healthy
-    command: ["python", "-m", "emery_agents.infrastructure.grpc.main"]
+    command: ["python", "-m", "emery_agents.grpc.main"]
     healthcheck:
       test: ["CMD", "python", "-c", "import grpc; grpc.channel_ready_future(grpc.insecure_channel('localhost:50051')).result(timeout=5)"]
       interval: 15s
