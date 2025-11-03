@@ -487,9 +487,18 @@ export async function getRowsDSG(
     );
 
     // Transform all rows to DSG format (including the potential extra row)
+    // AIDEV-NOTE: CRITICAL - Convert from numeric field IDs to field names for DSG
+    // row.toPlainObject() returns {id: "123", 79: "value", 80: "value"} (numeric IDs)
+    // But DSG expects {id: "123", test: "value", name: "value"} (field names)
     const allDsgData = rowsData.map(row => {
-      const plainData = row.toPlainObject(table.fields);
-      return { id: row.id.value, ...plainData };
+      const dsgRow: Record<string, any> = { id: row.id.value };
+
+      // Map fieldValues using field names (slugs) as keys, not numeric IDs
+      for (const fieldValue of row.fieldValues) {
+        dsgRow[fieldValue.fieldSlug] = fieldValue.value;
+      }
+
+      return dsgRow;
     });
 
     // If we got more than requested, there are more pages
@@ -555,9 +564,16 @@ export async function searchRowsDSG(
     }
 
     // Transform rows to DSG format
+    // AIDEV-NOTE: CRITICAL - Convert from numeric field IDs to field names for DSG
     const dsgData = result.data.map(row => {
-      const plainData = row.toPlainObject(table.fields);
-      return { id: row.id.value, ...plainData };
+      const dsgRow: Record<string, any> = { id: row.id.value };
+
+      // Map fieldValues using field names (slugs) as keys, not numeric IDs
+      for (const fieldValue of row.fieldValues) {
+        dsgRow[fieldValue.fieldSlug] = fieldValue.value;
+      }
+
+      return dsgRow;
     });
 
     return {

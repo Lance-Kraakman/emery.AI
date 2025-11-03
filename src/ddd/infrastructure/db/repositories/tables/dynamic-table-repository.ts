@@ -64,36 +64,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         .set({ s3Path: realS3Path.path })
         .where(eq(tables.id, tableRecord.id));
 
-      // 3. Create 'id' field - required by Delta Lake (at least one column must exist)
-      // AIDEV-NOTE: This is an infrastructure requirement, not a domain concept.
-      // The 'id' field stores Row.id (UUID) values for row identification.
-      const [idFieldRecord] = await this.db.insert(fields).values({
-        tableId: tableRecord.id,
-        name: 'id',
-        slug: 'id',
-        type: 'text',
-        orderIndex: 0,
-        required: true,
-        fieldConfig: {
-          isSystemField: true,
-          description: 'Row identifier (UUID)'
-        }
-      }).returning();
-
-      // Create TableField domain object for the id field
-      const idField = TableField.fromPersistence({
-        id: idFieldRecord.id,
-        tableId: idFieldRecord.tableId,
-        name: idFieldRecord.name,
-        type: idFieldRecord.type as FieldType,
-        orderIndex: idFieldRecord.orderIndex,
-        relatedTableId: null,
-        required: idFieldRecord.required,
-        metadata: idFieldRecord.fieldConfig || undefined,
-        createdAt: idFieldRecord.createdAt
-      });
-
-      // 4. Create table entity with id field
+      // 3. Create table entity WITHOUT default 'id' field
+      // AIDEV-NOTE: System 'id' column is automatically created by Delta Lake for row identification (UUID).
+      // No need to create a PostgreSQL field record for it - it's a system column, not a user field.
+      // User can add their own fields through the UI after table creation.
       const tableEntity = DynamicTable.fromPersistence({
         id: tableRecord.id,
         databaseId: tableRecord.databaseId,
@@ -102,19 +76,19 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         storageLocation: realS3Path.path,
         description: tableRecord.metadata?.description,
         metadata: tableRecord.metadata ? TableMetadata.fromDatabase(tableRecord.metadata).data : undefined,
-        fields: [idField],  // Include system id field
+        fields: [],  // Empty fields - system 'id' column exists at Delta Lake level
         createdBy: tableRecord.createdBy,
         createdAt: tableRecord.createdAt!,
         updatedAt: tableRecord.updatedAt!
       });
 
-      // Create Delta Lake table via gRPC service (id field will be included in schema)
+      // 4. Create Delta Lake table via gRPC service (system 'id' column created automatically)
       const result = await this.datalake.createTable(tableEntity);
       if (!result.success) {
         throw new Error(`Failed to initialize Delta Lake table: ${result.error}`);
       }
 
-      // 4. Return the created table entity
+      // 5. Return the created table entity
       console.log(`[TableService] Created table: ${tableEntity.name} (ID: ${tableEntity.id})`);
 
       return tableEntity;

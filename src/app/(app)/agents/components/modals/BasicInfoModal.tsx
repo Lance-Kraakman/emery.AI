@@ -345,12 +345,14 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
       </div>
 
       {/* Avatar Customization Modal - Rendered as child to prevent closing parent */}
-      <AvatarCustomizationModal
-        isOpen={isAvatarModalOpen}
-        onClose={() => setIsAvatarModalOpen(false)}
-        initialConfig={formData.avatarConfig}
-        onSave={handleAvatarSave}
-      />
+      {isAvatarModalOpen && (
+        <AvatarCustomizationModal
+          isOpen={isAvatarModalOpen}
+          onClose={() => setIsAvatarModalOpen(false)}
+          initialConfig={formData.avatarConfig}
+          onSave={handleAvatarSave}
+        />
+      )}
     </BaseModal>
   );
 }

@@ -244,8 +244,81 @@ export class DynamicTableDataLake {
         aggregations: aggCount
       });
 
-      // 1. Create query request (with optional aggregations)
-      const queryOptions = { orderBy, orderDirection, limit, offset, filters, aggregations };
+      // AIDEV-NOTE: Convert field names to field IDs for Delta Lake queries
+      // Delta Lake columns use numeric field IDs (79, 80), not field names ('test', 'name')
+
+      // 1a. Convert orderBy from field name to field ID
+      let orderByFieldId = orderBy;
+      if (orderBy) {
+        const orderField = table.fields.find(f => f.name === orderBy);
+        if (orderField) {
+          orderByFieldId = orderField.id.value.toString();
+          logger.debug('Converted orderBy field name to ID', {
+            fieldName: orderBy,
+            fieldId: orderByFieldId
+          });
+        } else {
+          logger.error('OrderBy field not found in table schema', {
+            fieldName: orderBy,
+            availableFields: table.fields.map(f => f.name)
+          });
+        }
+      }
+
+      // 1b. Convert filter field names to field IDs
+      let convertedFilters = filters;
+      if (Array.isArray(filters) && filters.length > 0) {
+        convertedFilters = filters.map((filter: any) => {
+          const filterField = table.fields.find(f => f.name === filter.field);
+          if (filterField) {
+            const convertedFilter = {
+              ...filter,
+              field: filterField.id.value.toString()
+            };
+            logger.debug('Converted filter field name to ID', {
+              fieldName: filter.field,
+              fieldId: convertedFilter.field
+            });
+            return convertedFilter;
+          } else {
+            logger.error('Filter field not found in table schema', {
+              fieldName: filter.field,
+              availableFields: table.fields.map(f => f.name)
+            });
+            return filter; // Keep original if field not found
+          }
+        });
+      } else if (typeof filters === 'object' && Object.keys(filters).length > 0) {
+        // Legacy format: Record<string, any> - convert keys to field IDs
+        convertedFilters = {};
+        for (const [fieldName, value] of Object.entries(filters)) {
+          const filterField = table.fields.find(f => f.name === fieldName);
+          if (filterField) {
+            const fieldId = filterField.id.value.toString();
+            convertedFilters[fieldId] = value;
+            logger.debug('Converted filter key to field ID', {
+              fieldName,
+              fieldId
+            });
+          } else {
+            logger.error('Filter field not found in table schema', {
+              fieldName,
+              availableFields: table.fields.map(f => f.name)
+            });
+            convertedFilters[fieldName] = value; // Keep original if field not found
+          }
+        }
+      }
+
+      // 1c. Create query request (with converted field IDs)
+      const queryOptions = {
+        orderBy: orderByFieldId,
+        orderDirection,
+        limit,
+        offset,
+        filters: convertedFilters,
+        aggregations
+      };
       const queryRequest = TableGrpcMapper.toQueryRowsRequest(
         table.id,
         table.storageLocation || `s3://emery-tables/${table.id.value}`,
