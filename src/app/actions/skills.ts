@@ -538,3 +538,32 @@ export async function createDefaultOrganizationSkill(): Promise<Result<SkillDTO>
     };
   }
 }
+
+/**
+ * Create a default agent skill with minimal data
+ * Used for quick creation from agent header "Add Skill" button
+ */
+export async function createDefaultAgentSkill(agentId: number): Promise<Result<SkillDTO>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    return createSkill({
+      agentId,
+      name: "Untitled Skill",
+      description: "",
+      inputs: [],
+      outputs: [],
+      instructions: "Add instructions here...",
+      tools: []
+    });
+  } catch (error) {
+    console.error('[createDefaultAgentSkill] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create default agent skill'
+    };
+  }
+}

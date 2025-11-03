@@ -431,3 +431,47 @@ export async function duplicateApp(id: number, revalidateUrl?: string): Promise<
     return { success: false, error: "Failed to duplicate app" }
   }
 }
+
+/**
+ * Update app theme configuration
+ */
+export async function updateAppTheme(
+  appId: number,
+  themeConfig: any
+): Promise<Result> {
+  try {
+    const session = await requirePermission("apps:manage");
+
+    if (!appId) {
+      return { success: false, error: "App ID is required" };
+    }
+
+    const appService = getAppApplicationService();
+
+    // Get the app
+    const app = await appService.getApp(AppId.fromNumber(appId));
+    if (!app) {
+      return { success: false, error: "App not found" };
+    }
+
+    // Update theme
+    app.updateTheme(themeConfig);
+
+    // Save the app using repository
+    const { getAppRepository } = await import("@/ddd/application/di/container");
+    const appRepository = getAppRepository();
+    const updatedApp = await appRepository.update(app);
+
+    // Revalidate app routes
+    revalidatePath(`/apps/${appId}`);
+    revalidatePath(`/p/${app.slug.value}`);
+
+    return {
+      success: true,
+      data: AppMapper.toDTO(updatedApp)
+    };
+  } catch (error) {
+    console.error('Error updating app theme:', error);
+    return { success: false, error: "Failed to update app theme" };
+  }
+}

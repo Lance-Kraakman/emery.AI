@@ -1352,6 +1352,7 @@ export const apps = pgTable("apps", {
   name: text("name").notNull(),
   slug: text("slug").notNull(),
   description: text("description"),
+  themeConfig: jsonb("theme_config"),
   createdBy: uuid("created_by")
     .notNull()
     .references(() => users.id),
@@ -1423,6 +1424,7 @@ export const pages = pgTable("pages", {
   description: text("description"),
   order: integer("order").default(0).notNull(),
   templateData: jsonb("template_data").notNull().$type<PuckDataStructure>(),
+  themeConfig: jsonb("theme_config"),
   isPublished: boolean("is_published").default(false).notNull(),
   createdBy: uuid("created_by")
     .notNull()

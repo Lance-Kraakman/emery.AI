@@ -9,6 +9,7 @@ export interface AppDTO {
   name: string;
   slug: string;
   description?: string;
+  themeConfig?: any;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -25,6 +26,7 @@ export class AppMapper {
       name: app.name,
       slug: app.slug.value,
       description: app.description,
+      themeConfig: app.themeConfig ? app.themeConfig.toJSON() : undefined,
       createdBy: app.createdBy.value,
       createdAt: app.createdAt.toISOString(),
       updatedAt: app.updatedAt.toISOString()

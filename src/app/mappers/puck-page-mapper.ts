@@ -12,6 +12,7 @@ export interface PageDTO {
   description?: string;
   order: number;
   templateData: PuckDataStructure;
+  themeConfig?: any;
   isPublished: boolean;
   createdBy: string;
   createdAt: string;
@@ -31,6 +32,7 @@ export class PuckPageMapper {
       description: page.description,
       order: page.order.value,
       templateData: page.templateData.data,
+      themeConfig: page.themeConfig ? page.themeConfig.toJSON() : undefined,
       isPublished: page.isPublished,
       createdBy: page.createdBy.value,
       createdAt: page.createdAt.toISOString(),

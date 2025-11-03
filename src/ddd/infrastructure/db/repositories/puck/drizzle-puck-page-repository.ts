@@ -86,6 +86,7 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
         description: persistence.description,
         order: persistence.order,
         templateData: persistence.templateData,
+        themeConfig: persistence.themeConfig,
         isPublished: persistence.isPublished,
         createdBy: persistence.createdBy,
         createdAt: persistence.createdAt,
@@ -111,6 +112,7 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
           description: persistence.description,
           order: persistence.order,
           templateData: persistence.templateData,
+          themeConfig: persistence.themeConfig,
           isPublished: persistence.isPublished,
           updatedAt: new Date()
         })
@@ -228,6 +230,7 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
       description: record.description,
       order: record.order,
       templateData: record.templateData,
+      themeConfig: record.themeConfig,
       isPublished: record.isPublished,
       createdBy: record.createdBy,
       createdAt: record.createdAt,

@@ -1,6 +1,6 @@
 .HeaderBlock {
-  background-color: white;
-  border-bottom: 1px solid #e5e7eb;
+  background-color: var(--theme-surface, white);
+  border-bottom: var(--theme-border-width, 1px) solid var(--theme-border, #e5e7eb);
   z-index: 100;
 }
 

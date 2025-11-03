@@ -11,9 +11,9 @@
   align-items: center;
   justify-content: center;
   padding: 3rem 2rem;
-  border: 2px dashed var(--border-color, #ddd);
-  border-radius: 8px;
-  background: var(--bg-muted, #f9f9f9);
+  border: 2px dashed var(--theme-border, #ddd);
+  border-radius: var(--theme-border-radius, 8px);
+  background: var(--theme-background, #f9f9f9);
   min-height: 150px;
 }
 
@@ -24,7 +24,7 @@
 }
 
 .placeholderText {
-  color: var(--text-muted, #666);
+  color: var(--theme-text-muted, #666);
   font-size: 1rem;
   margin: 0;
 }
@@ -36,9 +36,9 @@
   align-items: center;
   justify-content: center;
   padding: 2rem;
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 8px;
-  background: var(--bg-surface, #fff);
+  border: var(--theme-border-width, 1px) solid var(--theme-border, #ddd);
+  border-radius: var(--theme-border-radius, 8px);
+  background: var(--theme-surface, #fff);
   min-height: 150px;
 }
 
@@ -49,7 +49,7 @@
 }
 
 .emptyText {
-  color: var(--text-muted, #666);
+  color: var(--theme-text-muted, #666);
   font-size: 0.9375rem;
   margin: 0;
   text-align: center;
@@ -60,9 +60,9 @@
   display: flex;
   flex-direction: column;
   padding: 1.5rem;
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: 8px;
-  background: var(--bg-surface, #ffffff);
+  border: var(--theme-border-width, 1px) solid var(--theme-border, #e5e7eb);
+  border-radius: var(--theme-border-radius, 8px);
+  background: var(--theme-surface, #ffffff);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   transition: box-shadow 0.2s ease;
 }
@@ -75,7 +75,7 @@
 .label {
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--text-secondary, #6b7280);
+  color: var(--theme-text-muted, #6b7280);
   margin-bottom: 0.5rem;
   display: flex;
   align-items: center;
@@ -85,14 +85,14 @@
 .metricType {
   font-size: 0.75rem;
   font-weight: 400;
-  color: var(--text-muted, #9ca3af);
+  color: var(--theme-text-muted, #9ca3af);
 }
 
 /* Value */
 .value {
   font-size: 2.5rem;
   font-weight: 700;
-  color: var(--text-primary, #111827);
+  color: var(--theme-text, #111827);
   line-height: 1.2;
 }
 
@@ -106,16 +106,16 @@
 }
 
 .changeText {
-  color: var(--text-muted, #9ca3af);
+  color: var(--theme-text-muted, #9ca3af);
   font-style: italic;
 }
 
 .changePositive {
-  color: var(--success-color, #10b981);
+  color: var(--theme-success, #10b981);
 }
 
 .changeNegative {
-  color: var(--danger-color, #ef4444);
+  color: var(--theme-error, #ef4444);
 }
 
 /* Size variants */

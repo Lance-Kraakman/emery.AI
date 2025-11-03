@@ -23,6 +23,7 @@ interface PreviewClientProps {
  * - Navigation controls
  *
  * Receives pre-resolved data from server component parent.
+ * Theme is provided via ThemeContext.
  */
 export function PreviewClient({ resolvedData, pageName }: PreviewClientProps) {
   const router = useRouter();

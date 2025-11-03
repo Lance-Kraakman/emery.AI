@@ -3,9 +3,9 @@
 }
 
 .Card--card {
-  background: white;
-  box-shadow: rgba(140, 152, 164, 0.25) 0px 3px 6px 0px;
-  border-radius: 8px;
+  background: var(--theme-surface, white);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+  border-radius: var(--theme-border-radius, 8px);
   max-width: 100%;
 }
 
@@ -23,8 +23,8 @@
 
 .Card-icon {
   border-radius: 256px;
-  background: var(--puck-color-azure-09);
-  color: var(--puck-color-azure-06);
+  background: color-mix(in srgb, var(--theme-primary, var(--puck-color-azure-09)) 10%, transparent);
+  color: var(--theme-primary, var(--puck-color-azure-06));
   display: flex;
   justify-content: center;
   align-items: center;
@@ -44,7 +44,7 @@
 .Card-description {
   font-size: 16px;
   line-height: 1.5;
-  color: var(--puck-color-grey-05);
+  color: var(--theme-text-muted, var(--puck-color-grey-05));
   text-align: center;
   font-weight: 300;
 }

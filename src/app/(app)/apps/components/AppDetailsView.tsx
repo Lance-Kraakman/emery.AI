@@ -6,15 +6,18 @@ import type { PageDTO } from '@/app/mappers/puck-page-mapper';
 import type { ViewDTO } from '@/app/mappers/view-mapper';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Edit, Trash2 } from 'lucide-react';
+import { Edit, Trash2, Palette } from 'lucide-react';
 import { appsActions } from '@/stores/apps.store';
-import { deleteApp } from '@/app/actions/puck-apps';
+import { deleteApp, updateAppTheme } from '@/app/actions/puck-apps';
 import { getPages } from '@/app/actions/puck-pages';
 import { getViewsForOrganization } from '@/app/actions/views';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { PagesSection } from './PagesSection';
 import { ViewsSection } from './ViewsSection';
+import { ThemeEditorSheet } from './ThemeEditorSheet';
+import { useRouter } from 'next/navigation';
+import type { ThemeConfigProps } from '@/ddd/domain/puck/value-objects/theme-config';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,8 +34,10 @@ interface AppDetailsViewProps {
 }
 
 export function AppDetailsView({ app }: AppDetailsViewProps) {
+  const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [themeSheetOpen, setThemeSheetOpen] = useState(false);
   const [pages, setPages] = useState<PageDTO[]>([]);
   const [loadingPages, setLoadingPages] = useState(true);
   const [dataSources, setDataSources] = useState<ViewDTO[]>([]);
@@ -99,6 +104,24 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
     }
   };
 
+  const handleSaveAppTheme = async (theme: ThemeConfigProps | undefined) => {
+    try {
+      const result = await updateAppTheme(app.id, theme);
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update app theme");
+        return;
+      }
+
+      toast.success("App theme updated successfully");
+      setThemeSheetOpen(false);
+      router.refresh();
+    } catch (error) {
+      console.error('Error updating app theme:', error);
+      toast.error("Failed to update app theme");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -149,6 +172,33 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
         </CardContent>
       </Card>
 
+      {/* Theme Settings Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Theme Settings</CardTitle>
+          <CardDescription>Customize colors, typography, and layout for this app</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              {app.themeConfig ? (
+                <p className="text-sm text-muted-foreground">
+                  Custom theme configured
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Using default theme
+                </p>
+              )}
+            </div>
+            <Button onClick={() => setThemeSheetOpen(true)}>
+              <Palette className="h-4 w-4 mr-2" />
+              Edit Theme
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Pages Section */}
       <PagesSection appId={app.id} pages={pages} loading={loadingPages} onPagesChange={loadPages} />
 
@@ -181,6 +231,15 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Theme Editor Sheet */}
+      <ThemeEditorSheet
+        open={themeSheetOpen}
+        onOpenChange={setThemeSheetOpen}
+        initialTheme={app.themeConfig}
+        onSave={handleSaveAppTheme}
+        mode="app"
+      />
     </div>
   );
 }

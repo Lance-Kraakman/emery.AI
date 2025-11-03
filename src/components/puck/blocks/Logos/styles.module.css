@@ -1,5 +1,5 @@
 .Logos {
-  background-color: var(--puck-color-grey-02);
+  background-color: var(--theme-background, var(--puck-color-grey-02));
 }
 
 .Logos-items {

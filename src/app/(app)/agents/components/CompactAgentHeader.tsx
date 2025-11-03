@@ -9,6 +9,7 @@ import { useModal } from './modals/ModalContext';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useRouter } from 'next/navigation';
 import { AgentAvatar } from '@/components/agents/AgentAvatar';
+import { createDefaultAgentSkill } from '@/app/actions/skills';
 
 interface CompactAgentHeaderProps {
   agent: AgentDTO;
@@ -37,9 +38,17 @@ export function CompactAgentHeader({
   const activeSchedules = agent.schedules?.filter(s => s.enabled).length || 0;
   const totalSchedules = agent.schedules?.length || 0;
 
-  const handleAddSkill = () => {
+  const handleAddSkill = async () => {
     setSkillsOpen(false);
-    router.push(`/agents/${agent.id}/skills`);
+
+    // Create a default skill and navigate to editor
+    const result = await createDefaultAgentSkill(agent.id);
+    if (result.success && result.data) {
+      router.push(`/agents/${agent.id}/skills/${result.data.id}`);
+    } else {
+      console.error('Failed to create skill:', result.error);
+      // TODO: Show toast notification for error
+    }
   };
 
   const handleSkillClick = (skillId: number) => {
@@ -88,8 +97,20 @@ export function CompactAgentHeader({
         )}
       </div>
 
-      {/* Right side - Badges and actions */}
+      {/* Right side - Settings and action badges */}
       <div className="flex items-center gap-2">
+        {/* Settings Button */}
+        <button
+          onClick={() => openModal('basic-info', { agent })}
+          className="p-2 border rounded-md hover:bg-accent transition-colors"
+          title="Agent settings"
+        >
+          <Settings className="h-4 w-4" />
+        </button>
+
+        {/* Separator */}
+        <div className="h-6 w-px bg-border" />
+
         {/* Skills Dropdown */}
         <Popover open={skillsOpen} onOpenChange={setSkillsOpen}>
           <PopoverTrigger asChild>
@@ -230,15 +251,6 @@ export function CompactAgentHeader({
         >
           <Link2 className="h-3.5 w-3.5" />
           Connections ({connections.length})
-        </button>
-
-        {/* Settings Button */}
-        <button
-          onClick={() => openModal('basic-info', { agent })}
-          className="p-2 border rounded-md hover:bg-accent transition-colors"
-          title="Agent settings"
-        >
-          <Settings className="h-4 w-4" />
         </button>
       </div>
     </div>
