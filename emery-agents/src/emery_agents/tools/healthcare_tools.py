@@ -7,7 +7,7 @@ Includes document generation, template processing, and healthcare-specific utili
 
 from typing import Any, Dict
 from smolagents import Tool
-from ...core.entities import ToolConfig
+from ..grpc.generated.agent_worker_pb2 import ToolConfig
 import json
 import os
 from datetime import datetime

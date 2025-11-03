@@ -10,7 +10,7 @@ import os
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
-from ...core.entities import ToolConfig
+from ..grpc.generated.agent_worker_pb2 import ToolConfig
 
 
 class UnifiedToolLoader:
@@ -95,7 +95,7 @@ class UnifiedToolLoader:
 
     def _load_pipedream_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load a Pipedream tool using the unified configuration."""
-        from ...execution.tools.pipedream_tools import PipedreamTool
+        from ..tools.pipedream_tools import PipedreamTool
 
         if not api_key:
             raise ValueError(f"API key required for Pipedream tool '{tool_config.name}'")
@@ -147,87 +147,87 @@ class UnifiedToolLoader:
     # Emery tool loaders
     def _load_file_reader_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load File Reader tool."""
-        from ...execution.tools.base_tools import load_file_reader
+        from ..tools.base_tools import load_file_reader
         return load_file_reader(tool_config)
 
     def _load_calculator_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Calculator tool."""
-        from ...execution.tools.base_tools import load_calculator
+        from ..tools.base_tools import load_calculator
         return load_calculator(tool_config)
 
     def _load_document_reader_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Document Reader tool."""
-        from ...execution.tools.base_tools import load_document_reader
+        from ..tools.base_tools import load_document_reader
         return load_document_reader(tool_config)
 
     def _load_table_query_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Table Query tool."""
-        from ...execution.tools.base_tools import load_table_query
+        from ..tools.base_tools import load_table_query
         return load_table_query(tool_config)
 
     def _load_agent_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Agent CRUD tool."""
-        from ...execution.tools.crud_tools import load_agent_crud
+        from ..tools.crud_tools import load_agent_crud
         return load_agent_crud(tool_config)
 
     def _load_document_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Document CRUD tool."""
-        from ...execution.tools.crud_tools import load_document_crud
+        from ..tools.crud_tools import load_document_crud
         return load_document_crud(tool_config)
 
     def _load_file_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load File CRUD tool."""
-        from ...execution.tools.crud_tools import load_file_crud
+        from ..tools.crud_tools import load_file_crud
         return load_file_crud(tool_config)
 
     def _load_table_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Table CRUD tool."""
-        from ...execution.tools.crud_tools import load_table_crud
+        from ..tools.crud_tools import load_table_crud
         return load_table_crud(tool_config)
 
     def _load_team_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Team CRUD tool."""
-        from ...execution.tools.crud_tools import load_team_crud
+        from ..tools.crud_tools import load_team_crud
         return load_team_crud(tool_config)
 
     def _load_database_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Database CRUD tool."""
-        from ...execution.tools.crud_tools import load_database_crud
+        from ..tools.crud_tools import load_database_crud
         return load_database_crud(tool_config)
 
     def _load_emery_database_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Emery Database tool."""
-        from ...execution.tools.organizational_tools import EmeryDatabaseTool
+        from ..tools.organizational_tools import EmeryDatabaseTool
         return EmeryDatabaseTool(tool_config.name, tool_config.description)
 
     def _load_table_schema_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Table Schema tool."""
-        from ...execution.tools.organizational_tools import TableSchemaTool
+        from ..tools.organizational_tools import TableSchemaTool
         return TableSchemaTool(tool_config.name, tool_config.description)
 
     def _load_table_data_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Table Data tool."""
-        from ...execution.tools.organizational_tools import TableDataTool
+        from ..tools.organizational_tools import TableDataTool
         return TableDataTool(tool_config.name, tool_config.description)
 
     def _load_measurement_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Measurement API tool."""
-        from ...execution.tools.api_tools import MeasurementAPITool
+        from ..tools.api_tools import MeasurementAPITool
         return MeasurementAPITool(tool_config.name, tool_config.description)
 
     def _load_kpi_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load KPI API tool."""
-        from ...execution.tools.api_tools import KPIAPITool
+        from ..tools.api_tools import KPIAPITool
         return KPIAPITool(tool_config.name, tool_config.description)
 
     def _load_analysis_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Analysis API tool."""
-        from ...execution.tools.api_tools import AnalysisAPITool
+        from ..tools.api_tools import AnalysisAPITool
         return AnalysisAPITool(tool_config.name, tool_config.description)
 
     def _load_process_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Process API tool."""
-        from ...execution.tools.api_tools import ProcessAPITool
+        from ..tools.api_tools import ProcessAPITool
         return ProcessAPITool(tool_config.name, tool_config.description)
 
     def load_tools(self, tool_configs: List[ToolConfig], api_key: str = "", api_key_mode: str = "agent") -> List[Any]:

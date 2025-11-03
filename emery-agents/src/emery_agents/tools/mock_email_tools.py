@@ -7,7 +7,7 @@ Simulates Gmail API and other communication services.
 
 from typing import Any, Dict
 from smolagents import Tool
-from ...core.entities import ToolConfig
+from ..grpc.generated.agent_worker_pb2 import ToolConfig
 
 
 def load_mock_gmail(config: ToolConfig) -> Any:

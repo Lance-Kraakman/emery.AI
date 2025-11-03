@@ -8,7 +8,7 @@ Now includes Pipedream tools for OAuth-backed integrations.
 
 import os
 from typing import Any, Dict, List
-from ...core.entities import ToolConfig
+from ..grpc.generated.agent_worker_pb2 import ToolConfig
 from .base_tools import BASE_TOOLS
 from .mock_email_tools import EMAIL_TOOLS
 from .mock_data_tools import DATA_TOOLS
