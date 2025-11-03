@@ -40,7 +40,7 @@ export default function PreviewPage() {
         const app = await getApp(appId);
 
         // 2. Check sessionStorage first (unsaved changes from editor)
-        const savedData = sessionStorage.getItem(`preview-${pageId}`);
+        const savedData = sessionStorage.getItem(`puck-data-${pageId}`);
         let rawData: Data;
         let page: PageDTO;
 

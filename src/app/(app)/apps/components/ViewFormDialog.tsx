@@ -34,6 +34,7 @@ import type { AggregationType, FormatType } from '@/ddd/domain/views/value-objec
 import { ViewTypeSelector } from './ViewTypeSelector';
 import { MetricConfigurationSection } from './MetricConfigurationSection';
 import { GridConfigurationSection, type GridFilterConfig, type GridSortConfig, type GridFieldMapping } from './GridConfigurationSection';
+import { ChartConfigurationSection, type ChartConfigState } from './ChartConfigurationSection';
 
 interface ViewFormDialogProps {
   open: boolean;
@@ -55,7 +56,7 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [tableId, setTableId] = useState<number | undefined>();
-  const [viewType, setViewType] = useState<'grid' | 'metric'>('grid');
+  const [viewType, setViewType] = useState<'grid' | 'metric' | 'chart'>('grid');
 
   // Metric view configuration
   const [selectedFieldId, setSelectedFieldId] = useState<number | undefined>();
@@ -69,6 +70,14 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
   const [gridSorting, setGridSorting] = useState<GridSortConfig[]>([]);
   const [gridFieldMappings, setGridFieldMappings] = useState<GridFieldMapping[]>([]);
   const [gridDefaultPageSize, setGridDefaultPageSize] = useState<number>(50);
+
+  // Chart view configuration
+  const [chartConfig, setChartConfig] = useState<ChartConfigState>({
+    chartType: 'bar',
+    dataMode: 'raw',
+    yAxisFieldIds: [],
+    aggregations: [],
+  });
 
   // Load tables on mount
   useEffect(() => {
@@ -145,6 +154,22 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
           setGridDefaultPageSize(50);
         }
       }
+
+      // Load chart configuration if it's a chart view
+      if (view.viewType === 'chart' && view.viewConfig.type === 'chart') {
+        const chartConfigData = view.viewConfig as any;
+        setChartConfig({
+          chartType: chartConfigData.chartType || 'bar',
+          dataMode: chartConfigData.dataMode || 'raw',
+          xAxisFieldId: chartConfigData.xAxisFieldId,
+          yAxisFieldIds: chartConfigData.yAxisFieldIds || [],
+          groupByFieldId: chartConfigData.groupByFieldId,
+          aggregations: chartConfigData.aggregations || [],
+          maxDataPoints: chartConfigData.maxDataPoints,
+          sortBy: chartConfigData.sortBy,
+          sortDirection: chartConfigData.sortDirection,
+        });
+      }
     } else {
       setName('');
       setDescription('');
@@ -159,6 +184,12 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
       setGridSorting([]);
       setGridFieldMappings([]);
       setGridDefaultPageSize(50);
+      setChartConfig({
+        chartType: 'bar',
+        dataMode: 'raw',
+        yAxisFieldIds: [],
+        aggregations: [],
+      });
     }
   }, [view]);
 
@@ -209,6 +240,21 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
       }
     }
 
+    // Validate chart view configuration
+    if (viewType === 'chart') {
+      if (chartConfig.dataMode === 'raw') {
+        if (!chartConfig.xAxisFieldId || chartConfig.yAxisFieldIds.length === 0) {
+          setError('Chart view in raw mode requires X axis and at least one Y axis field');
+          return;
+        }
+      } else if (chartConfig.dataMode === 'aggregated') {
+        if (!chartConfig.groupByFieldId || chartConfig.aggregations.length === 0) {
+          setError('Chart view in aggregated mode requires Group By field and at least one aggregation');
+          return;
+        }
+      }
+    }
+
     try {
       setIsSubmitting(true);
       setError(null);
@@ -228,6 +274,20 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
               formatType,
               decimals,
             },
+          });
+          break;
+        case 'chart':
+          viewTypeVO = ViewType.chart();
+          viewConfigVO = ViewConfig.createChart({
+            chartType: chartConfig.chartType,
+            dataMode: chartConfig.dataMode,
+            xAxisFieldId: chartConfig.xAxisFieldId,
+            yAxisFieldIds: chartConfig.yAxisFieldIds,
+            groupByFieldId: chartConfig.groupByFieldId,
+            aggregations: chartConfig.aggregations,
+            maxDataPoints: chartConfig.maxDataPoints,
+            sortBy: chartConfig.sortBy,
+            sortDirection: chartConfig.sortDirection,
           });
           break;
         case 'grid':
@@ -420,7 +480,16 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
                 />
               )}
 
-
+              {/* Chart Configuration */}
+              {viewType === 'chart' && tableId && (
+                <ChartConfigurationSection
+                  fields={fields}
+                  loadingFields={loadingFields}
+                  config={chartConfig}
+                  onConfigChange={setChartConfig}
+                  isSubmitting={isSubmitting}
+                />
+              )}
 
               {error && (
                 <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">

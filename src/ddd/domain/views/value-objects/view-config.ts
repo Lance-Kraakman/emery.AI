@@ -35,11 +35,35 @@ export interface MetricViewConfig {
 }
 
 /**
+ * Chart View Configuration
+ * Recharts-based data visualization with raw or aggregated data
+ */
+export interface ChartViewConfig {
+  type: 'chart';
+  chartType: 'bar' | 'line' | 'pie' | 'area' | 'scatter';
+  dataMode: 'raw' | 'aggregated';
+
+  // Raw mode: plot row data directly
+  xAxisFieldId?: number;        // Field for X axis
+  yAxisFieldIds?: number[];     // Field(s) for Y axis - multiple series support
+
+  // Aggregated mode: GROUP BY + aggregations
+  groupByFieldId?: number;      // GROUP BY this field (becomes X axis)
+  aggregations?: AggregationConfigProps[];  // Multiple Y series via aggregations
+
+  // Optional: chart data limits
+  maxDataPoints?: number;       // Limit number of data points
+  sortBy?: 'x' | 'y';          // Sort data by X or Y axis
+  sortDirection?: 'asc' | 'desc';
+}
+
+/**
  * Union of all view configuration types
  */
 export type ViewConfigData =
   | GridViewConfig
-  | MetricViewConfig;
+  | MetricViewConfig
+  | ChartViewConfig;
 
 export class ViewConfig {
   private constructor(private readonly _config: ViewConfigData) {
@@ -66,6 +90,12 @@ export class ViewConfig {
     });
   }
 
+  static createChart(config: Omit<ChartViewConfig, 'type'>): ViewConfig {
+    return new ViewConfig({
+      type: 'chart',
+      ...config,
+    });
+  }
 
   /**
    * Create from JSON (database deserialization)
@@ -86,6 +116,9 @@ export class ViewConfig {
       case 'metric':
         this.validateMetricConfig(this._config);
         break;
+      case 'chart':
+        this.validateChartConfig(this._config);
+        break;
       case 'grid':
         // Grid config has no required fields
         break;
@@ -101,6 +134,38 @@ export class ViewConfig {
 
     // Validate aggregation can be created
     AggregationConfig.create(config.aggregation);
+  }
+
+  private validateChartConfig(config: ChartViewConfig): void {
+    // Validate chart type
+    const validChartTypes = ['bar', 'line', 'pie', 'area', 'scatter'];
+    if (!validChartTypes.includes(config.chartType)) {
+      throw new Error(`Invalid chart type: ${config.chartType}`);
+    }
+
+    // Validate data mode
+    if (config.dataMode !== 'raw' && config.dataMode !== 'aggregated') {
+      throw new Error(`Invalid chart data mode: ${config.dataMode}`);
+    }
+
+    // Validate based on data mode
+    if (config.dataMode === 'raw') {
+      if (!config.xAxisFieldId) {
+        throw new Error('Chart view in raw mode requires xAxisFieldId');
+      }
+      if (!config.yAxisFieldIds || config.yAxisFieldIds.length === 0) {
+        throw new Error('Chart view in raw mode requires at least one yAxisFieldId');
+      }
+    } else if (config.dataMode === 'aggregated') {
+      if (!config.groupByFieldId) {
+        throw new Error('Chart view in aggregated mode requires groupByFieldId');
+      }
+      if (!config.aggregations || config.aggregations.length === 0) {
+        throw new Error('Chart view in aggregated mode requires at least one aggregation');
+      }
+      // Validate each aggregation can be created
+      config.aggregations.forEach(agg => AggregationConfig.create(agg));
+    }
   }
 
   /**
@@ -128,6 +193,10 @@ export class ViewConfig {
     return this._config.type === 'metric';
   }
 
+  isChart(): this is { config: ChartViewConfig } {
+    return this._config.type === 'chart';
+  }
+
   /**
    * Extract all aggregations from this view config
    *
@@ -138,6 +207,12 @@ export class ViewConfig {
     switch (this._config.type) {
       case 'metric':
         return [AggregationConfig.create(this._config.aggregation)];
+
+      case 'chart':
+        if (this._config.dataMode === 'aggregated' && this._config.aggregations) {
+          return this._config.aggregations.map(a => AggregationConfig.create(a));
+        }
+        return [];
 
       case 'grid':
         return [];
@@ -163,6 +238,16 @@ export class ViewConfig {
   getGridConfig(): GridViewConfig | null {
     if (this.isGrid()) {
       return this._config as GridViewConfig;
+    }
+    return null;
+  }
+
+  /**
+   * Get chart config (type-safe accessor)
+   */
+  getChartConfig(): ChartViewConfig | null {
+    if (this.isChart()) {
+      return this._config as ChartViewConfig;
     }
     return null;
   }

@@ -322,6 +322,8 @@ export interface TableField {
   required: boolean;
   /** UI hints, validation rules, etc. */
   metadata: { [key: string]: string };
+  /** Numeric field ID used as Delta Lake column name */
+  fieldId: number;
 }
 
 export interface TableField_MetadataEntry {
@@ -662,7 +664,7 @@ export interface GetTableStatsResponse {
 }
 
 function createBaseTableField(): TableField {
-  return { name: "", type: 0, required: false, metadata: {} };
+  return { name: "", type: 0, required: false, metadata: {}, fieldId: 0 };
 }
 
 export const TableField: MessageFns<TableField> = {
@@ -679,6 +681,9 @@ export const TableField: MessageFns<TableField> = {
     Object.entries(message.metadata).forEach(([key, value]) => {
       TableField_MetadataEntry.encode({ key: key as any, value }, writer.uint32(34).fork()).join();
     });
+    if (message.fieldId !== 0) {
+      writer.uint32(40).int32(message.fieldId);
+    }
     return writer;
   },
 
@@ -724,6 +729,14 @@ export const TableField: MessageFns<TableField> = {
           }
           continue;
         }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.fieldId = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -744,6 +757,7 @@ export const TableField: MessageFns<TableField> = {
           return acc;
         }, {})
         : {},
+      fieldId: isSet(object.fieldId) ? globalThis.Number(object.fieldId) : 0,
     };
   },
 
@@ -767,6 +781,9 @@ export const TableField: MessageFns<TableField> = {
         });
       }
     }
+    if (message.fieldId !== 0) {
+      obj.fieldId = Math.round(message.fieldId);
+    }
     return obj;
   },
 
@@ -784,6 +801,7 @@ export const TableField: MessageFns<TableField> = {
       }
       return acc;
     }, {});
+    message.fieldId = object.fieldId ?? 0;
     return message;
   },
 };

@@ -123,6 +123,7 @@ export class TableGrpcMapper {
       type: this.mapFieldTypeToProto(field.type),
       required: field.required || false,
       metadata: field.metadata || {},
+      fieldId: field.id.value,  // Add numeric field ID for Delta Lake column name
     };
 
     return protoField;
@@ -159,6 +160,7 @@ export class TableGrpcMapper {
     tableId: TableId,
     serializedRows: Array<{ id: string; data: Record<string, any> }>,
     organizationId: OrganizationId,
+    fields: readonly TableField[],
     s3Path?: string,
     mode?: 'append' | 'overwrite'
   ): ICreateRowsRequest {
@@ -183,6 +185,7 @@ export class TableGrpcMapper {
     tableId: TableId,
     serializedRows: Array<{ id: string; data: Record<string, any> }>,
     organizationId: OrganizationId,
+    fields: readonly TableField[],
     s3Path?: string
   ): IUpdateRowsRequest {
     const request: IUpdateRowsRequest = {

@@ -1,6 +1,7 @@
 import { ComponentConfig, Slot } from "@measured/puck";
 import { getClassNameFactory } from "@/components/puck/lib";
 import { createComponent } from "@/components/puck/lib/create-component";
+import { ColorFieldRenderer } from "@/components/puck/fields/ColorField";
 import styles from "./styles.module.css";
 
 const getClassName = getClassNameFactory("FooterBlock", styles);
@@ -58,13 +59,9 @@ export const FooterBlock: ComponentConfig<FooterBlockProps> = {
       label: "Bottom Bar",
     },
     backgroundColor: {
-      type: "select",
-      label: "Background Color",
-      options: [
-        { label: "Light Gray", value: "#f9fafb" },
-        { label: "Dark Gray", value: "#1f2937" },
-        { label: "Black", value: "#111827" },
-      ],
+      type: "custom",
+      label: "Background Color (Optional)",
+      render: ColorFieldRenderer,
     },
   },
   defaultProps: {
@@ -75,7 +72,7 @@ export const FooterBlock: ComponentConfig<FooterBlockProps> = {
     column3: [],
     column4: [],
     bottomBar: [],
-    backgroundColor: "#1f2937",
+    backgroundColor: undefined,
   },
   resolveFields: async (data, { fields }) => {
     const layout = data.props.layout || "columns";
@@ -209,16 +206,13 @@ export const FooterBlock: ComponentConfig<FooterBlockProps> = {
     backgroundColor,
     puck
   }) => {
-    const isDark = backgroundColor !== "#f9fafb";
-
     return (
       <footer
         className={getClassName({
           [layout || "columns"]: true,
         })}
         style={{
-          backgroundColor,
-          color: isDark ? "white" : "inherit",
+          ...(backgroundColor && { backgroundColor }),
         }}
       >
         <div className={getClassName("inner")}>

@@ -14,9 +14,9 @@ export interface ViewDTO {
   tableName?: string;  // Optional table name for display purposes
   name: string;
   description?: string;
-  viewType: 'grid' | 'metric';
+  viewType: 'grid' | 'metric' | 'chart';
   viewConfig: {
-    type: 'grid' | 'metric';
+    type: 'grid' | 'metric' | 'chart';
     [key: string]: any;
   };
   filters: Array<{
@@ -54,9 +54,9 @@ export class ViewMapper {
       tableId: persistence.tableId,
       name: persistence.name,
       description: persistence.description,
-      viewType: persistence.viewType as 'grid' | 'metric',
+      viewType: persistence.viewType as 'grid' | 'metric' | 'chart',
       viewConfig: persistence.viewConfig as {
-        type: 'grid' | 'metric';
+        type: 'grid' | 'metric' | 'chart';
         [key: string]: any;
       },
       filters: persistence.filters,

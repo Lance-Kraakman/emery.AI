@@ -25,6 +25,8 @@ export interface AvatarConfigV1 {
   version: 1;
   style?: string;  // DiceBear style name
   color?: string;  // Color name for background
+  seed?: string;   // Seed for deterministic avatar generation
+  options?: Record<string, any>;  // Style-specific customization options
 }
 
 /**
@@ -172,23 +174,37 @@ export function getAvatarColor(colorName?: string) {
 }
 
 /**
+ * Generate a random seed for avatar generation
+ * Uses timestamp + random numbers for client-side generation
+ */
+export function generateRandomSeed(): string {
+  // Simple client-side random: timestamp + two random strings
+  const timestamp = Date.now();
+  const random1 = Math.random().toString(36).substring(2, 15);
+  const random2 = Math.random().toString(36).substring(2, 15);
+  return `${timestamp}-${random1}-${random2}`;
+}
+
+/**
  * Generate avatar data URI using DiceBear
  * @param styleName - The DiceBear style to use
  * @param seed - Unique identifier for deterministic avatar generation (e.g., agent ID)
  * @param colorName - Optional color name for background
+ * @param options - Optional style-specific customization options
  * @returns Data URI string for the SVG avatar
  */
 export function generateAvatarDataUri(
   styleName?: string,
   seed?: string,
-  colorName?: string
+  colorName?: string,
+  options?: Record<string, any>
 ): string {
   const style = getAvatarStyle(styleName);
   const color = getAvatarColor(colorName);
 
   const avatar = createAvatar(style, {
     seed: seed || 'default',
-    // Add style-specific options here if needed
+    ...options  // Spread style-specific options
   });
 
   return avatar.toDataUri();

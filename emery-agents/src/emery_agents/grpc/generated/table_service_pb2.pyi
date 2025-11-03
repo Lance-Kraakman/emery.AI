@@ -83,7 +83,7 @@ AGG_TYPE_COUNT_EMPTY: AggregationType
 AGG_TYPE_COUNT_NOT_EMPTY: AggregationType
 
 class TableField(_message.Message):
-    __slots__ = ("name", "type", "required", "metadata")
+    __slots__ = ("name", "type", "required", "metadata", "field_id")
     class MetadataEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -95,11 +95,13 @@ class TableField(_message.Message):
     TYPE_FIELD_NUMBER: _ClassVar[int]
     REQUIRED_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
+    FIELD_ID_FIELD_NUMBER: _ClassVar[int]
     name: str
     type: FieldType
     required: bool
     metadata: _containers.ScalarMap[str, str]
-    def __init__(self, name: _Optional[str] = ..., type: _Optional[_Union[FieldType, str]] = ..., required: bool = ..., metadata: _Optional[_Mapping[str, str]] = ...) -> None: ...
+    field_id: int
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[_Union[FieldType, str]] = ..., required: bool = ..., metadata: _Optional[_Mapping[str, str]] = ..., field_id: _Optional[int] = ...) -> None: ...
 
 class TableSchema(_message.Message):
     __slots__ = ("schema_id", "name", "version", "fields", "metadata")
