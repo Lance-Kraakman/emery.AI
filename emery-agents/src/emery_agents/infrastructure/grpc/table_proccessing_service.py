@@ -946,7 +946,22 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Skip LIKE/ILIKE operators - they don't work in dataset filter predicates
             if filter_obj.operator in (table_service_pb2.FILTER_OP_LIKE, table_service_pb2.FILTER_OP_ILIKE):
                 continue
-            field_ref = pc.field(filter_obj.field)
+
+            # CRITICAL FIX: Check if field is string_view and cast to large_string for filter compatibility
+            # PyArrow filter kernels don't support string_view comparison
+            import pyarrow.types as pat
+            try:
+                column_type = schema.field(filter_obj.field).type
+                if pat.is_string_view(column_type):
+                    # Cast string_view field to large_string for filter compatibility
+                    field_ref = pc.field(filter_obj.field).cast(pa.large_string())
+                else:
+                    field_ref = pc.field(filter_obj.field)
+            except KeyError:
+                # Field not in schema, skip
+                logger.warning(f"Filter field '{filter_obj.field}' not found in schema during field cast")
+                continue
+
             operator = filter_obj.operator
 
             # Extract value from the RowDataValue oneof
