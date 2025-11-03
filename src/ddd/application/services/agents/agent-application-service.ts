@@ -162,6 +162,14 @@ export class AgentApplicationService {
    */
   async updateAgent(dto: UpdateAgentDTO): Promise<Result<AgentDTO>> {
     try {
+      // LOGGING: Start of update operation
+      logger.debug('Updating agent', {
+        agentId: dto.id,
+        hasSchedules: !!dto.schedules,
+        scheduleCount: dto.schedules?.length,
+        updateFields: Object.keys(dto).filter(k => dto[k as keyof UpdateAgentDTO] !== undefined)
+      });
+
       // Convert ID to Value Object
       const agentId = AgentId.fromNumber(dto.id);
 
@@ -187,11 +195,31 @@ export class AgentApplicationService {
       if (dto.status !== undefined) updateData.status = dto.status;
       if (dto.avatarConfig !== undefined) updateData.avatarConfig = dto.avatarConfig;
 
+      // LOGGING: Update data prepared
+      logger.debug('Update data prepared for repository', {
+        agentId: dto.id,
+        updateDataKeys: Object.keys(updateData),
+        hasSchedules: !!updateData.schedules,
+        scheduleCount: updateData.schedules?.length,
+        schedules: updateData.schedules
+      });
+
       // Update agent via repository
       const savedAgent = await this.agentRepository.update(agentId, updateData);
 
+      // LOGGING: Agent updated successfully
+      logger.debug('Agent updated successfully', {
+        agentId: savedAgent.id.value,
+        scheduleCount: savedAgent.schedules?.length
+      });
+
       // Convert domain entity to DTO for serialization
       const agentDTO = AgentMapper.toDTO(savedAgent);
+
+      logger.summary('Agent update completed', {
+        agentId: dto.id,
+        success: true
+      });
 
       return {
         success: true,

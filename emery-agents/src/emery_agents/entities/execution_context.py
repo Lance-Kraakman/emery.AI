@@ -9,8 +9,8 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 from ..types import AgentId, OrganizationId, ExecutionMode
 
-# Import from proto_entities for SkillConfig (protobuf compatible)
-from ..proto_entities import SkillConfig
+# Import from generated protobuf for SkillConfig
+from ..grpc.generated.agent_worker_pb2 import SkillConfig
 
 
 # Constants

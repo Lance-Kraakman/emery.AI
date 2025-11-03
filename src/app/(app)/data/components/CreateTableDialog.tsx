@@ -19,7 +19,7 @@ interface CreateTableDialogProps {
 }
 
 export function CreateTableDialog({ isOpen, onClose, onTableCreated, selectedDatabaseId }: CreateTableDialogProps) {
-  const { data } = useEmery()
+  const { data} = useEmery()
   const [error, setError] = useState("")
 
   const form = useForm({

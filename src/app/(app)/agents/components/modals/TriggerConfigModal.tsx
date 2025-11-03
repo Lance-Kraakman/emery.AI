@@ -94,6 +94,8 @@ export function TriggerConfigModal({
   const [selectedType, setSelectedType] = useState<TriggerType>('MANUAL');
   const [currentStep, setCurrentStep] = useState<'select' | 'configure' | 'instructions' | 'review'>('select');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   // Configuration states for each trigger type
   const [manualConfig, setManualConfig] = useState({ description: '' });
@@ -179,6 +181,19 @@ export function TriggerConfigModal({
   const handleSave = async () => {
     try {
       setIsSaving(true);
+      setSaveStatus('saving');
+      setErrorMessage('');
+
+      // LOGGING: Start of save operation
+      console.log('[TriggerConfigModal] Starting schedule save', {
+        agentId: agent.id,
+        mode,
+        scheduleIndex,
+        selectedType,
+        scheduleName,
+        hasInstructions: !!taskInstructions,
+        toolCount: taskTools.length
+      });
 
       // Step 1: Create TriggerConfig instance
       let triggerConfig: TriggerConfig;
@@ -212,6 +227,12 @@ export function TriggerConfigModal({
           throw new Error(`Unsupported trigger type: ${selectedType}`);
       }
 
+      // LOGGING: TriggerConfig created
+      console.log('[TriggerConfigModal] TriggerConfig created', {
+        type: selectedType,
+        serialized: triggerConfig.toJSON()
+      });
+
       // Step 2: Create ScheduleConfigurationDTO with trigger + task instructions
       const newSchedule: ScheduleConfigurationDTO = {
         trigger: triggerConfig.toJSON() as any, // AIDEV-NOTE: toJSON() returns plain object compatible with TriggerConfigDTO
@@ -225,6 +246,13 @@ export function TriggerConfigModal({
         description: manualConfig.description || undefined
       };
 
+      // LOGGING: Schedule object created
+      console.log('[TriggerConfigModal] Schedule object created', {
+        newSchedule,
+        hasValidTrigger: !!newSchedule.trigger,
+        hasValidInstructions: !!newSchedule.taskInstructions?.instructions
+      });
+
       // Step 3: Update schedules array based on mode
       let updatedSchedules: ScheduleConfigurationDTO[];
       if (mode === 'create') {
@@ -237,19 +265,46 @@ export function TriggerConfigModal({
         );
       }
 
+      // LOGGING: Schedules array prepared for update
+      console.log('[TriggerConfigModal] Schedules array prepared', {
+        totalSchedules: updatedSchedules.length,
+        isCreate: mode === 'create',
+        scheduleIndex: mode === 'edit' ? scheduleIndex : 'N/A',
+        updatedSchedules
+      });
+
       const result = await updateAgentFromClient(agent.id, {
         schedules: updatedSchedules
+      });
+
+      // LOGGING: Server action result
+      console.log('[TriggerConfigModal] Server action result', {
+        success: result.success,
+        error: result.error,
+        result
       });
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to update schedule configuration');
       }
 
-      onUpdate?.();
-      onClose();
+      console.log('[TriggerConfigModal] Schedule saved successfully, calling onUpdate and closing modal');
+
+      // Show success state briefly before closing
+      setSaveStatus('success');
+
+      // Wait a moment to show success feedback, then close
+      setTimeout(() => {
+        onUpdate?.();
+        onClose();
+        // Reset states when closing
+        setSaveStatus('idle');
+        setErrorMessage('');
+      }, 800);
     } catch (error) {
       console.error('Error saving schedule configuration:', error);
-      // TODO: Add proper error handling/toast notification
+      setSaveStatus('error');
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to save schedule configuration');
     } finally {
       setIsSaving(false);
     }
@@ -728,17 +783,48 @@ export function TriggerConfigModal({
               </div>
             </div>
 
-            <div className="bg-muted/50 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
-                <div>
-                  <h4 className="font-medium">Ready to Save</h4>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Your schedule configuration is complete. When triggered, it will create a task with the instructions you've defined.
-                  </p>
+            {/* Status feedback - only show in review step */}
+            {saveStatus === 'idle' && (
+              <div className="bg-muted/50 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium">Ready to Save</h4>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Your schedule configuration is complete. When triggered, it will create a task with the instructions you've defined.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {saveStatus === 'success' && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-green-900">Schedule Saved Successfully!</h4>
+                    <p className="text-sm text-green-700 mt-1">
+                      Your schedule has been saved and will be active according to your configuration.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {saveStatus === 'error' && errorMessage && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <X className="h-5 w-5 text-red-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-red-900">Error Saving Schedule</h4>
+                    <p className="text-sm text-red-700 mt-1">
+                      {errorMessage}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

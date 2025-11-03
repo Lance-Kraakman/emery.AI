@@ -11,6 +11,7 @@
 import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import type { Result } from '@/ddd/domain/shared/result';
 import { Row } from '@/ddd/domain/tables/value-objects/row';
+import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import { GrpcTableClient } from '@/ddd/infrastructure/db/repositories/tables/table-grpc-client';
 import { TableGrpcMapper } from '@/ddd/infrastructure/db/repositories/tables/table-grpc-mapper';
 import { RowSerializer } from './row-serializer';
@@ -18,6 +19,61 @@ import { CreateTableRequest, DeleteTableRequest, UpdateTableRequest } from '@/li
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 
 const logger = createDebugLogger('DataLake');
+
+/**
+ * Convert field name to field ID for Delta Lake queries
+ * Delta Lake columns use numeric field IDs (79, 80), not field names ('test', 'name')
+ *
+ * @param fieldName - Human-readable field name
+ * @param fields - Table field definitions
+ * @returns Numeric field ID as string, or null if field not found
+ */
+function convertFieldNameToId(
+  fieldName: string,
+  fields: readonly TableField[]
+): string | null {
+  const field = fields.find(f => f.name === fieldName);
+
+  if (field) {
+    logger.debug('Converted field name to ID', {
+      fieldName,
+      fieldId: field.id.value.toString()
+    });
+    return field.id.value.toString();
+  }
+
+  logger.error('Field not found in table schema', {
+    fieldName,
+    availableFields: fields.map(f => f.name)
+  });
+  return null;
+}
+
+/**
+ * Convert filter field names to field IDs for Delta Lake queries
+ *
+ * @param filters - Array of filters using field names
+ * @param fields - Table field definitions
+ * @returns Filters with field names converted to field IDs
+ */
+function convertFiltersToFieldIds(
+  filters: any[],
+  fields: readonly TableField[]
+): any[] {
+  return filters.map(filter => {
+    const fieldId = convertFieldNameToId(filter.field, fields);
+
+    if (!fieldId) {
+      // Field not found - return original filter (will likely fail, but preserves error context)
+      return filter;
+    }
+
+    return {
+      ...filter,
+      field: fieldId
+    };
+  });
+}
 
 export class DynamicTableDataLake {
   constructor(
@@ -247,70 +303,15 @@ export class DynamicTableDataLake {
       // AIDEV-NOTE: Convert field names to field IDs for Delta Lake queries
       // Delta Lake columns use numeric field IDs (79, 80), not field names ('test', 'name')
 
-      // 1a. Convert orderBy from field name to field ID
-      let orderByFieldId = orderBy;
-      if (orderBy) {
-        const orderField = table.fields.find(f => f.name === orderBy);
-        if (orderField) {
-          orderByFieldId = orderField.id.value.toString();
-          logger.debug('Converted orderBy field name to ID', {
-            fieldName: orderBy,
-            fieldId: orderByFieldId
-          });
-        } else {
-          logger.error('OrderBy field not found in table schema', {
-            fieldName: orderBy,
-            availableFields: table.fields.map(f => f.name)
-          });
-        }
-      }
+      // Convert orderBy from field name to field ID
+      const orderByFieldId = orderBy ? convertFieldNameToId(orderBy, table.fields) || '' : '';
 
-      // 1b. Convert filter field names to field IDs
-      let convertedFilters = filters;
-      if (Array.isArray(filters) && filters.length > 0) {
-        convertedFilters = filters.map((filter: any) => {
-          const filterField = table.fields.find(f => f.name === filter.field);
-          if (filterField) {
-            const convertedFilter = {
-              ...filter,
-              field: filterField.id.value.toString()
-            };
-            logger.debug('Converted filter field name to ID', {
-              fieldName: filter.field,
-              fieldId: convertedFilter.field
-            });
-            return convertedFilter;
-          } else {
-            logger.error('Filter field not found in table schema', {
-              fieldName: filter.field,
-              availableFields: table.fields.map(f => f.name)
-            });
-            return filter; // Keep original if field not found
-          }
-        });
-      } else if (typeof filters === 'object' && Object.keys(filters).length > 0) {
-        // Legacy format: Record<string, any> - convert keys to field IDs
-        convertedFilters = {};
-        for (const [fieldName, value] of Object.entries(filters)) {
-          const filterField = table.fields.find(f => f.name === fieldName);
-          if (filterField) {
-            const fieldId = filterField.id.value.toString();
-            convertedFilters[fieldId] = value;
-            logger.debug('Converted filter key to field ID', {
-              fieldName,
-              fieldId
-            });
-          } else {
-            logger.error('Filter field not found in table schema', {
-              fieldName,
-              availableFields: table.fields.map(f => f.name)
-            });
-            convertedFilters[fieldName] = value; // Keep original if field not found
-          }
-        }
-      }
+      // Convert filter field names to field IDs
+      const convertedFilters = Array.isArray(filters) && filters.length > 0
+        ? convertFiltersToFieldIds(filters, table.fields)
+        : filters;
 
-      // 1c. Create query request (with converted field IDs)
+      // Create query request (with converted field IDs)
       const queryOptions = {
         orderBy: orderByFieldId,
         orderDirection,

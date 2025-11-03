@@ -3,6 +3,12 @@ Consolidated Types and Enums
 
 Simplified from DDD value objects - using direct types (int, str) instead of wrapper classes.
 Includes all enums and type aliases for the emery_agents package.
+
+Type Usage Guidelines:
+- Use generated protobuf types (grpc/generated/agent_worker_pb2) at gRPC boundaries
+- Use simplified entities (entities/) for business logic and services
+- Use type aliases from this file (AgentId, TaskId, etc.) for function signatures
+- No intermediate proto_entities layer - convert directly in mappers
 """
 
 from enum import Enum

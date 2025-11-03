@@ -229,24 +229,10 @@ export class TableGrpcMapper {
     queryParams: any = {},
     organizationId: OrganizationId
   ): IQueryRowsRequest {
-    // Convert RowFilter[] to protobuf RowFilter[] if present
-    let protoFilters: IRowFilter[] = [];
-    if (queryParams.filters) {
-      if (Array.isArray(queryParams.filters)) {
-        // New format: RowFilter[] with operators
-        protoFilters = queryParams.filters.map((filter: RowFilter) =>
-          this.toProtoRowFilter(filter)
-        );
-      } else if (typeof queryParams.filters === 'object') {
-        // Legacy format: Record<string, any> - convert to filters with EQ operator
-        protoFilters = Object.entries(queryParams.filters).map(([field, value]) => ({
-          field,
-          operator: ProtoFilterOperator.FILTER_OP_EQ,
-          value: this.toProtoRowDataValue(value),
-          values: [],
-        }));
-      }
-    }
+    // Convert RowFilter[] to protobuf RowFilter[]
+    const protoFilters: IRowFilter[] = Array.isArray(queryParams.filters)
+      ? queryParams.filters.map((filter: RowFilter) => this.toProtoRowFilter(filter))
+      : [];
 
     // AIDEV-NOTE: Add aggregation support for metric/dashboard views
     // Convert aggregation configuration to protobuf format if provided
