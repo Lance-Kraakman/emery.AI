@@ -973,8 +973,22 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     # Cast Python value to match column type
                     casted_value = self._cast_value_to_column_type(value, column_type)
 
-                    # Create scalar with explicit type
-                    value = pa.scalar(casted_value, type=column_type)
+                    # CRITICAL FIX: Normalize string_view to regular string for filter compatibility
+                    # PyArrow's filter kernels don't support string_view comparison
+                    # Convert string_view → large_string to enable filtering
+                    import pyarrow.types as pat
+                    if pat.is_string_view(column_type):
+                        # Normalize to large_string for filter compatibility
+                        filter_type = pa.large_string()
+                    elif pat.is_large_string(column_type) or pat.is_string(column_type):
+                        # Use as-is for regular string types
+                        filter_type = column_type
+                    else:
+                        # Non-string types: use as-is
+                        filter_type = column_type
+
+                    # Create scalar with filter-compatible type
+                    value = pa.scalar(casted_value, type=filter_type)
 
                 except KeyError:
                     logger.warning(f"Filter field '{filter_obj.field}' not found in schema, skipping filter")
@@ -1020,8 +1034,15 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     # Cast each value to match column type
                     casted_values = [self._cast_value_to_column_type(v, column_type) for v in values_list]
 
-                    # CRITICAL FIX: Convert Python list to PyArrow Array for is_in
-                    value_set_array = pa.array(casted_values, type=column_type)
+                    # CRITICAL FIX: Normalize string_view to large_string for filter compatibility
+                    import pyarrow.types as pat
+                    if pat.is_string_view(column_type):
+                        filter_type = pa.large_string()
+                    else:
+                        filter_type = column_type
+
+                    # Convert Python list to PyArrow Array for is_in
+                    value_set_array = pa.array(casted_values, type=filter_type)
                     predicates.append(pc.is_in(field_ref, value_set=value_set_array))
 
                 except KeyError:
@@ -1051,8 +1072,15 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     # Cast each value to match column type
                     casted_values = [self._cast_value_to_column_type(v, column_type) for v in values_list]
 
-                    # CRITICAL FIX: Convert Python list to PyArrow Array for is_in
-                    value_set_array = pa.array(casted_values, type=column_type)
+                    # CRITICAL FIX: Normalize string_view to large_string for filter compatibility
+                    import pyarrow.types as pat
+                    if pat.is_string_view(column_type):
+                        filter_type = pa.large_string()
+                    else:
+                        filter_type = column_type
+
+                    # Convert Python list to PyArrow Array for is_in
+                    value_set_array = pa.array(casted_values, type=filter_type)
                     predicates.append(
                         pc.invert(pc.is_in(field_ref, value_set=value_set_array))
                     )
