@@ -426,7 +426,7 @@ describe('TableApplicationService Integration Tests', () => {
           }
 
           // Merge existing data with update data
-          const existingData = existingRow.toPlainObject();
+          const existingData = existingRow.toPlainObject(updateTestTable.fields);
           const mergedData = {
             ...existingData,
             ...testCase.input.updateData,

@@ -590,7 +590,7 @@ export class ViewApplicationService {
       });
 
       logger.debug("Aggregated row columns", {
-        columns: Object.keys(aggregatedRow.toPlainObject()),
+        columns: Object.keys(aggregatedRow.toPlainObject(tableFields)),
         expectedFields: expectedFieldNames,
       });
 

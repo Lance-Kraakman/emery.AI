@@ -135,6 +135,7 @@ export class TableGrpcMapper {
     tableId: TableId,
     rows: Row[],
     organizationId: OrganizationId,
+    fields: readonly TableField[],
     s3Path?: string,
     mode?: 'append' | 'overwrite'
   ): ICreateRowsRequest {
@@ -143,7 +144,7 @@ export class TableGrpcMapper {
       userId: '', // Will be set by the service layer
       organizationId: organizationId.value.toString(),
       s3Path: s3Path || '', // S3 path for Delta Lake table data
-      rowsData: rows.map(row => this.toProtoRowData(row)),
+      rowsData: rows.map(row => this.toProtoRowData(row, fields)),
       mode: mode || 'append', // Default to append for backward compatibility
     };
 
@@ -314,9 +315,11 @@ export class TableGrpcMapper {
 
   /**
    * Convert Row domain entity to protobuf RowData interface
+   * @param row - Row entity to convert
+   * @param fields - Table fields for numeric ID mapping
    */
-  static toProtoRowData(row: Row): IRowData {
-    const plainData = row.toPlainObject();
+  static toProtoRowData(row: Row, fields: readonly TableField[]): IRowData {
+    const plainData = row.toPlainObject(fields);
     return this.toProtoRowDataFromPlain(row.id.value, plainData);
   }
 

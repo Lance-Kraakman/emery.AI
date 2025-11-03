@@ -220,7 +220,7 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
     let mergedData = { ...rowData, id: rowId };
 
     if (existingRow) {
-      const existingData = existingRow.toPlainObject();
+      const existingData = existingRow.toPlainObject(table.fields);
       // MERGE: Start with existing data, then overlay the new changes
       mergedData = { ...existingData, ...rowData, id: rowId };
     }
@@ -314,7 +314,7 @@ export async function updateRowsData(
 
     // Create a map for quick lookup
     const existingRowMap = new Map(
-      existingRows.map(row => [row.id.value, row.toPlainObject()])
+      existingRows.map(row => [row.id.value, row.toPlainObject(table.fields)])
     );
 
     // AIDEV-NOTE: Ensure we have a valid user ID
@@ -488,7 +488,7 @@ export async function getRowsDSG(
 
     // Transform all rows to DSG format (including the potential extra row)
     const allDsgData = rowsData.map(row => {
-      const plainData = row.toPlainObject();
+      const plainData = row.toPlainObject(table.fields);
       return { id: row.id.value, ...plainData };
     });
 
@@ -556,7 +556,7 @@ export async function searchRowsDSG(
 
     // Transform rows to DSG format
     const dsgData = result.data.map(row => {
-      const plainData = row.toPlainObject();
+      const plainData = row.toPlainObject(table.fields);
       return { id: row.id.value, ...plainData };
     });
 

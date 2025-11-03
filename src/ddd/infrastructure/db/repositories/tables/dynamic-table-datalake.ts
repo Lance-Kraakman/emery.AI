@@ -303,7 +303,7 @@ export class DynamicTableDataLake {
         });
 
         // Log sample row in debug mode only
-        logger.debug('Sample row', rows[0]?.toPlainObject());
+        logger.debug('Sample row', rows[0]?.toPlainObject(table.fields));
 
         return { success: true, data: { rows, totalCount } };
       } else {
