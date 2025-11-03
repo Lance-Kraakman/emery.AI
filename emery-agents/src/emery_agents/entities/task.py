@@ -13,6 +13,28 @@ from ..types import AgentId, OrganizationId, TaskId, OwnerId
 
 
 @dataclass
+class TriggerData:
+    """Trigger data for task execution."""
+    payload: Dict[str, Any]
+
+
+@dataclass
+class TaskRequest:
+    """Request to execute a task - simplified DTO from protobuf."""
+    task_id: TaskId
+    agent_id: AgentId
+    agent_config: Any  # AgentConfig from protobuf or dict
+    trigger_data: TriggerData
+    organization_id: OrganizationId
+    owner_id: OwnerId
+    timeout_seconds: int
+    name: str
+    skill_name: Optional[str] = None
+    instruction_config: Optional[Dict[str, Any]] = None  # Simplified from protobuf
+    organization_model: Optional[str] = None  # For model selection
+
+
+@dataclass
 class TaskInstructions:
     """Task execution instructions."""
     instructions: str

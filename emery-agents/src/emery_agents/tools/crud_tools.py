@@ -11,7 +11,7 @@ import json
 import httpx
 from typing import Any, Dict, Optional
 from smolagents import Tool
-from ...core.entities import ToolConfig
+from ..grpc.generated.agent_worker_pb2 import ToolConfig
 
 
 class BaseCrudTool(Tool):

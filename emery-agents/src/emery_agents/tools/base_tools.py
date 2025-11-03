@@ -7,7 +7,7 @@ Includes Python REPL, web search, file operations, and calculator.
 
 from typing import Any
 from smolagents import Tool
-from ...core.entities import ToolConfig
+from ..grpc.generated.agent_worker_pb2 import ToolConfig
 
 
 def load_python_repl(config: ToolConfig) -> Any:

@@ -12,8 +12,8 @@ import inspect
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from smolagents import Tool
-from ...core.entities import ToolConfig
-from ...domain.agents.value_objects.agent_value_objects import ApiKey
+from ..grpc.generated.agent_worker_pb2 import ToolConfig
+# ApiKey is now just a string in simplified architecture
 
 # Load metadata once
 METADATA_PATH = Path(__file__).parent / "pipedream_metadata.json"

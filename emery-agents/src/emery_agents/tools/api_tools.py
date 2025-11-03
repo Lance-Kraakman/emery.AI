@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import uuid
 import json
 from smolagents import Tool
-from ...core.entities import ToolConfig
+from ..grpc.generated.agent_worker_pb2 import ToolConfig
 
 
 def load_measurement_api_tool(config: ToolConfig) -> Any:
