@@ -510,7 +510,7 @@ export interface DeleteRowsRequest {
 
 /** Row filter with operator support for advanced querying */
 export interface RowFilter {
-  /** field_{id} format or field name */
+  /** field name (e.g., "email", "age") or "id" */
   field: string;
   /** Filter operator (eq, gt, like, etc.) */
   operator: FilterOperator;
@@ -524,7 +524,7 @@ export interface RowFilter {
 
 /** Single aggregation function to apply to a field */
 export interface AggregationFunction {
-  /** field_{id} format (e.g., "field_5") */
+  /** field name (e.g., "price", "quantity") */
   fieldId: string;
   /** Aggregation type (sum, avg, count, etc.) */
   type: AggregationType;

@@ -181,7 +181,7 @@ message DeleteRowsRequest {
 
 // Row filter with operator support for advanced querying
 message RowFilter {
-  string field = 1;                 // field_{id} format or field name
+  string field = 1;                 // field name (e.g., "email", "age") or "id"
   FilterOperator operator = 2;      // Filter operator (eq, gt, like, etc.)
   RowDataValue value = 3;           // Filter value (typed)
   repeated RowDataValue values = 4; // Multiple values for IN/NOT_IN operators
@@ -204,7 +204,7 @@ enum AggregationType {
 
 // Single aggregation function to apply to a field
 message AggregationFunction {
-  string field_id = 1;          // field_{id} format (e.g., "field_5")
+  string field_id = 1;          // field name (e.g., "price", "quantity")
   AggregationType type = 2;     // Aggregation type (sum, avg, count, etc.)
   string alias = 3;             // Alias for result (e.g., "total_sales")
   string format_type = 4;       // Display format hint: "number", "currency", "percentage", "duration"

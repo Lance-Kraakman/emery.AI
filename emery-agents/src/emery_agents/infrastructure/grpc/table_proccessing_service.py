@@ -1174,7 +1174,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 # Build Polars aggregation expressions
                 agg_exprs = []
                 for agg_func in agg_config.aggregations:
-                    field_name = agg_func.field_id  # e.g., "field_5"
+                    field_name = agg_func.field_id  # Numeric field ID as string, e.g., "10", "11"
 
                     # Map protobuf aggregation type to Polars expression
                     if agg_func.type == table_service_pb2.AGG_TYPE_SUM:
