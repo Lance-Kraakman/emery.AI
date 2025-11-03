@@ -195,6 +195,34 @@ export function TriggerConfigModal({
         toolCount: taskTools.length
       });
 
+      // VALIDATION: Ensure required fields are present
+      const validationErrors: string[] = [];
+
+      if (!scheduleName?.trim()) {
+        validationErrors.push('Schedule name is required');
+      }
+
+      if (!taskInstructions?.trim()) {
+        validationErrors.push('Task instructions are required');
+      }
+
+      // Validate trigger-specific requirements
+      if (selectedType === 'CALENDAR' && !calendarConfig.rrule) {
+        validationErrors.push('Calendar schedule requires an RRule configuration');
+      }
+
+      if (selectedType === 'DATABASE_EVENT' && databaseConfig.operations.length === 0) {
+        validationErrors.push('Database event trigger requires at least one operation');
+      }
+
+      if (validationErrors.length > 0) {
+        const errorMsg = validationErrors.join(', ');
+        console.error('[TriggerConfigModal] Validation failed:', validationErrors);
+        throw new Error(`Validation failed: ${errorMsg}`);
+      }
+
+      console.log('[TriggerConfigModal] Validation passed');
+
       // Step 1: Create TriggerConfig instance
       let triggerConfig: TriggerConfig;
 
