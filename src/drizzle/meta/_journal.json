@@ -155,6 +155,13 @@
       "when": 1762112436809,
       "tag": "0021_complex_agent_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1762127741944,
+      "tag": "0022_narrow_spot",
+      "breakpoints": true
     }
   ]
 }

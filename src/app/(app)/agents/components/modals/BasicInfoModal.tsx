@@ -16,7 +16,7 @@ import { checkPermission } from '@/app/actions/permissions';
 import { useSession } from 'next-auth/react';
 import { AgentAvatar } from '@/components/agents/AgentAvatar';
 import type { AvatarConfigV1 } from '@/lib/avatars';
-import { useModal } from './ModalContext';
+import { AvatarCustomizationModal } from './AvatarCustomizationModal';
 
 interface BasicInfoModalProps {
   isOpen: boolean;
@@ -43,7 +43,6 @@ interface User {
 
 export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoModalProps) {
   const { data: session } = useSession();
-  const { openModal } = useModal();
   const [formData, setFormData] = useState<FormData>({
     name: '',
     role: '',
@@ -58,6 +57,7 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
   const [canManageAgents, setCanManageAgents] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [currentOwnerName, setCurrentOwnerName] = useState<string>('Unknown User');
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
 
   // Load users and permissions when modal opens
   useEffect(() => {
@@ -168,12 +168,12 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
   };
 
   const handleAvatarEdit = () => {
-    openModal('avatar-customization', {
-      avatarConfig: formData.avatarConfig,
-      onSave: (config: AvatarConfigV1) => {
-        setFormData(prev => ({ ...prev, avatarConfig: config }));
-      }
-    });
+    setIsAvatarModalOpen(true);
+  };
+
+  const handleAvatarSave = (config: AvatarConfigV1) => {
+    setFormData(prev => ({ ...prev, avatarConfig: config }));
+    setIsAvatarModalOpen(false);
   };
 
   const footer = (
@@ -343,6 +343,14 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
           </p>
         </div>
       </div>
+
+      {/* Avatar Customization Modal - Rendered as child to prevent closing parent */}
+      <AvatarCustomizationModal
+        isOpen={isAvatarModalOpen}
+        onClose={() => setIsAvatarModalOpen(false)}
+        initialConfig={formData.avatarConfig}
+        onSave={handleAvatarSave}
+      />
     </BaseModal>
   );
 }

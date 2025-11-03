@@ -616,3 +616,55 @@ export async function duplicatePage(id: number, revalidateUrl?: string): Promise
     return { success: false, error: "Failed to duplicate page" }
   }
 }
+
+/**
+ * Update page theme configuration override
+ * Pass undefined/null to clear the override and use app theme
+ */
+export async function updatePageTheme(
+  pageId: number,
+  themeConfig: any | undefined
+): Promise<Result> {
+  try {
+    const session = await requirePermission("apps:manage");
+
+    if (!pageId) {
+      return { success: false, error: "Page ID is required" };
+    }
+
+    const pageService = getPuckPageApplicationService();
+
+    // Get the page
+    const page = await pageService.getPage(PageId.fromNumber(pageId));
+    if (!page) {
+      return { success: false, error: "Page not found" };
+    }
+
+    // Update theme
+    page.updateTheme(themeConfig);
+
+    // Save the page using repository
+    const { getPuckPageRepository } = await import("@/ddd/application/di/container");
+    const pageRepository = getPuckPageRepository();
+    const updatedPage = await pageRepository.update(page);
+
+    // Revalidate page routes
+    revalidatePath(`/apps/${page.appId.value}/pages/${pageId}`);
+
+    // Import getAppApplicationService to get app slug
+    const { getAppApplicationService } = await import("@/ddd/application/di/container");
+    const appService = getAppApplicationService();
+    const app = await appService.getApp(page.appId);
+    if (app) {
+      revalidatePath(`/p/${app.slug.value}${page.slug.value}`);
+    }
+
+    return {
+      success: true,
+      data: PuckPageMapper.toDTO(updatedPage)
+    };
+  } catch (error) {
+    console.error('Error updating page theme:', error);
+    return { success: false, error: "Failed to update page theme" };
+  }
+}

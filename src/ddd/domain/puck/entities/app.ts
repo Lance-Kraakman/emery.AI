@@ -5,6 +5,7 @@
 import type { AppId } from '../value-objects/app-id';
 import type { AppSlug } from '../value-objects/app-slug';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { ThemeConfig, type ThemeConfigProps } from '../value-objects/theme-config';
 
 export class App {
   private constructor(
@@ -13,6 +14,7 @@ export class App {
     private _name: string,
     private _slug: AppSlug,
     private _description: string | undefined,
+    private _themeConfig: ThemeConfig | undefined,
     private readonly _createdBy: UserId,
     private readonly _createdAt: Date,
     private _updatedAt: Date
@@ -49,6 +51,10 @@ export class App {
 
   get updatedAt(): Date {
     return new Date(this._updatedAt);
+  }
+
+  get themeConfig(): ThemeConfig {
+    return this._themeConfig || ThemeConfig.default();
   }
 
   // Business methods
@@ -90,6 +96,14 @@ export class App {
   }
 
   /**
+   * Update the app theme configuration
+   */
+  updateTheme(config: Partial<ThemeConfigProps> | undefined): void {
+    this._themeConfig = config ? ThemeConfig.create(config) : undefined;
+    this._updatedAt = new Date();
+  }
+
+  /**
    * Check if the app is owned by a specific organization
    */
   isOwnedBy(organizationId: OrganizationId): boolean {
@@ -121,6 +135,7 @@ export class App {
     name: string;
     slug: AppSlug;
     description?: string;
+    themeConfig?: Partial<ThemeConfigProps>;
     organizationId: OrganizationId;
     createdBy: UserId;
   }): App {
@@ -149,6 +164,7 @@ export class App {
       data.name.trim(),
       data.slug,
       data.description,
+      data.themeConfig ? ThemeConfig.create(data.themeConfig) : undefined,
       data.createdBy,
       now,
       now
@@ -164,6 +180,7 @@ export class App {
     name: string;
     slug: string;
     description?: string;
+    themeConfig?: any;
     createdBy: string;
     createdAt: Date;
     updatedAt: Date;
@@ -183,6 +200,7 @@ export class App {
       data.name,
       slugResult.data,
       data.description,
+      data.themeConfig ? ThemeConfig.fromJSON(data.themeConfig) : undefined,
       UserId.fromString(data.createdBy),
       data.createdAt,
       data.updatedAt
@@ -198,6 +216,7 @@ export class App {
     name: string;
     slug: string;
     description: string | undefined;
+    themeConfig: any;
     createdBy: string;
     createdAt: Date;
     updatedAt: Date;
@@ -208,6 +227,7 @@ export class App {
       name: this._name,
       slug: this._slug.value,
       description: this._description,
+      themeConfig: this._themeConfig?.toJSON(),
       createdBy: this._createdBy.value,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt

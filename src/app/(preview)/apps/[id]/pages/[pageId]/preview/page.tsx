@@ -13,15 +13,22 @@ import { useParams } from "next/navigation";
 import { resolveAllData, type Data } from "@measured/puck";
 import { config } from "@/components/puck/config";
 import { getPage } from "@/app/actions/puck-pages";
+import { getApp } from "@/app/actions/puck-apps";
 import { PreviewClient } from "./preview-client";
 import { Loading } from "@/components/ui/loading";
+import { ThemeConfig } from "@/ddd/domain/puck/value-objects/theme-config";
+import { ThemeProvider } from "@/components/puck/theme-context";
+import type { AppDTO } from "@/app/mappers/puck-app-mapper";
+import type { PageDTO } from "@/app/mappers/puck-page-mapper";
 
 export default function PreviewPage() {
   const params = useParams();
   const pageId = parseInt(params.pageId as string);
+  const appId = parseInt(params.id as string);
 
   const [resolvedData, setResolvedData] = useState<Data | null>(null);
   const [pageName, setPageName] = useState<string>("");
+  const [effectiveTheme, setEffectiveTheme] = useState<ThemeConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,25 +36,40 @@ export default function PreviewPage() {
       try {
         setLoading(true);
 
-        // 1. Check sessionStorage first (unsaved changes from editor)
+        // 1. Fetch app for theme
+        const app = await getApp(appId);
+
+        // 2. Check sessionStorage first (unsaved changes from editor)
         const savedData = sessionStorage.getItem(`preview-${pageId}`);
         let rawData: Data;
+        let page: PageDTO;
 
         if (savedData) {
           console.log('[PreviewPage] Loading unsaved data from sessionStorage');
           rawData = JSON.parse(savedData);
-          // Still need page for name
-          const page = await getPage(pageId);
+          // Still need page for name and theme
+          page = await getPage(pageId);
           setPageName(page.name);
         } else {
-          // 2. Fall back to database (saved state)
+          // 3. Fall back to database (saved state)
           console.log('[PreviewPage] Loading saved data from database');
-          const page = await getPage(pageId);
+          page = await getPage(pageId);
           rawData = page.templateData || { content: [], root: {}, zones: {} };
           setPageName(page.name);
         }
 
-        // 3. Resolve all component data (calls resolveData functions)
+        // 4. Compute effective theme (page overrides app)
+        const appTheme = app.themeConfig
+          ? ThemeConfig.create(app.themeConfig)
+          : ThemeConfig.default();
+
+        const computedTheme = page.themeConfig
+          ? ThemeConfig.merge(appTheme, ThemeConfig.create(page.themeConfig))
+          : appTheme;
+
+        setEffectiveTheme(computedTheme);
+
+        // 5. Resolve all component data (calls resolveData functions)
         console.log('[PreviewPage] Resolving component data...');
         const resolved = await resolveAllData(rawData, config, {});
         console.log('[PreviewPage] Data resolved, rendering...');
@@ -61,7 +83,7 @@ export default function PreviewPage() {
     }
 
     loadAndResolveData();
-  }, [pageId]);
+  }, [pageId, appId]);
 
   if (loading) {
     return (
@@ -71,7 +93,7 @@ export default function PreviewPage() {
     );
   }
 
-  if (!resolvedData) {
+  if (!resolvedData || !effectiveTheme) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-white gap-4">
         <h1 className="text-2xl font-bold">No preview data</h1>
@@ -79,5 +101,12 @@ export default function PreviewPage() {
     );
   }
 
-  return <PreviewClient resolvedData={resolvedData} pageName={pageName} />;
+  return (
+    <ThemeProvider value={effectiveTheme}>
+      <PreviewClient
+        resolvedData={resolvedData}
+        pageName={pageName}
+      />
+    </ThemeProvider>
+  );
 }

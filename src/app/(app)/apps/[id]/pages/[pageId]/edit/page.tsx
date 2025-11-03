@@ -7,12 +7,17 @@ import "@measured/puck/puck.css";
 import "@/styles/puck-theme.css";
 import { config } from "@/components/puck/config";
 import { getPage, updatePageContent, publishPage, unpublishPage } from "@/app/actions/puck-pages";
+import { getApp } from "@/app/actions/puck-apps";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
+import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Globe, Eye } from "lucide-react";
+import { ArrowLeft, Globe, Eye, Palette } from "lucide-react";
 import { Loading } from "@/components/ui/loading";
 import { toast } from "sonner";
-import { AppName } from "@/ddd/domain/connections/value-objects";
+import { ThemeConfig, type ThemeConfigProps } from "@/ddd/domain/puck/value-objects/theme-config";
+import { ThemeProvider } from "@/components/puck/theme-context";
+import { ThemeEditorSheet } from "@/app/(app)/apps/components/ThemeEditorSheet";
+import { updatePageTheme } from "@/app/actions/puck-pages";
 
 // Custom header actions component with full Puck controls
 // AIDEV-NOTE: This component is rendered inside Puck's context via overrides.headerActions,
@@ -23,12 +28,14 @@ function CustomHeaderActions({
   appId,
   page,
   onPublish,
+  onThemeClick,
 }: {
   children: ReactNode;
   pageId: number;
   appId: number;
   page: PageDTO;
   onPublish: () => void;
+  onThemeClick: () => void;
 }) {
   // AIDEV-NOTE: The `children` prop only contains Puck's default Publish button.
   // We don't render it because we provide our own custom Publish/Unpublish button.
@@ -105,6 +112,14 @@ function CustomHeaderActions({
         </Button>
 
         <Button
+          onClick={onThemeClick}
+          variant="outline"
+        >
+          <Palette size={16} className="mr-1" />
+          Theme
+        </Button>
+
+        <Button
           onClick={onPublish}
         >
           <Globe size={16} className="mr-1" />
@@ -122,9 +137,11 @@ export default function PageEditPage() {
   const pageId = parseInt(params.pageId as string);
 
   const [page, setPage] = useState<PageDTO | null>(null);
+  const [app, setApp] = useState<AppDTO | null>(null);
   const [initialData, setInitialData] = useState<Data>({ content: [], root: {}, zones: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [themeSheetOpen, setThemeSheetOpen] = useState(false);
 
   useEffect(() => {
     async function loadPage() {
@@ -133,6 +150,11 @@ export default function PageEditPage() {
 
         let rawData: Data;
         let loadedPage: PageDTO;
+        let loadedApp: AppDTO;
+
+        // Fetch the app first (needed for theme)
+        loadedApp = await getApp(appId);
+        setApp(loadedApp);
 
         // First check if we have unsaved changes in sessionStorage (returning from preview)
         const savedData = sessionStorage.getItem(`preview-${pageId}`);
@@ -184,10 +206,10 @@ export default function PageEditPage() {
       }
     }
 
-    if (pageId) {
+    if (pageId && appId) {
       loadPage();
     }
-  }, [pageId]);
+  }, [pageId, appId]);
 
   const handlePublish = async () => {
     if (!page) return;
@@ -212,6 +234,24 @@ export default function PageEditPage() {
     }
   };
 
+  const handleSavePageTheme = async (theme: ThemeConfigProps | undefined) => {
+    try {
+      const result = await updatePageTheme(pageId, theme);
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update page theme");
+        return;
+      }
+
+      toast.success("Page theme updated successfully");
+      setThemeSheetOpen(false);
+      router.refresh();
+    } catch (error) {
+      console.error('Error updating page theme:', error);
+      toast.error("Failed to update page theme");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -220,7 +260,7 @@ export default function PageEditPage() {
     );
   }
 
-  if (error || !page) {
+  if (error || !page || !app) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
         <h1 className="text-2xl font-bold">Page not found</h1>
@@ -233,45 +273,68 @@ export default function PageEditPage() {
     );
   }
 
+  // AIDEV-NOTE: Compute effective theme using cascade: Page theme overrides App theme
+  // If page has no theme override, use app theme. If app has no theme, use default.
+  const appTheme = app.themeConfig
+    ? ThemeConfig.create(app.themeConfig)
+    : ThemeConfig.default();
+
+  const effectiveTheme = page.themeConfig
+    ? ThemeConfig.merge(appTheme, ThemeConfig.create(page.themeConfig))
+    : appTheme;
+
   return (
-    <div className="h-screen">
-      {/* AIDEV-NOTE: Puck is used as an UNCONTROLLED component (no onChange prop).
-          This prevents iframe reloads on every edit. CustomHeaderActions uses
-          usePuck() hook to access current data when saving/previewing. */}
-      <Puck
-        config={config}
-        data={initialData}
-        headerTitle={page.name}
-        viewports={[
-          { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
-          { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },
-          { width: 1440, height: "auto", icon: "Monitor", label: "Desktop" }
-        ]}
-        iframe={{
-          enabled: true,
-          waitForStyles: true,
-          // htmlAttributes: {
-          //   className: "puck-canvas-light-mode",
-          // },
-        }}
-        overrides={{
-          puck: ({ children }) => (
-            <div className="puck-themed-wrapper">
-              {children}
-            </div>
-          ),
-          headerActions: ({ children }) => (
-            <CustomHeaderActions
-              pageId={pageId}
-              appId={appId}
-              page={page}
-              onPublish={handlePublish}
-            >
-              {children}
-            </CustomHeaderActions>
-          )
-        }}
+    <ThemeProvider value={effectiveTheme}>
+      <div className="h-screen">
+        {/* AIDEV-NOTE: Puck is used as an UNCONTROLLED component (no onChange prop).
+            This prevents iframe reloads on every edit. CustomHeaderActions uses
+            usePuck() hook to access current data when saving/previewing.
+            Theme is provided via ThemeContext to avoid mutating Puck's config. */}
+        <Puck
+          config={config}
+          data={initialData}
+          headerTitle={page.name}
+          viewports={[
+            { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
+            { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },
+            { width: 1440, height: "auto", icon: "Monitor", label: "Desktop" }
+          ]}
+          iframe={{
+            enabled: true,
+            waitForStyles: true,
+            // htmlAttributes: {
+            //   className: "puck-canvas-light-mode",
+            // },
+          }}
+          overrides={{
+            puck: ({ children }) => (
+              <div className="puck-themed-wrapper">
+                {children}
+              </div>
+            ),
+            headerActions: ({ children }) => (
+              <CustomHeaderActions
+                pageId={pageId}
+                appId={appId}
+                page={page}
+                onPublish={handlePublish}
+                onThemeClick={() => setThemeSheetOpen(true)}
+              >
+                {children}
+              </CustomHeaderActions>
+            )
+          }}
+        />
+      </div>
+
+      {/* Theme Editor Sheet */}
+      <ThemeEditorSheet
+        open={themeSheetOpen}
+        onOpenChange={setThemeSheetOpen}
+        initialTheme={page.themeConfig}
+        onSave={handleSavePageTheme}
+        mode="page"
       />
-    </div>
+    </ThemeProvider>
   );
 }

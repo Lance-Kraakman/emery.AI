@@ -7,6 +7,7 @@ import type { PageSlug } from '../value-objects/page-slug';
 import type { PageOrder } from '../value-objects/page-order';
 import type { PuckData } from '../value-objects/puck-data';
 import { UserId } from '@/ddd/domain/shared/value-objects';
+import { ThemeConfig, type ThemeConfigProps } from '../value-objects/theme-config';
 
 export class PuckPage {
   private constructor(
@@ -17,6 +18,7 @@ export class PuckPage {
     private _description: string | undefined,
     private _order: PageOrder,
     private _templateData: PuckData,
+    private _themeConfig: ThemeConfig | undefined,
     private _isPublished: boolean,
     private readonly _createdBy: UserId,
     private readonly _createdAt: Date,
@@ -66,6 +68,21 @@ export class PuckPage {
 
   get updatedAt(): Date {
     return new Date(this._updatedAt);
+  }
+
+  get themeConfig(): ThemeConfig | undefined {
+    return this._themeConfig;
+  }
+
+  /**
+   * Get the effective theme by merging with app theme
+   * Page theme overrides take precedence
+   */
+  getEffectiveTheme(appTheme: ThemeConfig): ThemeConfig {
+    if (!this._themeConfig) {
+      return appTheme;
+    }
+    return ThemeConfig.merge(appTheme, this._themeConfig);
   }
 
   // Business methods
@@ -119,6 +136,15 @@ export class PuckPage {
    */
   updateTemplateData(newData: PuckData): void {
     this._templateData = newData;
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Update the page theme configuration (override app theme)
+   * Pass undefined to clear the override and use app theme
+   */
+  updateTheme(config: Partial<ThemeConfigProps> | undefined): void {
+    this._themeConfig = config ? ThemeConfig.create(config) : undefined;
     this._updatedAt = new Date();
   }
 
@@ -185,6 +211,7 @@ export class PuckPage {
     description?: string;
     order: number;
     templateData: any;
+    themeConfig?: any;
     isPublished: boolean;
     createdBy: string;
     createdAt: Date;
@@ -223,6 +250,7 @@ export class PuckPage {
       data.description,
       orderResult.data,
       puckDataResult.data,
+      data.themeConfig ? ThemeConfig.fromJSON(data.themeConfig) : undefined,
       data.isPublished,
       UserId.fromString(data.createdBy),
       data.createdAt,
@@ -241,6 +269,7 @@ export class PuckPage {
     description: string | undefined;
     order: number;
     templateData: any;
+    themeConfig: any;
     isPublished: boolean;
     createdBy: string;
     createdAt: Date;
@@ -254,6 +283,7 @@ export class PuckPage {
       description: this._description,
       order: this._order.value,
       templateData: this._templateData.toDatabaseJson(),
+      themeConfig: this._themeConfig?.toJSON(),
       isPublished: this._isPublished,
       createdBy: this._createdBy.value,
       createdAt: this._createdAt,

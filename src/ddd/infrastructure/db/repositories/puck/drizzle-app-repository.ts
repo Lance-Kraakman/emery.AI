@@ -84,6 +84,7 @@ export class DrizzleAppRepository implements IAppRepository {
         name: persistence.name,
         slug: persistence.slug,
         description: persistence.description,
+        themeConfig: persistence.themeConfig,
         createdBy: persistence.createdBy,
         createdAt: persistence.createdAt,
         updatedAt: persistence.updatedAt
@@ -106,6 +107,7 @@ export class DrizzleAppRepository implements IAppRepository {
           name: persistence.name,
           slug: persistence.slug,
           description: persistence.description,
+          themeConfig: persistence.themeConfig,
           updatedAt: new Date()
         })
         .where(eq(apps.id, persistence.id))
@@ -156,6 +158,7 @@ export class DrizzleAppRepository implements IAppRepository {
       name: record.name,
       slug: record.slug,
       description: record.description,
+      themeConfig: record.themeConfig,
       createdBy: record.createdBy,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
