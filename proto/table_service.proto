@@ -61,6 +61,7 @@ message TableField {
   FieldType type = 2;
   bool required = 3;
   map<string, string> metadata = 4;  // UI hints, validation rules, etc.
+  int32 field_id = 5;                // Numeric field ID used as Delta Lake column name
 }
 
 // Table schema with structured field definitions

@@ -13,6 +13,7 @@ import { HeaderBlock } from "./blocks/HeaderBlock";
 import { FooterBlock } from "./blocks/FooterBlock";
 import TableBlockConfig from "./blocks/TableBlock";
 import MetricBlockConfig from "./blocks/MetricBlock";
+import ChartBlockConfig from "./blocks/ChartBlock";
 
 import Root from "./root";
 import { UserConfig } from "./types";
@@ -32,7 +33,7 @@ export const config: UserConfig = {
     },
     data: {
       title: "Data",
-      components: ["TableBlock", "MetricBlock"],
+      components: ["TableBlock", "MetricBlock", "ChartBlock"],
     },
     other: {
       title: "Other",
@@ -55,6 +56,7 @@ export const config: UserConfig = {
     FooterBlock,
     TableBlock: TableBlockConfig,
     MetricBlock: MetricBlockConfig,
+    ChartBlock: ChartBlockConfig,
   },
 };
 

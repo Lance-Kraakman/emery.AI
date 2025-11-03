@@ -88,7 +88,10 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             arrow_fields = []
             for field in table_fields:
                 dtype = type_mapping.get(field.type, pa.string())
-                arrow_fields.append(pa.field(field.name, dtype, nullable=not field.required))
+                # CRITICAL: Use numeric field ID as column name (immutable identifier)
+                column_name = str(field.field_id)
+                arrow_fields.append(pa.field(column_name, dtype, nullable=not field.required))
+                logger.debug(f"[_build_schema_from_table_fields] Field: id={field.field_id}, name={field.name}, column={column_name}, type={dtype}")
 
             return pa.schema(arrow_fields)
         except Exception as e:
@@ -154,6 +157,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         logger.info(f"[_create_dataframe_with_schema] Polars schema: {polars_schema}")
 
         # 3. Convert protobuf to Python dicts (type-agnostic conversion)
+        # AIDEV-NOTE: Keys are numeric field IDs, matching Delta Lake column names
         records = []
         for row_data in rows_data:
             record = {'id': row_data.id}
@@ -998,13 +1002,18 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     # Cast each value to match column type
                     casted_values = [self._cast_value_to_column_type(v, column_type) for v in values_list]
 
-                    predicates.append(pc.is_in(field_ref, value_set=casted_values))
+                    # CRITICAL FIX: Convert Python list to PyArrow Array for is_in
+                    value_set_array = pa.array(casted_values, type=column_type)
+                    predicates.append(pc.is_in(field_ref, value_set=value_set_array))
 
                 except KeyError:
                     logger.warning(f"Filter field '{filter_obj.field}' not found in schema, skipping IN filter")
                     continue
                 except ValueError as e:
                     logger.error(f"Type casting error for IN filter on field '{filter_obj.field}': {e}")
+                    continue
+                except TypeError as e:
+                    logger.error(f"PyArrow type error for IN filter on field '{filter_obj.field}': {e}")
                     continue
 
             elif operator == table_service_pb2.FILTER_OP_NOT_IN:
@@ -1024,8 +1033,10 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     # Cast each value to match column type
                     casted_values = [self._cast_value_to_column_type(v, column_type) for v in values_list]
 
+                    # CRITICAL FIX: Convert Python list to PyArrow Array for is_in
+                    value_set_array = pa.array(casted_values, type=column_type)
                     predicates.append(
-                        pc.invert(pc.is_in(field_ref, value_set=casted_values))
+                        pc.invert(pc.is_in(field_ref, value_set=value_set_array))
                     )
 
                 except KeyError:
@@ -1033,6 +1044,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     continue
                 except ValueError as e:
                     logger.error(f"Type casting error for NOT_IN filter on field '{filter_obj.field}': {e}")
+                    continue
+                except TypeError as e:
+                    logger.error(f"PyArrow type error for NOT_IN filter on field '{filter_obj.field}': {e}")
                     continue
 
             elif operator == table_service_pb2.FILTER_OP_IS_NULL:

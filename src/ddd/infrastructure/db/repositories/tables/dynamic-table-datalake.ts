@@ -54,6 +54,7 @@ export class DynamicTableDataLake {
         table.id,
         serializedData,
         table.organizationId,
+        table.fields,
         s3Path,
         'append'
       );
@@ -115,6 +116,7 @@ export class DynamicTableDataLake {
         table.id,
         serializedData,
         table.organizationId,
+        table.fields,
         s3Path
       );
 

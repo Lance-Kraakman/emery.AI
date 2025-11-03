@@ -1,6 +1,7 @@
 import { ComponentConfig, Slot } from "@measured/puck";
 import { getClassNameFactory } from "@/components/puck/lib";
 import { createComponent } from "@/components/puck/lib/create-component";
+import { ColorFieldRenderer } from "@/components/puck/fields/ColorField";
 import styles from "./styles.module.css";
 
 const getClassName = getClassNameFactory("HeaderBlock", styles);
@@ -48,13 +49,9 @@ export const HeaderBlock: ComponentConfig<HeaderBlockProps> = {
       ],
     },
     backgroundColor: {
-      type: "select",
-      label: "Background Color",
-      options: [
-        { label: "White", value: "white" },
-        { label: "Light Gray", value: "#f9fafb" },
-        { label: "Dark", value: "#1f2937" },
-      ],
+      type: "custom",
+      label: "Background Color (Optional)",
+      render: ColorFieldRenderer,
     },
   },
   defaultProps: {
@@ -63,7 +60,7 @@ export const HeaderBlock: ComponentConfig<HeaderBlockProps> = {
     navigation: [],
     actions: [],
     sticky: true,
-    backgroundColor: "white",
+    backgroundColor: undefined,
   },
   resolveFields: async (data, { fields }) => {
     const layout = data.props.layout || "left-nav";
@@ -134,8 +131,6 @@ export const HeaderBlock: ComponentConfig<HeaderBlockProps> = {
     };
   },
   render: ({ layout, logo: Logo, navigation: Navigation, actions: Actions, sticky, backgroundColor, puck }) => {
-    const isDark = backgroundColor === "#1f2937";
-
     return (
       <header
         className={getClassName({
@@ -143,8 +138,7 @@ export const HeaderBlock: ComponentConfig<HeaderBlockProps> = {
           [layout || "left-nav"]: true,
         })}
         style={{
-          backgroundColor,
-          color: isDark ? "white" : "inherit",
+          ...(backgroundColor && { backgroundColor }),
         }}
       >
         <div className={getClassName("inner")}>

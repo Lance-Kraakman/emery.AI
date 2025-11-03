@@ -4,13 +4,14 @@ import { ALargeSmall, AlignLeft } from "lucide-react";
 import { ComponentConfig } from "@measured/puck";
 import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
+import { ColorFieldRenderer } from "@/components/puck/fields/ColorField";
 
 export type TextProps = WithLayout<{
   align: "left" | "center" | "right";
   text?: string;
   padding?: string;
   size?: "s" | "m";
-  color: "default" | "muted";
+  textColor?: string;
   maxWidth?: string;
 }>;
 
@@ -37,12 +38,10 @@ const TextInner: ComponentConfig<TextProps> = {
         { label: "Right", value: "right" },
       ],
     },
-    color: {
-      type: "radio",
-      options: [
-        { label: "Default", value: "default" },
-        { label: "Muted", value: "muted" },
-      ],
+    textColor: {
+      type: "custom",
+      label: "Text Color (Optional)",
+      render: ColorFieldRenderer,
     },
     maxWidth: { type: "text" },
   },
@@ -50,15 +49,14 @@ const TextInner: ComponentConfig<TextProps> = {
     align: "left",
     text: "Text",
     size: "m",
-    color: "default",
+    textColor: undefined,
   },
-  render: ({ align, color, text, size, maxWidth }) => {
+  render: ({ align, textColor, text, size, maxWidth }) => {
     return (
       <Section maxWidth={maxWidth}>
         <span
           style={{
-            color:
-              color === "default" ? "inherit" : "var(--puck-color-grey-05)",
+            ...(textColor && { color: textColor }),
             display: "flex",
             textAlign: align,
             width: "100%",

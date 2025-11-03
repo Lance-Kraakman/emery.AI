@@ -698,7 +698,8 @@ proto.emery.tables.TableField.toObject = function(includeInstance, msg) {
     name: jspb.Message.getFieldWithDefault(msg, 1, ""),
     type: jspb.Message.getFieldWithDefault(msg, 2, 0),
     required: jspb.Message.getBooleanFieldWithDefault(msg, 3, false),
-    metadataMap: (f = msg.getMetadataMap()) ? f.toObject(includeInstance, undefined) : []
+    metadataMap: (f = msg.getMetadataMap()) ? f.toObject(includeInstance, undefined) : [],
+    fieldId: jspb.Message.getFieldWithDefault(msg, 5, 0)
   };
 
   if (includeInstance) {
@@ -753,6 +754,10 @@ proto.emery.tables.TableField.deserializeBinaryFromReader = function(msg, reader
         jspb.Map.deserializeBinary(message, reader, jspb.BinaryReader.prototype.readString, jspb.BinaryReader.prototype.readString, null, "", "");
          });
       break;
+    case 5:
+      var value = /** @type {number} */ (reader.readInt32());
+      msg.setFieldId(value);
+      break;
     default:
       reader.skipField();
       break;
@@ -806,6 +811,13 @@ proto.emery.tables.TableField.serializeBinaryToWriter = function(message, writer
   f = message.getMetadataMap(true);
   if (f && f.getLength() > 0) {
     f.serializeBinary(4, writer, jspb.BinaryWriter.prototype.writeString, jspb.BinaryWriter.prototype.writeString);
+  }
+  f = message.getFieldId();
+  if (f !== 0) {
+    writer.writeInt32(
+      5,
+      f
+    );
   }
 };
 
@@ -884,6 +896,24 @@ proto.emery.tables.TableField.prototype.getMetadataMap = function(opt_noLazyCrea
 proto.emery.tables.TableField.prototype.clearMetadataMap = function() {
   this.getMetadataMap().clear();
   return this;};
+
+
+/**
+ * optional int32 field_id = 5;
+ * @return {number}
+ */
+proto.emery.tables.TableField.prototype.getFieldId = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 5, 0));
+};
+
+
+/**
+ * @param {number} value
+ * @return {!proto.emery.tables.TableField} returns this
+ */
+proto.emery.tables.TableField.prototype.setFieldId = function(value) {
+  return jspb.Message.setProto3IntField(this, 5, value);
+};
 
 
 

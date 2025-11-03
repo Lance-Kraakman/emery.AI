@@ -12,6 +12,7 @@ import { TextProps } from "./blocks/Text";
 import { SpaceProps } from "./blocks/Space";
 import { TableBlockProps } from "./blocks/TableBlock/TableBlock";
 import { MetricBlockProps } from "./blocks/MetricBlock/MetricBlock";
+import { ChartBlockProps } from "./blocks/ChartBlock/ChartBlock";
 
 import { RootProps } from "./root";
 
@@ -54,6 +55,7 @@ export type Components = {
   FooterBlock: FooterBlockProps;
   TableBlock: TableBlockProps;
   MetricBlock: MetricBlockProps;
+  ChartBlock: ChartBlockProps;
 };
 
 export type UserConfig = Config<{

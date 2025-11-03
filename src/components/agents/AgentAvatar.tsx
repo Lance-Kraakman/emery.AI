@@ -36,14 +36,16 @@ export function AgentAvatar({ avatarConfig, agentId, size = 'md', className }: A
   const sizes = SIZE_CONFIG[size];
 
   // Generate avatar data URI with useMemo for performance
-  // Use agentId as seed for consistent avatars per agent
+  // Use stored seed if available, otherwise fallback to agentId for backward compatibility
   const avatarDataUri = useMemo(() => {
+    const seed = config.seed || agentId?.toString() || 'default';
     return generateAvatarDataUri(
       config.style,
-      agentId?.toString() || 'default',
-      config.color
+      seed,
+      config.color,
+      config.options
     );
-  }, [config.style, config.color, agentId]);
+  }, [config.style, config.color, config.seed, config.options, agentId]);
 
   return (
     <div

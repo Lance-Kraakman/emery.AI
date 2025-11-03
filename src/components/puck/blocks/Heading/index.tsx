@@ -5,12 +5,14 @@ import { Heading as _Heading } from "@/components/puck/components/Heading";
 import type { HeadingProps as _HeadingProps } from "@/components/puck/components/Heading";
 import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
+import { ColorFieldRenderer } from "@/components/puck/fields/ColorField";
 
 export type HeadingProps = WithLayout<{
   align: "left" | "center" | "right";
   text?: string;
   level?: _HeadingProps["rank"];
   size: _HeadingProps["size"];
+  textColor?: string;
 }>;
 
 const sizeOptions = [
@@ -55,20 +57,33 @@ const HeadingInternal: ComponentConfig<HeadingProps> = {
         { label: "Right", value: "right" },
       ],
     },
+    textColor: {
+      type: "custom",
+      label: "Text Color (Optional)",
+      render: ColorFieldRenderer,
+    },
   },
   defaultProps: {
     align: "left",
     text: "Heading",
     size: "m",
+    textColor: undefined,
     layout: {
       padding: "8px",
     },
   },
-  render: ({ align, text, size, level }) => {
+  render: ({ align, text, size, level, textColor }) => {
     return (
       <Section>
         <_Heading size={size} rank={level as any}>
-          <span style={{ display: "block", textAlign: align, width: "100%" }}>
+          <span
+            style={{
+              display: "block",
+              textAlign: align,
+              width: "100%",
+              ...(textColor && { color: textColor }),
+            }}
+          >
             {text}
           </span>
         </_Heading>

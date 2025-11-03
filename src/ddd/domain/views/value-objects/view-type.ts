@@ -7,11 +7,13 @@
  * AIDEV-NOTE: View types determine data transformation behavior:
  * - grid: Raw table rows with filters/sorting
  * - metric: Single aggregated value (sum, avg, count, etc.)
+ * - chart: Recharts visualization with raw or aggregated data
  */
 
 export type ViewTypeValue =
   | 'grid'            // Standard table view with rows/columns
-  | 'metric';         // Single metric display (e.g., "Total Sales: $150,000")
+  | 'metric'          // Single metric display (e.g., "Total Sales: $150,000")
+  | 'chart';          // Chart visualization (bar, line, pie, area, scatter)
 
 export class ViewType {
   private constructor(private readonly _value: ViewTypeValue) {}
@@ -21,7 +23,7 @@ export class ViewType {
    * Validates that value is a supported view type
    */
   static create(value: ViewTypeValue): ViewType {
-    const validTypes: ViewTypeValue[] = ['grid', 'metric'];
+    const validTypes: ViewTypeValue[] = ['grid', 'metric', 'chart'];
 
     if (!validTypes.includes(value)) {
       throw new Error(
@@ -43,6 +45,10 @@ export class ViewType {
     return new ViewType('metric');
   }
 
+  static chart(): ViewType {
+    return new ViewType('chart');
+  }
+
   /**
    * Get the raw string value
    */
@@ -61,21 +67,28 @@ export class ViewType {
     return this._value === 'metric';
   }
 
+  isChart(): boolean {
+    return this._value === 'chart';
+  }
+
   /**
    * Check if this view type requires aggregation computation
    *
-   * AIDEV-NOTE: Metric views need aggregations computed
-   * via the backend QueryRows RPC with aggregation config.
+   * AIDEV-NOTE: Metric views always need aggregations.
+   * Chart views need aggregations ONLY when in aggregated mode (checked in ViewConfig).
    */
   requiresAggregation(): boolean {
-    return this._value === 'metric';
+    return this._value === 'metric' || this._value === 'chart';
   }
 
   /**
    * Check if this view type displays raw table rows
+   *
+   * AIDEV-NOTE: Grid views always display rows.
+   * Chart views display rows ONLY when in raw mode (checked in ViewConfig).
    */
   displaysRows(): boolean {
-    return this._value === 'grid';
+    return this._value === 'grid' || this._value === 'chart';
   }
 
   /**

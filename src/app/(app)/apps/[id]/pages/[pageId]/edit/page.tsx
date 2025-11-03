@@ -19,6 +19,56 @@ import { ThemeProvider } from "@/components/puck/theme-context";
 import { ThemeEditorSheet } from "@/app/(app)/apps/components/ThemeEditorSheet";
 import { updatePageTheme } from "@/app/actions/puck-pages";
 
+// Sidebar state persistence component
+// AIDEV-NOTE: This component handles saving/restoring Puck's sidebar state to sessionStorage
+// so that sidebar visibility persists across page reloads (especially after theme changes)
+function SidebarStatePersistence({ pageId }: { pageId: number }) {
+  const { appState, dispatch } = usePuck();
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Restore sidebar state on mount
+  useEffect(() => {
+    if (isInitialized) return;
+
+    const savedLeftState = sessionStorage.getItem(`puck-sidebar-left-${pageId}`);
+    const savedRightState = sessionStorage.getItem(`puck-sidebar-right-${pageId}`);
+
+    if (savedLeftState !== null || savedRightState !== null) {
+      const uiUpdate: any = {};
+
+      if (savedLeftState !== null) {
+        uiUpdate.leftSideBarVisible = savedLeftState === 'true';
+      }
+
+      if (savedRightState !== null) {
+        uiUpdate.rightSideBarVisible = savedRightState === 'true';
+      }
+
+      dispatch({ type: 'setUi', ui: uiUpdate });
+    }
+
+    setIsInitialized(true);
+  }, [pageId, dispatch, isInitialized]);
+
+  // Save sidebar state whenever it changes
+  useEffect(() => {
+    if (!isInitialized) return; // Don't save initial state
+
+    const leftVisible = appState.ui.leftSideBarVisible;
+    const rightVisible = appState.ui.rightSideBarVisible;
+
+    if (leftVisible !== undefined) {
+      sessionStorage.setItem(`puck-sidebar-left-${pageId}`, String(leftVisible));
+    }
+
+    if (rightVisible !== undefined) {
+      sessionStorage.setItem(`puck-sidebar-right-${pageId}`, String(rightVisible));
+    }
+  }, [appState.ui.leftSideBarVisible, appState.ui.rightSideBarVisible, pageId, isInitialized]);
+
+  return null; // This component doesn't render anything
+}
+
 // Custom header actions component with full Puck controls
 // AIDEV-NOTE: This component is rendered inside Puck's context via overrides.headerActions,
 // so it has access to usePuck() hook to get current editor data without causing re-renders
@@ -29,6 +79,8 @@ function CustomHeaderActions({
   page,
   onPublish,
   onThemeClick,
+  loadedFromSessionStorage,
+  setLoadedFromSessionStorage,
 }: {
   children: ReactNode;
   pageId: number;
@@ -36,6 +88,8 @@ function CustomHeaderActions({
   page: PageDTO;
   onPublish: () => void;
   onThemeClick: () => void;
+  loadedFromSessionStorage: boolean;
+  setLoadedFromSessionStorage: (value: boolean) => void;
 }) {
   // AIDEV-NOTE: The `children` prop only contains Puck's default Publish button.
   // We don't render it because we provide our own custom Publish/Unpublish button.
@@ -46,8 +100,9 @@ function CustomHeaderActions({
   const { appState, history } = usePuck();
   const [saving, setSaving] = useState(false);
 
-  // Detect unsaved changes using Puck's history
-  const hasUnsavedChanges = history.hasPast;
+  // Detect unsaved changes using Puck's history OR sessionStorage presence
+  // AIDEV-NOTE: After theme reload, history.hasPast is false but data may be unsaved draft in sessionStorage
+  const hasUnsavedChanges = history.hasPast || loadedFromSessionStorage;
 
   const handleSave = async () => {
     try {
@@ -70,7 +125,8 @@ function CustomHeaderActions({
       toast.success("Page saved successfully!");
 
       // Clean up sessionStorage since changes are now saved
-      sessionStorage.removeItem(`preview-${pageId}`);
+      sessionStorage.removeItem(`puck-data-${pageId}`);
+      setLoadedFromSessionStorage(false);
     } catch (err) {
       console.error('Error saving page:', err);
       toast.error("Failed to save page");
@@ -84,10 +140,24 @@ function CustomHeaderActions({
     const currentData = appState.data;
 
     // Save current data to sessionStorage so preview can access unsaved changes
-    sessionStorage.setItem(`preview-${pageId}`, JSON.stringify(currentData));
+    sessionStorage.setItem(`puck-data-${pageId}`, JSON.stringify(currentData));
 
     // Navigate to preview route
     router.push(`/apps/${appId}/pages/${pageId}/preview`);
+  };
+
+  const handleThemeClick = () => {
+    // Get current data from Puck's state (no re-render!)
+    const currentData = appState.data;
+
+    // Save current data to sessionStorage so it persists through theme reload
+    // AIDEV-NOTE: Theme changes trigger a page reload, so we save Puck state
+    // to sessionStorage just like we do for preview. On reload, the page will
+    // restore from sessionStorage, preserving unsaved edits.
+    sessionStorage.setItem(`puck-data-${pageId}`, JSON.stringify(currentData));
+
+    // Open theme editor
+    onThemeClick();
   };
 
   return (
@@ -112,7 +182,7 @@ function CustomHeaderActions({
         </Button>
 
         <Button
-          onClick={onThemeClick}
+          onClick={handleThemeClick}
           variant="outline"
         >
           <Palette size={16} className="mr-1" />
@@ -142,6 +212,7 @@ export default function PageEditPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [themeSheetOpen, setThemeSheetOpen] = useState(false);
+  const [loadedFromSessionStorage, setLoadedFromSessionStorage] = useState(false);
 
   useEffect(() => {
     async function loadPage() {
@@ -156,8 +227,8 @@ export default function PageEditPage() {
         loadedApp = await getApp(appId);
         setApp(loadedApp);
 
-        // First check if we have unsaved changes in sessionStorage (returning from preview)
-        const savedData = sessionStorage.getItem(`preview-${pageId}`);
+        // First check if we have unsaved changes in sessionStorage (from preview/theme changes)
+        const savedData = sessionStorage.getItem(`puck-data-${pageId}`);
         if (savedData) {
           try {
             rawData = JSON.parse(savedData);
@@ -171,6 +242,7 @@ export default function PageEditPage() {
             console.log('[EditPage] Data resolved, initializing editor...');
 
             setInitialData(resolvedData);
+            setLoadedFromSessionStorage(true);
             setLoading(false);
             return;
           } catch (err) {
@@ -309,6 +381,7 @@ export default function PageEditPage() {
           overrides={{
             puck: ({ children }) => (
               <div className="puck-themed-wrapper">
+                <SidebarStatePersistence pageId={pageId} />
                 {children}
               </div>
             ),
@@ -319,6 +392,8 @@ export default function PageEditPage() {
                 page={page}
                 onPublish={handlePublish}
                 onThemeClick={() => setThemeSheetOpen(true)}
+                loadedFromSessionStorage={loadedFromSessionStorage}
+                setLoadedFromSessionStorage={setLoadedFromSessionStorage}
               >
                 {children}
               </CustomHeaderActions>
