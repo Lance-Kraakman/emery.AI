@@ -199,15 +199,26 @@ export function generateAvatarDataUri(
   colorName?: string,
   options?: Record<string, any>
 ): string {
-  const style = getAvatarStyle(styleName);
-  const color = getAvatarColor(colorName);
+  try {
+    const style = getAvatarStyle(styleName);
+    const color = getAvatarColor(colorName);
 
-  const avatar = createAvatar(style, {
-    seed: seed || 'default',
-    ...options  // Spread style-specific options
-  });
+    // Filter out empty string values from options
+    const cleanOptions = options ? Object.fromEntries(
+      Object.entries(options).filter(([_, value]) => value !== '' && value !== null && value !== undefined)
+    ) : {};
 
-  return avatar.toDataUri();
+    const avatar = createAvatar(style, {
+      seed: seed || 'default',
+      ...cleanOptions  // Spread style-specific options
+    });
+
+    return avatar.toDataUri();
+  } catch (error) {
+    console.error('Error generating avatar:', error);
+    // Return a simple fallback SVG data URI
+    return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2NjYyIvPjwvc3ZnPg==';
+  }
 }
 
 /**

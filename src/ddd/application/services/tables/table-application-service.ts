@@ -386,15 +386,21 @@ export class TableApplicationService {
         }
       }
 
-      // 3. Calculate order index based on existing fields
+      // 3. Validate field name is not reserved (especially 'id')
+      // AIDEV-NOTE: 'id' is reserved for the system row identifier (UUID column)
+      if (command.name.toLowerCase() === 'id') {
+        return ResultHelpers.failure(`Field name 'id' is reserved for the system row identifier. Please choose a different name.`);
+      }
+
+      // 4. Calculate order index based on existing fields
       const orderIndex = table.fields.length;
 
-      // 4. Validate field name uniqueness (business logic moved from entity)
+      // 5. Validate field name uniqueness (business logic moved from entity)
       if (table.hasField(command.name)) {
         return ResultHelpers.failure(`Field name '${command.name}' already exists`);
       }
 
-      // 5. Create field using domain factory
+      // 6. Create field using domain factory
       const field = TableField.create({
         name: command.name,
         type: command.type,
@@ -404,16 +410,16 @@ export class TableApplicationService {
         metadata: command.metadata
       });
 
-      // 6. Add field to table using internal method
+      // 7. Add field to table using internal method
       table.addField(field);
 
-      // 5. Save the updated table with its fields
+      // 8. Save the updated table with its fields
       const saveResult = await this.dynamicTableService.saveTable(table);
       if (!saveResult.success) {
         return ResultHelpers.failure(saveResult.error || 'Failed to save table with new field');
       }
 
-      // 6. Get the newly added field
+      // 9. Get the newly added field
       const newField = table.getField(command.name);
       if (!newField) {
         return ResultHelpers.failure('Field was added but could not be retrieved');

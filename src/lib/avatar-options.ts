@@ -74,17 +74,38 @@ export const loreleiOptions: StyleConfiguration = {
     },
     {
       name: 'frecklesProbability',
-      label: 'Freckles',
+      label: 'Freckles 0-100',
       type: 'probability',
       default: 0,
-      description: 'Probability of showing freckles (0-100%)',
+      description: 'Probability of showing freckles',
     },
     {
       name: 'glassesProbability',
-      label: 'Glasses',
+      label: 'Glasses 0-100',
       type: 'probability',
       default: 10,
-      description: 'Probability of wearing glasses (0-100%)',
+      description: 'Probability of wearing glasses',
+    },
+    {
+      name: 'beardProbability',
+      label: 'Beard 0-100',
+      type: 'probability',
+      default: 5,
+      description: 'Probability of showing beard',
+    },
+    {
+      name: 'earringsProbability',
+      label: 'Earrings 0-100',
+      type: 'probability',
+      default: 10,
+      description: 'Probability of wearing earrings',
+    },
+    {
+      name: 'hairAccessoriesProbability',
+      label: 'Hair Accessories 0-100',
+      type: 'probability',
+      default: 5,
+      description: 'Probability of wearing hair accessories',
     },
   ],
 };
@@ -96,20 +117,6 @@ export const loreleiOptions: StyleConfiguration = {
 export const avataaarsOptions: StyleConfiguration = {
   name: 'avataaars',
   options: [
-    {
-      name: 'accessories',
-      label: 'Accessories',
-      type: 'select',
-      options: [
-        { value: 'kurt', label: 'Kurt' },
-        { value: 'prescription01', label: 'Prescription 1' },
-        { value: 'prescription02', label: 'Prescription 2' },
-        { value: 'round', label: 'Round' },
-        { value: 'sunglasses', label: 'Sunglasses' },
-        { value: 'wayfarers', label: 'Wayfarers' },
-        { value: 'eyepatch', label: 'Eyepatch' },
-      ],
-    },
     {
       name: 'eyes',
       label: 'Eyes',
@@ -174,7 +181,6 @@ export const avataaarsOptions: StyleConfiguration = {
       label: 'Facial Hair',
       type: 'select',
       options: [
-        { value: '', label: 'None' },
         { value: 'beardLight', label: 'Light Beard' },
         { value: 'beardMedium', label: 'Medium Beard' },
         { value: 'beardMajestic', label: 'Majestic Beard' },
@@ -193,6 +199,27 @@ export const avataaarsOptions: StyleConfiguration = {
         { value: 'shirtVNeck', label: 'V-Neck' },
         { value: 'overall', label: 'Overall' },
       ],
+    },
+    {
+      name: 'accessoriesProbability',
+      label: 'Accessories 0-100',
+      type: 'probability',
+      default: 10,
+      description: 'Probability of wearing accessories like glasses',
+    },
+    {
+      name: 'facialHairProbability',
+      label: 'Facial Hair 0-100',
+      type: 'probability',
+      default: 10,
+      description: 'Probability of showing facial hair',
+    },
+    {
+      name: 'topProbability',
+      label: 'Hair/Hat 0-100',
+      type: 'probability',
+      default: 100,
+      description: 'Probability of showing hair or hat',
     },
   ],
 };
@@ -252,10 +279,17 @@ export const bigSmileOptions: StyleConfiguration = {
     },
     {
       name: 'accessoriesProbability',
-      label: 'Accessories',
+      label: 'Accessories 0-100',
       type: 'probability',
       default: 10,
-      description: 'Probability of wearing accessories (0-100%)',
+      description: 'Probability of wearing accessories',
+    },
+    {
+      name: 'facialHairProbability',
+      label: 'Facial Hair 0-100',
+      type: 'probability',
+      default: 5,
+      description: 'Probability of showing facial hair',
     },
   ],
 };

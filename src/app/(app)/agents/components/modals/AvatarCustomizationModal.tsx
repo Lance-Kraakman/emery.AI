@@ -46,20 +46,30 @@ export function AvatarCustomizationModal({
   const [selectedColor, setSelectedColor] = useState<string>('blue');
   const [seed, setSeed] = useState<string>(generateRandomSeed());
   const [options, setOptions] = useState<Record<string, any>>({});
+  const [isMounted, setIsMounted] = useState(false);
 
   // Reset state when modal opens with new config
   useEffect(() => {
-    if (isOpen && initialConfig) {
-      setSelectedStyle(initialConfig.style || 'lorelei');
-      setSelectedColor(initialConfig.color || 'blue');
-      setSeed(initialConfig.seed || generateRandomSeed());
-      setOptions(initialConfig.options || {});
-    } else if (isOpen && !initialConfig) {
-      // Generate new random avatar when opening without config
-      setSelectedStyle('lorelei');
-      setSelectedColor('blue');
-      setSeed(generateRandomSeed());
-      setOptions({});
+    if (isOpen) {
+      setIsMounted(false);
+
+      if (initialConfig) {
+        setSelectedStyle(initialConfig.style || 'lorelei');
+        setSelectedColor(initialConfig.color || 'blue');
+        setSeed(initialConfig.seed || generateRandomSeed());
+        setOptions(initialConfig.options || {});
+      } else {
+        // Generate new random avatar when opening without config
+        setSelectedStyle('lorelei');
+        setSelectedColor('blue');
+        setSeed(generateRandomSeed());
+        setOptions({});
+      }
+
+      // Wait for next tick to ensure DOM is ready
+      setTimeout(() => setIsMounted(true), 0);
+    } else {
+      setIsMounted(false);
     }
   }, [isOpen, initialConfig]);
 
@@ -114,21 +124,31 @@ export function AvatarCustomizationModal({
     onClose();
   };
 
+  // Don't render anything if modal is not open
+  if (!isOpen) {
+    return null;
+  }
+
   return (
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
       title="Customize Avatar"
-      size="lg"
+      size="xl"
       closeOnEscape={true}
       closeOnOutsideClick={true}
     >
-      <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+      {!isMounted ? (
+        <div className="p-6 flex items-center justify-center min-h-[400px]">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      ) : (
+        <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
         {/* Large Preview with Regenerate */}
-        <div className="flex flex-col items-center gap-4">
+        <div className="flex items-center gap-6">
           <div
             className={cn(
-              'w-32 h-32 rounded-lg flex items-center justify-center overflow-hidden',
+              'w-24 h-24 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0',
               previewColors.bg
             )}
           >
@@ -144,34 +164,53 @@ export function AvatarCustomizationModal({
           </div>
           <button
             onClick={handleRegenerate}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium border rounded-md hover:bg-accent transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border rounded-md hover:bg-accent transition-colors"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="h-3.5 w-3.5" />
             Regenerate Random
           </button>
         </div>
 
-        {/* Style Selection */}
+        {/* Style Selection Grid */}
         <div className="space-y-2">
-          <Label htmlFor="style">Character Style</Label>
-          <Select value={selectedStyle} onValueChange={handleStyleChange}>
-            <SelectTrigger id="style">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.keys(AVATAR_STYLES).map((styleName) => (
-                <SelectItem key={styleName} value={styleName}>
-                  {AVATAR_STYLE_LABELS[styleName as AvatarStyleName]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label className="text-sm">Character Style</Label>
+          <div className="grid grid-cols-4 gap-1.5">
+            {Object.keys(AVATAR_STYLES).map((styleName) => {
+              const isSelected = styleName === selectedStyle;
+              const stylePreviewUri = generateAvatarDataUri(styleName, `preview-${styleName}`, selectedColor, {});
+
+              return (
+                <button
+                  key={styleName}
+                  onClick={() => handleStyleChange(styleName)}
+                  className={cn(
+                    'flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 transition-all hover:scale-105',
+                    isSelected
+                      ? 'border-primary ring-2 ring-primary ring-offset-2 bg-primary/5'
+                      : 'border-border hover:border-primary/50'
+                  )}
+                  type="button"
+                >
+                  <div className={cn('w-10 h-10 rounded-md overflow-hidden', previewColors.bg)}>
+                    <img
+                      src={stylePreviewUri}
+                      alt={AVATAR_STYLE_LABELS[styleName as AvatarStyleName]}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <span className="text-[10px] font-medium text-center leading-tight">
+                    {AVATAR_STYLE_LABELS[styleName as AvatarStyleName]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Color Selection */}
         <div className="space-y-2">
-          <Label>Background Color</Label>
-          <div className="grid grid-cols-5 gap-2">
+          <Label className="text-sm">Background Color</Label>
+          <div className="grid grid-cols-5 gap-1.5">
             {Object.keys(AVATAR_COLORS).map((colorName) => {
               const color = AVATAR_COLORS[colorName as AvatarColorName];
               const isSelected = colorName === selectedColor;
@@ -189,7 +228,7 @@ export function AvatarCustomizationModal({
                   )}
                   title={colorName}
                 >
-                  <div className={cn('w-6 h-6 rounded-full', color.bg)} />
+                  <div className={cn('w-5 h-5 rounded-full', color.bg)} />
                 </button>
               );
             })}
@@ -198,22 +237,31 @@ export function AvatarCustomizationModal({
 
         {/* Style-Specific Options */}
         {styleConfig && styleConfig.options.length > 0 && (
-          <div className="space-y-4 pt-4 border-t">
+          <div className="space-y-3 pt-3 border-t">
             <h3 className="text-sm font-medium">Customization Options</h3>
             {styleConfig.options.map((option) => (
-              <div key={option.name} className="space-y-2">
-                <Label htmlFor={option.name}>{option.label}</Label>
+              <div key={option.name} className="space-y-1.5">
+                <Label htmlFor={option.name} className="text-xs">{option.label}</Label>
 
                 {option.type === 'select' && option.options && (
                   <Select
-                    value={options[option.name] || ''}
-                    onValueChange={(value) => handleOptionChange(option.name, value)}
+                    value={options[option.name] || undefined}
+                    onValueChange={(value) => {
+                      if (value === '__random__') {
+                        // Remove the option to make it random
+                        const newOptions = { ...options };
+                        delete newOptions[option.name];
+                        setOptions(newOptions);
+                      } else {
+                        handleOptionChange(option.name, value);
+                      }
+                    }}
                   >
                     <SelectTrigger id={option.name}>
                       <SelectValue placeholder="Random" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Random</SelectItem>
+                      <SelectItem value="__random__">Random</SelectItem>
                       {option.options.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>
                           {opt.label}
@@ -224,10 +272,10 @@ export function AvatarCustomizationModal({
                 )}
 
                 {option.type === 'probability' && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                       <span>{option.description}</span>
-                      <span>{options[option.name] || option.default || 0}%</span>
+                      <span className="font-medium">{options[option.name] || option.default || 0}%</span>
                     </div>
                     <input
                       type="range"
@@ -244,23 +292,26 @@ export function AvatarCustomizationModal({
             ))}
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       {/* Footer */}
-      <div className="flex justify-end gap-3 px-6 py-4 border-t bg-muted/50">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 text-sm font-medium border rounded-md hover:bg-accent transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSave}
-          className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-        >
-          Save Avatar
-        </button>
-      </div>
+      {isMounted && (
+        <div className="flex justify-end gap-3 px-4 py-3 border-t bg-muted/50">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium border rounded-md hover:bg-accent transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+          >
+            Save Avatar
+          </button>
+        </div>
+      )}
     </BaseModal>
   );
 }

@@ -81,21 +81,23 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         """
         try:
             # Map protobuf field types to PyArrow types
+            # CRITICAL FIX: Use large_string instead of string to prevent string_view in parquet
+            # This enables predicate pushdown to work correctly with PyArrow filters
             type_mapping = {
-                table_service_pb2.FIELD_TYPE_TEXT: pa.string(),
+                table_service_pb2.FIELD_TYPE_TEXT: pa.large_string(),
                 table_service_pb2.FIELD_TYPE_NUMBER: pa.float64(),
                 table_service_pb2.FIELD_TYPE_BOOLEAN: pa.bool_(),
                 table_service_pb2.FIELD_TYPE_DATE: pa.timestamp('us'),
-                table_service_pb2.FIELD_TYPE_FILE: pa.string(),    # Store as JSON
-                table_service_pb2.FIELD_TYPE_RELATION: pa.string(), # Store as JSON
-                table_service_pb2.FIELD_TYPE_DOCUMENT: pa.string(), # Store as JSON
+                table_service_pb2.FIELD_TYPE_FILE: pa.large_string(),    # Store as JSON
+                table_service_pb2.FIELD_TYPE_RELATION: pa.large_string(), # Store as JSON
+                table_service_pb2.FIELD_TYPE_DOCUMENT: pa.large_string(), # Store as JSON
             }
 
             arrow_fields = []
 
             # CRITICAL: Always add "id" column first for Delta Lake merge compatibility
             # This column stores the row UUID and is required for merge operations
-            arrow_fields.append(pa.field("id", pa.string(), nullable=False))
+            arrow_fields.append(pa.field("id", pa.large_string(), nullable=False))
             logger.debug(f"[_build_schema_from_table_fields] Added 'id' column (string, required)")
 
             # Add data fields with numeric column names
@@ -105,7 +107,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     logger.debug(f"[_build_schema_from_table_fields] Skipping field 'id' (field_id={field.field_id}) - already added as system column")
                     continue
 
-                dtype = type_mapping.get(field.type, pa.string())
+                dtype = type_mapping.get(field.type, pa.large_string())
                 # Use numeric field ID as column name (immutable identifier)
                 column_name = str(field.field_id)
                 arrow_fields.append(pa.field(column_name, dtype, nullable=not field.required))
@@ -115,6 +117,40 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         except Exception as e:
             logger.error(f"Error building schema from table fields: {e}")
             raise ValueError(f"Invalid table fields: {e}")
+
+    def _normalize_arrow_table_to_large_string(self, arrow_table: pa.Table) -> pa.Table:
+        """
+        Normalize all string columns in Arrow table to large_string type.
+
+        This prevents string_view from being written to parquet files, which enables
+        predicate pushdown to work correctly with PyArrow filters.
+
+        AIDEV-NOTE: This is the proper fix for string_view issues.
+        - Polars may use string_view internally for efficiency
+        - Parquet writers may encode strings as string_view
+        - But PyArrow filter kernels don't support string_view
+        - Solution: Cast all strings to large_string before writing
+        """
+        import pyarrow.types as pat
+
+        # Build new schema with string columns normalized to large_string
+        new_fields = []
+        for field in arrow_table.schema:
+            if pat.is_string(field.type) or pat.is_string_view(field.type):
+                # Normalize to large_string
+                new_fields.append(pa.field(field.name, pa.large_string(), nullable=field.nullable))
+            else:
+                # Keep original type
+                new_fields.append(field)
+
+        target_schema = pa.schema(new_fields)
+
+        # Cast table to target schema
+        normalized_table = arrow_table.cast(target_schema)
+
+        logger.debug(f"[_normalize_arrow_table_to_large_string] Normalized {len(arrow_table.schema)} columns")
+
+        return normalized_table
 
     def _create_dataframe_with_schema(
         self,
@@ -151,7 +187,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         delta_schema_arro3 = delta_table.schema().to_arrow(as_large_types=True)
         delta_schema_pyarrow = pa.schema(delta_schema_arro3)
 
+        delta_field_names = [f.name for f in delta_schema_pyarrow]
         logger.info(f"[_create_dataframe_with_schema] Delta Lake schema: {delta_schema_pyarrow}")
+        logger.info(f"[_create_dataframe_with_schema] Delta Lake field names: {delta_field_names}")
 
         # 2. Build Polars schema dict from PyArrow schema
         # AIDEV-NOTE: Inline type mapping (no separate helper needed)
@@ -172,7 +210,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 logger.warning(f"Unknown Arrow type for '{field.name}': {field.type}, using Utf8")
                 polars_schema[field.name] = pl.Utf8
 
+        polars_field_names = list(polars_schema.keys())
         logger.info(f"[_create_dataframe_with_schema] Polars schema: {polars_schema}")
+        logger.info(f"[_create_dataframe_with_schema] Polars field names: {polars_field_names}")
 
         # 3. Convert protobuf to Python dicts (type-agnostic conversion)
         # AIDEV-NOTE: Keys are numeric field IDs, matching Delta Lake column names
@@ -196,14 +236,51 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
             records.append(record)
 
-        # Log first record for debugging
+        # Log first record for debugging and detect field mismatches
         if records:
+            first_record_keys = list(records[0].keys())
+            logger.info(f"[_create_dataframe_with_schema] First record keys: {first_record_keys}")
             logger.info(f"[_create_dataframe_with_schema] First record: {records[0]}")
+
+            # CRITICAL: Detect fields in input that are NOT in Delta Lake schema
+            input_fields = set(first_record_keys)
+            schema_fields = set(polars_field_names)
+            missing_in_schema = input_fields - schema_fields
+            extra_in_schema = schema_fields - input_fields
+
+            if missing_in_schema:
+                logger.warning(f"[_create_dataframe_with_schema] ⚠️  FIELDS IN INPUT BUT NOT IN DELTA SCHEMA (WILL BE DROPPED): {sorted(missing_in_schema)}")
+                logger.warning(f"[_create_dataframe_with_schema] This will cause DATA LOSS - these fields will be silently ignored!")
+
+            if extra_in_schema:
+                logger.info(f"[_create_dataframe_with_schema] Fields in schema but not in input (will be filled with nulls): {sorted(extra_in_schema)}")
+
+            # DEFENSIVE: Filter records to only include fields that exist in schema
+            # This prevents silent data loss by making the filtering explicit
+            if missing_in_schema:
+                logger.warning(f"[_create_dataframe_with_schema] Filtering out unknown fields from records...")
+                filtered_records = []
+                for record in records:
+                    filtered_record = {k: v for k, v in record.items() if k in schema_fields}
+                    filtered_records.append(filtered_record)
+                records = filtered_records
+                logger.info(f"[_create_dataframe_with_schema] Filtered records to only include schema fields")
 
         # 4. Create DataFrame with EXPLICIT schema (no inference, no casting)
         # AIDEV-NOTE: Zero-copy friendly - types match Delta Lake from creation
+        # IMPORTANT: Polars DataFrame with explicit schema will ONLY include fields in polars_schema
+        # Any extra fields in records will be silently dropped by Polars
         df = pl.DataFrame(records, schema=polars_schema)
+
+        actual_df_columns = df.columns
         logger.info(f"[_create_dataframe_with_schema] Final DataFrame schema: {df.schema}")
+        logger.info(f"[_create_dataframe_with_schema] Final DataFrame columns: {actual_df_columns}")
+
+        # Final validation: confirm what was dropped
+        if records and len(first_record_keys) != len(actual_df_columns):
+            dropped_count = len(first_record_keys) - len(actual_df_columns)
+            logger.error(f"[_create_dataframe_with_schema] ❌ DATA LOSS DETECTED: {dropped_count} fields were dropped during DataFrame creation!")
+            logger.error(f"[_create_dataframe_with_schema] Input had {len(first_record_keys)} fields, DataFrame has {len(actual_df_columns)} fields")
 
         return df
 
@@ -277,19 +354,22 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             schema = self._build_schema_from_table_fields(request.schema.fields)
 
             # Create empty DataFrame with the schema
-            # Convert PyArrow schema to Polars-compatible format
+            # Create empty Arrow table from schema
             if len(schema) == 0:
-                # Empty schema - create completely empty DataFrame
-                empty_df = pl.DataFrame()
+                # Empty schema - create completely empty table
+                empty_table = pa.table({})
             else:
-                # Create empty DataFrame from PyArrow schema
+                # Create empty table from PyArrow schema
                 empty_table = pa.table({field.name: pa.array([], type=field.type) for field in schema})
-                empty_df = pl.from_arrow(empty_table)
+                # CRITICAL FIX: Normalize to large_string before writing to prevent string_view
+                # Write Arrow table directly - don't convert to Polars (Polars uses string_view)
+                empty_table = self._normalize_arrow_table_to_large_string(empty_table)
 
-            # Write to S3/MinIO as Delta Lake table
+            # Write Arrow table directly to S3/MinIO as Delta Lake table
+            # AIDEV-NOTE: Passing PyArrow table directly preserves large_string type
             write_deltalake(
                 s3_uri,
-                empty_df,
+                empty_table,
                 mode="overwrite",
                 storage_options=storage_options
             )
@@ -392,10 +472,16 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             write_mode = request.mode if request.mode else "append"
             logger.info(f"[CreateRows] Write mode from request: '{write_mode}'")
 
+            # CRITICAL FIX: Normalize to large_string before writing to prevent string_view
+            # Write Arrow table directly - don't convert to Polars (Polars uses string_view)
+            arrow_table = df.to_arrow()
+            arrow_table = self._normalize_arrow_table_to_large_string(arrow_table)
+
             logger.info(f"[CreateRows] Calling write_deltalake with mode='{write_mode}' and schema_mode='merge'...")
+            # AIDEV-NOTE: Passing PyArrow table directly preserves large_string type
             write_deltalake(
                 s3_uri,
-                df,
+                arrow_table,
                 mode=write_mode,  # Use mode from request ("append" or "overwrite")
                 schema_mode="merge",  # Allow adding new columns (schema evolution)
                 storage_options=storage_options
@@ -565,13 +651,19 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             df_schema = pl.DataFrame(schema=schema_dict)
             logger.info(f"[UpdateTable] Created empty DataFrame with schema: {df_schema.columns}")
 
-            # Write empty DataFrame to trigger schema evolution
-            # mode="append" won't add any rows (DataFrame is empty)
+            # CRITICAL FIX: Normalize to large_string before writing to prevent string_view
+            # Write Arrow table directly - don't convert to Polars (Polars uses string_view)
+            arrow_table = df_schema.to_arrow()
+            arrow_table = self._normalize_arrow_table_to_large_string(arrow_table)
+
+            # Write empty Arrow table to trigger schema evolution
+            # mode="append" won't add any rows (Arrow table is empty)
             # schema_mode="merge" will add the new columns to the schema
+            # AIDEV-NOTE: Passing PyArrow table directly preserves large_string type
             from deltalake import write_deltalake
             write_deltalake(
                 s3_uri,
-                df_schema,
+                arrow_table,  # Pass Arrow directly, not Polars!
                 mode="append",
                 schema_mode="merge",  # Critical: enables adding new columns
                 storage_options=storage_options
@@ -710,6 +802,38 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     message=f"Cannot update rows in non-existent table: {e}"
                 )
 
+            # DIAGNOSTIC: Log what fields are in the request vs Delta Lake schema
+            if request.rows_data:
+                # Get fields from first row in request
+                first_row = request.rows_data[0]
+                input_field_ids = ['id'] + list(first_row.data.keys())
+                logger.info(f"[UpdateRows] Input request field IDs: {sorted(input_field_ids)}")
+
+                # Get fields from Delta Lake schema
+                delta_schema = delta_table.schema().to_arrow(as_large_types=True)
+                delta_field_names = [f.name for f in pa.schema(delta_schema)]
+                logger.info(f"[UpdateRows] Delta Lake schema field IDs: {sorted(delta_field_names)}")
+
+                # Compare
+                input_set = set(input_field_ids)
+                delta_set = set(delta_field_names)
+                missing_in_delta = input_set - delta_set
+                extra_in_delta = delta_set - input_set
+
+                if missing_in_delta:
+                    logger.error(f"[UpdateRows] ❌ CRITICAL: Input has fields NOT in Delta schema: {sorted(missing_in_delta)}")
+                    logger.error(f"[UpdateRows] These fields will be DROPPED causing DATA LOSS!")
+
+                    # VALIDATION: Reject update to prevent silent data loss
+                    # This indicates a schema synchronization issue between frontend and backend
+                    return table_service_pb2.UpdateRowsResponse(
+                        success=False,
+                        message=f"Cannot update rows: Fields {sorted(missing_in_delta)} do not exist in table schema. Schema may not be synchronized. Please refresh the page or contact support."
+                    )
+
+                if extra_in_delta:
+                    logger.info(f"[UpdateRows] Delta schema has fields not in input (will remain unchanged): {sorted(extra_in_delta)}")
+
             # Always use schema-aware method (prevents Null type errors)
             logger.info(f"[UpdateRows] Using schema-aware DataFrame creation")
             df = self._create_dataframe_with_schema(request.rows_data, delta_table)
@@ -727,8 +851,13 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # AIDEV-NOTE: This performs efficient row-level updates without rewriting entire table
             # Matches rows by 'id' field and updates all columns when matched
             logger.info(f"[UpdateRows] Executing Delta Lake merge operation...")
+
+            # CRITICAL FIX: Normalize to large_string before merge to prevent string_view
+            source_arrow = df.to_arrow()
+            source_arrow = self._normalize_arrow_table_to_large_string(source_arrow)
+
             delta_table.merge(
-                source=df.to_arrow(),  # Convert Polars DataFrame to PyArrow Table
+                source=source_arrow,
                 predicate='target.id = source.id',
                 source_alias='source',
                 target_alias='target'
@@ -947,10 +1076,16 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             if filter_obj.operator in (table_service_pb2.FILTER_OP_LIKE, table_service_pb2.FILTER_OP_ILIKE):
                 continue
 
-            # AIDEV-NOTE: string_view columns are now handled by bypassing PyArrow predicates entirely
-            # See QueryRows method - if string_view is detected, we load all data and filter with Polars
-            # This predicate builder only runs for non-string_view columns
-            field_ref = pc.field(filter_obj.field)
+            # Get field reference for filter (no casting needed - data will be large_string)
+            # AIDEV-NOTE: We ensure all string data is large_string at write time,
+            # so predicate pushdown works correctly without casting
+            try:
+                field_ref = pc.field(filter_obj.field)
+            except KeyError:
+                # Field not in schema, skip
+                logger.warning(f"Filter field '{filter_obj.field}' not found in schema")
+                continue
+
             operator = filter_obj.operator
 
             # Extract value from the RowDataValue oneof
@@ -977,16 +1112,14 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     # Cast Python value to match column type
                     casted_value = self._cast_value_to_column_type(value, column_type)
 
-                    # CRITICAL FIX: Normalize string_view to regular string for filter compatibility
+                    # CRITICAL FIX: Normalize ALL string types to large_string for filter compatibility
                     # PyArrow's filter kernels don't support string_view comparison
-                    # Convert string_view → large_string to enable filtering
+                    # AIDEV-NOTE: Schema may report large_string but parquet data is string_view
+                    # Always normalize string values to large_string to match field casting
                     import pyarrow.types as pat
-                    if pat.is_string_view(column_type):
-                        # Normalize to large_string for filter compatibility
+                    if pat.is_string(column_type) or pat.is_large_string(column_type) or pat.is_string_view(column_type):
+                        # Normalize all string variants to large_string for filter compatibility
                         filter_type = pa.large_string()
-                    elif pat.is_large_string(column_type) or pat.is_string(column_type):
-                        # Use as-is for regular string types
-                        filter_type = column_type
                     else:
                         # Non-string types: use as-is
                         filter_type = column_type
@@ -1038,9 +1171,11 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     # Cast each value to match column type
                     casted_values = [self._cast_value_to_column_type(v, column_type) for v in values_list]
 
-                    # CRITICAL FIX: Normalize string_view to large_string for filter compatibility
+                    # CRITICAL FIX: Normalize ALL string types to large_string for filter compatibility
+                    # AIDEV-NOTE: Schema may report large_string but parquet data is string_view
+                    # Always normalize string values to large_string to match field casting
                     import pyarrow.types as pat
-                    if pat.is_string_view(column_type):
+                    if pat.is_string(column_type) or pat.is_large_string(column_type) or pat.is_string_view(column_type):
                         filter_type = pa.large_string()
                     else:
                         filter_type = column_type
@@ -1076,9 +1211,11 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     # Cast each value to match column type
                     casted_values = [self._cast_value_to_column_type(v, column_type) for v in values_list]
 
-                    # CRITICAL FIX: Normalize string_view to large_string for filter compatibility
+                    # CRITICAL FIX: Normalize ALL string types to large_string for filter compatibility
+                    # AIDEV-NOTE: Schema may report large_string but parquet data is string_view
+                    # Always normalize string values to large_string to match field casting
                     import pyarrow.types as pat
-                    if pat.is_string_view(column_type):
+                    if pat.is_string(column_type) or pat.is_large_string(column_type) or pat.is_string_view(column_type):
                         filter_type = pa.large_string()
                     else:
                         filter_type = column_type
@@ -1178,31 +1315,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # AIDEV-NOTE: DeltaTable.to_pyarrow_table(filters=predicate) is the correct method
             # Parameter is 'filters' (plural), not 'filter'
             # Predicate only includes filters that support pushdown (not LIKE/ILIKE)
-            #
-            # CRITICAL FIX: string_view columns break PyArrow filter predicates
-            # If ANY filter targets a string_view column, load ALL data without predicates
-            # then filter using Polars which handles string_view correctly
-            has_string_view_filter = False
-            if request.filters:
-                import pyarrow.types as pat
-                for filter_obj in request.filters:
-                    try:
-                        col_type = schema.field(filter_obj.field).type
-                        if pat.is_string_view(col_type):
-                            has_string_view_filter = True
-                            logger.info(f"[QueryRows] Filter on string_view field '{filter_obj.field}' detected, will apply filters in Polars")
-                            break
-                    except KeyError:
-                        continue
-
-            # Load table - with or without predicate based on string_view presence
-            if has_string_view_filter or not predicate:
-                # Load without filters if string_view involved or no valid predicates
-                arrow_table = delta_table.to_pyarrow_table()
-            else:
-                # Safe to use PyArrow predicate pushdown
-                arrow_table = delta_table.to_pyarrow_table(filters=predicate)
-
+            arrow_table = delta_table.to_pyarrow_table(filters=predicate)
             df = pl.from_arrow(arrow_table)
 
             # Apply LIKE/ILIKE filters in-memory using Polars
@@ -1249,69 +1362,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                         value = filter_obj.value.text_value if filter_obj.value.HasField('text_value') else ''
                         search_term = value.replace('%', '')
                         df = df.filter(pl.col(filter_obj.field).str.contains(search_term))
-
-            # Apply non-LIKE filters using Polars if we skipped PyArrow predicate pushdown
-            # AIDEV-NOTE: When string_view columns are involved, we load all data and filter with Polars
-            # Polars handles string_view columns correctly unlike PyArrow filter predicates
-            if has_string_view_filter:
-                logger.info(f"[QueryRows] Applying {len(request.filters)} filters using Polars (string_view compatibility mode)")
-                for filter_obj in request.filters:
-                    # Skip LIKE/ILIKE - already handled above
-                    if filter_obj.operator in (table_service_pb2.FILTER_OP_LIKE, table_service_pb2.FILTER_OP_ILIKE):
-                        continue
-
-                    # Extract value
-                    value = None
-                    if filter_obj.value.HasField('text_value'):
-                        value = filter_obj.value.text_value
-                    elif filter_obj.value.HasField('number_value'):
-                        value = filter_obj.value.number_value
-                    elif filter_obj.value.HasField('boolean_value'):
-                        value = filter_obj.value.boolean_value
-                    elif filter_obj.value.HasField('date_value'):
-                        value = filter_obj.value.date_value
-                    elif filter_obj.value.HasField('json_value'):
-                        value = filter_obj.value.json_value
-
-                    # Apply filter using Polars
-                    if filter_obj.operator == table_service_pb2.FILTER_OP_EQ:
-                        df = df.filter(pl.col(filter_obj.field) == value)
-                    elif filter_obj.operator == table_service_pb2.FILTER_OP_NE:
-                        df = df.filter(pl.col(filter_obj.field) != value)
-                    elif filter_obj.operator == table_service_pb2.FILTER_OP_GT:
-                        df = df.filter(pl.col(filter_obj.field) > value)
-                    elif filter_obj.operator == table_service_pb2.FILTER_OP_GTE:
-                        df = df.filter(pl.col(filter_obj.field) >= value)
-                    elif filter_obj.operator == table_service_pb2.FILTER_OP_LT:
-                        df = df.filter(pl.col(filter_obj.field) < value)
-                    elif filter_obj.operator == table_service_pb2.FILTER_OP_LTE:
-                        df = df.filter(pl.col(filter_obj.field) <= value)
-                    elif filter_obj.operator == table_service_pb2.FILTER_OP_IN:
-                        # Extract values list
-                        values_list = []
-                        for val in filter_obj.values:
-                            if val.HasField('text_value'):
-                                values_list.append(val.text_value)
-                            elif val.HasField('number_value'):
-                                values_list.append(val.number_value)
-                            elif val.HasField('boolean_value'):
-                                values_list.append(val.boolean_value)
-                        df = df.filter(pl.col(filter_obj.field).is_in(values_list))
-                    elif filter_obj.operator == table_service_pb2.FILTER_OP_NOT_IN:
-                        # Extract values list
-                        values_list = []
-                        for val in filter_obj.values:
-                            if val.HasField('text_value'):
-                                values_list.append(val.text_value)
-                            elif val.HasField('number_value'):
-                                values_list.append(val.number_value)
-                            elif val.HasField('boolean_value'):
-                                values_list.append(val.boolean_value)
-                        df = df.filter(~pl.col(filter_obj.field).is_in(values_list))
-                    elif filter_obj.operator == table_service_pb2.FILTER_OP_IS_NULL:
-                        df = df.filter(pl.col(filter_obj.field).is_null())
-                    elif filter_obj.operator == table_service_pb2.FILTER_OP_IS_NOT_NULL:
-                        df = df.filter(pl.col(filter_obj.field).is_not_null())
 
             # AIDEV-NOTE: Aggregation support for metric/dashboard views
             # Check if aggregation is requested (new field in QueryRowsRequest)
