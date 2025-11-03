@@ -22,11 +22,11 @@ import grpc
 from grpc import aio
 
 from smolagents import ToolCallingAgent
-from ...grpc.generated import agent_worker_pb2, agent_worker_pb2_grpc
+from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .mappers import ProtoMapper
-from ...core.entities import ToolConfig as CoreToolConfig
-from ...domain.ai.services.model_provider_service import IModelProviderService
-from ...infrastructure.ai.smolagents_model_provider import SmolagentsModelProvider
+from ..services.model_provider import SmolagentsModelProvider
+from ..services.tool_loader import UnifiedToolLoader
+from ..rag.rag_processor import RagProcessor
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -57,15 +57,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         # Import services at runtime to avoid circular dependencies
         try:
             # RAG processing (always available - no external dependencies)
-            from ...core.rag.rag_processor import RagProcessor
+            # RagProcessor already imported at top
             self.rag_processor = RagProcessor()
             logger.info("✅ RagProcessor initialized successfully")
 
-            # Tool registry repository for converting ToolConfig to smolagents tools
+            # Tool loader for converting ToolConfig to smolagents tools
             try:
-                from ...infrastructure.db.repositories.tools.tool_registry_repository import ToolRegistryRepository
-                self.tool_registry = ToolRegistryRepository()
-                logger.info("✅ ToolRegistryRepository initialized successfully")
+                # UnifiedToolLoader already imported at top
+                self.tool_registry = UnifiedToolLoader()
+                logger.info("✅ UnifiedToolLoader initialized successfully")
             except ImportError as tool_error:
                 logger.warning(f"⚠️ ToolRegistryRepository not available: {tool_error}")
                 self.tool_registry = None
@@ -113,7 +113,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 logger.info("🔍 Processing pre-assembled RAG context from Next.js...")
                 
                 # Import RagProcessor classes
-                from ...core.rag.rag_processor import RagContextData
+                # RagContextData imported from rag_processor (already imported)
                 
                 # Create RAG context data from the pre-assembled context
                 rag_context_data = RagContextData(
@@ -299,7 +299,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         try:
             # Import here to avoid circular dependencies
-            from ...core.rag.rag_processor import RagContextData
+            # RagContextData imported from rag_processor (already imported)
 
             # 1. Build system prompt using RAG processor if available
             system_prompt = self._build_system_prompt_with_rag(rag_context_data, domain_context)
@@ -344,7 +344,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
     ) -> str:
         """Build system prompt with RAG context integration."""
         if self.rag_processor and rag_context_data:
-            from ...core.rag.rag_processor import RagContextData
+            # RagContextData imported from rag_processor (already imported)
 
             if isinstance(rag_context_data, RagContextData):
                 domain_context_dict = {
@@ -382,13 +382,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 # Keep original tool name - let UnifiedToolLoader handle name resolution
                 tool_name = tool_config.name
 
-                core_config = CoreToolConfig(
+                core_config = agent_worker_pb2.ToolConfig(
                     name=tool_name,
                     version=tool_config.version or '',
                     config=dict(tool_config.config) if tool_config.config else {}
                 )
                 core_tool_configs.append(core_config)
-                logger.info(f"  Created CoreToolConfig: name={core_config.name}, config={core_config.config}")
+                logger.info(f"  Created ToolConfig: name={core_config.name}, config={core_config.config}")
 
             logger.info(f"🚀 Calling tool_registry.load_tools with {len(core_tool_configs)} configs...")
             smolagents_tools = []
