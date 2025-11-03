@@ -90,22 +90,34 @@ export class Row {
   }
 
 
-  toPlainObject(): Record<string, any> {
-    // AIDEV-NOTE: Domain value object returns plain values as-is
-    // Serialization for storage is handled by RowSerializer (infrastructure layer)
+  /**
+   * Convert row to plain object with numeric field IDs as keys
+   * AIDEV-NOTE: Uses field IDs (10, 11, 12) instead of field names for Delta Lake storage.
+   * Field IDs are immutable, allowing field name changes without breaking data.
+   * @param fields - Table fields to map field names to IDs
+   * @returns Object with numeric field ID keys: {id: "123", 10: "value", 11: "value"}
+   */
+  toPlainObject(fields: TableField[]): Record<string, any> {
     const obj: Record<string, any> = {
       id: this.id.value  // Include row ID in the returned data
     };
 
     for (const fieldValue of this.fieldValues) {
+      // Find the field definition to get its numeric ID
+      const field = fields.find(f => f.name === fieldValue.fieldSlug);
+      if (!field) {
+        console.warn(`[Row.toPlainObject] Field not found for slug: ${fieldValue.fieldSlug}`);
+        continue;
+      }
+
       const value = fieldValue.value;
 
       // Convert Date objects to ISO strings for JSON serialization
       if (fieldValue.fieldType === 'date' && value instanceof Date) {
-        obj[fieldValue.fieldSlug] = value.toISOString();
+        obj[field.id.value] = value.toISOString();
       } else {
         // All other types: return value as-is (arrays, objects, strings, primitives)
-        obj[fieldValue.fieldSlug] = value;
+        obj[field.id.value] = value;
       }
     }
 
@@ -113,58 +125,29 @@ export class Row {
   }
 
   /**
-   * Convert row to view format with field_{id} keys
-   *
-   * AIDEV-NOTE: Used by Views (filtered/sorted table views) and grid displays
-   * that need the Baserow-style field_{id} column naming convention.
-   * Unlike toPlainObject() which uses human-readable field names,
-   * this format is used for rendering in views/grids where field IDs
-   * are used as stable identifiers even when field names change.
-   *
-   * @param fields - Table fields to map field names to IDs
-   * @returns Object with field_{id} keys instead of field names
+   * Create Row from plain object with numeric field IDs as keys
+   * AIDEV-NOTE: Reads from numeric field IDs (10, 11, 12) not field names.
+   * @param data - Plain object with numeric field IDs: {id: "123", 10: "value", 11: "value"}
+   * @param tableId - Table ID
+   * @param tableFields - Table fields to map IDs to field definitions
+   * @returns Row entity
    */
-  toViewFormat(fields: TableField[]): Record<string, any> {
-    const obj: Record<string, any> = {
-      id: this.id.value
-    };
-
-    for (const fieldValue of this.fieldValues) {
-      // Find the field definition to get its ID
-      const field = fields.find(f => f.name === fieldValue.fieldSlug);
-
-      if (field) {
-        const value = fieldValue.value;
-
-        // Convert Date objects to ISO strings for JSON serialization
-        if (fieldValue.fieldType === 'date' && value instanceof Date) {
-          obj[`field_${field.id.value}`] = value.toISOString();
-        } else {
-          // All other types: return value as-is (arrays, objects, strings, primitives)
-          obj[`field_${field.id.value}`] = value;
-        }
-      }
-    }
-
-    return obj;
-  }
-
   static fromPlainObject(
     data: Record<string, any> & { id?: string },
     tableId: number,
     tableFields: TableField[]
   ): Row {
     // Validate required fields
-    // AIDEV-NOTE: Allow empty strings for legacy data - RowMapper.applyDefaults() will fix them
-    // Only fail on undefined (field completely missing)
+    // AIDEV-NOTE: Data uses numeric field IDs as keys, not field names
     for (const field of tableFields) {
-      // Skip 'id' field - it's auto-generated if not provided (see line 159)
+      // Skip 'id' field - it's auto-generated if not provided
       if (field.name === 'id') {
         continue;
       }
 
-      if (field.required && data[field.name] === undefined) {
-        throw new Error(`${field.name} is required`);
+      const fieldKey = field.id.value.toString();
+      if (field.required && data[fieldKey] === undefined) {
+        throw new Error(`${field.name} (field ${fieldKey}) is required`);
       }
     }
 
@@ -172,28 +155,30 @@ export class Row {
 
     for (const field of tableFields) {
       // Skip 'id' field - Row.id is the authoritative source, not fieldValues
-      // The 'id' is auto-generated in Row constructor (line 159) and used by toPlainObject()
       if (field.name === 'id') {
         continue;
       }
 
-      const value = data[field.name];
+      // Read value using numeric field ID as key
+      const fieldKey = field.id.value.toString();
+      const value = data[fieldKey];
 
       // AIDEV-NOTE: Debug logging for document field values
       if (field.type === 'document' || field.type === 'file') {
-        console.log(`[Row.fromPlainObject] ${field.type} field "${field.name}" incoming value:`, JSON.stringify(value, null, 2));
+        console.log(`[Row.fromPlainObject] ${field.type} field "${field.name}" (ID ${fieldKey}) incoming value:`, JSON.stringify(value, null, 2));
       }
 
-      // Skip undefined/null optional fields
-      if ((value === undefined || value === null) && !field.required) {
-        continue;
-      }
+      // AIDEV-NOTE: CRITICAL FIX - Always include ALL fields, even if null/undefined
+      // This prevents data loss during partial updates where only changed fields are sent.
+      // Previously, null/undefined optional fields were skipped, causing them to be lost
+      // when Row.toPlainObject() was called (it only returns fields with FieldValue objects).
 
       // Validate data type for non-null values
       if (value !== undefined && value !== null) {
         Row.validateFieldValue(field, value);
       }
 
+      // Always push FieldValue for every field in schema, preserving complete row state
       fieldValues.push(new FieldValue(field.name, value, field.type));
     }
 
@@ -264,8 +249,8 @@ export class RowCollection {
     return new RowCollection(filteredRows);
   }
 
-  toPlainObjects(): Record<string, any>[] {
-    return this.rows.map(row => row.toPlainObject());
+  toPlainObjects(fields: TableField[]): Record<string, any>[] {
+    return this.rows.map(row => row.toPlainObject(fields));
   }
 
 }
