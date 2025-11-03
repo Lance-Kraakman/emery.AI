@@ -143,12 +143,12 @@ export function AvatarCustomizationModal({
           <div className="text-muted-foreground">Loading...</div>
         </div>
       ) : (
-        <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="p-3 space-y-3 max-h-[80vh] overflow-y-auto">
         {/* Large Preview with Regenerate */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4">
           <div
             className={cn(
-              'w-24 h-24 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0',
+              'w-20 h-20 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0',
               previewColors.bg
             )}
           >
@@ -164,7 +164,7 @@ export function AvatarCustomizationModal({
           </div>
           <button
             onClick={handleRegenerate}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border rounded-md hover:bg-accent transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border rounded-md hover:bg-accent transition-colors"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Regenerate Random
@@ -172,9 +172,9 @@ export function AvatarCustomizationModal({
         </div>
 
         {/* Style Selection Grid */}
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label className="text-sm">Character Style</Label>
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-4 gap-1">
             {Object.keys(AVATAR_STYLES).map((styleName) => {
               const isSelected = styleName === selectedStyle;
               const stylePreviewUri = generateAvatarDataUri(styleName, `preview-${styleName}`, selectedColor, {});
@@ -208,9 +208,9 @@ export function AvatarCustomizationModal({
         </div>
 
         {/* Color Selection */}
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label className="text-sm">Background Color</Label>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-5 gap-1">
             {Object.keys(AVATAR_COLORS).map((colorName) => {
               const color = AVATAR_COLORS[colorName as AvatarColorName];
               const isSelected = colorName === selectedColor;
@@ -220,15 +220,15 @@ export function AvatarCustomizationModal({
                   key={colorName}
                   onClick={() => handleColorChange(colorName)}
                   className={cn(
-                    'relative aspect-square rounded-md border-2 flex items-center justify-center transition-all hover:scale-105',
+                    'relative h-8 rounded-md border-2 flex items-center justify-center transition-all hover:scale-105',
                     color.bg,
                     isSelected
-                      ? 'border-primary ring-2 ring-primary ring-offset-2'
+                      ? 'border-primary ring-2 ring-primary ring-offset-1'
                       : 'border-border hover:border-primary/50'
                   )}
                   title={colorName}
                 >
-                  <div className={cn('w-5 h-5 rounded-full', color.bg)} />
+                  <div className={cn('w-3 h-3 rounded-full', color.bg)} />
                 </button>
               );
             })}
@@ -237,10 +237,10 @@ export function AvatarCustomizationModal({
 
         {/* Style-Specific Options */}
         {styleConfig && styleConfig.options.length > 0 && (
-          <div className="space-y-3 pt-3 border-t">
-            <h3 className="text-sm font-medium">Customization Options</h3>
+          <div className="space-y-2 pt-2 border-t">
+            <h3 className="text-xs font-medium">Customization Options</h3>
             {styleConfig.options.map((option) => (
-              <div key={option.name} className="space-y-1.5">
+              <div key={option.name} className="space-y-1">
                 <Label htmlFor={option.name} className="text-xs">{option.label}</Label>
 
                 {option.type === 'select' && option.options && (
@@ -272,7 +272,7 @@ export function AvatarCustomizationModal({
                 )}
 
                 {option.type === 'probability' && (
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                       <span>{option.description}</span>
                       <span className="font-medium">{options[option.name] || option.default || 0}%</span>
@@ -297,7 +297,7 @@ export function AvatarCustomizationModal({
 
       {/* Footer */}
       {isMounted && (
-        <div className="flex justify-end gap-3 px-4 py-3 border-t bg-muted/50">
+        <div className="flex justify-end gap-2 px-3 py-2.5 border-t bg-muted/50">
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium border rounded-md hover:bg-accent transition-colors"

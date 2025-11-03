@@ -238,6 +238,14 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       const session = await requireResourcePermission("agents:manage", "agent", agentId);
       const agentApplicationService = getAgentApplicationService();
 
+      // LOGGING: Start of update operation
+      console.log('[agents.ts/updateAgent] Starting agent update', {
+        agentId,
+        hasSchedules: !!data.schedules,
+        scheduleCount: data.schedules?.length,
+        dataKeys: Object.keys(data)
+      });
+
       // Serialize schedules if they're ScheduleConfiguration instances
       const scheduleDTOs = data.schedules?.map(schedule => {
         if (schedule && typeof schedule === 'object' && 'toJSON' in schedule && typeof schedule.toJSON === 'function') {
@@ -245,6 +253,14 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
         }
         return schedule;
       });
+
+      // LOGGING: Schedules serialized
+      if (scheduleDTOs) {
+        console.log('[agents.ts/updateAgent] Schedules serialized', {
+          count: scheduleDTOs.length,
+          schedules: scheduleDTOs
+        });
+      }
 
       // Build DTO - Application Service handles Value Object conversion
       const dto: UpdateAgentDTO = {
@@ -264,7 +280,21 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
         avatarConfig: data.avatarConfig
       };
 
+      // LOGGING: DTO built, calling application service
+      console.log('[agents.ts/updateAgent] DTO built, calling application service', {
+        dto,
+        hasSchedules: !!dto.schedules,
+        scheduleCount: dto.schedules?.length
+      });
+
       const result = await agentApplicationService.updateAgent(dto);
+
+      // LOGGING: Application service result
+      console.log('[agents.ts/updateAgent] Application service result', {
+        success: result.success,
+        hasData: !!result.data,
+        error: result.error
+      });
 
       if (!result.success || !result.data) {
         return {
@@ -281,6 +311,7 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
       }
 
       // Application service now returns DTO directly
+      console.log('[agents.ts/updateAgent] Update successful, revalidated paths');
       return {
         success: true,
         data: result.data,
