@@ -1,1 +1,0 @@
-"""Agent domain entities with rich business logic."""
