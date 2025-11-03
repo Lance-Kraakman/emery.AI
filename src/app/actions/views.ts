@@ -534,8 +534,8 @@ export async function executeView(
     // Type-narrow the schema fields after null check
     const fields = schemaResult.data;
 
-    // Convert Row entities to view format (field_{id} keys for grid display)
-    const plainRows = result.data.rows.map((row) => row.toViewFormat(fields));
+    // Convert Row entities to plain objects with numeric field IDs as keys
+    const plainRows = result.data.rows.map((row) => row.toPlainObject(fields));
 
     // Convert TableField VOs to plain objects
     const plainFields = fields.map((field) => ({
@@ -604,6 +604,53 @@ export async function executeViewAggregations(
     };
   } catch (error) {
     console.error("Error executing view aggregations:", error);
+    return null;
+  }
+}
+
+/**
+ * Execute a chart view and return data formatted for Recharts
+ *
+ * AIDEV-NOTE: Used by ChartBlock to fetch and render chart visualizations.
+ * Handles both raw mode (plot table rows directly) and aggregated mode (GROUP BY with aggregations).
+ */
+export async function executeChartView(
+  viewId: number
+): Promise<{
+  dataPoints: Array<{
+    x: any;
+    y: any;
+    series?: string;
+    [key: string]: any;
+  }>;
+  xAxisLabel?: string;
+  yAxisLabels?: string[];
+  chartType: 'bar' | 'line' | 'pie' | 'area' | 'scatter';
+  dataMode: 'raw' | 'aggregated';
+} | null> {
+  try {
+    await requirePermission("data:view");
+    await requireCurrentOrganization();
+
+    if (!viewId) {
+      return null;
+    }
+
+    const viewService = getViewApplicationService();
+
+    // Execute chart view via application service
+    const result = await viewService.executeChartView({
+      viewId: ViewId.fromNumber(viewId),
+    });
+
+    if (!result.success || !result.data) {
+      console.error("Failed to execute chart view:", result.error);
+      return null;
+    }
+
+    return result.data;
+  } catch (error) {
+    console.error("Error executing chart view:", error);
     return null;
   }
 }

@@ -188,11 +188,13 @@ def load_table_data(config: ToolConfig) -> Any:
         def __init__(self):
             super().__init__()
             # AIDEV-NOTE: Context-specific data storage for organizational analysis
+            # Uses numeric field IDs (10, 11, 12...) as column keys for immutability
+            # This allows field name changes without breaking data
             self.table_data = {
-                1: {  # Customers table data
-                    1: {"field_10": "Acme Corp", "field_11": "contact@acme.com", "field_12": "Technology Solutions", "field_13": "software", "field_14": 5000000, "field_15": 50},
-                    2: {"field_10": "Beta Industries", "field_11": "info@beta.com", "field_12": "Manufacturing", "field_13": "manufacturing", "field_14": 15000000, "field_15": 200},
-                    3: {"field_10": "Gamma Services", "field_11": "hello@gamma.com", "field_12": "Consulting", "field_13": "consulting", "field_14": 2000000, "field_15": 25}
+                1: {  # Customers table data (field IDs: 10=company, 11=email, 12=industry, 13=sector, 14=revenue, 15=employees)
+                    1: {10: "Acme Corp", 11: "contact@acme.com", 12: "Technology Solutions", 13: "software", 14: 5000000, 15: 50},
+                    2: {10: "Beta Industries", 11: "info@beta.com", 12: "Manufacturing", 13: "manufacturing", 14: 15000000, 15: 200},
+                    3: {10: "Gamma Services", 11: "hello@gamma.com", 12: "Consulting", 13: "consulting", 14: 2000000, 15: 25}
                 },
                 4: {}  # Analysis_Results table - empty initially for context storage
             }

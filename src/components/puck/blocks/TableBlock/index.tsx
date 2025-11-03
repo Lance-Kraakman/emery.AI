@@ -222,8 +222,8 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
         console.log('[TableBlock resolveData] View has no field mappings, auto-generating for', result.fields.length, 'fields');
 
         // AIDEV-NOTE: Include 'id' field but hidden by default
-        // The 'id' field is special - it's stored as `row.id` not `row.field_X` in toViewFormat()
-        // See src/ddd/domain/tables/value-objects/row.ts:162-164
+        // The 'id' field is special - it's always present in row.toPlainObject()
+        // See src/ddd/domain/tables/value-objects/row.ts
 
         fieldMappings = result.fields.map((field, index) => {
           const isIdField = field.name === 'id';
@@ -259,7 +259,7 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
           _tableName: tableName,
           _tableId: view.tableId,
           fieldMappings,            // From view, not component props
-          _rows: result.rows,        // Plain objects from .toViewFormat()
+          _rows: result.rows,        // Plain objects from row.toPlainObject()
           _fields: result.fields,    // Plain objects: { id, name, type }
           _totalCount: result.totalCount,
         } as any,
