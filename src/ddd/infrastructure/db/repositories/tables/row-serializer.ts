@@ -26,15 +26,16 @@ export class RowSerializer {
   // ============================================================================
 
   /**
-   * Serialize Row for Delta Lake storage
-   * Applies field-aware normalization and complex type wrapping
+   * Serialize Row for Delta Lake storage with numeric field IDs
+   * AIDEV-NOTE: Uses numeric field IDs as column names (10, 11, 12) not field names.
+   * Applies field-aware normalization and complex type wrapping.
    *
    * @param row - Domain Row entity
    * @param fields - Table field definitions
-   * @returns Plain object ready for Delta Lake storage via protobuf
+   * @returns Plain object with numeric IDs: {id: "123", 10: "value", 11: "value"}
    */
   static serializeForStorage(row: Row, fields: readonly TableField[]): Record<string, any> {
-    const plain = row.toPlainObject();
+    const plain = row.toPlainObject(fields);
 
     // AIDEV-NOTE: Build result from scratch to avoid corrupted keys
     // DO NOT use { ...plain } as it preserves numeric keys from corruption
@@ -46,8 +47,9 @@ export class RowSerializer {
     });
 
     for (const field of fields) {
-      const value = plain[field.name];
-      result[field.name] = this.serializeFieldValue(value, field);
+      const fieldKey = field.id.value;
+      const value = plain[fieldKey];
+      result[fieldKey] = this.serializeFieldValue(value, field);
     }
 
     return result;
@@ -79,17 +81,18 @@ export class RowSerializer {
    * Wrap complex field values for Delta Lake JSON storage
    *
    * AIDEV-NOTE: Delta Lake stores complex types as JSON strings.
-   * We wrap arrays/objects with field name for proper deserialization:
+   * We wrap arrays/objects with field ID for proper deserialization:
    *
    * Example:
    *   Input:  docs = [{id: 1}, {id: 2}]
-   *   Output: docs = {docs: [{id: 1}, {id: 2}]}
+   *   Output: {10: [{id: 1}, {id: 2}]} (where 10 is field ID)
    *
    * This wrapper helps identify the field when parsing JSON from Delta Lake,
    * ensuring we unwrap to the correct structure during deserialization.
    */
   private static wrapComplexFieldForStorage(value: any, field: TableField): any {
-    console.log(`[RowSerializer.serializeForStorage] Field "${field.name}":`, {
+    const fieldKey = field.id.value.toString();
+    console.log(`[RowSerializer.serializeForStorage] Field "${field.name}" (ID ${fieldKey}):`, {
       type: field.type,
       valueType: typeof value,
       isArray: Array.isArray(value),
@@ -97,8 +100,8 @@ export class RowSerializer {
     });
 
     if (value && (Array.isArray(value) || typeof value === 'object')) {
-      // Wrap: [...] → {fieldName: [...]}
-      return { [field.name]: value };
+      // Wrap: [...] → {fieldId: [...]}
+      return { [fieldKey]: value };
     }
 
     // null, undefined, or primitive → store as-is
@@ -153,11 +156,12 @@ export class RowSerializer {
 
   /**
    * Deserialize data from Delta Lake storage to Row-compatible format
-   * Parses JSON for complex types and applies Excel-like defaults
+   * AIDEV-NOTE: Reads from numeric field IDs (10, 11, 12) not field names.
+   * Parses JSON for complex types and applies Excel-like defaults.
    *
-   * @param data - Raw data from Delta Lake via Arrow IPC
+   * @param data - Raw data from Delta Lake with numeric field IDs: {id: "123", 10: "value", 11: "value"}
    * @param fields - Table field definitions
-   * @returns Plain object ready for Row.fromPlainObject()
+   * @returns Plain object ready for Row.fromPlainObject() with numeric IDs
    */
   static deserializeFromStorage(
     data: Record<string, any>,
@@ -167,8 +171,9 @@ export class RowSerializer {
     const result: Record<string, any> = { id: data.id };
 
     for (const field of fields) {
-      const value = data[field.name];
-      result[field.name] = this.deserializeFieldValue(value, field);
+      const fieldKey = field.id.value.toString();
+      const value = data[fieldKey];
+      result[fieldKey] = this.deserializeFieldValue(value, field);
     }
 
     return result;
@@ -196,26 +201,28 @@ export class RowSerializer {
    * Unwrap complex field values from Delta Lake JSON storage
    *
    * AIDEV-NOTE: Reverses the wrapping from serializeFieldValue.
+   * Uses numeric field IDs as wrapper keys.
    *
    * Example:
-   *   Storage: '{"docs": [{id: 1}]}'
-   *   Parsed:  {docs: [{id: 1}]}
+   *   Storage: '{"10": [{id: 1}]}'
+   *   Parsed:  {10: [{id: 1}]}
    *   Returned: [{id: 1}]  ← unwrapped
    */
   private static unwrapComplexFieldFromStorage(value: any, field: TableField): any {
     if (typeof value === 'string' && value.length > 0) {
       try {
         const parsed = JSON.parse(value);
+        const fieldKey = field.id.value.toString();
 
-        // Unwrap field-named wrapper: {docs: [...]} → [...]
-        if (parsed && typeof parsed === 'object' && field.name in parsed) {
-          return parsed[field.name];
+        // Unwrap field-ID wrapper: {10: [...]} → [...]
+        if (parsed && typeof parsed === 'object' && fieldKey in parsed) {
+          return parsed[fieldKey];
         }
 
         // Fallback: use parsed value directly (legacy data)
         return parsed;
       } catch (e) {
-        console.warn(`[RowSerializer.deserializeFromStorage] Failed to parse JSON for field "${field.name}":`, e);
+        console.warn(`[RowSerializer.deserializeFromStorage] Failed to parse JSON for field "${field.name}" (ID ${field.id.value}):`, e);
         return value; // Keep as-is if parse fails
       }
     }
