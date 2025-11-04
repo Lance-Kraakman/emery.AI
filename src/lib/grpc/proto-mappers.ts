@@ -10,24 +10,22 @@
  * - Proto messages (proto/agent_worker.proto) - Transport layer only
  */
 
-import { Agent, CapabilityConfig, ServerConfig, StepConfig } from '@/ddd/domain/agents/entities/agent';
+import { Agent, ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
-import { 
+import {
   AgentConfig as AgentConfigProto,
   ToolConfig as ToolConfigProto,
-  ServerConfig as ServerConfigProto,
-  StepConfig as StepConfigProto,
-  CapabilityConfig as CapabilityConfigProto,
+  SkillConfig as SkillConfigProto,
   TaskRequest,
   TaskProgress as TaskProgressProto,
   TriggerData,
-  InstructionConfig as InstructionConfigProto,
-  StepType
+  InstructionConfig as InstructionConfigProto
 } from './generated/agent_worker';
 import { Task, TaskStatus } from '@/ddd/domain/tasks/entities/task';
 
 // AgentData interface for gRPC transport (uses primitives, not domain value objects)
+// AIDEV-NOTE: Skills are now in separate table, not embedded in Agent
 export interface AgentData {
   id: number;
   name: string;
@@ -35,9 +33,7 @@ export interface AgentData {
   description?: string;
   persona?: string;
   tools?: ToolConfig[];
-  servers?: ServerConfig[];
-  trigger?: any;
-  capabilities?: CapabilityConfig[];
+  schedules?: ScheduleConfigurationJSON[];
   status?: any;
   organizationId: number;
   ownerId: string;
@@ -63,49 +59,8 @@ export function mapToolToProto(tool: ToolConfig): ToolConfigProto {
 }
 
 /**
- * Map TypeScript ServerConfig to protobuf ServerConfig
- */
-export function mapServerToProto(server: ServerConfig): ServerConfigProto {
-  return {
-    name: server.name,
-    endpoint: server.endpoint || '',
-    config: server.config || {}
-  };
-}
-
-/**
- * Map TypeScript StepConfig to protobuf StepConfig
- */
-export function mapStepToProto(step: StepConfig): StepConfigProto {
-  // Map TypeScript string enum to proto enum
-  const stepTypeMap: Record<string, StepType> = {
-    'CODE_STEP': StepType.CODE_STEP,
-    'TOOL_STEP': StepType.TOOL_STEP
-  };
-
-  return {
-    id: `step_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, // Generate ID for proto
-    type: stepTypeMap[step.type] || StepType.TOOL_STEP,
-    instructions: step.instructions,
-    model: step.model || '',
-    tools: step.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
-    servers: step.servers?.filter(server => server !== null && server !== undefined)?.map(mapServerToProto) || []
-  };
-}
-
-/**
- * Map TypeScript CapabilityConfig to protobuf CapabilityConfig
- */
-export function mapCapabilityToProto(capability: CapabilityConfig): CapabilityConfigProto {
-  return {
-    name: capability.name,
-    description: capability.description,
-    steps: capability.steps.map(mapStepToProto)
-  };
-}
-
-/**
  * Map TypeScript AgentData to protobuf AgentConfig
+ * AIDEV-NOTE: Skills are now in separate table, queried separately when needed
  */
 export function mapAgentToProto(agent: Agent): AgentConfigProto {
   return {
@@ -113,9 +68,10 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
     role: agent.role || '',
     description: agent.description || '',
     persona: agent.persona || '',
-    tools: agent.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
-    servers: agent.servers?.filter(server => server !== null && server !== undefined)?.map(mapServerToProto) || [],
-    capabilities: agent.capabilities?.filter(capability => capability !== null && capability !== undefined)?.map(mapCapabilityToProto) || []
+    defaultModel: agent.defaultModel || '', // Agent-specific model override for task execution
+    tools: [], // Tools are now defined per-task (in skills and schedule configurations)
+    servers: [], // Servers removed from agent-level configuration
+    skills: [] // Skills queried separately from skills table
   };
 }
 
@@ -125,12 +81,13 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
 export function mapInstructionConfigToProto(instructionConfig: {
   instructions: string;
   tools?: ToolConfig[];
-  servers?: ServerConfig[];
+  model?: string;
 }): InstructionConfigProto {
   return {
     instructions: instructionConfig.instructions,
     tools: instructionConfig.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
-    servers: instructionConfig.servers?.filter(server => server !== null && server !== undefined)?.map(mapServerToProto) || []
+    servers: [], // Servers removed from task instructions
+    model: instructionConfig.model || '' // Empty model will be resolved by worker using hierarchy
   };
 }
 
@@ -142,17 +99,17 @@ export function createTaskRequest(params: {
   taskId: string;
   agentId: number;
   // Execution mode - use one of the following
-  capabilityName?: string;  // Direct capability execution
+  skillName?: string;  // Direct capability execution
   instructionConfig?: {     // Instruction-based execution with auto-routing
     instructions: string;
     tools?: ToolConfig[];
-    servers?: ServerConfig[];
   };
   agent: Agent;
   triggerData: Record<string, any>;
   organizationId: string;
   ownerId: string;
   timeoutSeconds?: number;
+  organizationModel?: string; // Organization default model (fallback for agent model)
 }): TaskRequest {
   // Convert trigger data to string map format expected by proto
   const triggerPayload: Record<string, string> = {};
@@ -164,24 +121,26 @@ export function createTaskRequest(params: {
     payload: triggerPayload
   };
 
-  // Build the base request
+  // Build the base request (using camelCase - generator handles wire format conversion)
   const request: TaskRequest = {
-    task_id: params.taskId,
-    agent_id: params.agentId,
-    agent_config: mapAgentToProto(params.agent),
-    trigger_data: triggerData as any,
-    organization_id: params.organizationId,
-    owner_id: params.ownerId,
-    timeout_seconds: params.timeoutSeconds || 300
+    name: params.skillName || 'instruction_based_task',
+    taskId: params.taskId,
+    agentId: params.agentId,
+    agentConfig: mapAgentToProto(params.agent),
+    triggerData: triggerData as any,
+    organizationId: params.organizationId,
+    ownerId: params.ownerId,
+    timeoutSeconds: params.timeoutSeconds || 300,
+    organizationModel: params.organizationModel || '' // Organization default model for fallback
   };
 
   // Set execution mode (oneof field)
-  if (params.capabilityName) {
-    request.capability_name = params.capabilityName;
+  if (params.skillName) {
+    request.skillName = params.skillName;
   } else if (params.instructionConfig) {
-    request.instruction_config = mapInstructionConfigToProto(params.instructionConfig);
+    request.instructionConfig = mapInstructionConfigToProto(params.instructionConfig);
   } else {
-    throw new Error('Either capabilityName or instructionConfig must be provided');
+    throw new Error('Either skillName or instructionConfig must be provided');
   }
 
   return request;
@@ -232,19 +191,19 @@ export function mapTaskProgressFromProto(progress: TaskProgressProto): {
   
   // Parse result if available
   let result: any = undefined;
-  if (progress.output_json) {
+  if (progress.outputJson) {
     try {
-      result = JSON.parse(progress.output_json);
+      result = JSON.parse(progress.outputJson);
     } catch (error) {
       console.warn('Failed to parse task output JSON:', error);
-      result = { raw_output: progress.output_json };
+      result = { raw_output: progress.outputJson };
     }
   }
 
   return {
     status,
     result,
-    error: progress.error_message || undefined
+    error: progress.errorMessage || undefined
   };
 }
 

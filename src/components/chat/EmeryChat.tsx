@@ -21,6 +21,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
+import { RightPanelResizeHandle } from '@/components/ui/right-panel-resize-handle'
 import { ChatCanvas } from './ChatCanvas'
 import CustomChatInput from './CustomChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
@@ -29,12 +30,11 @@ import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { ToolPanel } from './ToolPanel'
 import { useChatHandler } from './ChatProvider'
-import { resolveReferences } from '@/app/actions/references'
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
-import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
-import { fetchFileArtifactData, getFileDownloadUrl, getDocumentFieldValue } from '@/app/actions/artifacts'
+import { fetchFileArtifactData, getFileDownloadUrl, getDocumentFieldValue, getDocumentDownloadUrl } from '@/app/actions/artifacts'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
+import { StepProgressIndicator } from './StepProgressIndicator'
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
@@ -93,12 +93,12 @@ function EmeryChatHeader({
   }
 
   return (
-    <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
+    <div className="flex items-center justify-between py-4 px-4 bg-muted/20">
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-lg bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-              Emery
+              Dash
             </h3>
             <ChatHistoryDropdown
               currentChatId={currentChatId}
@@ -174,7 +174,7 @@ function ChatSuggestions({
   if (suggestions.length === 0) return null
 
   return (
-    <div className="px-4">
+    <div>
       <div className="mb-2">
         <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <Lightbulb className="h-3 w-3" />
@@ -237,7 +237,7 @@ function ChatContentWithCanvas({
 }: ChatContentWithCanvasProps) {
   const { openArtifactInCanvas } = useChatCanvas()
 
-  // Handle tool click using canvas hook
+  // Handle tool click using global UI state for artifacts
   const handleToolClick = async (tool: ToolDTO) => {
     console.log('Tool clicked:', tool)
 
@@ -249,49 +249,62 @@ function ChatContentWithCanvas({
 
     if (tool.category === ToolCategory.DOCUMENTS) {
       // Fetch real document data using server action
-      // Note: DocumentToolConfig uses tableId/fieldId, not documentTableId/documentFieldId
+      // Note: Runtime values are now in ToolDTO root level, not in config
       const result = await getDocumentFieldValue(
-        tool.config.documentId!,
-        tool.config.organizationId,
-        tool.config.tableId!,
-        tool.config.fieldId!
+        tool.documentId!,
+        tool.organizationId!,
+        tool.tableId as number,
+        tool.fieldId!
       )
 
       if (result.success && result.data) {
-        // Create artifact and open in canvas using tool config data
+        // Get download URL for the document
+        const urlResult = await getDocumentDownloadUrl(
+          tool.documentId!,
+          tool.organizationId!,
+          tool.tableId as number,
+          tool.fieldId!
+        )
+
+        const downloadUrl = urlResult.success ? urlResult.data! : undefined
+
+        // Create artifact and open in canvas using global UI state
         const artifact = createDocumentArtifact(
           result.data,
-          tool.config.organizationId,
-          tool.config.tableId!,
-          tool.config.fieldId!,
-          'view'
+          tool.organizationId!,
+          tool.tableId as number,
+          tool.fieldId!,
+          'view',
+          downloadUrl
         )
-        openArtifactInCanvas(artifact)
+        // CRITICAL FIX: Use global UI state instead of LlamaIndex canvas
+        // This ensures artifact opens in EmeryCanvas (main content area)
+        uiStateActions.openArtifact(artifact)
         console.log('Document artifact opened in canvas:', artifact)
       } else {
         console.error('Failed to fetch document data:', result.error)
       }
     } else if (tool.category === ToolCategory.FILES) {
-      // Fetch real file data using DTO config
+      // Fetch real file data using DTO runtime values
       const fileResult = await fetchFileArtifactData(
-        tool.config.fileId!,
-        tool.config.organizationId,
-        tool.config.filename!,
-        tool.config.fileMimeType!
+        tool.fileId!,
+        tool.organizationId!,
+        tool.filename!,
+        tool.mimeType!
       )
 
       if (fileResult.success && fileResult.data) {
         // Get download URL for the file
         const urlResult = await getFileDownloadUrl(
-          tool.config.fileId!,
-          tool.config.organizationId
+          tool.fileId!,
+          tool.organizationId!
         )
 
         const downloadUrl = urlResult.success ? urlResult.data! : ''
 
-        // Create artifact and open in canvas
+        // Create artifact and open in canvas using global UI state
         const artifact = createFileArtifact(fileResult.data, 1, 1, 'generic', downloadUrl)
-        openArtifactInCanvas(artifact)
+        uiStateActions.openArtifact(artifact)
         console.log('File artifact opened in canvas:', artifact)
       } else {
         console.error('Failed to fetch file data:', fileResult.error)
@@ -303,33 +316,22 @@ function ChatContentWithCanvas({
   return (
     <div className="h-full flex flex-col">
       {/* Messages and suggestions container - scrollable */}
-      <div ref={handler.scrollRef} className="flex-1 overflow-y-auto flex flex-col px-1">
+      <div ref={handler.scrollRef} className="flex-1 overflow-y-auto flex flex-col">
         {/* Messages area */}
         <div className="flex-1">
           {/* Debug: Show message count */}
           {process.env.NODE_ENV === 'development' && (
-            <div className="text-xs text-gray-500 p-2">
+            <div className="text-xs text-gray-500 py-2">
               Messages: {handler.messages?.length || 0}
             </div>
           )}
 
           {/* ChatMessages component */}
           <ChatMessages
-            className="flex-1 h-full bg-transparent [&_.message]:bg-transparent [&_.message]:py-1 [&_.message]:px-2 [&_.message]:text-sm [&_.message]:leading-tight [&_p]:text-sm [&_p]:leading-5 [&_*]:text-sm"
+            className="flex-1 h-full bg-transparent [&_.message]:bg-transparent [&_.message]:py-1 [&_.message]:text-sm [&_.message]:leading-tight [&_p]:text-sm [&_p]:leading-5 [&_*]:text-sm"
           />
 
         </div>
-
-        {/* Suggestions at bottom of messages area when no messages */}
-        {isClient && showSuggestions && handler.messages.length === 0 && (
-          <div className="flex-shrink-0 mt-auto">
-            <ChatSuggestions
-              onSuggestionClick={onSuggestionClick}
-              selectedIndex={selectedSuggestionIndex}
-              domainType={chatContext?.domainType}
-            />
-          </div>
-        )}
       </div>
 
       {/* Tool Panel - with direct canvas access */}
@@ -341,8 +343,19 @@ function ChatContentWithCanvas({
         className="border-t border-border/10"
       />
 
+      {/* Step Progress Indicator - shows real-time agent execution */}
+      {handler.currentStep && (
+        <div className="px-3 py-2 border-t border-border/10">
+          <StepProgressIndicator
+            currentStep={handler.currentStep}
+            isLoading={handler.isLoading}
+            onCancel={handler.cancelMessage}
+          />
+        </div>
+      )}
+
       {/* Input area */}
-      <div className="flex-shrink-0 p-4 border-t border-border/10 bg-card" onKeyDown={onKeyDown}>
+      <div className="flex-shrink-0 py-4 px-3 border-t border-border/10 bg-card" onKeyDown={onKeyDown}>
         <CustomChatInput
           onSendMessage={async (message) => {
             // Send message with tools
@@ -371,11 +384,13 @@ export function EmeryChat() {
 
   // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders
   const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
+  const chatWidth = useStore(uiStateStore, uiStateSelectors.chatWidth)
   const canvasState = useStore(uiStateStore, uiStateSelectors.canvasState)
   const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
   const chatContext = useStore(uiStateStore, uiStateSelectors.chatContext)
   const toggleCanvas = uiStateActions.toggleCanvas
   const setChatContext = uiStateActions.setChatContext
+  const setChatWidth = uiStateActions.setChatWidth
 
   const { data: emeryData } = useEmery()
 
@@ -467,7 +482,7 @@ export function EmeryChat() {
   // Don't render if user is not authenticated
   if (!userId || !organizationId) {
     return (
-      <div className="w-96 h-full flex flex-col bg-card border-l border-border items-center justify-center p-8">
+      <div className="w-96 h-full flex flex-col bg-card border-l border-border items-center justify-center py-8">
         <p className="text-sm text-muted-foreground">Please sign in to use chat</p>
       </div>
     )
@@ -489,21 +504,33 @@ export function EmeryChat() {
     }
   }
   
-  // Collapsed state - just show header with expand button
+  // Collapsed state - show minimal icon strip with dashlet logo
   if (chatState === 'collapsed') {
     return (
-      <div className="w-12 h-full flex flex-col bg-card border-l border-border flex-shrink-0">
-        <EmeryChatHeader 
-          domainType={chatContext?.domainType}
-          domainName={chatContext?.domainName}
-          currentChatId={currentChatId}
-          onChatSelect={handleChatSelect}
-          onNewChat={handleNewChat}
-          onChatHistoryUpdate={handleChatHistoryUpdate}
-          userId={userId || ''}
-          organizationId={organizationId || 0}
-        />
-        <div className="flex-1" />
+      <div className="w-12 h-full flex flex-col bg-card border-l border-border flex-shrink-0 items-center py-4 gap-4">
+        {/* Dashlet logo */}
+        <button
+          onClick={() => uiStateActions.toggleChat()}
+          className="flex items-center justify-center hover:opacity-80 transition-opacity"
+          title="Expand chat"
+        >
+          <img
+            src="/assets/dashlet/logo_icon.svg"
+            alt="Dashlet"
+            className="h-6 w-6"
+          />
+        </button>
+
+        {/* Expand button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => uiStateActions.toggleChat()}
+          className="h-8 w-8"
+          title="Expand chat"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
       </div>
     )
   }
@@ -593,11 +620,20 @@ export function EmeryChat() {
 
   // Determine layout based on canvas state
   const isFullWidth = canvasState === 'collapsed'
-  
+
   return (
-    <div className={`flex bg-card border-l border-border flex-shrink-0 ${isFullWidth ? 'h-screen' : 'h-full'}`}>
+    <div className={`relative flex bg-card border-l border-border flex-shrink-0 h-screen`} style={{ width: isFullWidth ? '100%' : `${chatWidth}px` }}>
+      {/* Resize handle */}
+      {!isFullWidth && (
+        <RightPanelResizeHandle
+          onResize={setChatWidth}
+          minWidth={280}
+          maxWidth={600}
+        />
+      )}
+
       {/* Chat Section - now full width without sidebar */}
-      <div className={`flex flex-col ${isFullWidth ? 'h-screen' : 'h-full'} ${isFullWidth ? 'flex-1' : 'w-96'}`}>
+      <div className={`flex flex-col w-full h-screen`}>
         <EmeryChatHeader 
           domainType={chatContext?.domainType}
           domainName={chatContext?.domainName}

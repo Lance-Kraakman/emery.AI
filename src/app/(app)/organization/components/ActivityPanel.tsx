@@ -192,7 +192,7 @@ export default function ActivityPanel({
                       id: activity.id || '',
                       name: activity.name,
                       status: activity.status || 'unknown',
-                      capabilityName: activity.capabilityName || undefined,
+                      skillName: activity.skillName || undefined,
                       result: activity.result,
                       error: activity.error || undefined,
                       logs: activity.logs || [],

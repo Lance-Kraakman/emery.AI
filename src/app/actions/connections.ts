@@ -555,54 +555,14 @@ export async function getAgentsNeedingConnections(): Promise<Result<AgentConnect
 
     // Get agents in this organization
     const agents = await agentService.getAgents({
-      organizationId: OrganizationId.fromNumber(session.user.currentOrganizationId!)
+      organizationId: session.user.currentOrganizationId!
     });
 
+    // AIDEV-NOTE: Agents no longer have tools at agent-level
+    // Tools are defined per-task (in skills and schedules)
+    // This function now returns empty array - connection management
+    // should be done at user/organization level, not agent level
     const agentSummaries: AgentConnectionSummary[] = [];
-
-    for (const agent of agents) {
-      const tools = agent.tools || [];
-
-      if (tools.length === 0) continue;
-
-      // Get connection status for agent tools
-      const toolStatusResult = await getToolConnectionStatus(tools, session.user.id);
-
-      if (!toolStatusResult.success) continue;
-
-      const toolStatuses = toolStatusResult.data || [];
-      const connectedTools = toolStatuses.filter(t => t.isConnected).length;
-      const disconnectedTools = toolStatuses.length - connectedTools;
-
-      // Collect all missing apps
-      const allMissingApps = new Set<string>();
-      toolStatuses.forEach(tool => {
-        tool.missingApps.forEach(app => allMissingApps.add(app));
-      });
-
-      // Determine connection health
-      let connectionHealth: 'healthy' | 'warning' | 'critical';
-      if (disconnectedTools === 0) {
-        connectionHealth = 'healthy';
-      } else if (connectedTools > disconnectedTools) {
-        connectionHealth = 'warning';
-      } else {
-        connectionHealth = 'critical';
-      }
-
-      // Only include agents that need connections
-      if (disconnectedTools > 0) {
-        agentSummaries.push({
-          agentId: agent.id.value,
-          agentName: agent.name,
-          totalTools: toolStatuses.length,
-          connectedTools,
-          disconnectedTools,
-          missingApps: Array.from(allMissingApps),
-          connectionHealth
-        });
-      }
-    }
 
     return {
       success: true,
@@ -693,48 +653,16 @@ export async function validateAgentConnections(
       };
     }
 
-    const tools = agent.tools || [];
-
-    if (tools.length === 0) {
-      return {
-        success: true,
-        data: {
-          valid: true,
-          warnings: [],
-          missingConnections: [],
-          toolStatuses: []
-        }
-      };
-    }
-
-    // Get tool connection status
-    const toolStatusResult = await getToolConnectionStatus(tools, session.user.id);
-
-    if (!toolStatusResult.success) {
-      return {
-        success: false,
-        error: toolStatusResult.error
-      };
-    }
-
-    const toolStatuses = toolStatusResult.data || [];
-    const allMissingApps = new Set<string>();
-    const warnings: string[] = [];
-
-    toolStatuses.forEach(tool => {
-      tool.missingApps.forEach(app => allMissingApps.add(app));
-      warnings.push(...tool.warnings);
-    });
-
-    const valid = allMissingApps.size === 0;
-
+    // AIDEV-NOTE: Agents no longer have tools at agent-level
+    // Tools are defined per-task (in skills and schedules)
+    // Always return valid since connection validation is per-task now
     return {
       success: true,
       data: {
-        valid,
-        warnings,
-        missingConnections: Array.from(allMissingApps),
-        toolStatuses
+        valid: true,
+        warnings: [],
+        missingConnections: [],
+        toolStatuses: []
       }
     };
   } catch (error) {

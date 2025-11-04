@@ -119,7 +119,7 @@ export class ToolConfig {
     public readonly name: string,
     public readonly config: ToolConfigData
   ) {
-    if (!name?.trim()) {
+    if (!name || name.trim() === '') {
       throw new Error('Tool name is required and cannot be empty')
     }
     if (typeof config !== 'object' || config === null) {

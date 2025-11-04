@@ -20,6 +20,7 @@ services:
       - integration-test-network
 
   app-integration:
+    image: emery-integration-app:prod
     build:
       context: ../..
       dockerfile: Dockerfile
@@ -30,7 +31,7 @@ services:
       - ../../.env.local.test
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
-      NODE_ENV: development
+      NODE_ENV: production
       NEXTAUTH_URL: http://localhost:3002
       # Override WORKER_ADDRESS for internal container network
       WORKER_ADDRESS: agent-integration:50051
@@ -91,10 +92,20 @@ services:
       ORGANIZATION_ID: default
       USE_PIPEDREAM_TOOLS: true
       NEXTJS_BASE_URL: http://app-integration:3000
+      # MinIO S3 configuration for Delta Lake storage (internal container network)
+      AWS_ENDPOINT_URL: http://minio-integration:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      S3_BUCKET_NAME: emery-files
+      AWS_ALLOW_HTTP: "true"
+      AWS_S3_ALLOW_UNSAFE_RENAME: "true"
     depends_on:
       postgres-integration:
         condition: service_healthy
-    command: ["python", "-m", "emery_agents.infrastructure.grpc.main"]
+      minio-integration:
+        condition: service_healthy
+    command: ["python", "-m", "emery_agents.grpc.main"]
     healthcheck:
       test: ["CMD", "python", "-c", "import grpc; grpc.channel_ready_future(grpc.insecure_channel('localhost:50051')).result(timeout=5)"]
       interval: 15s
@@ -104,6 +115,7 @@ services:
       - integration-test-network
 
   scheduler-integration:
+    image: emery-integration-scheduler:prod
     build:
       context: ../..
       dockerfile: Dockerfile
@@ -113,7 +125,7 @@ services:
       - ../../.env.local.test
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
-      NODE_ENV: development
+      NODE_ENV: production
       # Override WORKER_ADDRESS for internal container network to reach agent
       WORKER_ADDRESS: agent-integration:50051
       # MinIO S3 configuration for integration tests (internal container network)

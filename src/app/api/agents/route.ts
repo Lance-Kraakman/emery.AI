@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentApplicationService } from '@/ddd/application/di/container';
-import type { CreateAgentCommand } from '@/ddd/application/services/agents/agent-application-service';
+import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 /**
@@ -26,41 +26,37 @@ export async function POST(request: NextRequest): Promise<Response> {
     const userId = authResult.user.id;
 
     const body = await request.json();
-    const { 
-      name, 
-      role, 
-      description, 
-      persona, 
+    const {
+      name,
+      role,
+      description,
+      persona,
       organizationId,
       trigger,
-      capabilities,
-      tools,
-      servers 
+      skills
     } = body;
 
     if (!name || !organizationId) {
-      return Response.json({ 
-        error: 'Missing required fields: name, organizationId' 
+      return Response.json({
+        error: 'Missing required fields: name, organizationId'
       }, { status: 400 });
     }
 
     // Use AgentApplicationService for agent creation
     const agentApplicationService = getAgentApplicationService();
 
-    const command: CreateAgentCommand = {
+    // Build DTO - Application Service handles Value Object conversion
+    const dto: CreateAgentDTO = {
       name,
       role,
       description,
       persona,
-      ownerId: UserId.fromString(userId),
-      organizationId: OrganizationId.fromNumber(parseInt(organizationId)),
-      trigger: trigger || { type: 'MANUAL', enabled: true },
-      capabilities: capabilities || [],
-      tools: tools || [],
-      servers: servers || []
+      ownerId: userId,
+      organizationId: parseInt(organizationId),
+      schedules: trigger ? [trigger] : [{ type: 'MANUAL', enabled: true }]
     };
 
-    const result = await agentApplicationService.createAgent(command);
+    const result = await agentApplicationService.createAgent(dto);
 
     if (!result.success) {
       return Response.json({ 

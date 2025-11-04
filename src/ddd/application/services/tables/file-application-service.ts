@@ -1,14 +1,18 @@
 /**
  * File Application Service
- * 
+ *
  * Orchestrates file operations with business logic and validation.
  * Handles file upload/download, permissions, and lifecycle management.
  * Integrates files with dynamic table fields for organizational scoping.
- * 
+ *
  * AIDEV-NOTE: Application service for file management - coordinates between
  * FileFieldService, storage repositories, and business rules for files connected to dynamic tables
  */
+
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import type { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
+
+const logger = createDebugLogger('FileService');
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import type { Result } from '@/ddd/domain/shared/result';
 import { FieldId, OrganizationId, TableId } from '@/ddd/domain/shared/value-objects';

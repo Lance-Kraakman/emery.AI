@@ -1,45 +1,22 @@
 /**
  * Team Application Service
- * 
+ *
  * Handles team business operations including CRUD, member management,
  * agent assignment, and organization scoping.
  */
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
+
+const logger = createDebugLogger('TeamService');
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { Result } from '@/ddd/domain/shared/result';
 import { Team } from '@/ddd/domain/teams/entities/team';
 import { TeamId, OrganizationId, AgentId } from '@/ddd/domain/shared/value-objects';
+import type { CreateTeamDTO, UpdateTeamDTO, TeamFiltersDTO, TeamDTO } from '@/app/dtos/team.dto';
 
-export interface CreateTeamCommand {
-  name: string;
-  purpose?: string;
-  description?: string;
-  responsibilities?: string[];
-  goals?: string[];
-  agentIds?: string[];
-  databaseId?: string;
-  organizationId: number;
-}
-
-export interface UpdateTeamCommand {
-  teamId: number;
-  name?: string;
-  purpose?: string;
-  description?: string;
-  responsibilities?: string[];
-  goals?: string[];
-  agentIds?: string[];
-}
-
-export interface TeamFilters {
-  organizationId: number;
-  searchQuery?: string;
-  hasAgents?: boolean;
-}
-
-// Use unified Result interface from domain shared types
-export type TeamApplicationResult<T = any> = Result<T>;
+// Re-export DTOs for backward compatibility during migration
+export type { CreateTeamDTO, UpdateTeamDTO, TeamFiltersDTO, TeamDTO };
 
 export class TeamApplicationService {
 
@@ -51,10 +28,10 @@ export class TeamApplicationService {
   /**
    * Create a new team with business validation
    */
-  async createTeam(command: CreateTeamCommand): Promise<TeamApplicationResult<Team>> {
+  async createTeam(dto: CreateTeamDTO): Promise<Result<TeamDTO>> {
     try {
       // Business validation
-      if (!command.name?.trim()) {
+      if (!dto.name?.trim()) {
         return {
           success: false,
           error: "Team name is required"
@@ -63,47 +40,48 @@ export class TeamApplicationService {
 
       // Validate agent IDs if provided
       const warnings: string[] = [];
-      if (command.agentIds && command.agentIds.length > 0) {
-        const agents = await this.agentRepository.findByOrganization(OrganizationId.fromNumber(command.organizationId));
+      let validatedAgentIds = dto.agentIds;
+      if (dto.agentIds && dto.agentIds.length > 0) {
+        const agents = await this.agentRepository.findByOrganization(OrganizationId.fromNumber(dto.organizationId));
         const validAgentIds = agents.map(a => a.id.toString());
-        const invalidAgentIds = command.agentIds.filter(id => !validAgentIds.includes(id));
-        
+        const invalidAgentIds = dto.agentIds.filter(id => !validAgentIds.includes(id));
+
         if (invalidAgentIds.length > 0) {
           warnings.push(`Invalid agent IDs: ${invalidAgentIds.join(', ')}`);
           // Remove invalid agent IDs
-          command.agentIds = command.agentIds.filter(id => !invalidAgentIds.includes(id));
+          validatedAgentIds = dto.agentIds.filter(id => !invalidAgentIds.includes(id));
         }
       }
 
       // Create team using domain entity with temporary ID (repository will assign real ID)
       const team = Team.fromPersistence({
         id: -1, // Use -1 for temporary ID (allowed by BaseId validation)
-        name: command.name.trim(),
-        purpose: command.purpose,
-        description: command.description,
-        responsibilities: command.responsibilities,
-        goals: command.goals,
-        agentIds: command.agentIds ? command.agentIds.map(id => id.toString()) : undefined,
-        databaseId: command.databaseId,
-        organizationId: command.organizationId
+        name: dto.name.trim(),
+        purpose: dto.purpose,
+        description: dto.description,
+        responsibilities: dto.responsibilities,
+        goals: dto.goals,
+        agentIds: validatedAgentIds ? validatedAgentIds.map(id => id.toString()) : undefined,
+        databaseId: dto.databaseId,
+        organizationId: dto.organizationId
       });
 
       // Create team via repository
       const createData = {
-        name: command.name,
-        purpose: command.purpose || null,
-        description: command.description || null,
-        responsibilities: command.responsibilities || null,
-        goals: command.goals || null,
-        agentIds: command.agentIds ? command.agentIds.map(id => id.toString()) : null,
-        databaseId: command.databaseId || null,
-        organizationId: command.organizationId
+        name: dto.name,
+        purpose: dto.purpose || null,
+        description: dto.description || null,
+        responsibilities: dto.responsibilities || null,
+        goals: dto.goals || null,
+        agentIds: validatedAgentIds ? validatedAgentIds.map(id => id.toString()) : null,
+        databaseId: dto.databaseId || null,
+        organizationId: dto.organizationId
       };
       const savedTeam = await this.teamRepository.create(createData);
 
       return {
         success: true,
-        data: savedTeam,
+        data: this.toDTO(savedTeam),
         warnings: warnings.length > 0 ? warnings : undefined
       };
     } catch (error) {
@@ -118,40 +96,40 @@ export class TeamApplicationService {
   /**
    * Update an existing team
    */
-  async updateTeam(command: UpdateTeamCommand): Promise<TeamApplicationResult<Team>> {
+  async updateTeam(dto: UpdateTeamDTO): Promise<Result<TeamDTO>> {
     try {
       // Load existing team
-      const existingTeam = await this.teamRepository.findById(TeamId.fromNumber(command.teamId));
+      const existingTeam = await this.teamRepository.findById(TeamId.fromNumber(dto.id));
       if (!existingTeam) {
         return {
           success: false,
-          error: `Team with ID ${command.teamId} not found`
+          error: `Team with ID ${dto.id} not found`
         };
       }
 
       // Validate agent IDs if provided
       const warnings: string[] = [];
-      let validatedAgentIds = command.agentIds;
-      if (command.agentIds && command.agentIds.length > 0) {
+      let validatedAgentIds = dto.agentIds;
+      if (dto.agentIds && dto.agentIds.length > 0) {
         const agents = await this.agentRepository.findByOrganization(existingTeam.organizationId);
         const validAgentIds = agents.map(a => a.id.toString());
-        const invalidAgentIds = command.agentIds.filter(id => !validAgentIds.includes(id));
+        const invalidAgentIds = dto.agentIds.filter(id => !validAgentIds.includes(id));
         
         if (invalidAgentIds.length > 0) {
           warnings.push(`Invalid agent IDs: ${invalidAgentIds.join(', ')}`);
           // Remove invalid agent IDs
-          validatedAgentIds = command.agentIds.filter(id => !invalidAgentIds.includes(id));
+          validatedAgentIds = dto.agentIds.filter(id => !invalidAgentIds.includes(id));
         }
       }
 
       // Create updated team with existing values as defaults
       const updatedTeam = Team.fromPersistence({
         id: existingTeam.id.value,
-        name: command.name !== undefined ? command.name : existingTeam.name,
-        purpose: command.purpose !== undefined ? command.purpose : existingTeam.purpose,
-        description: command.description !== undefined ? command.description : existingTeam.description,
-        responsibilities: command.responsibilities !== undefined ? command.responsibilities : existingTeam.responsibilities,
-        goals: command.goals !== undefined ? command.goals : existingTeam.goals,
+        name: dto.name !== undefined ? dto.name : existingTeam.name,
+        purpose: dto.purpose !== undefined ? dto.purpose : existingTeam.purpose,
+        description: dto.description !== undefined ? dto.description : existingTeam.description,
+        responsibilities: dto.responsibilities !== undefined ? dto.responsibilities : existingTeam.responsibilities,
+        goals: dto.goals !== undefined ? dto.goals : existingTeam.goals,
         agentIds: validatedAgentIds !== undefined ? validatedAgentIds : existingTeam.agentIds?.map(id => id.toString()) || null,
         organizationId: existingTeam.organizationId.value,
         createdAt: existingTeam.createdAt
@@ -159,17 +137,17 @@ export class TeamApplicationService {
 
       // Update team via repository
       const updateData = {
-        name: command.name,
-        purpose: command.purpose,
-        description: command.description,
-        responsibilities: command.responsibilities,
-        goals: command.goals
+        name: dto.name,
+        purpose: dto.purpose,
+        description: dto.description,
+        responsibilities: dto.responsibilities,
+        goals: dto.goals
       };
-      const savedTeam = await this.teamRepository.update(TeamId.fromNumber(command.teamId), updateData);
+      const savedTeam = await this.teamRepository.update(TeamId.fromNumber(dto.id), updateData);
 
       return {
         success: true,
-        data: savedTeam,
+        data: this.toDTO(savedTeam),
         warnings: warnings.length > 0 ? warnings : undefined
       };
     } catch (error) {
@@ -184,7 +162,7 @@ export class TeamApplicationService {
   /**
    * Delete a team
    */
-  async deleteTeam(teamId: number): Promise<TeamApplicationResult<void>> {
+  async deleteTeam(teamId: number): Promise<Result<void>> {
     try {
       const team = await this.teamRepository.findById(TeamId.fromNumber(teamId));
       if (!team) {
@@ -219,7 +197,7 @@ export class TeamApplicationService {
   /**
    * Get teams with filtering and organization scoping
    */
-  async getTeams(filters: TeamFilters): Promise<Team[]> {
+  async getTeams(filters: TeamFiltersDTO): Promise<Team[]> {
     try {
       let teams = await this.teamRepository.findByOrganization(OrganizationId.fromNumber(filters.organizationId));
 
@@ -257,9 +235,28 @@ export class TeamApplicationService {
   }
 
   /**
+   * Convert Team domain entity to TeamDTO
+   */
+  private toDTO(team: Team): TeamDTO {
+    return {
+      id: team.id.value,
+      name: team.name,
+      purpose: team.purpose || undefined,
+      description: team.description || undefined,
+      responsibilities: team.responsibilities || undefined,
+      goals: team.goals || undefined,
+      agentIds: team.agentIds?.map(id => id.value.toString()) || undefined,
+      databaseId: team.databaseId || undefined,
+      organizationId: team.organizationId.value,
+      createdAt: team.createdAt || undefined,
+      updatedAt: undefined // Team entity doesn't track updatedAt
+    };
+  }
+
+  /**
    * Add agent to team
    */
-  async addAgentToTeam(teamId: number, agentId: string): Promise<TeamApplicationResult<Team>> {
+  async addAgentToTeam(teamId: number, agentId: string): Promise<Result<TeamDTO>> {
     try {
       const existingTeam = await this.teamRepository.findById(TeamId.fromNumber(teamId));
       if (!existingTeam) {
@@ -307,7 +304,7 @@ export class TeamApplicationService {
 
       return {
         success: true,
-        data: savedTeam
+        data: this.toDTO(savedTeam)
       };
     } catch (error) {
       console.error("Error adding agent to team:", error);
@@ -321,7 +318,7 @@ export class TeamApplicationService {
   /**
    * Remove agent from team
    */
-  async removeAgentFromTeam(teamId: number, agentId: string): Promise<TeamApplicationResult<Team>> {
+  async removeAgentFromTeam(teamId: number, agentId: string): Promise<Result<TeamDTO>> {
     try {
       const existingTeam = await this.teamRepository.findById(TeamId.fromNumber(teamId));
       if (!existingTeam) {
@@ -358,7 +355,7 @@ export class TeamApplicationService {
 
       return {
         success: true,
-        data: savedTeam
+        data: this.toDTO(savedTeam)
       };
     } catch (error) {
       console.error("Error removing agent from team:", error);
@@ -386,7 +383,7 @@ export class TeamApplicationService {
   /**
    * Bulk assign agents to team
    */
-  async bulkAssignAgents(teamId: TeamId, agentIds: AgentId[]): Promise<TeamApplicationResult<Team>> {
+  async bulkAssignAgents(teamId: TeamId, agentIds: AgentId[]): Promise<Result<TeamDTO>> {
     try {
       const existingTeam = await this.teamRepository.findById(teamId);
       if (!existingTeam) {
@@ -425,7 +422,7 @@ export class TeamApplicationService {
 
       return {
         success: true,
-        data: savedTeam
+        data: this.toDTO(savedTeam)
       };
     } catch (error) {
       console.error("Error bulk assigning agents:", error);

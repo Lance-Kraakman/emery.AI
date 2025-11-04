@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Force dynamic rendering to prevent build-time database connections
 export const dynamic = 'force-dynamic';
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { db } from '@/lib/db/client';
 import { agents } from '@/lib/db/schema';
@@ -15,7 +15,6 @@ import crypto from 'crypto';
 export interface AgentExecuteRequest {
   instructions: string; // Main instruction text
   tools?: Array<{name: string, version?: string, config?: Record<string, any>}>; // Optional tools
-  servers?: Array<{name: string, endpoint?: string, config?: Record<string, any>}>; // Optional servers
   metadata?: Record<string, any>; // Optional context metadata
   webhook_url?: string;
   timeout?: number;
@@ -64,13 +63,13 @@ export async function POST(
 
     // Verify agent ownership (agents can only be used by their owners)
     if (agent.ownerId !== userId) {
-      return Response.json({ 
-        error: 'Access denied: You can only execute actions for agents you own' 
+      return Response.json({
+        error: 'Access denied: You can only execute actions for agents you own'
       }, { status: 403 });
     }
 
     const body: AgentExecuteRequest = await request.json();
-    const { instructions, tools, servers, metadata, webhook_url, timeout = 30000 } = body;
+    const { instructions, tools, metadata, webhook_url, timeout = 30000 } = body;
 
     if (!instructions) {
       return Response.json({
@@ -95,25 +94,32 @@ export async function POST(
     const taskInstructions: TaskInstructions = {
       instructions,
       tools: toolConfigs,
-      servers,
       metadata
     };
     
-    // Create and execute task
+    // Create and execute task - service accepts primitives
     const taskResult = await agentTaskService.createAndExecuteTask({
-      agentId: AgentId.fromNumber(agentId),
+      agentId: agentId,
       name: `Agent execution: ${instructions.substring(0, 50)}...`,
       instructions: taskInstructions,
-      organizationId: OrganizationId.fromNumber(agent.organizationId),
-      createdBy: UserId.fromString(userId),
+      organizationId: agent.organizationId,
+      createdBy: userId,
       timeoutSeconds: Math.floor(timeout / 1000)
     });
-    
+
+    if (!taskResult.success) {
+      console.error(`[AGENT-EXECUTE-API] Task execution failed: ${taskResult.error}`);
+      return NextResponse.json({
+        success: false,
+        error: taskResult.error || 'Task execution failed'
+      }, { status: 500 });
+    }
+
     const result = {
-      success: taskResult.executionResult.success,
-      output_data: taskResult.executionResult.outputData,
-      error: taskResult.executionResult.error,
-      execution_id: taskResult.executionResult.executionId
+      success: taskResult.data!.executionResult.success,
+      output_data: taskResult.data!.executionResult.outputData,
+      error: taskResult.data!.executionResult.error,
+      execution_id: taskResult.data!.executionResult.executionId
     };
 
     // If webhook URL provided, send result asynchronously

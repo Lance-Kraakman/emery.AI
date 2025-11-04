@@ -9,7 +9,7 @@
 
 import { RRule } from 'rrule';
 
-export type TriggerType = 'MANUAL' | 'CALENDAR' | 'DATABASE_EVENT' | 'WEBHOOK';
+export type TriggerType = 'CALENDAR' | 'DATABASE_EVENT' | 'WEBHOOK';
 export type DatabaseOperation = 'INSERT' | 'UPDATE' | 'DELETE';
 
 // AIDEV-NOTE: Base class for all trigger configurations with common validation
@@ -34,42 +34,6 @@ export abstract class BaseTriggerConfig {
 
   public getType(): TriggerType {
     return this.type;
-  }
-}
-
-// Manual trigger - executed on-demand by users
-export class ManualTriggerConfig extends BaseTriggerConfig {
-  constructor(
-    enabled: boolean = true,
-    description?: string
-  ) {
-    super('MANUAL', enabled, description);
-    this.validate();
-  }
-
-  validate(): void {
-    // Manual triggers don't need additional validation
-  }
-
-  equals(other: BaseTriggerConfig): boolean {
-    return other instanceof ManualTriggerConfig &&
-           this.enabled === other.enabled &&
-           this.description === other.description;
-  }
-
-  toJSON(): Record<string, any> {
-    return {
-      type: this.type,
-      enabled: this.enabled,
-      description: this.description
-    };
-  }
-
-  static fromJSON(data: any): ManualTriggerConfig {
-    return new ManualTriggerConfig(
-      data.enabled,
-      data.description
-    );
   }
 }
 
@@ -308,18 +272,13 @@ export class WebhookTriggerConfig extends BaseTriggerConfig {
   }
 }
 
-export type TriggerConfig = 
-  | ManualTriggerConfig 
-  | CalendarTriggerConfig 
-  | DatabaseEventTriggerConfig 
+export type TriggerConfig =
+  | CalendarTriggerConfig
+  | DatabaseEventTriggerConfig
   | WebhookTriggerConfig;
 
 // Factory functions for creating trigger configurations
 export const TriggerConfigs = {
-  manual: (enabled: boolean = true, description?: string): ManualTriggerConfig => {
-    return new ManualTriggerConfig(enabled, description);
-  },
-
   calendar: (rrule: string, options?: {
     timezone?: string;
     startDate?: Date;
@@ -376,8 +335,6 @@ export function TriggerConfigFromJSON(data: any): TriggerConfig {
   }
 
   switch (data.type) {
-    case 'MANUAL':
-      return ManualTriggerConfig.fromJSON(data);
     case 'CALENDAR':
       return CalendarTriggerConfig.fromJSON(data);
     case 'DATABASE_EVENT':

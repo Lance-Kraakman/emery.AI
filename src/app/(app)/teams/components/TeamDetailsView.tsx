@@ -20,8 +20,6 @@ import TeamActivityPanel from './TeamActivityPanel';
 interface TeamDetailsViewProps {
   team: TeamDTO;
   agents: AgentDTO[];
-  onEdit: () => void;
-  onUpdate?: () => void;
 }
 
 interface EditFormData {
@@ -33,7 +31,7 @@ interface EditFormData {
   agentIds: string[];
 }
 
-export default function TeamDetailsView({ team, agents, onEdit, onUpdate }: TeamDetailsViewProps) {
+export default function TeamDetailsView({ team, agents }: TeamDetailsViewProps) {
   const [isMembersOpen, setIsMembersOpen] = useState(false);
   const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -99,10 +97,10 @@ export default function TeamDetailsView({ team, agents, onEdit, onUpdate }: Team
       if (!result.success) {
         throw new Error(result.error || 'Failed to update team');
       }
-      
+
       setIsEditMode(false);
-      onUpdate?.();
-      
+      // Data will be automatically revalidated by Next.js
+
     } catch (error) {
       console.error('Error updating team:', error);
       // Simple alert for now - could be replaced with a toast system later

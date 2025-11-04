@@ -80,12 +80,11 @@ export class DrizzleAgentRepository
     return result.length;
   }
 
-  async findActiveAgentsWithTriggers(organizationId?: OrganizationId): Promise<Agent[]> {
+  async findActiveAgentsWithSchedules(organizationId?: OrganizationId): Promise<Agent[]> {
     const conditions = [
       eq(agents.status, 'active'),
-      isNotNull(agents.trigger),
-      // Ensure trigger is not empty JSON object
-      sql`jsonb_typeof(${agents.trigger}) = 'object' AND jsonb_array_length(jsonb_object_keys(${agents.trigger})) > 0`
+      // Ensure schedules array is not empty
+      sql`jsonb_array_length(${agents.schedules}) > 0`
     ];
 
     if (organizationId) {
@@ -100,11 +99,10 @@ export class DrizzleAgentRepository
     return results.map(result => this.fromPersistence(result));
   }
 
-  async findAgentsWithTriggers(organizationId?: OrganizationId): Promise<Agent[]> {
+  async findAgentsWithSchedules(organizationId?: OrganizationId): Promise<Agent[]> {
     const conditions = [
-      isNotNull(agents.trigger),
-      // Ensure trigger is not empty JSON object
-      sql`jsonb_typeof(${agents.trigger}) = 'object' AND jsonb_array_length(jsonb_object_keys(${agents.trigger})) > 0`
+      // Ensure schedules array is not empty
+      sql`jsonb_array_length(${agents.schedules}) > 0`
     ];
 
     if (organizationId) {
@@ -115,6 +113,19 @@ export class DrizzleAgentRepository
       .select()
       .from(agents)
       .where(and(...conditions));
+
+    return results.map(result => this.fromPersistence(result));
+  }
+
+  async findAll(organizationId?: OrganizationId): Promise<Agent[]> {
+    const conditions = organizationId
+      ? [eq(agents.organizationId, organizationId.value)]
+      : [];
+
+    const results: AgentRow[] = await this.db
+      .select()
+      .from(agents)
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
 
     return results.map(result => this.fromPersistence(result));
   }

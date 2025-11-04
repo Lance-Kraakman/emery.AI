@@ -16,10 +16,9 @@ if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
 from emery_agents.core.entities import (
-    AgentConfig, CapabilityConfig, StepConfig, ToolConfig, ServerConfig,
+    AgentConfig, SkillConfig, ToolConfig, ServerConfig,
     TaskRequest, InstructionConfig, TriggerData
 )
-from emery_agents.core.types import StepType
 
 
 class FixtureLoader:

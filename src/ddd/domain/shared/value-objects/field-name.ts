@@ -52,13 +52,6 @@ export class FieldName {
   }
 
   /**
-   * Generate database column name (field_{id} format)
-   */
-  getDatabaseColumnName(fieldId: number): string {
-    return `field_${fieldId}`;
-  }
-
-  /**
    * Check if this is a reserved field name
    */
   isReserved(): boolean {

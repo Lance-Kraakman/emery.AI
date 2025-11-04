@@ -32,12 +32,16 @@ import {
   isWebhookTrigger,
   getTriggerTypeLabel
 } from '../trigger-utils';
+import { InstructionsWithToolsInput } from '@/components/shared/InstructionsWithToolsInput';
+import type { ScheduleConfigurationDTO } from '@/app/dtos/schedule.dto';
 
 interface TriggerConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
   agent: AgentDTO;
   onUpdate?: () => void;
+  mode?: 'create' | 'edit'; // Create new schedule or edit existing
+  scheduleIndex?: number;    // Index of schedule to edit (only used in edit mode)
 }
 
 interface TriggerTypeOption {
@@ -49,13 +53,6 @@ interface TriggerTypeOption {
 }
 
 const triggerTypes: TriggerTypeOption[] = [
-  {
-    type: 'MANUAL',
-    title: 'Manual Execution',
-    description: 'Trigger manually from dashboard or via API calls',
-    icon: Zap,
-    badge: 'Default'
-  },
   {
     type: 'CALENDAR',
     title: 'Scheduled',
@@ -79,10 +76,19 @@ const triggerTypes: TriggerTypeOption[] = [
   }
 ];
 
-export function TriggerConfigModal({ isOpen, onClose, agent, onUpdate }: TriggerConfigModalProps) {
-  const [selectedType, setSelectedType] = useState<TriggerType>('MANUAL');
-  const [currentStep, setCurrentStep] = useState<'select' | 'configure' | 'review'>('select');
+export function TriggerConfigModal({
+  isOpen,
+  onClose,
+  agent,
+  onUpdate,
+  mode = 'edit',
+  scheduleIndex = 0
+}: TriggerConfigModalProps) {
+  const [selectedType, setSelectedType] = useState<TriggerType>('CALENDAR');
+  const [currentStep, setCurrentStep] = useState<'select' | 'configure' | 'instructions' | 'review'>('select');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   // Configuration states for each trigger type
   const [manualConfig, setManualConfig] = useState({ description: '' });
@@ -101,35 +107,62 @@ export function TriggerConfigModal({ isOpen, onClose, agent, onUpdate }: Trigger
     allowedOrigins: [] as string[]
   });
 
-  // Initialize with current agent trigger
-  useEffect(() => {
-    if (isOpen && agent.trigger) {
-      setSelectedType(agent.trigger.type);
+  // Task instructions state (NEW - defines WHAT task to execute)
+  const [scheduleName, setScheduleName] = useState('');
+  const [taskInstructions, setTaskInstructions] = useState('');
+  const [taskTools, setTaskTools] = useState<any[]>([]); // ToolConfigDTO[]
 
-      if (agent.trigger.type === 'MANUAL') {
-        setManualConfig({ description: agent.trigger.description || '' });
-      } else if (isCalendarTrigger(agent.trigger)) {
+  // Initialize with current schedule or start fresh for create mode
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (mode === 'create') {
+      // Reset to defaults for creating new schedule
+      setSelectedType('CALENDAR');
+      setManualConfig({ description: '' });
+      setCalendarConfig({ rrule: '', timezone: 'UTC', startDate: undefined });
+      setDatabaseConfig({ operations: ['INSERT', 'UPDATE'], tableId: undefined });
+      setWebhookConfig({ webhookSecret: '', requiresSignature: false, allowedOrigins: [] });
+      setScheduleName('');
+      setTaskInstructions('');
+      setTaskTools([]);
+      setCurrentStep('select');
+    } else if (mode === 'edit' && agent.schedules[scheduleIndex]) {
+      // Load existing schedule for editing
+      const schedule = agent.schedules[scheduleIndex];
+      const trigger = schedule.trigger;
+      setSelectedType(trigger.type);
+
+      if (trigger.type === 'CALENDAR') {
         setCalendarConfig({
-          rrule: agent.trigger.rrule || '',
-          timezone: agent.trigger.timezone || 'UTC',
-          startDate: agent.trigger.startDate ? new Date(agent.trigger.startDate) : undefined
+          rrule: trigger.rrule || '',
+          timezone: trigger.timezone || 'UTC',
+          startDate: trigger.startDate ? new Date(trigger.startDate) : undefined
         });
-      } else if (isDatabaseEventTrigger(agent.trigger)) {
+      } else if (trigger.type === 'DATABASE_EVENT') {
         setDatabaseConfig({
-          operations: agent.trigger.operations || ['INSERT', 'UPDATE'],
-          tableId: agent.trigger.tableId
+          operations: trigger.operations || ['INSERT', 'UPDATE'],
+          tableId: trigger.tableId
         });
-      } else if (isWebhookTrigger(agent.trigger)) {
+      } else if (trigger.type === 'WEBHOOK') {
         setWebhookConfig({
-          webhookSecret: agent.trigger.webhookSecret || '',
-          requiresSignature: agent.trigger.requiresSignature || false,
-          allowedOrigins: agent.trigger.allowedOrigins || []
+          webhookSecret: trigger.webhookSecret || '',
+          requiresSignature: trigger.requiresSignature || false,
+          allowedOrigins: trigger.allowedOrigins || []
         });
       }
 
+      // Load task instructions if available (new format)
+      // @ts-ignore - TODO: Fix after ScheduleConfigurationDTO migration complete
+      setScheduleName(schedule.name || '');
+      // @ts-ignore - TODO: Fix after ScheduleConfigurationDTO migration complete
+      setTaskInstructions(schedule.taskInstructions?.instructions || '');
+      // @ts-ignore - TODO: Fix after ScheduleConfigurationDTO migration complete
+      setTaskTools(schedule.taskInstructions?.tools || []);
+
       setCurrentStep('select');
     }
-  }, [isOpen, agent]);
+  }, [isOpen, agent, mode, scheduleIndex]);
 
   const handleTypeSelect = (type: TriggerType) => {
     setSelectedType(type);
@@ -139,28 +172,67 @@ export function TriggerConfigModal({ isOpen, onClose, agent, onUpdate }: Trigger
   const handleSave = async () => {
     try {
       setIsSaving(true);
+      setSaveStatus('saving');
+      setErrorMessage('');
 
-      let newTrigger: TriggerConfig;
+      // LOGGING: Start of save operation
+      console.log('[TriggerConfigModal] Starting schedule save', {
+        agentId: agent.id,
+        mode,
+        scheduleIndex,
+        selectedType,
+        scheduleName,
+        hasInstructions: !!taskInstructions,
+        toolCount: taskTools.length
+      });
+
+      // VALIDATION: Ensure required fields are present
+      const validationErrors: string[] = [];
+
+      if (!scheduleName?.trim()) {
+        validationErrors.push('Schedule name is required');
+      }
+
+      if (!taskInstructions?.trim()) {
+        validationErrors.push('Task instructions are required');
+      }
+
+      // Validate trigger-specific requirements
+      if (selectedType === 'CALENDAR' && !calendarConfig.rrule) {
+        validationErrors.push('Calendar schedule requires an RRule configuration');
+      }
+
+      if (selectedType === 'DATABASE_EVENT' && databaseConfig.operations.length === 0) {
+        validationErrors.push('Database event trigger requires at least one operation');
+      }
+
+      if (validationErrors.length > 0) {
+        const errorMsg = validationErrors.join(', ');
+        console.error('[TriggerConfigModal] Validation failed:', validationErrors);
+        throw new Error(`Validation failed: ${errorMsg}`);
+      }
+
+      console.log('[TriggerConfigModal] Validation passed');
+
+      // Step 1: Create TriggerConfig instance
+      let triggerConfig: TriggerConfig;
 
       switch (selectedType) {
-        case 'MANUAL':
-          newTrigger = TriggerConfigs.manual(true, manualConfig.description);
-          break;
         case 'CALENDAR':
-          newTrigger = TriggerConfigs.calendar(calendarConfig.rrule, {
+          triggerConfig = TriggerConfigs.calendar(calendarConfig.rrule, {
             timezone: calendarConfig.timezone,
             startDate: calendarConfig.startDate,
             enabled: true
           });
           break;
         case 'DATABASE_EVENT':
-          newTrigger = TriggerConfigs.databaseEvent(databaseConfig.operations, {
+          triggerConfig = TriggerConfigs.databaseEvent(databaseConfig.operations, {
             tableId: databaseConfig.tableId,
             enabled: true
           });
           break;
         case 'WEBHOOK':
-          newTrigger = TriggerConfigs.webhook({
+          triggerConfig = TriggerConfigs.webhook({
             webhookSecret: webhookConfig.webhookSecret,
             requiresSignature: webhookConfig.requiresSignature,
             allowedOrigins: webhookConfig.allowedOrigins.length > 0 ? webhookConfig.allowedOrigins : undefined,
@@ -171,19 +243,91 @@ export function TriggerConfigModal({ isOpen, onClose, agent, onUpdate }: Trigger
           throw new Error(`Unsupported trigger type: ${selectedType}`);
       }
 
+      // LOGGING: TriggerConfig created
+      console.log('[TriggerConfigModal] TriggerConfig created', {
+        type: selectedType,
+        serialized: triggerConfig.toJSON()
+      });
+
+      // Step 2: Create ScheduleConfigurationDTO with trigger + task instructions
+      const newSchedule: ScheduleConfigurationDTO = {
+        trigger: triggerConfig.toJSON() as any, // AIDEV-NOTE: toJSON() returns plain object compatible with TriggerConfigDTO
+        taskInstructions: {
+          instructions: taskInstructions,
+          tools: taskTools,
+          metadata: {}
+        },
+        enabled: true,
+        name: scheduleName,
+        description: manualConfig.description || undefined
+      };
+
+      // LOGGING: Schedule object created
+      console.log('[TriggerConfigModal] Schedule object created', {
+        newSchedule,
+        hasValidTrigger: !!newSchedule.trigger,
+        hasValidInstructions: !!newSchedule.taskInstructions?.instructions
+      });
+
+      // Step 3: Update schedules array based on mode
+      let updatedSchedules: ScheduleConfigurationDTO[];
+
+      // BUGFIX: If in edit mode but the schedule doesn't exist at the index, treat as create
+      const scheduleExists = agent.schedules && agent.schedules[scheduleIndex] !== undefined;
+
+      if (mode === 'create' || !scheduleExists) {
+        // Append new schedule to existing schedules
+        if (!scheduleExists && mode === 'edit') {
+          console.warn(`[TriggerConfigModal] Edit mode but schedule ${scheduleIndex} doesn't exist. Treating as create.`);
+        }
+        updatedSchedules = [...(agent.schedules || []), newSchedule];
+      } else {
+        // Replace schedule at specific index
+        updatedSchedules = agent.schedules.map((schedule, i) =>
+          i === scheduleIndex ? newSchedule : schedule
+        );
+      }
+
+      // LOGGING: Schedules array prepared for update
+      console.log('[TriggerConfigModal] Schedules array prepared', {
+        totalSchedules: updatedSchedules.length,
+        isCreate: mode === 'create',
+        scheduleIndex: mode === 'edit' ? scheduleIndex : 'N/A',
+        updatedSchedules
+      });
+
       const result = await updateAgentFromClient(agent.id, {
-        trigger: newTrigger
+        schedules: updatedSchedules
+      });
+
+      // LOGGING: Server action result
+      console.log('[TriggerConfigModal] Server action result', {
+        success: result.success,
+        error: result.error,
+        result
       });
 
       if (!result.success) {
-        throw new Error(result.error || 'Failed to update trigger configuration');
+        throw new Error(result.error || 'Failed to update schedule configuration');
       }
 
-      onUpdate?.();
-      onClose();
+      console.log('[TriggerConfigModal] Schedule saved successfully, calling onUpdate and closing modal');
+
+      // Show success state briefly before closing
+      setSaveStatus('success');
+
+      // Wait a moment to show success feedback, then close
+      setTimeout(() => {
+        onUpdate?.();
+        onClose();
+        // Reset states when closing
+        setSaveStatus('idle');
+        setErrorMessage('');
+      }, 800);
     } catch (error) {
-      console.error('Error saving trigger configuration:', error);
-      // TODO: Add proper error handling/toast notification
+      console.error('Error saving schedule configuration:', error);
+      setSaveStatus('error');
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to save schedule configuration');
     } finally {
       setIsSaving(false);
     }
@@ -191,10 +335,9 @@ export function TriggerConfigModal({ isOpen, onClose, agent, onUpdate }: Trigger
 
   const canProceedToNextStep = () => {
     if (currentStep === 'select') return true;
+
     if (currentStep === 'configure') {
       switch (selectedType) {
-        case 'MANUAL':
-          return true; // Always valid
         case 'CALENDAR':
           return !!calendarConfig.rrule;
         case 'DATABASE_EVENT':
@@ -205,19 +348,29 @@ export function TriggerConfigModal({ isOpen, onClose, agent, onUpdate }: Trigger
           return false;
       }
     }
+
+    if (currentStep === 'instructions') {
+      // Require schedule name and task instructions
+      return !!scheduleName.trim() && !!taskInstructions.trim();
+    }
+
     return false;
   };
 
   const getStepTitle = () => {
+    const modePrefix = mode === 'create' ? 'Add New Schedule' : `Edit Schedule ${scheduleIndex + 1}`;
+
     switch (currentStep) {
       case 'select':
-        return 'Choose Trigger Type';
+        return `${modePrefix}: Choose Type`;
       case 'configure':
-        return `Configure ${getTriggerTypeLabel(selectedType)}`;
+        return `${modePrefix}: Configure ${getTriggerTypeLabel(selectedType)}`;
+      case 'instructions':
+        return `${modePrefix}: Define Task`;
       case 'review':
-        return 'Review Configuration';
+        return `${modePrefix}: Review`;
       default:
-        return 'Trigger Configuration';
+        return modePrefix;
     }
   };
 
@@ -227,7 +380,12 @@ export function TriggerConfigModal({ isOpen, onClose, agent, onUpdate }: Trigger
         {currentStep !== 'select' && (
           <Button
             variant="outline"
-            onClick={() => setCurrentStep(currentStep === 'review' ? 'configure' : 'select')}
+            onClick={() => {
+              // Navigate backwards through steps
+              if (currentStep === 'review') setCurrentStep('instructions');
+              else if (currentStep === 'instructions') setCurrentStep('configure');
+              else if (currentStep === 'configure') setCurrentStep('select');
+            }}
             disabled={isSaving}
           >
             Back
@@ -241,6 +399,15 @@ export function TriggerConfigModal({ isOpen, onClose, agent, onUpdate }: Trigger
         </Button>
 
         {currentStep === 'configure' && (
+          <Button
+            onClick={() => setCurrentStep('instructions')}
+            disabled={!canProceedToNextStep() || isSaving}
+          >
+            Next: Define Task
+          </Button>
+        )}
+
+        {currentStep === 'instructions' && (
           <Button
             onClick={() => setCurrentStep('review')}
             disabled={!canProceedToNextStep() || isSaving}
@@ -256,7 +423,7 @@ export function TriggerConfigModal({ isOpen, onClose, agent, onUpdate }: Trigger
             ) : (
               <Save className="h-4 w-4 mr-2" />
             )}
-            Save Configuration
+            Save Schedule
           </Button>
         )}
       </div>
@@ -327,36 +494,6 @@ export function TriggerConfigModal({ isOpen, onClose, agent, onUpdate }: Trigger
 
       {currentStep === 'configure' && (
         <div className="p-6">
-          {selectedType === 'MANUAL' && (
-            <div className="space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <Info className="h-5 w-5 text-green-600 mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-green-900">Manual Execution</h4>
-                    <p className="text-sm text-green-700 mt-1">
-                      This agent can be triggered from the dashboard, via API calls, or when referenced in chat conversations.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="manual-description">Execution Context (Optional)</Label>
-                <Textarea
-                  id="manual-description"
-                  value={manualConfig.description}
-                  onChange={(e) => setManualConfig({ description: e.target.value })}
-                  placeholder="Describe when this agent should be triggered manually..."
-                  rows={3}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Help users understand when to trigger this agent
-                </p>
-              </div>
-            </div>
-          )}
-
           {selectedType === 'CALENDAR' && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
@@ -501,6 +638,58 @@ export function TriggerConfigModal({ isOpen, onClose, agent, onUpdate }: Trigger
         </div>
       )}
 
+      {currentStep === 'instructions' && (
+        <div className="p-6">
+          <div className="space-y-6">
+            {/* Schedule Name */}
+            <div className="space-y-2">
+              <Label htmlFor="schedule-name" className="text-base font-medium">
+                Schedule Name *
+              </Label>
+              <Input
+                id="schedule-name"
+                value={scheduleName}
+                onChange={(e) => setScheduleName(e.target.value)}
+                placeholder="e.g., Daily Sales Report, Weekly Data Sync"
+                className="text-base"
+              />
+              <p className="text-xs text-muted-foreground">
+                Give this schedule a descriptive name to identify it easily
+              </p>
+            </div>
+
+            {/* Task Instructions with @ Tool Mentions */}
+            <div className="space-y-2">
+              <InstructionsWithToolsInput
+                value={taskInstructions}
+                onChange={setTaskInstructions}
+                tools={taskTools}
+                onToolsChange={setTaskTools}
+                label="Task Instructions *"
+                helpText="Define what task should be created when this schedule triggers. Use @ to reference tools, documents, files, or agents."
+                placeholder="Describe the task to execute... (Type @ to add tools)"
+                id="schedule-task-instructions"
+                minHeight="200px"
+              />
+            </div>
+
+            {/* Info box explaining the concept */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-blue-900">What happens when triggered?</h4>
+                  <p className="text-sm text-blue-700 mt-1">
+                    When this schedule triggers, a new task will be created with these instructions.
+                    The task will have access to the tools you've selected using @ mentions.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {currentStep === 'review' && (
         <div className="p-6">
           <div className="space-y-6">
@@ -520,12 +709,6 @@ export function TriggerConfigModal({ isOpen, onClose, agent, onUpdate }: Trigger
               </div>
 
               <div className="space-y-3 text-sm">
-                {selectedType === 'MANUAL' && (
-                  <div>
-                    <strong>Execution Context:</strong> {manualConfig.description || 'None specified'}
-                  </div>
-                )}
-
                 {selectedType === 'CALENDAR' && (
                   <>
                     <div><strong>Timezone:</strong> {calendarConfig.timezone}</div>
@@ -557,17 +740,76 @@ export function TriggerConfigModal({ isOpen, onClose, agent, onUpdate }: Trigger
               </div>
             </div>
 
-            <div className="bg-muted/50 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+            {/* Task Instructions Summary */}
+            <div className="border rounded-lg p-4">
+              <h3 className="font-medium mb-3">Task Definition</h3>
+              <div className="space-y-3 text-sm">
                 <div>
-                  <h4 className="font-medium">Ready to Save</h4>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Your trigger configuration is complete and ready to be applied to the agent.
-                  </p>
+                  <strong>Schedule Name:</strong> {scheduleName || 'Not specified'}
                 </div>
+                <div>
+                  <strong>Task Instructions:</strong>
+                  <div className="mt-2 p-3 bg-muted/50 rounded-md text-sm whitespace-pre-wrap">
+                    {taskInstructions || 'No instructions provided'}
+                  </div>
+                </div>
+                {taskTools.length > 0 && (
+                  <div>
+                    <strong>Tools ({taskTools.length}):</strong>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {taskTools.map((tool, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {tool.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Status feedback - only show in review step */}
+            {saveStatus === 'idle' && (
+              <div className="bg-muted/50 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium">Ready to Save</h4>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Your schedule configuration is complete. When triggered, it will create a task with the instructions you've defined.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {saveStatus === 'success' && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-green-900">Schedule Saved Successfully!</h4>
+                    <p className="text-sm text-green-700 mt-1">
+                      Your schedule has been saved and will be active according to your configuration.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {saveStatus === 'error' && errorMessage && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <X className="h-5 w-5 text-red-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-red-900">Error Saving Schedule</h4>
+                    <p className="text-sm text-red-700 mt-1">
+                      {errorMessage}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

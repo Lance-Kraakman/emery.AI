@@ -53,6 +53,14 @@ function DataDialogs() {
   )
 }
 
+interface SidebarData {
+  apps: any[]
+  agents: any[]
+  teams: any[]
+  skills: any[]
+  databases: any[]
+}
+
 interface EmeryProvidersProps {
   children: React.ReactNode
   // Layout configuration props
@@ -60,13 +68,16 @@ interface EmeryProvidersProps {
   chatContext?: import('@/components/layout/types').ChatContextConfig
   // Page context for automatic chat configuration
   pageName?: string
+  // Server-fetched sidebar data
+  sidebarData?: SidebarData
 }
 
-export function EmeryProviders({ 
-  children, 
+export function EmeryProviders({
+  children,
   enableChat = true,
   chatContext,
-  pageName
+  pageName,
+  sidebarData
 }: EmeryProvidersProps) {
   // Auto-generate chat context based on page if not provided
   const effectiveChatContext = chatContext || (pageName ? createChatContextForPage(pageName) : undefined)
@@ -80,7 +91,11 @@ export function EmeryProviders({
       >
         <EmeryStoreProvider>
           <LayoutProvider>
-              <EmeryLayout enableChat={enableChat} chatContext={effectiveChatContext}>
+              <EmeryLayout
+                enableChat={enableChat}
+                chatContext={effectiveChatContext}
+                sidebarData={sidebarData}
+              >
                 {children}
               </EmeryLayout>
               <DataDialogs />

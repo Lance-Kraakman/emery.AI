@@ -1,16 +1,19 @@
 /**
  * Document Application Service
- * 
+ *
  * Orchestrates document operations using the existing file infrastructure.
  * Documents are treated as enhanced file field values with additional metadata
  * and business logic. This service coordinates between DocumentField entities,
  * the existing FileUseCases, and storage operations.
- * 
+ *
  * AIDEV-NOTE: Documents reuse the entire file infrastructure (S3, FileUseCases, API routes)
  * while adding rich document semantics on top of the base file field system.
  */
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { DocumentField } from '@/ddd/domain/tables/entities/document-field-entity';
+
+const logger = createDebugLogger('DocumentService');
 import { DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import { FileUseCases } from './file-application-service';
 import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/value-objects';
@@ -83,24 +86,11 @@ export class DocumentApplicationService {
         return { success: false, error: 'Document not found' };
       }
 
-      // Create a complete DocumentFieldValue with the actual data from the database
-      const documentFieldValue: DocumentFieldValue = {
-        id: documentId,
-        name: documentData.name,
-        size: 0, // Size can be retrieved from S3 if needed
-        mimeType: documentData.mimeType,
-        s3Key: documentData.s3Key,
-        uploadedAt: new Date().toISOString(), // TODO: Get real upload date if needed
-        documentMetadata: {
-          title: documentData.name,
-          version: 1,
-          documentType: documentData.mimeType === 'application/vnd.tiptap+json' ? 'tiptap' : 'file'
-        }
-      };
-
+      // CRITICAL FIX: Return the actual document data from storage
+      // instead of creating a new object with hardcoded defaults (size: 0, etc.)
       return {
         success: true,
-        data: documentFieldValue
+        data: documentData
       };
     } catch (error) {
       console.error('[DOCUMENT-APP-SERVICE] Error getting document field value:', error);
@@ -113,13 +103,14 @@ export class DocumentApplicationService {
 
   /**
    * Private helper to find document data in table rows
+   * Returns the complete DocumentFieldValue with all metadata
    */
   private async findDocumentInTable(
     documentId: string,
     organizationId: OrganizationId,
     tableId: TableId,
     fieldId: FieldId
-  ): Promise<{ s3Key: string; name: string; mimeType: string } | null> {
+  ): Promise<DocumentFieldValue | null> {
     try {
       // Get table and validate field
       const table = await this.dynamicTableService.getTable(tableId);
@@ -132,8 +123,8 @@ export class DocumentApplicationService {
         return null;
       }
 
-      // Get all rows using proper repository pattern
-      const rows = await this.tableRepository.findRows(tableId);
+      // Get all rows using proper repository pattern (using high limit for document search)
+      const rows = await this.tableRepository.getRows(tableId, { limit: 10000, offset: 0 });
 
       // Find the document in the rows
       for (const row of rows) {
@@ -146,11 +137,9 @@ export class DocumentApplicationService {
           const matchingFile = files.find((f: any) => f && f.id === documentId);
 
           if (matchingFile && matchingFile.s3Key) {
-            return {
-              s3Key: matchingFile.s3Key,
-              name: matchingFile.name || documentId,
-              mimeType: matchingFile.mimeType || 'application/vnd.tiptap+json'
-            };
+            // CRITICAL FIX: Return the ENTIRE document object with all metadata
+            // instead of cherry-picking properties and losing size, uploadedAt, etc.
+            return matchingFile;
           }
         } catch (error) {
           console.warn('[DOCUMENT-APP-SERVICE] Error parsing document data from row:', error);

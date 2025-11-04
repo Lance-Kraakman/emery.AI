@@ -4,8 +4,6 @@ import { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import type { ServerConfig, CapabilityConfig } from '@/ddd/domain/agents/entities/agent';
-import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 // Export the unified Result interface for use in Server Actions
 export type { Result } from '@/ddd/domain/shared/result';
@@ -94,34 +92,21 @@ export interface CreateAgentFormData {
   trigger?: any;
 }
 
-// Client-side agent data interface for server actions (using typed interfaces)
-export interface CreateAgentClientData {
-  name: string;
-  role?: string;
-  description?: string;
-  persona?: string;
-  ownerId?: string; // User ID string - converted to UserId in action
-  tools?: ToolConfig[];
-  servers?: ServerConfig[];
-  trigger?: TriggerConfig;
-  capabilities?: CapabilityConfig[];
-  status?: string; // Plain string - converted to AgentStatus in action
-  organizationId?: number;
-  roleId?: number;
-}
+// AIDEV-NOTE: Import DTO types from agent mapper (following ToolMapper pattern)
+// These DTOs use plain serializable types that can pass through Next.js Server Actions
+import type { ToolConfigDTO } from '@/app/mappers/agent-mapper';
+
+// AIDEV-NOTE: Re-export CreateAgentDTO from consolidated DTOs
+// CreateAgentClientData is now an alias for CreateAgentDTO
+export type { CreateAgentDTO as CreateAgentClientData } from '@/app/dtos/agent.dto';
 
 // Import agent types from domain layer
 export type {
-  ServerConfig,
-  StepConfig,
-  CapabilityConfig,
   CreateAgentData
 } from '@/ddd/domain/agents/entities/agent';
 
 // Import tool types from tools domain
 export type { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-
-export type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 // Import task types from domain layer
 import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
@@ -138,7 +123,7 @@ export type { TaskDTO as Task } from '@/app/mappers/task-mapper';
 export interface CreateTaskData {
   agentId: number;
   name: string;
-  capabilityName?: string;
+  skillName?: string;
   instructions: TaskInstructions;
   createdBy?: string;
 }
@@ -148,5 +133,56 @@ export interface CreateTaskData {
 export interface TeamMembershipData {
   teamId: number;
   userId: string;
+}
+
+// Data Source types
+export interface CreateViewData {
+  tableId: number;
+  name: string;
+  description?: string;
+  filters?: Array<{
+    field: string;
+    operator: string;
+    value: string | number | boolean | null;
+  }>;
+  sorting?: Array<{
+    fieldId: number;
+    direction: "asc" | "desc";
+    priority: number;
+  }>;
+  fieldMappings?: Array<{
+    sourceFieldId: number;
+    displayName: string;
+    visible: boolean;
+    order: number;
+  }>;
+  viewType?: any; // ViewType Value Object
+  viewConfig?: any; // ViewConfig Value Object
+}
+
+export interface UpdateViewData {
+  id: number;
+  name?: string;
+  description?: string;
+  filters?: Array<{
+    field: string;           // Field name (will be converted to fieldId in action)
+    operator: string;
+    value: string | number | boolean | null;
+  }>;
+  sorting?: Array<{
+    fieldId: number;
+    direction: "asc" | "desc";
+    priority: number;
+  }>;
+  pagination?: {
+    pageSize: number;
+    offset?: number;
+  };
+  fieldMappings?: Array<{
+    sourceFieldId: number;
+    displayName: string;
+    visible: boolean;
+    order: number;
+  }>;
 }
 

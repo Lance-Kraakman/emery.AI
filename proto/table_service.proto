@@ -1,0 +1,324 @@
+syntax = "proto3";
+
+package emery.tables;
+
+// Delta Lake Table Service - Handles table and row operations using Delta Lake
+service TableService {
+  rpc CreateTable(CreateTableRequest) returns (TableResponse);
+  rpc GetTable(GetTableRequest) returns (TableResponse);
+  rpc UpdateTable(UpdateTableRequest) returns (TableResponse);
+  rpc DeleteTable(DeleteTableRequest) returns (DeleteTableResponse);
+  rpc ListTables(ListTablesRequest) returns (ListTablesResponse);
+
+  // Row operations with strong typing (bulk operations)
+  rpc CreateRows(CreateRowsRequest) returns (CreateRowsResponse);
+  rpc GetRows(GetRowsRequest) returns (GetRowsResponse);
+  rpc UpdateRows(UpdateRowsRequest) returns (UpdateRowsResponse);
+  rpc DeleteRows(DeleteRowsRequest) returns (DeleteRowsResponse);
+
+  // Zero-copy Arrow IPC query (updated to use Arrow IPC for performance)
+  rpc QueryRows(QueryRowsRequest) returns (QueryRowsResponse);
+
+  // Get table statistics from Delta Lake metadata (no data loading)
+  rpc GetTableStats(GetTableStatsRequest) returns (GetTableStatsResponse);
+}
+
+// Field types matching the frontend TypeScript definitions
+enum FieldType {
+  FIELD_TYPE_UNSPECIFIED = 0;
+  FIELD_TYPE_TEXT = 1;
+  FIELD_TYPE_NUMBER = 2;
+  FIELD_TYPE_BOOLEAN = 3;
+  FIELD_TYPE_DATE = 4;
+  FIELD_TYPE_FILE = 5;        // Stored as JSON string
+  FIELD_TYPE_RELATION = 6;    // Stored as JSON string
+  FIELD_TYPE_DOCUMENT = 7;    // Stored as JSON string
+}
+
+// Filter operators matching the TypeScript FilterOperator type
+enum FilterOperator {
+  FILTER_OP_UNSPECIFIED = 0;
+  FILTER_OP_EQ = 1;           // equals
+  FILTER_OP_NE = 2;           // not equals
+  FILTER_OP_GT = 3;           // greater than
+  FILTER_OP_GTE = 4;          // greater than or equal
+  FILTER_OP_LT = 5;           // less than
+  FILTER_OP_LTE = 6;          // less than or equal
+  FILTER_OP_LIKE = 7;         // SQL LIKE pattern
+  FILTER_OP_ILIKE = 8;        // case-insensitive LIKE
+  FILTER_OP_IN = 9;           // value in array
+  FILTER_OP_NOT_IN = 10;      // value not in array
+  FILTER_OP_IS_NULL = 11;     // IS NULL
+  FILTER_OP_IS_NOT_NULL = 12; // IS NOT NULL
+  FILTER_OP_CONTAINS = 13;    // Contains operator (for relation fields)
+  FILTER_OP_CONTAINED_BY = 14;// Contained by operator
+  FILTER_OP_HAS_KEY = 15;     // Has key operator
+}
+
+// Table field definition with strong typing
+message TableField {
+  string name = 1;
+  FieldType type = 2;
+  bool required = 3;
+  map<string, string> metadata = 4;  // UI hints, validation rules, etc.
+  int32 field_id = 5;                // Numeric field ID used as Delta Lake column name
+}
+
+// Table schema with structured field definitions
+message TableSchema {
+  string schema_id = 1;
+  string name = 2;
+  string version = 3;
+  repeated TableField fields = 4;
+  map<string, string> metadata = 5;
+}
+
+// Table entity with Delta Lake support
+message Table {
+  string table_id = 1;               // Unique table identifier
+  string name = 2;                   // Table name
+  TableSchema schema = 3;             // Structured table schema
+  string description = 4;            // Table description
+  string created_by = 5;             // Creator user ID
+  string updated_by = 6;             // Last updater user ID
+  int64 created_at_ms = 7;           // Creation timestamp
+  int64 updated_at_ms = 8;           // Last update timestamp
+  string organization_id = 9;        // Organization for multi-tenant routing
+  map<string, string> metadata = 10; // Additional table metadata
+  bool is_deleted = 11;              // Soft delete flag
+  string s3_path = 12;               // S3 path for Delta Lake table data
+}
+
+// Table entity with Delta Lake support
+
+// Row entity with typed data
+message Row {
+  string row_id = 1;                 // Unique row identifier
+  string table_id = 2;               // Parent table ID
+  RowData row_data = 3;              // Typed row data
+  string created_by = 4;             // Creator user ID
+  string updated_by = 5;             // Last updater user ID
+  int64 created_at_ms = 6;           // Creation timestamp
+  int64 updated_at_ms = 7;           // Last update timestamp
+  string organization_id = 8;        // Organization for multi-tenant routing
+  bool is_deleted = 9;               // Soft delete flag
+}
+
+// Table request messages
+message CreateTableRequest {
+  string name = 1;
+  TableSchema schema = 2;            // Structured table schema
+  string description = 3;
+  string user_id = 4;
+  string organization_id = 5;
+  map<string, string> metadata = 6;
+  string s3_path = 7;                // S3 path for Delta Lake table data
+}
+
+message GetTableRequest {
+  string table_id = 1;
+  string user_id = 2;
+  string organization_id = 3;
+}
+
+message UpdateTableRequest {
+  string table_id = 1;
+  string name = 2;                   // Optional
+  TableSchema schema = 3;            // Optional structured schema
+  string description = 4;            // Optional
+  string user_id = 5;
+  string organization_id = 6;
+  map<string, string> metadata = 7;  // Optional
+  string s3_path = 8;                // S3 path for Delta Lake table data
+}
+
+message DeleteTableRequest {
+  string table_id = 1;
+  string user_id = 2;
+  string organization_id = 3;
+  bool soft_delete = 4;
+}
+
+message ListTablesRequest {
+  string user_id = 1;
+  string organization_id = 2;
+  int32 limit = 3;                   // Optional: result limit
+  int32 offset = 4;                  // Optional: result offset
+  string search_term = 5;            // Optional: search tables by name/description
+}
+
+// Row request messages with strong typing (bulk operations)
+message CreateRowsRequest {
+  string table_id = 1;
+  repeated RowData rows_data = 2;    // Multiple typed rows
+  string user_id = 3;
+  string organization_id = 4;
+  string s3_path = 5;                // S3 path for Delta Lake table data
+  string mode = 6;                   // Write mode: "append" (add rows) or "overwrite" (replace all)
+}
+
+message GetRowsRequest {
+  string table_id = 1;
+  repeated string row_ids = 2;       // Multiple row IDs
+  string user_id = 3;
+  string organization_id = 4;
+}
+
+message UpdateRowsRequest {
+  string table_id = 1;
+  repeated RowData rows_data = 2;    // Multiple typed rows (must include IDs)
+  string user_id = 3;
+  string organization_id = 4;
+  string s3_path = 5;                // S3 path for Delta Lake table data
+}
+
+message DeleteRowsRequest {
+  string table_id = 1;
+  repeated string row_ids = 2;       // Multiple row IDs
+  string user_id = 3;
+  string organization_id = 4;
+  string s3_path = 5;                // S3 path for Delta Lake table data
+}
+
+// Row filter with operator support for advanced querying
+message RowFilter {
+  string field = 1;                 // field name (e.g., "email", "age") or "id"
+  FilterOperator operator = 2;      // Filter operator (eq, gt, like, etc.)
+  RowDataValue value = 3;           // Filter value (typed)
+  repeated RowDataValue values = 4; // Multiple values for IN/NOT_IN operators
+}
+
+// Aggregation types for metric/dashboard views
+// AIDEV-NOTE: Used by ViewApplicationService to compute aggregations via gRPC.
+// Aggregations are applied AFTER filters for correct SQL semantics (WHERE before GROUP BY).
+enum AggregationType {
+  AGG_TYPE_UNSPECIFIED = 0;
+  AGG_TYPE_SUM = 1;           // Sum of values
+  AGG_TYPE_AVG = 2;           // Average (mean) of values
+  AGG_TYPE_COUNT = 3;         // Count of non-null values
+  AGG_TYPE_MIN = 4;           // Minimum value
+  AGG_TYPE_MAX = 5;           // Maximum value
+  AGG_TYPE_COUNT_DISTINCT = 6;// Count of unique values
+  AGG_TYPE_COUNT_EMPTY = 7;   // Count of null/empty values
+  AGG_TYPE_COUNT_NOT_EMPTY = 8; // Count of non-null/non-empty values
+}
+
+// Single aggregation function to apply to a field
+message AggregationFunction {
+  string field_id = 1;          // field name (e.g., "price", "quantity")
+  AggregationType type = 2;     // Aggregation type (sum, avg, count, etc.)
+  string alias = 3;             // Alias for result (e.g., "total_sales")
+  string format_type = 4;       // Display format hint: "number", "currency", "percentage", "duration"
+}
+
+// Aggregation configuration for QueryRows
+// AIDEV-NOTE: Extends QueryRows to support metric/dashboard views.
+// When aggregation is present, QueryRows returns aggregated data instead of raw rows.
+message AggregationConfig {
+  repeated string group_by_fields = 1;    // Fields to group by (empty for global aggregation)
+  repeated AggregationFunction aggregations = 2; // Aggregations to compute
+}
+
+message QueryRowsRequest {
+  string table_id = 1;
+  string s3_path = 2;
+  repeated RowFilter filters = 3;   // Typed filters with operators
+  string order_by = 4;
+  string order_direction = 5;       // 'ASC' or 'DESC'
+  int32 limit = 6;
+  int32 offset = 7;
+  string user_id = 8;
+  string organization_id = 9;
+
+  // AIDEV-NOTE: Optional aggregation config for metric/dashboard views.
+  // When present, QueryRows applies filters, then aggregations, returning aggregated data.
+  // This reuses all existing filter/sort logic in Python gRPC service.
+  AggregationConfig aggregation = 10;
+}
+
+
+
+// Response messages
+message TableResponse {
+  bool success = 1;
+  Table table = 2;
+  string message = 3;
+}
+
+message DeleteTableResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ListTablesResponse {
+  bool success = 1;
+  repeated Table tables = 2;
+  int32 total_count = 3;
+  string message = 4;
+}
+
+message CreateRowsResponse {
+  bool success = 1;
+  repeated Row rows = 2;
+  int32 rows_created = 3;
+  string message = 4;
+}
+
+message GetRowsResponse {
+  bool success = 1;
+  repeated Row rows = 2;
+  int32 total_count = 3;
+  string message = 4;
+}
+
+message UpdateRowsResponse {
+  bool success = 1;
+  repeated Row rows = 2;
+  int32 rows_updated = 3;
+  string message = 4;
+}
+
+message DeleteRowsResponse {
+  bool success = 1;
+  int32 rows_deleted = 2;
+  string message = 3;
+}
+
+message QueryRowsResponse {
+  bool success = 1;
+  bytes arrow_ipc_stream = 2;      // Arrow IPC serialized data (zero-copy)
+  int32 total_count = 3;
+  string message = 4;
+}
+
+// Typed value for row data - maps frontend field types to protobuf
+message RowDataValue {
+  oneof value {
+    string text_value = 1;
+    double number_value = 2;
+    bool boolean_value = 3;
+    int64 date_value = 4;      // Unix timestamp ms
+    string json_value = 5;     // For file/relation/document complex types
+  }
+}
+
+// Represents a single row's data with strong typing
+message RowData {
+  string id = 1;
+  map<string, RowDataValue> data = 2;
+}
+
+// Get table statistics request
+message GetTableStatsRequest {
+  string table_id = 1;
+  string s3_path = 2;
+  string organization_id = 3;
+}
+
+// Get table statistics response
+message GetTableStatsResponse {
+  bool success = 1;
+  int64 row_count = 2;
+  int64 size_bytes = 3;
+  string message = 4;
+}

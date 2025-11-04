@@ -1,49 +1,58 @@
 """
-Emery Agents - Pure agent execution service for protobuf requests.
+Emery Agents - Simplified Agent Execution Service
 
-This package provides:
-- Simple protobuf-compatible execution service
-- Core domain entities matching protobuf schema exactly
-- Smolagents integration with streaming progress
-- Dual execution modes: capability-based and instruction-based
+Simplified architecture without DDD overhead:
+- entities/ - Simple dataclasses with validation
+- services/ - Business logic (executor, model provider, tool loader)
+- grpc/ - gRPC services and protobuf
+- types.py - Consolidated enums and type aliases
+- No DDD: No value objects, interfaces, or DI container
+
 """
 
-# Core entities matching protobuf
-from .core.entities import (
-    TaskRequest, TaskProgress, AgentConfig, CapabilityConfig, 
-    StepConfig, ToolConfig, ServerConfig, InstructionConfig,
-    WorkerInfo, CancelTaskRequest, CancelTaskResponse
+__version__ = "3.0.0-simplified"
+
+# Export simplified entities
+from .entities import Agent, AgentConfig, Task, TaskConfig, TaskInstructions, ExecutionContext
+
+# Export services
+from .services import AgentExecutor, SmolagentsModelProvider, UnifiedToolLoader, TokenUsage
+
+# Export types
+from .types import (
+    ExecutionMode,
+    TaskStatus,
+    WorkerStatus,
+    ModelType,
+    AgentId,
+    OrganizationId,
+    TaskId,
 )
-from .core.types import StepType, TaskStatus, WorkerStatus
 
-# DDD Application services
-from .application.di.container import container
-from .domain.execution.services.capability_routing_service import CapabilityRoutingService
-
-__version__ = "2.0.0-protobuf"
-__author__ = "Lance Kraakman"
-__email__ = "lance@aifactory.nz"
+# Export gRPC server for main entry point
+from .grpc.server import serve as grpc_serve
 
 __all__ = [
-    # Core entities
-    "TaskRequest",
-    "TaskProgress", 
+    # Entities
+    "Agent",
     "AgentConfig",
-    "CapabilityConfig",
-    "StepConfig",
-    "ToolConfig",
-    "ServerConfig",
-    "InstructionConfig",
-    "WorkerInfo",
-    "CancelTaskRequest",
-    "CancelTaskResponse",
-    
-    # Core types
-    "StepType",
-    "TaskStatus", 
+    "Task",
+    "TaskConfig",
+    "TaskInstructions",
+    "ExecutionContext",
+    # Services
+    "AgentExecutor",
+    "SmolagentsModelProvider",
+    "UnifiedToolLoader",
+    "TokenUsage",
+    # Types
+    "ExecutionMode",
+    "TaskStatus",
     "WorkerStatus",
-    
-    # DDD Application services
-    "container",
-    "CapabilityRoutingService",
+    "ModelType",
+    "AgentId",
+    "OrganizationId",
+    "TaskId",
+    # gRPC
+    "grpc_serve",
 ]

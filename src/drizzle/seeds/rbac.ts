@@ -46,7 +46,9 @@ async function seedSystemRoles() {
       Permission.TEAMS_VIEW, Permission.TEAMS_MANAGE, Permission.TEAMS_CREATE,
       Permission.AGENTS_VIEW, Permission.AGENTS_MANAGE, Permission.AGENTS_CREATE, Permission.AGENTS_EXECUTE,
       Permission.TASKS_VIEW, Permission.TASKS_MANAGE, Permission.TASKS_CREATE, Permission.TASKS_EXECUTE,
-      Permission.DATA_VIEW, Permission.DATA_MANAGE, Permission.DATA_CREATE
+      Permission.DATA_VIEW, Permission.DATA_MANAGE, Permission.DATA_CREATE,
+      Permission.SKILLS_VIEW, Permission.SKILLS_MANAGE, Permission.SKILLS_CREATE, Permission.SKILLS_EXECUTE,
+      Permission.APPS_VIEW, Permission.APPS_CREATE, Permission.APPS_MANAGE, Permission.APPS_PUBLISH
     ],
     
     [SYSTEM_ROLES.ORGANIZATION_ADMIN]: [
@@ -56,7 +58,9 @@ async function seedSystemRoles() {
       Permission.TEAMS_VIEW, Permission.TEAMS_MANAGE, Permission.TEAMS_CREATE,
       Permission.AGENTS_VIEW, Permission.AGENTS_MANAGE, Permission.AGENTS_CREATE, Permission.AGENTS_EXECUTE,
       Permission.TASKS_VIEW, Permission.TASKS_MANAGE, Permission.TASKS_CREATE, Permission.TASKS_EXECUTE,
-      Permission.DATA_VIEW, Permission.DATA_MANAGE, Permission.DATA_CREATE
+      Permission.DATA_VIEW, Permission.DATA_MANAGE, Permission.DATA_CREATE,
+      Permission.SKILLS_VIEW, Permission.SKILLS_MANAGE, Permission.SKILLS_CREATE, Permission.SKILLS_EXECUTE,
+      Permission.APPS_VIEW, Permission.APPS_CREATE, Permission.APPS_MANAGE, Permission.APPS_PUBLISH
     ],
     
     [SYSTEM_ROLES.TEAM_LEAD]: [
@@ -65,7 +69,9 @@ async function seedSystemRoles() {
       Permission.TEAMS_VIEW, Permission.TEAMS_MANAGE,
       Permission.AGENTS_VIEW, Permission.AGENTS_MANAGE, Permission.AGENTS_CREATE, Permission.AGENTS_EXECUTE,
       Permission.TASKS_VIEW, Permission.TASKS_MANAGE, Permission.TASKS_CREATE, Permission.TASKS_EXECUTE,
-      Permission.DATA_VIEW, Permission.DATA_CREATE
+      Permission.DATA_VIEW, Permission.DATA_CREATE,
+      Permission.SKILLS_VIEW, Permission.SKILLS_MANAGE, Permission.SKILLS_CREATE, Permission.SKILLS_EXECUTE,
+      Permission.APPS_VIEW, Permission.APPS_CREATE, Permission.APPS_MANAGE, Permission.APPS_PUBLISH
     ],
     
     [SYSTEM_ROLES.MEMBER]: [
@@ -73,13 +79,16 @@ async function seedSystemRoles() {
       Permission.ORGANIZATIONS_VIEW, Permission.USERS_VIEW, Permission.TEAMS_VIEW,
       Permission.AGENTS_VIEW, Permission.AGENTS_CREATE, Permission.AGENTS_EXECUTE,
       Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EXECUTE,
-      Permission.DATA_VIEW, Permission.DATA_CREATE
+      Permission.DATA_VIEW, Permission.DATA_CREATE,
+      Permission.SKILLS_VIEW, Permission.SKILLS_EXECUTE,
+      Permission.APPS_VIEW, Permission.APPS_CREATE
     ],
     
     [SYSTEM_ROLES.VIEWER]: [
       // Read-only access
       Permission.ORGANIZATIONS_VIEW, Permission.USERS_VIEW, Permission.TEAMS_VIEW,
-      Permission.AGENTS_VIEW, Permission.TASKS_VIEW, Permission.DATA_VIEW
+      Permission.AGENTS_VIEW, Permission.TASKS_VIEW, Permission.DATA_VIEW,
+      Permission.SKILLS_VIEW, Permission.APPS_VIEW
     ],
     
     [SYSTEM_ROLES.SYSTEM_SERVICE]: [

@@ -1,33 +1,41 @@
 "use client"
 
-import React, { useEffect } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import React, { useEffect, useMemo, useCallback, useRef } from "react"
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { useStore } from '@tanstack/react-store'
+import { toast } from 'sonner'
+import debounce from 'lodash/debounce'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Settings, Plus, Search, TableIcon as Table, Database } from "lucide-react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
-import { DynamicDataTable } from "./components/DynamicDataTable"
+import { DynamicDataSheetGrid } from "./components/DynamicDataSheetGrid"
 import { FieldManagerDialog } from "./components/FieldManagerDialog"
 import { useEmery } from "@/contexts/EmeryStoreProvider"
 import { dataStore, dataSelectors } from '@/stores/data-management.store'
 import { storeActions, dataActions } from '@/stores/actions'
 import type { TableDTO } from "@/app/mappers/table-mapper"
 import { getFields } from "@/app/actions/fields"
-import { getRowsData, createRow, updateRowData, deleteRowData } from "@/app/actions/rows"
-import type { FieldDTO } from "@/app/mappers/field-mapper"
-import type { RowDTO } from "@/app/mappers/row-mapper"
+import { getRowsDSG, searchRowsDSG, createRow, createRows, updateRowData, updateRowsData, deleteRowData } from "@/app/actions/rows"
+import { useBulkRowUpdate } from "@/hooks/use-bulk-row-update"
+import { GRID_CONFIG } from "@/lib/constants/grid"
+import { rowQueryKeys, fieldQueryKeys } from "@/lib/query-keys/rows"
+import type { FilterConfig } from "@/lib/types/filters"
 import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
+import type { FieldDTO } from "@/app/mappers/field-mapper"
+import type { DSGRow } from "@/app/mappers/dsg-mapper"
+import { createDebugLogger } from '@/lib/utils/debug-logger'
 
-export function DataViewsClientSimplified() {
-  const searchParams = useSearchParams()
+const logger = createDebugLogger('DataViewsClient')
+
+interface DataViewsClientSimplifiedProps {
+  tableId?: number
+}
+
+export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplifiedProps = {}) {
   const queryClient = useQueryClient()
   const { data, isLoading: dataLoading, error: dataError } = useEmery()
-  
-  const tableIdParam = searchParams?.get("tableId")
-  const initialTableId = tableIdParam ? parseInt(tableIdParam) : undefined
 
   // Find the initial table across all databases
   const findTableById = (id: number): TableDTO | undefined => {
@@ -42,137 +50,221 @@ export function DataViewsClientSimplified() {
   const selectedTableId = useStore(dataStore, dataSelectors.selectedTableId)
   const isFieldManagerOpen = useStore(dataStore, dataSelectors.isFieldManagerOpen)
   const searchTerm = useStore(dataStore, dataSelectors.searchTerm)
-  
-  // Initialize with URL parameter
+  const sortBy = useStore(dataStore, dataSelectors.sortBy)
+  const activeFilters = useStore(dataStore, dataSelectors.activeFilters)
+
+  // AIDEV-NOTE: Debug logging for sortBy changes
+  React.useEffect(() => {
+    logger.debug('sortBy changed in component', { field: sortBy.field, order: sortBy.order })
+  }, [sortBy])
+
+  // Clear filters when table changes
   useEffect(() => {
-    if (initialTableId && !selectedTableId) {
-      dataActions.setSelectedTable(initialTableId)
+    if (selectedTableId) {
+      dataActions.clearActiveFilters()
     }
-  }, [initialTableId, selectedTableId])
+  }, [selectedTableId])
+
+  // Sync tableId prop to selectedTableId state
+  useEffect(() => {
+    if (tableId) {
+      dataActions.setSelectedTable(tableId)
+    }
+  }, [tableId])
 
   const selectedTable = selectedTableId ? findTableById(selectedTableId) : undefined
 
-  // Update selected table when URL changes
-  useEffect(() => {
-    const tableId = tableIdParam ? parseInt(tableIdParam) : undefined;
-    dataActions.setSelectedTable(tableId);
-  }, [tableIdParam]);
-
   // TanStack Query for fields
   const fieldsQuery = useQuery({
-    queryKey: ['fields', selectedTableId],
+    queryKey: selectedTableId ? fieldQueryKeys.all(selectedTableId) : ['fields', null],
     queryFn: () => selectedTableId ? getFields(selectedTableId) : Promise.resolve([]),
     enabled: !!selectedTableId,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: GRID_CONFIG.FIELD_STALE_TIME,
   })
 
-  // TanStack Query for rows  
-  const rowsQuery = useQuery({
-    queryKey: ['rows', selectedTableId],
-    queryFn: () => selectedTableId ? getRowsData(selectedTableId, 1000) : Promise.resolve([]),
-    enabled: !!selectedTableId,
-    staleTime: 1000 * 60 * 2, // 2 minutes
-  })
-
-  const fields = fieldsQuery.data || []
-  const rows = rowsQuery.data || []
-  const loading = fieldsQuery.isLoading || rowsQuery.isLoading
-  const error = fieldsQuery.error || rowsQuery.error
-
-  // TanStack Mutations for optimistic updates
-  const updateRowMutation = useMutation({
-    mutationFn: async ({ rowId, fieldId, value }: { rowId: string, fieldId: number, value: DomainFieldValue }) => {
-      if (!selectedTableId) throw new Error('No table selected')
-      
-      const field = fields.find(f => f.id === fieldId)
-      if (!field) throw new Error('Field not found')
-
-      return updateRowData({
-        tableId: selectedTableId,
-        rowId,
-        data: { [field.name]: value },
-      });
+  // TanStack Infinite Query for rows (supports pagination)
+  const infiniteRowsQuery = useInfiniteQuery({
+    queryKey: selectedTableId
+      ? rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
+      : ['rows', null, 'infinite'],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }: { pageParam: number }) =>
+      selectedTableId
+        ? getRowsDSG(
+            selectedTableId,
+            GRID_CONFIG.PAGE_SIZE,
+            pageParam,
+            sortBy.field,
+            (sortBy.order || 'asc') === 'asc' ? 'ASC' : 'DESC',
+            activeFilters ?? []
+          )
+        : Promise.resolve({ rows: [], hasMore: false, total: 0 }),
+    getNextPageParam: (lastPage: { rows: DSGRow[], hasMore: boolean, total: number }, allPages: any[]) => {
+      if (!lastPage.hasMore) return undefined
+      return allPages.length * GRID_CONFIG.PAGE_SIZE // Offset for next page
     },
-    onMutate: async ({ rowId, fieldId, value }) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['rows', selectedTableId] })
-      
-      // Snapshot the previous value
-      const previousRows = queryClient.getQueryData(['rows', selectedTableId])
-      
-      // Find the field to get its info
-      const field = fields.find(f => f.id === fieldId)
-      if (!field) return { previousRows }
+    enabled: !!selectedTableId && !searchTerm, // Disable when searching
+    staleTime: GRID_CONFIG.ROW_STALE_TIME,
+  })
 
-      // Optimistically update the cache
-      queryClient.setQueryData(['rows', selectedTableId], (oldRows: RowDTO[] | undefined) => {
-        if (!oldRows) return []
-        return oldRows.map(row => {
-          if (row.id === rowId) {
-            const updatedFieldValues = [...row.fieldValues].map(fv =>
-              fv.fieldSlug === field.name 
-                ? { fieldSlug: field.name, value, fieldType: field.type }
-                : fv
-            );
-            const hasField = row.fieldValues.some(fv => fv.fieldSlug === field.name);
-            if (!hasField) {
-              updatedFieldValues.push({ fieldSlug: field.name, value, fieldType: field.type });
-            }
-            return { ...row, fieldValues: updatedFieldValues };
-          }
-          return row;
-        })
+  // TanStack Query for server-side search
+  const searchQuery = useQuery({
+    queryKey: selectedTableId && searchTerm
+      ? rowQueryKeys.search(selectedTableId, searchTerm)
+      : ['rows', null, 'search'],
+    queryFn: () =>
+      selectedTableId && searchTerm
+        ? searchRowsDSG(selectedTableId, searchTerm, 1000) // Higher limit for search results
+        : Promise.resolve({ rows: [], total: 0 }),
+    enabled: !!selectedTableId && !!searchTerm && searchTerm.trim().length > 0,
+    staleTime: GRID_CONFIG.SEARCH_STALE_TIME,
+  })
+
+  const fields: FieldDTO[] = fieldsQuery.data || []
+
+  // Use search results when searching, otherwise use paginated rows
+  const rows: DSGRow[] = useMemo(() => {
+    if (searchTerm && searchQuery.data?.rows) {
+      return searchQuery.data.rows
+    }
+    return infiniteRowsQuery.data?.pages.flatMap((page: { rows: DSGRow[], hasMore: boolean, total: number }) => page.rows) ?? []
+  }, [searchTerm, searchQuery.data, infiniteRowsQuery.data])
+
+  // Get total count - from search results or from first page of infinite query
+  const totalCount = useMemo(() => {
+    if (searchTerm && searchQuery.data) {
+      return searchQuery.data.total
+    }
+    // Get total from first page of infinite query
+    return infiniteRowsQuery.data?.pages?.[0]?.total ?? 0
+  }, [searchTerm, searchQuery.data, infiniteRowsQuery.data])
+
+  // Separate initial loading from search loading to prevent table from disappearing during search
+  const isInitialLoading = fieldsQuery.isLoading || infiniteRowsQuery.isLoading
+  const isSearching = searchQuery.isLoading
+  const loading = isInitialLoading || isSearching
+  const error = fieldsQuery.error || infiniteRowsQuery.error || searchQuery.error
+
+  // Scroll handler for infinite scroll - throttled for performance
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLDivElement
+    const { scrollHeight, scrollTop, clientHeight } = target
+
+    // Trigger load when within threshold of bottom
+    if (
+      scrollHeight - scrollTop - clientHeight < GRID_CONFIG.SCROLL_THRESHOLD &&
+      !infiniteRowsQuery.isFetching &&
+      infiniteRowsQuery.hasNextPage
+    ) {
+      infiniteRowsQuery.fetchNextPage()
+    }
+  }, [infiniteRowsQuery])
+
+  // Throttle scroll handler to max 100ms (10 times per second)
+  const handleScrollThrottled = useMemo(() => {
+    let timeoutId: NodeJS.Timeout | null = null
+    let lastRan = 0
+
+    return (e: React.UIEvent<HTMLDivElement>) => {
+      const now = Date.now()
+
+      if (now - lastRan >= 100) {
+        handleScroll(e)
+        lastRan = now
+      } else {
+        if (timeoutId) clearTimeout(timeoutId)
+        timeoutId = setTimeout(() => {
+          handleScroll(e)
+          lastRan = Date.now()
+        }, 100 - (now - lastRan))
+      }
+    }
+  }, [handleScroll])
+
+  // AIDEV-NOTE: Bulk row update with debounced batching
+  // Extracted to custom hook for reusability and cleaner component code
+  // Handles optimistic updates, batching, and server synchronization
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async (updates: Array<{ rowId: string; data: Record<string, any> }>) => {
+      if (!selectedTableId) throw new Error('No table selected')
+      return updateRowsData(selectedTableId, updates)
+    },
+    onError: (err) => {
+      logger.error("Failed to bulk update rows:", err)
+      toast.error("Failed to save changes", {
+        description: err instanceof Error ? err.message : "An error occurred while saving changes"
       })
 
-      return { previousRows }
-    },
-    onError: (err, variables, context) => {
-      // Rollback on error
-      if (context?.previousRows) {
-        queryClient.setQueryData(['rows', selectedTableId], context.previousRows)
+      // Invalidate to refetch correct data on error
+      if (selectedTableId) {
+        queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
       }
-      console.error("Failed to update row:", err)
+    },
+    onSuccess: (data, variables) => {
+      logger.summary('Bulk update completed', { rows: variables.length })
     },
     onSettled: () => {
-      // Refetch after mutation
-      queryClient.invalidateQueries({ queryKey: ['rows', selectedTableId] })
+      // Don't invalidate - let optimistic updates persist
     },
   })
 
-  const addRowMutation = useMutation({
-    mutationFn: async () => {
+  const { handleUpdateRow } = useBulkRowUpdate({
+    fields,
+    bulkUpdateMutation,
+    selectedTableId,
+    sortBy,
+    activeFilters
+  })
+
+  const addRowsMutation = useMutation({
+    mutationFn: async (rowsData: Record<string, any>[]) => {
       if (!selectedTableId) throw new Error('No table selected')
-      
-      const rowData: Record<string, any> = {}
-      fields.forEach(field => {
-        if (field.required || field.type === 'text') {
-          switch (field.type) {
-            case 'number':
-              rowData[field.name] = 0
-              break
-            case 'boolean':
-              rowData[field.name] = false
-              break
-            case 'date':
-              rowData[field.name] = new Date().toISOString().split('T')[0]
-              break
-            default:
-              rowData[field.name] = ""
+
+      // Apply field defaults to each row
+      const processedRows = rowsData.map(initialData => {
+        const rowData: Record<string, any> = initialData || {}
+
+        // Only add defaults for optional (non-required) fields
+        // Required fields are left undefined so domain validation can enforce them
+        fields.forEach(field => {
+          if (rowData[field.name] === undefined && !field.required) {
+            switch (field.type) {
+              case 'number':
+                rowData[field.name] = null
+                break
+              case 'boolean':
+                rowData[field.name] = false
+                break
+              case 'date':
+                rowData[field.name] = null
+                break
+              case 'text':
+                rowData[field.name] = ""
+                break
+            }
           }
-        }
+        })
+
+        return rowData
       })
 
-      return createRow({ tableId: selectedTableId, data: rowData })
+      return createRows({ tableId: selectedTableId, rows: processedRows })
     },
-    onSuccess: (result) => {
-      if (result.success && result.data) {
-        queryClient.setQueryData(['rows', selectedTableId], (oldRows: RowDTO[] | undefined) => {
-          return oldRows ? [...oldRows, result.data] : [result.data]
-        })
+    onSuccess: (data, variables) => {
+      const rowCount = variables.length
+      toast.success(`Added ${rowCount} ${rowCount === 1 ? 'row' : 'rows'}`)
+    },
+    onSettled: () => {
+      // Invalidate all row queries to refetch with new rows
+      if (selectedTableId) {
+        queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
       }
     },
     onError: (err) => {
-      console.error("Failed to add row:", err)
+      logger.error("Failed to add rows:", err)
+      toast.error("Failed to add row", {
+        description: err instanceof Error ? err.message : "An error occurred while adding the row"
+      })
     },
   })
 
@@ -181,57 +273,61 @@ export function DataViewsClientSimplified() {
       if (!selectedTableId) throw new Error('No table selected')
       return deleteRowData(selectedTableId, rowId)
     },
-    onMutate: async (rowId) => {
-      await queryClient.cancelQueries({ queryKey: ['rows', selectedTableId] })
-      const previousRows = queryClient.getQueryData(['rows', selectedTableId])
-      
-      queryClient.setQueryData(['rows', selectedTableId], (oldRows: RowDTO[] | undefined) => {
-        return oldRows ? oldRows.filter(row => row.id !== rowId) : []
-      })
-
-      return { previousRows }
-    },
-    onError: (err, variables, context) => {
-      if (context?.previousRows) {
-        queryClient.setQueryData(['rows', selectedTableId], context.previousRows)
-      }
-      console.error("Failed to delete row:", err)
+    onSuccess: () => {
+      toast.success("Row deleted")
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['rows', selectedTableId] })
+      // Invalidate all row queries to refetch without deleted row
+      if (selectedTableId) {
+        queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
+      }
+    },
+    onError: (err) => {
+      logger.error("Failed to delete row:", err)
+      toast.error("Failed to delete row", {
+        description: err instanceof Error ? err.message : "An error occurred while deleting the row"
+      })
     },
   })
 
-  const handleUpdateRow = (rowId: string, fieldId: number, value: DomainFieldValue) => {
-    updateRowMutation.mutate({ rowId, fieldId, value })
-  }
-
-  const handleAddRow = () => {
-    addRowMutation.mutate()
+  const handleAddRows = async (rowsData: Record<string, any>[]): Promise<void> => {
+    await addRowsMutation.mutateAsync(rowsData)
   }
 
   const handleDeleteRow = (rowId: string) => {
     deleteRowMutation.mutate(rowId)
   }
 
-  // Refresh data using TanStack Query invalidation
-  const refreshTableData = () => {
-    if (selectedTableId) {
-      queryClient.invalidateQueries({ queryKey: ['fields', selectedTableId] })
-      queryClient.invalidateQueries({ queryKey: ['rows', selectedTableId] })
-    }
+  // Filter handlers - use store actions
+  const handleAddFilter = (filter: FilterConfig) => {
+    dataActions.addFilter(filter)
   }
 
-  // Filter rows based on search
-  const filteredRows = rows.filter((row: RowDTO) => {
-    if (!searchTerm) return true
-    // Convert fieldValues to searchable format
-    const searchableValues = row.fieldValues.map(fv => String(fv.value));
-    searchableValues.push(row.id); // Include row ID in search
-    return searchableValues.some(value => 
-      value.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  })
+  const handleRemoveFilter = (index: number) => {
+    dataActions.removeFilter(index)
+  }
+
+  const handleClearFilters = () => {
+    dataActions.clearActiveFilters()
+  }
+
+  // Sort handlers - simplified, just set what's requested
+  const handleSort = useCallback((field: string, direction: 'asc' | 'desc') => {
+    logger.debug('handleSort setting sort', { field, direction })
+    dataActions.setSorting(field, direction)
+  }, [])
+
+  const handleClearSort = useCallback(() => {
+    dataActions.clearSorting()
+  }, [])
+
+  // Refresh data using TanStack Query invalidation
+  const refreshTableData = useCallback(() => {
+    if (selectedTableId) {
+      queryClient.invalidateQueries({ queryKey: fieldQueryKeys.all(selectedTableId) })
+      queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
+    }
+  }, [selectedTableId, queryClient])
 
   const renderEmptyState = () => (
     <div className="flex-1 flex items-center justify-center">
@@ -285,85 +381,40 @@ export function DataViewsClientSimplified() {
   if (dataError) return renderErrorState()
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="py-4 px-6 border-b">
-        <h1 className="text-2xl font-bold">Data</h1>
-        <p className="text-muted-foreground">
-          {selectedTable
-            ? `Viewing ${selectedTable.name} in ${(data?.databases || []).find(db => db.id === selectedTable.databaseId)?.name || 'Unknown Database'}`
-            : 'Select a table from the sidebar to view its data'
-          }
-        </p>
-      </div>
-      
-      <div className="flex-1 flex flex-col px-6">
-        {selectedTable && (
-          <div className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search in table..."
-                  value={searchTerm}
-                  onChange={(e) => dataActions.setSearchTerm(e.target.value)}
-                  className="pl-10 bg-transparent"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="bg-transparent">
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => dataActions.setFieldManagerOpen(true)}>
-                    <Settings className="h-4 w-4 mr-2" />
-                    Manage Fields
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleAddRow}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Row
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={refreshTableData}>
-                    Refresh Data
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Main content - full width, no padding, no header */}
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {isInitialLoading ? renderLoadingState() :
+         error ? renderErrorState() :
+         !selectedTable ? renderEmptyState() : (
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <DynamicDataSheetGrid
+              fields={fields}
+              rows={rows}
+              totalCount={totalCount}
+              organizationId={selectedTable.organizationId!}
+              tableId={selectedTable.id}
+              tableName={selectedTable.name}
+              searchTerm={searchTerm}
+              onSearchChange={(value) => dataActions.setSearchTerm(value)}
+              onManageFields={() => dataActions.setFieldManagerOpen(true)}
+              onRefresh={refreshTableData}
+              onUpdateRow={handleUpdateRow}
+              onAddRows={handleAddRows}
+              onDeleteRow={handleDeleteRow}
+              onScroll={handleScrollThrottled}
+              isLoading={isSearching}
+              error={error ? String(error) : null}
+              activeFilters={activeFilters ?? []}
+              onAddFilter={handleAddFilter}
+              onRemoveFilter={handleRemoveFilter}
+              onClearFilters={handleClearFilters}
+              sortState={sortBy}
+              onSort={handleSort}
+              onClearSort={handleClearSort}
+            />
           </div>
         )}
-
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col pt-4 min-h-0">
-          {loading ? renderLoadingState() : 
-           error ? renderErrorState() :
-           !selectedTable ? renderEmptyState() : (
-            <>
-              <div className="mb-4">
-                <h2 className="text-xl font-bold">{selectedTable.name}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {filteredRows.length} row{filteredRows.length !== 1 ? "s" : ""}
-                  {searchTerm && ` (filtered from ${rows.length})`}
-                </p>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <DynamicDataTable
-                  fields={fields}
-                  rows={filteredRows}
-                  organizationId={selectedTable.organizationId!}
-                  tableId={selectedTable.id}
-                  onUpdateRow={handleUpdateRow}
-                  onAddRow={handleAddRow}
-                  onDeleteRow={handleDeleteRow}
-                />
-              </div>
-            </>
-          )}
-        </div>
       </div>
 
       {/* Field Manager Dialog - local to table */}

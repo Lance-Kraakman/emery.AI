@@ -114,76 +114,6 @@ class EventDrivenScheduler {
     });
   }
 
-  private async handleDatabaseEvent(event: TaskEvent): Promise<void> {
-    // Type guard to ensure we have the required properties for database events
-    if (!event.tableId || !event.operation) {
-      console.warn('⚠️ Database event missing required tableId or operation');
-      return;
-    }
-    try {
-      const agentRepository = getAgentRepository();
-      const organizationId = OrganizationId.fromNumber(event.organizationId);
-      
-      // Get all agents for this organization
-      const agents = await agentRepository.findByOrganization(organizationId);
-      
-      // Filter agents that have DATABASE_EVENT triggers matching this event
-      const matchingAgents = agents.filter(agent => {
-        if (!agent.trigger) return false;
-        
-        try {
-          const triggerConfig = TriggerConfigFromJSON(agent.trigger);
-          
-          if (!(triggerConfig instanceof DatabaseEventTriggerConfig)) {
-            return false;
-          }
-          
-          if (!triggerConfig.isEnabled()) {
-            return false;
-          }
-          
-          // Check if trigger matches the operation and table
-          const matchesOperation = triggerConfig.matchesOperation(event.operation! as any);
-          const matchesTable = triggerConfig.matchesTable(event.tableId!);
-          
-          return matchesOperation && matchesTable;
-        } catch (error) {
-          console.warn(`Failed to parse trigger config for agent ${agent.id.value}:`, error);
-          return false;
-        }
-      });
-      
-      console.log(`🔍 Found ${matchingAgents.length} agents with matching DATABASE_EVENT triggers for table ${event.tableId}, operation ${event.operation}`);
-      
-      // Create and execute tasks for matching agents
-      for (const agent of matchingAgents) {
-        try {
-          // Create task using the application service instead of direct repository
-          const task = await this.agentTaskService.createTask({
-            agentId: agent.id,
-            organizationId: agent.organizationId,
-            name: `Database Event: ${event.operation} on ${event.tableId}`,
-            capabilityName: undefined,
-            instructions: {
-              instructions: `Database event detected: ${event.operation} operation on table ${event.tableId}`,
-              metadata: event.data || {}
-            }
-          });
-          
-          console.log(`📝 Created database event task for agent ${agent.name} (${agent.id.value})`);
-          
-          // Execute the task immediately
-          await this.agentTaskService.executeTask({ taskId: task.id.value });
-          console.log(`✅ Executed database event task for agent ${agent.name}`);
-        } catch (error) {
-          console.error(`❌ Failed to create/execute database event task for agent ${agent.id.value}:`, error);
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error handling database event:', error);
-    }
-  }
-
   private async handleRagReindexEvent(event: RagReindexEvent): Promise<void> {
     return withSystemContext(event.organizationId, async () => {
       try {
@@ -304,7 +234,7 @@ class EventDrivenScheduler {
               agentId: task.agentId.value,
               organizationId: task.organizationId.value,
               name: task.name,
-              capabilityName: task.capabilityName,
+              skillName: task.skillName,
               instructions: task.instructions,
               status: task.status.value,
               createdBy: task.createdBy?.value,

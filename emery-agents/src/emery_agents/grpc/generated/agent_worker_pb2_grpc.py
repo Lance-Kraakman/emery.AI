@@ -64,7 +64,7 @@ class AgentWorkerServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetWorkerInfo(self, request, context):
-        """Get worker health status and available capabilities
+        """Get worker health status and available skills
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -204,6 +204,11 @@ class ChatProcessingServiceStub(object):
                 request_serializer=agent__worker__pb2.ProcessMessageRequest.SerializeToString,
                 response_deserializer=agent__worker__pb2.ProcessMessageResponse.FromString,
                 _registered_method=True)
+        self.CancelMessage = channel.unary_unary(
+                '/emery.agents.ChatProcessingService/CancelMessage',
+                request_serializer=agent__worker__pb2.CancelMessageRequest.SerializeToString,
+                response_deserializer=agent__worker__pb2.CancelMessageResponse.FromString,
+                _registered_method=True)
 
 
 class ChatProcessingServiceServicer(object):
@@ -217,6 +222,13 @@ class ChatProcessingServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def CancelMessage(self, request, context):
+        """Cancel an in-progress message processing
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ChatProcessingServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -224,6 +236,11 @@ def add_ChatProcessingServiceServicer_to_server(servicer, server):
                     servicer.ProcessMessage,
                     request_deserializer=agent__worker__pb2.ProcessMessageRequest.FromString,
                     response_serializer=agent__worker__pb2.ProcessMessageResponse.SerializeToString,
+            ),
+            'CancelMessage': grpc.unary_unary_rpc_method_handler(
+                    servicer.CancelMessage,
+                    request_deserializer=agent__worker__pb2.CancelMessageRequest.FromString,
+                    response_serializer=agent__worker__pb2.CancelMessageResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -254,6 +271,33 @@ class ChatProcessingService(object):
             '/emery.agents.ChatProcessingService/ProcessMessage',
             agent__worker__pb2.ProcessMessageRequest.SerializeToString,
             agent__worker__pb2.ProcessMessageResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CancelMessage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/emery.agents.ChatProcessingService/CancelMessage',
+            agent__worker__pb2.CancelMessageRequest.SerializeToString,
+            agent__worker__pb2.CancelMessageResponse.FromString,
             options,
             channel_credentials,
             insecure,

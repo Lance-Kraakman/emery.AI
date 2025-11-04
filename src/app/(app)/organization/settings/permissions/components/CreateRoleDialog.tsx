@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, Plus } from "lucide-react";
-import { getAvailablePermissions, createCustomRole } from "@/app/actions/roles";
-import { PermissionSelector, type PermissionAssignment } from "./PermissionSelector";
+import { createCustomRole } from "@/app/actions/roles";
+import { CompactPermissionList } from "./CompactPermissionList";
+import type { PermissionAssignment } from "./PermissionSelector";
 
 interface CreateRoleDialogProps {
   open: boolean;
@@ -18,13 +19,6 @@ interface CreateRoleDialogProps {
 }
 
 export function CreateRoleDialog({ open, onOpenChange, onSuccess }: CreateRoleDialogProps) {
-  const [availablePermissions, setAvailablePermissions] = useState<Array<{
-    id: number;
-    resource: string;
-    action: string;
-    description: string | null;
-  }>>([]);
-  const [permissionsLoading, setPermissionsLoading] = useState(false);
   const [error, setError] = useState("");
 
   const form = useForm({
@@ -59,25 +53,11 @@ export function CreateRoleDialog({ open, onOpenChange, onSuccess }: CreateRoleDi
 
   useEffect(() => {
     if (open) {
-      loadAvailablePermissions();
       // Reset form when dialog opens
       form.reset();
       setError('');
     }
   }, [open, form]);
-
-  const loadAvailablePermissions = async () => {
-    try {
-      setPermissionsLoading(true);
-      const permissions = await getAvailablePermissions();
-      setAvailablePermissions(permissions);
-    } catch (error) {
-      console.error('Error loading permissions:', error);
-      setError('Failed to load available permissions');
-    } finally {
-      setPermissionsLoading(false);
-    }
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -142,31 +122,20 @@ export function CreateRoleDialog({ open, onOpenChange, onSuccess }: CreateRoleDi
           {/* Permission Selection */}
           <form.Field
             name="selectedPermissions"
-            validators={{
-              onChange: ({ value }) => value.length === 0 ? 'Please select at least one permission' : undefined,
-            }}
           >
             {(field) => (
               <div className="space-y-4">
                 <div>
-                  <Label>Permissions *</Label>
+                  <Label>Permissions</Label>
                   <p className="text-sm text-muted-foreground">
-                    Select the permissions this role should have.
+                    Select the permissions this role should have (optional).
                   </p>
                 </div>
 
-                {permissionsLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                    <span className="ml-2">Loading permissions...</span>
-                  </div>
-                ) : (
-                  <PermissionSelector
-                    availablePermissions={availablePermissions}
-                    selectedPermissions={field.state.value}
-                    onSelectionChange={(permissions) => field.handleChange(permissions)}
-                  />
-                )}
+                <CompactPermissionList
+                  selectedPermissions={field.state.value}
+                  onSelectionChange={(permissions) => field.handleChange(permissions)}
+                />
                 {field.state.meta.errors.length > 0 && (
                   <div className="text-sm text-destructive">
                     {field.state.meta.errors[0]}

@@ -14,7 +14,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { ToolDropdown } from './ToolDropdown';
 import { resolveReferences } from '@/app/actions/references';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
@@ -38,13 +38,13 @@ export default function CustomChatInput({
   const [inputValue, setInputValue] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownQuery, setDropdownQuery] = useState('');
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number; maxHeight?: number }>({ left: 0 });
   const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([]);
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Detect @ tools and show/hide dropdown
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     const cursorPos = e.target.selectionStart || 0;
 
@@ -72,21 +72,20 @@ export default function CustomChatInput({
       // Position above input since chat is at bottom of screen
       if (inputRef.current) {
         const rect = inputRef.current.getBoundingClientRect();
-        const dropdownHeight = 400;
-        const gap = 4;
+        const gap = 8; // Gap between dropdown and input
 
-        // Calculate optimal position to stay within viewport
-        let top = rect.top - dropdownHeight - gap;
+        // Position dropdown so its bottom is at the top of the input
+        const bottom = window.innerHeight - rect.top + gap;
+        const maxHeight = rect.top - gap - 20; // 20px margin from top of viewport
+
         let left = rect.left;
 
-        // Prevent going off top of screen
-        if (top < 0) {
-          top = rect.bottom + gap; // Position below input instead
-        }
-
         // Prevent going off right side of screen
-        const dropdownWidth = 400; // min-w-96 = 384px, but give some buffer
+        const dropdownWidth = 440; // Match w-[440px] in ToolDropdown
+
+        // Check if dropdown would overflow on right side
         if (left + dropdownWidth > window.innerWidth) {
+          // Position from right edge instead
           left = window.innerWidth - dropdownWidth - 16; // 16px margin
         }
 
@@ -95,7 +94,7 @@ export default function CustomChatInput({
           left = 16; // 16px margin
         }
 
-        setDropdownPosition({ top, left });
+        setDropdownPosition({ bottom, left, maxHeight });
       }
     } else {
       setShowDropdown(false);
@@ -135,7 +134,9 @@ export default function CustomChatInput({
         fallback: getReferenceFallback()
       });
 
-      const insertText = tool.insertText || getReferenceFallback();
+      const rawInsertText = tool.insertText || getReferenceFallback();
+      // AIDEV-NOTE: Remove line breaks, tabs, and extra whitespace from insert text
+      const insertText = rawInsertText.replace(/[\n\r\t]+/g, ' ').replace(/\s+/g, ' ').trim();
       const newValue = beforeAt + insertText + ' ' + afterCursor;
       setInputValue(newValue);
 
@@ -183,7 +184,7 @@ export default function CustomChatInput({
   };
 
   // Handle key presses
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // When dropdown is open, prevent default behavior for navigation keys
     if (showDropdown && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape', 'Tab'].includes(e.key)) {
       e.preventDefault();
@@ -191,6 +192,7 @@ export default function CustomChatInput({
       return; // Let ToolDropdown handle these
     }
 
+    // Enter without Shift sends message, Shift+Enter creates new line
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       e.stopPropagation(); // AIDEV-NOTE: Prevent event bubbling to parent forms
@@ -220,48 +222,37 @@ export default function CustomChatInput({
 
   return (
     <div className={`relative ${className}`}>
-      <div className="flex gap-2 items-center">
-        <div className="flex-1 relative">
-          <Input
-            ref={inputRef}
-            value={inputValue}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={disabled}
-            className="pr-12"
-          />
+      <div className="relative">
+        <Textarea
+          ref={inputRef}
+          value={inputValue}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          disabled={disabled}
+          className="min-h-[220px] max-h-[400px] resize-none px-3 pr-12"
+        />
 
-          {/* Tool Dropdown */}
-          <ToolDropdown
-            query={dropdownQuery}
-            isOpen={showDropdown}
-            onClose={() => setShowDropdown(false)}
-            onSelect={handleToolSelect}
-            position={{
-              top: dropdownPosition.top,
-              left: dropdownPosition.left,
-              maxHeight: 400,
-            }}
-          />
-        </div>
-
+        {/* Floating Send Button - positioned inside textarea */}
         <Button
           onClick={handleSendMessage}
           disabled={!inputValue.trim() || disabled}
           size="sm"
-          className="px-3"
+          className="absolute bottom-2 right-2 h-8 w-8 p-0 rounded-full shadow-sm hover:shadow-md transition-shadow"
         >
-          <Send className="h-4 w-4" />
+          <Send className="h-3 w-3" />
         </Button>
+
+        {/* Tool Dropdown */}
+        <ToolDropdown
+          query={dropdownQuery}
+          isOpen={showDropdown}
+          onClose={() => setShowDropdown(false)}
+          onSelect={handleToolSelect}
+          position={dropdownPosition}
+        />
       </div>
 
-      {/* Helpful hint */}
-      {!inputValue && (
-        <div className="text-xs text-gray-400 mt-1">
-          Type @ to add tools, documents, agents, and more
-        </div>
-      )}
     </div>
   );
 }

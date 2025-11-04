@@ -206,16 +206,18 @@ export class RagSqlTemplates {
 
   /**
    * Get file data from a specific dynamic table field
+   * AIDEV-NOTE: Legacy template - modern implementation uses Delta Lake with field names
    */
   static getDynamicTableFiles(params: DynamicTableFileQueryParams): SqlQuery {
     // Note: This template requires manual substitution for table and field names
     // due to dynamic nature - handled by SqlExecutor
+    // Modern implementation uses Delta Lake with human-readable field names, not numeric IDs
     return {
       query: `
-        SELECT id, field_{{fieldId}} as file_data, created_at, updated_at
-        FROM {{tableDbName}} 
-        WHERE field_{{fieldId}} IS NOT NULL
-        AND field_{{fieldId}} != '[]'
+        SELECT id, {{fieldName}} as file_data, created_at, updated_at
+        FROM {{tableDbName}}
+        WHERE {{fieldName}} IS NOT NULL
+        AND {{fieldName}} != '[]'
       `.trim(),
       params: []
     };

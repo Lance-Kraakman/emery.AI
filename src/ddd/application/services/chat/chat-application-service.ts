@@ -1,10 +1,10 @@
 /**
  * Chat Application Service
- * 
+ *
  * Orchestrates chat operations with business logic and table connections.
  * Handles chat session management, message processing, and RAG integration.
  * Connects chats to dynamic tables for table-specific AI assistance.
- * 
+ *
  * AIDEV-NOTE: Application service for chat management - coordinates between
  * chat repositories, RAG services, and dynamic table context for table-connected chats
  */
@@ -18,43 +18,19 @@ import type { DomainType } from '@/ddd/domain/rag/value-objects';
 import type { ChatMessage, CreateChatMessageData, ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ChatMessageEntity } from '@/ddd/domain/chat/entities/chat-message';
+import type {
+  CreateChatDTO,
+  SendMessageDTO,
+  GetChatHistoryDTO,
+  GetChatsDTO,
+  ChatSessionDTO,
+  ChatMessageDTO,
+  ChatWithMessagesDTO
+} from '@/app/dtos/chat.dto';
+import { ChatMapper } from '@/app/mappers/chat-mapper';
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 
-export interface CreateChatCommand {
-  organizationId: OrganizationId;
-  createdBy: UserId;
-  title?: string; // Auto-generated if not provided
-  description?: string;
-  
-  // Domain connections
-  domainType?: DomainType;
-  domainId?: number; // Keep as number since it's generic across domains
-}
-
-export interface SendMessageCommand {
-  chatId: ChatId;
-  userId: UserId;
-  organizationId: OrganizationId;
-  content: string;
-  role: 'user' | 'assistant' | 'system';
-  metadata?: ChatMessageMetadata;
-}
-
-export interface GetChatHistoryQuery {
-  chatId: ChatId;
-  userId: UserId;
-  organizationId: OrganizationId;
-  limit?: number;
-  offset?: number;
-}
-
-export interface GetChatsQuery {
-  userId?: UserId;
-  organizationId: OrganizationId;
-  tableId?: TableId;
-  status?: 'active' | 'archived';
-  limit?: number;
-  offset?: number;
-}
+const logger = createDebugLogger('ChatService');
 
 export class ChatApplicationService {
   constructor(
@@ -67,21 +43,25 @@ export class ChatApplicationService {
   /**
    * Create a new chat session, optionally connected to any domain type
    */
-  async createChat(command: CreateChatCommand): Promise<Result<Chat>> {
+  async createChat(dto: CreateChatDTO): Promise<Result<ChatSessionDTO>> {
     try {
+      // Convert DTO to Value Objects
+      const organizationId = OrganizationId.fromNumber(dto.organizationId);
+      const createdBy = UserId.fromString(dto.createdBy);
+
       // 1. Validate domain connection and get domain info
       let contextMetadata: ChatContextMetadata;
-      
-      if (command.domainType && command.domainId) {
-        const validation = await this.validateDomainConnection(command.domainType, command.domainId, command.organizationId.value);
+
+      if (dto.domainType && dto.domainId) {
+        const validation = await this.validateDomainConnection(dto.domainType, dto.domainId, dto.organizationId);
         if (!validation.valid) {
           return { success: false, error: validation.error };
         }
-        
+
         // Create domain-specific context metadata
         contextMetadata = ChatUtils.createDomainContextMetadata(
-          command.domainType,
-          command.domainId,
+          dto.domainType,
+          dto.domainId,
           validation.domainName!,
           validation.domainSchema
         );
@@ -91,14 +71,14 @@ export class ChatApplicationService {
       }
 
       // 2. Generate title if not provided
-      const title = command.title || ChatUtils.generateContextTitle(contextMetadata);
+      const title = dto.title || ChatUtils.generateContextTitle(contextMetadata);
 
       // 3. Validate chat data
       const chatData: CreateChatData = {
-        organizationId: command.organizationId,
-        createdBy: command.createdBy,
+        organizationId,
+        createdBy,
         title,
-        description: command.description,
+        description: dto.description,
         contextMetadata
       };
 
@@ -121,15 +101,15 @@ export class ChatApplicationService {
       await this.chatRepository.updateMessageStats(chat.id, 1, new Date());
 
       const chatTypeDesc = contextMetadata.contextType === 'organizations' ? 'organization' : `${contextMetadata.contextType}-connected`;
-      console.log(`[CHAT-APP-SERVICE] Created ${chatTypeDesc} chat: ${chat.title}`);
+      logger.summary(`Created ${chatTypeDesc} chat: ${chat.title}`);
 
       return {
         success: true,
-        data: chat
+        data: ChatMapper.toSessionDTO(chat)
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error creating chat:', error);
+      logger.error('Error creating chat:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create chat'
@@ -224,10 +204,15 @@ export class ChatApplicationService {
   /**
    * Send a message to a chat
    */
-  async sendMessage(command: SendMessageCommand): Promise<Result<ChatMessage>> {
+  async sendMessage(dto: SendMessageDTO): Promise<Result<ChatMessageDTO>> {
     try {
+      // Convert DTO to Value Objects
+      const chatId = ChatId.fromString(dto.chatId);
+      const userId = UserId.fromString(dto.userId);
+      const organizationId = OrganizationId.fromNumber(dto.organizationId);
+
       // 1. Verify chat exists and user has access
-      const chat = await this.chatRepository.findById(command.chatId, command.organizationId);
+      const chat = await this.chatRepository.findById(chatId, organizationId);
       if (!chat) {
         return {
           success: false,
@@ -235,7 +220,7 @@ export class ChatApplicationService {
         };
       }
 
-      if (!chat.canUserMessage(command.userId, command.organizationId)) {
+      if (!chat.canUserMessage(userId, organizationId)) {
         return {
           success: false,
           error: 'Access denied: cannot send messages to this chat'
@@ -243,14 +228,14 @@ export class ChatApplicationService {
       }
 
       // 2. Get next message index
-      const messageIndex = await this.messageRepository.getNextMessageIndex(command.chatId);
+      const messageIndex = await this.messageRepository.getNextMessageIndex(chatId);
 
       // 3. Validate message data
       const messageData: CreateChatMessageData = {
-        chatId: command.chatId,
-        role: command.role,
-        content: command.content,
-        metadata: command.metadata,
+        chatId,
+        role: dto.role,
+        content: dto.content,
+        metadata: dto.metadata,
         messageIndex
       };
 
@@ -266,18 +251,18 @@ export class ChatApplicationService {
       const message = await this.messageRepository.create(messageData);
 
       // 5. Update chat statistics
-      const newMessageCount = await this.messageRepository.getMessageCount(command.chatId);
-      await this.chatRepository.updateMessageStats(command.chatId, newMessageCount, new Date());
+      const newMessageCount = await this.messageRepository.getMessageCount(chatId);
+      await this.chatRepository.updateMessageStats(chatId, newMessageCount, new Date());
 
-      console.log(`[CHAT-APP-SERVICE] Added ${command.role} message to chat ${chat.title}`);
+      logger.summary(`Added ${dto.role} message to chat ${chat.title}`);
 
       return {
         success: true,
-        data: message
+        data: ChatMapper.toMessageDTO(message)
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error sending message:', error);
+      logger.error('Error sending message:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to send message'
@@ -288,14 +273,15 @@ export class ChatApplicationService {
   /**
    * Get chat history with messages
    */
-  async getChatHistory(query: GetChatHistoryQuery): Promise<Result<{
-    chat: Chat;
-    messages: ChatMessage[];
-    totalMessages: number;
-  }>> {
+  async getChatHistory(dto: GetChatHistoryDTO): Promise<Result<ChatWithMessagesDTO>> {
     try {
+      // Convert DTO to Value Objects
+      const chatId = ChatId.fromString(dto.chatId);
+      const userId = UserId.fromString(dto.userId);
+      const organizationId = OrganizationId.fromNumber(dto.organizationId);
+
       // 1. Verify chat exists and user has access
-      const chat = await this.chatRepository.findById(query.chatId, query.organizationId);
+      const chat = await this.chatRepository.findById(chatId, organizationId);
       if (!chat) {
         return {
           success: false,
@@ -303,7 +289,7 @@ export class ChatApplicationService {
         };
       }
 
-      if (!chat.canUserAccess(query.userId, query.organizationId)) {
+      if (!chat.canUserAccess(userId, organizationId)) {
         return {
           success: false,
           error: 'Access denied: cannot view this chat'
@@ -312,25 +298,21 @@ export class ChatApplicationService {
 
       // 2. Get messages
       const messages = await this.messageRepository.findByChatId(
-        query.chatId,
-        query.limit || 50,
-        query.offset || 0
+        chatId,
+        dto.limit || 50,
+        dto.offset || 0
       );
 
       // 3. Get total message count
-      const totalMessages = await this.messageRepository.getMessageCount(query.chatId);
+      const totalMessages = await this.messageRepository.getMessageCount(chatId);
 
       return {
         success: true,
-        data: {
-          chat,
-          messages,
-          totalMessages
-        }
+        data: ChatMapper.toChatWithMessagesDTO(chat, messages, totalMessages)
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error getting chat history:', error);
+      logger.error('Error getting chat history:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get chat history'
@@ -341,50 +323,55 @@ export class ChatApplicationService {
   /**
    * Get chats for a user or organization, with optional table filtering
    */
-  async getChats(query: GetChatsQuery): Promise<Result<Chat[]>> {
+  async getChats(dto: GetChatsDTO): Promise<Result<ChatSessionDTO[]>> {
     try {
+      // Convert DTO to Value Objects
+      const organizationId = OrganizationId.fromNumber(dto.organizationId);
+
       let chats: Chat[];
 
-      if (query.tableId) {
+      if (dto.tableId) {
         // Get chats for specific table
+        const tableId = TableId.fromNumber(dto.tableId);
         chats = await this.chatRepository.findByTable(
-          query.tableId,
-          query.organizationId,
-          query.limit || 20,
-          query.offset || 0
+          tableId,
+          organizationId,
+          dto.limit || 20,
+          dto.offset || 0
         );
-      } else if (query.userId) {
+      } else if (dto.userId) {
         // Get chats for specific user
+        const userId = UserId.fromString(dto.userId);
         chats = await this.chatRepository.findByUser(
-          query.userId,
-          query.organizationId,
-          query.limit || 20,
-          query.offset || 0
+          userId,
+          organizationId,
+          dto.limit || 20,
+          dto.offset || 0
         );
       } else {
         // Get all chats for organization
-        if (query.status === 'active') {
+        if (dto.status === 'active') {
           chats = await this.chatRepository.findActiveByOrganization(
-            query.organizationId,
-            query.limit || 20,
-            query.offset || 0
+            organizationId,
+            dto.limit || 20,
+            dto.offset || 0
           );
         } else {
           chats = await this.chatRepository.findByOrganization(
-            query.organizationId,
-            query.limit || 20,
-            query.offset || 0
+            organizationId,
+            dto.limit || 20,
+            dto.offset || 0
           );
         }
       }
 
       return {
         success: true,
-        data: chats
+        data: chats.map(ChatMapper.toSessionDTO)
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error getting chats:', error);
+      logger.error('Error getting chats:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get chats'
@@ -414,7 +401,7 @@ export class ChatApplicationService {
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error getting conversation context:', error);
+      logger.error('Error getting conversation context:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get conversation context'
@@ -451,14 +438,14 @@ export class ChatApplicationService {
         };
       }
 
-      console.log(`[CHAT-APP-SERVICE] Archived chat: ${chat.title}`);
+      logger.summary(`Archived chat: ${chat.title}`);
 
       return {
         success: true
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error archiving chat:', error);
+      logger.error('Error archiving chat:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to archive chat'
@@ -497,14 +484,14 @@ export class ChatApplicationService {
         };
       }
 
-      console.log(`[CHAT-APP-SERVICE] Deleted chat: ${chat.title}`);
+      logger.summary(`Deleted chat: ${chat.title}`);
 
       return {
         success: true
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error deleting chat:', error);
+      logger.error('Error deleting chat:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to delete chat'
@@ -530,7 +517,7 @@ export class ChatApplicationService {
       };
 
     } catch (error) {
-      console.error('[CHAT-APP-SERVICE] Error getting chat stats:', error);
+      logger.error('Error getting chat stats:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get chat statistics'

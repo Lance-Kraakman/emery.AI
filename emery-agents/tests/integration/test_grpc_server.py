@@ -12,7 +12,7 @@ import grpc
 from unittest.mock import patch
 from typing import AsyncIterator
 
-from emery_agents.infrastructure.grpc.server import AgentWorkerServiceImplementation
+from emery_agents.grpc.server import AgentWorkerServiceImplementation
 from emery_agents.grpc.generated import agent_worker_pb2, agent_worker_pb2_grpc
 
 

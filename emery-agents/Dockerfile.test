@@ -34,4 +34,4 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
   CMD python -c "from grpc_health.v1 import health_pb2_grpc, health_pb2; import grpc; channel = grpc.insecure_channel('localhost:50051'); stub = health_pb2_grpc.HealthStub(channel); stub.Check(health_pb2.HealthCheckRequest())" || exit 1
 
 # Default command runs the gRPC server
-CMD ["python", "-m", "emery_agents.infrastructure.grpc.main"]
+CMD ["python", "-m", "emery_agents.grpc.main"]

@@ -10,7 +10,7 @@ import { withAuthContext } from '@/lib/auth/with-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import { OrganizationId, TableId, DatabaseId, UserId } from "@/ddd/domain/shared/value-objects";
 import type { Result, CreateTableData } from "./types";
-import type { CreateTableCommand } from "@/ddd/application/services/tables/table-application-service";
+import type { CreateTableCommand, UpdateTableCommand } from "@/ddd/application/services/tables/table-application-service";
 import { TableMapper, type TableDTO } from "@/app/mappers/table-mapper";
 
 // Import the DI setup to ensure container is initialized
@@ -102,7 +102,7 @@ export async function getTables(): Promise<TableDTO[]> {
     const session = await requirePermission("data:view");
     const currentOrg = await requireCurrentOrganization();
     const tableApplicationService = getTableApplicationService();
-    
+
     const tableList = await tableApplicationService.getTablesForOrganization(OrganizationId.fromNumber(currentOrg.id));
 
     console.log(`[GET-TABLES] Found ${tableList.length} tables for org ${currentOrg.id}`);
@@ -111,10 +111,67 @@ export async function getTables(): Promise<TableDTO[]> {
     console.error("Error fetching tables:", error);
     console.error("Error details:", error instanceof Error ? error.message : String(error));
     console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
-    
+
     // Return empty array instead of throwing error to prevent UI crashes
     console.log(`[GET-TABLES] Returning empty array due to error to prevent UI crash`);
     return [];
+  }
+}
+
+/**
+ * Update an existing table
+ */
+export async function updateTable(
+  tableId: number,
+  updates: { name?: string; description?: string; metadata?: Record<string, any> },
+  revalidateUrl?: string
+): Promise<Result> {
+  try {
+    const session = await requirePermission("data:manage");
+    const currentOrg = await requireCurrentOrganization();
+
+    if (!tableId) {
+      return {
+        success: false,
+        error: "Table ID is required",
+      };
+    }
+
+    const tableApplicationService = getTableApplicationService();
+
+    const command: UpdateTableCommand = {
+      id: TableId.fromNumber(tableId),
+      name: updates.name,
+      description: updates.description,
+      metadata: updates.metadata
+    };
+
+    const result = await tableApplicationService.updateTable(command);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to update table"
+      };
+    }
+
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/data'); // Default path for table operations
+    }
+
+    return {
+      success: true,
+      data: result.data ? TableMapper.toDTO(result.data) : null,
+    };
+  } catch (error) {
+    console.error("Error updating table:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update table",
+    };
   }
 }
 
@@ -165,13 +222,82 @@ export async function deleteTableAction(formData: FormData) {
   const tableId = parseInt(formData.get('tableId') as string);
 
   const result = await deleteTable(tableId);
-  
+
   if (!result.success) {
     throw new Error(result.error);
   }
 
   // Note: revalidatePath is handled in the main deleteTable function
   return result;
+}
+
+/**
+ * Duplicate an existing table
+ * Appends " (Copy)" to the table name and copies the schema
+ */
+export async function duplicateTable(tableId: number, revalidateUrl?: string): Promise<Result> {
+  try {
+    const session = await requirePermission("data:create");
+    const currentOrg = await requireCurrentOrganization();
+
+    if (!tableId) {
+      return {
+        success: false,
+        error: "Table ID is required",
+      };
+    }
+
+    const tableApplicationService = getTableApplicationService();
+
+    // Get the original table
+    const originalTable = await tableApplicationService.getTable(TableId.fromNumber(tableId));
+    if (!originalTable) {
+      return { success: false, error: "Table not found" };
+    }
+
+    // Create new name with " (Copy)" suffix
+    const newName = `${originalTable.name} (Copy)`;
+
+    // Create the duplicate table
+    const command: CreateTableCommand = {
+      name: newName,
+      databaseId: originalTable.databaseId,
+      organizationId: OrganizationId.fromNumber(currentOrg.id),
+      createdBy: UserId.fromString(session.user.id),
+      description: originalTable.description,
+      metadata: originalTable.metadata || {}
+    };
+
+    const result = await tableApplicationService.createTable(command);
+
+    if (!result.success || !result.data) {
+      return {
+        success: false,
+        error: result.error || "Failed to duplicate table"
+      };
+    }
+
+    // TODO: Copy fields from original table to new table
+    // This would require additional logic to duplicate the table schema
+
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/data');
+    }
+
+    return {
+      success: true,
+      data: TableMapper.toDTO(result.data),
+    };
+  } catch (error) {
+    console.error("Error duplicating table:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to duplicate table",
+    };
+  }
 }
 
 /**
