@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Parse request and get user's agent API key for tools
-    const { messages, chatId, domainType, domainId, tools = [] } = await req.json();
+    const { messages, chatId, messageId, domainType, domainId, tools = [] } = await req.json();
     const latestMessage = messages[messages.length - 1]?.content;
 
     console.log('[CHAT-GRPC-API] Request includes tools:', {
@@ -538,7 +538,8 @@ export async function POST(req: NextRequest) {
               console.error('[CHAT-GRPC-API] Stream processing error:', streamError);
               controller.error(streamError);
             }
-          }
+          },
+          messageId // Pass messageId for cancellation tracking
         ).then(() => {
           console.log('[CHAT-GRPC-API] gRPC processing completed successfully');
         }).catch((error) => {
