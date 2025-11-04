@@ -330,6 +330,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"📝 Result type: {type(result)}")
             logger.info(f"📝 Result preview: {str(result)[:200]}...")
 
+            # DEBUG: Immediate check of agent state
+            logger.info(f"🔍 DEBUG: hasattr(agent, 'logs') = {hasattr(agent, 'logs')}")
+            if hasattr(agent, 'logs'):
+                logger.info(f"🔍 DEBUG: agent.logs is None? {agent.logs is None}")
+                logger.info(f"🔍 DEBUG: len(agent.logs) = {len(agent.logs) if agent.logs else 'N/A'}")
+                logger.info(f"🔍 DEBUG: agent.logs = {agent.logs}")
+
             # Extract and store token usage from agent logs
             self.last_token_usage = self._extract_token_usage_from_agent(agent)
             if self.last_token_usage:
