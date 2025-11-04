@@ -42,12 +42,12 @@ class PipedreamTool(Tool):
         self.inputs = self._create_inputs(metadata["inputs"])
         self.output_type = "object"
         
-        # Use ApiKey Value Object for type safety
+        # Store API key as string (simplified architecture)
         api_key = config.config.get("api_key") if config and config.config else None
         if not api_key:
             raise ValueError("api_key required")
 
-        self.agent_api_key = ApiKey(api_key) if isinstance(api_key, str) else api_key
+        self.agent_api_key = api_key  # Store as string directly
         self.base_url = config.config.get("base_url") or os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
         self.api_key_mode = config.config.get("api_key_mode", "user")  # Default to user for chat flow
 
@@ -116,8 +116,8 @@ class PipedreamTool(Tool):
     
     def forward(self, **kwargs) -> Dict[str, Any]:
         """Execute Pipedream action or MCP call via proxy with smart routing."""
-        # Use Value Object for API key
-        api_key_value = getattr(self.agent_api_key, 'value', str(self.agent_api_key))
+        # Use API key directly (stored as string)
+        api_key_value = self.agent_api_key
         
         try:
             if self.tool_type == "mcp":
