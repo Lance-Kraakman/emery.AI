@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth/auth-options';
 import { getChatProcessingClient } from '@/lib/grpc/chat-processing-client';
+import { authOptions } from '@/lib/auth';
 
 /**
  * POST /api/chat/cancel
