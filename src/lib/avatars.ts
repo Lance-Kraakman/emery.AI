@@ -203,9 +203,20 @@ export function generateAvatarDataUri(
     const style = getAvatarStyle(styleName);
     const color = getAvatarColor(colorName);
 
-    // Filter out empty string values from options
+    // Filter out empty values and wrap feature options in arrays
+    // DiceBear 9.x requires arrays for all feature options (eyes, hair, etc.)
+    // but probabilities and colors should remain as numbers/strings
     const cleanOptions = options ? Object.fromEntries(
-      Object.entries(options).filter(([_, value]) => value !== '' && value !== null && value !== undefined)
+      Object.entries(options)
+        .filter(([_, value]) => value !== '' && value !== null && value !== undefined)
+        .map(([key, value]) => {
+          // Probability and color options stay as-is (numbers/strings)
+          if (key.endsWith('Probability') || key.endsWith('Color')) {
+            return [key, value];
+          }
+          // Wrap feature options in arrays (DiceBear requirement)
+          return [key, Array.isArray(value) ? value : [value]];
+        })
     ) : {};
 
     const avatar = createAvatar(style, {
