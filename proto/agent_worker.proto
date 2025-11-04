@@ -172,6 +172,9 @@ message InstructionConfig {
 service ChatProcessingService {
   // Process a message and stream AI response (no database operations)
   rpc ProcessMessage(ProcessMessageRequest) returns (stream ProcessMessageResponse);
+
+  // Cancel an in-progress message processing
+  rpc CancelMessage(CancelMessageRequest) returns (CancelMessageResponse);
 }
 
 // Request for AI message processing
@@ -191,6 +194,8 @@ message ProcessMessageRequest {
   repeated ToolConfig tools = 6;
 
   string model = 7;                  // Optional: model override for this chat message
+
+  string message_id = 8;             // Unique message identifier for cancellation
 }
 
 // Streaming response from AI processing
@@ -266,6 +271,19 @@ enum StepType {
   STEP_ACTION = 1;       // Agent is executing a tool/action
   STEP_REASONING = 2;    // Agent is reasoning about results
   STEP_FINAL = 3;        // Agent has reached final answer
+}
+
+// Request to cancel an in-progress message
+message CancelMessageRequest {
+  string message_id = 1;             // Message identifier to cancel
+  string user_id = 2;                // User requesting cancellation (for authorization)
+  int32 organization_id = 3;         // Organization context
+}
+
+// Response to message cancellation request
+message CancelMessageResponse {
+  bool success = 1;                  // Whether cancellation was successful
+  string message = 2;                // Status message
 }
 
 // Chat context configuration for AI processing
