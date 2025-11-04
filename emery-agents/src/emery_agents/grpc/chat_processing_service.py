@@ -51,6 +51,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         self.organization_id = organization_id
         self.proto_mapper = ProtoMapper()
         self.last_token_usage = None  # Store token usage from last agent execution
+        self.active_streams: Dict[str, bool] = {}  # Track active message streams for cancellation
 
         # Initialize AI processing services - no database dependencies
         logger.info("Initializing ChatProcessingService for AI operations only")
@@ -99,8 +100,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         message_content = request.message_content
         user_id = request.user_id
         org_id = request.organization_id
-        
-        logger.info(f"🚀 Processing message for user {user_id} in org {org_id}")
+        message_id = request.message_id if request.message_id else f"msg_{int(time.time() * 1000)}"
+
+        # Register message stream for cancellation tracking
+        self.active_streams[message_id] = False  # False = not cancelled
+        logger.info(f"🚀 Processing message {message_id} for user {user_id} in org {org_id}")
         logger.info(f"📝 Message preview: {message_content[:100]}...")
 
         # Always use ToolCallingAgent - handles empty tools gracefully
@@ -180,6 +184,21 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 domain_context=request.context,
                 org_model=org_model
             ):
+                # Check for cancellation
+                if self.active_streams.get(message_id, False):
+                    logger.info(f"⚠️ Message {message_id} was cancelled, stopping stream")
+                    # Send cancellation error
+                    cancel_response = agent_worker_pb2.ProcessMessageResponse(
+                        error=agent_worker_pb2.ProcessingError(
+                            error_code='CANCELLED',
+                            error_message='Message processing was cancelled by user',
+                            error_details={}
+                        ),
+                        timestamp=int(time.time() * 1000)
+                    )
+                    yield cancel_response
+                    break
+
                 # Handle different response types from streaming
                 if isinstance(response_dict, dict):
                     response_type = response_dict.get("type")
@@ -254,7 +273,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 timestamp=int(time.time() * 1000)
             )
             yield complete_response
-            
+
             logger.info(f"✅ Message processing completed in {processing_time}ms")
 
         except Exception as e:
@@ -274,6 +293,43 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 timestamp=int(time.time() * 1000)
             )
             yield error_response
+
+        finally:
+            # Cleanup: Remove message from active streams
+            if message_id in self.active_streams:
+                del self.active_streams[message_id]
+                logger.info(f"🧹 Cleaned up message {message_id} from active streams")
+
+    async def CancelMessage(
+        self,
+        request: agent_worker_pb2.CancelMessageRequest,
+        context: grpc.aio.ServicerContext
+    ) -> agent_worker_pb2.CancelMessageResponse:
+        """
+        Cancel an in-progress message processing.
+
+        Marks the message as cancelled so the streaming loop will stop gracefully.
+        """
+        message_id = request.message_id
+
+        logger.info(f"🚫 Cancellation requested for message {message_id}")
+
+        if message_id in self.active_streams:
+            # Mark as cancelled
+            self.active_streams[message_id] = True
+            logger.info(f"✅ Message {message_id} marked for cancellation")
+
+            return agent_worker_pb2.CancelMessageResponse(
+                success=True,
+                message=f"Message {message_id} cancellation requested"
+            )
+        else:
+            logger.warning(f"⚠️ Message {message_id} not found in active streams")
+
+            return agent_worker_pb2.CancelMessageResponse(
+                success=False,
+                message=f"Message {message_id} not found or already completed"
+            )
 
     async def _get_rag_context(
         self, 
