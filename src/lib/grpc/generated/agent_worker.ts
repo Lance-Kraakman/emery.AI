@@ -133,6 +133,56 @@ export function workerStatusToJSON(object: WorkerStatus): string {
   }
 }
 
+/** Types of execution steps during agent processing */
+export enum StepType {
+  /** STEP_PLANNING - Agent is planning next action */
+  STEP_PLANNING = 0,
+  /** STEP_ACTION - Agent is executing a tool/action */
+  STEP_ACTION = 1,
+  /** STEP_REASONING - Agent is reasoning about results */
+  STEP_REASONING = 2,
+  /** STEP_FINAL - Agent has reached final answer */
+  STEP_FINAL = 3,
+  UNRECOGNIZED = -1,
+}
+
+export function stepTypeFromJSON(object: any): StepType {
+  switch (object) {
+    case 0:
+    case "STEP_PLANNING":
+      return StepType.STEP_PLANNING;
+    case 1:
+    case "STEP_ACTION":
+      return StepType.STEP_ACTION;
+    case 2:
+    case "STEP_REASONING":
+      return StepType.STEP_REASONING;
+    case 3:
+    case "STEP_FINAL":
+      return StepType.STEP_FINAL;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return StepType.UNRECOGNIZED;
+  }
+}
+
+export function stepTypeToJSON(object: StepType): string {
+  switch (object) {
+    case StepType.STEP_PLANNING:
+      return "STEP_PLANNING";
+    case StepType.STEP_ACTION:
+      return "STEP_ACTION";
+    case StepType.STEP_REASONING:
+      return "STEP_REASONING";
+    case StepType.STEP_FINAL:
+      return "STEP_FINAL";
+    case StepType.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
 /** Request to execute a specific agent task */
 export interface TaskRequest {
   /** Unique task identifier */
@@ -373,6 +423,10 @@ export interface ProcessMessageResponse {
   error?:
     | ProcessingError
     | undefined;
+  /** Real-time step execution progress */
+  stepProgress?:
+    | StepProgress
+    | undefined;
   /** Response timestamp */
   timestamp: number;
 }
@@ -448,6 +502,25 @@ export interface ProcessingError {
 }
 
 export interface ProcessingError_ErrorDetailsEntry {
+  key: string;
+  value: string;
+}
+
+/** Real-time step execution progress (for stream=True agent execution) */
+export interface StepProgress {
+  /** Type of step being executed */
+  stepType: StepType;
+  /** Human-readable step description */
+  stepName: string;
+  /** Step content/output */
+  content: string;
+  /** Additional step metadata (tool name, arguments, etc.) */
+  metadata: { [key: string]: string };
+  /** Step sequence number (0-indexed) */
+  stepIndex: number;
+}
+
+export interface StepProgress_MetadataEntry {
   key: string;
   value: string;
 }
@@ -2761,7 +2834,14 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
 };
 
 function createBaseProcessMessageResponse(): ProcessMessageResponse {
-  return { contentChunk: undefined, ragContext: undefined, complete: undefined, error: undefined, timestamp: 0 };
+  return {
+    contentChunk: undefined,
+    ragContext: undefined,
+    complete: undefined,
+    error: undefined,
+    stepProgress: undefined,
+    timestamp: 0,
+  };
 }
 
 export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
@@ -2778,8 +2858,11 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     if (message.error !== undefined) {
       ProcessingError.encode(message.error, writer.uint32(34).fork()).join();
     }
+    if (message.stepProgress !== undefined) {
+      StepProgress.encode(message.stepProgress, writer.uint32(42).fork()).join();
+    }
     if (message.timestamp !== 0) {
-      writer.uint32(40).int64(message.timestamp);
+      writer.uint32(48).int64(message.timestamp);
     }
     return writer;
   },
@@ -2824,7 +2907,15 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
           continue;
         }
         case 5: {
-          if (tag !== 40) {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.stepProgress = StepProgress.decode(reader, reader.uint32());
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
             break;
           }
 
@@ -2846,6 +2937,7 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
       ragContext: isSet(object.ragContext) ? RagContext.fromJSON(object.ragContext) : undefined,
       complete: isSet(object.complete) ? ProcessingComplete.fromJSON(object.complete) : undefined,
       error: isSet(object.error) ? ProcessingError.fromJSON(object.error) : undefined,
+      stepProgress: isSet(object.stepProgress) ? StepProgress.fromJSON(object.stepProgress) : undefined,
       timestamp: isSet(object.timestamp) ? globalThis.Number(object.timestamp) : 0,
     };
   },
@@ -2863,6 +2955,9 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     }
     if (message.error !== undefined) {
       obj.error = ProcessingError.toJSON(message.error);
+    }
+    if (message.stepProgress !== undefined) {
+      obj.stepProgress = StepProgress.toJSON(message.stepProgress);
     }
     if (message.timestamp !== 0) {
       obj.timestamp = Math.round(message.timestamp);
@@ -2886,6 +2981,9 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
       : undefined;
     message.error = (object.error !== undefined && object.error !== null)
       ? ProcessingError.fromPartial(object.error)
+      : undefined;
+    message.stepProgress = (object.stepProgress !== undefined && object.stepProgress !== null)
+      ? StepProgress.fromPartial(object.stepProgress)
       : undefined;
     message.timestamp = object.timestamp ?? 0;
     return message;
@@ -3689,6 +3787,225 @@ export const ProcessingError_ErrorDetailsEntry: MessageFns<ProcessingError_Error
     object: I,
   ): ProcessingError_ErrorDetailsEntry {
     const message = createBaseProcessingError_ErrorDetailsEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseStepProgress(): StepProgress {
+  return { stepType: 0, stepName: "", content: "", metadata: {}, stepIndex: 0 };
+}
+
+export const StepProgress: MessageFns<StepProgress> = {
+  encode(message: StepProgress, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.stepType !== 0) {
+      writer.uint32(8).int32(message.stepType);
+    }
+    if (message.stepName !== "") {
+      writer.uint32(18).string(message.stepName);
+    }
+    if (message.content !== "") {
+      writer.uint32(26).string(message.content);
+    }
+    Object.entries(message.metadata).forEach(([key, value]) => {
+      StepProgress_MetadataEntry.encode({ key: key as any, value }, writer.uint32(34).fork()).join();
+    });
+    if (message.stepIndex !== 0) {
+      writer.uint32(40).int32(message.stepIndex);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StepProgress {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStepProgress();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.stepType = reader.int32() as any;
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.stepName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.content = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          const entry4 = StepProgress_MetadataEntry.decode(reader, reader.uint32());
+          if (entry4.value !== undefined) {
+            message.metadata[entry4.key] = entry4.value;
+          }
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.stepIndex = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StepProgress {
+    return {
+      stepType: isSet(object.stepType) ? stepTypeFromJSON(object.stepType) : 0,
+      stepName: isSet(object.stepName) ? globalThis.String(object.stepName) : "",
+      content: isSet(object.content) ? globalThis.String(object.content) : "",
+      metadata: isObject(object.metadata)
+        ? Object.entries(object.metadata).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+          acc[key] = String(value);
+          return acc;
+        }, {})
+        : {},
+      stepIndex: isSet(object.stepIndex) ? globalThis.Number(object.stepIndex) : 0,
+    };
+  },
+
+  toJSON(message: StepProgress): unknown {
+    const obj: any = {};
+    if (message.stepType !== 0) {
+      obj.stepType = stepTypeToJSON(message.stepType);
+    }
+    if (message.stepName !== "") {
+      obj.stepName = message.stepName;
+    }
+    if (message.content !== "") {
+      obj.content = message.content;
+    }
+    if (message.metadata) {
+      const entries = Object.entries(message.metadata);
+      if (entries.length > 0) {
+        obj.metadata = {};
+        entries.forEach(([k, v]) => {
+          obj.metadata[k] = v;
+        });
+      }
+    }
+    if (message.stepIndex !== 0) {
+      obj.stepIndex = Math.round(message.stepIndex);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StepProgress>, I>>(base?: I): StepProgress {
+    return StepProgress.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StepProgress>, I>>(object: I): StepProgress {
+    const message = createBaseStepProgress();
+    message.stepType = object.stepType ?? 0;
+    message.stepName = object.stepName ?? "";
+    message.content = object.content ?? "";
+    message.metadata = Object.entries(object.metadata ?? {}).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+      if (value !== undefined) {
+        acc[key] = globalThis.String(value);
+      }
+      return acc;
+    }, {});
+    message.stepIndex = object.stepIndex ?? 0;
+    return message;
+  },
+};
+
+function createBaseStepProgress_MetadataEntry(): StepProgress_MetadataEntry {
+  return { key: "", value: "" };
+}
+
+export const StepProgress_MetadataEntry: MessageFns<StepProgress_MetadataEntry> = {
+  encode(message: StepProgress_MetadataEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StepProgress_MetadataEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStepProgress_MetadataEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StepProgress_MetadataEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: StepProgress_MetadataEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StepProgress_MetadataEntry>, I>>(base?: I): StepProgress_MetadataEntry {
+    return StepProgress_MetadataEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StepProgress_MetadataEntry>, I>>(object: I): StepProgress_MetadataEntry {
+    const message = createBaseStepProgress_MetadataEntry();
     message.key = object.key ?? "";
     message.value = object.value ?? "";
     return message;

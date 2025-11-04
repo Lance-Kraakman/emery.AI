@@ -201,9 +201,10 @@ message ProcessMessageResponse {
     RagContext rag_context = 2;       // RAG sources and context
     ProcessingComplete complete = 3;   // Processing finished marker
     ProcessingError error = 4;        // Processing error
+    StepProgress step_progress = 5;   // Real-time step execution progress
   }
 
-  int64 timestamp = 5;               // Response timestamp
+  int64 timestamp = 6;               // Response timestamp
 }
 
 // Simple conversation history message (passed TO gRPC, not managed BY it)
@@ -248,6 +249,23 @@ message ProcessingError {
   string error_code = 1;             // Error code (RAG_FAILED, MODEL_ERROR, etc.)
   string error_message = 2;          // Human-readable error message
   map<string, string> error_details = 3; // Additional error context
+}
+
+// Real-time step execution progress (for stream=True agent execution)
+message StepProgress {
+  StepType step_type = 1;            // Type of step being executed
+  string step_name = 2;              // Human-readable step description
+  string content = 3;                // Step content/output
+  map<string, string> metadata = 4;  // Additional step metadata (tool name, arguments, etc.)
+  int32 step_index = 5;              // Step sequence number (0-indexed)
+}
+
+// Types of execution steps during agent processing
+enum StepType {
+  STEP_PLANNING = 0;     // Agent is planning next action
+  STEP_ACTION = 1;       // Agent is executing a tool/action
+  STEP_REASONING = 2;    // Agent is reasoning about results
+  STEP_FINAL = 3;        // Agent has reached final answer
 }
 
 // Chat context configuration for AI processing
