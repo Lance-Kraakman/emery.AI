@@ -62,6 +62,10 @@ interface ExtendedChatHandler extends ChatHandler {
   availableTools: ToolDTO[]
   addTool: (tool: ToolDTO) => void
   removeTool: (tool: ToolDTO) => void
+  // Step progress tracking
+  currentStep: { type: string; name: string; index: number } | null
+  // Cancellation
+  cancelMessage?: () => Promise<void>
 }
 
 /**
@@ -87,7 +91,14 @@ export function useChatGRPC(
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isClient, setIsClient] = useState(false)
   const [currentChatId, setCurrentChatId] = useState<string | undefined>()
+  const [currentStep, setCurrentStep] = useState<{
+    type: string
+    name: string
+    index: number
+  } | null>(null)
+  const [currentMessageId, setCurrentMessageId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
   // AIDEV-NOTE: Use fine-grained store subscription instead of useLayout()
   const chatContext = useStore(uiStateStore, uiStateSelectors.chatContext)
 
@@ -193,8 +204,16 @@ export function useChatGRPC(
     setIsLoading(true)
     setInput('')
 
+    // Generate message ID for cancellation tracking
+    const messageId = `msg_${Date.now()}_${generateId()}`
+    setCurrentMessageId(messageId)
+
+    // Create abort controller for cancellation
+    abortControllerRef.current = new AbortController()
+
     try {
       console.log('[CHAT-GRPC-HOOK] Calling gRPC-based chat API with tools:', {
+        messageId,
         selectedTools: selectedTools.length,
         toolNames: selectedTools.map(t => t.name)
       })
@@ -242,11 +261,12 @@ export function useChatGRPC(
       const requestBody = {
         messages: chatMessages,
         chatId: currentChatId,
+        messageId: messageId, // For cancellation tracking
         ...(chatContextOptions?.domainType ? { domainType: chatContextOptions.domainType } : {}),
         ...(chatContextOptions?.domainId ? { domainId: chatContextOptions.domainId } : {}),
         tools: allTools
       }
-      
+
       // Call the gRPC-based streaming chat API
       const response = await fetch('/api/chat/stream-grpc', {
         method: 'POST',
@@ -254,6 +274,7 @@ export function useChatGRPC(
           'Content-Type': 'application/json',
         },
         credentials: 'include', // Ensure cookies are included in the request
+        signal: abortControllerRef.current?.signal, // For abort support
         body: JSON.stringify(requestBody),
       })
 
@@ -280,26 +301,52 @@ export function useChatGRPC(
 
       console.log('[CHAT-GRPC-HOOK] Starting to read gRPC streaming response')
 
-      // Read the stream - gRPC API returns plain text stream
+      // Read the stream - gRPC API returns mixed SSE events and plain text
+      let buffer = ''
       while (true) {
         const { done, value } = await reader.read()
         if (done) {
           console.log('[CHAT-GRPC-HOOK] Stream reading completed')
+          setCurrentStep(null) // Clear step progress
           break
         }
 
-        // Decode the chunk - it's plain text from gRPC processing
+        // Decode the chunk
         const chunk = new TextDecoder().decode(value)
-        
-        if (chunk) {
-          assistantMessage += chunk
-          
-          // Update the assistant message in real-time
-          setMessages((prev) => prev.map((msg) =>
-            msg.id === assistantId
-              ? { ...msg, content: assistantMessage }
-              : msg
-          ))
+        buffer += chunk
+
+        // Process buffer for SSE events (data: {...}\n\n)
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || '' // Keep incomplete event in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const eventData = JSON.parse(line.substring(6))
+
+              if (eventData.type === 'step_progress') {
+                // Update current step indicator
+                console.log('[CHAT-GRPC-HOOK] Step progress:', eventData)
+                setCurrentStep({
+                  type: eventData.stepType,
+                  name: eventData.stepName,
+                  index: eventData.stepIndex
+                })
+              }
+            } catch (e) {
+              console.warn('[CHAT-GRPC-HOOK] Failed to parse SSE event:', line, e)
+            }
+          } else if (line.trim()) {
+            // Plain text chunk (assistant response)
+            assistantMessage += line
+
+            // Update the assistant message in real-time
+            setMessages((prev) => prev.map((msg) =>
+              msg.id === assistantId
+                ? { ...msg, content: assistantMessage }
+                : msg
+            ))
+          }
         }
       }
 
@@ -310,15 +357,28 @@ export function useChatGRPC(
 
     } catch (error) {
       console.error('[CHAT-GRPC-HOOK] Chat error:', error)
-      
-      // Add error message
-      setMessages((prev) => [...prev, {
-        id: generateId(),
-        content: `Sorry, there was an error processing your message: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
-        role: 'assistant' as const,
-      }])
+
+      // Check if it was aborted
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('[CHAT-GRPC-HOOK] Message cancelled by user')
+        setMessages((prev) => [...prev, {
+          id: generateId(),
+          content: '_Message cancelled by user_',
+          role: 'assistant' as const,
+        }])
+      } else {
+        // Add error message
+        setMessages((prev) => [...prev, {
+          id: generateId(),
+          content: `Sorry, there was an error processing your message: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+          role: 'assistant' as const,
+        }])
+      }
     } finally {
       setIsLoading(false)
+      setCurrentStep(null)
+      setCurrentMessageId(null)
+      abortControllerRef.current = null
     }
 
     return message.content as string
@@ -413,6 +473,33 @@ export function useChatGRPC(
     }
   }
 
+  // Cancel current message processing
+  const cancelMessage = async () => {
+    if (!currentMessageId || !abortControllerRef.current) {
+      console.warn('[CHAT-GRPC-HOOK] No message to cancel')
+      return
+    }
+
+    console.log('[CHAT-GRPC-HOOK] Cancelling message:', currentMessageId)
+
+    try {
+      // Abort the fetch request
+      abortControllerRef.current.abort()
+
+      // Also call backend cancellation API (fire and forget)
+      await fetch('/api/chat/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ messageId: currentMessageId })
+      }).catch(err => {
+        console.warn('[CHAT-GRPC-HOOK] Backend cancel failed (non-critical):', err)
+      })
+    } catch (error) {
+      console.error('[CHAT-GRPC-HOOK] Cancel error:', error)
+    }
+  }
+
   // Tool management functions
   const addTool = async (tool: ToolDTO) => {
     // No validation needed - domain objects are self-validating
@@ -447,6 +534,9 @@ export function useChatGRPC(
     availableTools,
     addTool,
     removeTool,
+    // Step progress and cancellation
+    currentStep,
+    cancelMessage,
   }
 }
 
