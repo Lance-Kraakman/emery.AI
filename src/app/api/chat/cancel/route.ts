@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/auth-options';
-import { ChatProcessingClient } from '@/lib/grpc/chat-processing-client';
+import { getChatProcessingClient } from '@/lib/grpc/chat-processing-client';
 
 /**
  * POST /api/chat/cancel
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     console.log(`[CHAT-CANCEL-API] Cancelling message ${messageId} for user ${userId}`);
 
     // 3. Call gRPC cancellation service
-    const chatClient = new ChatProcessingClient(userId, organizationId);
+    const chatClient = getChatProcessingClient(organizationId.toString());
 
     try {
       const result = await chatClient.cancelMessage(
@@ -74,10 +74,8 @@ export async function POST(request: NextRequest) {
         success: false,
         message: 'Failed to cancel message via gRPC'
       }, { status: 500 });
-
-    } finally {
-      chatClient.close();
     }
+    // Note: Don't close the client - it's managed by the registry
 
   } catch (error) {
     console.error('[CHAT-CANCEL-API] Error:', error);
