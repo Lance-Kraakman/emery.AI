@@ -523,21 +523,42 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         """Extract accumulated token usage from agent's execution logs."""
         try:
             if not hasattr(agent, 'logs') or not agent.logs:
+                logger.warning("❌ DEBUG: No logs attribute or logs are empty")
                 return None
+
+            logger.info(f"📊 DEBUG: Agent has {len(agent.logs)} log entries")
+
+            # Debug: Print first log entry structure
+            if agent.logs:
+                first_log = agent.logs[0]
+                logger.info(f"📊 DEBUG: First log type: {type(first_log)}")
+                logger.info(f"📊 DEBUG: First log dir: {[attr for attr in dir(first_log) if not attr.startswith('_')]}")
+                if hasattr(first_log, '__dict__'):
+                    logger.info(f"📊 DEBUG: First log __dict__: {first_log.__dict__}")
 
             # Aggregate token usage from all steps
             total_input = 0
             total_output = 0
             model_name = ""
 
-            for log_entry in agent.logs:
+            for i, log_entry in enumerate(agent.logs):
+                logger.info(f"📊 DEBUG: Log {i} type={type(log_entry).__name__}, has input_tokens={hasattr(log_entry, 'input_tokens')}, has output_tokens={hasattr(log_entry, 'output_tokens')}")
+
                 if hasattr(log_entry, 'input_tokens') and hasattr(log_entry, 'output_tokens'):
-                    total_input += getattr(log_entry, 'input_tokens', 0)
-                    total_output += getattr(log_entry, 'output_tokens', 0)
+                    input_tok = getattr(log_entry, 'input_tokens', 0)
+                    output_tok = getattr(log_entry, 'output_tokens', 0)
+                    total_input += input_tok
+                    total_output += output_tok
                     if not model_name and hasattr(log_entry, 'model_name'):
                         model_name = log_entry.model_name
+                    logger.info(f"✅ DEBUG: Found tokens in log {i}: input={input_tok}, output={output_tok}")
+                else:
+                    logger.info(f"⚠️ DEBUG: Log {i} missing token attributes")
+
+            logger.info(f"📊 DEBUG: Total aggregated: input={total_input}, output={total_output}")
 
             if total_input == 0 and total_output == 0:
+                logger.warning(f"⚠️ DEBUG: Aggregated tokens are zero after checking {len(agent.logs)} logs")
                 return None
 
             # Import TokenUsage from model_provider
