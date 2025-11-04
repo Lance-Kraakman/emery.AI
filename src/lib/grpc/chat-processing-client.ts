@@ -20,7 +20,8 @@ import type {
   ContentChunk,
   RagContext,
   ProcessingComplete,
-  ProcessingError
+  ProcessingError,
+  StepProgress
 } from './generated/agent_worker';
 
 // Load protobuf definition
@@ -50,12 +51,13 @@ export interface ChatProcessingOptions {
 }
 
 export interface StreamingChatResponse {
-  type: 'content' | 'rag_context' | 'complete' | 'error';
+  type: 'content' | 'rag_context' | 'complete' | 'error' | 'step_progress';
   content?: string;
   sequence?: number;
   ragContext?: RagContext;
   complete?: ProcessingComplete;
   error?: ProcessingError;
+  stepProgress?: StepProgress;
   timestamp: number;
 }
 
@@ -136,6 +138,7 @@ export class ChatProcessingClient {
           hasRagContext: !!response.ragContext,
           hasComplete: !!response.complete,
           hasError: !!response.error,
+          hasStepProgress: !!response.stepProgress,
           timestamp: response.timestamp
         });
 
@@ -143,7 +146,14 @@ export class ChatProcessingClient {
         // AIDEV-NOTE: keepCase:false converts snake_case proto fields to camelCase at runtime
         let streamingResponse: StreamingChatResponse;
 
-        if (response.contentChunk) {
+        if (response.stepProgress) {
+          // Real-time step execution progress
+          streamingResponse = {
+            type: 'step_progress',
+            stepProgress: response.stepProgress,
+            timestamp: response.timestamp
+          };
+        } else if (response.contentChunk) {
           streamingResponse = {
             type: 'content',
             content: response.contentChunk.content,

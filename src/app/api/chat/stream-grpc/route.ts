@@ -455,7 +455,24 @@ export async function POST(req: NextRequest) {
             });
 
             try {
-              if (response.type === 'content' && response.content) {
+              if (response.type === 'step_progress' && response.stepProgress) {
+                // Real-time step execution progress
+                const step = response.stepProgress;
+                const stepTypeNames = ['PLANNING', 'ACTION', 'REASONING', 'FINAL'];
+                const stepTypeName = stepTypeNames[step.stepType || 0];
+
+                console.log(`[CHAT-GRPC-API] Step progress [${step.stepIndex}]:`, {
+                  type: stepTypeName,
+                  name: step.stepName,
+                  contentLength: step.content?.length || 0,
+                  metadata: step.metadata
+                });
+
+                // AIDEV-NOTE: For now, we just log step progress
+                // In Phase 2, we can add UI indicators by sending structured events to frontend
+                // Options: Send as SSE events, or render as visible progress markers in the stream
+
+              } else if (response.type === 'content' && response.content) {
                 // Stream content chunk to frontend
                 fullAssistantResponse += response.content;
                 const chunk = new TextEncoder().encode(response.content);
