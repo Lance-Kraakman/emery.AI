@@ -483,10 +483,17 @@ export async function POST(req: NextRequest) {
                 controller.enqueue(eventChunk);
 
               } else if (response.type === 'content' && response.content) {
-                // Stream content chunk to frontend
+                // Stream content chunk to frontend as SSE event
                 fullAssistantResponse += response.content;
-                const chunk = new TextEncoder().encode(response.content);
-                controller.enqueue(chunk);
+
+                const contentEvent = {
+                  type: 'content',
+                  text: response.content
+                };
+
+                const eventData = `data: ${JSON.stringify(contentEvent)}\n\n`;
+                const eventChunk = new TextEncoder().encode(eventData);
+                controller.enqueue(eventChunk);
 
               } else if (response.type === 'rag_context' && response.ragContext) {
                 // Store RAG sources for later saving to database
