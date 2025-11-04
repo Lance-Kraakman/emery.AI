@@ -468,9 +468,19 @@ export async function POST(req: NextRequest) {
                   metadata: step.metadata
                 });
 
-                // AIDEV-NOTE: For now, we just log step progress
-                // In Phase 2, we can add UI indicators by sending structured events to frontend
-                // Options: Send as SSE events, or render as visible progress markers in the stream
+                // Send step progress event to frontend as SSE-like JSON
+                const stepEvent = {
+                  type: 'step_progress',
+                  stepType: stepTypeName,
+                  stepName: step.stepName,
+                  stepIndex: step.stepIndex,
+                  content: step.content,
+                  metadata: step.metadata
+                };
+
+                const eventData = `data: ${JSON.stringify(stepEvent)}\n\n`;
+                const eventChunk = new TextEncoder().encode(eventData);
+                controller.enqueue(eventChunk);
 
               } else if (response.type === 'content' && response.content) {
                 // Stream content chunk to frontend
