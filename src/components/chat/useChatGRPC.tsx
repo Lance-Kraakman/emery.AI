@@ -291,13 +291,7 @@ export function useChatGRPC(
 
       let assistantMessage = ''
       const assistantId = generateId()
-
-      // Add empty assistant message that we'll stream into
-      setMessages((prev) => [...prev, {
-        id: assistantId,
-        content: '',
-        role: 'assistant' as const,
-      }])
+      let messageCreated = false // Track if we've added the message to UI yet
 
       console.log('[CHAT-GRPC-HOOK] Starting to read gRPC streaming response')
 
@@ -336,12 +330,22 @@ export function useChatGRPC(
                 // Content chunk from assistant response
                 assistantMessage += eventData.text
 
-                // Update the assistant message in real-time
-                setMessages((prev) => prev.map((msg) =>
-                  msg.id === assistantId
-                    ? { ...msg, content: assistantMessage }
-                    : msg
-                ))
+                // Create message on first content chunk (not before)
+                if (!messageCreated) {
+                  setMessages((prev) => [...prev, {
+                    id: assistantId,
+                    content: assistantMessage,
+                    role: 'assistant' as const,
+                  }])
+                  messageCreated = true
+                } else {
+                  // Update the assistant message in real-time
+                  setMessages((prev) => prev.map((msg) =>
+                    msg.id === assistantId
+                      ? { ...msg, content: assistantMessage }
+                      : msg
+                  ))
+                }
               }
             } catch (e) {
               console.warn('[CHAT-GRPC-HOOK] Failed to parse SSE event:', line, e)
