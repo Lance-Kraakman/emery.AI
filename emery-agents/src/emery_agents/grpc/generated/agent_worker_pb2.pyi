@@ -23,6 +23,13 @@ class WorkerStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     WORKER_DEGRADED: _ClassVar[WorkerStatus]
     WORKER_UNHEALTHY: _ClassVar[WorkerStatus]
     WORKER_SHUTTING_DOWN: _ClassVar[WorkerStatus]
+
+class StepType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    STEP_PLANNING: _ClassVar[StepType]
+    STEP_ACTION: _ClassVar[StepType]
+    STEP_REASONING: _ClassVar[StepType]
+    STEP_FINAL: _ClassVar[StepType]
 TASK_PENDING: TaskStatus
 TASK_IN_PROGRESS: TaskStatus
 TASK_COMPLETED: TaskStatus
@@ -34,6 +41,10 @@ WORKER_BUSY: WorkerStatus
 WORKER_DEGRADED: WorkerStatus
 WORKER_UNHEALTHY: WorkerStatus
 WORKER_SHUTTING_DOWN: WorkerStatus
+STEP_PLANNING: StepType
+STEP_ACTION: StepType
+STEP_REASONING: StepType
+STEP_FINAL: StepType
 
 class TaskRequest(_message.Message):
     __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name", "organization_model")
@@ -275,18 +286,20 @@ class ProcessMessageRequest(_message.Message):
     def __init__(self, message_content: _Optional[str] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., context: _Optional[_Union[ChatContext, _Mapping]] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageResponse(_message.Message):
-    __slots__ = ("content_chunk", "rag_context", "complete", "error", "timestamp")
+    __slots__ = ("content_chunk", "rag_context", "complete", "error", "step_progress", "timestamp")
     CONTENT_CHUNK_FIELD_NUMBER: _ClassVar[int]
     RAG_CONTEXT_FIELD_NUMBER: _ClassVar[int]
     COMPLETE_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
+    STEP_PROGRESS_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     content_chunk: ContentChunk
     rag_context: RagContext
     complete: ProcessingComplete
     error: ProcessingError
+    step_progress: StepProgress
     timestamp: int
-    def __init__(self, content_chunk: _Optional[_Union[ContentChunk, _Mapping]] = ..., rag_context: _Optional[_Union[RagContext, _Mapping]] = ..., complete: _Optional[_Union[ProcessingComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., timestamp: _Optional[int] = ...) -> None: ...
+    def __init__(self, content_chunk: _Optional[_Union[ContentChunk, _Mapping]] = ..., rag_context: _Optional[_Union[RagContext, _Mapping]] = ..., complete: _Optional[_Union[ProcessingComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., step_progress: _Optional[_Union[StepProgress, _Mapping]] = ..., timestamp: _Optional[int] = ...) -> None: ...
 
 class HistoryMessage(_message.Message):
     __slots__ = ("role", "content", "timestamp")
@@ -367,6 +380,27 @@ class ProcessingError(_message.Message):
     error_message: str
     error_details: _containers.ScalarMap[str, str]
     def __init__(self, error_code: _Optional[str] = ..., error_message: _Optional[str] = ..., error_details: _Optional[_Mapping[str, str]] = ...) -> None: ...
+
+class StepProgress(_message.Message):
+    __slots__ = ("step_type", "step_name", "content", "metadata", "step_index")
+    class MetadataEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    STEP_TYPE_FIELD_NUMBER: _ClassVar[int]
+    STEP_NAME_FIELD_NUMBER: _ClassVar[int]
+    CONTENT_FIELD_NUMBER: _ClassVar[int]
+    METADATA_FIELD_NUMBER: _ClassVar[int]
+    STEP_INDEX_FIELD_NUMBER: _ClassVar[int]
+    step_type: StepType
+    step_name: str
+    content: str
+    metadata: _containers.ScalarMap[str, str]
+    step_index: int
+    def __init__(self, step_type: _Optional[_Union[StepType, str]] = ..., step_name: _Optional[str] = ..., content: _Optional[str] = ..., metadata: _Optional[_Mapping[str, str]] = ..., step_index: _Optional[int] = ...) -> None: ...
 
 class ChatContext(_message.Message):
     __slots__ = ("domain_type", "domain_id", "enable_rag", "rag_threshold", "max_rag_docs", "primary_rag_weight", "assembled_rag_context", "rag_sources")
