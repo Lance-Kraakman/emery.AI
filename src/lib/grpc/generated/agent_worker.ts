@@ -403,6 +403,8 @@ export interface ProcessMessageRequest {
   tools: ToolConfig[];
   /** Optional: model override for this chat message */
   model: string;
+  /** Unique message identifier for cancellation */
+  messageId: string;
 }
 
 /** Streaming response from AI processing */
@@ -523,6 +525,24 @@ export interface StepProgress {
 export interface StepProgress_MetadataEntry {
   key: string;
   value: string;
+}
+
+/** Request to cancel an in-progress message */
+export interface CancelMessageRequest {
+  /** Message identifier to cancel */
+  messageId: string;
+  /** User requesting cancellation (for authorization) */
+  userId: string;
+  /** Organization context */
+  organizationId: number;
+}
+
+/** Response to message cancellation request */
+export interface CancelMessageResponse {
+  /** Whether cancellation was successful */
+  success: boolean;
+  /** Status message */
+  message: string;
 }
 
 /** Chat context configuration for AI processing */
@@ -2674,6 +2694,7 @@ function createBaseProcessMessageRequest(): ProcessMessageRequest {
     conversationHistory: [],
     tools: [],
     model: "",
+    messageId: "",
   };
 }
 
@@ -2699,6 +2720,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     }
     if (message.model !== "") {
       writer.uint32(58).string(message.model);
+    }
+    if (message.messageId !== "") {
+      writer.uint32(66).string(message.messageId);
     }
     return writer;
   },
@@ -2766,6 +2790,14 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
           message.model = reader.string();
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.messageId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2786,6 +2818,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
         : [],
       tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
       model: isSet(object.model) ? globalThis.String(object.model) : "",
+      messageId: isSet(object.messageId) ? globalThis.String(object.messageId) : "",
     };
   },
 
@@ -2812,6 +2845,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     if (message.model !== "") {
       obj.model = message.model;
     }
+    if (message.messageId !== "") {
+      obj.messageId = message.messageId;
+    }
     return obj;
   },
 
@@ -2829,6 +2865,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     message.conversationHistory = object.conversationHistory?.map((e) => HistoryMessage.fromPartial(e)) || [];
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.model = object.model ?? "";
+    message.messageId = object.messageId ?? "";
     return message;
   },
 };
@@ -4012,6 +4049,174 @@ export const StepProgress_MetadataEntry: MessageFns<StepProgress_MetadataEntry> 
   },
 };
 
+function createBaseCancelMessageRequest(): CancelMessageRequest {
+  return { messageId: "", userId: "", organizationId: 0 };
+}
+
+export const CancelMessageRequest: MessageFns<CancelMessageRequest> = {
+  encode(message: CancelMessageRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.messageId !== "") {
+      writer.uint32(10).string(message.messageId);
+    }
+    if (message.userId !== "") {
+      writer.uint32(18).string(message.userId);
+    }
+    if (message.organizationId !== 0) {
+      writer.uint32(24).int32(message.organizationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelMessageRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCancelMessageRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.messageId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.organizationId = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CancelMessageRequest {
+    return {
+      messageId: isSet(object.messageId) ? globalThis.String(object.messageId) : "",
+      userId: isSet(object.userId) ? globalThis.String(object.userId) : "",
+      organizationId: isSet(object.organizationId) ? globalThis.Number(object.organizationId) : 0,
+    };
+  },
+
+  toJSON(message: CancelMessageRequest): unknown {
+    const obj: any = {};
+    if (message.messageId !== "") {
+      obj.messageId = message.messageId;
+    }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.organizationId !== 0) {
+      obj.organizationId = Math.round(message.organizationId);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CancelMessageRequest>, I>>(base?: I): CancelMessageRequest {
+    return CancelMessageRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CancelMessageRequest>, I>>(object: I): CancelMessageRequest {
+    const message = createBaseCancelMessageRequest();
+    message.messageId = object.messageId ?? "";
+    message.userId = object.userId ?? "";
+    message.organizationId = object.organizationId ?? 0;
+    return message;
+  },
+};
+
+function createBaseCancelMessageResponse(): CancelMessageResponse {
+  return { success: false, message: "" };
+}
+
+export const CancelMessageResponse: MessageFns<CancelMessageResponse> = {
+  encode(message: CancelMessageResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.success !== false) {
+      writer.uint32(8).bool(message.success);
+    }
+    if (message.message !== "") {
+      writer.uint32(18).string(message.message);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelMessageResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCancelMessageResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.success = reader.bool();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.message = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CancelMessageResponse {
+    return {
+      success: isSet(object.success) ? globalThis.Boolean(object.success) : false,
+      message: isSet(object.message) ? globalThis.String(object.message) : "",
+    };
+  },
+
+  toJSON(message: CancelMessageResponse): unknown {
+    const obj: any = {};
+    if (message.success !== false) {
+      obj.success = message.success;
+    }
+    if (message.message !== "") {
+      obj.message = message.message;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CancelMessageResponse>, I>>(base?: I): CancelMessageResponse {
+    return CancelMessageResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CancelMessageResponse>, I>>(object: I): CancelMessageResponse {
+    const message = createBaseCancelMessageResponse();
+    message.success = object.success ?? false;
+    message.message = object.message ?? "";
+    return message;
+  },
+};
+
 function createBaseChatContext(): ChatContext {
   return {
     domainType: "",
@@ -4302,11 +4507,24 @@ export const ChatProcessingServiceService = {
       Buffer.from(ProcessMessageResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ProcessMessageResponse => ProcessMessageResponse.decode(value),
   },
+  /** Cancel an in-progress message processing */
+  cancelMessage: {
+    path: "/emery.agents.ChatProcessingService/CancelMessage",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: CancelMessageRequest): Buffer => Buffer.from(CancelMessageRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CancelMessageRequest => CancelMessageRequest.decode(value),
+    responseSerialize: (value: CancelMessageResponse): Buffer =>
+      Buffer.from(CancelMessageResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CancelMessageResponse => CancelMessageResponse.decode(value),
+  },
 } as const;
 
 export interface ChatProcessingServiceServer extends UntypedServiceImplementation {
   /** Process a message and stream AI response (no database operations) */
   processMessage: handleServerStreamingCall<ProcessMessageRequest, ProcessMessageResponse>;
+  /** Cancel an in-progress message processing */
+  cancelMessage: handleUnaryCall<CancelMessageRequest, CancelMessageResponse>;
 }
 
 export interface ChatProcessingServiceClient extends Client {
@@ -4320,6 +4538,22 @@ export interface ChatProcessingServiceClient extends Client {
     metadata?: Metadata,
     options?: Partial<CallOptions>,
   ): ClientReadableStream<ProcessMessageResponse>;
+  /** Cancel an in-progress message processing */
+  cancelMessage(
+    request: CancelMessageRequest,
+    callback: (error: ServiceError | null, response: CancelMessageResponse) => void,
+  ): ClientUnaryCall;
+  cancelMessage(
+    request: CancelMessageRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CancelMessageResponse) => void,
+  ): ClientUnaryCall;
+  cancelMessage(
+    request: CancelMessageRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CancelMessageResponse) => void,
+  ): ClientUnaryCall;
 }
 
 export const ChatProcessingServiceClient = makeGenericClientConstructor(

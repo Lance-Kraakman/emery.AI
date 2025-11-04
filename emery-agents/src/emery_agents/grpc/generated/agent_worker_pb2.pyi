@@ -268,7 +268,7 @@ class InstructionConfig(_message.Message):
     def __init__(self, instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., model: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageRequest(_message.Message):
-    __slots__ = ("message_content", "user_id", "organization_id", "context", "conversation_history", "tools", "model")
+    __slots__ = ("message_content", "user_id", "organization_id", "context", "conversation_history", "tools", "model", "message_id")
     MESSAGE_CONTENT_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
@@ -276,6 +276,7 @@ class ProcessMessageRequest(_message.Message):
     CONVERSATION_HISTORY_FIELD_NUMBER: _ClassVar[int]
     TOOLS_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
     message_content: str
     user_id: str
     organization_id: int
@@ -283,7 +284,8 @@ class ProcessMessageRequest(_message.Message):
     conversation_history: _containers.RepeatedCompositeFieldContainer[HistoryMessage]
     tools: _containers.RepeatedCompositeFieldContainer[ToolConfig]
     model: str
-    def __init__(self, message_content: _Optional[str] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., context: _Optional[_Union[ChatContext, _Mapping]] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ...) -> None: ...
+    message_id: str
+    def __init__(self, message_content: _Optional[str] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., context: _Optional[_Union[ChatContext, _Mapping]] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ..., message_id: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageResponse(_message.Message):
     __slots__ = ("content_chunk", "rag_context", "complete", "error", "step_progress", "timestamp")
@@ -401,6 +403,24 @@ class StepProgress(_message.Message):
     metadata: _containers.ScalarMap[str, str]
     step_index: int
     def __init__(self, step_type: _Optional[_Union[StepType, str]] = ..., step_name: _Optional[str] = ..., content: _Optional[str] = ..., metadata: _Optional[_Mapping[str, str]] = ..., step_index: _Optional[int] = ...) -> None: ...
+
+class CancelMessageRequest(_message.Message):
+    __slots__ = ("message_id", "user_id", "organization_id")
+    MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
+    message_id: str
+    user_id: str
+    organization_id: int
+    def __init__(self, message_id: _Optional[str] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ...) -> None: ...
+
+class CancelMessageResponse(_message.Message):
+    __slots__ = ("success", "message")
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    message: str
+    def __init__(self, success: bool = ..., message: _Optional[str] = ...) -> None: ...
 
 class ChatContext(_message.Message):
     __slots__ = ("domain_type", "domain_id", "enable_rag", "rag_threshold", "max_rag_docs", "primary_rag_weight", "assembled_rag_context", "rag_sources")

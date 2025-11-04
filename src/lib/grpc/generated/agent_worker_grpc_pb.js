@@ -4,6 +4,28 @@
 var grpc = require('@grpc/grpc-js');
 var agent_worker_pb = require('./agent_worker_pb.js');
 
+function serialize_emery_agents_CancelMessageRequest(arg) {
+  if (!(arg instanceof agent_worker_pb.CancelMessageRequest)) {
+    throw new Error('Expected argument of type emery.agents.CancelMessageRequest');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_emery_agents_CancelMessageRequest(buffer_arg) {
+  return agent_worker_pb.CancelMessageRequest.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_emery_agents_CancelMessageResponse(arg) {
+  if (!(arg instanceof agent_worker_pb.CancelMessageResponse)) {
+    throw new Error('Expected argument of type emery.agents.CancelMessageResponse');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_emery_agents_CancelMessageResponse(buffer_arg) {
+  return agent_worker_pb.CancelMessageResponse.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
 function serialize_emery_agents_CancelTaskRequest(arg) {
   if (!(arg instanceof agent_worker_pb.CancelTaskRequest)) {
     throw new Error('Expected argument of type emery.agents.CancelTaskRequest');
@@ -147,6 +169,18 @@ processMessage: {
     requestDeserialize: deserialize_emery_agents_ProcessMessageRequest,
     responseSerialize: serialize_emery_agents_ProcessMessageResponse,
     responseDeserialize: deserialize_emery_agents_ProcessMessageResponse,
+  },
+  // Cancel an in-progress message processing
+cancelMessage: {
+    path: '/emery.agents.ChatProcessingService/CancelMessage',
+    requestStream: false,
+    responseStream: false,
+    requestType: agent_worker_pb.CancelMessageRequest,
+    responseType: agent_worker_pb.CancelMessageResponse,
+    requestSerialize: serialize_emery_agents_CancelMessageRequest,
+    requestDeserialize: deserialize_emery_agents_CancelMessageRequest,
+    responseSerialize: serialize_emery_agents_CancelMessageResponse,
+    responseDeserialize: deserialize_emery_agents_CancelMessageResponse,
   },
 };
 
