@@ -173,25 +173,65 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             else:
                 logger.info("🔧 No organization model specified, will use system default")
 
-            async for chunk in self._stream_tool_calling_agent_response(
+            async for response_dict in self._stream_tool_calling_agent_response(
                 conversation_messages,
                 tools_to_use,
                 rag_context_data,
                 domain_context=request.context,
                 org_model=org_model
             ):
-                total_content += chunk
+                # Handle different response types from streaming
+                if isinstance(response_dict, dict):
+                    response_type = response_dict.get("type")
 
-                # Send content chunk
-                chunk_response = agent_worker_pb2.ProcessMessageResponse(
-                    content_chunk=agent_worker_pb2.ContentChunk(
-                        content=chunk,
-                        sequence=sequence
-                    ),
-                    timestamp=int(time.time() * 1000)
-                )
-                yield chunk_response
-                sequence += 1
+                    if response_type == "step_progress":
+                        # Send step progress update
+                        step_type_map = {
+                            "STEP_PLANNING": agent_worker_pb2.STEP_PLANNING,
+                            "STEP_ACTION": agent_worker_pb2.STEP_ACTION,
+                            "STEP_REASONING": agent_worker_pb2.STEP_REASONING,
+                            "STEP_FINAL": agent_worker_pb2.STEP_FINAL
+                        }
+
+                        step_response = agent_worker_pb2.ProcessMessageResponse(
+                            step_progress=agent_worker_pb2.StepProgress(
+                                step_type=step_type_map.get(response_dict.get("step_type"), agent_worker_pb2.STEP_PLANNING),
+                                step_name=response_dict.get("step_name", ""),
+                                content=response_dict.get("content", ""),
+                                metadata=response_dict.get("metadata", {}),
+                                step_index=response_dict.get("step_index", 0)
+                            ),
+                            timestamp=int(time.time() * 1000)
+                        )
+                        yield step_response
+
+                    elif response_type == "content_chunk":
+                        # Send content chunk (final answer text)
+                        chunk = response_dict.get("content", "")
+                        total_content += chunk
+
+                        chunk_response = agent_worker_pb2.ProcessMessageResponse(
+                            content_chunk=agent_worker_pb2.ContentChunk(
+                                content=chunk,
+                                sequence=sequence
+                            ),
+                            timestamp=int(time.time() * 1000)
+                        )
+                        yield chunk_response
+                        sequence += 1
+
+                else:
+                    # Legacy fallback for string responses (error messages)
+                    total_content += str(response_dict)
+                    chunk_response = agent_worker_pb2.ProcessMessageResponse(
+                        content_chunk=agent_worker_pb2.ContentChunk(
+                            content=str(response_dict),
+                            sequence=sequence
+                        ),
+                        timestamp=int(time.time() * 1000)
+                    )
+                    yield chunk_response
+                    sequence += 1
 
             # 4. Send completion marker
             processing_time = int((time.time() - start_time) * 1000)
@@ -294,7 +334,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         rag_context_data: Optional['RagContextData'],
         domain_context: Optional['agent_worker_pb2.ChatContext'] = None,
         org_model: Optional[str] = None
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream AI response using ToolCallingAgent with proper streaming support.
         Always uses ToolCallingAgent approach whether tools are provided or not.
@@ -323,32 +363,94 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             full_prompt = self._build_conversation_prompt(system_prompt, conversation_messages)
             logger.info(f"💬 Built conversation prompt: {len(full_prompt)} chars")
 
-            # 5. Execute with ToolCallingAgent (synchronous) and stream result
-            logger.info("🚀 Executing ToolCallingAgent...")
-            result = agent.run(full_prompt)  # This is synchronous in smolagents
-            logger.info(f"✅ Execution completed: {len(result)} chars")
-            logger.info(f"📝 Result type: {type(result)}")
-            logger.info(f"📝 Result preview: {str(result)[:200]}...")
+            # 5. Execute with ToolCallingAgent with real streaming
+            logger.info("🚀 Executing ToolCallingAgent with stream=True...")
 
-            # Extract and store token usage from agent memory
+            # Import smolagents step types for proper type checking
+            from smolagents.memory import ActionStep, PlanningStep
+            from smolagents.types import AgentText
+
+            step_index = 0
+            final_answer_text = ""
+
+            # Use stream=True for real-time step-by-step progress
+            for step in agent.run(full_prompt, stream=True):
+                logger.info(f"📊 Step {step_index}: {type(step).__name__}")
+
+                if isinstance(step, PlanningStep):
+                    # Agent is planning next action
+                    planning_content = str(step.thoughts) if hasattr(step, 'thoughts') else "Planning next action..."
+                    logger.info(f"🧠 Planning: {planning_content[:100]}...")
+
+                    yield {
+                        "type": "step_progress",
+                        "step_type": "STEP_PLANNING",
+                        "step_name": "Planning",
+                        "content": planning_content,
+                        "metadata": {},
+                        "step_index": step_index
+                    }
+
+                elif isinstance(step, ActionStep):
+                    # Agent is executing a tool
+                    tool_name = step.tool_name if hasattr(step, 'tool_name') else "unknown"
+                    tool_args = str(step.tool_arguments) if hasattr(step, 'tool_arguments') else "{}"
+                    observations = str(step.observations) if hasattr(step, 'observations') else ""
+
+                    logger.info(f"🔧 Action: {tool_name} with args {tool_args[:100]}")
+
+                    yield {
+                        "type": "step_progress",
+                        "step_type": "STEP_ACTION",
+                        "step_name": f"Tool: {tool_name}",
+                        "content": observations,
+                        "metadata": {
+                            "tool": tool_name,
+                            "arguments": tool_args
+                        },
+                        "step_index": step_index
+                    }
+
+                elif isinstance(step, AgentText):
+                    # Final answer reached
+                    final_answer_text = str(step)
+                    logger.info(f"✅ Final answer: {len(final_answer_text)} chars")
+
+                    # Yield final step indicator
+                    yield {
+                        "type": "step_progress",
+                        "step_type": "STEP_FINAL",
+                        "step_name": "Final Answer",
+                        "content": "Generating final response...",
+                        "metadata": {},
+                        "step_index": step_index
+                    }
+
+                    # Stream final answer as content chunks
+                    async for chunk in self._stream_text_chunks(final_answer_text):
+                        yield {
+                            "type": "content_chunk",
+                            "content": chunk
+                        }
+
+                step_index += 1
+
+            # Extract token usage after execution completes
             self.last_token_usage = self._extract_token_usage_from_agent(agent)
             if self.last_token_usage:
                 logger.info(f"💰 Token usage captured: {self.last_token_usage.total_tokens} tokens, ${self.last_token_usage.cost_usd:.6f}")
             else:
-                logger.warning("⚠️ No token usage found in agent logs")
+                logger.warning("⚠️ No token usage found in agent memory")
 
-            # 6. Stream the result by chunks to simulate streaming
-            chunk_count = 0
-            async for chunk in self._stream_text_chunks(result):
-                chunk_count += 1
-                logger.info(f"📤 Yielding chunk {chunk_count}: {len(chunk)} chars")
-                yield chunk
-
-            logger.info(f"✅ Streamed {chunk_count} chunks total")
+            logger.info(f"✅ Completed streaming with {step_index} steps")
 
         except Exception as e:
             logger.error(f"❌ ToolCallingAgent execution failed: {e}")
-            yield f"I apologize, but I encountered an error processing your request: {str(e)}"
+            # Yield error as content chunk
+            yield {
+                "type": "content_chunk",
+                "content": f"I apologize, but I encountered an error processing your request: {str(e)}"
+            }
 
     def _build_system_prompt_with_rag(
         self,
