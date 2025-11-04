@@ -332,20 +332,20 @@ export function useChatGRPC(
                   name: eventData.stepName,
                   index: eventData.stepIndex
                 })
+              } else if (eventData.type === 'content') {
+                // Content chunk from assistant response
+                assistantMessage += eventData.text
+
+                // Update the assistant message in real-time
+                setMessages((prev) => prev.map((msg) =>
+                  msg.id === assistantId
+                    ? { ...msg, content: assistantMessage }
+                    : msg
+                ))
               }
             } catch (e) {
               console.warn('[CHAT-GRPC-HOOK] Failed to parse SSE event:', line, e)
             }
-          } else if (line.trim()) {
-            // Plain text chunk (assistant response)
-            assistantMessage += line
-
-            // Update the assistant message in real-time
-            setMessages((prev) => prev.map((msg) =>
-              msg.id === assistantId
-                ? { ...msg, content: assistantMessage }
-                : msg
-            ))
           }
         }
       }
