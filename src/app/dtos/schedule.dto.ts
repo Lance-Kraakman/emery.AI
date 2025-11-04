@@ -37,14 +37,6 @@ interface BaseTriggerConfigDTO {
 }
 
 /**
- * Manual trigger DTO
- * Trigger executed on-demand by users or API calls
- */
-export interface ManualTriggerConfigDTO extends BaseTriggerConfigDTO {
-  type: 'MANUAL';
-}
-
-/**
  * Calendar trigger DTO
  * Scheduled execution based on RRULE (iCalendar recurrence rule)
  */
@@ -83,7 +75,6 @@ export interface WebhookTriggerConfigDTO extends BaseTriggerConfigDTO {
  * TypeScript can narrow the type based on the 'type' field
  */
 export type TriggerConfigDTO =
-  | ManualTriggerConfigDTO
   | CalendarTriggerConfigDTO
   | DatabaseEventTriggerConfigDTO
   | WebhookTriggerConfigDTO;

@@ -50,8 +50,6 @@ interface ScheduleCardProps {
 function getScheduleIcon(schedule: ScheduleConfigurationDTO) {
   const trigger = schedule.trigger;
   switch (trigger.type) {
-    case 'MANUAL':
-      return Zap;
     case 'CALENDAR':
       return Calendar;
     case 'DATABASE_EVENT':
@@ -59,16 +57,12 @@ function getScheduleIcon(schedule: ScheduleConfigurationDTO) {
     case 'WEBHOOK':
       return Globe;
     default:
-      return Zap;
+      return Calendar;
   }
 }
 
 function getScheduleSummary(schedule: ScheduleConfigurationDTO): string {
   const trigger = schedule.trigger;
-
-  if (trigger.type === 'MANUAL') {
-    return trigger.description || 'Manual execution on demand';
-  }
 
   if (trigger.type === 'CALENDAR') {
     const rrule = trigger.rrule || 'Not configured';

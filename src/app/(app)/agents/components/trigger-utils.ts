@@ -39,8 +39,6 @@ export const getWebhookRequiresSignature = (trigger: TriggerConfig): boolean =>
 // Human-readable trigger type labels
 export const getTriggerTypeLabel = (triggerType: TriggerConfig['type']): string => {
   switch (triggerType) {
-    case 'MANUAL':
-      return 'Manual Execution';
     case 'CALENDAR':
       return 'Scheduled/Calendar';
     case 'DATABASE_EVENT':

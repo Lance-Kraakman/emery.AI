@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Settings, Zap, Calendar, Link2, Plus, ChevronRight } from 'lucide-react';
+import { Settings, Zap, Calendar, Link2, Plus, ChevronRight, ClipboardList } from 'lucide-react';
 import type { AgentDTO } from '@/app/dtos/agent.dto';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useRouter } from 'next/navigation';
 import { AgentAvatar } from '@/components/agents/AgentAvatar';
 import { createDefaultAgentSkill } from '@/app/actions/skills';
+import { TaskAssignmentModal } from './TaskAssignmentModal';
 
 interface CompactAgentHeaderProps {
   agent: AgentDTO;
@@ -34,6 +35,7 @@ export function CompactAgentHeader({
   const router = useRouter();
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [schedulesOpen, setSchedulesOpen] = useState(false);
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
 
   const activeSchedules = agent.schedules?.filter(s => s.enabled).length || 0;
   const totalSchedules = agent.schedules?.length || 0;
@@ -110,6 +112,16 @@ export function CompactAgentHeader({
 
         {/* Separator */}
         <div className="h-6 w-px bg-border" />
+
+        {/* Assign Task Button */}
+        <button
+          onClick={() => setTaskDialogOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors bg-primary text-primary-foreground hover:bg-primary/90"
+          title="Assign a new task to this agent"
+        >
+          <ClipboardList className="h-3.5 w-3.5" />
+          Assign Task
+        </button>
 
         {/* Skills Dropdown */}
         <Popover open={skillsOpen} onOpenChange={setSkillsOpen}>
@@ -253,6 +265,13 @@ export function CompactAgentHeader({
           Connections ({connections.length})
         </button>
       </div>
+
+      {/* Task Assignment Modal */}
+      <TaskAssignmentModal
+        isOpen={taskDialogOpen}
+        onClose={() => setTaskDialogOpen(false)}
+        agent={agent}
+      />
     </div>
   );
 }

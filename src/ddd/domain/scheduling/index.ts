@@ -7,13 +7,12 @@
 
 // Value Objects - Trigger Configurations
 export { TriggerConfigs } from './value-objects/trigger-config';
-export type { 
-  TriggerType, 
-  TriggerConfig, 
-  ManualTriggerConfig, 
-  CalendarTriggerConfig, 
-  DatabaseEventTriggerConfig, 
-  WebhookTriggerConfig 
+export type {
+  TriggerType,
+  TriggerConfig,
+  CalendarTriggerConfig,
+  DatabaseEventTriggerConfig,
+  WebhookTriggerConfig
 } from './value-objects/trigger-config';
 
 // Common Types - Scheduling Interfaces

@@ -11,6 +11,40 @@ import type { Result, CreateRowCommand, UpdateRowCommand } from "./types";
 import { Row, RowId } from "@/ddd/domain/tables/value-objects/row";
 import { TableId, UserId } from "@/ddd/domain/shared/value-objects";
 import { RowMapper, type RowDTO } from "@/app/mappers/row-mapper";
+import type { TableField } from "@/ddd/domain/tables/value-objects/table-field";
+
+/**
+ * Convert row data from field names to field IDs
+ *
+ * AIDEV-NOTE: DSG grid sends data with field names as keys: { name: "value", age: 123 }
+ * But Row.fromPlainObject expects numeric field IDs: { 6: "value", 7: 123 }
+ * This function performs the conversion using the table's field definitions.
+ *
+ * @param rowData - Row data with field names as keys
+ * @param tableFields - Table field definitions for mapping names to IDs
+ * @returns Row data with numeric field IDs as keys
+ */
+function convertFieldNamesToIds(
+  rowData: Record<string, any>,
+  tableFields: readonly TableField[]
+): Record<string, any> {
+  const convertedData: Record<string, any> = {};
+
+  for (const field of tableFields) {
+    if (field.name === 'id') continue; // Skip id field - it's handled separately
+    const fieldKey = field.id.value.toString();
+    if (rowData[field.name] !== undefined) {
+      convertedData[fieldKey] = rowData[field.name];
+    }
+  }
+
+  // Preserve row ID if provided
+  if (rowData.id) {
+    convertedData.id = rowData.id;
+  }
+
+  return convertedData;
+}
 
 
 export async function createRow(data: CreateRowCommand, revalidateUrl?: string): Promise<Result> {
@@ -39,8 +73,10 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
       };
     }
 
-    // Convert plain data to Row entity using table field information
-    const row = Row.fromPlainObject(rowData || {}, tableId, table.fields);
+    // Convert field names to field IDs before creating Row entity
+    // AIDEV-NOTE: DSG sends { name: "value" }, Row.fromPlainObject expects { 6: "value" }
+    const convertedData = convertFieldNamesToIds(rowData || {}, table.fields);
+    const row = Row.fromPlainObject(convertedData, tableId, table.fields);
 
     // AIDEV-NOTE: Ensure we have a valid user ID
     if (!session.user?.id || typeof session.user.id !== 'string') {
@@ -120,7 +156,11 @@ export async function createRows(data: { tableId: number; rows: Record<string, a
     }
 
     // Convert all plain data to Row entities
-    const rows = rowsData.map(rowData => Row.fromPlainObject(rowData, tableId, table.fields));
+    // AIDEV-NOTE: DSG sends { name: "value" }, Row.fromPlainObject expects { 6: "value" }
+    const rows = rowsData.map(rowData => {
+      const convertedData = convertFieldNamesToIds(rowData, table.fields);
+      return Row.fromPlainObject(convertedData, tableId, table.fields);
+    });
 
     // AIDEV-NOTE: Ensure we have a valid user ID
     if (!session.user?.id || typeof session.user.id !== 'string') {

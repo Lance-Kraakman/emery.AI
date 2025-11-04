@@ -54,13 +54,6 @@ interface TriggerTypeOption {
 
 const triggerTypes: TriggerTypeOption[] = [
   {
-    type: 'MANUAL',
-    title: 'Manual Execution',
-    description: 'Trigger manually from dashboard or via API calls',
-    icon: Zap,
-    badge: 'Default'
-  },
-  {
     type: 'CALENDAR',
     title: 'Scheduled',
     description: 'Run on a recurring schedule with timezone support',
@@ -91,7 +84,7 @@ export function TriggerConfigModal({
   mode = 'edit',
   scheduleIndex = 0
 }: TriggerConfigModalProps) {
-  const [selectedType, setSelectedType] = useState<TriggerType>('MANUAL');
+  const [selectedType, setSelectedType] = useState<TriggerType>('CALENDAR');
   const [currentStep, setCurrentStep] = useState<'select' | 'configure' | 'instructions' | 'review'>('select');
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
@@ -125,7 +118,7 @@ export function TriggerConfigModal({
 
     if (mode === 'create') {
       // Reset to defaults for creating new schedule
-      setSelectedType('MANUAL');
+      setSelectedType('CALENDAR');
       setManualConfig({ description: '' });
       setCalendarConfig({ rrule: '', timezone: 'UTC', startDate: undefined });
       setDatabaseConfig({ operations: ['INSERT', 'UPDATE'], tableId: undefined });
@@ -140,9 +133,7 @@ export function TriggerConfigModal({
       const trigger = schedule.trigger;
       setSelectedType(trigger.type);
 
-      if (trigger.type === 'MANUAL') {
-        setManualConfig({ description: trigger.description || '' });
-      } else if (trigger.type === 'CALENDAR') {
+      if (trigger.type === 'CALENDAR') {
         setCalendarConfig({
           rrule: trigger.rrule || '',
           timezone: trigger.timezone || 'UTC',
@@ -227,9 +218,6 @@ export function TriggerConfigModal({
       let triggerConfig: TriggerConfig;
 
       switch (selectedType) {
-        case 'MANUAL':
-          triggerConfig = TriggerConfigs.manual(true, manualConfig.description);
-          break;
         case 'CALENDAR':
           triggerConfig = TriggerConfigs.calendar(calendarConfig.rrule, {
             timezone: calendarConfig.timezone,
@@ -350,8 +338,6 @@ export function TriggerConfigModal({
 
     if (currentStep === 'configure') {
       switch (selectedType) {
-        case 'MANUAL':
-          return true; // Always valid
         case 'CALENDAR':
           return !!calendarConfig.rrule;
         case 'DATABASE_EVENT':
@@ -508,36 +494,6 @@ export function TriggerConfigModal({
 
       {currentStep === 'configure' && (
         <div className="p-6">
-          {selectedType === 'MANUAL' && (
-            <div className="space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <Info className="h-5 w-5 text-green-600 mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-green-900">Manual Execution</h4>
-                    <p className="text-sm text-green-700 mt-1">
-                      This agent can be triggered from the dashboard, via API calls, or when referenced in chat conversations.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="manual-description">Execution Context (Optional)</Label>
-                <Textarea
-                  id="manual-description"
-                  value={manualConfig.description}
-                  onChange={(e) => setManualConfig({ description: e.target.value })}
-                  placeholder="Describe when this agent should be triggered manually..."
-                  rows={3}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Help users understand when to trigger this agent
-                </p>
-              </div>
-            </div>
-          )}
-
           {selectedType === 'CALENDAR' && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
@@ -753,12 +709,6 @@ export function TriggerConfigModal({
               </div>
 
               <div className="space-y-3 text-sm">
-                {selectedType === 'MANUAL' && (
-                  <div>
-                    <strong>Execution Context:</strong> {manualConfig.description || 'None specified'}
-                  </div>
-                )}
-
                 {selectedType === 'CALENDAR' && (
                   <>
                     <div><strong>Timezone:</strong> {calendarConfig.timezone}</div>
