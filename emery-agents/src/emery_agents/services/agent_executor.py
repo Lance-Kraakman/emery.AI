@@ -15,7 +15,7 @@ from smolagents import CodeAgent, ToolCallingAgent
 
 from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode, AgentId, OrganizationId
-from ..grpc.generated.agent_worker_pb2 import TaskRequest, SkillConfig, ToolConfig
+from ..grpc.generated.agent_worker_pb2 import TaskRequest, SkillConfig, ToolConfig, TokenUsage as TokenUsageProto
 from .model_provider import SmolagentsModelProvider
 from .tool_loader import UnifiedToolLoader
 
@@ -39,6 +39,31 @@ class AgentExecutor:
         self.tool_loader = tool_loader or UnifiedToolLoader()
         self.agent_cache: Dict[str, Union[CodeAgent, ToolCallingAgent]] = {}
         logger.info("AgentExecutor initialized")
+
+    def _extract_token_usage(self, result) -> Optional[TokenUsageProto]:
+        """
+        Extract token usage from agent execution result.
+
+        Args:
+            result: RunResult object from smolagents agent.run()
+
+        Returns:
+            TokenUsageProto if token usage data exists, None otherwise
+        """
+        if not hasattr(result, 'token_usage') or not result.token_usage:
+            logger.debug("No token_usage found in result")
+            return None
+
+        tu = result.token_usage
+        logger.info(f"Extracted token usage: {getattr(tu, 'total_tokens', 0)} tokens, ${getattr(tu, 'cost_usd', 0.0):.6f}")
+
+        return TokenUsageProto(
+            model_name=getattr(tu, 'model_name', ''),
+            input_tokens=getattr(tu, 'input_tokens', 0),
+            output_tokens=getattr(tu, 'output_tokens', 0),
+            total_tokens=getattr(tu, 'total_tokens', 0),
+            cost_usd=getattr(tu, 'cost_usd', 0.0)
+        )
 
     # =========================================================================
     # Routing Logic (from CapabilityRoutingService)
@@ -173,12 +198,16 @@ class AgentExecutor:
                 # Execute instructions directly
                 result = agent.run(context.instructions)
 
+                # Extract token usage from result
+                token_usage_proto = self._extract_token_usage(result)
+
                 yield {
                     "status": "completed",
-                    "output": json.dumps({"result": str(result)}),
+                    "output": json.dumps({"result": str(result.output) if hasattr(result, 'output') else str(result)}),
                     "error_message": "",
                     "timestamp_ms": int(time.time() * 1000),
-                    "progress_percent": 100.0
+                    "progress_percent": 100.0,
+                    "token_usage": token_usage_proto
                 }
 
                 return
@@ -217,19 +246,23 @@ class AgentExecutor:
                 # Execute skill instructions directly
                 result = agent.run(skill.instructions)
 
+                # Extract token usage from result
+                token_usage_proto = self._extract_token_usage(result)
+
                 # Final completion
                 duration_ms = int((time.time() - start_time) * 1000)
                 yield {
                     "status": "completed",
                     "output": json.dumps({
-                        "result": str(result),
+                        "result": str(result.output) if hasattr(result, 'output') else str(result),
                         "message": "Task completed successfully",
                         "duration_ms": duration_ms,
                         "skill": skill.name
                     }),
                     "error_message": "",
                     "timestamp_ms": int(time.time() * 1000),
-                    "progress_percent": 100.0
+                    "progress_percent": 100.0,
+                    "token_usage": token_usage_proto
                 }
 
         except Exception as e:
