@@ -50,6 +50,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
     def __init__(self, organization_id: str):
         self.organization_id = organization_id
         self.proto_mapper = ProtoMapper()
+        self.last_token_usage = None  # Store token usage from last agent execution
 
         # Initialize AI processing services - no database dependencies
         logger.info("Initializing ChatProcessingService for AI operations only")
@@ -194,11 +195,16 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             # 4. Send completion marker
             processing_time = int((time.time() - start_time) * 1000)
+
+            # Convert stored token usage to protobuf
+            token_usage_proto = self._convert_token_usage_to_proto(self.last_token_usage)
+
             complete_response = agent_worker_pb2.ProcessMessageResponse(
                 complete=agent_worker_pb2.ProcessingComplete(
                     model_used=self._get_model_name(),
                     total_tokens=sequence,
                     processing_time_ms=processing_time,
+                    token_usage=token_usage_proto,
                     metadata={
                         'content_length': str(len(total_content)),
                         'rag_sources': str(len(rag_context_data.sources) if rag_context_data else 0),
@@ -323,6 +329,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"✅ Execution completed: {len(result)} chars")
             logger.info(f"📝 Result type: {type(result)}")
             logger.info(f"📝 Result preview: {str(result)[:200]}...")
+
+            # Extract and store token usage from result
+            if hasattr(result, 'token_usage') and result.token_usage:
+                self.last_token_usage = result.token_usage
+                logger.info(f"💰 Token usage captured: {result.token_usage.total_tokens} tokens, ${result.token_usage.cost_usd:.6f}")
+            else:
+                self.last_token_usage = None
+                logger.warning("⚠️ No token usage found in result")
 
             # 6. Stream the result by chunks to simulate streaming
             chunk_count = 0
@@ -491,6 +505,19 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             sources=sources,
             context_summary=f'Found {len(rag_context_data.sources)} relevant sources from {rag_context_data.domain_type or "organization"} data',
             total_sources=len(rag_context_data.sources)
+        )
+
+    def _convert_token_usage_to_proto(self, token_usage) -> Optional[agent_worker_pb2.TokenUsage]:
+        """Convert token usage object to protobuf TokenUsage message."""
+        if not token_usage:
+            return None
+
+        return agent_worker_pb2.TokenUsage(
+            model_name=getattr(token_usage, 'model_name', ''),
+            input_tokens=getattr(token_usage, 'input_tokens', 0),
+            output_tokens=getattr(token_usage, 'output_tokens', 0),
+            total_tokens=getattr(token_usage, 'total_tokens', 0),
+            cost_usd=getattr(token_usage, 'cost_usd', 0.0)
         )
 
     def _build_system_prompt(

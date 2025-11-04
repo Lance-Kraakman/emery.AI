@@ -97,7 +97,8 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                     output_json=progress_dict.get("output", ""),
                     error_message=progress_dict.get("error_message", ""),
                     timestamp_ms=progress_dict["timestamp_ms"],
-                    progress_percent=progress_dict["progress_percent"]
+                    progress_percent=progress_dict["progress_percent"],
+                    token_usage=progress_dict.get("token_usage")
                 )
                 yield proto_progress
                 
