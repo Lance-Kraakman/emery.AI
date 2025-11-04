@@ -330,13 +330,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"📝 Result type: {type(result)}")
             logger.info(f"📝 Result preview: {str(result)[:200]}...")
 
-            # Extract and store token usage from result
-            if hasattr(result, 'token_usage') and result.token_usage:
-                self.last_token_usage = result.token_usage
-                logger.info(f"💰 Token usage captured: {result.token_usage.total_tokens} tokens, ${result.token_usage.cost_usd:.6f}")
+            # Extract and store token usage from agent logs
+            self.last_token_usage = self._extract_token_usage_from_agent(agent)
+            if self.last_token_usage:
+                logger.info(f"💰 Token usage captured: {self.last_token_usage.total_tokens} tokens, ${self.last_token_usage.cost_usd:.6f}")
             else:
-                self.last_token_usage = None
-                logger.warning("⚠️ No token usage found in result")
+                logger.warning("⚠️ No token usage found in agent logs")
 
             # 6. Stream the result by chunks to simulate streaming
             chunk_count = 0
@@ -519,6 +518,45 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             total_tokens=getattr(token_usage, 'total_tokens', 0),
             cost_usd=getattr(token_usage, 'cost_usd', 0.0)
         )
+
+    def _extract_token_usage_from_agent(self, agent) -> Optional[Any]:
+        """Extract accumulated token usage from agent's execution logs."""
+        try:
+            if not hasattr(agent, 'logs') or not agent.logs:
+                return None
+
+            # Aggregate token usage from all steps
+            total_input = 0
+            total_output = 0
+            model_name = ""
+
+            for log_entry in agent.logs:
+                if hasattr(log_entry, 'input_tokens') and hasattr(log_entry, 'output_tokens'):
+                    total_input += getattr(log_entry, 'input_tokens', 0)
+                    total_output += getattr(log_entry, 'output_tokens', 0)
+                    if not model_name and hasattr(log_entry, 'model_name'):
+                        model_name = log_entry.model_name
+
+            if total_input == 0 and total_output == 0:
+                return None
+
+            # Import TokenUsage from model_provider
+            from ..services.model_provider import TokenUsage, calculate_token_cost
+
+            # Calculate cost using model registry
+            cost = calculate_token_cost(model_name or self._get_model_name(), total_input, total_output)
+
+            return TokenUsage(
+                input_tokens=total_input,
+                output_tokens=total_output,
+                total_tokens=total_input + total_output,
+                cost_usd=cost,
+                model_name=model_name or self._get_model_name()
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to extract token usage from agent logs: {e}")
+            return None
 
     def _build_system_prompt(
         self, 
