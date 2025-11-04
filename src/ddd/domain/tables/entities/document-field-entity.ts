@@ -15,7 +15,7 @@ import { FileField } from './file-field-entity';
 import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/value-objects';
 import crypto from 'crypto';
 
-export class DocumentField {
+export class DocumentField { 
   private constructor(
     private readonly _fileField: FileField,
     private _metadata: DocumentMetadata

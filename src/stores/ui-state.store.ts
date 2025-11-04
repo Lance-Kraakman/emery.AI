@@ -23,6 +23,7 @@ export interface UIState {
   // Layout state (from LayoutProvider)
   sidebarState: PanelState
   chatState: PanelState
+  chatWidth: number // Resizable chat panel width in pixels
   canvasState: PanelState
   canvasType: CanvasType
   breakpoint: LayoutBreakpoint
@@ -100,6 +101,7 @@ const initialState: UIState = {
   // Layout defaults
   sidebarState: 'expanded',
   chatState: 'collapsed',
+  chatWidth: 320, // Default chat panel width: 320px (down from 459px)
   canvasState: 'collapsed',
   canvasType: 'chat',
   breakpoint: 'desktop',
@@ -184,12 +186,12 @@ if (typeof window !== 'undefined') {
   
   // Setup auto-persistence
   persistenceCleanup = persistence.setupAutoPersist(
-    uiStateStore, 
+    uiStateStore,
     'emery-ui-state',
     {
       key: 'emery-ui-state',
       enabled: true,
-      whitelist: ['sidebarState', 'chatState', 'canvasState', 'canvasType', 'openCollapsibles', 'isPanelCollapsed']
+      whitelist: ['sidebarState', 'chatState', 'chatWidth', 'canvasState', 'canvasType', 'openCollapsibles', 'isPanelCollapsed']
     }
   )
 }
@@ -203,6 +205,12 @@ export const uiStateActions = {
 
   setChatState: (state: PanelState) => {
     uiStateStore.setState((currentState) => ({ ...currentState, chatState: state }))
+  },
+
+  setChatWidth: (width: number) => {
+    // Clamp width between 280px (min) and 600px (max)
+    const clampedWidth = Math.min(Math.max(width, 280), 600)
+    uiStateStore.setState((currentState) => ({ ...currentState, chatWidth: clampedWidth }))
   },
 
   setCanvasState: (state: PanelState) => {
@@ -452,6 +460,7 @@ export const uiStateSelectors = {
   // Layout selectors
   sidebarState: (state: UIState) => state.sidebarState,
   chatState: (state: UIState) => state.chatState,
+  chatWidth: (state: UIState) => state.chatWidth,
   canvasState: (state: UIState) => state.canvasState,
   canvasType: (state: UIState) => state.canvasType,
   breakpoint: (state: UIState) => state.breakpoint,

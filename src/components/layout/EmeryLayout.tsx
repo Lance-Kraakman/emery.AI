@@ -1,13 +1,14 @@
 'use client'
 
 import React, { Suspense } from 'react'
-import { EmerySidebar } from '@/components/EmerySidebar'
+import { AppSidebar } from '@/components/app-sidebar'
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { Loading } from '@/components/ui/loading'
 import { EmeryCanvas } from '@/components/chat/EmeryCanvas'
 import { EmeryChat } from '@/components/chat/EmeryChat'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
-import type { EmeryLayoutProps, ChatContextConfig } from './types'
+import type { EmeryLayoutProps, ChatContextConfig} from './types'
 import { ChatProvider } from '@/components/chat/ChatProvider'
 
 /** p p
@@ -24,15 +25,25 @@ import { ChatProvider } from '@/components/chat/ChatProvider'
  * become the main view when canvas is collapsed, like current mission-control.
  */
 
+interface SidebarData {
+  apps: any[]
+  agents: any[]
+  teams: any[]
+  skills: any[]
+  databases: any[]
+}
+
 interface EmeryLayoutInnerProps extends EmeryLayoutProps {
   // This component needs layout context, so it must be wrapped by LayoutProvider
+  sidebarData?: SidebarData
 }
 
 
 function EmeryLayoutInner({
   children,
   chatContext,
-  enableChat = true
+  enableChat = true,
+  sidebarData
 }: EmeryLayoutInnerProps) {
   // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders when unrelated state changes
   const sidebarState = useStore(uiStateStore, uiStateSelectors.sidebarState)
@@ -58,102 +69,56 @@ function EmeryLayoutInner({
     return displayedArtifact ? <div className="h-full"><EmeryCanvas /></div> : <>{children}</>
   })
 
-  // Calculate responsive classes
-  const sidebarWidth = getSidebarWidth(sidebarState, isMobile)
-  const showSidebarOverlay = isMobile && sidebarState === 'expanded'
-
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Mobile Overlay for Sidebar */}
-      {showSidebarOverlay && (
-        <div
-          className="fixed inset-0 bg-black/50 z-20 md:hidden"
-          onClick={() => setSidebarState('collapsed')}
-        />
-      )}
-
-      {/* Left Panel - Sidebar */}
-      <aside
-        className={`
-          h-screen
-          ${sidebarWidth}
-          ${isMobile ? 'fixed left-0 top-0 h-screen z-30 transform transition-transform duration-300' : ''}
-          ${isMobile && sidebarState === 'collapsed' ? '-translate-x-full' : 'translate-x-0'}
-          bg-card border-r border-border
-        `}
-      >
+    <SidebarProvider>
+      <div className="flex h-screen w-full overflow-hidden bg-transparent">
+        {/* Sidebar - now receives server-fetched data */}
         <Suspense fallback={<SidebarSkeleton />}>
-          <EmerySidebar />
-        </Suspense>
-      </aside>
-
-      {/* Main Content Area + Chat - 3-panel layout */}
-      {/* AIDEV-NOTE: Artifact state managed by TanStack store, ChatSection only wraps chat UI */}
-      <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
-        {/* Main Content Area with Canvas */}
-        <main className="flex-1 overflow-y-auto h-full">
-          <MainContentWithCanvas>
-            {children || (
-              <div className="h-full flex items-center justify-center p-6">
-                <div className="text-center text-muted-foreground">
-                  <p>Select a page from the sidebar to get started</p>
-                </div>
-              </div>
-            )}
-          </MainContentWithCanvas>
-        </main>
-
-        {/* Chat Area - EmeryChat controls its own width based on chatState */}
-        {enableChat && (
-          <ChatProvider chatContext={chatContext}>
-            <Suspense fallback={<ChatSkeleton />}>
-              <EmeryChat />
-            </Suspense>
-          </ChatProvider>
-        )}
-      </div>
-
-      {/* Mobile Chat Overlay */}
-      {isMobile && enableChat && chatState === 'expanded' && (
-        <ChatProvider chatContext={chatContext}>
-          <div
-            className="fixed inset-0 bg-black/50 z-20"
-            onClick={() => setChatState('collapsed')}
+          <AppSidebar
+            apps={sidebarData?.apps || []}
+            agents={sidebarData?.agents || []}
+            teams={sidebarData?.teams || []}
+            skills={sidebarData?.skills || []}
+            databases={sidebarData?.databases || []}
           />
-          <div className="fixed right-0 top-0 h-screen w-80 z-30 bg-card border-l border-border">
-            <Suspense fallback={<ChatSkeleton />}>
-              <EmeryChat />
-            </Suspense>
+        </Suspense>
+
+        {/* Main Content Area + Chat */}
+        <SidebarInset className="flex-1 flex min-h-0 overflow-hidden">
+          <div className="flex-1 flex min-h-0 overflow-hidden">
+            {/* Main Content Area with Canvas */}
+            <main className="flex-1 overflow-x-hidden min-h-0">
+              <MainContentWithCanvas>
+                {children || (
+                  <div className="h-full flex items-center justify-center p-6">
+                    <div className="text-center text-muted-foreground">
+                      <p>Select a page from the sidebar to get started</p>
+                    </div>
+                  </div>
+                )}
+              </MainContentWithCanvas>
+            </main>
+
+            {/* Chat Area - EmeryChat controls its own width based on chatState */}
+            {enableChat && (
+              <ChatProvider chatContext={chatContext}>
+                <Suspense fallback={<ChatSkeleton />}>
+                  <EmeryChat />
+                </Suspense>
+              </ChatProvider>
+            )}
           </div>
-        </ChatProvider>
-      )}
-    </div>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
   )
 }
 
 // Main exported component that ensures LayoutProvider is available
-export function EmeryLayout(props: EmeryLayoutProps) {
+export function EmeryLayout(props: EmeryLayoutInnerProps) {
   return (
     <EmeryLayoutInner {...props} />
   )
-}
-
-// Utility functions for responsive widths
-function getSidebarWidth(state: string, isMobile: boolean): string {
-  if (isMobile) {
-    return 'w-64' // Fixed width on mobile (overlay)
-  }
-  
-  switch (state) {
-    case 'collapsed':
-      return 'w-16'
-    case 'expanded':
-      return 'w-64'
-    case 'hidden':
-      return 'w-0'
-    default:
-      return 'w-64'
-  }
 }
 
 // Loading skeletons

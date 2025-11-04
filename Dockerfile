@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
 RUN npm i -g pnpm
-RUN pnpm install @duckdb/node-api
 
 # AIDEV-NOTE: Install dependencies with frozen lockfile for cache efficiency
 RUN pnpm install --frozen-lockfile
@@ -53,7 +52,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/src/public ./src/public
+COPY --from=builder /app/src/public ./public
 
 # AIDEV-NOTE: Copy source files needed for tsx execution
 COPY --from=builder /app/src/scripts ./src/scripts

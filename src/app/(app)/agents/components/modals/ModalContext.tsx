@@ -5,9 +5,9 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 export type ModalType =
   | 'basic-info'
   | 'trigger-config'
-  | 'capabilities'
   | 'tools-servers'
-  | 'activity-details';
+  | 'activity-details'
+  | 'authorized-connections';
 
 interface ModalState {
   type: ModalType | null;

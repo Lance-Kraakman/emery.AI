@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Plus, Settings, Trash2, Users, Shield, Crown, Loader2 } from "lucide-react";
 import { getOrganizationRoles, deleteCustomRole, type CustomRole } from "@/app/actions/roles";
-import { RoleWizard } from "./RoleWizard";
+import { CreateRoleDialog } from "./CreateRoleDialog";
 import { EditRoleDialog } from "./EditRoleDialog";
 import { 
   AlertDialog, 
@@ -32,7 +32,7 @@ import {
 export function RolesTab() {
   const [roles, setRoles] = useState<CustomRole[]>([]);
   const [loading, setLoading] = useState(true);
-  const [createWizardOpen, setCreateWizardOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<CustomRole | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -72,7 +72,7 @@ export function RolesTab() {
 
   const handleCreateSuccess = () => {
     if (!isMounted) return;
-    setCreateWizardOpen(false);
+    setCreateDialogOpen(false);
     loadRoles(); // Refresh roles list
   };
 
@@ -254,7 +254,7 @@ export function RolesTab() {
                 System roles are built-in and cannot be modified. Create custom roles for organization-specific permission sets.
               </p>
             </div>
-            <Button onClick={() => setCreateWizardOpen(true)}>
+            <Button onClick={() => setCreateDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Create Role
             </Button>
@@ -299,10 +299,10 @@ export function RolesTab() {
         </CardContent>
       </Card>
 
-      {/* Create Role Wizard */}
-      <RoleWizard
-        open={createWizardOpen}
-        onOpenChange={setCreateWizardOpen}
+      {/* Create Role Dialog */}
+      <CreateRoleDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
         onSuccess={handleCreateSuccess}
       />
 

@@ -39,13 +39,6 @@ export function getAIModel(modelOverride?: string) {
 }
 
 /**
- * Get available chat models
- */
-export function getAvailableChatModels() {
-  return [HF_MODELS.chat.default]  // Only Qwen/Qwen-7B-Instruct
-}
-
-/**
  * Get the appropriate embedding model using direct HuggingFace API
  * @param modelOverride - Optional embedding model override (can be 'default' or specific model name)
  * @returns HuggingFace inference client configured for embeddings
@@ -131,13 +124,6 @@ export function getEmbeddingModel(modelOverride?: string) {
 }
 
 /**
- * Get available embedding models
- */
-export function getAvailableEmbeddingModels() {
-  return [HF_MODELS.embedding.default, ...HF_MODELS.embedding.alternatives]
-}
-
-/**
  * Check HuggingFace configuration status
  */
 export function getAIProviderInfo() {
@@ -148,12 +134,4 @@ export function getAIProviderInfo() {
     defaultChatModel: HF_MODELS.chat.default,
     defaultEmbeddingModel: HF_MODELS.embedding.default,
   }
-}
-
-/**
- * Get model by use case
- */
-export function getModelRecommendation(useCase: 'code' | 'chat' | 'general' | 'fast') {
-  // All use cases use the same model since it's the only one with default interface provider
-  return HF_MODELS.chat.default  // Qwen/Qwen-7B-Instruct
 }

@@ -90,58 +90,95 @@ export class Row {
   }
 
 
-  toPlainObject(): Record<string, any> {
+  /**
+   * Convert row to plain object with numeric field IDs as keys
+   * AIDEV-NOTE: Uses field IDs (10, 11, 12) instead of field names for Delta Lake storage.
+   * Field IDs are immutable, allowing field name changes without breaking data.
+   * @param fields - Table fields to map field names to IDs
+   * @returns Object with numeric field ID keys: {id: "123", 10: "value", 11: "value"}
+   */
+  toPlainObject(fields: readonly TableField[]): Record<string, any> {
     const obj: Record<string, any> = {
       id: this.id.value  // Include row ID in the returned data
     };
 
     for (const fieldValue of this.fieldValues) {
-      // CRITICAL FIX: Ensure complex objects are properly serialized, not stringified
+      // Find the field definition to get its numeric ID
+      const field = fields.find(f => f.name === fieldValue.fieldSlug);
+      if (!field) {
+        console.warn(`[Row.toPlainObject] Field not found for slug: ${fieldValue.fieldSlug}`);
+        continue;
+      }
+
       const value = fieldValue.value;
-      
-      // For complex field types, ensure they remain as objects/arrays
-      if (fieldValue.fieldType === 'file' || fieldValue.fieldType === 'document' || fieldValue.fieldType === 'relation') {
-        // These should already be plain objects/arrays from domain value objects
-        obj[fieldValue.fieldSlug] = value;
-      } else if (fieldValue.fieldType === 'date' && value instanceof Date) {
-        // Convert Date objects to ISO strings
-        obj[fieldValue.fieldSlug] = value.toISOString();
+
+      // Convert Date objects to ISO strings for JSON serialization
+      if (fieldValue.fieldType === 'date' && value instanceof Date) {
+        obj[field.id.value] = value.toISOString();
       } else {
-        // For primitive types, use as-is
-        obj[fieldValue.fieldSlug] = value;
+        // All other types: return value as-is (arrays, objects, strings, primitives)
+        obj[field.id.value] = value;
       }
     }
 
     return obj;
   }
 
+  /**
+   * Create Row from plain object with numeric field IDs as keys
+   * AIDEV-NOTE: Reads from numeric field IDs (10, 11, 12) not field names.
+   * @param data - Plain object with numeric field IDs: {id: "123", 10: "value", 11: "value"}
+   * @param tableId - Table ID
+   * @param tableFields - Table fields to map IDs to field definitions
+   * @returns Row entity
+   */
   static fromPlainObject(
-    data: Record<string, any> & { id?: string }, 
+    data: Record<string, any> & { id?: string },
     tableId: number,
     tableFields: TableField[]
   ): Row {
     // Validate required fields
+    // AIDEV-NOTE: Data uses numeric field IDs as keys, not field names
     for (const field of tableFields) {
-      if (field.required && (!data[field.name] || data[field.name] === '')) {
-        throw new Error(`${field.name} is required`);
+      // Skip 'id' field - it's auto-generated if not provided
+      if (field.name === 'id') {
+        continue;
+      }
+
+      const fieldKey = field.id.value.toString();
+      if (field.required && data[fieldKey] === undefined) {
+        throw new Error(`${field.name} (field ${fieldKey}) is required`);
       }
     }
 
     const fieldValues: FieldValue[] = [];
-    
+
     for (const field of tableFields) {
-      const value = data[field.name];
-      
-      // Skip undefined/null optional fields
-      if ((value === undefined || value === null) && !field.required) {
+      // Skip 'id' field - Row.id is the authoritative source, not fieldValues
+      if (field.name === 'id') {
         continue;
       }
+
+      // Read value using numeric field ID as key
+      const fieldKey = field.id.value.toString();
+      const value = data[fieldKey];
+
+      // AIDEV-NOTE: Debug logging for document field values
+      if (field.type === 'document' || field.type === 'file') {
+        console.log(`[Row.fromPlainObject] ${field.type} field "${field.name}" (ID ${fieldKey}) incoming value:`, JSON.stringify(value, null, 2));
+      }
+
+      // AIDEV-NOTE: CRITICAL FIX - Always include ALL fields, even if null/undefined
+      // This prevents data loss during partial updates where only changed fields are sent.
+      // Previously, null/undefined optional fields were skipped, causing them to be lost
+      // when Row.toPlainObject() was called (it only returns fields with FieldValue objects).
 
       // Validate data type for non-null values
       if (value !== undefined && value !== null) {
         Row.validateFieldValue(field, value);
       }
 
+      // Always push FieldValue for every field in schema, preserving complete row state
       fieldValues.push(new FieldValue(field.name, value, field.type));
     }
 
@@ -212,8 +249,8 @@ export class RowCollection {
     return new RowCollection(filteredRows);
   }
 
-  toPlainObjects(): Record<string, any>[] {
-    return this.rows.map(row => row.toPlainObject());
+  toPlainObjects(fields: TableField[]): Record<string, any>[] {
+    return this.rows.map(row => row.toPlainObject(fields));
   }
 
 }

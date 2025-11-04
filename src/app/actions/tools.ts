@@ -24,36 +24,53 @@ import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
  */
 export async function searchAllTools(options: {
   query: string;
-  categories?: string[]; // Reference category names to filter by (documents, files, agents, etc.)
+  categories?: string[]; // Reference category names to filter by (agent, file, doc, table, database)
   toolCategories?: string[]; // Tool category names to filter by (apps, utilities, etc.)
-  appId?: string; // Filter by specific app (e.g., "gmail", "slack")
+  appIds?: string[]; // Filter by specific apps (e.g., ["gmail", "slack"]) - multi-select support
   connectedOnly?: boolean; // Only show tools with active connections
   requiresConnection?: boolean; // Only show tools that require connections
+  showReferenceTools?: boolean; // Include reference tools (agents, tables, databases) in results
   limit?: number;
   offset?: number;
 }): Promise<Result<ToolSearchResultDTO>> {
   try {
     const session = await requireAuth();
 
-    const { query, categories, toolCategories, appId, connectedOnly, requiresConnection, limit = 20, offset = 0 } = options;
-
-    console.log(`[ToolActions] Searching all tools with query: "${query}"`);
+    const { query, categories, toolCategories, appIds, connectedOnly, requiresConnection, showReferenceTools = true, limit = 20, offset = 0 } = options;
 
     // Get the tool search application service from DI container
     const toolSearchService = getToolSearchApplicationService();
 
-    // Convert string arrays to proper enums
-    const referenceCategories = categories?.map(cat => cat as ReferenceCategory);
-    const toolCategoryEnums = toolCategories?.map(cat => cat as ToolCategory);
+    // AIDEV-NOTE: Trust TypeScript types - if arrays are sent correctly, use them directly
+    // Simple validation: only use if it's actually an array
+    const referenceCategories = Array.isArray(categories)
+      ? categories.map(cat => cat as ReferenceCategory)
+      : undefined;
+
+    const toolCategoryEnums = Array.isArray(toolCategories)
+      ? toolCategories.map(cat => cat as ToolCategory)
+      : undefined;
+
+    console.log(`[ToolActions] Searching tools:`, {
+      query,
+      categories: referenceCategories,
+      appIds,
+      connectedOnly,
+      requiresConnection,
+      showReferenceTools,
+      categoriesCount: referenceCategories?.length || 0,
+      appIdsCount: appIds?.length || 0
+    });
 
     // Search using application service
     const searchResult = await toolSearchService.searchAllTools({
       query,
       categories: referenceCategories,
       toolCategories: toolCategoryEnums,
-      appId,
+      appIds,
       connectedOnly,
       requiresConnection,
+      showReferenceTools,
       organizationId: OrganizationId.fromNumber(session.user.currentOrganizationId),
       userId: UserId.fromString(session.user.id),
       limit,

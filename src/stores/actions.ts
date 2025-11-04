@@ -15,6 +15,7 @@ import { dataActions, dataStore } from './data-management.store'
 import { chatActions, chatStore } from './chat.store'
 import { orgChartActions, orgChartStore } from './organization-chart.store'
 import { formsActions, formsStore } from './forms.store'
+import { appsActions, appsStore } from './apps.store'
 
 // Import server actions
 import { getCurrentOrganization } from '@/app/actions/user-organizations'
@@ -23,7 +24,7 @@ import { getTables } from '@/app/actions/tables'
 import { getAgents } from '@/app/actions/agents'
 import { getTeams } from '@/app/actions/teams'
 import { getFields } from '@/app/actions/fields'
-import { getRowsData } from '@/app/actions/rows'
+import { getRowsDSG } from '@/app/actions/rows'
 
 /**
  * Cross-store action creators for complex operations
@@ -130,15 +131,15 @@ export const storeActions = {
     try {
       dataActions.setLoading(true)
       
-      const [fields, rows] = await Promise.all([
+      const [fields, rowsResponse] = await Promise.all([
         getFields(tableId),
-        getRowsData(tableId)
+        getRowsDSG(tableId, 1000, 0)
       ])
-      
+
       dataActions.setFields(fields)
-      dataActions.setRows(Array.from(rows) as any, rows.length)
-      
-      return { success: true, data: { fields, rows } }
+      dataActions.setRows(Array.from(rowsResponse.rows) as any, rowsResponse.rows.length)
+
+      return { success: true, data: { fields, rows: rowsResponse.rows } }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to refresh table data'
       dataActions.setError(errorMessage)
@@ -371,6 +372,7 @@ export const storeActions = {
     chatActions.reset()
     orgChartActions.reset()
     formsActions.reset()
+    appsActions.reset()
   },
 
   /**
@@ -385,7 +387,8 @@ export const storeActions = {
       data: dataStore.state,
       chat: chatStore.state,
       orgChart: orgChartStore.state,
-      forms: formsStore.state
+      forms: formsStore.state,
+      apps: appsStore.state
     }
   }
 }
@@ -399,5 +402,6 @@ export {
   dataActions,
   chatActions,
   orgChartActions,
-  formsActions
+  formsActions,
+  appsActions
 }

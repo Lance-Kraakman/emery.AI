@@ -1,17 +1,19 @@
-import type { 
-  IAgentExecutionRepository, 
-  AgentExecutionRequest, 
-  AgentExecutionResult, 
-  ExecutionStatus, 
-  WorkerHealth 
+import type {
+  IAgentExecutionRepository,
+  AgentExecutionRequest,
+  AgentExecutionResult,
+  ExecutionStatus,
+  WorkerHealth
 } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import { workerRegistry } from '@/lib/grpc/client';
 import type { TaskProgress } from '@/lib/grpc/client';
 import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/lib/grpc/proto-mappers';
-import { getAgentDisplayName, getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
+import { getAgentDisplayName, type Agent } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, UserId, OrganizationId, TaskStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
+import { getTokenUsageRepository, getOrganizationRepository } from '@/ddd/application/di/getters';
 
 export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
   // Track active executions for status queries
@@ -25,44 +27,91 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
    * Execute agent via gRPC worker
    */
   async executeAgent(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
-    const { agentId, instructions, tools, servers, executionId, organizationId, timeoutSeconds, onProgress } = request;
+    const { agentId, instructions, skillName, tools, executionId, organizationId, timeoutSeconds, onProgress } = request;
 
     console.log(`[GRPC-EXECUTION-REPO] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
-    
+    console.log(`[GRPC-EXECUTION-REPO-DEBUG] Capability routing:`, {
+      skillName,
+      skillNameType: typeof skillName,
+      skillNameTruthy: !!skillName,
+      skillNameLength: skillName?.length,
+      willUseCapabilityMode: !!skillName
+    });
+    if (skillName) {
+      console.log(`[GRPC-EXECUTION-REPO] Capability-based execution: ${skillName}`);
+    } else {
+      console.log(`[GRPC-EXECUTION-REPO] Instruction-based execution (no capability name)`);
+    }
+
     try {
       // 1. Load agent configuration (delegated to agent repository)
       const agent = await this.agentRepository.findById(AgentId.fromNumber(agentId));
       if (!agent) {
         throw new Error(`Agent ${agentId} not found`);
       }
-      
-      // 2. Determine organization context
+
+      // 2. Load organization for model selection hierarchy
+      const orgRepository = getOrganizationRepository();
+      const organization = await orgRepository.findById(agent.organizationId);
+      const organizationModel = organization?.defaultModel || null;
+
+      console.log(`[GRPC-EXECUTION-REPO] Agent model: ${agent.defaultModel || 'not set (will use org/system default)'}`);
+      console.log(`[GRPC-EXECUTION-REPO] Organization model: ${organizationModel || 'not set (will use system default)'}`);
+
+      // 3. Determine organization context
       const targetOrganizationId = organizationId || agent.organizationId;
       const organizationIdStr = targetOrganizationId.toString();
-      
-      console.log(`[GRPC-EXECUTION-REPO] Using agent: ${getAgentDisplayName(agent)} with ${getCapabilitiesCount(agent)} capabilities`);
-      
+
+      console.log(`[GRPC-EXECUTION-REPO] Using agent: ${getAgentDisplayName(agent)}`);
+
       // 3. Get worker client for organization
       const workerClient = workerRegistry.getWorkerForOrganization(organizationIdStr);
-      
-      // 4. Create proto task request
-      const taskRequest = createTaskRequest({
-        taskId: executionId,
-        agentId: agent.id.value,
-        instructionConfig: {
-          instructions,
-          tools: (tools || []).map(tool =>
-            tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
-          ),
-          servers: servers || []
-        },
-        agent: agent,
-        triggerData: {}, // Empty for proto compatibility
-        organizationId: organizationIdStr,
-        ownerId: agent.ownerId.value,
-        timeoutSeconds: timeoutSeconds || 300
-      });
-      
+
+      // 4. Enrich agent with API key in tools (following chat pattern)
+      const enrichedAgent = this.enrichAgentTools(agent);
+
+      // 5. Create proto task request - use capability mode if skillName provided
+      const taskRequest = skillName
+        ? createTaskRequest({
+            taskId: executionId,
+            agentId: agent.id.value,
+            skillName: skillName, // Use capability-based execution
+            agent: enrichedAgent, // Use enriched agent with API key in tool configs
+            triggerData: {}, // Empty for proto compatibility
+            organizationId: organizationIdStr,
+            ownerId: agent.ownerId.value,
+            timeoutSeconds: timeoutSeconds || 300,
+            organizationModel: organizationModel || undefined // Pass organization model for hierarchy
+          })
+        : createTaskRequest({
+            taskId: executionId,
+            agentId: agent.id.value,
+            instructionConfig: { // Use instruction-based execution
+              instructions,
+              tools: this.enrichTools((tools || []).map(tool =>
+                tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
+              ), agent.apiKey?.value)
+            },
+            agent: enrichedAgent,
+            triggerData: {}, // Empty for proto compatibility
+            organizationId: organizationIdStr,
+            ownerId: agent.ownerId.value,
+            timeoutSeconds: timeoutSeconds || 300,
+            organizationModel: organizationModel || undefined // Pass organization model for hierarchy
+          });
+
+      // AIDEV-DEBUG: Log what we're actually sending to Python
+      console.log('[GRPC-DEBUG] TaskRequest being sent:', JSON.stringify({
+        taskId: taskRequest.taskId,
+        agentId: taskRequest.agentId,
+        skillName: taskRequest.skillName,
+        hasInstructionConfig: !!taskRequest.instructionConfig,
+        instructionConfig: taskRequest.instructionConfig,
+        instructionsText: instructions,
+        toolsCount: tools?.length || 0,
+        organizationId: taskRequest.organizationId
+      }, null, 2));
+
       // 5. Initialize execution tracking
       let finalStatus: 'completed' | 'failed' | 'in_progress' = 'in_progress';
       let finalOutputData: any = null;
@@ -80,16 +129,14 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       
       // 6. Execute task via gRPC with streaming progress updates
       await workerClient.executeTask(taskRequest as any, async (progress: TaskProgress) => {
-        console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Step ${progress.step_id} - Status: ${progress.status} (${progress.progress_percent}%)`);
+        console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Status: ${progress.status} (${progress.progressPercent}%)`);
 
         // DEBUG: Log full TaskProgress object
         console.log(`[GRPC-DEBUG] TaskProgress received:`, JSON.stringify(progress, null, 2));
-        console.log(`[GRPC-DEBUG] output_json content:`, progress.output_json);
-        console.log(`[GRPC-DEBUG] step_id:`, progress.step_id);
-        console.log(`[GRPC-DEBUG] step_type:`, progress.step_type);
+        console.log(`[GRPC-DEBUG] outputJson content:`, progress.outputJson);
 
-        // Create log message from TaskProgress
-        const logMessage = `Step ${progress.step_id} (${progress.step_type}): ${progress.status} - ${progress.progress_percent}% ${progress.output_json ? `| Output: ${progress.output_json.substring(0, 200)}${progress.output_json.length > 200 ? '...' : ''}` : ''}${progress.error_message ? ` | Error: ${progress.error_message}` : ''}`;
+        // Create log message from TaskProgress (simplified - no step info)
+        const logMessage = `${progress.status} - ${progress.progressPercent}% ${progress.outputJson ? `| Output: ${progress.outputJson.substring(0, 200)}${progress.outputJson.length > 200 ? '...' : ''}` : ''}${progress.errorMessage ? ` | Error: ${progress.errorMessage}` : ''}`;
 
         console.log(`[GRPC-DEBUG] Formatted log message:`, logMessage);
 
@@ -103,17 +150,16 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
 
         // Map proto progress to TypeScript types
         const taskUpdate = mapTaskProgressFromProto(progress);
-        
+
         // Calculate completion time for terminal states
         const isTerminal = ['completed', 'failed', 'cancelled'].includes(taskUpdate.status?.value || '');
         const calculatedCompletedAt = isTerminal ? new Date() : undefined;
-        
+
         // Update execution tracking
         this.activeExecutions.set(executionId, {
           executionId,
           status: (taskUpdate.status?.value as ExecutionStatus['status']) || 'in_progress',
-          progress: progress.progress_percent,
-          currentStep: progress.step_id,
+          progress: progress.progressPercent,
           result: taskUpdate.result,
           error: taskUpdate.error,
           startedAt,
@@ -126,6 +172,36 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
           finalStatus = 'completed';
           finalOutputData = taskUpdate.result;
           completedAt = new Date();
+
+          // Record token usage for billing
+          if (progress.tokenUsage) {
+            const tokenUsage = progress.tokenUsage;
+            const tokenUsageRepo = getTokenUsageRepository();
+            const tokenUsageService = new TokenUsageApplicationService(tokenUsageRepo);
+
+            const orgId = typeof targetOrganizationId === 'number'
+              ? targetOrganizationId
+              : targetOrganizationId.value;
+
+            tokenUsageService.recordTokenUsage({
+              organizationId: orgId,
+              userId: agent.ownerId.value,
+              agentId: agent.id.value,
+              entityType: 'task' as const,
+              entityId: executionId,
+              modelName: tokenUsage.modelName,
+              inputTokens: tokenUsage.inputTokens,
+              outputTokens: tokenUsage.outputTokens,
+              metadata: {
+                taskName: skillName || 'instruction_based',
+                skillName: skillName,
+                success: true
+              }
+            }).catch((error) => {
+              console.error('[GRPC-EXECUTION-REPO] Failed to record token usage:', error);
+              // Don't fail the task execution if token recording fails
+            });
+          }
         } else if (taskUpdate.status?.value === 'failed') {
           console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Task FAILED!`);
           finalStatus = 'failed';
@@ -257,5 +333,41 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       console.error(`[GRPC-EXECUTION-REPO] Error checking execution availability for org ${organizationId}:`, error);
       return false;
     }
+  }
+
+  /**
+   * Enrich tools with agent API key (following chat pattern)
+   * Adds api_key to tool.config for OAuth proxy authentication
+   */
+  private enrichTools(tools: ToolConfig[], agentApiKey?: string): ToolConfig[] {
+    if (!agentApiKey) {
+      return tools;
+    }
+
+    return tools.map(tool => {
+      const config = tool.config as any;
+
+      // If tool already has authentication, preserve it
+      if (config.api_key || config.oauth_token) {
+        return tool;
+      }
+
+      // Add API key with agent mode for OAuth proxy
+      return tool.withConfig({
+        ...config,
+        api_key: agentApiKey,
+        api_key_mode: 'agent'  // Agent mode uses agent owner's credentials
+      });
+    });
+  }
+
+  /**
+   * Enrich agent with API key in all tool configs
+   * AIDEV-NOTE: Skills are now in separate table, so this just returns agent unchanged
+   * Tool enrichment for skills should happen when skills are queried separately
+   */
+  private enrichAgentTools(agent: Agent): Agent {
+    // Skills are in separate table now, not embedded in Agent entity
+    return agent;
   }
 }

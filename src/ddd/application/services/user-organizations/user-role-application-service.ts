@@ -1,10 +1,14 @@
 /**
  * User Role Application Service
- * 
+ *
  * Handles user creation, role assignment, and organization membership.
  * Updated for full RBAC system with SystemRoleType roles.
  */
+
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
+
+const logger = createDebugLogger('UserRoleService');
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
 import type { UserOrganization, CreateUserOrganizationData } from '@/ddd/domain/users/entities/user';

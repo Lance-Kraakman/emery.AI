@@ -16,13 +16,14 @@ import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 
 /**
  * The actual row format stored in S3 Arrow files and used by repositories.
- * Contains system fields (id, timestamps) and dynamic field columns (field_1, field_2, etc.)
+ * Contains system fields (id, timestamps) and dynamic field columns with human-readable names.
+ * AIDEV-NOTE: Modern Delta Lake implementation uses field names, not field_{id} format.
  */
 export interface DynamicTableRow {
   id: string;                          // UUID primary key
   created_at?: Date | string | null;   // Auto-managed timestamp
   updated_at?: Date | string | null;   // Auto-managed timestamp
-  [fieldKey: string]: any;             // Dynamic field_{id} columns with typed values
+  [fieldKey: string]: any;             // Dynamic field columns with typed values (uses field names)
 }
 
 // ========================================
@@ -35,10 +36,16 @@ export interface RowQueryOptions {
   orderBy?: string;                    // Column name to order by
   orderDirection?: 'ASC' | 'DESC';
   filters?: RowFilter[];               // Complex filtering options
+  aggregations?: Array<{               // Aggregation configuration for metric/dashboard views
+    fieldId: string;
+    type: string;
+    alias: string;
+    formatType?: string;
+  }>;
 }
 
 export interface RowFilter {
-  field: string;                       // field_{id} format
+  field: string;                       // field name or 'id'
   operator: FilterOperator;
   value: any;
 }

@@ -251,6 +251,7 @@ export class DatabaseToolRegistry implements IToolRegistryService {
 
       // Add app filter if specified
       if (options?.appId) {
+        console.log(`[DatabaseToolRegistry] Adding app filter: appId="${options.appId}"`);
         whereConditions.push(eq(appTypes.id, options.appId));
       }
 
@@ -265,17 +266,11 @@ export class DatabaseToolRegistry implements IToolRegistryService {
         }
       }
 
-      // Add connected-only filter (requires user connections check)
-      if (options?.connectedOnly && options?.userId) {
-        console.log(`[DatabaseToolRegistry] Filtering for connected-only tools for user ${options.userId}`);
-        // This would require a subquery or join with user connections table
-        // For now, just filter for OAuth-enabled apps (tools that CAN have connections)
-        whereConditions.push(eq(appTypes.supportsOAuth, true));
-
-        // TODO: Add actual user connection checking by joining with connections table
-        // This would be something like:
-        // JOIN user_connections ON user_connections.app_id = app_types.id
-        // WHERE user_connections.user_id = options.userId AND user_connections.status = 'active'
+      // Track if we need connection filtering (will apply after query)
+      const needsConnectionFilter = options?.connectedOnly && options?.userId && options?.organizationId;
+      if (needsConnectionFilter) {
+        console.log(`[DatabaseToolRegistry] Connected-only filter requested for user ${options.userId}`);
+        // Will filter after query using actual user connections
       }
 
       // Build the query
@@ -291,15 +286,40 @@ export class DatabaseToolRegistry implements IToolRegistryService {
         .orderBy(desc(tools.createdAt));
 
       // Apply where conditions if any
+      console.log(`[DatabaseToolRegistry] Executing query with ${whereConditions.length} conditions`, {
+        appId: options?.appId,
+        category: options?.category,
+        query: options?.searchQuery
+      });
+
+      let results;
       if (whereConditions.length > 0) {
-        const results = await dbQuery.where(and(...whereConditions));
-        console.log(`[DatabaseToolRegistry] Found ${results.length} tools matching criteria`);
-        return results.map(({ tool, app }) => this.convertToToolMetadata(tool, app));
+        results = await dbQuery.where(and(...whereConditions));
       } else {
-        const results = await dbQuery;
-        console.log(`[DatabaseToolRegistry] Found ${results.length} tools matching criteria`);
-        return results.map(({ tool, app }) => this.convertToToolMetadata(tool, app));
+        results = await dbQuery;
       }
+
+      console.log(`[DatabaseToolRegistry] Found ${results.length} tools from database`);
+      if (results.length > 0) {
+        console.log(`[DatabaseToolRegistry] Sample tool apps:`, results.slice(0, 3).map(r => ({
+          toolId: r.tool.id,
+          appId: r.tool.appId,
+          appName: r.app?.name
+        })));
+      }
+      let toolMetadata = results.map(({ tool, app }) => this.convertToToolMetadata(tool, app));
+
+      // Apply connection filter if needed (post-processing)
+      if (needsConnectionFilter && options?.userId && options?.organizationId) {
+        toolMetadata = await this.filterByUserConnections(
+          toolMetadata,
+          options.userId,
+          options.organizationId
+        );
+      }
+
+      console.log(`[DatabaseToolRegistry] Returning ${toolMetadata.length} tools after filtering`);
+      return toolMetadata;
 
     } catch (error) {
       console.error('[DatabaseToolRegistry] Error searching tools:', error);
@@ -422,12 +442,11 @@ export class DatabaseToolRegistry implements IToolRegistryService {
       searchQuery,
       limit = 50,
       offset = 0,
-      category
     } = options;
 
     try {
-      // Get tools with the specified criteria
-      const toolsFound = await this.searchToolsInternal(searchQuery, limit + 1, offset, { category });
+      // Get tools with the specified criteria - pass ALL options for proper filtering
+      const toolsFound = await this.searchToolsInternal(searchQuery, limit + 1, offset, options);
 
       // Check if there are more tools available
       const hasMore = toolsFound.length > limit;
@@ -503,6 +522,54 @@ export class DatabaseToolRegistry implements IToolRegistryService {
     } catch (error) {
       console.error('[DatabaseToolRegistry] Error getting apps:', error);
       return [];
+    }
+  }
+
+  /**
+   * Filter tools to only those with active user connections
+   * @private
+   */
+  private async filterByUserConnections(
+    tools: ToolMetadata[],
+    userId: string,
+    orgId: number
+  ): Promise<ToolMetadata[]> {
+    try {
+      // Dynamically import to avoid circular dependencies
+      const { getConnectionApplicationService } = await import('@/ddd/application/di/container');
+      const { UserId } = await import('@/ddd/domain/shared/value-objects');
+
+      const connectionService = getConnectionApplicationService();
+      const userIdVO = UserId.fromString(userId);
+
+      // Get user's active connections
+      const result = await connectionService.getUserConnections(userIdVO);
+      if (!result.success || !result.data) {
+        console.log('[DatabaseToolRegistry] No connections found for user');
+        return [];
+      }
+
+      // Build set of connected app IDs
+      const connectedAppIds = new Set(
+        result.data
+          .filter(conn => conn.status === 'active')
+          .map(conn => conn.appName.value)
+      );
+
+      console.log(`[DatabaseToolRegistry] User has ${connectedAppIds.size} active connections:`, Array.from(connectedAppIds));
+
+      // Filter to connected tools only
+      const filtered = tools.filter(tool => {
+        const appId = tool.extra?.appId;
+        return appId && connectedAppIds.has(appId);
+      });
+
+      console.log(`[DatabaseToolRegistry] Filtered from ${tools.length} to ${filtered.length} connected tools`);
+      return filtered;
+
+    } catch (error) {
+      console.error('[DatabaseToolRegistry] Error filtering by connections:', error);
+      return tools; // Return unfiltered on error
     }
   }
 }

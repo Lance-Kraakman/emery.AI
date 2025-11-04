@@ -1,7 +1,10 @@
 // AIDEV-NOTE: Search analytics service implementation
 // Provides search logging and analytics using repository pattern
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { type SearchLogger } from '@/ddd/domain/rag/services';
+
+const logger = createDebugLogger('SearchAnalytics');
 import type { RagQueryLogRepository } from '@/ddd/domain/rag/repositories/rag-query-log-repository';
 import { RagIndexId, SearchQuery } from '@/ddd/domain/rag/value-objects';
 

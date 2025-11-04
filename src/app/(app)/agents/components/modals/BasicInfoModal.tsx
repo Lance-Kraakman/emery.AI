@@ -7,13 +7,16 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, X, User } from 'lucide-react';
+import { Loader2, Save, X, User, Pencil } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import { UserSelect } from '@/components/ui/UserSelect';
 import { getOrganizationMembers } from '@/app/actions/invitations';
 import { checkPermission } from '@/app/actions/permissions';
 import { useSession } from 'next-auth/react';
+import { AgentAvatar } from '@/components/agents/AgentAvatar';
+import type { AvatarConfigV1 } from '@/lib/avatars';
+import { AvatarCustomizationModal } from './AvatarCustomizationModal';
 
 interface BasicInfoModalProps {
   isOpen: boolean;
@@ -28,6 +31,7 @@ interface FormData {
   description: string;
   status: string;
   ownerId: string;
+  avatarConfig?: AvatarConfigV1 | null;
 }
 
 interface User {
@@ -44,7 +48,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
     role: '',
     description: '',
     status: 'active',
-    ownerId: ''
+    ownerId: '',
+    avatarConfig: null
   });
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -52,6 +57,7 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
   const [canManageAgents, setCanManageAgents] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [currentOwnerName, setCurrentOwnerName] = useState<string>('Unknown User');
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
 
   // Load users and permissions when modal opens
   useEffect(() => {
@@ -68,7 +74,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
         role: agent.role || '',
         description: agent.description || '',
         status: agent.status || 'active',
-        ownerId: agent.ownerId || ''
+        ownerId: agent.ownerId || '',
+        avatarConfig: agent.avatarConfig || null
       };
       setFormData(initialData);
       setHasChanges(false);
@@ -112,7 +119,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
         formData.role !== (agent.role || '') ||
         formData.description !== (agent.description || '') ||
         formData.status !== (agent.status || 'active') ||
-        formData.ownerId !== (agent.ownerId || '')
+        formData.ownerId !== (agent.ownerId || '') ||
+        JSON.stringify(formData.avatarConfig) !== JSON.stringify(agent.avatarConfig)
       );
       setHasChanges(hasChanged);
     }
@@ -130,7 +138,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
         name: formData.name.trim(),
         role: formData.role.trim(),
         description: formData.description.trim(),
-        status: formData.status,
+        status: formData.status as 'active' | 'inactive' | 'archived',
+        avatarConfig: formData.avatarConfig,
         ...(canManageAgents && formData.ownerId && { ownerId: formData.ownerId })
       });
 
@@ -156,6 +165,15 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
       if (!shouldDiscard) return;
     }
     onClose();
+  };
+
+  const handleAvatarEdit = () => {
+    setIsAvatarModalOpen(true);
+  };
+
+  const handleAvatarSave = (config: AvatarConfigV1) => {
+    setFormData(prev => ({ ...prev, avatarConfig: config }));
+    setIsAvatarModalOpen(false);
   };
 
   const footer = (
@@ -189,41 +207,64 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
       onClose={handleCancel}
       title="Edit Agent Information"
       description="Update the basic information for this agent"
-      size="md"
+      size="lg"
       footer={footer}
       closeOnEscape={!hasChanges}
       closeOnOutsideClick={!hasChanges}
     >
       <div className="p-6 space-y-6">
-        {/* Agent Name */}
-        <div className="space-y-2">
-          <Label htmlFor="name" className="text-sm font-medium">
-            Agent Name *
-          </Label>
-          <Input
-            id="name"
-            value={formData.name}
-            onChange={(e) => handleInputChange('name', e.target.value)}
-            placeholder="Enter agent name"
-            disabled={isSaving}
-          />
-        </div>
+        {/* Profile Header Section */}
+        <div className="flex items-start gap-6 pb-6 border-b">
+          {/* Avatar with Edit Button */}
+          <div className="relative group">
+            <AgentAvatar
+              avatarConfig={formData.avatarConfig}
+              agentId={agent.id}
+              size="lg"
+              className="w-24 h-24"
+            />
+            <button
+              onClick={handleAvatarEdit}
+              className="absolute -bottom-2 -right-2 w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-primary/90 transition-all hover:scale-110"
+              title="Edit avatar"
+              type="button"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          </div>
 
-        {/* Role */}
-        <div className="space-y-2">
-          <Label htmlFor="role" className="text-sm font-medium">
-            Role
-          </Label>
-          <Input
-            id="role"
-            value={formData.role}
-            onChange={(e) => handleInputChange('role', e.target.value)}
-            placeholder="e.g., Data Analyst, Customer Support, Content Writer"
-            disabled={isSaving}
-          />
-          <p className="text-xs text-muted-foreground">
-            Describe what this agent does or its primary function
-          </p>
+          {/* Name and Role */}
+          <div className="flex-1 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-sm font-medium">
+                Agent Name *
+              </Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => handleInputChange('name', e.target.value)}
+                placeholder="Enter agent name"
+                disabled={isSaving}
+                className="text-lg font-semibold"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="role" className="text-sm font-medium">
+                Role
+              </Label>
+              <Input
+                id="role"
+                value={formData.role}
+                onChange={(e) => handleInputChange('role', e.target.value)}
+                placeholder="e.g., Data Analyst, Customer Support, Content Writer"
+                disabled={isSaving}
+              />
+              <p className="text-xs text-muted-foreground">
+                Describe what this agent does or its primary function
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Status */}
@@ -298,10 +339,20 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
             disabled={isSaving}
           />
           <p className="text-xs text-muted-foreground">
-            Optional: Provide details about the agent's purpose and capabilities
+            Optional: Provide details about the agent's purpose and skills
           </p>
         </div>
       </div>
+
+      {/* Avatar Customization Modal - Rendered as child to prevent closing parent */}
+      {isAvatarModalOpen && (
+        <AvatarCustomizationModal
+          isOpen={isAvatarModalOpen}
+          onClose={() => setIsAvatarModalOpen(false)}
+          initialConfig={formData.avatarConfig}
+          onSave={handleAvatarSave}
+        />
+      )}
     </BaseModal>
   );
 }

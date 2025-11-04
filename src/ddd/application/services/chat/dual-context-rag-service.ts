@@ -1,15 +1,18 @@
 /**
  * Dual-Context RAG Service
- * 
+ *
  * Provides intelligent context retrieval for domain-connected chats.
  * Combines domain-specific context (prioritized) with organizational context (background).
  * Supports tables, agents, files, teams, and other domain types.
- * 
+ *
  * AIDEV-NOTE: Core service for dual-context RAG strategy - manages prioritized
  * domain-specific context while maintaining organizational awareness
  */
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import type { SearchRagQuery } from '@/ddd/application/services/rag/queries/search-query';
+
+const logger = createDebugLogger('DualContextRAG');
 import { getRagSearchApplicationService, getRagIndexRepository } from '@/ddd/application/di/container';
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';

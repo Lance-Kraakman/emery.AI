@@ -1,5 +1,18 @@
-import type { Agent, AgentType, AgentSpecialization, CapabilityConfig } from '@/ddd/domain/agents/entities/agent';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import { ScheduleMapper } from './schedule-mapper';
+import type { ScheduleConfigurationDTO } from '@/app/dtos/schedule.dto';
+import type { AvatarConfig } from '@/lib/avatars';
+
+// AIDEV-NOTE: Serializable DTO types following the ToolMapper pattern
+// ToolConfig class instances cannot be serialized by Next.js Server Actions
+// We serialize to plain objects with name + config, matching ToolDTO pattern
+
+export interface ToolConfigDTO {
+  name: string;
+  config: Record<string, any>;
+}
 
 export interface AgentDTO {
   id: number;
@@ -7,19 +20,16 @@ export interface AgentDTO {
   role: string;
   description: string;
   persona: string;
-  tools: any[];
-  servers: any[];
-  trigger?: TriggerConfig;
-  capabilities: CapabilityConfig[];
+  schedules: ScheduleConfigurationDTO[];
   databaseId?: string | null;
   status: string;
   organizationId: number;
-  ownerId: string;
+  ownerId: string; // Used for OAuth resolution via proxy
   apiKey?: string | null;
-  agentType?: AgentType;
-  specialization?: AgentSpecialization;
-  createdAt?: Date | null;
-  updatedAt?: Date | null;
+  defaultModel?: string | null; // AI model override for this agent
+  avatarConfig?: AvatarConfig | null; // Avatar configuration with icon + color
+  createdAt?: string | null; // ISO string for serialization
+  updatedAt?: string | null; // ISO string for serialization
 }
 
 export class AgentMapper {
@@ -30,19 +40,18 @@ export class AgentMapper {
       role: agent.role,
       description: agent.description,
       persona: agent.persona,
-      tools: agent.tools,
-      servers: agent.servers,
-      trigger: agent.trigger,
-      capabilities: agent.capabilities,
+      // Use ScheduleMapper to convert ScheduleConfiguration to ScheduleConfigurationDTO
+      schedules: agent.schedules.map(schedule => ScheduleMapper.toDTO(schedule)),
       databaseId: agent.databaseId,
       status: agent.status.value,
       organizationId: agent.organizationId.value,
       ownerId: agent.ownerId.value,
       apiKey: agent.apiKey?.value || null,
-      agentType: agent.agentType,
-      specialization: agent.specialization,
-      createdAt: agent.createdAt,
-      updatedAt: agent.updatedAt
+      defaultModel: agent.defaultModel || null,
+      avatarConfig: agent.avatarConfig || null,
+      // Convert Date objects to ISO strings for server component serialization
+      createdAt: agent.createdAt ? agent.createdAt.toISOString() : null,
+      updatedAt: agent.updatedAt ? agent.updatedAt.toISOString() : null
     };
   }
 }

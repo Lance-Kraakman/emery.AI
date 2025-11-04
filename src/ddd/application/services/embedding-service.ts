@@ -1,9 +1,12 @@
 // AIDEV-NOTE: Embedding service implementation
 // Provides embedding generation using the AI SDK with HuggingFace models
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { getEmbeddingModel } from '@/lib/ai/models';
 import { type EmbeddingGenerator } from '@/ddd/domain/rag/services';
 import crypto from 'crypto';
+
+const logger = createDebugLogger('EmbeddingService');
 
 export class EmbeddingService implements EmbeddingGenerator {
   private readonly embeddingModel = getEmbeddingModel();
@@ -23,19 +26,18 @@ export class EmbeddingService implements EmbeddingGenerator {
     // Check if HF_TOKEN is available
     const hfToken = process.env.HF_TOKEN;
     if (!hfToken) {
-      console.error('[EMBEDDING-SERVICE] 🔴 CRITICAL: HF_TOKEN is not set!');
-      console.error('[EMBEDDING-SERVICE] Set HF_TOKEN environment variable from https://huggingface.co/settings/tokens');
+      logger.error('CRITICAL: HF_TOKEN is not set - Set from https://huggingface.co/settings/tokens');
       throw new Error('HF_TOKEN environment variable is required for embeddings');
     }
 
     const timeout = options?.timeout || 30000; // Default 30s timeout
-    console.log(`[EMBEDDING-SERVICE] Starting embedding generation for ${text.length} chars (timeout: ${timeout}ms)`);
-    console.log(`[EMBEDDING-SERVICE] Text preview: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
-    console.log(`[EMBEDDING-SERVICE] Model: ${this.embeddingModel.modelId}`);
-    console.log(`[EMBEDDING-SERVICE] Provider: ${this.embeddingModel.provider}`);
-    console.log(`[EMBEDDING-SERVICE] HF_TOKEN present: ${hfToken ? 'YES' : 'NO'}`);
-    console.log(`[EMBEDDING-SERVICE] HF_TOKEN length: ${hfToken.length} chars`);
-    console.log(`[EMBEDDING-SERVICE] HF_TOKEN prefix: ${hfToken.substring(0, 8)}...`);
+    logger.debug('Starting embedding generation', {
+      chars: text.length,
+      timeout: `${timeout}ms`,
+      preview: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
+      model: this.embeddingModel.modelId,
+      provider: this.embeddingModel.provider
+    });
     
     try {
       const startTime = Date.now();
@@ -54,12 +56,11 @@ export class EmbeddingService implements EmbeddingGenerator {
         throw new Error('Generated embedding is empty');
       }
 
-      console.log(`[EMBEDDING-SERVICE] ✅ SUCCESS: Got ${embedding.length} dimensions in ${elapsed}ms`);
-      
+      logger.summary('Embedding generated', { dimensions: embedding.length, time: `${elapsed}ms` });
+
       return embedding;
     } catch (error) {
-      console.error('[EMBEDDING-SERVICE] 🔴 FAILED to generate embedding!');
-      console.log('error generating embedding:', error)
+      logger.error('Failed to generate embedding', error);
       throw error;
     }
   }
@@ -82,23 +83,26 @@ export class EmbeddingService implements EmbeddingGenerator {
     // Check if HF_TOKEN is available
     const hfToken = process.env.HF_TOKEN;
     if (!hfToken) {
-      console.error('[EMBEDDING-SERVICE] 🔴 CRITICAL: HF_TOKEN is not set!');
-      console.error('[EMBEDDING-SERVICE] Set HF_TOKEN environment variable from https://huggingface.co/settings/tokens');
+      logger.error('CRITICAL: HF_TOKEN is not set - Set from https://huggingface.co/settings/tokens');
       throw new Error('HF_TOKEN environment variable is required for embeddings');
     }
 
     const timeout = options?.timeout || 45000; // Default 45s timeout for batch operations
-    console.log(`[EMBEDDING-SERVICE] Starting BATCH embedding generation for ${validTexts.length} texts (timeout: ${timeout}ms)`);
-    console.log(`[EMBEDDING-SERVICE] Total characters: ${validTexts.reduce((sum, text) => sum + text.length, 0)}`);
-    console.log(`[EMBEDDING-SERVICE] Model: ${this.embeddingModel.modelId}`);
-    console.log(`[EMBEDDING-SERVICE] Provider: ${this.embeddingModel.provider}`);
+    const totalChars = validTexts.reduce((sum, text) => sum + text.length, 0);
+    logger.debug('Starting BATCH embedding generation', {
+      count: validTexts.length,
+      timeout: `${timeout}ms`,
+      totalChars,
+      model: this.embeddingModel.modelId,
+      provider: this.embeddingModel.provider
+    });
     
     try {
       const startTime = Date.now();
       
       // Use direct HuggingFace API with batch
-      console.log('[EMBEDDING-SERVICE] Calling HuggingFace batch API directly...');
-      
+      logger.debug('Calling HuggingFace batch API');
+
       // Apply timeout to batch embedding generation
       const embeddingPromise = this.embeddingModel.generateEmbeddingsBatch(validTexts.map(text => text.trim()));
       const timeoutPromise = new Promise<never>((_, reject) => {
@@ -108,7 +112,7 @@ export class EmbeddingService implements EmbeddingGenerator {
       const embeddings = await Promise.race([embeddingPromise, timeoutPromise]);
 
       const elapsed = Date.now() - startTime;
-      
+
       if (!embeddings || embeddings.length === 0) {
         throw new Error('Generated batch embeddings are empty');
       }
@@ -117,49 +121,47 @@ export class EmbeddingService implements EmbeddingGenerator {
         throw new Error(`Batch embedding count mismatch: expected ${validTexts.length}, got ${embeddings.length}`);
       }
 
-      console.log(`[EMBEDDING-SERVICE] ✅ BATCH SUCCESS: Got ${embeddings.length} embeddings with ${embeddings[0]?.length || 0} dimensions in ${elapsed}ms`);
-      console.log(`[EMBEDDING-SERVICE] Average: ${Math.round(elapsed / embeddings.length)}ms per embedding`);
-      
+      logger.summary('Batch embeddings generated', {
+        count: embeddings.length,
+        dimensions: embeddings[0]?.length || 0,
+        time: `${elapsed}ms`,
+        avgPerEmbedding: `${Math.round(elapsed / embeddings.length)}ms`
+      });
+
       return embeddings;
     } catch (error) {
-      console.error('[EMBEDDING-SERVICE] 🔴 FAILED to generate batch embeddings!');
-      console.error(`[EMBEDDING-SERVICE] Failed batch size: ${validTexts.length} texts`);
-      
+      logger.error(`Failed to generate batch embeddings for ${validTexts.length} texts`, error);
+
       if (error instanceof Error) {
-        console.error(`[EMBEDDING-SERVICE] Error type: ${error.constructor.name}`);
-        console.error(`[EMBEDDING-SERVICE] Error message: ${error.message}`);
-        
+        logger.error(`Error type: ${error.constructor.name}, message: ${error.message}`);
+
         // Enhanced error logging for HuggingFace API errors
         if (error.message.includes('HTTP') || error.message.includes('fetch') || error.message.includes('Failed to perform inference')) {
-          console.error('[EMBEDDING-SERVICE] 🌐 HuggingFace API Error Details:');
-          console.error(`[EMBEDDING-SERVICE] This appears to be a HuggingFace API server error`);
-          console.error(`[EMBEDDING-SERVICE] The model server may be overloaded or experiencing issues`);
-          console.error(`[EMBEDDING-SERVICE] Consider: 1) Retry later, 2) Use different model, 3) Check HF status`);
-          
+          logger.error('HuggingFace API Error - server may be overloaded. Consider: 1) Retry later, 2) Use different model, 3) Check HF status');
+
           // Check if this is an InferenceClientProviderApiError from @huggingface/inference
           if (error.constructor.name === 'InferenceClientProviderApiError') {
-            console.error('[EMBEDDING-SERVICE] 📋 HuggingFace API Error Context:');
-            if ('url' in error) console.error(`[EMBEDDING-SERVICE] API URL: ${error.url}`);
-            if ('method' in error) console.error(`[EMBEDDING-SERVICE] HTTP Method: ${error.method}`);
-            if ('requestId' in error) console.error(`[EMBEDDING-SERVICE] Request ID: ${error.requestId}`);
-            if ('body' in error) console.error(`[EMBEDDING-SERVICE] Response Body:`, error.body);
+            logger.debug('HuggingFace API Error Context', {
+              url: 'url' in error ? (error as any).url : undefined,
+              method: 'method' in error ? (error as any).method : undefined,
+              requestId: 'requestId' in error ? (error as any).requestId : undefined
+            });
+            if ('body' in error) logger.debug('Response Body', (error as any).body);
           }
         }
-        
+
         // Log more details if available
         if ('cause' in error && error.cause) {
-          console.error(`[EMBEDDING-SERVICE] Cause: ${error.cause}`);
+          logger.error(`Cause: ${error.cause}`);
         }
         if ('status' in error && error.status) {
-          console.error(`[EMBEDDING-SERVICE] HTTP Status: ${(error as any).status}`);
+          logger.error(`HTTP Status: ${(error as any).status}`);
         }
         if (error.stack) {
-          console.error(`[EMBEDDING-SERVICE] Stack trace:`);
-          console.error(error.stack.split('\n').slice(0, 5).join('\n'));
+          logger.debug(`Stack trace: ${error.stack.split('\n').slice(0, 5).join(' | ')}`);
         }
       } else {
-        console.error(`[EMBEDDING-SERVICE] Unknown error type: ${typeof error}`);
-        console.error(error);
+        logger.error(`Unknown error type: ${typeof error}`, error);
       }
       
       // Create a more descriptive error for upstream handling

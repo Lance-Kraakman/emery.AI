@@ -10,7 +10,7 @@ interface TaskCardProps {
     id: string;
     name: string;
     status: string;
-    capabilityName?: string;
+    skillName?: string;
     result?: any;
     error?: string;
     logs?: string[];
@@ -46,7 +46,7 @@ export function TaskCard({ task, className, hasMounted = true, variant = 'full' 
           <div className="flex-1 min-w-0 pr-2">
             <h4 className="font-medium text-sm truncate">{task.name}</h4>
             <p className="text-xs text-muted-foreground truncate">
-              {task.capabilityName}
+              {task.skillName}
             </p>
           </div>
           <span
@@ -99,10 +99,10 @@ export function TaskCard({ task, className, hasMounted = true, variant = 'full' 
 
       {/* Task Details */}
       <div className="space-y-2 text-sm text-muted-foreground">
-        {task.capabilityName && (
+        {task.skillName && (
           <div className="flex items-center gap-2">
             <User className="h-4 w-4" />
-            <span>Capability: {task.capabilityName}</span>
+            <span>Skill: {task.skillName}</span>
           </div>
         )}
 

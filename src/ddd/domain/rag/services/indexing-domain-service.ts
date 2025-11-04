@@ -18,7 +18,6 @@ import type { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import type { FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import { getCapabilitiesCount } from '@/ddd/domain/agents/entities/agent';
 import type { Database } from '@/ddd/domain/databases/entities/database';
 import type { Team } from '@/ddd/domain/teams/entities/team';
 import type { Task } from '@/ddd/domain/tasks/entities/task';
@@ -173,7 +172,7 @@ export class IndexingDomainService {
       
       if (fileFields.length > 0) {
         // Get rows that might contain file values
-        const rows = await this.tableRepository.findRows(table.id, { limit: 10000 });
+        const rows = await this.tableRepository.getRows(table.id, { limit: 10000, offset: 0 });
         
         for (const row of rows) {
           for (const fileField of fileFields) {
@@ -445,9 +444,7 @@ export class IndexingDomainService {
           role: agent.role,
           status: agent.status,
           organizationId: organizationId.value,
-          toolCount: agent.tools ? Object.keys(agent.tools).length : 0,
-          serverCount: agent.servers ? Object.keys(agent.servers).length : 0,
-          capabilityCount: getCapabilitiesCount(agent),
+          schedulesCount: agent.schedules?.length || 0,
         },
         embedding,
         contentHash,
@@ -633,7 +630,7 @@ export class IndexingDomainService {
           agentId: task.agentId,
           organizationId: organizationId.value,
           status: task.status.value,
-          capabilityName: task.capabilityName,
+          skillName: task.skillName,
           hasResult: !!task.result,
           hasError: !!task.error,
           duration: task.duration,
@@ -642,7 +639,6 @@ export class IndexingDomainService {
           completedAt: task.completedAt,
           isTerminal: task.isTerminal,
           toolCount: task.instructions.tools?.length || 0,
-          serverCount: task.instructions.servers?.length || 0,
         },
         embedding,
         contentHash,
@@ -660,9 +656,10 @@ export class IndexingDomainService {
   private async fetchSampleRows(table: DynamicTable, limit: number = 15): Promise<any[]> {
     try {
       // Use the repository to get sample rows
-      const rows = await this.tableRepository.findRows(table.id, { 
-        limit, 
-        orderBy: 'created_at DESC' 
+      const rows = await this.tableRepository.getRows(table.id, {
+        limit,
+        offset: 0,
+        orderBy: 'created_at DESC'
       });
       
       console.log(`[INDEXING-DEBUG] Fetched ${rows.length} sample rows from table ${table.name}`);
@@ -804,20 +801,12 @@ Usage: This table supports data analysis, reporting, workflow automation, and in
   }
 
   private generateAgentContent(agent: Agent): string {
-    const toolsList = agent.tools && typeof agent.tools === 'object'
-      ? `\nTools: ${Object.keys(agent.tools).join(', ')}`
-      : '\nTools: None configured';
+    const schedulesCount = agent.schedules?.length || 0;
+    const schedulesDesc = schedulesCount > 0
+      ? `\nSchedules: ${schedulesCount} configured schedule${schedulesCount > 1 ? 's' : ''}`
+      : '\nSchedules: None configured';
 
-    const serversList = agent.servers && typeof agent.servers === 'object'
-      ? `\nServers: ${Object.keys(agent.servers).join(', ')}`
-      : '\nServers: None configured';
-
-    const capabilityCount = getCapabilitiesCount(agent);
-    const capabilitiesDesc = capabilityCount > 0
-      ? `\nCapabilities: ${capabilityCount} configured capabilities`
-      : '\nCapabilities: None configured';
-
-    const createdDate = agent.createdAt 
+    const createdDate = agent.createdAt
       ? `\nCreated: ${agent.createdAt.toLocaleDateString()}`
       : '';
 
@@ -825,11 +814,11 @@ Usage: This table supports data analysis, reporting, workflow automation, and in
 ${agent.role ? `Role: ${agent.role}` : 'Role: Not specified'}
 ${agent.description ? `Description: ${agent.description}` : 'Description: Not provided'}
 ${agent.persona ? `Persona: ${agent.persona}` : 'Persona: Default assistant'}
-Status: ${agent.status || 'active'}${createdDate}${toolsList}${serversList}${capabilitiesDesc}
+Status: ${agent.status || 'active'}${createdDate}${schedulesDesc}
 
 About: ${agent.name} is an AI agent configured within the Emery platform for workflow automation and task execution. This agent can process requests, execute workflows, and integrate with various tools and services to accomplish organizational objectives.
 
-Functionality: The agent operates within the Emery ecosystem to handle automated workflows, data processing, integration tasks, and other organizational processes as configured through its capabilities and available tools.`;
+Functionality: The agent operates within the Emery ecosystem to handle automated workflows, data processing, integration tasks, and other organizational processes as configured through its schedules. Tools are defined per-task in skills and schedule configurations.`;
   }
 
   private generateDatabaseContent(database: Database): string {
@@ -879,10 +868,6 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
       ? `\nTools: ${task.instructions.tools.map(tool => tool.name).join(', ')}`
       : '\nTools: None configured';
 
-    const serversList = task.instructions.servers && task.instructions.servers.length > 0
-      ? `\nServers: ${task.instructions.servers.map(server => server.name).join(', ')}`
-      : '\nServers: None configured';
-
     const createdDate = task.createdAt 
       ? `\nCreated: ${task.createdAt.toLocaleDateString()}`
       : '';
@@ -911,15 +896,15 @@ Functionality: The team collaborates on tasks, projects, and workflows within th
       ? `${task.instructions.instructions.substring(0, 297)}...`
       : task.instructions.instructions;
 
-    const capabilityInfo = task.capabilityName
-      ? `\nCapability: ${task.capabilityName}`
+    const capabilityInfo = task.skillName
+      ? `\nCapability: ${task.skillName}`
       : '';
 
     return `Task: ${task.name}
 Agent ID: ${task.agentId.value}${capabilityInfo}
 Status: ${task.status.value}${createdDate}${startedDate}${completedDate}${durationInfo}
 
-Instructions: ${instructionsSummary}${toolsList}${serversList}${resultInfo}
+Instructions: ${instructionsSummary}${toolsList}${resultInfo}
 
 About: ${task.name} is an execution task within the Emery platform, tracking automated agent workflows and their outcomes. This task provides insight into agent performance, workflow patterns, and organizational automation activities.
 

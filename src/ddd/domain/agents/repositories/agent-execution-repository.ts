@@ -11,6 +11,7 @@
 export interface AgentExecutionRequest {
   agentId: number;
   instructions: string;
+  skillName?: string; // Optional - for capability-based execution
   tools?: Array<{name: string, version?: string, config?: Record<string, any>}>;
   servers?: Array<{name: string, endpoint?: string, config?: Record<string, any>}>;
   executionId: string;
