@@ -331,11 +331,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"📝 Result preview: {str(result)[:200]}...")
 
             # DEBUG: Immediate check of agent state
-            logger.info(f"🔍 DEBUG: hasattr(agent, 'logs') = {hasattr(agent, 'logs')}")
-            if hasattr(agent, 'logs'):
-                logger.info(f"🔍 DEBUG: agent.logs is None? {agent.logs is None}")
-                logger.info(f"🔍 DEBUG: len(agent.logs) = {len(agent.logs) if agent.logs else 'N/A'}")
-                logger.info(f"🔍 DEBUG: agent.logs = {agent.logs}")
+            logger.info(f"🔍 DEBUG: hasattr(agent, 'memory') = {hasattr(agent, 'memory')}")
+            if hasattr(agent, 'memory'):
+                logger.info(f"🔍 DEBUG: agent.memory.steps is None? {agent.memory.steps is None}")
+                logger.info(f"🔍 DEBUG: len(agent.memory.steps) = {len(agent.memory.steps) if agent.memory.steps else 'N/A'}")
+                logger.info(f"🔍 DEBUG: step types = {[type(s).__name__ for s in agent.memory.steps] if agent.memory.steps else 'N/A'}")
 
             # Extract and store token usage from agent logs
             self.last_token_usage = self._extract_token_usage_from_agent(agent)
@@ -527,45 +527,39 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         )
 
     def _extract_token_usage_from_agent(self, agent) -> Optional[Any]:
-        """Extract accumulated token usage from agent's execution logs."""
+        """Extract accumulated token usage from agent's memory steps."""
         try:
-            if not hasattr(agent, 'logs') or not agent.logs:
-                logger.warning("❌ DEBUG: No logs attribute or logs are empty")
+            # Use agent.memory.steps instead of deprecated agent.logs
+            if not hasattr(agent, 'memory') or not agent.memory.steps:
+                logger.warning("No memory steps found in agent")
                 return None
 
-            logger.info(f"📊 DEBUG: Agent has {len(agent.logs)} log entries")
+            logger.info(f"📊 Agent has {len(agent.memory.steps)} memory steps")
 
-            # Debug: Print first log entry structure
-            if agent.logs:
-                first_log = agent.logs[0]
-                logger.info(f"📊 DEBUG: First log type: {type(first_log)}")
-                logger.info(f"📊 DEBUG: First log dir: {[attr for attr in dir(first_log) if not attr.startswith('_')]}")
-                if hasattr(first_log, '__dict__'):
-                    logger.info(f"📊 DEBUG: First log __dict__: {first_log.__dict__}")
+            # Import step types from smolagents
+            from smolagents.memory import ActionStep, PlanningStep
 
             # Aggregate token usage from all steps
             total_input = 0
             total_output = 0
             model_name = ""
 
-            for i, log_entry in enumerate(agent.logs):
-                logger.info(f"📊 DEBUG: Log {i} type={type(log_entry).__name__}, has input_tokens={hasattr(log_entry, 'input_tokens')}, has output_tokens={hasattr(log_entry, 'output_tokens')}")
-
-                if hasattr(log_entry, 'input_tokens') and hasattr(log_entry, 'output_tokens'):
-                    input_tok = getattr(log_entry, 'input_tokens', 0)
-                    output_tok = getattr(log_entry, 'output_tokens', 0)
-                    total_input += input_tok
-                    total_output += output_tok
-                    if not model_name and hasattr(log_entry, 'model_name'):
-                        model_name = log_entry.model_name
-                    logger.info(f"✅ DEBUG: Found tokens in log {i}: input={input_tok}, output={output_tok}")
+            for i, step in enumerate(agent.memory.steps):
+                # Only ActionStep and PlanningStep have token_usage
+                if isinstance(step, (ActionStep, PlanningStep)):
+                    if step.token_usage:
+                        total_input += step.token_usage.input_tokens
+                        total_output += step.token_usage.output_tokens
+                        if not model_name:
+                            model_name = getattr(step.token_usage, 'model_name', '')
+                        logger.info(f"✅ Step {i} ({type(step).__name__}): input={step.token_usage.input_tokens}, output={step.token_usage.output_tokens}")
+                    else:
+                        logger.info(f"⚠️ Step {i} ({type(step).__name__}) has no token usage")
                 else:
-                    logger.info(f"⚠️ DEBUG: Log {i} missing token attributes")
-
-            logger.info(f"📊 DEBUG: Total aggregated: input={total_input}, output={total_output}")
+                    logger.info(f"ℹ️ Step {i}: {type(step).__name__} (no token tracking)")
 
             if total_input == 0 and total_output == 0:
-                logger.warning(f"⚠️ DEBUG: Aggregated tokens are zero after checking {len(agent.logs)} logs")
+                logger.warning(f"⚠️ Total token usage is zero after checking {len(agent.memory.steps)} steps")
                 return None
 
             # Import TokenUsage from model_provider
