@@ -34,6 +34,7 @@ import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
 import { fetchFileArtifactData, getFileDownloadUrl, getDocumentFieldValue, getDocumentDownloadUrl } from '@/app/actions/artifacts'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
+import { StepProgressIndicator } from './StepProgressIndicator'
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
@@ -341,6 +342,17 @@ function ChatContentWithCanvas({
         onRemoveTool={onRemoveTool}
         className="border-t border-border/10"
       />
+
+      {/* Step Progress Indicator - shows real-time agent execution */}
+      {handler.currentStep && (
+        <div className="px-3 py-2 border-t border-border/10">
+          <StepProgressIndicator
+            currentStep={handler.currentStep}
+            isLoading={handler.isLoading}
+            onCancel={handler.cancelMessage}
+          />
+        </div>
+      )}
 
       {/* Input area */}
       <div className="flex-shrink-0 py-4 px-3 border-t border-border/10 bg-card" onKeyDown={onKeyDown}>
