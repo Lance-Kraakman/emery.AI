@@ -367,8 +367,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info("🚀 Executing ToolCallingAgent with stream=True...")
 
             # Import smolagents step types for proper type checking
-            from smolagents.memory import ActionStep, PlanningStep
-            from smolagents.types import AgentText
+            from smolagents.memory import ActionStep, PlanningStep, FinalAnswerStep
+            from smolagents import AgentText
 
             step_index = 0
             final_answer_text = ""
@@ -411,9 +411,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         "step_index": step_index
                     }
 
-                elif isinstance(step, AgentText):
+                elif isinstance(step, (FinalAnswerStep, AgentText)):
                     # Final answer reached
-                    final_answer_text = str(step)
+                    # FinalAnswerStep has .answer attribute, AgentText can be converted to string
+                    if isinstance(step, FinalAnswerStep):
+                        final_answer_text = str(step.answer) if hasattr(step, 'answer') else str(step)
+                    else:
+                        final_answer_text = str(step)
+
                     logger.info(f"✅ Final answer: {len(final_answer_text)} chars")
 
                     # Yield final step indicator
