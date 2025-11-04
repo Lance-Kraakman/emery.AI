@@ -91,10 +91,14 @@ export class ChatProcessingClient {
     organizationId: number,
     conversationHistory: HistoryMessage[] = [],
     options: ChatProcessingOptions = {},
-    onStreamingResponse: (response: StreamingChatResponse) => void
+    onStreamingResponse: (response: StreamingChatResponse) => void,
+    messageId?: string
   ): Promise<void> {
-    
-    console.log(`[CHAT-GRPC-CLIENT] Processing message for user ${userId} in org ${organizationId}`);
+
+    // Generate message ID if not provided
+    const actualMessageId = messageId || `msg_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    console.log(`[CHAT-GRPC-CLIENT] Processing message ${actualMessageId} for user ${userId} in org ${organizationId}`);
     console.log(`[CHAT-GRPC-CLIENT] Message preview: ${messageContent.substring(0, 100)}...`);
     console.log(`[CHAT-GRPC-CLIENT] History messages: ${conversationHistory.length}`);
 
@@ -106,6 +110,7 @@ export class ChatProcessingClient {
       organizationId: organizationId,
       conversationHistory: conversationHistory,
       model: options.defaultModel || '', // Pass organization's default model or empty string for system default
+      messageId: actualMessageId, // Add message ID for cancellation tracking
       tools: (options.tools || []).map(tool => ({
         name: tool.name,
         version: '', // Empty version since ToolConfig no longer has version
@@ -214,6 +219,42 @@ export class ChatProcessingClient {
         });
         
         reject(error);
+      });
+    });
+  }
+
+  /**
+   * Cancel an in-progress message processing
+   *
+   * @param messageId - The message ID to cancel
+   * @param userId - User requesting cancellation
+   * @param organizationId - Organization context
+   */
+  async cancelMessage(
+    messageId: string,
+    userId: string,
+    organizationId: number
+  ): Promise<{ success: boolean; message: string }> {
+    console.log(`[CHAT-GRPC-CLIENT] Cancelling message ${messageId}`);
+
+    return new Promise((resolve, reject) => {
+      const request = {
+        messageId: messageId,
+        userId: userId,
+        organizationId: organizationId
+      };
+
+      this.client.CancelMessage(request, (error: any, response: any) => {
+        if (error) {
+          console.error(`[CHAT-GRPC-CLIENT] Cancel failed:`, error);
+          reject(error);
+        } else {
+          console.log(`[CHAT-GRPC-CLIENT] Cancel response:`, response);
+          resolve({
+            success: response.success,
+            message: response.message
+          });
+        }
       });
     });
   }
