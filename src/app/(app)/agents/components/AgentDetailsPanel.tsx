@@ -101,7 +101,7 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   const getTriggerStatus = () => {
     if (!agent.schedules || agent.schedules.length === 0) return 'partial';
     const firstSchedule = agent.schedules[0];
-    if (!firstSchedule || firstSchedule.trigger.type === 'MANUAL') return 'partial';
+    if (!firstSchedule) return 'partial';
     return 'configured';
   };
 
@@ -115,7 +115,7 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
     const scheduleCount = agent.schedules.length;
     const firstSchedule = agent.schedules[0];
 
-    if (!firstSchedule || firstSchedule.trigger.type === 'MANUAL') {
+    if (!firstSchedule) {
       return 'Manual execution only';
     }
 

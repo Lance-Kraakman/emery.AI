@@ -34,7 +34,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
   const [isTriggerConfigOpen, setIsTriggerConfigOpen] = useState(false);
 
   // Internal form state (trigger kept as single item for UI simplicity)
-  const [trigger, setTrigger] = useState<TriggerConfig>(TriggerConfigs.manual());
+  const [trigger, setTrigger] = useState<TriggerConfig>(TriggerConfigs.calendar('FREQ=DAILY;INTERVAL=1'));
 
   const form = useForm({
     defaultValues: {
@@ -96,9 +96,6 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
     let newTrigger: TriggerConfig;
 
     switch (triggerType) {
-      case 'MANUAL':
-        newTrigger = TriggerConfigs.manual();
-        break;
       case 'CALENDAR':
         newTrigger = TriggerConfigs.calendar('FREQ=DAILY;INTERVAL=1');
         break;
@@ -109,7 +106,7 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
         newTrigger = TriggerConfigs.webhook();
         break;
       default:
-        newTrigger = TriggerConfigs.manual();
+        newTrigger = TriggerConfigs.calendar('FREQ=DAILY;INTERVAL=1');
     }
 
     setTrigger(newTrigger);
@@ -250,12 +247,11 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
             <div className="px-3 pb-3 space-y-3">
               <div>
                 <h4 className="font-medium text-foreground mb-2 text-sm">Trigger Type</h4>
-                <Select value={trigger?.type || 'MANUAL'} onValueChange={handleTriggerTypeChange}>
+                <Select value={trigger?.type || 'CALENDAR'} onValueChange={handleTriggerTypeChange}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MANUAL">Manual Execution</SelectItem>
                     <SelectItem value="CALENDAR">Scheduled/Calendar</SelectItem>
                     <SelectItem value="DATABASE_EVENT">Database Changes</SelectItem>
                     <SelectItem value="WEBHOOK">Webhook Trigger</SelectItem>
@@ -263,22 +259,13 @@ export default function AgentCreateView({ onCancel, onCreated }: AgentCreateView
                 </Select>
               </div>
 
-              {/* Trigger Type Specific Configuration */}
-              {trigger?.type === 'MANUAL' && (
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">
-                    Agent will execute only when manually triggered by users.
-                  </p>
-                </div>
-              )}
-
               {trigger?.type === 'CALENDAR' && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
                     Configure recurring schedules using the calendar interface.
                   </p>
                   <ScheduleManager
-                    initialRRule={getCalendarRRule(trigger || TriggerConfigs.manual())}
+                    initialRRule={getCalendarRRule(trigger || TriggerConfigs.calendar('FREQ=DAILY;INTERVAL=1'))}
                     onScheduleChange={(rrule) => {
                       handleTriggerConfigChange({ rrule });
                     }}

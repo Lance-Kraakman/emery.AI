@@ -12,7 +12,6 @@ interface CompactSchedulesListProps {
 }
 
 const TRIGGER_ICONS = {
-  MANUAL: Clock,
   CALENDAR: Calendar,
   DATABASE_EVENT: Database,
   WEBHOOK: Webhook
@@ -22,8 +21,6 @@ function getScheduleDescription(schedule: ScheduleConfigurationDTO): string {
   const trigger = schedule.trigger;
 
   switch (trigger.type) {
-    case 'MANUAL':
-      return 'Manual execution only';
     case 'CALENDAR':
       try {
         const rrule = RRule.fromString(trigger.rrule);

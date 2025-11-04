@@ -55,7 +55,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
     description: agent.description || '',
     persona: agent.persona || '',
     status: agent.status || 'active',
-    schedules: agent.schedules?.length > 0 ? agent.schedules : [TriggerConfigs.manual()],
+    schedules: agent.schedules || [],
     defaultModel: agent.defaultModel || null
   });
 
@@ -67,7 +67,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
       description: agent.description || '',
       persona: agent.persona || '',
       status: agent.status || 'active',
-      schedules: agent.schedules?.length > 0 ? agent.schedules : [TriggerConfigs.manual()],
+      schedules: agent.schedules || [],
       defaultModel: agent.defaultModel || null
     });
   };
@@ -80,7 +80,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
       description: agent.description || '',
       persona: agent.persona || '',
       status: agent.status || 'active',
-      schedules: agent.schedules?.length > 0 ? agent.schedules : [TriggerConfigs.manual()],
+      schedules: agent.schedules || [],
       defaultModel: agent.defaultModel || null
     });
   };
@@ -136,9 +136,6 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
     let newTrigger: TriggerConfig;
 
     switch (triggerType) {
-      case 'MANUAL':
-        newTrigger = TriggerConfigs.manual();
-        break;
       case 'CALENDAR':
         newTrigger = TriggerConfigs.calendar('FREQ=DAILY;INTERVAL=1');
         break;
@@ -149,7 +146,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
         newTrigger = TriggerConfigs.webhook();
         break;
       default:
-        newTrigger = TriggerConfigs.manual();
+        newTrigger = TriggerConfigs.calendar('FREQ=DAILY;INTERVAL=1');
     }
 
     setEditFormData(prev => ({ ...prev, schedules: [newTrigger] }));
@@ -157,7 +154,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
 
   const handleTriggerConfigChange = (config: Partial<TriggerConfig>) => {
     setEditFormData(prev => {
-      const currentSchedule = prev.schedules[0] || TriggerConfigs.manual();
+      const currentSchedule = prev.schedules[0] || TriggerConfigs.calendar('FREQ=DAILY;INTERVAL=1');
       const updatedSchedule = { ...currentSchedule, ...config } as TriggerConfig;
       return { ...prev, schedules: [updatedSchedule] };
     });
