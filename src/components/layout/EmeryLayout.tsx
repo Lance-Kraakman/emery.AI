@@ -1,6 +1,6 @@
 'use client'
 
-import React, { Suspense } from 'react'
+import React, { Suspense, useEffect } from 'react'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { Loading } from '@/components/ui/loading'
@@ -9,7 +9,8 @@ import { EmeryChat } from '@/components/chat/EmeryChat'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
 import type { EmeryLayoutProps, ChatContextConfig} from './types'
-import { ChatProvider } from '@/components/chat/ChatProvider'
+import { ChatProvider, useChatHandler } from '@/components/chat/ChatProvider'
+import { ChatSection, useChatCanvas } from '@llamaindex/chat-ui'
 
 /** p p
  * EmeryLayout - Core layout component with canvas expansion logic
@@ -49,7 +50,6 @@ function EmeryLayoutInner({
   const sidebarState = useStore(uiStateStore, uiStateSelectors.sidebarState)
   const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
   const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
-  const displayedArtifact = useStore(uiStateStore, uiStateSelectors.displayedArtifact)
   const setChatContext = uiStateActions.setChatContext
   const setSidebarState = uiStateActions.setSidebarState
   const setChatState = uiStateActions.setChatState
@@ -60,14 +60,6 @@ function EmeryLayoutInner({
       setChatContext(chatContext)
     }
   }, [setChatContext]) // AIDEV-NOTE: Removed chatContext to prevent infinite re-render loop
-
-  // Component that conditionally renders canvas or main content
-  // AIDEV-NOTE: Memoized to prevent re-renders when chat messages update
-  // Now reads artifact from TanStack store and uses EmeryCanvas (no ChatCanvasProvider needed)
-  const MainContentWithCanvas = React.memo(function MainContentWithCanvas({ children }: { children: React.ReactNode }) {
-    // Show canvas when artifact is displayed, otherwise show children
-    return displayedArtifact ? <div className="h-full"><EmeryCanvas /></div> : <>{children}</>
-  })
 
   return (
     <SidebarProvider>
@@ -83,12 +75,17 @@ function EmeryLayoutInner({
           />
         </Suspense>
 
-        {/* Main Content Area + Chat */}
+        {/* Main Content Area + Chat - wrapped in ChatProvider for canvas context */}
         <SidebarInset className="flex-1 flex min-h-0 overflow-hidden">
-          <div className="flex-1 flex min-h-0 overflow-hidden">
-            {/* Main Content Area with Canvas */}
-            <main className="flex-1 overflow-x-hidden min-h-0">
-              <MainContentWithCanvas>
+          {enableChat ? (
+            <ChatProvider chatContext={chatContext}>
+              <Suspense fallback={<div className="flex-1 flex min-h-0 overflow-hidden"><ChatSkeleton /></div>}>
+                <EmeryLayoutWithChat>{children}</EmeryLayoutWithChat>
+              </Suspense>
+            </ChatProvider>
+          ) : (
+            <div className="flex-1 flex min-h-0 overflow-hidden">
+              <main className="flex-1 overflow-x-hidden min-h-0">
                 {children || (
                   <div className="h-full flex items-center justify-center p-6">
                     <div className="text-center text-muted-foreground">
@@ -96,21 +93,78 @@ function EmeryLayoutInner({
                     </div>
                   </div>
                 )}
-              </MainContentWithCanvas>
-            </main>
-
-            {/* Chat Area - EmeryChat controls its own width based on chatState */}
-            {enableChat && (
-              <ChatProvider chatContext={chatContext}>
-                <Suspense fallback={<ChatSkeleton />}>
-                  <EmeryChat />
-                </Suspense>
-              </ChatProvider>
-            )}
-          </div>
+              </main>
+            </div>
+          )}
         </SidebarInset>
       </div>
     </SidebarProvider>
+  )
+}
+
+// Component that has access to ChatProvider context
+function EmeryLayoutWithChat({ children }: { children: React.ReactNode }) {
+  const handler = useChatHandler()
+  const displayedArtifact = useStore(uiStateStore, uiStateSelectors.displayedArtifact)
+
+  return (
+    <ChatSection
+      handler={handler}
+      className="flex-1 flex min-h-0 overflow-hidden"
+      autoOpenCanvas={false}
+    >
+      <EmeryLayoutContent displayedArtifact={displayedArtifact}>
+        {children}
+      </EmeryLayoutContent>
+    </ChatSection>
+  )
+}
+
+// Inner component with canvas bridge logic
+function EmeryLayoutContent({
+  children,
+  displayedArtifact
+}: {
+  children: React.ReactNode
+  displayedArtifact: any
+}) {
+  const { openArtifactInCanvas, displayedArtifact: canvasArtifact } = useChatCanvas()
+
+  // AIDEV-NOTE: Bridge global UI state artifacts to ChatCanvas context
+  // This allows table cell clicks (which set global state) to open artifacts in ChatCanvas
+  useEffect(() => {
+    if (displayedArtifact) {
+      console.log('[EMERY-LAYOUT] Bridge: Opening artifact from global state in ChatCanvas:', displayedArtifact)
+      openArtifactInCanvas(displayedArtifact)
+      // Clear global state after bridging to ChatCanvas
+      uiStateActions.closeArtifact()
+    }
+  }, [displayedArtifact, openArtifactInCanvas])
+
+  return (
+    <div className="flex-1 flex min-h-0 overflow-hidden">
+      {/* Show Canvas on LHS when artifact is open, otherwise show Main Content */}
+      {canvasArtifact ? (
+        <div className="flex-1 overflow-x-hidden min-h-0">
+          <EmeryCanvas />
+        </div>
+      ) : (
+        <main className="flex-1 overflow-x-hidden min-h-0">
+          {children || (
+            <div className="h-full flex items-center justify-center p-6">
+              <div className="text-center text-muted-foreground">
+                <p>Select a page from the sidebar to get started</p>
+              </div>
+            </div>
+          )}
+        </main>
+      )}
+
+      {/* Chat Area - EmeryChat controls its own width based on chatState */}
+      <Suspense fallback={<ChatSkeleton />}>
+        <EmeryChat />
+      </Suspense>
+    </div>
   )
 }
 

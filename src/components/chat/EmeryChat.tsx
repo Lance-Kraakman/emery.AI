@@ -5,10 +5,8 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { generateId } from 'ai'
 import {
-  ChatSection,
   ChatMessages,
   useChatCanvas,
-  type Message
 } from '@llamaindex/chat-ui'
 import { 
   ChevronLeft, 
@@ -226,6 +224,9 @@ function ChatContentWithCanvas({
   handler,
   // chatContext
 }: ChatContentWithCanvasProps) {
+  // AIDEV-NOTE: useChatCanvas must be called at component level, not inside handlers
+  const { openArtifactInCanvas } = useChatCanvas()
+
   // Handle tool click using global UI state for artifacts
   const handleToolClick = async (tool: ToolDTO) => {
     console.log('Tool clicked:', tool)
@@ -257,7 +258,7 @@ function ChatContentWithCanvas({
 
         const downloadUrl = urlResult.success ? urlResult.data! : undefined
 
-        // Create artifact and open in canvas using global UI state
+        // Create artifact and open in canvas using LlamaIndex ChatCanvas
         const artifact = createDocumentArtifact(
           result.data,
           tool.organizationId!,
@@ -266,9 +267,9 @@ function ChatContentWithCanvas({
           'view',
           downloadUrl
         )
-        // CRITICAL FIX: Use global UI state instead of LlamaIndex canvas
-        // This ensures artifact opens in EmeryCanvas (main content area)
-        uiStateActions.openArtifact(artifact)
+        console.log('Document artifact created:', artifact)
+        // Open the artifact in canvas using hook from component level
+        openArtifactInCanvas(artifact)
         console.log('Document artifact opened in canvas:', artifact)
       } else {
         console.error('Failed to fetch document data:', result.error)
@@ -291,9 +292,9 @@ function ChatContentWithCanvas({
 
         const downloadUrl = urlResult.success ? urlResult.data! : ''
 
-        // Create artifact and open in canvas using global UI state
+        // Create artifact and open in canvas using LlamaIndex ChatCanvas
         const artifact = createFileArtifact(fileResult.data, 1, 1, 'generic', downloadUrl)
-        uiStateActions.openArtifact(artifact)
+        openArtifactInCanvas(artifact)
         console.log('File artifact opened in canvas:', artifact)
       } else {
         console.error('Failed to fetch file data:', fileResult.error)
@@ -599,24 +600,18 @@ export function EmeryChat() {
         />
         
         {/* Chat content area - takes remaining height after header */}
-        {/* AIDEV-NOTE: ChatSection provides LlamaIndex canvas context for reference tools */}
-        {/* Real handler from ChatProvider ensures messages array is always defined (no SSR flatMap errors) */}
+        {/* AIDEV-NOTE: ChatSection is now in EmeryLayout, wrapping the entire app */}
+        {/* This allows canvas to work across main content and chat areas */}
         <div className="flex-1 min-h-0 overflow-hidden" suppressHydrationWarning>
-          <ChatSection
+          <ChatContentWithCanvas
+            selectedTools={selectedTools}
+            onToolsChange={handleToolsChange}
+            onAddTool={handleAddTool}
+            onRemoveTool={handleRemoveTool}
+            isClient={isClient}
             handler={handler}
-            className="h-full"
-            autoOpenCanvas={false}
-          >
-            <ChatContentWithCanvas
-              selectedTools={selectedTools}
-              onToolsChange={handleToolsChange}
-              onAddTool={handleAddTool}
-              onRemoveTool={handleRemoveTool}
-              isClient={isClient}
-              handler={handler}
-              chatContext={chatContext}
-            />
-          </ChatSection>
+            chatContext={chatContext}
+          />
         </div>
       </div>
     </div>

@@ -102,10 +102,11 @@ const initialState: UIState = {
   sidebarState: 'expanded',
   chatState: 'collapsed',
   chatWidth: 320, // Default chat panel width: 320px (down from 459px)
-  canvasState: 'collapsed',
   canvasType: 'chat',
   breakpoint: 'desktop',
   isMobile: false,
+
+  canvasState: 'collapsed',
 
   // Canvas/Artifact state
   displayedArtifact: null,
@@ -293,102 +294,12 @@ export const uiStateActions = {
     uiStateStore.setState((state) => ({ ...state, selectedDatabaseForTable: databaseId }))
   },
 
-  // Collapsible actions
-  setOpenCollapsibles: (collapsibles: string[]) => {
-    uiStateStore.setState((state) => ({ ...state, openCollapsibles: collapsibles }))
-  },
-
-  toggleCollapsible: (id: string) => {
-    uiStateStore.setState((state) => {
-      const isOpen = state.openCollapsibles.includes(id)
-      const openCollapsibles = isOpen
-        ? state.openCollapsibles.filter(item => item !== id)
-        : [...state.openCollapsibles, id]
-      
-      return { ...state, openCollapsibles }
-    })
-  },
-
-  // Panel collapse actions
-  setPanelCollapsed: (panel: keyof UIState['isPanelCollapsed'], collapsed: boolean) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      isPanelCollapsed: {
-        ...state.isPanelCollapsed,
-        [panel]: collapsed
-      }
-    }))
-  },
-
-  togglePanelCollapsed: (panel: keyof UIState['isPanelCollapsed']) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      isPanelCollapsed: {
-        ...state.isPanelCollapsed,
-        [panel]: !state.isPanelCollapsed[panel]
-      }
-    }))
-  },
-
-  // Search expand actions
-  setSearchExpanded: (section: keyof UIState['isSearchExpanded'], expanded: boolean) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      isSearchExpanded: {
-        ...state.isSearchExpanded,
-        [section]: expanded
-      }
-    }))
-  },
-
-  toggleSearchExpanded: (section: keyof UIState['isSearchExpanded']) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      isSearchExpanded: {
-        ...state.isSearchExpanded,
-        [section]: !state.isSearchExpanded[section]
-      }
-    }))
-  },
-
-  // Modal actions
-  openModal: (modal: keyof UIState['modals']) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      modals: {
-        ...state.modals,
-        [modal]: true
-      }
-    }))
-  },
-
   closeModal: (modal: keyof UIState['modals']) => {
     uiStateStore.setState((state) => ({
       ...state,
       modals: {
         ...state.modals,
         [modal]: false
-      }
-    }))
-  },
-
-  toggleModal: (modal: keyof UIState['modals']) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      modals: {
-        ...state.modals,
-        [modal]: !state.modals[modal]
-      }
-    }))
-  },
-
-  // Form actions
-  setAgentCreateForm: (isOpen: boolean, editingAgent: string | null = null) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      forms: {
-        ...state.forms,
-        agentCreate: { isOpen, editingAgent }
       }
     }))
   },

@@ -53,7 +53,8 @@ export default function CellRenderer({ field, value, readOnly = false, organizat
 
         console.log('Opening document artifact in canvas:', documentArtifact)
         // Use global UI state to open artifact (works from any component)
-        uiStateActions.openArtifact(documentArtifact)
+        // const { openArtifact } = useChatCanvas()
+        // openArtifact(documentArtifact)
 
       } else {
         const viewerType = FileTypeDetector.detectViewerType(fileName, mimeType)
