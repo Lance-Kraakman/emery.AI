@@ -19,6 +19,39 @@
 
 import type { Row } from '@/ddd/domain/tables/value-objects/row';
 import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
+import type {
+  FileArrayFieldValue,
+  DocumentArrayFieldValue,
+  RelationArrayFieldValue
+} from '@/ddd/domain/tables/value-objects/field-values';
+import {
+  isDocumentArray,
+  isFileArray
+} from '@/ddd/domain/tables/value-objects/field-values';
+
+// ============================================================================
+// Storage Format Types
+// ============================================================================
+
+/**
+ * Complex fields are wrapped in Delta Lake JSON storage with either:
+ * - Numeric field ID: {5: [...]} (standard storage format)
+ * - Field name: {"sdf": [...]} (Arrow deserialization format)
+ */
+type ComplexFieldWrapper<T> = {
+  [key: string]: T;  // Single key with either fieldId or fieldName
+};
+
+/**
+ * Type for complex field values as stored in Delta Lake
+ */
+type StoredComplexField =
+  | FileArrayFieldValue
+  | DocumentArrayFieldValue
+  | RelationArrayFieldValue
+  | ComplexFieldWrapper<FileArrayFieldValue>
+  | ComplexFieldWrapper<DocumentArrayFieldValue>
+  | ComplexFieldWrapper<RelationArrayFieldValue>;
 
 export class RowSerializer {
   // ============================================================================
@@ -185,10 +218,13 @@ export class RowSerializer {
    *
    * @param value - Raw value from storage
    * @param field - Field definition with type information
-   * @returns Parsed value with Excel-like defaults for domain layer
+   * @returns Parsed value with Excel-like defaults for domain layer, properly typed
    */
-  private static deserializeFieldValue(value: any, field: TableField): any {
-    // Complex types: unwrap JSON
+  private static deserializeFieldValue(
+    value: any,
+    field: TableField
+  ): string | number | boolean | Date | FileArrayFieldValue | DocumentArrayFieldValue | RelationArrayFieldValue | null {
+    // Complex types: unwrap JSON and validate
     if (this.isComplexFieldType(field.type)) {
       return this.unwrapComplexFieldFromStorage(value, field);
     }
@@ -201,52 +237,119 @@ export class RowSerializer {
    * Unwrap complex field values from Delta Lake JSON storage
    *
    * AIDEV-NOTE: Reverses the wrapping from serializeFieldValue.
-   * Uses numeric field IDs as wrapper keys.
+   * Handles both numeric field IDs and field names as wrapper keys.
    *
    * Example:
    *   Storage: '{"10": [{id: 1}]}'
    *   Parsed:  {10: [{id: 1}]}
    *   Returned: [{id: 1}]  ← unwrapped
+   *
+   * @param value - Raw value from storage (JSON string or pre-parsed object)
+   * @param field - Field definition with type information
+   * @returns Unwrapped array matching field type (FileArrayFieldValue | DocumentArrayFieldValue | RelationArrayFieldValue)
    */
-  private static unwrapComplexFieldFromStorage(value: any, field: TableField): any {
-    // Handle JSON string values
+  private static unwrapComplexFieldFromStorage(
+    value: StoredComplexField | string | null | undefined,
+    field: TableField
+  ): FileArrayFieldValue | DocumentArrayFieldValue | RelationArrayFieldValue | null {
+    // Handle null/undefined
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    // Handle JSON string values from Delta Lake storage
     if (typeof value === 'string' && value.length > 0) {
       try {
         const parsed = JSON.parse(value);
-        const fieldKey = field.id.value.toString();
-
-        // Unwrap field-ID wrapper: {10: [...]} → [...]
-        if (parsed && typeof parsed === 'object' && fieldKey in parsed) {
-          return parsed[fieldKey];
-        }
-
-        // Fallback: use parsed value directly (legacy data)
-        return parsed;
+        return this.unwrapParsedComplexField(parsed, field);
       } catch (e) {
-        console.warn(`[RowSerializer.deserializeFromStorage] Failed to parse JSON for field "${field.name}" (ID ${field.id.value}):`, e);
-        return value; // Keep as-is if parse fails
+        console.warn(`[RowSerializer.unwrapComplexFieldFromStorage] Failed to parse JSON for field "${field.name}" (ID ${field.id.value}):`, e);
+        return null;
       }
     }
 
-    // Handle already-parsed object values (from Arrow deserialization)
-    // AIDEV-NOTE: Arrow data comes pre-parsed with field name wrappers like {"sdf": [...]}
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
+    // Handle already-parsed values (from Arrow or direct objects)
+    if (value && typeof value === 'object') {
+      return this.unwrapParsedComplexField(value, field);
+    }
+
+    // Unexpected primitive value
+    console.warn(`[RowSerializer.unwrapComplexFieldFromStorage] Unexpected primitive value for complex field "${field.name}":`, value);
+    return null;
+  }
+
+  /**
+   * Unwrap a parsed complex field value (removes wrapper object if present)
+   *
+   * @param parsed - Parsed object that may be wrapped
+   * @param field - Field definition
+   * @returns Unwrapped array
+   */
+  private static unwrapParsedComplexField(
+    parsed: any,
+    field: TableField
+  ): FileArrayFieldValue | DocumentArrayFieldValue | RelationArrayFieldValue | null {
+    if (!parsed) return null;
+
+    // If already an array, validate and return
+    if (Array.isArray(parsed)) {
+      return this.validateComplexFieldArray(parsed, field);
+    }
+
+    // If object, try to unwrap using field ID or field name
+    if (typeof parsed === 'object') {
       const fieldKey = field.id.value.toString();
       const fieldName = field.name;
 
       // Try unwrapping by field ID first: {5: [...]} → [...]
-      if (fieldKey in value) {
-        return value[fieldKey];
+      if (fieldKey in parsed) {
+        const unwrapped = parsed[fieldKey];
+        return Array.isArray(unwrapped) ? this.validateComplexFieldArray(unwrapped, field) : null;
       }
 
       // Try unwrapping by field name: {"sdf": [...]} → [...]
-      if (fieldName in value) {
-        return value[fieldName];
+      if (fieldName in parsed) {
+        const unwrapped = parsed[fieldName];
+        return Array.isArray(unwrapped) ? this.validateComplexFieldArray(unwrapped, field) : null;
       }
+
+      // No valid wrapper found
+      console.warn(`[RowSerializer.unwrapParsedComplexField] No valid wrapper found for field "${field.name}" (ID ${fieldKey})`, {
+        keys: Object.keys(parsed),
+        expected: [fieldKey, fieldName]
+      });
+      return null;
     }
 
-    // null, undefined, primitive, or already unwrapped array
-    return value;
+    return null;
+  }
+
+  /**
+   * Validate and type-check complex field arrays
+   *
+   * @param arr - Array to validate
+   * @param field - Field definition
+   * @returns Typed array if valid, empty array otherwise
+   */
+  private static validateComplexFieldArray(
+    arr: any[],
+    field: TableField
+  ): FileArrayFieldValue | DocumentArrayFieldValue | RelationArrayFieldValue {
+    if (arr.length === 0) return [];
+
+    // Use type guards from domain layer
+    switch (field.type) {
+      case 'document':
+        return isDocumentArray(arr) ? arr : [];
+      case 'file':
+        return isFileArray(arr) ? arr : [];
+      case 'relation':
+        // Relation arrays are less strictly typed
+        return arr;
+      default:
+        console.warn(`[RowSerializer.validateComplexFieldArray] Unknown complex field type: ${field.type}`);
+        return [];
+    }
   }
 
   /**
