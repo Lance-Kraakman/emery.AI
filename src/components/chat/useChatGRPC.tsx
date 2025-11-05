@@ -181,7 +181,6 @@ export function useChatGRPC(
         console.log(`[CHAT-GRPC-HOOK] Loaded ${chatMessages.length} messages for chat ${chatId}`)
       } else {
         console.error('[CHAT-GRPC-HOOK] Failed to load chat session:', result.error)
-        // Fall back to localStorage for this context
         loadFromLocalStorage()
       }
     } catch (error) {
