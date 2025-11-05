@@ -375,9 +375,22 @@ export class DynamicTableDataLake {
           const rowData: Record<string, any> = {};
 
           // Extract data from each column
+          // AIDEV-NOTE: Map field names to numeric field IDs for RowSerializer compatibility
+          // System columns (id) use literal names, user fields use numeric IDs
           for (const field of arrowTable.schema.fields) {
             const column = arrowTable.getChild(field.name);
-            rowData[field.name] = column?.get(i);
+            const columnValue = column?.get(i);
+
+            // System columns use literal names
+            if (field.name === 'id') {
+              rowData.id = columnValue;
+            } else {
+              // User fields: map field name to numeric field ID
+              const tableField = table.fields.find(tf => tf.name === field.name);
+              if (tableField) {
+                rowData[tableField.id.value.toString()] = columnValue;
+              }
+            }
           }
 
           // Deserialize from Delta Lake storage (JSON strings → arrays/objects)
