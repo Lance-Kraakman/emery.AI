@@ -317,6 +317,14 @@ export class RowSerializer {
       if (fieldKey in parsed) {
         console.log(`[RowSerializer.unwrapParsedComplexField] Found wrapper with fieldKey "${fieldKey}"`);
         const unwrapped = parsed[fieldKey];
+
+        // Check if still wrapped (double wrapper): {5: {sdf: [...]}}
+        if (unwrapped && typeof unwrapped === 'object' && !Array.isArray(unwrapped) && fieldName in unwrapped) {
+          console.log(`[RowSerializer.unwrapParsedComplexField] Found double wrapper, unwrapping again by fieldName "${fieldName}"`);
+          const doubleUnwrapped = unwrapped[fieldName];
+          return Array.isArray(doubleUnwrapped) ? this.validateComplexFieldArray(doubleUnwrapped, field) : null;
+        }
+
         return Array.isArray(unwrapped) ? this.validateComplexFieldArray(unwrapped, field) : null;
       }
 
