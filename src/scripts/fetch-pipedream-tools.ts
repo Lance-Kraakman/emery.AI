@@ -64,7 +64,7 @@ async function fetchAndSavePipedreamTools() {
     const toolMetadata: Record<string, SimplifiedToolMetadata> = {};
 
     // Skip Pipedream fetching and go directly to Emery tools generation
-    await generateUnifiedMetadata(toolMetadata, 0, 0, [], 0);
+    await generateUnifiedMetadata(toolMetadata, 0, 0, [], 0, new Map<string, string>());
     return;
   }
 
@@ -218,9 +218,10 @@ async function fetchAndSavePipedreamTools() {
     try {
       // List all actions for this app with retry logic
       components = await retryWithBackoff(async () => {
-        return await pipedreamClient.components.list({
+        return await pipedreamClient?.components.list({
           app: appSlug,
-          type: 'action',
+          // q: 'action', maybe try this
+          // type: 'action',
           limit: 200  // Get up to 200 actions per app
         });
       }, appSlug);

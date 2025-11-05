@@ -7,7 +7,8 @@ import { generateId } from 'ai'
 import {
   ChatSection,
   ChatMessages,
-  useChatCanvas
+  useChatCanvas,
+  type Message
 } from '@llamaindex/chat-ui'
 import { 
   ChevronLeft, 
@@ -22,7 +23,7 @@ import { Button } from '@/components/ui/button'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
 import { RightPanelResizeHandle } from '@/components/ui/right-panel-resize-handle'
-import { ChatCanvas } from './ChatCanvas'
+// import { ChatCanvas } from './ChatCanvas'
 import CustomChatInput from './CustomChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
 import { createChatContextForPage } from '@/components/layout/types'
@@ -160,50 +161,50 @@ function EmeryChatHeader({
 }
 
 // Context-aware suggestions component (extracted from mission-control)
-function ChatSuggestions({ 
-  onSuggestionClick, 
-  selectedIndex = -1,
-  domainType
-}: { 
-  onSuggestionClick: (suggestion: string) => void
-  selectedIndex?: number
-  domainType?: DomainType | 'organizations' | 'general'
-}) {
-  const suggestions = getSuggestionsForDomain(domainType)
+// function ChatSuggestions({ 
+//   onSuggestionClick, 
+//   selectedIndex = -1,
+//   domainType
+// }: { 
+//   onSuggestionClick: (suggestion: string) => void
+//   selectedIndex?: number
+//   domainType?: DomainType | 'organizations' | 'general'
+// }) {
+//   const suggestions = getSuggestionsForDomain(domainType)
 
-  if (suggestions.length === 0) return null
+//   if (suggestions.length === 0) return null
 
-  return (
-    <div>
-      <div className="mb-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <Lightbulb className="h-3 w-3" />
-          Suggestions
-        </div>
-      </div>
-      <div>
-        {suggestions.map((suggestion, index) => (
-          <button
-            key={index}
-            className={`w-full flex items-center gap-2 px-0 py-2.5 text-left text-sm transition-colors duration-150 focus:outline-none border-b border-border/30 last:border-b-0 ${
-              selectedIndex === index 
-                ? 'bg-muted/70 text-foreground' 
-                : 'hover:bg-muted/50'
-            }`}
-            onClick={() => onSuggestionClick(suggestion.prompt)}
-          >
-            <div className="flex-shrink-0 text-muted-foreground">
-              {suggestion.icon}
-            </div>
-            <span className="flex-1 text-foreground truncate">
-              {suggestion.title}
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
+//   return (
+//     <div>
+//       <div className="mb-2">
+//         <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+//           <Lightbulb className="h-3 w-3" />
+//           Suggestions
+//         </div>
+//       </div>
+//       <div>
+//         {suggestions.map((suggestion, index) => (
+//           <button
+//             key={index}
+//             className={`w-full flex items-center gap-2 px-0 py-2.5 text-left text-sm transition-colors duration-150 focus:outline-none border-b border-border/30 last:border-b-0 ${
+//               selectedIndex === index 
+//                 ? 'bg-muted/70 text-foreground' 
+//                 : 'hover:bg-muted/50'
+//             }`}
+//             onClick={() => onSuggestionClick(suggestion.prompt)}
+//           >
+//             <div className="flex-shrink-0 text-muted-foreground">
+//               {suggestion.icon}
+//             </div>
+//             <span className="flex-1 text-foreground truncate">
+//               {suggestion.title}
+//             </span>
+//           </button>
+//         ))}
+//       </div>
+//     </div>
+//   )
+// }
 
 // Component that can access useChatCanvas hook inside ChatSection
 interface ChatContentWithCanvasProps {
@@ -211,13 +212,8 @@ interface ChatContentWithCanvasProps {
   onToolsChange: (tools: ToolDTO[]) => void
   onAddTool: () => void
   onRemoveTool: (tool: ToolDTO) => void
-  showSuggestions: boolean
-  selectedSuggestionIndex: number
-  onSuggestionClick: (suggestion: string) => void
-  onKeyDown: (e: React.KeyboardEvent) => void
   isClient: boolean
   handler: any
-  setShowSuggestions: (show: boolean) => void
   chatContext: any
 }
 
@@ -226,17 +222,10 @@ function ChatContentWithCanvas({
   onToolsChange,
   onAddTool,
   onRemoveTool,
-  showSuggestions,
-  selectedSuggestionIndex,
-  onSuggestionClick,
-  onKeyDown,
-  isClient,
+  // isClient,
   handler,
-  setShowSuggestions,
-  chatContext
+  // chatContext
 }: ChatContentWithCanvasProps) {
-  const { openArtifactInCanvas } = useChatCanvas()
-
   // Handle tool click using global UI state for artifacts
   const handleToolClick = async (tool: ToolDTO) => {
     console.log('Tool clicked:', tool)
@@ -327,10 +316,22 @@ function ChatContentWithCanvas({
           )}
 
           {/* ChatMessages component */}
-          <ChatMessages
-            className="flex-1 h-full bg-transparent [&_.message]:bg-transparent [&_.message]:py-1 [&_.message]:text-sm [&_.message]:leading-tight [&_p]:text-sm [&_p]:leading-5 [&_*]:text-sm"
+                    <ChatMessages
+            className="flex-1 h-full bg-transparent [&_.message]:bg-background [&_.message.assistant]:bg-muted [&_.message.user]:bg-primary [&_.message.user]:text-primary-foreground [&_.message]:p-4 [&_.message]:rounded-lg [&_.message]:my-2 [&_.message]:mx-4 [&_p]:text-sm [&_p]:leading-relaxed"
           />
-
+          
+          {/* Step Progress Indicator - styled like an assistant message */}
+          {handler.currentStep && (
+            <div className="mx-4 my-2">
+              <div className="message assistant bg-muted p-4 rounded-lg">
+                <StepProgressIndicator
+                  currentStep={handler.currentStep}
+                  isLoading={handler.isLoading}
+                  onCancel={handler.cancelMessage}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -343,25 +344,11 @@ function ChatContentWithCanvas({
         className="border-t border-border/10"
       />
 
-      {/* Step Progress Indicator - shows real-time agent execution */}
-      {handler.currentStep && (
-        <div className="px-3 py-2 border-t border-border/10">
-          <StepProgressIndicator
-            currentStep={handler.currentStep}
-            isLoading={handler.isLoading}
-            onCancel={handler.cancelMessage}
-          />
-        </div>
-      )}
-
       {/* Input area */}
-      <div className="flex-shrink-0 py-4 px-3 border-t border-border/10 bg-card" onKeyDown={onKeyDown}>
+      <div className="flex-shrink-0 py-4 px-3 border-t border-border/10 bg-card">
         <CustomChatInput
           onSendMessage={async (message) => {
-            // Send message with tools
             handler.append({ content: message, role: 'user' })
-            setShowSuggestions(false)
-            // Keep tools visible after sending (don't clear them)
           }}
           onToolsChange={onToolsChange}
           placeholder="Ask Emery anything... (type @ to add tools, docs, agents, etc.)"
@@ -396,8 +383,6 @@ export function EmeryChat() {
 
   // Chat session state
   const [currentChatId, setCurrentChatId] = useState<string | undefined>()
-  const [showSuggestions, setShowSuggestions] = useState(true)
-  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [isClient, setIsClient] = useState(false)
 
   // Tools state for @ tool selection
@@ -537,36 +522,7 @@ export function EmeryChat() {
 
   const suggestions = getSuggestionsPrompts(chatContext?.domainType)
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Check if reference dropdown is open to avoid conflicts
-    const referenceDropdownOpen = document.querySelector('[data-chat-search-dropdown]')
-    if (referenceDropdownOpen) return // Let reference dropdown handle navigation
 
-    // AIDEV-NOTE: Check if the event target is the chat input to avoid conflicts
-    const isFromChatInput = (e.target as HTMLElement)?.tagName === 'INPUT'
-    if (isFromChatInput) return // Let CustomChatInput handle its own events
-
-    if (!showSuggestions || suggestions.length === 0) return
-
-    if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setSelectedSuggestionIndex(prev => {
-        if (prev === -1) return suggestions.length - 1
-        return prev > 0 ? prev - 1 : suggestions.length - 1
-      })
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setSelectedSuggestionIndex(prev => {
-        if (prev === -1) return 0
-        return prev < suggestions.length - 1 ? prev + 1 : 0
-      })
-    } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
-      e.preventDefault()
-      handleSuggestionClick(suggestions[selectedSuggestionIndex])
-    } else if (e.key === 'Escape') {
-      setSelectedSuggestionIndex(-1)
-    }
-  }
 
   // Handle tool changes from chat input
   const handleToolsChange = (tools: ToolDTO[]) => {
@@ -608,8 +564,6 @@ export function EmeryChat() {
 
   const handleSuggestionClick = (suggestion: string) => {
     console.log('Suggestion clicked:', suggestion)
-    setSelectedSuggestionIndex(-1)
-    setShowSuggestions(false) // Hide suggestions after selection
 
     // Use the chat handler to send the suggestion
     handler.append({ content: suggestion, role: 'user' })
@@ -628,7 +582,6 @@ export function EmeryChat() {
         <RightPanelResizeHandle
           onResize={setChatWidth}
           minWidth={280}
-          maxWidth={600}
         />
       )}
 
@@ -659,13 +612,8 @@ export function EmeryChat() {
               onToolsChange={handleToolsChange}
               onAddTool={handleAddTool}
               onRemoveTool={handleRemoveTool}
-              showSuggestions={showSuggestions}
-              selectedSuggestionIndex={selectedSuggestionIndex}
-              onSuggestionClick={handleSuggestionClick}
-              onKeyDown={handleKeyDown}
               isClient={isClient}
               handler={handler}
-              setShowSuggestions={setShowSuggestions}
               chatContext={chatContext}
             />
           </ChatSection>

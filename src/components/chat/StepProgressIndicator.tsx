@@ -32,48 +32,28 @@ export function StepProgressIndicator({
     return null
   }
 
-  const getStepIcon = () => {
+  const getStepMessage = () => {
     switch (currentStep.type) {
       case 'PLANNING':
-        return <Brain className="h-4 w-4 animate-pulse text-blue-500" />
+        return 'Thinking...'
       case 'ACTION':
-        return <Wrench className="h-4 w-4 animate-pulse text-orange-500" />
+        return `Using ${currentStep.name}...`
       case 'REASONING':
-        return <Loader2 className="h-4 w-4 animate-spin text-purple-500" />
+        return 'Processing results...'
       case 'FINAL':
-        return <CheckCircle2 className="h-4 w-4 animate-pulse text-green-500" />
+        return 'Finalizing response...'
       default:
-        return <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
-    }
-  }
-
-  const getStepColor = () => {
-    switch (currentStep.type) {
-      case 'PLANNING':
-        return 'bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900'
-      case 'ACTION':
-        return 'bg-orange-50 border-orange-200 dark:bg-orange-950/20 dark:border-orange-900'
-      case 'REASONING':
-        return 'bg-purple-50 border-purple-200 dark:bg-purple-950/20 dark:border-purple-900'
-      case 'FINAL':
-        return 'bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-900'
-      default:
-        return 'bg-gray-50 border-gray-200 dark:bg-gray-950/20 dark:border-gray-900'
+        return 'Working...'
     }
   }
 
   return (
-    <div className={`flex items-center justify-between px-4 py-2 border rounded-lg ${getStepColor()} transition-all duration-300`}>
-      <div className="flex items-center gap-3">
-        {getStepIcon()}
-        <div className="flex flex-col">
-          <div className="text-sm font-medium text-foreground/90">
-            {currentStep.name}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Step {currentStep.index + 1}
-          </div>
-        </div>
+    <div className="flex items-center justify-between transition-all duration-300">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="text-sm">
+          {getStepMessage()}
+        </span>
       </div>
 
       {onCancel && (
