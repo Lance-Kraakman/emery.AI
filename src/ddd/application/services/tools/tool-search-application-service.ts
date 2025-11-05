@@ -451,11 +451,11 @@ export class ToolSearchApplicationService {
           );
 
           // Use TableApplicationService.getRows with proper pagination
+          // AIDEV-NOTE: Don't sort by created_at as it may not exist in all Delta Lake tables
+          // System 'id' column is guaranteed to exist in all tables
           const queryOptions: RowQueryOptions = {
             limit: limit * 2, // Get more rows since we'll filter by document/file names
-            offset,
-            orderBy: 'created_at',
-            orderDirection: 'DESC'
+            offset
           };
 
           logger.debug(`Getting rows for table "${table.name}" with options:`, queryOptions);
