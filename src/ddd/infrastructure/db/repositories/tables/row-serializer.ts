@@ -209,6 +209,7 @@ export class RowSerializer {
    *   Returned: [{id: 1}]  ← unwrapped
    */
   private static unwrapComplexFieldFromStorage(value: any, field: TableField): any {
+    // Handle JSON string values
     if (typeof value === 'string' && value.length > 0) {
       try {
         const parsed = JSON.parse(value);
@@ -227,7 +228,24 @@ export class RowSerializer {
       }
     }
 
-    // null, undefined, or non-string
+    // Handle already-parsed object values (from Arrow deserialization)
+    // AIDEV-NOTE: Arrow data comes pre-parsed with field name wrappers like {"sdf": [...]}
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const fieldKey = field.id.value.toString();
+      const fieldName = field.name;
+
+      // Try unwrapping by field ID first: {5: [...]} → [...]
+      if (fieldKey in value) {
+        return value[fieldKey];
+      }
+
+      // Try unwrapping by field name: {"sdf": [...]} → [...]
+      if (fieldName in value) {
+        return value[fieldName];
+      }
+    }
+
+    // null, undefined, primitive, or already unwrapped array
     return value;
   }
 
