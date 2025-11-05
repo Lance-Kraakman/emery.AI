@@ -201,11 +201,13 @@ export class RowSerializer {
     fields: readonly TableField[]
   ): Record<string, any> {
     // AIDEV-NOTE: Build result from scratch to avoid corrupted keys
+    console.log(`[RowSerializer.deserializeFromStorage] Input data keys:`, Object.keys(data));
     const result: Record<string, any> = { id: data.id };
 
     for (const field of fields) {
       const fieldKey = field.id.value.toString();
       const value = data[fieldKey];
+      console.log(`[RowSerializer.deserializeFromStorage] Field "${field.name}" (ID ${fieldKey}): value=`, value === undefined ? 'UNDEFINED' : typeof value);
       result[fieldKey] = this.deserializeFieldValue(value, field);
     }
 
@@ -289,10 +291,18 @@ export class RowSerializer {
     parsed: any,
     field: TableField
   ): FileArrayFieldValue | DocumentArrayFieldValue | RelationArrayFieldValue | null {
+    console.log(`[RowSerializer.unwrapParsedComplexField] Field "${field.name}" (ID ${field.id.value}):`, {
+      parsedType: typeof parsed,
+      isArray: Array.isArray(parsed),
+      keys: typeof parsed === 'object' && parsed ? Object.keys(parsed) : 'N/A',
+      sample: JSON.stringify(parsed).substring(0, 100)
+    });
+
     if (!parsed) return null;
 
     // If already an array, validate and return
     if (Array.isArray(parsed)) {
+      console.log(`[RowSerializer.unwrapParsedComplexField] Already an array, validating...`);
       return this.validateComplexFieldArray(parsed, field);
     }
 
@@ -301,14 +311,18 @@ export class RowSerializer {
       const fieldKey = field.id.value.toString();
       const fieldName = field.name;
 
+      console.log(`[RowSerializer.unwrapParsedComplexField] Trying to unwrap object. FieldKey="${fieldKey}", FieldName="${fieldName}"`);
+
       // Try unwrapping by field ID first: {5: [...]} → [...]
       if (fieldKey in parsed) {
+        console.log(`[RowSerializer.unwrapParsedComplexField] Found wrapper with fieldKey "${fieldKey}"`);
         const unwrapped = parsed[fieldKey];
         return Array.isArray(unwrapped) ? this.validateComplexFieldArray(unwrapped, field) : null;
       }
 
       // Try unwrapping by field name: {"sdf": [...]} → [...]
       if (fieldName in parsed) {
+        console.log(`[RowSerializer.unwrapParsedComplexField] Found wrapper with fieldName "${fieldName}"`);
         const unwrapped = parsed[fieldName];
         return Array.isArray(unwrapped) ? this.validateComplexFieldArray(unwrapped, field) : null;
       }
