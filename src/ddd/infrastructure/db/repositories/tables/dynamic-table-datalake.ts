@@ -375,27 +375,18 @@ export class DynamicTableDataLake {
           const rowData: Record<string, any> = {};
 
           // Extract data from each column
-          // AIDEV-NOTE: Map field names to numeric field IDs for RowSerializer compatibility
-          // System columns (id) use literal names, user fields use numeric IDs
           for (const field of arrowTable.schema.fields) {
             const column = arrowTable.getChild(field.name);
-            const columnValue = column?.get(i);
-
-            // System columns use literal names
-            if (field.name === 'id') {
-              rowData.id = columnValue;
-            } else {
-              // User fields: map field name to numeric field ID
-              const tableField = table.fields.find(tf => tf.name === field.name);
-              if (tableField) {
-                rowData[tableField.id.value.toString()] = columnValue;
-              }
-            }
+            rowData[field.name] = column?.get(i);
           }
 
           // Deserialize from Delta Lake storage (JSON strings → arrays/objects)
           // AIDEV-NOTE: RowSerializer handles complex field type deserialization
+          logger.debug(`[DEBUG] rowData keys BEFORE deserialize:`, Object.keys(rowData));
+          logger.debug(`[DEBUG] rowData sample:`, JSON.stringify(rowData).substring(0, 200));
           const deserializedData = RowSerializer.deserializeFromStorage(rowData, table.fields);
+          logger.debug(`[DEBUG] deserializedData keys AFTER deserialize:`, Object.keys(deserializedData));
+          logger.debug(`[DEBUG] deserializedData sample:`, JSON.stringify(deserializedData).substring(0, 200));
 
           // Convert to domain Row entity with clean deserialized data
           const row = Row.fromPlainObject(deserializedData, table.id.value, table.fields as any);

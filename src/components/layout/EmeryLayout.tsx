@@ -12,18 +12,24 @@ import type { EmeryLayoutProps, ChatContextConfig} from './types'
 import { ChatProvider, useChatHandler } from '@/components/chat/ChatProvider'
 import { ChatSection, useChatCanvas } from '@llamaindex/chat-ui'
 
-/** p p
- * EmeryLayout - Core layout component with canvas expansion logic
- * 
- * Layout modes based on canvas state:
- * - Canvas Expanded: 3-panel (sidebar | canvas | chat)
- * - Canvas Collapsed: 2-panel (sidebar | chat-as-main)
- * 
- * The main content area becomes a canvas object that can be collapsed,
- * allowing the chat to expand to fill the main view area.
- * 
- * AIDEV-NOTE: This implements the canvas expansion logic where chat can
- * become the main view when canvas is collapsed, like current mission-control.
+/**
+ * EmeryLayout - Core layout component with LlamaIndex ChatCanvas integration
+ *
+ * Layout structure: Sidebar | (Main Content OR Canvas) | Chat
+ *
+ * Behavior:
+ * - Default: Sidebar | Main Content | Chat
+ * - Canvas Open: Sidebar | Canvas (replaces main content) | Chat
+ * - Chat Collapsed: Chat panel hidden visually but stays mounted in DOM
+ *
+ * Canvas appears on the LEFT side and replaces the main content area when
+ * an artifact is opened (from table cells, tool panel, or AI responses).
+ *
+ * ChatSection wraps the entire layout to provide unified canvas context,
+ * allowing artifacts to be opened from any component and displayed consistently.
+ *
+ * AIDEV-NOTE: Uses LlamaIndex ChatCanvas v0.6 with custom artifact renderers
+ * for DocumentArtifact and FileArtifact types.
  */
 
 interface SidebarData {
