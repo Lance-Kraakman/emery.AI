@@ -66,7 +66,7 @@
     "@lexical/rich-text": "^0.20.0",
     "@lexical/selection": "^0.20.0",
     "@lexical/utils": "^0.20.0",
-    "@llamaindex/chat-ui": "^0.5.17",
+    "@llamaindex/chat-ui": "^0.6.1",
     "@llamaindex/core": "^0.6.19",
     "@llamaindex/readers": "^3.1.18",
     "@measured/puck": "^0.20.2",

@@ -22,19 +22,27 @@ import type { ToolDTO } from '@/app/mappers/tool-mapper'
 
 // Extended handler interface that includes our custom methods
 interface ExtendedChatHandler extends ChatHandler {
+  // Base ChatHandler fields
+  isLoading: boolean
+  messages: any[]
   append: (message: any) => Promise<string>
+  setMessages: (messages: any[]) => void
+  // Custom fields
   scrollRef?: React.RefObject<HTMLDivElement>
   scrollToBottom?: () => void
   clearMessages?: () => void
   currentChatId?: string
   switchToChat?: (chatId: string) => Promise<void>
   createNewChat?: () => Promise<void>
-  onChatCreated?: (chatId: string) => void
   // Tool management
   selectedTools: ToolDTO[]
   availableTools: ToolDTO[]
   addTool: (tool: ToolDTO) => void
   removeTool: (tool: ToolDTO) => void
+  // Step progress tracking
+  currentStep: { type: string; name: string; index: number } | null
+  // Cancellation
+  cancelMessage?: () => Promise<void>
 }
 
 // Context for chat handler

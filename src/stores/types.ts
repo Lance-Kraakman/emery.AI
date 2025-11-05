@@ -14,40 +14,6 @@ export interface BaseStoreConfig {
 export type PanelState = 'expanded' | 'collapsed'
 export type LayoutBreakpoint = 'mobile' | 'tablet' | 'desktop'
 
-// Chat related types
-export interface ChatMessage {
-  id: string
-  content: string
-  role: 'user' | 'assistant'
-  timestamp?: Date
-}
-
-export interface ChatContext {
-  chatId?: string
-  domainType?: string
-  domainId?: number
-  tableId?: number
-}
-
-// Form state types
-export interface FormState {
-  isSubmitting: boolean
-  errors: Record<string, string>
-  isDirty: boolean
-  isValid: boolean
-}
-
-// Store action types for consistency
-export interface StoreAction<TPayload = any> {
-  type: string
-  payload?: TPayload
-}
-
-// Store selector type helper
-export type StoreSelector<TState, TSelected> = (state: TState) => TSelected
-
-// Generic store utilities
-export type StoreInstance<TState> = Store<TState>
 
 // Persistence configuration
 export interface PersistenceConfig {

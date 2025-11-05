@@ -17,6 +17,33 @@ interface ChatMessage extends Message {
 }
 
 /**
+ * Helper to extract text content from Message parts
+ */
+function getMessageContent(message: Message): string {
+  if (!message.parts || message.parts.length === 0) return ''
+
+  // Find the first text part
+  const textPart = message.parts.find((part: any) => typeof part === 'string' || part?.type === 'text')
+
+  if (typeof textPart === 'string') return textPart
+  if (textPart && typeof textPart === 'object' && 'text' in textPart) return textPart.text
+
+  // Fallback: convert first part to string
+  return String(message.parts[0] || '')
+}
+
+/**
+ * Helper to create a Message with text content
+ */
+function createTextMessage(content: string, role: 'user' | 'assistant' | 'system', id?: string): ChatMessage {
+  return {
+    id: id || generateId(),
+    role,
+    parts: [{ type: 'text', text: content }] as any,
+  }
+}
+
+/**
  * Extract tool references from message content
  * Finds patterns like @tool:gmail-create-draft and converts them to tool configs
  */
@@ -49,14 +76,18 @@ function extractToolReferencesFromMessage(message: string): Array<{name: string,
 
 // Extended ChatHandler interface with scroll functionality, persistence, and tool management
 interface ExtendedChatHandler extends ChatHandler {
+  // Base ChatHandler fields
+  isLoading: boolean
+  messages: any[]
   append: (message: Message) => Promise<string>
+  setMessages: (messages: any[]) => void
+  // Custom fields
   scrollRef?: React.RefObject<HTMLDivElement>
   scrollToBottom?: () => void
   clearMessages?: () => void
   currentChatId?: string
   switchToChat?: (chatId: string) => Promise<void>
   createNewChat?: () => Promise<void>
-  onChatCreated?: (chatId: string) => void
   // Tool management
   selectedTools: ToolDTO[]
   availableTools: ToolDTO[]
@@ -140,14 +171,12 @@ export function useChatGRPC(
       
       if (result.success && result.data) {
         setCurrentChatId(chatId)
-        
+
         // Convert DTOs to ChatMessage format
-        const chatMessages: ChatMessage[] = result.data.messages.map(msg => ({
-          id: msg.id,
-          content: msg.content,
-          role: msg.role as 'user' | 'assistant'
-        }))
-        
+        const chatMessages: ChatMessage[] = result.data.messages.map(msg =>
+          createTextMessage(msg.content, msg.role as 'user' | 'assistant', msg.id)
+        )
+
         setMessages(chatMessages)
         console.log(`[CHAT-GRPC-HOOK] Loaded ${chatMessages.length} messages for chat ${chatId}`)
       } else {
@@ -194,11 +223,8 @@ export function useChatGRPC(
   }, [messages, isClient, chatStorageKey])
 
   const append = async (message: Message) => {
-    const userMessage: ChatMessage = {
-      id: generateId(),
-      content: message.content,
-      role: message.role as 'user' | 'assistant',
-    }
+    const messageContent = getMessageContent(message)
+    const userMessage = createTextMessage(messageContent, message.role as 'user' | 'assistant')
 
     setMessages((prev) => [...prev, userMessage])
     setIsLoading(true)
@@ -221,7 +247,7 @@ export function useChatGRPC(
       // Prepare chat messages for API call
       const chatMessages = [...messages, userMessage].map(m => ({
         role: m.role as 'user' | 'assistant',
-        content: m.content,
+        content: getMessageContent(m),
       }))
 
       // Prepare context data for API call using proper UI types
@@ -240,7 +266,7 @@ export function useChatGRPC(
       }))
 
       // 2. Extract tool references from message content (e.g., @tool:gmail-create-draft)
-      const messageToolReferences = extractToolReferencesFromMessage(userMessage.content)
+      const messageToolReferences = extractToolReferencesFromMessage(messageContent)
       console.log('[CHAT-GRPC-HOOK] Extracted tool references from message:', messageToolReferences)
 
       // Debug: Log individual tool configs
@@ -332,17 +358,13 @@ export function useChatGRPC(
 
                 // Create message on first content chunk (not before)
                 if (!messageCreated) {
-                  setMessages((prev) => [...prev, {
-                    id: assistantId,
-                    content: assistantMessage,
-                    role: 'assistant' as const,
-                  }])
+                  setMessages((prev) => [...prev, createTextMessage(assistantMessage, 'assistant', assistantId)])
                   messageCreated = true
                 } else {
                   // Update the assistant message in real-time
                   setMessages((prev) => prev.map((msg) =>
                     msg.id === assistantId
-                      ? { ...msg, content: assistantMessage }
+                      ? createTextMessage(assistantMessage, 'assistant', assistantId)
                       : msg
                   ))
                 }
@@ -365,18 +387,11 @@ export function useChatGRPC(
       // Check if it was aborted
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('[CHAT-GRPC-HOOK] Message cancelled by user')
-        setMessages((prev) => [...prev, {
-          id: generateId(),
-          content: '_Message cancelled by user_',
-          role: 'assistant' as const,
-        }])
+        setMessages((prev) => [...prev, createTextMessage('_Message cancelled by user_', 'assistant')])
       } else {
         // Add error message
-        setMessages((prev) => [...prev, {
-          id: generateId(),
-          content: `Sorry, there was an error processing your message: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
-          role: 'assistant' as const,
-        }])
+        const errorMsg = `Sorry, there was an error processing your message: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`
+        setMessages((prev) => [...prev, createTextMessage(errorMsg, 'assistant')])
       }
     } finally {
       setIsLoading(false)
@@ -385,7 +400,7 @@ export function useChatGRPC(
       abortControllerRef.current = null
     }
 
-    return message.content as string
+    return messageContent
   }
 
   // Clear all messages and localStorage
@@ -521,11 +536,14 @@ export function useChatGRPC(
   }
 
   return {
-    input,
-    setInput,
+    // Base ChatHandler required fields
+    status: isLoading ? 'streaming' : 'ready',
+    sendMessage: async (msg: Message) => {
+      await append(msg)
+    },
     isLoading,
     append,
-    messages: messages.map(msg => ({ id: msg.id, content: msg.content, role: msg.role })), // Include id field required by ChatMessages component
+    messages, // Messages already have the correct structure with id and parts
     setMessages,
     scrollRef,
     scrollToBottom,
