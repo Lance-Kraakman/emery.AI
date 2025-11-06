@@ -32,6 +32,10 @@ export interface Organization {
   tokenQuotaMonthly?: number | null;
   tokenUsageCurrentMonth?: number;
   quotaResetAt?: Date | null;
+  // Credit system fields (user-facing billing)
+  creditBalance?: number;
+  creditsUsedCurrentMonth?: number;
+  creditsResetAt?: Date | null;
   createdAt?: Date | null;
   // Note: No updatedAt field - not present in organizations table schema
 }
@@ -53,6 +57,10 @@ export interface UpdateOrganizationData extends Partial<CreateOrganizationData> 
   tokenQuotaMonthly?: number | null;
   tier?: 'free' | 'pro' | 'enterprise';
   availableModels?: string[];
+  // Credit system fields
+  creditBalance?: number;
+  creditsUsedCurrentMonth?: number;
+  creditsResetAt?: Date | null;
 }
 
 export interface OrganizationWithMembers extends Organization {

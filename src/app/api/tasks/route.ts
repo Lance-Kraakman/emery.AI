@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
-import { getTokenUsageRepository } from '@/ddd/application/di/getters';
+import { getTokenUsageRepository, getOrganizationRepository } from '@/ddd/application/di/getters';
 import type { CreateTaskDTO } from '@/app/dtos/task.dto';
 
 /**
@@ -60,7 +60,8 @@ export async function POST(request: NextRequest) {
     // Check token quota before creating task
     const organizationId = authResult.user.organizationId!;
     const tokenUsageRepo = getTokenUsageRepository();
-    const tokenUsageService = new TokenUsageApplicationService(tokenUsageRepo);
+    const orgRepo = getOrganizationRepository();
+    const tokenUsageService = new TokenUsageApplicationService(tokenUsageRepo, orgRepo);
     const quotaCheck = await tokenUsageService.checkQuota(organizationId);
 
     if (quotaCheck.quotaExceeded) {

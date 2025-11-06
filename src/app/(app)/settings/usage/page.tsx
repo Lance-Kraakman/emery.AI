@@ -7,7 +7,7 @@ import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 export const metadata = {
   title: 'Usage & Billing | Organization Settings',
-  description: 'Manage token usage, quotas, and model configuration for your organization',
+  description: 'Manage credit usage, view breakdowns, and configure AI models for your organization',
 };
 
 export default async function UsageSettingsPage() {
@@ -46,6 +46,7 @@ export default async function UsageSettingsPage() {
             currentModel={organization.defaultModel || null}
             availableModels={organization.availableModels || []}
             tokenQuota={organization.tokenQuotaMonthly || null}
+            creditBalance={organization.creditBalance || 0}
           />
         </Suspense>
       </div>

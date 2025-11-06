@@ -10,6 +10,7 @@ import { TokenUsageUtils } from '@/ddd/domain/billing/entities/token-usage';
 import { OrganizationId, UserId, AgentId } from '@/ddd/domain/shared/value-objects';
 import { calculateTokenCost } from '@/lib/ai/model-registry';
 import type { Result } from '@/ddd/domain/shared/result';
+import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 
 const logger = createDebugLogger('TokenUsageService');
@@ -53,7 +54,8 @@ export interface UsageStatisticsDTO {
 
 export class TokenUsageApplicationService {
   constructor(
-    private readonly tokenUsageRepository: ITokenUsageRepository
+    private readonly tokenUsageRepository: ITokenUsageRepository,
+    private readonly organizationRepository: IOrganizationRepository
   ) {}
 
   /**
@@ -121,20 +123,68 @@ export class TokenUsageApplicationService {
 
   /**
    * Check if organization has exceeded quota
+   * Enforces credit limits by comparing creditsUsedCurrentMonth against creditBalance
    */
   async checkQuota(organizationId: number): Promise<QuotaCheckResult> {
-    const orgId = OrganizationId.fromNumber(organizationId);
+    try {
+      const orgId = OrganizationId.fromNumber(organizationId);
 
-    // Get current month usage
-    const currentUsage = await this.tokenUsageRepository.getCurrentMonthUsage(orgId);
+      // Get organization to check credit balance
+      const organization = await this.organizationRepository.findById(orgId);
 
-    // TODO: Get monthly quota from organization settings
-    // For now, return unlimited (quota enforcement will be added separately)
-    return {
-      allowed: true,
-      currentUsage,
-      quotaExceeded: false,
-    };
+      if (!organization) {
+        logger.error('Organization not found for quota check', { organizationId });
+        // Fail safe - deny access if organization doesn't exist
+        return {
+          allowed: false,
+          currentUsage: 0,
+          quotaExceeded: true,
+        };
+      }
+
+      const creditBalance = organization.creditBalance ?? 0;
+      const creditsUsed = organization.creditsUsedCurrentMonth ?? 0;
+
+      // Organizations with 0 or null credit balance are treated as unlimited (enterprise tier)
+      if (creditBalance === 0) {
+        logger.debug('Organization has unlimited credits (enterprise tier)', { organizationId });
+        return {
+          allowed: true,
+          currentUsage: creditsUsed,
+          monthlyQuota: undefined, // Unlimited
+          percentageUsed: 0,
+          quotaExceeded: false,
+        };
+      }
+
+      // Calculate usage percentage
+      const percentageUsed = (creditsUsed / creditBalance) * 100;
+      const quotaExceeded = creditsUsed >= creditBalance;
+
+      logger.debug('Quota check result', {
+        organizationId,
+        creditBalance,
+        creditsUsed,
+        percentageUsed: percentageUsed.toFixed(2),
+        quotaExceeded
+      });
+
+      return {
+        allowed: !quotaExceeded,
+        currentUsage: creditsUsed,
+        monthlyQuota: creditBalance,
+        percentageUsed,
+        quotaExceeded,
+      };
+    } catch (error) {
+      logger.error('Failed to check quota', { error, organizationId });
+      // Fail safe - deny access on error
+      return {
+        allowed: false,
+        currentUsage: 0,
+        quotaExceeded: true,
+      };
+    }
   }
 
   /**
