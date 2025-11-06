@@ -17,6 +17,7 @@ class FieldType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     FIELD_TYPE_FILE: _ClassVar[FieldType]
     FIELD_TYPE_RELATION: _ClassVar[FieldType]
     FIELD_TYPE_DOCUMENT: _ClassVar[FieldType]
+    FIELD_TYPE_EMBEDDING: _ClassVar[FieldType]
 
 class FilterOperator(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -56,6 +57,7 @@ FIELD_TYPE_DATE: FieldType
 FIELD_TYPE_FILE: FieldType
 FIELD_TYPE_RELATION: FieldType
 FIELD_TYPE_DOCUMENT: FieldType
+FIELD_TYPE_EMBEDDING: FieldType
 FILTER_OP_UNSPECIFIED: FilterOperator
 FILTER_OP_EQ: FilterOperator
 FILTER_OP_NE: FilterOperator
@@ -469,19 +471,27 @@ class QueryRowsResponse(_message.Message):
     message: str
     def __init__(self, success: bool = ..., arrow_ipc_stream: _Optional[bytes] = ..., total_count: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
 
+class FloatArray(_message.Message):
+    __slots__ = ("values",)
+    VALUES_FIELD_NUMBER: _ClassVar[int]
+    values: _containers.RepeatedScalarFieldContainer[float]
+    def __init__(self, values: _Optional[_Iterable[float]] = ...) -> None: ...
+
 class RowDataValue(_message.Message):
-    __slots__ = ("text_value", "number_value", "boolean_value", "date_value", "json_value")
+    __slots__ = ("text_value", "number_value", "boolean_value", "date_value", "json_value", "embedding_value")
     TEXT_VALUE_FIELD_NUMBER: _ClassVar[int]
     NUMBER_VALUE_FIELD_NUMBER: _ClassVar[int]
     BOOLEAN_VALUE_FIELD_NUMBER: _ClassVar[int]
     DATE_VALUE_FIELD_NUMBER: _ClassVar[int]
     JSON_VALUE_FIELD_NUMBER: _ClassVar[int]
+    EMBEDDING_VALUE_FIELD_NUMBER: _ClassVar[int]
     text_value: str
     number_value: float
     boolean_value: bool
     date_value: int
     json_value: str
-    def __init__(self, text_value: _Optional[str] = ..., number_value: _Optional[float] = ..., boolean_value: bool = ..., date_value: _Optional[int] = ..., json_value: _Optional[str] = ...) -> None: ...
+    embedding_value: FloatArray
+    def __init__(self, text_value: _Optional[str] = ..., number_value: _Optional[float] = ..., boolean_value: bool = ..., date_value: _Optional[int] = ..., json_value: _Optional[str] = ..., embedding_value: _Optional[_Union[FloatArray, _Mapping]] = ...) -> None: ...
 
 class RowData(_message.Message):
     __slots__ = ("id", "data")

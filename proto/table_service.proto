@@ -33,6 +33,7 @@ enum FieldType {
   FIELD_TYPE_FILE = 5;        // Stored as JSON string
   FIELD_TYPE_RELATION = 6;    // Stored as JSON string
   FIELD_TYPE_DOCUMENT = 7;    // Stored as JSON string
+  FIELD_TYPE_EMBEDDING = 8;   // Fixed-size float32 list in Delta Lake
 }
 
 // Filter operators matching the TypeScript FilterOperator type
@@ -291,6 +292,11 @@ message QueryRowsResponse {
   string message = 4;
 }
 
+// Float array for embedding vectors (efficient packed encoding)
+message FloatArray {
+  repeated float values = 1;  // Embedding vector as array of float32
+}
+
 // Typed value for row data - maps frontend field types to protobuf
 message RowDataValue {
   oneof value {
@@ -299,6 +305,7 @@ message RowDataValue {
     bool boolean_value = 3;
     int64 date_value = 4;      // Unix timestamp ms
     string json_value = 5;     // For file/relation/document complex types
+    FloatArray embedding_value = 6;  // For embedding vectors (fixed-size float32 lists)
   }
 }
 

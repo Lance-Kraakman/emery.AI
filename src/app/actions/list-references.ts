@@ -172,7 +172,7 @@ async function getTableReferences(
             const wordInfo = wordCount ? ` (${wordCount.toLocaleString()} words)` : '';
 
             references.push({
-              id: `doc_${table.id}_${fieldValue.fieldSlug}_${rowDTO.id}`,
+              id: `doc_${table.id}_${fieldValue.fieldId}_${rowDTO.id}`,
               insertText,
               displayName: title,
               description: `Document in ${table.databaseName} → ${table.name}${wordInfo}`,
@@ -202,7 +202,7 @@ async function getTableReferences(
             const mimeInfo = fileField.mimeType ? ` [${fileField.mimeType}]` : '';
 
             references.push({
-              id: `file_${table.id}_${fieldValue.fieldSlug}_${rowDTO.id}`,
+              id: `file_${table.id}_${fieldValue.fieldId}_${rowDTO.id}`,
               insertText,
               displayName: fileName,
               description: `File in ${table.databaseName} → ${table.name}${fileSize}${mimeInfo}`,

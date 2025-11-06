@@ -733,7 +733,8 @@ export const dataSelectors = {
     // Apply row filter
     if (state.rowFilter.field && state.rowFilter.value !== undefined) {
       filtered = filtered.filter(row => {
-        const fieldValue = row.fieldValues.find(fv => fv.fieldSlug === state.rowFilter.field)?.value
+        // AIDEV-NOTE: Assumes state.rowFilter.field is numeric field ID (e.g., "1", "10")
+        const fieldValue = row.fieldValues.find(fv => fv.fieldId === state.rowFilter.field)?.value
         const filterValue = state.rowFilter.value
 
         switch (state.rowFilter.operator) {
@@ -758,8 +759,9 @@ export const dataSelectors = {
     // Apply sorting
     if (state.sortBy.field) {
       filtered.sort((a, b) => {
-        const aValue = a.fieldValues.find(fv => fv.fieldSlug === state.sortBy.field)?.value || ''
-        const bValue = b.fieldValues.find(fv => fv.fieldSlug === state.sortBy.field)?.value || ''
+        // AIDEV-NOTE: Assumes state.sortBy.field is numeric field ID (e.g., "1", "10")
+        const aValue = a.fieldValues.find(fv => fv.fieldId === state.sortBy.field)?.value || ''
+        const bValue = b.fieldValues.find(fv => fv.fieldId === state.sortBy.field)?.value || ''
         
         let compareResult = 0
         if (typeof aValue === 'number' && typeof bValue === 'number') {

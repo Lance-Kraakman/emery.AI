@@ -533,14 +533,17 @@ export async function getRowsDSG(
 
     // Transform all rows to DSG format (including the potential extra row)
     // AIDEV-NOTE: CRITICAL - Convert from numeric field IDs to field names for DSG
-    // row.toPlainObject() returns {id: "123", 79: "value", 80: "value"} (numeric IDs)
-    // But DSG expects {id: "123", test: "value", name: "value"} (field names)
+    // FieldValue now stores fieldId (e.g., "1", "10"), so we map to field names for DSG
+    // DSG expects {id: "123", test: "value", name: "value"} (field names)
     const allDsgData = rowsData.map(row => {
       const dsgRow: Record<string, any> = { id: row.id.value };
 
-      // Map fieldValues using field names (slugs) as keys, not numeric IDs
+      // Map fieldValues: fieldId → field name for DSG format
       for (const fieldValue of row.fieldValues) {
-        dsgRow[fieldValue.fieldSlug] = fieldValue.value;
+        const field = table.fields.find(f => f.id.value.toString() === fieldValue.fieldId);
+        if (field) {
+          dsgRow[field.name] = fieldValue.value;
+        }
       }
 
       return dsgRow;
@@ -613,9 +616,12 @@ export async function searchRowsDSG(
     const dsgData = result.data.map(row => {
       const dsgRow: Record<string, any> = { id: row.id.value };
 
-      // Map fieldValues using field names (slugs) as keys, not numeric IDs
+      // Map fieldValues: fieldId → field name for DSG format
       for (const fieldValue of row.fieldValues) {
-        dsgRow[fieldValue.fieldSlug] = fieldValue.value;
+        const field = table.fields.find(f => f.id.value.toString() === fieldValue.fieldId);
+        if (field) {
+          dsgRow[field.name] = fieldValue.value;
+        }
       }
 
       return dsgRow;
