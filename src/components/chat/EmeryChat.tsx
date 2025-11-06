@@ -266,14 +266,21 @@ function ChatContentWithCanvas({
           )}
 
           {/* ChatMessages component */}
-                    <ChatMessages
+          <ChatMessages
             className="flex-1 h-full bg-transparent [&_.message]:bg-background [&_.message.assistant]:bg-muted [&_.message.user]:bg-primary [&_.message.user]:text-primary-foreground [&_.message]:p-4 [&_.message]:rounded-lg [&_.message]:my-2 [&_.message]:mx-4 [&_p]:text-sm [&_p]:leading-relaxed"
           />
-          
-          {/* Step Progress Indicator - styled like an assistant message */}
-          {handler.currentStep && (
-            <div className="mx-4 my-2">
-              <div className="message assistant bg-muted p-4 rounded-lg">
+
+          {/* Loading indicator styled as a pending assistant message */}
+          {handler.isLoading && handler.currentStep && (
+            <div className="flex gap-3 px-4 py-2 mx-4 mb-2">
+              {/* Bot Avatar */}
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              {/* Step Progress */}
+              <div className="flex-1 min-w-0">
                 <StepProgressIndicator
                   currentStep={handler.currentStep}
                   isLoading={handler.isLoading}

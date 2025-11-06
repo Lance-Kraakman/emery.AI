@@ -50,10 +50,10 @@ export function StepProgressIndicator({
 
   return (
     <div className="transition-all duration-300">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-sm font-medium">
+          <span className="text-sm">
             {getStepMessage()}
           </span>
         </div>
@@ -65,7 +65,7 @@ export function StepProgressIndicator({
             onClick={onCancel}
             className="h-7 px-2 text-xs hover:bg-destructive/10 hover:text-destructive"
           >
-            <XCircle className="h-4 w-4 mr-1" />
+            <XCircle className="h-3 w-3 mr-1" />
             Cancel
           </Button>
         )}
@@ -73,7 +73,7 @@ export function StepProgressIndicator({
 
       {/* Display step content if available */}
       {currentStep.content && (
-        <div className="mt-2 pl-6 text-xs text-muted-foreground/80 whitespace-pre-wrap">
+        <div className="text-xs text-muted-foreground/70 whitespace-pre-wrap line-clamp-3">
           {currentStep.content}
         </div>
       )}

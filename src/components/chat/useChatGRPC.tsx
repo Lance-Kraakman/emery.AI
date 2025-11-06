@@ -1,7 +1,7 @@
 'use client'
 
 import { generateId } from 'ai'
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { ChatHandler, Message, type MessagePart } from '@llamaindex/chat-ui'
 import { useStore } from '@tanstack/react-store'
