@@ -38,7 +38,7 @@ export function StepProgressIndicator({
       case 'PLANNING':
         return 'Thinking...'
       case 'ACTION':
-        return `Using ${currentStep.name}...`
+        return currentStep.name ? `Using ${currentStep.name}...` : 'Executing action...'
       case 'REASONING':
         return 'Processing results...'
       case 'FINAL':
