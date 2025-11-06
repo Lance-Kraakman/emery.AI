@@ -177,7 +177,8 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
           if (progress.tokenUsage) {
             const tokenUsage = progress.tokenUsage;
             const tokenUsageRepo = getTokenUsageRepository();
-            const tokenUsageService = new TokenUsageApplicationService(tokenUsageRepo);
+            const orgRepo = getOrganizationRepository();
+            const tokenUsageService = new TokenUsageApplicationService(tokenUsageRepo, orgRepo);
 
             const orgId = typeof targetOrganizationId === 'number'
               ? targetOrganizationId

@@ -17,9 +17,14 @@ export interface ModelCapabilities {
 }
 
 export interface ModelPricing {
-  inputPer1M: number;         // Cost per 1M input tokens in USD
-  outputPer1M: number;        // Cost per 1M output tokens in USD
+  inputPer1M: number;         // Provider cost per 1M input tokens in USD (internal tracking)
+  outputPer1M: number;        // Provider cost per 1M output tokens in USD (internal tracking)
   currency: 'USD';
+
+  // Credit pricing for user-facing billing (1 credit = $0.001, with 2.5x markup on provider costs)
+  // AIDEV-NOTE: Credits provide user-friendly billing units
+  inputCreditsPerK: number;   // Credits consumed per 1K input tokens
+  outputCreditsPerK: number;  // Credits consumed per 1K output tokens
 }
 
 export interface ModelMetadata {
@@ -79,6 +84,8 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputPer1M: 0.15,      // Custom pricing - adjust based on contract
       outputPer1M: 0.60,     // Custom pricing - adjust based on contract
       currency: 'USD',
+      inputCreditsPerK: 0.375,   // 0.375 credits per 1K input tokens
+      outputCreditsPerK: 1.5,    // 1.5 credits per 1K output tokens
     },
     tier: 'free',            // Available to all users
     category: 'balanced',
@@ -107,6 +114,8 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputPer1M: 0.10,
       outputPer1M: 0.40,
       currency: 'USD',
+      inputCreditsPerK: 0.25,    // 0.25 credits per 1K input tokens
+      outputCreditsPerK: 1.0,    // 1.0 credits per 1K output tokens
     },
     tier: 'free',
     category: 'fast',
@@ -133,6 +142,8 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputPer1M: 0.20,
       outputPer1M: 0.80,
       currency: 'USD',
+      inputCreditsPerK: 0.5,     // 0.5 credits per 1K input tokens
+      outputCreditsPerK: 2.0,    // 2.0 credits per 1K output tokens
     },
     tier: 'free',
     category: 'balanced',
@@ -159,6 +170,8 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputPer1M: 0.10,
       outputPer1M: 0.40,
       currency: 'USD',
+      inputCreditsPerK: 0.25,    // 0.25 credits per 1K input tokens
+      outputCreditsPerK: 1.0,    // 1.0 credits per 1K output tokens
     },
     tier: 'free',
     category: 'fast',
@@ -185,6 +198,8 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputPer1M: 0.05,
       outputPer1M: 0.20,
       currency: 'USD',
+      inputCreditsPerK: 0.125,   // 0.125 credits per 1K input tokens
+      outputCreditsPerK: 0.5,    // 0.5 credits per 1K output tokens
     },
     tier: 'free',
     category: 'fast',
@@ -211,6 +226,8 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputPer1M: 0.15,
       outputPer1M: 0.60,
       currency: 'USD',
+      inputCreditsPerK: 0.375,   // 0.375 credits per 1K input tokens
+      outputCreditsPerK: 1.5,    // 1.5 credits per 1K output tokens
     },
     tier: 'pro',             // Pro tier only
     category: 'balanced',
@@ -262,7 +279,7 @@ export function getModelsWithCapability(capability: keyof ModelCapabilities): Mo
 }
 
 /**
- * Calculate cost for token usage
+ * Calculate provider cost for token usage (internal tracking)
  */
 export function calculateTokenCost(
   modelId: string,
@@ -279,6 +296,27 @@ export function calculateTokenCost(
   const outputCost = (outputTokens / 1_000_000) * model.pricing.outputPer1M;
 
   return inputCost + outputCost;
+}
+
+/**
+ * Calculate credits consumed for token usage (user-facing billing)
+ * 1 credit = $0.001 with 2.5x markup on provider costs
+ */
+export function calculateCreditsUsed(
+  modelId: string,
+  inputTokens: number,
+  outputTokens: number
+): number {
+  const model = getModelMetadata(modelId);
+  if (!model) {
+    console.warn(`Model ${modelId} not found in registry, returning 0 credits`);
+    return 0;
+  }
+
+  const inputCredits = (inputTokens / 1_000) * model.pricing.inputCreditsPerK;
+  const outputCredits = (outputTokens / 1_000) * model.pricing.outputCreditsPerK;
+
+  return inputCredits + outputCredits;
 }
 
 /**

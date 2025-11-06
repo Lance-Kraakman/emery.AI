@@ -74,8 +74,11 @@ export class DIContainer {
     this.registerServices('core', coreServices);
 
     // Phase 2: Register billing services (token usage tracking)
-    // Minimal dependencies
-    const billingServices = registerBillingServices({ db });
+    // Depends on: organization repository
+    const billingServices = registerBillingServices({
+      db,
+      organizationRepository: coreServices.organizationRepository
+    });
     this.registerServices('billing', billingServices);
 
     // Phase 3: Register agent services
@@ -182,6 +185,8 @@ export class DIContainer {
 
       // Billing domain
       'tokenUsageRepository': 'ITokenUsageRepository',
+      'tokenUsageApplicationService': 'TokenUsageApplicationService',
+      'creditUsageApplicationService': 'CreditUsageApplicationService',
 
       // Agent domain
       'agentRepository': 'IAgentRepository',
@@ -321,6 +326,10 @@ export {
 
   // Billing domain repositories
   getTokenUsageRepository,
+
+  // Billing application services
+  getTokenUsageApplicationService,
+  getCreditUsageApplicationService,
 
   // Domain services
   getDynamicTableService,

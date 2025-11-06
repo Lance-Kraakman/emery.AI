@@ -145,7 +145,8 @@ export async function POST(req: NextRequest) {
     // 2.5 Check token quota before processing
     console.log('[CHAT-GRPC-API] Checking token quota for organization:', organizationId);
     const tokenUsageRepo = getTokenUsageRepository();
-    const tokenUsageService = new TokenUsageApplicationService(tokenUsageRepo);
+    const orgRepo = getOrganizationRepository();
+    const tokenUsageService = new TokenUsageApplicationService(tokenUsageRepo, orgRepo);
     const quotaCheck = await tokenUsageService.checkQuota(organizationId);
 
     console.log('[CHAT-GRPC-API] Quota check result:', {

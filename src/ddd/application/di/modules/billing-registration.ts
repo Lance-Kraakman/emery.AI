@@ -8,6 +8,7 @@
 
 import type { ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
 import type { ITokenUsageRepository } from '@/ddd/domain/billing/repositories/token-usage-repository';
+import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { DrizzleTokenUsageRepository } from '@/ddd/infrastructure/db/repositories/billing/drizzle-token-usage-repository';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { CreditUsageApplicationService } from '@/ddd/application/services/billing/credit-usage-application-service';
@@ -20,16 +21,20 @@ export interface BillingServices {
 
 export interface BillingDependencies {
   db: ContextAwareDbClient;
+  organizationRepository: IOrganizationRepository;
 }
 
 export function registerBillingServices(deps: BillingDependencies): BillingServices {
-  const { db } = deps;
+  const { db, organizationRepository } = deps;
 
   // Register repositories
   const tokenUsageRepository = new DrizzleTokenUsageRepository(db);
 
   // Register application services
-  const tokenUsageApplicationService = new TokenUsageApplicationService(tokenUsageRepository);
+  const tokenUsageApplicationService = new TokenUsageApplicationService(
+    tokenUsageRepository,
+    organizationRepository
+  );
   const creditUsageApplicationService = new CreditUsageApplicationService(tokenUsageRepository);
 
   return {
