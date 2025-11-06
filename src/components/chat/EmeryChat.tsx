@@ -298,7 +298,11 @@ function ChatContentWithCanvas({
       <div className="flex-shrink-0 py-4 px-3 border-t border-border/10 bg-card">
         <CustomChatInput
           onSendMessage={async (message) => {
-            handler.append({ content: message, role: 'user' })
+            // Send message with proper MessagePart format
+            handler.append({
+              role: 'user',
+              parts: [{ type: 'text', text: message }]
+            })
           }}
           onToolsChange={onToolsChange}
           placeholder="Ask Emery anything... (type @ to add tools, docs, agents, etc.)"
