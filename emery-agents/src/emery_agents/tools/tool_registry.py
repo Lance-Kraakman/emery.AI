@@ -15,6 +15,7 @@ from .mock_data_tools import DATA_TOOLS
 from .organizational_tools import ORGANIZATIONAL_TOOLS
 from .api_tools import API_TOOLS
 from .crud_tools import CRUD_TOOLS
+from .embedding_tool import EmbeddingTool
 
 # Conditionally import Pipedream tools based on environment
 USE_PIPEDREAM_TOOLS = os.getenv("USE_PIPEDREAM_TOOLS", "false").lower() == "true"
@@ -45,7 +46,8 @@ class ToolRegistry:
             **ORGANIZATIONAL_TOOLS,
             **API_TOOLS,
             **CRUD_TOOLS,  # Internal CRUD operations (agents, documents, files, tables, teams)
-            **PIPEDREAM_TOOLS  # OAuth-backed integrations (Gmail, Slack, etc.)
+            **PIPEDREAM_TOOLS,  # OAuth-backed integrations (Gmail, Slack, etc.)
+            "generate_embedding": lambda config: EmbeddingTool()  # AI embedding generation
         }
         
         # Log registry statistics
@@ -56,7 +58,8 @@ class ToolRegistry:
             "organizational": len(ORGANIZATIONAL_TOOLS),
             "api": len(API_TOOLS),
             "crud": len(CRUD_TOOLS),
-            "pipedream": len(PIPEDREAM_TOOLS)
+            "pipedream": len(PIPEDREAM_TOOLS),
+            "ai": 1  # generate_embedding
         }
         total_tools = sum(tool_counts.values())
         print(f"[TOOL-REGISTRY] Initialized with {total_tools} tools")
@@ -156,6 +159,8 @@ class ToolRegistry:
             category = "crud"
         elif tool_name_lower in PIPEDREAM_TOOLS:
             category = "pipedream"
+        elif tool_name_lower == "generate_embedding":
+            category = "ai"
         
         return {
             "name": tool_name,
