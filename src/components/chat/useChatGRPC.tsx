@@ -330,10 +330,10 @@ export function useChatGRPC(
         tools: selectedTools.map(t => t.name)
       })
 
-      // Prepare chat messages for API call
+      // Prepare chat messages for API call - send parts array for multimodal support
       const chatMessages = [...messages, userMessage].map(m => ({
         role: m.role as 'user' | 'assistant',
-        content: getMessageContent(m),
+        parts: m.parts, // Send parts array to API
       }))
 
       // Prepare context data for API call using proper UI types
