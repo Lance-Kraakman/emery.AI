@@ -9,6 +9,7 @@ interface StepProgressIndicatorProps {
     type: string
     name: string
     index: number
+    content?: string
   } | null
   isLoading: boolean
   onCancel?: () => void
@@ -48,24 +49,33 @@ export function StepProgressIndicator({
   }
 
   return (
-    <div className="flex items-center justify-between transition-all duration-300">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span className="text-sm">
-          {getStepMessage()}
-        </span>
+    <div className="transition-all duration-300">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm font-medium">
+            {getStepMessage()}
+          </span>
+        </div>
+
+        {onCancel && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onCancel}
+            className="h-7 px-2 text-xs hover:bg-destructive/10 hover:text-destructive"
+          >
+            <XCircle className="h-4 w-4 mr-1" />
+            Cancel
+          </Button>
+        )}
       </div>
 
-      {onCancel && (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onCancel}
-          className="h-7 px-2 text-xs hover:bg-destructive/10 hover:text-destructive"
-        >
-          <XCircle className="h-4 w-4 mr-1" />
-          Cancel
-        </Button>
+      {/* Display step content if available */}
+      {currentStep.content && (
+        <div className="mt-2 pl-6 text-xs text-muted-foreground/80 whitespace-pre-wrap">
+          {currentStep.content}
+        </div>
       )}
     </div>
   )

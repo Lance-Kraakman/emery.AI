@@ -192,6 +192,7 @@ export function useChatGRPC(
     type: string
     name: string
     index: number
+    content?: string
   } | null>(null)
   const [currentMessageId, setCurrentMessageId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -450,7 +451,8 @@ export function useChatGRPC(
                 setCurrentStep({
                   type: eventData.stepType,
                   name: eventData.stepName,
-                  index: eventData.stepIndex
+                  index: eventData.stepIndex,
+                  content: eventData.content // Include step content for display
                 })
               } else if (eventData.type === 'content') {
                 // Content chunk from assistant response

@@ -253,7 +253,7 @@ export async function POST(req: NextRequest) {
         organizationId: organizationId,
         createdBy: userId,
         domainType: domainType as any,
-        domainId: domainId ? parseInt(domainId) : undefined
+        domainId: domainId ? domainId : undefined
       };
 
       const chatResult = await chatApplicationService.createChat(createChatDTO);
@@ -538,18 +538,26 @@ export async function POST(req: NextRequest) {
                 });
 
                 // Send step progress event to frontend as SSE-like JSON
+                // Convert metadata to plain object if it's a Map
+                const plainMetadata = step.metadata ? { ...step.metadata } : {};
+
                 const stepEvent = {
                   type: 'step_progress',
                   stepType: stepTypeName,
                   stepName: step.stepName,
                   stepIndex: step.stepIndex,
                   content: step.content,
-                  metadata: step.metadata
+                  metadata: plainMetadata
                 };
 
-                const eventData = `data: ${JSON.stringify(stepEvent)}\n\n`;
-                const eventChunk = new TextEncoder().encode(eventData);
-                controller.enqueue(eventChunk);
+                try {
+                  const eventData = `data: ${JSON.stringify(stepEvent)}\n\n`;
+                  const eventChunk = new TextEncoder().encode(eventData);
+                  controller.enqueue(eventChunk);
+                } catch (jsonError) {
+                  console.error('[CHAT-GRPC-API] Failed to serialize step event:', jsonError);
+                  console.error('[CHAT-GRPC-API] Problematic metadata:', step.metadata);
+                }
 
               } else if (response.type === 'content' && response.content) {
                 // Stream content chunk to frontend as SSE event
