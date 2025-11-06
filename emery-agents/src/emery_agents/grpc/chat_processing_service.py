@@ -112,32 +112,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         logger.info(f"🔧 Tools provided: {tools_count}, always using ToolCallingAgent")
 
         try:
-            # 1. RAG Context Processing (pre-assembled from Next.js)
-            rag_context_data = None
-            if request.context and request.context.assembled_rag_context:
-                logger.info("🔍 Processing pre-assembled RAG context from Next.js...")
-                
-                # Import RagProcessor classes
-                # RagContextData imported from rag_processor (already imported)
-                
-                # Create RAG context data from the pre-assembled context
-                rag_context_data = RagContextData(
-                    assembled_context=request.context.assembled_rag_context,
-                    sources=list(request.context.rag_sources) if request.context.rag_sources else [],
-                    domain_type=request.context.domain_type if request.context.domain_type else None,
-                    domain_id=request.context.domain_id if request.context.domain_id else None
-                )
-                
-                logger.info(f"✅ Processed RAG context: {len(rag_context_data.assembled_context)} chars, {len(rag_context_data.sources)} sources")
-                
-                # Send RAG acknowledgment to client (optional - could be removed)
-                if rag_context_data.sources:
-                    rag_response = agent_worker_pb2.ProcessMessageResponse(
-                        rag_context=self._build_rag_context_proto_from_data(rag_context_data),
-                        timestamp=int(time.time() * 1000)
-                    )
-                    yield rag_response
-                    logger.info(f"✅ Sent RAG context acknowledgment with {len(rag_context_data.sources)} sources")
+            # RAG context has been removed - chat is now simpler without automatic RAG
+            # Tools can still be provided for specific data access if needed
+            logger.debug("🔧 Processing without RAG context (RAG system removed)")
 
             # 2. Build Conversation Context
             conversation_messages = []
@@ -180,7 +157,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             async for response_dict in self._stream_tool_calling_agent_response(
                 conversation_messages,
                 tools_to_use,
-                rag_context_data,
+                None,  # RAG context removed
                 domain_context=request.context,
                 org_model=org_model
             ):
@@ -266,7 +243,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     token_usage=token_usage_proto,
                     metadata={
                         'content_length': str(len(total_content)),
-                        'rag_sources': str(len(rag_context_data.sources) if rag_context_data else 0),
+                        'rag_sources': '0',  # RAG context removed
                         'domain_type': request.context.domain_type if request.context else 'none'
                     }
                 ),
