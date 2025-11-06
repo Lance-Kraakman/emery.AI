@@ -238,7 +238,7 @@ export class TableGrpcMapper {
     // Convert aggregation configuration to protobuf format if provided
     const aggregation = (queryParams.aggregations && Array.isArray(queryParams.aggregations) && queryParams.aggregations.length > 0)
       ? {
-          groupByFields: [], // Empty for global aggregations (metric views)
+          groupByFields: queryParams.groupByFields || [], // Use provided groupByFields or empty for global aggregations
           aggregations: queryParams.aggregations.map((agg: any) => ({
             fieldId: agg.fieldId,
             type: this.mapAggregationTypeToProto(agg.type),

@@ -42,6 +42,7 @@ export interface RowQueryOptions {
     alias: string;
     formatType?: string;
   }>;
+  groupByFields?: string[];            // Fields to GROUP BY (for chart aggregations with multiple groups)
 }
 
 export interface RowFilter {
