@@ -248,6 +248,12 @@ export const organizations = pgTable("organizations", {
   tokenUsageCurrentMonth: integer("token_usage_current_month").default(0), // Current month's token usage
   quotaResetAt: timestamp("quota_reset_at"), // When quota was last reset
 
+  // Credit system fields (1 credit = 1,000 tokens for user-facing billing)
+  // AIDEV-NOTE: Credits provide user-friendly billing units. Different models cost different credits per 1K tokens.
+  creditBalance: integer("credit_balance").default(0).notNull(), // Current available credits
+  creditsUsedCurrentMonth: integer("credits_used_current_month").default(0).notNull(), // Credits used this month
+  creditsResetAt: timestamp("credits_reset_at"), // When credits were last reset (for monthly free tier)
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   // RBAC-based policy for viewing organizations
@@ -952,175 +958,6 @@ export const verificationTokens = pgTable("verification_tokens", {
   expires: timestamp("expires").notNull(),
 });
 
-// RAG System Tables
-export const ragIndexes = pgTable("rag_indexes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  description: text("description"),
-  
-  // Scoping - configurable domain filtering
-  organizationId: integer("organization_id").notNull().references(() => organizations.id),
-  agentId: integer("agent_id").references(() => agents.id),
-  // Note: roleId removed for simplified RBAC - use organization-level permissions instead
-  
-  // Domain configuration - what to RAG against
-  domainTypes: jsonb("domain_types").notNull(), // ["tables", "files", "agents", "teams", "databases", "organizations"]
-  domainFilters: jsonb("domain_filters"), // Additional filtering criteria
-  
-  // Embedding configuration
-  embeddingModel: text("embedding_model").default("sentence-transformers/all-mpnet-base-v2"),
-  embeddingDimensions: integer("embedding_dimensions").default(768),
-  
-  // Status and metadata
-  status: text("status").default("active"), // active, building, error
-  lastIndexedAt: timestamp("last_indexed_at"),
-  documentCount: integer("document_count").default(0),
-  
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  // RBAC-based policies for RAG indexes
-  pgPolicy("rag_indexes_manage_permission", {
-    as: "permissive",
-    for: "all",
-    to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id
-      )`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id
-      )`,
-  }),
-  pgPolicy("rag_indexes_view_permission", {
-    as: "permissive",
-    for: "select",
-    to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:view',
-        organization_id
-      )`,
-  }),
-]);
-
-export const ragDocuments = pgTable("rag_documents", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  ragIndexId: uuid("rag_index_id").notNull().references(() => ragIndexes.id),
-  organizationId: integer("organization_id").notNull().references(() => organizations.id), // Denormalized for performance
-  
-  // Source identification
-  domainType: text("domain_type").notNull(), // "tables", "files", "agents", "teams", "databases", "organizations"
-  sourceId: text("source_id").notNull(), // ID of the source (table.id, file_path, etc.)
-  sourceName: text("source_name").notNull(), // Human readable name
-  
-  // Content
-  title: text("title").notNull(),
-  content: text("content").notNull(),
-  metadata: jsonb("metadata"), // Additional context about the source
-  
-  // Vector embedding using pgvector for fast similarity search
-  embedding: vector("embedding"),
-  
-  // Content hash for change detection
-  contentHash: text("content_hash").notNull(),
-  
-  // Timestamps
-  indexedAt: timestamp("indexed_at").defaultNow(),
-  sourceUpdatedAt: timestamp("source_updated_at"),
-}, (table) => [
-  // RBAC-based policies for RAG documents
-  pgPolicy("rag_documents_manage_permission", {
-    as: "permissive",
-    for: "all",
-    to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id
-      )`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id
-      )`,
-  }),
-  pgPolicy("rag_documents_view_permission", {
-    as: "permissive",
-    for: "select",
-    to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:view',
-        organization_id
-      )`,
-  }),
-]);
-
-export const ragQueryLogs = pgTable("rag_query_logs", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  ragIndexId: uuid("rag_index_id").notNull().references(() => ragIndexes.id),
-  organizationId: integer("organization_id").references(() => organizations.id), // Denormalized for performance
-  
-  // Query details
-  query: text("query").notNull(),
-  queryEmbedding: vector("query_embedding"),
-  
-  // Results
-  resultsCount: integer("results_count").notNull(),
-  topResults: jsonb("top_results"), // Store top matching documents with scores
-  
-  // Context
-  userId: uuid("user_id").references(() => users.id),
-  agentId: integer("agent_id").references(() => agents.id),
-  sessionId: text("session_id"),
-
-  // Search parameters
-  similarityMetric: text("similarity_metric"),
-  threshold: integer("threshold"),
-  
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  // RBAC-based policies for RAG query logs
-  pgPolicy("rag_query_logs_manage_permission", {
-    as: "permissive",
-    for: "all",
-    to: "public",
-    using: sql`(organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer)))
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        COALESCE(organization_id, (SELECT ri.organization_id FROM rag_indexes ri WHERE ri.id = rag_index_id))
-      )`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id
-      )`,
-  }),
-  pgPolicy("rag_query_logs_view_permission", {
-    as: "permissive",
-    for: "select",
-    to: "public",
-    using: sql`(user_id = current_setting('app.current_user_id')::uuid OR user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:view',
-        COALESCE(organization_id, (SELECT ri.organization_id FROM rag_indexes ri WHERE ri.id = rag_index_id))
-      ))
-      AND (organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer)))`,
-  }),
-]);
-
 // Chat System Tables - Connected to All Domain Types
 export const chats = pgTable("chats", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -1218,7 +1055,8 @@ export const tokenUsageLogs = pgTable("token_usage_logs", {
   totalTokens: integer("total_tokens").notNull().default(0),
 
   // Cost tracking
-  costUsd: doublePrecision("cost_usd").notNull().default(0), // Cost in USD
+  costUsd: doublePrecision("cost_usd").notNull().default(0), // Cost in USD (provider cost for internal tracking)
+  creditsUsed: doublePrecision("credits_used").notNull().default(0), // Credits consumed (user-facing billing)
 
   // Metadata
   processingTimeMs: integer("processing_time_ms"), // Processing time in milliseconds
@@ -1251,6 +1089,47 @@ export const tokenUsageLogs = pgTable("token_usage_logs", {
           'organizations:manage',
           organization_id
         )
+      )`
+  }),
+]);
+
+// AIDEV-NOTE: Credit purchases table - tracks when organizations buy credit packages
+export const creditPurchases = pgTable("credit_purchases", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+
+  // Package details
+  packageName: text("package_name").notNull(), // e.g., 'Starter', 'Professional', 'Business', 'Enterprise'
+  creditsPurchased: integer("credits_purchased").notNull(), // Number of credits purchased
+  amountPaidUsd: doublePrecision("amount_paid_usd").notNull(), // Amount paid in USD
+
+  // Payment tracking
+  stripePaymentIntentId: text("stripe_payment_intent_id"), // Stripe payment reference
+  paymentStatus: text("payment_status").notNull().default("completed"), // 'pending', 'completed', 'failed', 'refunded'
+
+  // Metadata
+  metadata: jsonb("metadata").$type<{
+    promoCode?: string;
+    discountApplied?: number;
+    notes?: string;
+  }>(),
+
+  purchasedAt: timestamp("purchased_at").defaultNow().notNull(),
+}, (table) => [
+  // Indexes for efficient querying
+  index("credit_purchases_organization_idx").on(table.organizationId),
+  index("credit_purchases_date_idx").on(table.purchasedAt),
+
+  // RBAC policy: only organization managers can view credit purchases
+  pgPolicy("credit_purchases_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'organizations:manage',
+        organization_id
       )`
   }),
 ]);

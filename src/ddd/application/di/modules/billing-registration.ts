@@ -3,14 +3,19 @@
  *
  * Registers repositories and services for billing domain:
  * - Token Usage tracking
+ * - Credit Usage management
  */
 
 import type { ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
 import type { ITokenUsageRepository } from '@/ddd/domain/billing/repositories/token-usage-repository';
 import { DrizzleTokenUsageRepository } from '@/ddd/infrastructure/db/repositories/billing/drizzle-token-usage-repository';
+import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
+import { CreditUsageApplicationService } from '@/ddd/application/services/billing/credit-usage-application-service';
 
 export interface BillingServices {
   tokenUsageRepository: ITokenUsageRepository;
+  tokenUsageApplicationService: TokenUsageApplicationService;
+  creditUsageApplicationService: CreditUsageApplicationService;
 }
 
 export interface BillingDependencies {
@@ -23,7 +28,13 @@ export function registerBillingServices(deps: BillingDependencies): BillingServi
   // Register repositories
   const tokenUsageRepository = new DrizzleTokenUsageRepository(db);
 
+  // Register application services
+  const tokenUsageApplicationService = new TokenUsageApplicationService(tokenUsageRepository);
+  const creditUsageApplicationService = new CreditUsageApplicationService(tokenUsageRepository);
+
   return {
-    tokenUsageRepository
+    tokenUsageRepository,
+    tokenUsageApplicationService,
+    creditUsageApplicationService,
   };
 }

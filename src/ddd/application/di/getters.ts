@@ -21,7 +21,6 @@ import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-reposi
 import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
 import type { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
 import type { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
-import type { IIndexingDomainService, ISearchDomainService } from '@/ddd/domain/rag/services';
 
 import type { AgentTaskApplicationService } from '@/ddd/application/services/agents/agent-task-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
@@ -38,17 +37,9 @@ import type { ToolSearchApplicationService } from '@/ddd/application/services/to
 import type { ToolConfigurationApplicationService } from '@/ddd/application/services/tools/tool-configuration-application-service';
 import type { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
 import type { OAuthProxyApplicationService } from '@/ddd/application/services/connections/oauth-proxy-application-service';
-import type { EmbeddingService } from '@/ddd/application/services/embedding-service';
-import type { SearchAnalyticsService } from '@/ddd/application/services/search-analytics-service';
-import type { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
-import type { IndexingQueueService } from '@/ddd/application/services/rag/indexing-queue-service';
 
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
-import type { EmbeddingGeneratorService } from '@/ddd/domain/rag/services/embedding-generator-service';
 
-import type { DrizzleRagIndexRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-index-repository';
-import type { DrizzleRagDocumentRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-document-repository';
-import type { DrizzleRagQueryLogRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-query-log-repository';
 import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-repository';
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
 import type { AppApplicationService } from '@/ddd/application/services/puck/app-application-service';
@@ -56,6 +47,8 @@ import type { PuckPageApplicationService } from '@/ddd/application/services/puck
 import type { ViewRepository as IViewRepository } from '@/ddd/domain/views/repositories/view-repository';
 import type { ViewApplicationService } from '@/ddd/application/services/views/view-application-service';
 import type { ITokenUsageRepository } from '@/ddd/domain/billing/repositories/token-usage-repository';
+import type { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
+import type { CreditUsageApplicationService } from '@/ddd/application/services/billing/credit-usage-application-service';
 
 import { DIContainer } from './container';
 
@@ -98,18 +91,6 @@ type ServiceMap = {
   ToolSearchApplicationService: ToolSearchApplicationService;
   ToolConfigurationApplicationService: ToolConfigurationApplicationService;
 
-  // RAG Services
-  RagIndexRepository: DrizzleRagIndexRepository;
-  RagDocumentRepository: DrizzleRagDocumentRepository;
-  RagQueryLogRepository: DrizzleRagQueryLogRepository;
-  EmbeddingService: EmbeddingService;
-  SearchAnalyticsService: SearchAnalyticsService;
-  EmbeddingGeneratorDomainService: EmbeddingGeneratorService;
-  IndexingDomainService: IIndexingDomainService;
-  SearchDomainService: ISearchDomainService;
-  RagSearchApplicationService: RagSearchApplicationService;
-  IndexingQueueService: IndexingQueueService;
-
   // Connection Services
   ConnectionRepository: IConnectionRepository;
   ConnectionApplicationService: ConnectionApplicationService;
@@ -129,6 +110,8 @@ type ServiceMap = {
 
   // Billing Services
   TokenUsageRepository: ITokenUsageRepository;
+  TokenUsageApplicationService: TokenUsageApplicationService;
+  CreditUsageApplicationService: CreditUsageApplicationService;
 };
 
 /**
@@ -142,9 +125,6 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
 
   // Special mappings for services with interface prefix
   const specialMappings: Record<string, string> = {
-    'RagIndexRepository': 'IRagIndexRepository',
-    'RagDocumentRepository': 'IRagDocumentRepository',
-    'RagQueryLogRepository': 'IRagQueryLogRepository',
     'ConnectionRepository': 'IConnectionRepository',
     'AppRepository': 'IAppRepository',
     'PuckPageRepository': 'IPuckPageRepository',
@@ -217,17 +197,6 @@ export const getToolSearchApplicationService = createGetter('ToolSearchApplicati
 export const getToolConfigurationApplicationService = createGetter('ToolConfigurationApplicationService');
 export const getToolRegistryService = createGetter('IToolRegistryService');
 
-// RAG service getters
-export const getRagIndexRepository = createGetter('RagIndexRepository');
-export const getRagDocumentRepository = createGetter('RagDocumentRepository');
-export const getRagQueryLogRepository = createGetter('RagQueryLogRepository');
-export const getEmbeddingService = createGetter('EmbeddingService');
-export const getSearchAnalyticsService = createGetter('SearchAnalyticsService');
-export const getIndexingDomainService = createGetter('IndexingDomainService');
-export const getSearchDomainService = createGetter('SearchDomainService');
-export const getRagSearchApplicationService = createGetter('RagSearchApplicationService');
-export const getIndexingQueueService = createGetter('IndexingQueueService');
-
 // Connection service getters - handle null gracefully when Pipedream not configured
 export const getConnectionRepository = (): IConnectionRepository => {
   const diContainer = DIContainer.getInstance(); // Lazy access
@@ -272,3 +241,7 @@ export const getViewApplicationService = createGetter('ViewApplicationService');
 
 // Billing domain repository getters
 export const getTokenUsageRepository = createGetter('TokenUsageRepository');
+
+// Billing application service getters
+export const getTokenUsageApplicationService = createGetter('TokenUsageApplicationService');
+export const getCreditUsageApplicationService = createGetter('CreditUsageApplicationService');
