@@ -21,7 +21,6 @@ import { registerDatabaseServices, type DatabaseServices } from './modules/datab
 import { registerViewServices, type ViewServices } from './modules/view-registration';
 import { registerChatServices, type ChatServices } from './modules/chat-registration';
 import { registerToolsServices, type ToolsServices } from './modules/tools-registration';
-import { registerRagServices, type RagServices } from './modules/rag-registration';
 import { registerConnectionServices, type ConnectionServices } from './modules/connection-registration';
 import { registerDelegationServices, type DelegationServices } from './modules/delegation-registration';
 import { registerPuckServices, type PuckServices } from './modules/puck-registration';
@@ -131,26 +130,12 @@ export class DIContainer {
     });
     this.registerServices('tools', toolsServices);
 
-    // Phase 7: Register RAG services
-    // Depends on: many repositories from previous phases
-    const ragServices = registerRagServices({
-      db,
-      organizationRepository: coreServices.organizationRepository,
-      agentRepository: agentServices.agentRepository,
-      databaseRepository: databaseServices.databaseRepository,
-      teamRepository: coreServices.teamRepository,
-      taskRepository: agentServices.taskRepository,
-      fileStorageRepository: databaseServices.fileStorageRepository,
-      dynamicTableRepository: databaseServices.dynamicTableRepository
-    });
-    this.registerServices('rag', ragServices);
-
-    // Phase 8: Register delegation services
+    // Phase 7: Register delegation services
     // Depends on: database (for credential delegation storage)
     const delegationServices = registerDelegationServices({ db });
     this.registerServices('delegation', delegationServices);
 
-    // Phase 9: Register Puck services
+    // Phase 8: Register Puck services
     // Depends on: organization repository
     const puckServices = registerPuckServices({
       db,
@@ -158,7 +143,7 @@ export class DIContainer {
     });
     this.registerServices('puck', puckServices);
 
-    // Phase 10: Register connection services (optional - Pipedream)
+    // Phase 9: Register connection services (optional - Pipedream)
     // Depends on: agent repository, delegation service (for security)
     const connectionServices = registerConnectionServices({
       agentRepository: agentServices.agentRepository,
@@ -181,7 +166,7 @@ export class DIContainer {
    */
   private registerServices(
     domain: string,
-    services: CoreServices | BillingServices | AgentServices | SkillServices | DatabaseServices | ViewServices | ChatServices | ToolsServices | RagServices | ConnectionServices | DelegationServices | PuckServices
+    services: CoreServices | BillingServices | AgentServices | SkillServices | DatabaseServices | ViewServices | ChatServices | ToolsServices | ConnectionServices | DelegationServices | PuckServices
   ): void {
     // Map service names to container keys
     const serviceKeyMappings: Record<string, string> = {
@@ -233,18 +218,6 @@ export class DIContainer {
       'toolConfigurationService': 'IToolConfigurationService',
       'toolConfigurationApplicationService': 'ToolConfigurationApplicationService',
       'toolSearchApplicationService': 'ToolSearchApplicationService',
-
-      // RAG domain
-      'ragIndexRepository': 'IRagIndexRepository',
-      'ragDocumentRepository': 'IRagDocumentRepository',
-      'ragQueryLogRepository': 'IRagQueryLogRepository',
-      'embeddingService': 'EmbeddingService',
-      'searchAnalyticsService': 'SearchAnalyticsService',
-      'embeddingGeneratorService': 'EmbeddingGeneratorService',
-      'indexingDomainService': 'IndexingDomainService',
-      'searchDomainService': 'SearchDomainService',
-      'ragSearchApplicationService': 'RagSearchApplicationService',
-      'indexingQueueService': 'IndexingQueueService',
 
       // Connection domain
       'connectionRepository': 'IConnectionRepository',
@@ -377,17 +350,6 @@ export {
   getToolSearchApplicationService,
   getToolConfigurationApplicationService,
   getToolRegistryService,
-
-  // RAG services
-  getRagIndexRepository,
-  getRagDocumentRepository,
-  getRagQueryLogRepository,
-  getEmbeddingService,
-  getSearchAnalyticsService,
-  getIndexingDomainService,
-  getSearchDomainService,
-  getRagSearchApplicationService,
-  getIndexingQueueService,
 
   // Connection services
   getConnectionRepository,

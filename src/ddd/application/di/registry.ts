@@ -25,7 +25,6 @@ import type { IConnectionRepository } from '@/ddd/domain/connections/repositorie
 import type { IDelegationRepository } from '@/ddd/domain/delegations/repositories/delegation-repository';
 import type { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
 import type { IToolConfigurationService } from '@/ddd/domain/tools/services/tool-configuration-service';
-import type { IIndexingDomainService, ISearchDomainService } from '@/ddd/domain/rag/services';
 
 import type { AgentTaskApplicationService } from '@/ddd/application/services/agents/agent-task-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
@@ -44,17 +43,8 @@ import type { ToolConfigurationApplicationService } from '@/ddd/application/serv
 import type { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
 import type { OAuthProxyApplicationService } from '@/ddd/application/services/connections/oauth-proxy-application-service';
 import type { CredentialDelegationApplicationService } from '@/ddd/application/services/delegations/credential-delegation-application-service';
-import type { EmbeddingService } from '@/ddd/application/services/embedding-service';
-import type { SearchAnalyticsService } from '@/ddd/application/services/search-analytics-service';
-import type { RagSearchApplicationService } from '@/ddd/application/services/rag/rag-search-application-service';
-import type { IndexingQueueService } from '@/ddd/application/services/rag/indexing-queue-service';
 
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
-import type { EmbeddingGeneratorService } from '@/ddd/domain/rag/services/embedding-generator-service';
-
-import type { DrizzleRagIndexRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-index-repository';
-import type { DrizzleRagDocumentRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-document-repository';
-import type { DrizzleRagQueryLogRepository } from '@/ddd/infrastructure/db/repositories/rag/drizzle-rag-query-log-repository';
 
 import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-repository';
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
@@ -95,11 +85,6 @@ export interface RepositoryRegistry {
 
   // Billing domain repositories
   ITokenUsageRepository: ITokenUsageRepository;
-
-  // RAG domain repositories
-  IRagIndexRepository: DrizzleRagIndexRepository;
-  IRagDocumentRepository: DrizzleRagDocumentRepository;
-  IRagQueryLogRepository: DrizzleRagQueryLogRepository;
 
   // Connection domain repositories (nullable when Pipedream not configured)
   IConnectionRepository: IConnectionRepository | null;
@@ -145,15 +130,6 @@ export interface RepositoryRegistry {
   // Tools application services
   ToolSearchApplicationService: ToolSearchApplicationService;
   ToolConfigurationApplicationService: ToolConfigurationApplicationService;
-
-  // RAG application services
-  EmbeddingService: EmbeddingService;
-  SearchAnalyticsService: SearchAnalyticsService;
-  EmbeddingGeneratorService: EmbeddingGeneratorService;
-  IndexingDomainService: IIndexingDomainService;
-  SearchDomainService: ISearchDomainService;
-  RagSearchApplicationService: RagSearchApplicationService;
-  IndexingQueueService: IndexingQueueService;
 
   // Connection application services (nullable when Pipedream not configured)
   ConnectionApplicationService: ConnectionApplicationService | null;

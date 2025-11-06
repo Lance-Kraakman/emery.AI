@@ -6,42 +6,34 @@ import {
   getSchedulerService,
   taskSchedulingContainer
 } from "@/ddd/application/di/scheduling-container";
-import { 
-  getIndexingDomainService, 
-  getAgentTaskApplicationService, 
-  initializeDI,
-  getIndexingQueueService,
-  getRagIndexRepository 
+import {
+  getAgentTaskApplicationService,
+  initializeDI
 } from "@/ddd/application/di/container";
 import { createNotificationClient, rawClient } from "@/lib/db/client";
 import { contextAwareDb } from "@/lib/db/simple-context-proxy";
 import { withSystemContext } from "@/lib/db/system-context";
 import { TaskId } from "@/ddd/domain/tasks/value-objects/task-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects";
-import type { DomainType } from "@/ddd/domain/rag/value-objects";
-import type { RagReindexEvent, TaskEvent } from "@/ddd/domain/scheduling";
+import type { TaskEvent } from "@/ddd/domain/scheduling";
 import { DatabaseEventTriggerConfig, TriggerConfigFromJSON } from "@/ddd/domain/scheduling/value-objects/trigger-config";
 import { getAgentRepository } from "@/ddd/application/di/container";
 import postgres from "postgres";
 
 /**
  * Event-Driven Scheduler
- * Listens to PostgreSQL events and orchestrates task execution and RAG reindexing
+ * Listens to PostgreSQL events and orchestrates task execution
  */
 class EventDrivenScheduler {
   private notificationClient: postgres.Sql | null = null;
-  private ragDebounceMap = new Map<string, NodeJS.Timeout>();
   private isShuttingDown = false;
   private fallbackTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private agentTaskService = getAgentTaskApplicationService(),
-    private indexingDomainService = getIndexingDomainService(),
     private schedulerService = getSchedulerService(),
     private taskRepository = getTaskRepository(),
-    private taskQueueService = getTaskQueueService(),
-    private indexingQueueService = getIndexingQueueService(),
-    private ragIndexRepository = getRagIndexRepository()
+    private taskQueueService = getTaskQueueService()
   ) {}
 
   async start(): Promise<void> {
@@ -85,16 +77,7 @@ class EventDrivenScheduler {
       }
     });
 
-    // Listen for RAG reindex events
-    await this.notificationClient.listen('rag_reindex_needed', async (payload) => {
-      try {
-        const event = JSON.parse(payload);
-        console.log(`📨 Received rag_reindex_needed: org=${event.organizationId}, type=${event.domainType}`);
-        await this.handleRagReindexEvent(event);
-      } catch (error) {
-        console.error('❌ Error handling rag_reindex_needed:', error);
-      }
-    });
+    console.log('🎧 Listening for task_event...');
   }
 
   private async handleTaskEvent(event: TaskEvent): Promise<void> {
@@ -112,92 +95,6 @@ class EventDrivenScheduler {
         console.log(`⏭️ Skipping task ${event.taskId} (not found or not pending)`);
       }
     });
-  }
-
-  private async handleRagReindexEvent(event: RagReindexEvent): Promise<void> {
-    return withSystemContext(event.organizationId, async () => {
-      try {
-        const organizationId = OrganizationId.fromNumber(event.organizationId);
-        const domainType = event.domainType as DomainType;
-
-        console.log(`🔄 Queuing reindex for org=${event.organizationId}, type=${event.domainType}`);
-
-        // Get existing indexes for this organization
-        const indexes = await this.ragIndexRepository.findByOrganization(organizationId);
-
-        if (indexes.length === 0) {
-          // No indexes exist, create a default index first, then queue initial indexing
-          console.log(`[SCHEDULER] No indexes found for org ${event.organizationId}, creating default index`);
-          
-          try {
-            // Create default index using domain service helper
-            const defaultIndex = await this.createDefaultIndex(organizationId);
-            
-            // Now queue initial indexing for the newly created index
-            await this.indexingQueueService.enqueue({
-              indexId: defaultIndex.id.value,
-              operation: 'initial',
-              domainType,
-              maxRetries: 3
-            });
-            
-            console.log(`📥 Created default index and queued initial indexing for org=${event.organizationId}, type=${event.domainType}`);
-          } catch (error) {
-            console.error(`❌ Failed to create default index for org ${event.organizationId}:`, error);
-            return;
-          }
-        } else {
-          // Queue reindex for each existing index
-          console.log(`[SCHEDULER] Found ${indexes.length} indexes for org ${event.organizationId}, queuing reindex operations`);
-          
-          for (const index of indexes) {
-            await this.indexingQueueService.enqueue({
-              indexId: index.id.value,
-              operation: 'reindex',
-              domainType,
-              maxRetries: 3
-            });
-            console.log(`📥 Queued reindex for index ${index.name} (${index.id.value.substring(0, 8)})`);
-          }
-          
-          console.log(`📥 Queued ${indexes.length} reindex operations for org=${event.organizationId}, type=${event.domainType}`);
-        }
-      } catch (error) {
-        console.error(`❌ Failed to queue reindex operations for org ${event.organizationId}:`, error);
-      }
-    });
-  }
-
-  /**
-   * Create a default RAG index for an organization (extracted from domain service logic)
-   */
-  private async createDefaultIndex(organizationId: OrganizationId) {
-    const { RagIndex } = await import('@/ddd/domain/rag/entities/rag-index');
-    
-    const defaultIndex = RagIndex.create({
-      name: 'Organization Knowledge Base',
-      description: 'Automatic RAG index for organizational data - covers all tables, agents, teams, databases, and files',
-      organizationId,
-      domainTypes: ['tables', 'agents', 'teams', 'organizations', 'databases', 'files']
-    });
-
-    const createData = {
-      id: defaultIndex.id.value,
-      organizationId: defaultIndex.organizationId.value,
-      name: defaultIndex.name,
-      description: defaultIndex.description,
-      domainTypes: defaultIndex.domainTypes,
-      domainFilters: defaultIndex.domainFilters || {},
-      embeddingModel: defaultIndex.embeddingModel,
-      embeddingDimensions: defaultIndex.embeddingDimensions,
-      status: defaultIndex.status,
-      documentCount: defaultIndex.documentCount || 0,
-      createdAt: defaultIndex.createdAt || new Date()
-    };
-    await this.ragIndexRepository.create(createData);
-    console.log(`[SCHEDULER] Created default index "${defaultIndex.name}" for organization ${organizationId.value}`);
-    
-    return defaultIndex;
   }
 
   private startFallbackTimer(): void {
@@ -304,12 +201,6 @@ class EventDrivenScheduler {
     if (this.fallbackTimer) {
       clearInterval(this.fallbackTimer);
     }
-
-    // Clear debounce timers
-    for (const timer of this.ragDebounceMap.values()) {
-      clearTimeout(timer);
-    }
-    this.ragDebounceMap.clear();
 
     // Close notification client
     if (this.notificationClient) {
