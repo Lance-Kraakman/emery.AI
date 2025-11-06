@@ -115,9 +115,9 @@ export function useBulkRowUpdate({
         if (!updatesByRow.has(rowId)) {
           updatesByRow.set(rowId, {})
         }
-        // CRITICAL FIX: Use numeric field ID as key, not field name
-        // System uses numeric IDs everywhere for immutability
-        updatesByRow.get(rowId)![field.id] = value
+        // CRITICAL: Use field NAME as key at UI layer (converted to IDs by server action)
+        // Server action expects: { name: "value" } and converts to { 2: "value" }
+        updatesByRow.get(rowId)![field.name] = value
       })
 
       // Convert to array format expected by bulk API

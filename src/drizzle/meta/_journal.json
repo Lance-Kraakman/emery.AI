@@ -162,6 +162,20 @@
       "when": 1762127741944,
       "tag": "0022_narrow_spot",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1762400554384,
+      "tag": "0023_wet_exiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1762400955855,
+      "tag": "0024_faithful_goliath",
+      "breakpoints": true
     }
   ]
 }
