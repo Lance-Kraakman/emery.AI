@@ -340,6 +340,10 @@ export class TableGrpcMapper {
       // Python/Polars will handle this as None/null for appropriate field types
       // This prevents "Cannot cast string '' to Float64" errors
       return {};
+    } else if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'number') {
+      // AIDEV-NOTE: Embedding vectors - arrays of numbers
+      // Convert to protobuf FloatArray for efficient wire format
+      return { embeddingValue: { values: value } };
     } else if (typeof value === 'number') {
       // Numbers go to numberValue
       return { numberValue: value };
@@ -455,6 +459,9 @@ export class TableGrpcMapper {
       return new Date(protoValue.dateValue);
     } else if (protoValue.jsonValue !== undefined) {
       return JSON.parse(protoValue.jsonValue);
+    } else if (protoValue.embeddingValue !== undefined && protoValue.embeddingValue.values) {
+      // AIDEV-NOTE: Embedding vectors - convert protobuf FloatArray to JavaScript array
+      return Array.from(protoValue.embeddingValue.values);
     } else {
       return null;
     }
@@ -479,6 +486,8 @@ export class TableGrpcMapper {
         return FieldType.FIELD_TYPE_RELATION;
       case 'document':
         return FieldType.FIELD_TYPE_DOCUMENT;
+      case 'embedding':
+        return FieldType.FIELD_TYPE_EMBEDDING;
       default:
         return FieldType.FIELD_TYPE_UNSPECIFIED;
     }
@@ -503,6 +512,8 @@ export class TableGrpcMapper {
         return 'relation';
       case FieldType.FIELD_TYPE_DOCUMENT:
         return 'document';
+      case FieldType.FIELD_TYPE_EMBEDDING:
+        return 'embedding';
       default:
         return 'text';
     }

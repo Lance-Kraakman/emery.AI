@@ -101,8 +101,10 @@ export function createEmptyDSGRow(fields: FieldDTO[]): DSGRow {
 export function rowDTOToDSG(rowDTO: RowDTO): DSGRow {
   const dsgRow: DSGRow = { id: rowDTO.id }
 
+  // AIDEV-NOTE: This function is likely broken - RowDTO now uses numeric field IDs,
+  // but DSG format expects field names. This needs field lookup to work correctly.
   rowDTO.fieldValues.forEach(fv => {
-    dsgRow[fv.fieldSlug] = fv.value
+    dsgRow[fv.fieldId] = fv.value
   })
 
   return dsgRow

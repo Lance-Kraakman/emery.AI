@@ -22,6 +22,7 @@ export interface CreateFieldData {
   required?: boolean;
   orderIndex?: number;
   relatedTableId?: number;
+  metadata?: Record<string, string>;
 }
 
 // Application-specific command DTOs (not domain types)

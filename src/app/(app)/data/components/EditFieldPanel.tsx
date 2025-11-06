@@ -28,6 +28,7 @@ const FIELD_TYPES: Array<{ value: FieldType; label: string }> = [
   { value: "relation", label: "Relation" },
   { value: "file", label: "File" },
   { value: "document", label: "Document" },
+  { value: "embedding", label: "Embedding" },
 ]
 
 export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables = [] }: EditFieldPanelProps) {
@@ -35,6 +36,7 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
   const [type, setType] = useState<FieldType | "">(field?.type || "")
   const [required, setRequired] = useState(field?.required || false)
   const [relatedTableId, setRelatedTableId] = useState<number | undefined>(field?.relatedTableId ?? undefined)
+  const [embeddingSize, setEmbeddingSize] = useState<number | undefined>()
   const [showTypeWarning, setShowTypeWarning] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -44,6 +46,19 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
       setType(field.type)
       setRequired(field.required || false)
       setRelatedTableId(field.relatedTableId ?? undefined)
+
+      // Load existing embedding size from metadata
+      if (field.type === 'embedding' && field.metadata?.embeddingSize) {
+        const size = typeof field.metadata.embeddingSize === 'string'
+          ? parseInt(field.metadata.embeddingSize)
+          : typeof field.metadata.embeddingSize === 'number'
+          ? field.metadata.embeddingSize
+          : undefined
+        setEmbeddingSize(size)
+      } else {
+        setEmbeddingSize(undefined)
+      }
+
       setShowTypeWarning(false)
     }
   }, [field])
@@ -53,18 +68,35 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
       setShowTypeWarning(true)
     }
     setType(newType)
+
+    // Clear embedding size if switching away from embedding type
+    if (newType !== 'embedding') {
+      setEmbeddingSize(undefined)
+    }
   }
 
   const handleSave = async () => {
     if (!field) return
 
+    // Validate embedding field has size selected
+    if (type === 'embedding' && !embeddingSize) {
+      alert("Please select an embedding size")
+      return
+    }
+
     setLoading(true)
     try {
+      // Build metadata for embedding fields
+      const metadata = type === 'embedding' && embeddingSize ? {
+        embeddingSize: embeddingSize.toString()
+      } : undefined
+
       await onSave(field, {
         name,
         type: type as FieldType,
         required,
-        relatedTableId: type === 'relation' ? relatedTableId : undefined
+        relatedTableId: type === 'relation' ? relatedTableId : undefined,
+        metadata
       })
 
       onClose()
@@ -150,6 +182,30 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {/* Embedding-specific: Size selector */}
+          {type === 'embedding' && (
+            <div className="space-y-2">
+              <Label htmlFor="embeddingSize">Embedding Size *</Label>
+              <Select
+                value={embeddingSize?.toString()}
+                onValueChange={(val) => setEmbeddingSize(parseInt(val))}
+              >
+                <SelectTrigger id="embeddingSize">
+                  <SelectValue placeholder="Select embedding size..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="384">384 dimensions (MiniLM-L6)</SelectItem>
+                  <SelectItem value="768">768 dimensions (BERT/MPNet)</SelectItem>
+                  <SelectItem value="1536">1536 dimensions (OpenAI ada-002)</SelectItem>
+                  <SelectItem value="3072">3072 dimensions (Large models)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground">
+                Choose the dimension size for embedding vectors
+              </p>
             </div>
           )}
         </div>

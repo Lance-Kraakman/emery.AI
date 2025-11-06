@@ -601,7 +601,7 @@ export class ViewApplicationService {
           throw new Error(`Field ${agg.fieldId} not found during result extraction`);
         }
 
-        // Use field ID to access aggregation result (Python now returns columns with numeric IDs)
+        // Row now stores values by field ID, so we can access directly using the field ID
         const fieldIdString = field.id.value.toString();
         const fieldValue = aggregatedRow.getFieldValue(fieldIdString);
         const value = fieldValue?.value;
@@ -609,7 +609,6 @@ export class ViewApplicationService {
         logger.debug("Extracting aggregation value", {
           fieldId: agg.fieldId,
           fieldName: field.name,
-          fieldIdString,
           hasFieldValue: !!fieldValue,
           value,
         });

@@ -34,6 +34,8 @@ export enum FieldType {
   FIELD_TYPE_RELATION = 6,
   /** FIELD_TYPE_DOCUMENT - Stored as JSON string */
   FIELD_TYPE_DOCUMENT = 7,
+  /** FIELD_TYPE_EMBEDDING - Fixed-size float32 list in Delta Lake */
+  FIELD_TYPE_EMBEDDING = 8,
   UNRECOGNIZED = -1,
 }
 
@@ -63,6 +65,9 @@ export function fieldTypeFromJSON(object: any): FieldType {
     case 7:
     case "FIELD_TYPE_DOCUMENT":
       return FieldType.FIELD_TYPE_DOCUMENT;
+    case 8:
+    case "FIELD_TYPE_EMBEDDING":
+      return FieldType.FIELD_TYPE_EMBEDDING;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -88,6 +93,8 @@ export function fieldTypeToJSON(object: FieldType): string {
       return "FIELD_TYPE_RELATION";
     case FieldType.FIELD_TYPE_DOCUMENT:
       return "FIELD_TYPE_DOCUMENT";
+    case FieldType.FIELD_TYPE_EMBEDDING:
+      return "FIELD_TYPE_EMBEDDING";
     case FieldType.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -622,6 +629,12 @@ export interface QueryRowsResponse {
   message: string;
 }
 
+/** Float array for embedding vectors (efficient packed encoding) */
+export interface FloatArray {
+  /** Embedding vector as array of float32 */
+  values: number[];
+}
+
 /** Typed value for row data - maps frontend field types to protobuf */
 export interface RowDataValue {
   textValue?: string | undefined;
@@ -634,7 +647,11 @@ export interface RowDataValue {
     | number
     | undefined;
   /** For file/relation/document complex types */
-  jsonValue?: string | undefined;
+  jsonValue?:
+    | string
+    | undefined;
+  /** For embedding vectors (fixed-size float32 lists) */
+  embeddingValue?: FloatArray | undefined;
 }
 
 /** Represents a single row's data with strong typing */
@@ -4321,6 +4338,78 @@ export const QueryRowsResponse: MessageFns<QueryRowsResponse> = {
   },
 };
 
+function createBaseFloatArray(): FloatArray {
+  return { values: [] };
+}
+
+export const FloatArray: MessageFns<FloatArray> = {
+  encode(message: FloatArray, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    writer.uint32(10).fork();
+    for (const v of message.values) {
+      writer.float(v);
+    }
+    writer.join();
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FloatArray {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFloatArray();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag === 13) {
+            message.values.push(reader.float());
+
+            continue;
+          }
+
+          if (tag === 10) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.values.push(reader.float());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FloatArray {
+    return {
+      values: globalThis.Array.isArray(object?.values) ? object.values.map((e: any) => globalThis.Number(e)) : [],
+    };
+  },
+
+  toJSON(message: FloatArray): unknown {
+    const obj: any = {};
+    if (message.values?.length) {
+      obj.values = message.values;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FloatArray>, I>>(base?: I): FloatArray {
+    return FloatArray.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FloatArray>, I>>(object: I): FloatArray {
+    const message = createBaseFloatArray();
+    message.values = object.values?.map((e) => e) || [];
+    return message;
+  },
+};
+
 function createBaseRowDataValue(): RowDataValue {
   return {
     textValue: undefined,
@@ -4328,6 +4417,7 @@ function createBaseRowDataValue(): RowDataValue {
     booleanValue: undefined,
     dateValue: undefined,
     jsonValue: undefined,
+    embeddingValue: undefined,
   };
 }
 
@@ -4347,6 +4437,9 @@ export const RowDataValue: MessageFns<RowDataValue> = {
     }
     if (message.jsonValue !== undefined) {
       writer.uint32(42).string(message.jsonValue);
+    }
+    if (message.embeddingValue !== undefined) {
+      FloatArray.encode(message.embeddingValue, writer.uint32(50).fork()).join();
     }
     return writer;
   },
@@ -4398,6 +4491,14 @@ export const RowDataValue: MessageFns<RowDataValue> = {
           message.jsonValue = reader.string();
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.embeddingValue = FloatArray.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4414,6 +4515,7 @@ export const RowDataValue: MessageFns<RowDataValue> = {
       booleanValue: isSet(object.booleanValue) ? globalThis.Boolean(object.booleanValue) : undefined,
       dateValue: isSet(object.dateValue) ? globalThis.Number(object.dateValue) : undefined,
       jsonValue: isSet(object.jsonValue) ? globalThis.String(object.jsonValue) : undefined,
+      embeddingValue: isSet(object.embeddingValue) ? FloatArray.fromJSON(object.embeddingValue) : undefined,
     };
   },
 
@@ -4434,6 +4536,9 @@ export const RowDataValue: MessageFns<RowDataValue> = {
     if (message.jsonValue !== undefined) {
       obj.jsonValue = message.jsonValue;
     }
+    if (message.embeddingValue !== undefined) {
+      obj.embeddingValue = FloatArray.toJSON(message.embeddingValue);
+    }
     return obj;
   },
 
@@ -4447,6 +4552,9 @@ export const RowDataValue: MessageFns<RowDataValue> = {
     message.booleanValue = object.booleanValue ?? undefined;
     message.dateValue = object.dateValue ?? undefined;
     message.jsonValue = object.jsonValue ?? undefined;
+    message.embeddingValue = (object.embeddingValue !== undefined && object.embeddingValue !== null)
+      ? FloatArray.fromPartial(object.embeddingValue)
+      : undefined;
     return message;
   },
 };

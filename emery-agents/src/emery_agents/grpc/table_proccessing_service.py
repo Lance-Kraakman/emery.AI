@@ -228,6 +228,31 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         - Other columns: "1", "2", "3", etc. (numeric field IDs)
         - The "id" field from table_fields is SKIPPED - we add "id" column manually
         """
+        def get_embedding_type(field) -> pa.DataType:
+            """
+            Extract embedding size from metadata and create fixed-size list type.
+
+            AIDEV-NOTE: Embedding fields use fixed-size float32 lists for efficient storage.
+            The embedding dimension is extracted from field metadata (embeddingSize).
+            Default to 768 dimensions (all-mpnet-base-v2 standard) if not specified.
+            """
+            metadata = dict(field.metadata) if field.metadata else {}
+            embedding_size_str = metadata.get('embeddingSize', '768')
+
+            try:
+                embedding_size = int(embedding_size_str)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid embeddingSize '{embedding_size_str}' for field {field.name}, defaulting to 768")
+                embedding_size = 768
+
+            # Validate dimension is one of the supported sizes
+            valid_sizes = [384, 768, 1536, 3072]
+            if embedding_size not in valid_sizes:
+                logger.warning(f"Embedding size {embedding_size} not in valid sizes {valid_sizes} for field {field.name}, defaulting to 768")
+                embedding_size = 768
+
+            return pa.list_(pa.float32(), list_size=embedding_size)
+
         try:
             # Map protobuf field types to PyArrow types
             # CRITICAL FIX: Use large_string instead of string to prevent string_view in parquet
@@ -240,6 +265,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 table_service_pb2.FIELD_TYPE_FILE: pa.large_string(),    # Store as JSON
                 table_service_pb2.FIELD_TYPE_RELATION: pa.large_string(), # Store as JSON
                 table_service_pb2.FIELD_TYPE_DOCUMENT: pa.large_string(), # Store as JSON
+                # EMBEDDING handled separately due to dynamic sizing
             }
 
             arrow_fields = []
@@ -256,7 +282,13 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     logger.debug(f"[_build_schema_from_table_fields] Skipping field 'id' (field_id={field.field_id}) - already added as system column")
                     continue
 
-                dtype = type_mapping.get(field.type, pa.large_string())
+                # Handle embedding fields with dynamic sizing
+                if field.type == table_service_pb2.FIELD_TYPE_EMBEDDING:
+                    dtype = get_embedding_type(field)
+                    logger.debug(f"[_build_schema_from_table_fields] Embedding field: id={field.field_id}, name={field.name}, type={dtype}")
+                else:
+                    dtype = type_mapping.get(field.type, pa.large_string())
+
                 # Use numeric field ID as column name (immutable identifier)
                 column_name = str(field.field_id)
                 arrow_fields.append(pa.field(column_name, dtype, nullable=not field.required))
@@ -354,6 +386,11 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 polars_schema[field.name] = pl.Boolean
             elif pa.types.is_timestamp(field.type):
                 polars_schema[field.name] = pl.Datetime
+            elif pa.types.is_list(field.type) or pa.types.is_fixed_size_list(field.type):
+                # Embedding fields are fixed-size lists of float32
+                # Polars List type with Float32 inner type
+                polars_schema[field.name] = pl.List(pl.Float32)
+                logger.info(f"[_create_dataframe_with_schema] List field '{field.name}': {field.type} → pl.List(pl.Float32)")
             else:
                 # Fallback to string for unknown types
                 logger.warning(f"Unknown Arrow type for '{field.name}': {field.type}, using Utf8")
@@ -369,7 +406,28 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         for row_data in rows_data:
             record = {'id': row_data.id}
 
+            # DIAGNOSTIC: Log raw protobuf data to identify None value source
+            logger.info(f"[DIAGNOSTIC] Row ID: {row_data.id}")
+            logger.info(f"[DIAGNOSTIC] Raw protobuf data keys: {list(row_data.data.keys())}")
+
             for key, value in row_data.data.items():
+                # DIAGNOSTIC: Log field extraction details
+                has_text = value.HasField('text_value')
+                has_number = value.HasField('number_value')
+                has_bool = value.HasField('boolean_value')
+                has_date = value.HasField('date_value')
+                has_json = value.HasField('json_value')
+                has_embedding = value.HasField('embedding_value')
+                logger.info(f"[DIAGNOSTIC] Field '{key}': text={has_text}, number={has_number}, bool={has_bool}, date={has_date}, json={has_json}, embedding={has_embedding}")
+
+                if has_text:
+                    logger.info(f"[DIAGNOSTIC] Field '{key}' text_value: '{value.text_value}'")
+                if has_number:
+                    logger.info(f"[DIAGNOSTIC] Field '{key}' number_value: {value.number_value}")
+                if has_bool:
+                    logger.info(f"[DIAGNOSTIC] Field '{key}' boolean_value: {value.boolean_value}")
+                if has_embedding:
+                    logger.info(f"[DIAGNOSTIC] Field '{key}' embedding_value: {len(value.embedding_value.values)} dimensions")
                 if value.HasField('text_value'):
                     record[key] = value.text_value
                 elif value.HasField('number_value'):
@@ -380,6 +438,10 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     record[key] = value.date_value
                 elif value.HasField('json_value'):
                     record[key] = value.json_value
+                elif value.HasField('embedding_value'):
+                    # Convert protobuf repeated float to Python list for Polars
+                    record[key] = list(value.embedding_value.values)
+                    logger.info(f"[_create_dataframe_with_schema] Extracted embedding: field={key}, dimensions={len(record[key])}")
                 else:
                     record[key] = None  # Empty protobuf oneof = None
 

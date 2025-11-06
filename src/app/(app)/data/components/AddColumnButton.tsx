@@ -12,7 +12,7 @@ import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
 import type { TableDTO } from "@/app/mappers/table-mapper"
 
 interface AddColumnButtonProps {
-  onAddColumn: (data: { name: string; type: FieldType; required: boolean; relatedTableId?: number }) => Promise<void>
+  onAddColumn: (data: { name: string; type: FieldType; required: boolean; relatedTableId?: number; metadata?: Record<string, string> }) => Promise<void>
   availableTables?: TableDTO[]
 }
 
@@ -24,6 +24,7 @@ const FIELD_TYPES: Array<{ value: FieldType; label: string }> = [
   { value: "relation", label: "Relation" },
   { value: "file", label: "File" },
   { value: "document", label: "Document" },
+  { value: "embedding", label: "Embedding" },
 ]
 
 export function AddColumnButton({ onAddColumn, availableTables = [] }: AddColumnButtonProps) {
@@ -32,18 +33,31 @@ export function AddColumnButton({ onAddColumn, availableTables = [] }: AddColumn
   const [type, setType] = useState<FieldType | "">("")
   const [required, setRequired] = useState(false)
   const [relatedTableId, setRelatedTableId] = useState<number>()
+  const [embeddingSize, setEmbeddingSize] = useState<number>()
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async () => {
     if (!name || !type) return
 
+    // Validate embedding field has size selected
+    if (type === 'embedding' && !embeddingSize) {
+      alert("Please select an embedding size")
+      return
+    }
+
     setLoading(true)
     try {
+      // Build metadata for embedding fields
+      const metadata = type === 'embedding' && embeddingSize ? {
+        embeddingSize: embeddingSize.toString()
+      } : undefined
+
       await onAddColumn({
         name,
         type: type as FieldType,
         required,
-        relatedTableId: type === 'relation' ? relatedTableId : undefined
+        relatedTableId: type === 'relation' ? relatedTableId : undefined,
+        metadata
       })
 
       // Reset form
@@ -51,6 +65,7 @@ export function AddColumnButton({ onAddColumn, availableTables = [] }: AddColumn
       setType("")
       setRequired(false)
       setRelatedTableId(undefined)
+      setEmbeddingSize(undefined)
       setOpen(false)
     } catch (error) {
       console.error("Failed to add column:", error)
@@ -113,6 +128,26 @@ export function AddColumnButton({ onAddColumn, availableTables = [] }: AddColumn
                       {table.name}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {type === 'embedding' && (
+            <div className="space-y-2">
+              <Label htmlFor="add-embedding-size">Embedding Size *</Label>
+              <Select
+                value={embeddingSize?.toString()}
+                onValueChange={(val) => setEmbeddingSize(parseInt(val))}
+              >
+                <SelectTrigger id="add-embedding-size">
+                  <SelectValue placeholder="Select size" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="384">384 dimensions</SelectItem>
+                  <SelectItem value="768">768 dimensions</SelectItem>
+                  <SelectItem value="1536">1536 dimensions</SelectItem>
+                  <SelectItem value="3072">3072 dimensions</SelectItem>
                 </SelectContent>
               </Select>
             </div>

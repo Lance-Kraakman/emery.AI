@@ -42,6 +42,7 @@ const FIELD_TYPES = [
   { value: "relation", label: "Relation" },
   { value: "file", label: "File" },
   { value: "document", label: "Document" },
+  { value: "embedding", label: "Embedding" },
 ]
 
 export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsUpdated }: FieldManagerDialogProps) {
@@ -50,20 +51,34 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   const [newFieldType, setNewFieldType] = useState<FieldType | "">("")
   const [newFieldRequired, setNewFieldRequired] = useState(false)
   const [newFieldRelatedTableId, setNewFieldRelatedTableId] = useState<number | undefined>()
+  const [embeddingSize, setEmbeddingSize] = useState<number | undefined>()
   const [loading, setLoading] = useState(false)
   const [availableTables, setAvailableTables] = useState<TableDTO[]>([])
 
   const handleAddField = async () => {
     if (!newFieldName || !newFieldType) return
 
+    // Validate embedding field has size selected
+    if (newFieldType === 'embedding' && !embeddingSize) {
+      alert("Please select an embedding size")
+      return
+    }
+
     try {
       setLoading(true)
+
+      // Build metadata for embedding fields
+      const metadata = newFieldType === 'embedding' && embeddingSize ? {
+        embeddingSize: embeddingSize.toString()
+      } : undefined
+
       const result = await createField({
         tableId,
         name: newFieldName,
         type: newFieldType as FieldType,
         required: newFieldRequired,
-        relatedTableId: newFieldType === 'relation' ? newFieldRelatedTableId : undefined
+        relatedTableId: newFieldType === 'relation' ? newFieldRelatedTableId : undefined,
+        metadata
       })
 
       if (result.success) {
@@ -71,6 +86,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
         setNewFieldType("")
         setNewFieldRequired(false)
         setNewFieldRelatedTableId(undefined)
+        setEmbeddingSize(undefined)
         setIsAddingField(false)
         onFieldsUpdated()
       } else {
@@ -281,6 +297,9 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
                     } else {
                       loadTables()
                     }
+                    if (value !== 'embedding') {
+                      setEmbeddingSize(undefined)
+                    }
                   }}>
                     <SelectTrigger id="fieldType">
                       <SelectValue placeholder="Select type..." />
@@ -299,14 +318,14 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
               {newFieldType === 'relation' && (
                 <div className="space-y-2">
                   <Label htmlFor="relatedTable">Related Table</Label>
-                  <Select 
-                    value={newFieldRelatedTableId?.toString()} 
+                  <Select
+                    value={newFieldRelatedTableId?.toString()}
                     onValueChange={(value) => setNewFieldRelatedTableId(parseInt(value))}
                   >
                     <SelectTrigger id="relatedTable">
                       <SelectValue placeholder={
-                        availableTables.length === 0 
-                          ? "No tables available..." 
+                        availableTables.length === 0
+                          ? "No tables available..."
                           : "Select table to relate to..."
                       } />
                     </SelectTrigger>
@@ -329,6 +348,29 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
                       Debug: No tables loaded. Check console for errors.
                     </div>
                   )}
+                </div>
+              )}
+
+              {newFieldType === 'embedding' && (
+                <div className="space-y-2">
+                  <Label htmlFor="embeddingSize">Embedding Size *</Label>
+                  <Select
+                    value={embeddingSize?.toString()}
+                    onValueChange={(value) => setEmbeddingSize(parseInt(value))}
+                  >
+                    <SelectTrigger id="embeddingSize">
+                      <SelectValue placeholder="Select embedding size..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="384">384 dimensions (MiniLM-L6)</SelectItem>
+                      <SelectItem value="768">768 dimensions (BERT/MPNet)</SelectItem>
+                      <SelectItem value="1536">1536 dimensions (OpenAI ada-002)</SelectItem>
+                      <SelectItem value="3072">3072 dimensions (Large models)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-muted-foreground">
+                    Choose the dimension size for embedding vectors
+                  </p>
                 </div>
               )}
 

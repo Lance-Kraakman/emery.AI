@@ -129,7 +129,7 @@ export class DocumentApplicationService {
       // Find the document in the rows
       for (const row of rows) {
         try {
-          const fieldValue = row.getFieldValue(field.name);
+          const fieldValue = row.getFieldValue(field.id.value.toString());
           if (!fieldValue || !fieldValue.value) continue;
 
           // Document fields are always arrays (DocumentFieldValue[])

@@ -38,7 +38,7 @@ export type {
 export type FieldValueDTO = DomainFieldValue;
 
 export interface TypedFieldValueDTO {
-  fieldSlug: string;
+  fieldId: string;  // AIDEV-NOTE: Numeric field ID (e.g., "1", "10"), not field name
   value: FieldValueDTO;
   fieldType: 'text' | 'number' | 'boolean' | 'date' | 'file' | 'relation' | 'document';
 }
@@ -55,7 +55,7 @@ export class RowMapper {
       id: row.id.value,
       tableId: row.tableId,
       fieldValues: row.fieldValues.map(fv => ({
-        fieldSlug: fv.fieldSlug,
+        fieldId: fv.fieldId,  // AIDEV-NOTE: Now uses numeric field ID instead of field name
         value: RowMapper.domainToDTO(fv.value, fv.fieldType),
         fieldType: fv.fieldType as TypedFieldValueDTO['fieldType']
       }))
@@ -113,7 +113,7 @@ export class RowMapper {
   // Keep for backwards compatibility
   static fieldValueToDTO(fieldValue: FieldValue): TypedFieldValueDTO {
     return {
-      fieldSlug: fieldValue.fieldSlug,
+      fieldId: fieldValue.fieldId,  // AIDEV-NOTE: Now uses numeric field ID instead of field name
       value: RowMapper.domainToDTO(fieldValue.value, fieldValue.fieldType),
       fieldType: fieldValue.fieldType as TypedFieldValueDTO['fieldType']
     };

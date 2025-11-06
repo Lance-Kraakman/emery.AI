@@ -608,7 +608,7 @@ export class TableApplicationService {
           // Extract file values from each row
           for (const row of rows) {
             for (const field of fileFields) {
-              const fieldValue = row.getFieldValue(field.name);
+              const fieldValue = row.getFieldValue(field.id.value.toString());
               
               // Check if the field contains files
               if (isFileArray(fieldValue)) {
@@ -678,7 +678,7 @@ export class TableApplicationService {
         continue;
       }
 
-      const fieldValue = data.getFieldValue(field.getColumnName());
+      const fieldValue = data.getFieldValue(field.id.value.toString());
       if (!fieldValue || fieldValue.isNull()) {
         if (field.required) {
           return { valid: false, error: `${field.name} is required` };

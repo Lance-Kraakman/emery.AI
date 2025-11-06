@@ -470,18 +470,19 @@ export class ToolSearchApplicationService {
 
               // Look through all field values to find document and file fields
               for (const fieldValue of rowDTO.fieldValues) {
-                const fieldId = fieldSlugToIdMap.get(fieldValue.fieldSlug);
+                // AIDEV-NOTE: fieldValue.fieldId now contains the numeric field ID directly
+                const fieldId = fieldValue.fieldId;
                 if (!fieldId) {
-                  logger.debug(`Could not find fieldId for fieldSlug "${fieldValue.fieldSlug}"`);
-                  continue; // Skip if we can't find the fieldId
+                  logger.debug(`Field has no fieldId`);
+                  continue;
                 }
 
-                logger.debug(`Checking field "${fieldValue.fieldSlug}" (type: ${fieldValue.fieldType}), value:`, fieldValue.value);
+                logger.debug(`Checking field "${fieldValue.fieldId}" (type: ${fieldValue.fieldType}), value:`, fieldValue.value);
 
                 if (fieldValue.fieldType === 'document' && fieldValue.value && isDocumentArray(fieldValue.value)) {
                   // Handle DocumentArrayFieldValue - iterate through each document
                   const docArray = fieldValue.value as DocumentFieldValue[];
-                  logger.debug(`Found ${docArray.length} documents in field "${fieldValue.fieldSlug}"`);
+                  logger.debug(`Found ${docArray.length} documents in field "${fieldValue.fieldId}"`);
 
                   for (const docField of docArray) {
                     const title = docField.documentMetadata?.title || docField.name || 'Untitled Document';
@@ -504,7 +505,7 @@ export class ToolSearchApplicationService {
                           docField.mimeType || 'application/octet-stream',
                           table.name,
                           table.id.value,
-                          fieldId,
+                          Number(fieldId),  // Convert string field ID to number
                           rowDTO.id,
                           database.name
                         )
@@ -527,7 +528,7 @@ export class ToolSearchApplicationService {
                           fileField.mimeType || 'application/octet-stream',
                           table.name,
                           table.id.value,
-                          fieldId,
+                          Number(fieldId),  // Convert string field ID to number
                           rowDTO.id,
                           database.name
                         )

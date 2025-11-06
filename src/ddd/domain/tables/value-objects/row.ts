@@ -42,12 +42,12 @@ export class RowId {
 
 export class FieldValue {
   constructor(
-    public readonly fieldSlug: string,
+    public readonly fieldId: string,  // AIDEV-NOTE: Stores numeric field ID (e.g., "1", "10"), not field name
     public readonly value: TypedFieldValue | null | undefined,
     public readonly fieldType: string
   ) {
-    if (!fieldSlug || fieldSlug.trim().length === 0) {
-      throw new Error('Field slug cannot be empty');
+    if (!fieldId || fieldId.trim().length === 0) {
+      throw new Error('Field ID cannot be empty');
     }
   }
 
@@ -56,7 +56,7 @@ export class FieldValue {
   }
 
   equals(other: FieldValue): boolean {
-    return this.fieldSlug === other.fieldSlug && 
+    return this.fieldId === other.fieldId &&
            this.value === other.value &&
            this.fieldType === other.fieldType;
   }
@@ -81,21 +81,40 @@ export class Row {
     }
   }
 
-  getFieldValue(fieldSlug: string): FieldValue | undefined {
-    return this.fieldValues.find(fv => fv.fieldSlug === fieldSlug);
+  /**
+   * Get field value by numeric field ID
+   * @param fieldId - Numeric field ID as string (e.g., "1", "10", "42")
+   */
+  getFieldValue(fieldId: string): FieldValue | undefined {
+    return this.fieldValues.find(fv => fv.fieldId === fieldId);
   }
 
-  hasField(fieldSlug: string): boolean {
-    return this.fieldValues.some(fv => fv.fieldSlug === fieldSlug);
+  /**
+   * Check if row has a field by numeric field ID
+   * @param fieldId - Numeric field ID as string (e.g., "1", "10", "42")
+   */
+  hasField(fieldId: string): boolean {
+    return this.fieldValues.some(fv => fv.fieldId === fieldId);
+  }
+
+  /**
+   * Helper: Get field value by field name (for convenience)
+   * @param fieldName - Field name to look up
+   * @param fields - Table fields to resolve name → ID
+   */
+  getFieldValueByName(fieldName: string, fields: readonly TableField[]): FieldValue | undefined {
+    const field = fields.find(f => f.name === fieldName);
+    if (!field) return undefined;
+    return this.getFieldValue(field.id.value.toString());
   }
 
 
   /**
    * Convert row to plain object with numeric field IDs as keys
-   * AIDEV-NOTE: Uses field IDs (10, 11, 12) instead of field names for Delta Lake storage.
-   * Field IDs are immutable, allowing field name changes without breaking data.
-   * @param fields - Table fields to map field names to IDs
-   * @returns Object with numeric field ID keys: {id: "123", 10: "value", 11: "value"}
+   * AIDEV-NOTE: FieldValue.fieldId already contains numeric field IDs (e.g., "1", "10"),
+   * so no field lookup is needed! This makes the method much simpler and faster.
+   * @param fields - Table fields (not used anymore, kept for backward compatibility)
+   * @returns Object with numeric field ID keys: {id: "123", 1: "value", 10: "value"}
    */
   toPlainObject(fields: readonly TableField[]): Record<string, any> {
     const obj: Record<string, any> = {
@@ -103,21 +122,15 @@ export class Row {
     };
 
     for (const fieldValue of this.fieldValues) {
-      // Find the field definition to get its numeric ID
-      const field = fields.find(f => f.name === fieldValue.fieldSlug);
-      if (!field) {
-        console.warn(`[Row.toPlainObject] Field not found for slug: ${fieldValue.fieldSlug}`);
-        continue;
-      }
-
+      // fieldValue.fieldId already contains the numeric field ID!
       const value = fieldValue.value;
 
       // Convert Date objects to ISO strings for JSON serialization
       if (fieldValue.fieldType === 'date' && value instanceof Date) {
-        obj[field.id.value] = value.toISOString();
+        obj[fieldValue.fieldId] = value.toISOString();
       } else {
         // All other types: return value as-is (arrays, objects, strings, primitives)
-        obj[field.id.value] = value;
+        obj[fieldValue.fieldId] = value;
       }
     }
 
@@ -174,7 +187,8 @@ export class Row {
       }
 
       // Always push FieldValue for every field in schema, preserving complete row state
-      fieldValues.push(new FieldValue(field.name, value, field.type));
+      // AIDEV-NOTE: Store numeric field ID (e.g., "1", "10"), not field name
+      fieldValues.push(new FieldValue(field.id.value.toString(), value, field.type));
     }
 
     return new Row(
