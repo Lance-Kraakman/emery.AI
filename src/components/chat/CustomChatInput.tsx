@@ -12,9 +12,10 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send } from 'lucide-react';
+import { Send, Paperclip, X, Image as ImageIcon, File as FileIcon, Music } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { ToolDropdown } from './ToolDropdown';
 import { resolveReferences } from '@/app/actions/references';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
@@ -26,6 +27,10 @@ interface CustomChatInputProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  // Multimodal support
+  pendingAttachments?: File[];
+  onAttachmentAdd?: (file: File) => void;
+  onAttachmentRemove?: (index: number) => void;
 }
 
 export default function CustomChatInput({
@@ -33,7 +38,10 @@ export default function CustomChatInput({
   onToolsChange,
   placeholder = "Type your message here...",
   className = "",
-  disabled = false
+  disabled = false,
+  pendingAttachments = [],
+  onAttachmentAdd,
+  onAttachmentRemove
 }: CustomChatInputProps) {
   const [inputValue, setInputValue] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -42,6 +50,7 @@ export default function CustomChatInput({
   const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([]);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Detect @ tools and show/hide dropdown
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -200,6 +209,58 @@ export default function CustomChatInput({
     }
   };
 
+  // File upload handlers
+  const handleFileButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach(file => {
+      // Validate file type and size
+      const maxSize = 50 * 1024 * 1024; // 50MB
+      if (file.size > maxSize) {
+        alert(`File ${file.name} is too large. Maximum size is 50MB.`);
+        return;
+      }
+
+      // Accept images, audio, documents, and common file types
+      const acceptedTypes = [
+        'image/', 'audio/', 'video/',
+        'application/pdf', 'application/msword',
+        'application/vnd.openxmlformats-officedocument',
+        'text/'
+      ];
+
+      const isAccepted = acceptedTypes.some(type => file.type.startsWith(type));
+      if (!isAccepted) {
+        alert(`File type ${file.type} is not supported.`);
+        return;
+      }
+
+      onAttachmentAdd?.(file);
+    });
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Get icon for file type
+  const getFileIcon = (file: File) => {
+    if (file.type.startsWith('image/')) return <ImageIcon className="w-3 h-3" />;
+    if (file.type.startsWith('audio/')) return <Music className="w-3 h-3" />;
+    return <FileIcon className="w-3 h-3" />;
+  };
+
+  // Format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -222,6 +283,31 @@ export default function CustomChatInput({
 
   return (
     <div className={`relative ${className}`}>
+      {/* Attachment previews */}
+      {pendingAttachments.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {pendingAttachments.map((file, index) => (
+            <Badge
+              key={index}
+              variant="secondary"
+              className="flex items-center gap-2 px-2 py-1 max-w-[200px]"
+            >
+              {getFileIcon(file)}
+              <span className="text-xs truncate flex-1">{file.name}</span>
+              <span className="text-xs text-muted-foreground">{formatFileSize(file.size)}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onAttachmentRemove?.(index)}
+                className="h-4 w-4 p-0 hover:bg-transparent"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </Badge>
+          ))}
+        </div>
+      )}
+
       <div className="relative">
         <Textarea
           ref={inputRef}
@@ -230,18 +316,43 @@ export default function CustomChatInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className="min-h-[220px] max-h-[400px] resize-none px-3 pr-12"
+          className="min-h-[220px] max-h-[400px] resize-none px-3 pr-12 pb-10"
         />
 
-        {/* Floating Send Button - positioned inside textarea */}
-        <Button
-          onClick={handleSendMessage}
-          disabled={!inputValue.trim() || disabled}
-          size="sm"
-          className="absolute bottom-2 right-2 h-8 w-8 p-0 rounded-full shadow-sm hover:shadow-md transition-shadow"
-        >
-          <Send className="h-3 w-3" />
-        </Button>
+        {/* Bottom action bar - positioned inside textarea */}
+        <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+          {/* File upload button */}
+          <Button
+            onClick={handleFileButtonClick}
+            disabled={disabled}
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            title="Attach file (images, audio, documents)"
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.txt"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+
+          {/* Send Button */}
+          <Button
+            onClick={handleSendMessage}
+            disabled={!inputValue.trim() || disabled}
+            size="sm"
+            className="h-8 w-8 p-0 rounded-full shadow-sm hover:shadow-md transition-shadow"
+          >
+            <Send className="h-3 w-3" />
+          </Button>
+        </div>
 
         {/* Tool Dropdown */}
         <ToolDropdown
