@@ -14,7 +14,7 @@ import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-t
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import { AgentId, TableId, OrganizationId, UserId, ChatId } from '@/ddd/domain/shared/value-objects';
 import { Chat, ChatUtils, type CreateChatData, type ChatContextMetadata } from '@/ddd/domain/chat/entities/chat';
-import type { DomainType } from '@/ddd/domain/rag/value-objects';
+import type { DomainType } from '@/ddd/domain/shared/types/domain-type';
 import type { ChatMessage, CreateChatMessageData, ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ChatMessageEntity } from '@/ddd/domain/chat/entities/chat-message';

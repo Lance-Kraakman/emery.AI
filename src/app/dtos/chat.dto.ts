@@ -5,7 +5,7 @@
  * Uses primitives at boundaries, Value Objects used internally by application services.
  */
 
-import type { DomainType } from '@/ddd/domain/rag/value-objects';
+import type { DomainType } from '@/ddd/domain/shared/types/domain-type';
 import type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 
 // Re-export response DTOs from mapper to avoid duplication

@@ -3,7 +3,7 @@
  * AIDEV-NOTE: Layout types that integrate with domain entities for type-safe UI state management
  */
 
-import type { DomainType } from '@/ddd/domain/rag/value-objects'
+import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
 import type { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects'
 
 // Layout panel states

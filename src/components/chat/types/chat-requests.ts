@@ -4,7 +4,7 @@
  * These are NOT domain mappings - those belong in app/mappers/
  */
 
-import type { DomainType } from '@/ddd/domain/rag/value-objects'
+import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
 
 export interface ChatMessageRequest {
