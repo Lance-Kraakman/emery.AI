@@ -288,12 +288,6 @@ message CancelMessageResponse {
 
 // Chat context configuration for AI processing
 message ChatContext {
-  string domain_type = 1;            // Domain type (table, agent, file, team, workflow)
+  string domain_type = 1;            // Domain type (tables, agents, files, teams, workflows)
   int32 domain_id = 2;               // Domain entity identifier
-  bool enable_rag = 3;               // Enable RAG context retrieval
-  float rag_threshold = 4;           // RAG similarity threshold (default: 0.3)
-  int32 max_rag_docs = 5;            // Maximum RAG documents to retrieve (default: 5)
-  float primary_rag_weight = 6;      // Weight for domain-specific RAG (default: 0.7)
-  string assembled_rag_context = 7;  // Pre-assembled RAG context from Next.js DualContextRagService
-  repeated string rag_sources = 8;   // RAG source summary for metadata
 }

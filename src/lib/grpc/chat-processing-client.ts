@@ -40,12 +40,6 @@ const ChatProcessingService = protoDescriptor.emery.agents.ChatProcessingService
 export interface ChatProcessingOptions {
   domainType?: string;
   domainId?: number;
-  enableRag?: boolean;
-  ragThreshold?: number;
-  maxRagDocs?: number;
-  primaryRagWeight?: number;
-  assembledRagContext?: string;  // Pre-assembled RAG context from DualContextRagService
-  ragSources?: string[];         // RAG source summary
   tools?: ToolConfig[];          // Available tools for the chat
   defaultModel?: string | null;  // Organization's default AI model
 }
@@ -119,16 +113,10 @@ export class ChatProcessingClient {
     };
 
     // Add context if provided
-    if (options.domainType || options.enableRag || options.assembledRagContext) {
+    if (options.domainType) {
       const context: ChatContext = {
         domainType: options.domainType || '',
-        domainId: options.domainId || 0,
-        enableRag: options.enableRag || false,
-        ragThreshold: options.ragThreshold || 0.3,
-        maxRagDocs: options.maxRagDocs || 5,
-        primaryRagWeight: options.primaryRagWeight || 0.7,
-        assembledRagContext: options.assembledRagContext || '',
-        ragSources: options.ragSources || []
+        domainId: options.domainId || 0
       };
       request.context = context;
     }

@@ -547,22 +547,10 @@ export interface CancelMessageResponse {
 
 /** Chat context configuration for AI processing */
 export interface ChatContext {
-  /** Domain type (table, agent, file, team, workflow) */
+  /** Domain type (tables, agents, files, teams, workflows) */
   domainType: string;
   /** Domain entity identifier */
   domainId: number;
-  /** Enable RAG context retrieval */
-  enableRag: boolean;
-  /** RAG similarity threshold (default: 0.3) */
-  ragThreshold: number;
-  /** Maximum RAG documents to retrieve (default: 5) */
-  maxRagDocs: number;
-  /** Weight for domain-specific RAG (default: 0.7) */
-  primaryRagWeight: number;
-  /** Pre-assembled RAG context from Next.js DualContextRagService */
-  assembledRagContext: string;
-  /** RAG source summary for metadata */
-  ragSources: string[];
 }
 
 function createBaseTaskRequest(): TaskRequest {
@@ -4218,16 +4206,7 @@ export const CancelMessageResponse: MessageFns<CancelMessageResponse> = {
 };
 
 function createBaseChatContext(): ChatContext {
-  return {
-    domainType: "",
-    domainId: 0,
-    enableRag: false,
-    ragThreshold: 0,
-    maxRagDocs: 0,
-    primaryRagWeight: 0,
-    assembledRagContext: "",
-    ragSources: [],
-  };
+  return { domainType: "", domainId: 0 };
 }
 
 export const ChatContext: MessageFns<ChatContext> = {
@@ -4237,24 +4216,6 @@ export const ChatContext: MessageFns<ChatContext> = {
     }
     if (message.domainId !== 0) {
       writer.uint32(16).int32(message.domainId);
-    }
-    if (message.enableRag !== false) {
-      writer.uint32(24).bool(message.enableRag);
-    }
-    if (message.ragThreshold !== 0) {
-      writer.uint32(37).float(message.ragThreshold);
-    }
-    if (message.maxRagDocs !== 0) {
-      writer.uint32(40).int32(message.maxRagDocs);
-    }
-    if (message.primaryRagWeight !== 0) {
-      writer.uint32(53).float(message.primaryRagWeight);
-    }
-    if (message.assembledRagContext !== "") {
-      writer.uint32(58).string(message.assembledRagContext);
-    }
-    for (const v of message.ragSources) {
-      writer.uint32(66).string(v!);
     }
     return writer;
   },
@@ -4282,54 +4243,6 @@ export const ChatContext: MessageFns<ChatContext> = {
           message.domainId = reader.int32();
           continue;
         }
-        case 3: {
-          if (tag !== 24) {
-            break;
-          }
-
-          message.enableRag = reader.bool();
-          continue;
-        }
-        case 4: {
-          if (tag !== 37) {
-            break;
-          }
-
-          message.ragThreshold = reader.float();
-          continue;
-        }
-        case 5: {
-          if (tag !== 40) {
-            break;
-          }
-
-          message.maxRagDocs = reader.int32();
-          continue;
-        }
-        case 6: {
-          if (tag !== 53) {
-            break;
-          }
-
-          message.primaryRagWeight = reader.float();
-          continue;
-        }
-        case 7: {
-          if (tag !== 58) {
-            break;
-          }
-
-          message.assembledRagContext = reader.string();
-          continue;
-        }
-        case 8: {
-          if (tag !== 66) {
-            break;
-          }
-
-          message.ragSources.push(reader.string());
-          continue;
-        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4343,14 +4256,6 @@ export const ChatContext: MessageFns<ChatContext> = {
     return {
       domainType: isSet(object.domainType) ? globalThis.String(object.domainType) : "",
       domainId: isSet(object.domainId) ? globalThis.Number(object.domainId) : 0,
-      enableRag: isSet(object.enableRag) ? globalThis.Boolean(object.enableRag) : false,
-      ragThreshold: isSet(object.ragThreshold) ? globalThis.Number(object.ragThreshold) : 0,
-      maxRagDocs: isSet(object.maxRagDocs) ? globalThis.Number(object.maxRagDocs) : 0,
-      primaryRagWeight: isSet(object.primaryRagWeight) ? globalThis.Number(object.primaryRagWeight) : 0,
-      assembledRagContext: isSet(object.assembledRagContext) ? globalThis.String(object.assembledRagContext) : "",
-      ragSources: globalThis.Array.isArray(object?.ragSources)
-        ? object.ragSources.map((e: any) => globalThis.String(e))
-        : [],
     };
   },
 
@@ -4362,24 +4267,6 @@ export const ChatContext: MessageFns<ChatContext> = {
     if (message.domainId !== 0) {
       obj.domainId = Math.round(message.domainId);
     }
-    if (message.enableRag !== false) {
-      obj.enableRag = message.enableRag;
-    }
-    if (message.ragThreshold !== 0) {
-      obj.ragThreshold = message.ragThreshold;
-    }
-    if (message.maxRagDocs !== 0) {
-      obj.maxRagDocs = Math.round(message.maxRagDocs);
-    }
-    if (message.primaryRagWeight !== 0) {
-      obj.primaryRagWeight = message.primaryRagWeight;
-    }
-    if (message.assembledRagContext !== "") {
-      obj.assembledRagContext = message.assembledRagContext;
-    }
-    if (message.ragSources?.length) {
-      obj.ragSources = message.ragSources;
-    }
     return obj;
   },
 
@@ -4390,12 +4277,6 @@ export const ChatContext: MessageFns<ChatContext> = {
     const message = createBaseChatContext();
     message.domainType = object.domainType ?? "";
     message.domainId = object.domainId ?? 0;
-    message.enableRag = object.enableRag ?? false;
-    message.ragThreshold = object.ragThreshold ?? 0;
-    message.maxRagDocs = object.maxRagDocs ?? 0;
-    message.primaryRagWeight = object.primaryRagWeight ?? 0;
-    message.assembledRagContext = object.assembledRagContext ?? "";
-    message.ragSources = object.ragSources?.map((e) => e) || [];
     return message;
   },
 };

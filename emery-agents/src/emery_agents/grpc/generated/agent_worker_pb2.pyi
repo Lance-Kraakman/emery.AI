@@ -423,21 +423,9 @@ class CancelMessageResponse(_message.Message):
     def __init__(self, success: bool = ..., message: _Optional[str] = ...) -> None: ...
 
 class ChatContext(_message.Message):
-    __slots__ = ("domain_type", "domain_id", "enable_rag", "rag_threshold", "max_rag_docs", "primary_rag_weight", "assembled_rag_context", "rag_sources")
+    __slots__ = ("domain_type", "domain_id")
     DOMAIN_TYPE_FIELD_NUMBER: _ClassVar[int]
     DOMAIN_ID_FIELD_NUMBER: _ClassVar[int]
-    ENABLE_RAG_FIELD_NUMBER: _ClassVar[int]
-    RAG_THRESHOLD_FIELD_NUMBER: _ClassVar[int]
-    MAX_RAG_DOCS_FIELD_NUMBER: _ClassVar[int]
-    PRIMARY_RAG_WEIGHT_FIELD_NUMBER: _ClassVar[int]
-    ASSEMBLED_RAG_CONTEXT_FIELD_NUMBER: _ClassVar[int]
-    RAG_SOURCES_FIELD_NUMBER: _ClassVar[int]
     domain_type: str
     domain_id: int
-    enable_rag: bool
-    rag_threshold: float
-    max_rag_docs: int
-    primary_rag_weight: float
-    assembled_rag_context: str
-    rag_sources: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, domain_type: _Optional[str] = ..., domain_id: _Optional[int] = ..., enable_rag: bool = ..., rag_threshold: _Optional[float] = ..., max_rag_docs: _Optional[int] = ..., primary_rag_weight: _Optional[float] = ..., assembled_rag_context: _Optional[str] = ..., rag_sources: _Optional[_Iterable[str]] = ...) -> None: ...
+    def __init__(self, domain_type: _Optional[str] = ..., domain_id: _Optional[int] = ...) -> None: ...
