@@ -13,7 +13,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
+import {
   Download,
   ExternalLink,
   File,
@@ -25,19 +25,25 @@ import {
   ZoomOut,
   RotateCw,
   AtSign,
+  X,
 } from 'lucide-react'
 import type { FileArtifact } from '../types/chat-artifacts'
 import { getFileDisplayInfo } from '../types/chat-artifacts'
+import { createDebugLogger } from '@/lib/utils/debug-logger'
+
+const logger = createDebugLogger('FileArtifactViewer')
 // Note: Old reference search store removed in favor of simplified system
 
-interface FileArtifactViewerProps {
+interface FileArtifactViewerProps{
   artifact: FileArtifact
+  onClose?: () => void
   className?: string
 }
 
-export function FileArtifactViewer({ 
-  artifact, 
-  className = "" 
+export function FileArtifactViewer({
+  artifact,
+  onClose,
+  className = ""
 }: FileArtifactViewerProps) {
   const { fileField, viewerType, fileName, fileUrl } = artifact.data
   const [zoom, setZoom] = useState(100)
@@ -61,7 +67,7 @@ export function FileArtifactViewer({
           setLoadingText(false)
         })
         .catch(error => {
-          console.error('Failed to load text content:', error)
+          logger.error('Failed to load text content', error)
           setTextContent('Failed to load file content.')
           setLoadingText(false)
         })
@@ -202,23 +208,36 @@ export function FileArtifactViewer({
   }
 
   return (
-    <div className={`bg-white border rounded-lg shadow-sm ${className}`}>
+    <div className={`h-full flex flex-col bg-card ${className}`}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b bg-gray-50">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           {getFileIcon()}
-          <div>
-            <h3 className="font-medium text-sm">{displayInfo.title}</h3>
-            <p className="text-xs text-gray-500">{displayInfo.subtitle}</p>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-medium text-sm truncate">{displayInfo.title}</h3>
+            <p className="text-xs text-muted-foreground truncate">{displayInfo.subtitle}</p>
           </div>
         </div>
-        
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-2 flex-shrink-0">
           {/* File metadata */}
-          <Badge variant="outline" className="text-xs">
+          <Badge variant="outline" className="text-xs flex-shrink-0">
             <HardDrive className="w-3 h-3 mr-1" />
             {displayInfo.sizeFormatted}
           </Badge>
+
+          {/* Close button */}
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="h-7 w-7 p-0 flex-shrink-0"
+              title="Close (Esc)"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
           
           {/* Viewer controls for supported types */}
           {(viewerType === 'image' || viewerType === 'text') && (
@@ -288,9 +307,9 @@ export function FileArtifactViewer({
                 // Insert file reference into chat
                 const fileName = artifact.data.fileField.name
                 const referenceText = `@file:${fileName}`
-                
+
                 // TODO: Implement reference button functionality with new simplified system
-                console.log('Add reference:', referenceText)
+                logger.debug('Add reference', { referenceText })
               }}
               className="text-xs"
               title="Add file reference to chat"
@@ -303,12 +322,12 @@ export function FileArtifactViewer({
       </div>
 
       {/* File Content */}
-      <div ref={contentRef}>
+      <div ref={contentRef} className="flex-1 overflow-auto">
         {renderFileContent()}
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between p-3 border-t bg-gray-50 text-xs text-gray-500">
+      <div className="flex items-center justify-between p-3 border-t border-border bg-muted/10 text-xs text-muted-foreground flex-shrink-0">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />

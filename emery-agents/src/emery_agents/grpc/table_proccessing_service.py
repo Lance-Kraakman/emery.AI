@@ -8,11 +8,12 @@ It provides high-performance, ACID-compliant operations on data stored in S3.
 import json
 import logging
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple, Union
 from datetime import datetime, timezone
 
 import polars as pl
 import pyarrow as pa
+import pyarrow.compute as pc
 from deltalake import write_deltalake, DeltaTable
 from google.protobuf.json_format import Parse, MessageToJson
 from google.protobuf.struct_pb2 import ListValue
@@ -102,7 +103,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         if extra:
             logger.info(f"[{context}] Fields in schema not in input (null-filled): {sorted(extra)}")
 
-    def _validate_s3_path(self, request, method: str) -> tuple:
+    def _validate_s3_path(self, request: Any, method: str) -> Tuple[bool, Optional[str], Optional[table_service_pb2.TableResponse]]:
         """Validate s3_path field exists and is not empty.
 
         Args:
@@ -128,7 +129,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         s3_uri = self._to_s3_uri(request.s3_path)
         return True, s3_uri, None
 
-    def _get_delta_table_safe(self, s3_uri: str, storage_options: dict, method: str, must_exist: bool = True):
+    def _get_delta_table_safe(self, s3_uri: str, storage_options: Dict[str, str], method: str, must_exist: bool = True) -> Tuple[Optional[DeltaTable], Optional[str]]:
         """Safely load Delta table with error handling.
 
         Args:
@@ -149,7 +150,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             log_func(f"[{method}] Delta table not found at {s3_uri}: {e}")
             return None, str(e)
 
-    def _extract_protobuf_values(self, values: List) -> List[Any]:
+    def _extract_protobuf_values(self, values: List[table_service_pb2.RowDataValue]) -> List[Any]:
         """Extract Python values from list of RowDataValue protobuf objects.
 
         Args:
@@ -843,7 +844,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
     # AIDEV-NOTE: Removed duplicate GetTableStats - using the better implementation below at line ~1204
 
-    def _cast_value_to_column_type(self, value, column_type):
+    def _cast_value_to_column_type(self, value: Any, column_type: pa.DataType) -> Any:
         """
         Cast Python value to match PyArrow column type.
 
@@ -903,7 +904,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             logger.error(f"Failed to cast value {value} to type {column_type}: {e}")
             raise ValueError(f"Cannot cast filter value '{value}' to column type {column_type}")
 
-    def _build_pyarrow_predicate(self, filters, schema):
+    def _build_pyarrow_predicate(self, filters: List[table_service_pb2.RowFilter], schema: pa.Schema) -> Optional[pc.Expression]:
         """
         Build PyArrow compute predicate from request filters for efficient filtering.
 
@@ -1216,28 +1217,29 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 # Build Polars aggregation expressions
                 agg_exprs = []
                 for agg_func in agg_config.aggregations:
-                    field_name = agg_func.field_id  # Numeric field ID as string, e.g., "10", "11"
+                    field_id = agg_func.field_id  # Numeric field ID as string, e.g., "10", "11"
 
                     # Map protobuf aggregation type to Polars expression
+                    # AIDEV-NOTE: Use field_id as alias to ensure column names match what TypeScript expects
                     if agg_func.type == table_service_pb2.AGG_TYPE_SUM:
-                        agg_exprs.append(pl.col(field_name).sum().alias(agg_func.alias))
+                        agg_exprs.append(pl.col(field_id).sum().alias(field_id))
                     elif agg_func.type == table_service_pb2.AGG_TYPE_AVG:
-                        agg_exprs.append(pl.col(field_name).mean().alias(agg_func.alias))
+                        agg_exprs.append(pl.col(field_id).mean().alias(field_id))
                     elif agg_func.type == table_service_pb2.AGG_TYPE_COUNT:
-                        agg_exprs.append(pl.col(field_name).count().alias(agg_func.alias))
+                        agg_exprs.append(pl.col(field_id).count().alias(field_id))
                     elif agg_func.type == table_service_pb2.AGG_TYPE_MIN:
-                        agg_exprs.append(pl.col(field_name).min().alias(agg_func.alias))
+                        agg_exprs.append(pl.col(field_id).min().alias(field_id))
                     elif agg_func.type == table_service_pb2.AGG_TYPE_MAX:
-                        agg_exprs.append(pl.col(field_name).max().alias(agg_func.alias))
+                        agg_exprs.append(pl.col(field_id).max().alias(field_id))
                     elif agg_func.type == table_service_pb2.AGG_TYPE_COUNT_DISTINCT:
-                        agg_exprs.append(pl.col(field_name).n_unique().alias(agg_func.alias))
+                        agg_exprs.append(pl.col(field_id).n_unique().alias(field_id))
                     elif agg_func.type == table_service_pb2.AGG_TYPE_COUNT_EMPTY:
                         agg_exprs.append(
-                            pl.col(field_name).is_null().sum().alias(agg_func.alias)
+                            pl.col(field_id).is_null().sum().alias(field_id)
                         )
                     elif agg_func.type == table_service_pb2.AGG_TYPE_COUNT_NOT_EMPTY:
                         agg_exprs.append(
-                            pl.col(field_name).is_not_null().sum().alias(agg_func.alias)
+                            pl.col(field_id).is_not_null().sum().alias(field_id)
                         )
                     else:
                         logger.warning(f"[QueryRows] Unknown aggregation type: {agg_func.type}")

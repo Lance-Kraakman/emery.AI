@@ -11,11 +11,6 @@ import {
 import { 
   ChevronLeft, 
   ChevronRight, 
-  Database,
-  BarChart,
-  Users,
-  Code,
-  Lightbulb
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useStore } from '@tanstack/react-store'
@@ -24,7 +19,7 @@ import { RightPanelResizeHandle } from '@/components/ui/right-panel-resize-handl
 // import { ChatCanvas } from './ChatCanvas'
 import CustomChatInput from './CustomChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
-import { createChatContextForPage } from '@/components/layout/types'
+import { createChatContextForPage, type ChatContextConfig } from '@/components/layout/types'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { ToolPanel } from './ToolPanel'
@@ -34,6 +29,9 @@ import { createDocumentArtifact, createFileArtifact } from './types/chat-artifac
 import { fetchFileArtifactData, getFileDownloadUrl, getDocumentFieldValue, getDocumentDownloadUrl } from '@/app/actions/artifacts'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import { StepProgressIndicator } from './StepProgressIndicator'
+import { createDebugLogger } from '@/lib/utils/debug-logger'
+
+const logger = createDebugLogger('EmeryChat')
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
@@ -158,52 +156,6 @@ function EmeryChatHeader({
   )
 }
 
-// Context-aware suggestions component (extracted from mission-control)
-// function ChatSuggestions({ 
-//   onSuggestionClick, 
-//   selectedIndex = -1,
-//   domainType
-// }: { 
-//   onSuggestionClick: (suggestion: string) => void
-//   selectedIndex?: number
-//   domainType?: DomainType | 'organizations' | 'general'
-// }) {
-//   const suggestions = getSuggestionsForDomain(domainType)
-
-//   if (suggestions.length === 0) return null
-
-//   return (
-//     <div>
-//       <div className="mb-2">
-//         <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-//           <Lightbulb className="h-3 w-3" />
-//           Suggestions
-//         </div>
-//       </div>
-//       <div>
-//         {suggestions.map((suggestion, index) => (
-//           <button
-//             key={index}
-//             className={`w-full flex items-center gap-2 px-0 py-2.5 text-left text-sm transition-colors duration-150 focus:outline-none border-b border-border/30 last:border-b-0 ${
-//               selectedIndex === index 
-//                 ? 'bg-muted/70 text-foreground' 
-//                 : 'hover:bg-muted/50'
-//             }`}
-//             onClick={() => onSuggestionClick(suggestion.prompt)}
-//           >
-//             <div className="flex-shrink-0 text-muted-foreground">
-//               {suggestion.icon}
-//             </div>
-//             <span className="flex-1 text-foreground truncate">
-//               {suggestion.title}
-//             </span>
-//           </button>
-//         ))}
-//       </div>
-//     </div>
-//   )
-// }
-
 // Component that can access useChatCanvas hook inside ChatSection
 interface ChatContentWithCanvasProps {
   selectedTools: ToolDTO[]
@@ -211,8 +163,8 @@ interface ChatContentWithCanvasProps {
   onAddTool: () => void
   onRemoveTool: (tool: ToolDTO) => void
   isClient: boolean
-  handler: any
-  chatContext: any
+  handler: ReturnType<typeof useChatHandler>
+  chatContext: ChatContextConfig | undefined
 }
 
 function ChatContentWithCanvas({
@@ -220,20 +172,18 @@ function ChatContentWithCanvas({
   onToolsChange,
   onAddTool,
   onRemoveTool,
-  // isClient,
   handler,
-  // chatContext
 }: ChatContentWithCanvasProps) {
   // AIDEV-NOTE: useChatCanvas must be called at component level, not inside handlers
   const { openArtifactInCanvas } = useChatCanvas()
 
   // Handle tool click using global UI state for artifacts
   const handleToolClick = async (tool: ToolDTO) => {
-    console.log('Tool clicked:', tool)
+    logger.debug('Tool clicked', { tool: tool.name, category: tool.category })
 
     // Only handle reference tools for artifact opening (check via category or insertText pattern)
     if (!tool.insertText?.includes('@') || tool.insertText?.startsWith('@tool:')) {
-      console.log('System tool clicked:', tool.name)
+      logger.debug('System tool clicked', { tool: tool.name })
       return
     }
 
@@ -267,12 +217,11 @@ function ChatContentWithCanvas({
           'view',
           downloadUrl
         )
-        console.log('Document artifact created:', artifact)
         // Open the artifact in canvas using hook from component level
         openArtifactInCanvas(artifact)
-        console.log('Document artifact opened in canvas:', artifact)
+        logger.debug('Document artifact opened', { documentId: tool.documentId, tableId: tool.tableId })
       } else {
-        console.error('Failed to fetch document data:', result.error)
+        logger.error('Failed to fetch document data', result.error)
       }
     } else if (tool.category === ToolCategory.FILES) {
       // Fetch real file data using DTO runtime values
@@ -295,9 +244,9 @@ function ChatContentWithCanvas({
         // Create artifact and open in canvas using LlamaIndex ChatCanvas
         const artifact = createFileArtifact(fileResult.data, 1, 1, 'generic', downloadUrl)
         openArtifactInCanvas(artifact)
-        console.log('File artifact opened in canvas:', artifact)
+        logger.debug('File artifact opened', { fileId: tool.fileId, filename: tool.filename })
       } else {
-        console.error('Failed to fetch file data:', fileResult.error)
+        logger.error('Failed to fetch file data', fileResult.error)
       }
     }
     // Other tool types have different behaviors (agents, tables, databases)
@@ -399,7 +348,7 @@ export function EmeryChat() {
 
   // Handle chat created callback from useChatGRPC
   const handleChatCreated = (chatId: string) => {
-    console.log('[EMERY-CHAT] New chat created:', chatId)
+    logger.summary('New chat created', { chatId })
     setCurrentChatId(chatId)
     // Trigger refresh of chat history dropdown
     handleChatHistoryUpdate()
@@ -431,7 +380,7 @@ export function EmeryChat() {
         }
       }
 
-      console.log('[EMERY-CHAT] Auto-detecting context:', { pathname, pageName, domainId })
+      logger.debug('Auto-detecting context', { pathname, pageName, domainId })
 
       // Create context based on detected page
       const detectedContext = createChatContextForPage(pageName, domainId, domainName)
@@ -451,11 +400,6 @@ export function EmeryChat() {
     setIsClient(true)
   }, [])
 
-  // AIDEV-NOTE: Removed complex text parsing - tools now come from explicit selection only
-  // This eliminates the parseReferencesWithContext runtime error and simplifies the architecture
-
-  // NOW ALL HOOKS ARE CALLED - CONDITIONAL RETURNS ARE SAFE BELOW THIS POINT
-
   // Don't render if hidden - return hidden div instead of null to avoid hook rule violations
   if (chatState === 'hidden') {
     return <div className="hidden" />
@@ -468,7 +412,7 @@ export function EmeryChat() {
   // Don't render if user is not authenticated
   if (!userId || !organizationId) {
     return (
-      <div className="w-96 h-full flex flex-col bg-card border-l border-border items-center justify-center py-8">
+      <div className="w-96 h-full flex flex-col bg-card items-center justify-center py-8">
         <p className="text-sm text-muted-foreground">Please sign in to use chat</p>
       </div>
     )
@@ -493,7 +437,7 @@ export function EmeryChat() {
   // Collapsed state - show minimal icon strip with dashlet logo
   if (chatState === 'collapsed') {
     return (
-      <div className="w-12 h-full flex flex-col bg-card border-l border-border flex-shrink-0 items-center py-4 gap-4">
+      <div className="w-12 h-full flex flex-col bg-card flex-shrink-0 items-center py-4 gap-4">
         {/* Dashlet logo */}
         <button
           onClick={() => uiStateActions.toggleChat()}
@@ -520,9 +464,6 @@ export function EmeryChat() {
       </div>
     )
   }
-
-  const suggestions = getSuggestionsPrompts(chatContext?.domainType)
-
 
 
   // Handle tool changes from chat input
@@ -560,24 +501,14 @@ export function EmeryChat() {
 
     // TODO: Also update the input text to remove the tool reference
     // This would require access to the input element's value and updating it
-    console.log('Tool removed:', toolToRemove)
+    logger.debug('Tool removed', { tool: toolToRemove.name })
   }
-
-  const handleSuggestionClick = (suggestion: string) => {
-    console.log('Suggestion clicked:', suggestion)
-
-    // Use the chat handler to send the suggestion
-    handler.append({ content: suggestion, role: 'user' })
-  }
-
-
-
 
   // Determine layout based on canvas state
   const isFullWidth = canvasState === 'collapsed'
 
   return (
-    <div className={`relative flex bg-card flex-shrink-0 h-screen`} style={{ width: isFullWidth ? '100%' : `${chatWidth}px` }}>
+    <div className={`relative flex bg-card flex-shrink-0 h-full`} style={{ width: isFullWidth ? '100%' : `${chatWidth}px` }}>
       {/* Resize handle */}
       {!isFullWidth && (
         <RightPanelResizeHandle
@@ -587,7 +518,7 @@ export function EmeryChat() {
       )}
 
       {/* Chat Section - now full width without sidebar */}
-      <div className={`flex flex-col w-full h-screen`}>
+      <div className={`flex flex-col w-full h-full`}>
         <EmeryChatHeader 
           domainType={chatContext?.domainType}
           domainName={chatContext?.domainName}
@@ -616,83 +547,4 @@ export function EmeryChat() {
       </div>
     </div>
   )
-}
-
-// Helper functions for domain-specific suggestions
-function getSuggestionsForDomain(domainType?: DomainType | 'organizations' | 'general') {
-  switch (domainType) {
-    case 'agents':
-      return [
-        {
-          icon: <Code className="h-3 w-3" />,
-          title: "Help configure agent capabilities and tools",
-          prompt: "Help me configure this agent's capabilities and available tools for optimal performance."
-        },
-        {
-          icon: <BarChart className="h-3 w-3" />,
-          title: "Analyze agent performance and task execution",
-          prompt: "Analyze this agent's performance metrics and suggest optimizations for task execution."
-        }
-      ]
-      
-    case 'teams':
-      return [
-        {
-          icon: <Users className="h-3 w-3" />,
-          title: "Analyze team collaboration and productivity",
-          prompt: "Analyze our team's collaboration patterns and suggest productivity improvements."
-        },
-        {
-          icon: <BarChart className="h-3 w-3" />,
-          title: "Review team performance metrics and goals",
-          prompt: "Review our team's performance metrics and help optimize our goals and workflows."
-        }
-      ]
-      
-    case 'tables':
-      return [
-        {
-          icon: <Database className="h-3 w-3" />,
-          title: "Query table data with natural language",
-          prompt: "Help me query this table's data using natural language commands."
-        },
-        {
-          icon: <BarChart className="h-3 w-3" />,
-          title: "Analyze data patterns and generate insights",
-          prompt: "Analyze patterns in this table's data and generate actionable business insights."
-        }
-      ]
-      
-    case 'organizations':
-      return [
-        {
-          icon: <BarChart className="h-3 w-3" />,
-          title: "Generate organizational performance report",
-          prompt: "Generate a comprehensive report on our organizational performance and key metrics."
-        },
-        {
-          icon: <Users className="h-3 w-3" />,
-          title: "Analyze resource allocation and optimization",
-          prompt: "Analyze our current resource allocation and suggest optimization strategies."
-        }
-      ]
-      
-    default: // 'general' or mission-control
-      return [
-        {
-          icon: <Database className="h-3 w-3" />,
-          title: "Analyze database performance and optimization opportunities",
-          prompt: "Analyze the current database performance and suggest optimizations for our main tables and queries."
-        },
-        {
-          icon: <BarChart className="h-3 w-3" />,
-          title: "Generate comprehensive analytics report with KPIs",
-          prompt: "Generate a comprehensive analytics report showing key performance indicators, user engagement metrics, and business trends from our data."
-        }
-      ]
-  }
-}
-
-function getSuggestionsPrompts(domainType?: DomainType | 'organizations' | 'general'): string[] {
-  return getSuggestionsForDomain(domainType).map(s => s.prompt)
 }

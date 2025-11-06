@@ -3,7 +3,7 @@
 import { generateId } from 'ai'
 import React, { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
-import { ChatHandler, Message } from '@llamaindex/chat-ui'
+import { ChatHandler, Message, type MessagePart } from '@llamaindex/chat-ui'
 import type { DomainType } from '@/ddd/domain/rag/value-objects'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
@@ -11,6 +11,9 @@ import { createChatStreamRequest, type ChatContextOptions } from './types/chat-r
 import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/chat-history'
 import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
+import { createDebugLogger } from '@/lib/utils/debug-logger'
+
+const logger = createDebugLogger('ChatGRPC')
 
 interface ChatMessage extends Message {
   id: string
@@ -23,7 +26,7 @@ function getMessageContent(message: Message): string {
   if (!message.parts || message.parts.length === 0) return ''
 
   // Find the first text part
-  const textPart = message.parts.find((part: any) => typeof part === 'string' || part?.type === 'text')
+  const textPart = message.parts.find((part: MessagePart) => typeof part === 'string' || (typeof part === 'object' && part?.type === 'text'))
 
   if (typeof textPart === 'string') return textPart
   if (textPart && typeof textPart === 'object' && 'text' in textPart) return textPart.text
@@ -39,7 +42,7 @@ function createTextMessage(content: string, role: 'user' | 'assistant' | 'system
   return {
     id: id || generateId(),
     role,
-    parts: [{ type: 'text', text: content }] as any,
+    parts: [{ type: 'text', text: content }],
   }
 }
 
@@ -47,8 +50,8 @@ function createTextMessage(content: string, role: 'user' | 'assistant' | 'system
  * Extract tool references from message content
  * Finds patterns like @tool:gmail-create-draft and converts them to tool configs
  */
-function extractToolReferencesFromMessage(message: string): Array<{name: string, version: string, config: any}> {
-  const toolReferences: Array<{name: string, version: string, config: any}> = []
+function extractToolReferencesFromMessage(message: string): Array<{name: string, version: string, config: Record<string, unknown>}> {
+  const toolReferences: Array<{name: string, version: string, config: Record<string, unknown>}> = []
 
   // Match @tool:xxx patterns
   const toolMatches = message.match(/@tool:([a-zA-Z0-9_-]+)/g)
@@ -78,9 +81,9 @@ function extractToolReferencesFromMessage(message: string): Array<{name: string,
 interface ExtendedChatHandler extends ChatHandler {
   // Base ChatHandler fields
   isLoading: boolean
-  messages: any[]
+  messages: ChatMessage[]
   append: (message: Message) => Promise<string>
-  setMessages: (messages: any[]) => void
+  setMessages: (messages: ChatMessage[]) => void
   // Custom fields
   scrollRef?: React.RefObject<HTMLDivElement>
   scrollToBottom?: () => void
@@ -166,9 +169,9 @@ export function useChatGRPC(
   // Load a specific chat session with full history
   const loadChatSession = async (chatId: string) => {
     try {
-      console.log('[CHAT-GRPC-HOOK] Loading chat session:', chatId)
+      logger.debug('Loading chat session', { chatId })
       const result = await loadChatWithFullHistory(chatId)
-      
+
       if (result.success && result.data) {
         setCurrentChatId(chatId)
 
@@ -178,14 +181,13 @@ export function useChatGRPC(
         )
 
         setMessages(chatMessages)
-        console.log(`[CHAT-GRPC-HOOK] Loaded ${chatMessages.length} messages for chat ${chatId}`)
+        logger.summary('Loaded messages', { count: chatMessages.length, chatId })
       } else {
-        console.error('[CHAT-GRPC-HOOK] Failed to load chat session:', result.error)
+        logger.error('Failed to load chat session', result.error)
         loadFromLocalStorage()
       }
     } catch (error) {
-      console.error('[CHAT-GRPC-HOOK] Error loading chat session:', error)
-      // Fall back to localStorage for this context
+      logger.error('Error loading chat session', error)
       loadFromLocalStorage()
     }
   }
@@ -200,7 +202,7 @@ export function useChatGRPC(
           setMessages(parsedMessages)
         }
       } catch (error) {
-        console.warn('[CHAT-GRPC-HOOK] Failed to load from localStorage:', error)
+        logger.debug('Failed to load from localStorage', error)
       }
     }
   }
@@ -216,7 +218,7 @@ export function useChatGRPC(
       try {
         localStorage.setItem(chatStorageKey, JSON.stringify(messages))
       } catch (error) {
-        console.warn('[CHAT-GRPC-HOOK] Failed to persist messages:', error)
+        logger.debug('Failed to persist messages', error)
       }
     }
   }, [messages, isClient, chatStorageKey])
@@ -237,10 +239,10 @@ export function useChatGRPC(
     abortControllerRef.current = new AbortController()
 
     try {
-      console.log('[CHAT-GRPC-HOOK] Calling gRPC-based chat API with tools:', {
+      logger.debug('Calling chat API', {
         messageId,
-        selectedTools: selectedTools.length,
-        toolNames: selectedTools.map(t => t.name)
+        toolCount: selectedTools.length,
+        tools: selectedTools.map(t => t.name)
       })
 
       // Prepare chat messages for API call
@@ -266,22 +268,17 @@ export function useChatGRPC(
 
       // 2. Extract tool references from message content (e.g., @tool:gmail-create-draft)
       const messageToolReferences = extractToolReferencesFromMessage(messageContent)
-      console.log('[CHAT-GRPC-HOOK] Extracted tool references from message:', messageToolReferences)
-
-      // Debug: Log individual tool configs
-      messageToolReferences.forEach((tool, index) => {
-        console.log(`[CHAT-GRPC-HOOK] Tool ${index}: name=${tool.name}, config=`, tool.config)
-      })
 
       // 3. Combine all tools (avoid duplicates by name)
-      const allTools = [...selectedToolData]
+      // Use unknown to accept both ToolDefinitionData and basic configs from message parsing
+      const allTools: Array<{name: string, version: string, config: unknown}> = [...selectedToolData]
       for (const toolRef of messageToolReferences) {
         if (!allTools.find(t => t.name === toolRef.name)) {
           allTools.push(toolRef)
         }
       }
 
-      console.log('[CHAT-GRPC-HOOK] Final tool list for gRPC:', allTools)
+      logger.debug('Tool list for gRPC', { count: allTools.length, tools: allTools.map(t => t.name) })
 
       const requestBody = {
         messages: chatMessages,
@@ -318,14 +315,14 @@ export function useChatGRPC(
       const assistantId = generateId()
       let messageCreated = false // Track if we've added the message to UI yet
 
-      console.log('[CHAT-GRPC-HOOK] Starting to read gRPC streaming response')
+      logger.debug('Starting stream read')
 
       // Read the stream - gRPC API returns mixed SSE events and plain text
       let buffer = ''
       while (true) {
         const { done, value } = await reader.read()
         if (done) {
-          console.log('[CHAT-GRPC-HOOK] Stream reading completed')
+          logger.debug('Stream completed')
           setCurrentStep(null) // Clear step progress
           break
         }
@@ -344,8 +341,6 @@ export function useChatGRPC(
               const eventData = JSON.parse(line.substring(6))
 
               if (eventData.type === 'step_progress') {
-                // Update current step indicator
-                console.log('[CHAT-GRPC-HOOK] Step progress:', eventData)
                 setCurrentStep({
                   type: eventData.stepType,
                   name: eventData.stepName,
@@ -369,23 +364,23 @@ export function useChatGRPC(
                 }
               }
             } catch (e) {
-              console.warn('[CHAT-GRPC-HOOK] Failed to parse SSE event:', line, e)
+              logger.debug('Failed to parse SSE event', e)
             }
           }
         }
       }
 
-      console.log('[CHAT-GRPC-HOOK] Final assistant message length:', assistantMessage.length)
+      logger.summary('Stream complete', { messageLength: assistantMessage.length })
 
       // Check for new chat creation after stream completes
       await checkForNewChat()
 
     } catch (error) {
-      console.error('[CHAT-GRPC-HOOK] Chat error:', error)
+      logger.error('Chat error', error)
 
       // Check if it was aborted
       if (error instanceof Error && error.name === 'AbortError') {
-        console.log('[CHAT-GRPC-HOOK] Message cancelled by user')
+        logger.debug('Message cancelled by user')
         setMessages((prev) => [...prev, createTextMessage('_Message cancelled by user_', 'assistant')])
       } else {
         // Add error message
@@ -410,7 +405,7 @@ export function useChatGRPC(
       try {
         localStorage.removeItem(chatStorageKey)
       } catch (error) {
-        console.warn('[CHAT-GRPC-HOOK] Failed to clear persisted messages:', error)
+        logger.debug('Failed to clear persisted messages', error)
       }
     }
   }
@@ -418,10 +413,10 @@ export function useChatGRPC(
   // Switch to a different chat session
   const switchToChat = async (chatId: string) => {
     try {
-      console.log('[CHAT-GRPC-HOOK] Switching to chat:', chatId)
+      logger.debug('Switching to chat', { chatId })
       await loadChatSession(chatId)
     } catch (error) {
-      console.error('[CHAT-GRPC-HOOK] Failed to switch chat:', error)
+      logger.error('Failed to switch chat', error)
     }
   }
 
@@ -444,32 +439,32 @@ export function useChatGRPC(
         organizationId,
         userId
       }
-      
-      console.log('[CHAT-GRPC-HOOK] Checking for new chat creation:', context)
-      
+
+      logger.debug('Checking for new chat', { context })
+
       // Get the current (most recent) chat for this context
       const result = await getCurrentChatSession(context)
-      
+
       if (result.success && result.data) {
         const newChatId = result.data.id
-        console.log('[CHAT-GRPC-HOOK] Found new chat created:', newChatId)
-        
+        logger.summary('New chat created', { chatId: newChatId })
+
         // Update current chat ID
         setCurrentChatId(newChatId)
-        
+
         // Notify parent component if callback provided
         onChatCreated?.(newChatId)
       }
-      
+
     } catch (error) {
-      console.error('[CHAT-GRPC-HOOK] Failed to check for new chat:', error)
+      logger.error('Failed to check for new chat', error)
     }
   }
 
   // Create a new chat session
   const createNewChat = async () => {
     try {
-      console.log('[CHAT-GRPC-HOOK] Creating new chat for context:', {
+      logger.debug('Creating new chat', {
         domainType: contextOptions?.domainType || chatContext?.domainType,
         domainId: contextOptions?.domainId || chatContext?.domainId
       })
@@ -487,18 +482,18 @@ export function useChatGRPC(
       // when the first message is sent with no chatId
 
     } catch (error) {
-      console.error('[CHAT-GRPC-HOOK] Failed to create new chat:', error)
+      logger.error('Failed to create new chat', error)
     }
   }
 
   // Cancel current message processing
   const cancelMessage = async () => {
     if (!currentMessageId || !abortControllerRef.current) {
-      console.warn('[CHAT-GRPC-HOOK] No message to cancel')
+      logger.debug('No message to cancel')
       return
     }
 
-    console.log('[CHAT-GRPC-HOOK] Cancelling message:', currentMessageId)
+    logger.debug('Cancelling message', { messageId: currentMessageId })
 
     try {
       // Abort the fetch request
@@ -511,10 +506,10 @@ export function useChatGRPC(
         credentials: 'include',
         body: JSON.stringify({ messageId: currentMessageId })
       }).catch(err => {
-        console.warn('[CHAT-GRPC-HOOK] Backend cancel failed (non-critical):', err)
+        logger.debug('Backend cancel failed (non-critical)', err)
       })
     } catch (error) {
-      console.error('[CHAT-GRPC-HOOK] Cancel error:', error)
+      logger.error('Cancel error', error)
     }
   }
 
