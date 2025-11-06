@@ -9,6 +9,7 @@
  */
 
 import { ChatId, ChatMessageId } from "../../shared/value-objects";
+import type { AnyAttachmentMetadata } from "../../../domain/multimodal/value-objects/attachment-metadata";
 
 export interface ChatMessageMetadata {
   ragSources?: Array<{
@@ -21,6 +22,8 @@ export interface ChatMessageMetadata {
   processingTime?: number;
   tokenCount?: number;
   error?: string;
+  // Multimodal attachments (images, audio, documents)
+  attachments?: AnyAttachmentMetadata[];
 }
 
 export interface ChatMessage {

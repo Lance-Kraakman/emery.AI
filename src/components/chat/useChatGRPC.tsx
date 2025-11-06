@@ -68,10 +68,11 @@ function createMultimodalMessage(
 function createImagePart(attachment: AnyAttachmentMetadata): MessagePart {
   return {
     type: 'data-file',
-    name: attachment.filename,
-    url: attachment.url,
-    mimeType: attachment.mimeType,
-    size: attachment.sizeBytes,
+    data: {
+      filename: attachment.filename,
+      mediaType: attachment.mimeType,
+      url: attachment.url,
+    }
   }
 }
 
@@ -81,10 +82,11 @@ function createImagePart(attachment: AnyAttachmentMetadata): MessagePart {
 function createAudioPart(attachment: AnyAttachmentMetadata): MessagePart {
   return {
     type: 'data-file',
-    name: attachment.filename,
-    url: attachment.url,
-    mimeType: attachment.mimeType,
-    size: attachment.sizeBytes,
+    data: {
+      filename: attachment.filename,
+      mediaType: attachment.mimeType,
+      url: attachment.url,
+    }
   }
 }
 
@@ -94,10 +96,11 @@ function createAudioPart(attachment: AnyAttachmentMetadata): MessagePart {
 function createFilePart(attachment: AnyAttachmentMetadata): MessagePart {
   return {
     type: 'data-file',
-    name: attachment.filename,
-    url: attachment.url,
-    mimeType: attachment.mimeType,
-    size: attachment.sizeBytes,
+    data: {
+      filename: attachment.filename,
+      mediaType: attachment.mimeType,
+      url: attachment.url,
+    }
   }
 }
 
