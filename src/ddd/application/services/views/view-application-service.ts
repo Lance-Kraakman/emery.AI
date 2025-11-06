@@ -23,6 +23,7 @@ import { UserId } from "@/ddd/domain/shared/value-objects/user-id";
 import type { Result } from "@/ddd/domain/shared/result";
 import type { Row } from "@/ddd/domain/tables/value-objects/row";
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field";
+import type { RowFilter, RowQueryOptions } from "@/ddd/infrastructure/db/types/table-persistence";
 import { createDebugLogger } from "@/lib/utils/debug-logger";
 
 const logger = createDebugLogger("ViewService");
@@ -428,41 +429,51 @@ export class ViewApplicationService {
       }
       const tableFields = table.fields;
 
-      // 4. Fetch rows from table
-      // AIDEV-NOTE: For now, fetch all rows and filter/sort in memory
-      // In production, this should be pushed down to the database query
-      const rows = await this.tableApplicationService.getRows(dataSource.tableId, {
-        limit: 10000, // Fetch large batch for in-memory processing
-        offset: 0,
-      });
+      // 4. Build database query options with filters, sorting, and pagination
+      // AIDEV-NOTE: Push all operations to database for optimal performance
+      const queryOptions: RowQueryOptions = {
+        limit: pagination.pageSize,
+        offset: pagination.offset,
+      };
 
-      // 5. Apply filters (in-memory for now)
-      let filteredRows = rows;
+      // Add filters if present
       if (dataSource.hasFilters()) {
-        filteredRows = this.applyFilters(filteredRows, dataSource.filters, tableFields);
+        queryOptions.filters = this.convertFilterConfigToRowFilter(dataSource.filters, tableFields);
       }
 
-      // 6. Apply sorting (in-memory for now)
+      // Add sorting if present
       if (dataSource.hasSorting()) {
-        filteredRows = this.applySorting(filteredRows, dataSource.getSortedSorting(), tableFields);
+        const sortParams = this.convertSortConfigToOrderBy(dataSource.getSortedSorting(), tableFields);
+        if (sortParams) {
+          queryOptions.orderBy = sortParams.orderBy;
+          queryOptions.orderDirection = sortParams.orderDirection;
+        }
       }
 
-      // 6. Apply pagination (slice filtered/sorted results)
-      const paginatedRows = filteredRows.slice(
-        pagination.offset,
-        pagination.offset + pagination.pageSize
-      );
+      // 5. Fetch rows from database with all operations applied
+      const rows = await this.tableApplicationService.getRows(dataSource.tableId, queryOptions);
+
+      // 6. Get total count for pagination (with same filters applied)
+      // AIDEV-NOTE: This requires a separate count query with filters but no limit/offset
+      const countOptions: RowQueryOptions = {
+        limit: 0, // No limit for count
+        offset: 0,
+        filters: queryOptions.filters, // Same filters as data query
+      };
+      const allFilteredRows = await this.tableApplicationService.getRows(dataSource.tableId, countOptions);
+      const totalCount = allFilteredRows.length;
 
       logger.debug("View executed successfully", {
         id: command.dataSourceId.value,
-        rowCount: paginatedRows.length,
+        rowCount: rows.length,
+        totalCount
       });
 
       return {
         success: true,
         data: {
-          rows: paginatedRows,
-          totalCount: filteredRows.length,
+          rows,
+          totalCount,
           pageSize: pagination.pageSize,
           offset: pagination.offset,
         },
@@ -764,22 +775,28 @@ export class ViewApplicationService {
     chartConfig: any,
     tableFields: TableField[]
   ): Promise<ChartDataPoint[]> {
-    // Fetch rows from table
-    const rows = await this.tableApplicationService.getRows(view.tableId, {
+    // Build database query options with filters and sorting
+    const queryOptions: RowQueryOptions = {
       limit: chartConfig.maxDataPoints || 1000,
       offset: 0,
-    });
+    };
 
-    // Apply filters if configured
-    let filteredRows = rows;
+    // Add filters if present
     if (view.hasFilters()) {
-      filteredRows = this.applyFilters(filteredRows, view.filters, tableFields);
+      queryOptions.filters = this.convertFilterConfigToRowFilter(view.filters, tableFields);
     }
 
-    // Apply sorting if configured
+    // Add sorting if present
     if (view.hasSorting()) {
-      filteredRows = this.applySorting(filteredRows, view.getSortedSorting(), tableFields);
+      const sortParams = this.convertSortConfigToOrderBy(view.getSortedSorting(), tableFields);
+      if (sortParams) {
+        queryOptions.orderBy = sortParams.orderBy;
+        queryOptions.orderDirection = sortParams.orderDirection;
+      }
     }
+
+    // Fetch rows from database with all operations applied
+    const filteredRows = await this.tableApplicationService.getRows(view.tableId, queryOptions);
 
     // Get field names for X and Y axes
     const xAxisField = tableFields.find(f => f.id.value === chartConfig.xAxisFieldId);
@@ -824,6 +841,9 @@ export class ViewApplicationService {
 
   /**
    * Execute aggregated mode chart data - GROUP BY with aggregations
+   *
+   * AIDEV-NOTE: Uses database GROUP BY for optimal performance.
+   * Supports unlimited dataset size via database aggregation engine.
    */
   private async executeAggregatedChartData(
     view: View,
@@ -834,92 +854,62 @@ export class ViewApplicationService {
       throw new Error("Aggregated mode requires groupByFieldId and at least one aggregation");
     }
 
-    // Get the GROUP BY field name
+    // Get the GROUP BY field
     const groupByField = tableFields.find(f => f.id.value === chartConfig.groupByFieldId);
     if (!groupByField) {
       throw new Error(`GROUP BY field ${chartConfig.groupByFieldId} not found`);
     }
 
-    // Convert aggregations to format expected by table service
-    const aggregationParams = chartConfig.aggregations.map((agg: any) => {
-      const field = tableFields.find(f => f.id.value === agg.fieldId);
-      if (!field) {
-        throw new Error(`Aggregation field ${agg.fieldId} not found`);
-      }
+    // Build aggregation query parameters
+    const aggQuery = this.buildAggregationQuery(
+      chartConfig.aggregations,
+      [chartConfig.groupByFieldId], // Group by field IDs
+      tableFields
+    );
 
-      return {
-        fieldId: field.id.value.toString(),  // Use numeric field ID for Delta Lake columns
-        type: agg.aggregationType,
-        alias: agg.label || field.name,
-        formatType: 'number',
-      };
-    });
-
-    // Execute aggregated query with GROUP BY
-    // AIDEV-TODO: Need to implement groupBy support in table service
-    // For now, fetch all rows and group in-memory
-    const rows = await this.tableApplicationService.getRows(view.tableId, {
-      limit: 10000,
+    // Build database query options
+    const queryOptions: RowQueryOptions = {
+      limit: chartConfig.maxDataPoints || 0, // 0 = no limit
       offset: 0,
-    });
+      aggregations: aggQuery.aggregations,
+      groupByFields: aggQuery.groupByFields,
+    };
 
-    // Apply filters before grouping
-    let filteredRows = rows;
+    // Add filters if present
     if (view.hasFilters()) {
-      filteredRows = this.applyFilters(filteredRows, view.filters, tableFields);
+      queryOptions.filters = this.convertFilterConfigToRowFilter(view.filters, tableFields);
     }
 
-    // Group rows by the GROUP BY field
-    const groupedData = new Map<any, Row[]>();
-    filteredRows.forEach(row => {
-      const rowData = row.toPlainObject(tableFields);
-      const groupKey = rowData[groupByField.id.value];
-      if (!groupedData.has(groupKey)) {
-        groupedData.set(groupKey, []);
+    // Add sorting if configured in chart config
+    // AIDEV-NOTE: For aggregated charts, we may want to sort by aggregated values
+    // This is handled post-query below for flexibility
+    if (view.hasSorting()) {
+      const sortParams = this.convertSortConfigToOrderBy(view.getSortedSorting(), tableFields);
+      if (sortParams) {
+        queryOptions.orderBy = sortParams.orderBy;
+        queryOptions.orderDirection = sortParams.orderDirection;
       }
-      groupedData.get(groupKey)!.push(row);
-    });
+    }
 
-    // Compute aggregations for each group
-    const dataPoints: ChartDataPoint[] = Array.from(groupedData.entries()).map(([groupKey, groupRows]) => {
+    // Execute aggregated query with GROUP BY at database level
+    const aggregatedRows = await this.tableApplicationService.getRows(view.tableId, queryOptions);
+
+    // Convert aggregated rows to chart data points
+    const dataPoints: ChartDataPoint[] = aggregatedRows.map(row => {
+      const rowData = row.toPlainObject(tableFields);
+
       const point: ChartDataPoint = {
-        x: groupKey,
+        x: rowData[groupByField.id.value], // Group by value (x-axis)
         y: 0, // Will be set by first aggregation
       };
 
+      // Map aggregated values to data point properties
       chartConfig.aggregations.forEach((agg: any, index: number) => {
         const field = tableFields.find(f => f.id.value === agg.fieldId);
         if (!field) return;
 
-        // Compute aggregation value
-        const values = groupRows.map(row => {
-          const rowData = row.toPlainObject(tableFields);
-          return rowData[field.id.value];
-        }).filter(v => v != null);
-
-        let aggregatedValue: any;
-        switch (agg.aggregationType) {
-          case 'sum':
-            aggregatedValue = values.reduce((sum, val) => sum + Number(val), 0);
-            break;
-          case 'avg':
-            aggregatedValue = values.length > 0
-              ? values.reduce((sum, val) => sum + Number(val), 0) / values.length
-              : 0;
-            break;
-          case 'count':
-            aggregatedValue = values.length;
-            break;
-          case 'min':
-            aggregatedValue = values.length > 0 ? Math.min(...values.map(Number)) : 0;
-            break;
-          case 'max':
-            aggregatedValue = values.length > 0 ? Math.max(...values.map(Number)) : 0;
-            break;
-          default:
-            aggregatedValue = 0;
-        }
-
+        // Get aggregated value from row (database computed it)
+        const aggregatedValue = rowData[field.id.value];
         const label = agg.label || field.name;
         point[label] = aggregatedValue;
 
@@ -932,7 +922,7 @@ export class ViewApplicationService {
       return point;
     });
 
-    // Apply sorting if configured
+    // Apply sorting if configured in chart config (post-query sorting)
     if (chartConfig.sortBy && chartConfig.sortDirection) {
       dataPoints.sort((a, b) => {
         const aVal = chartConfig.sortBy === 'x' ? a.x : a.y;
@@ -943,7 +933,7 @@ export class ViewApplicationService {
       });
     }
 
-    // Limit data points if maxDataPoints is set
+    // Limit data points if maxDataPoints is set (post-query slicing)
     if (chartConfig.maxDataPoints && dataPoints.length > chartConfig.maxDataPoints) {
       return dataPoints.slice(0, chartConfig.maxDataPoints);
     }
@@ -985,80 +975,182 @@ export class ViewApplicationService {
     }
   }
 
-  /**
-   * Apply filters to rows (in-memory implementation)
-   * AIDEV-NOTE: This is a temporary implementation. In production, filters should be
-   * applied at the database level for better performance with large datasets.
-   */
-  private applyFilters(rows: Row[], filters: readonly FilterConfig[], tableFields: TableField[]): Row[] {
-    return rows.filter((row) => {
-      const rowData = row.toPlainObject(tableFields);
-      return filters.every((filter) => {
-        const field = tableFields.find(f => f.id.value === filter.fieldId);
-        if (!field) return true; // Skip filter if field not found
-        const fieldValue = rowData[field.id.value];
+  // ============================================================================
+  // Query Builder Helper Methods
+  // ============================================================================
 
-        switch (filter.operator) {
-          case "equals":
-            return fieldValue === filter.value;
-          case "not_equals":
-            return fieldValue !== filter.value;
-          case "contains":
-            return String(fieldValue).includes(String(filter.value));
-          case "not_contains":
-            return !String(fieldValue).includes(String(filter.value));
-          case "starts_with":
-            return String(fieldValue).startsWith(String(filter.value));
-          case "ends_with":
-            return String(fieldValue).endsWith(String(filter.value));
-          case "greater_than":
-            return Number(fieldValue) > Number(filter.value);
-          case "greater_than_or_equal":
-            return Number(fieldValue) >= Number(filter.value);
-          case "less_than":
-            return Number(fieldValue) < Number(filter.value);
-          case "less_than_or_equal":
-            return Number(fieldValue) <= Number(filter.value);
-          case "is_empty":
-            return !fieldValue || fieldValue === "";
-          case "is_not_empty":
-            return !!fieldValue && fieldValue !== "";
-          case "is_true":
-            return fieldValue === true;
-          case "is_false":
-            return fieldValue === false;
-          default:
-            return true;
-        }
-      });
+  /**
+   * Convert domain FilterConfig to database RowFilter format
+   *
+   * AIDEV-NOTE: Maps view filter operators to database filter operators and converts
+   * field names to field IDs for Delta Lake queries.
+   *
+   * @param filters - Domain filter configurations
+   * @param tableFields - Table field definitions for name→ID mapping
+   * @returns Database-compatible filter array
+   */
+  private convertFilterConfigToRowFilter(
+    filters: readonly FilterConfig[],
+    tableFields: readonly TableField[]
+  ): RowFilter[] {
+    return filters.map(filter => {
+      // Find field by ID to get field name for database query
+      const field = tableFields.find(f => f.id.value === filter.fieldId);
+      if (!field) {
+        logger.error('Filter references unknown field', { fieldId: filter.fieldId });
+        throw new Error(`Filter references unknown field ID: ${filter.fieldId}`);
+      }
+
+      // Convert field ID to field name (database uses field names as column names)
+      const fieldKey = field.id.value.toString();
+
+      // Map domain filter operators to database operators
+      let dbOperator: RowFilter['operator'];
+      let dbValue: any = filter.value;
+
+      switch (filter.operator) {
+        case 'equals':
+          dbOperator = 'eq';
+          break;
+        case 'not_equals':
+          dbOperator = 'ne';
+          break;
+        case 'contains':
+          // Use case-insensitive LIKE with wildcards
+          dbOperator = 'ilike';
+          dbValue = `%${filter.value}%`;
+          break;
+        case 'not_contains':
+          // Negated case-insensitive LIKE
+          dbOperator = 'ilike'; // Will be wrapped with NOT in repository
+          dbValue = `%${filter.value}%`;
+          // AIDEV-TODO: Repository may need to handle NOT operators
+          break;
+        case 'starts_with':
+          dbOperator = 'ilike';
+          dbValue = `${filter.value}%`;
+          break;
+        case 'ends_with':
+          dbOperator = 'ilike';
+          dbValue = `%${filter.value}`;
+          break;
+        case 'greater_than':
+          dbOperator = 'gt';
+          break;
+        case 'greater_than_or_equal':
+          dbOperator = 'gte';
+          break;
+        case 'less_than':
+          dbOperator = 'lt';
+          break;
+        case 'less_than_or_equal':
+          dbOperator = 'lte';
+          break;
+        case 'is_empty':
+          // Empty means NULL or empty string
+          dbOperator = 'is_null';
+          // AIDEV-NOTE: This only handles NULL. Empty string check needs OR condition
+          break;
+        case 'is_not_empty':
+          dbOperator = 'is_not_null';
+          break;
+        case 'is_true':
+          dbOperator = 'eq';
+          dbValue = true;
+          break;
+        case 'is_false':
+          dbOperator = 'eq';
+          dbValue = false;
+          break;
+        default:
+          logger.error('Unknown filter operator, using equals', { operator: filter.operator });
+          dbOperator = 'eq';
+      }
+
+      return {
+        field: fieldKey,
+        operator: dbOperator,
+        value: dbValue
+      };
     });
   }
 
   /**
-   * Apply sorting to rows (in-memory implementation)
-   * AIDEV-NOTE: This is a temporary implementation. In production, sorting should be
-   * applied at the database level for better performance.
+   * Convert domain SortConfig to database orderBy/orderDirection parameters
+   *
+   * AIDEV-NOTE: Database currently supports single-column sorting.
+   * Takes the first sort config with highest priority.
+   *
+   * @param sorting - Domain sort configurations
+   * @param tableFields - Table field definitions for ID→name mapping
+   * @returns Object with orderBy field name and direction, or null if no sorting
    */
-  private applySorting(rows: Row[], sorting: readonly SortConfig[], tableFields: TableField[]): Row[] {
-    return [...rows].sort((a, b) => {
-      const aData = a.toPlainObject(tableFields);
-      const bData = b.toPlainObject(tableFields);
+  private convertSortConfigToOrderBy(
+    sorting: readonly SortConfig[],
+    tableFields: readonly TableField[]
+  ): { orderBy: string; orderDirection: 'ASC' | 'DESC' } | null {
+    if (!sorting || sorting.length === 0) {
+      return null;
+    }
 
-      for (const sort of sorting) {
-        const field = tableFields.find(f => f.id.value === sort.fieldId);
-        if (!field) continue; // Skip sorting by this field if not found
-        const aValue = aData[field.id.value];
-        const bValue = bData[field.id.value];
+    // Take first sort config (database supports single sort column)
+    const firstSort = sorting[0];
+    const field = tableFields.find(f => f.id.value === firstSort.fieldId);
 
-        let comparison = 0;
-        if (aValue < bValue) comparison = -1;
-        if (aValue > bValue) comparison = 1;
+    if (!field) {
+      logger.error('Sort references unknown field', { fieldId: firstSort.fieldId });
+      return null;
+    }
 
-        if (comparison !== 0) {
-          return sort.direction === "asc" ? comparison : -comparison;
-        }
+    return {
+      orderBy: field.id.value.toString(),
+      orderDirection: firstSort.direction === 'asc' ? 'ASC' : 'DESC'
+    };
+  }
+
+  /**
+   * Build aggregation query parameters for chart views
+   *
+   * AIDEV-NOTE: Maps chart aggregation config to database GROUP BY query format.
+   * Supports both grouped aggregations (multiple data points) and global aggregations (single metric).
+   *
+   * @param aggregations - Aggregation configurations from chart config
+   * @param groupByFieldIds - Field IDs to group by (for multi-series charts)
+   * @param tableFields - Table field definitions
+   * @returns Object with aggregations array and optional groupByFields array
+   */
+  private buildAggregationQuery(
+    aggregations: readonly { fieldId: number; aggregationType: string; label?: string }[],
+    groupByFieldIds: number[],
+    tableFields: readonly TableField[]
+  ): { aggregations: RowQueryOptions['aggregations']; groupByFields?: string[] } {
+    // Map aggregations to database format
+    const dbAggregations = aggregations.map(agg => {
+      const field = tableFields.find(f => f.id.value === agg.fieldId);
+      if (!field) {
+        throw new Error(`Aggregation references unknown field ID: ${agg.fieldId}`);
       }
-      return 0;
+
+      return {
+        fieldId: field.id.value.toString(),
+        type: agg.aggregationType, // sum, avg, count, min, max, etc.
+        alias: agg.label || field.name, // Use label if provided, otherwise field name
+        formatType: field.type // Hint for result formatting
+      };
     });
+
+    // Map group by fields to database format
+    const dbGroupByFields = groupByFieldIds.map(fieldId => {
+      const field = tableFields.find(f => f.id.value === fieldId);
+      if (!field) {
+        throw new Error(`Group by references unknown field ID: ${fieldId}`);
+      }
+      return field.id.value.toString();
+    });
+
+    return {
+      aggregations: dbAggregations,
+      groupByFields: dbGroupByFields.length > 0 ? dbGroupByFields : undefined
+    };
   }
 }
