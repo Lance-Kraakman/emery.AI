@@ -36,6 +36,8 @@ import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
 import { getChatProcessingClient, type StreamingChatResponse, type ChatProcessingOptions } from '@/lib/grpc/chat-processing-client';
 import type { HistoryMessage } from '@/lib/grpc/generated/agent_worker';
 import type { MessagePart } from '@llamaindex/chat-ui';
+import { s3ChatAttachmentService } from '@/ddd/infrastructure/multimodal/s3-chat-attachment-service';
+import type { AnyAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
 
 /**
  * Extract text content from Message parts array
@@ -104,8 +106,60 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Parse request and get user's agent API key for tools
-    const { messages, chatId, messageId, domainType, domainId, tools = [] } = await req.json();
+    // 2. Parse request (handle both JSON and FormData with file uploads)
+    const contentType = req.headers.get('content-type') || '';
+    let messages: any[];
+    let chatId: string | undefined;
+    let messageId: string;
+    let domainType: string | undefined;
+    let domainId: number | undefined;
+    let tools: any[] = [];
+    let uploadedFiles: File[] = [];
+
+    if (contentType.includes('multipart/form-data')) {
+      // Handle FormData with file uploads
+      console.log('[CHAT-GRPC-API] Parsing FormData request with attachments');
+      const formData = await req.formData();
+
+      // Parse JSON data field
+      const dataField = formData.get('data');
+      if (!dataField || typeof dataField !== 'string') {
+        return new Response(
+          JSON.stringify({ error: 'Missing or invalid data field in FormData' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const parsedData = JSON.parse(dataField);
+      messages = parsedData.messages;
+      chatId = parsedData.chatId;
+      messageId = parsedData.messageId;
+      domainType = parsedData.domainType;
+      domainId = parsedData.domainId;
+      tools = parsedData.tools || [];
+
+      // Extract uploaded files
+      for (const [key, value] of formData.entries()) {
+        if (key.startsWith('file_') && value instanceof File) {
+          uploadedFiles.push(value);
+        }
+      }
+
+      console.log('[CHAT-GRPC-API] Extracted attachments:', {
+        count: uploadedFiles.length,
+        files: uploadedFiles.map(f => ({ name: f.name, type: f.type, size: f.size }))
+      });
+    } else {
+      // Handle standard JSON request
+      const body = await req.json();
+      messages = body.messages;
+      chatId = body.chatId;
+      messageId = body.messageId;
+      domainType = body.domainType;
+      domainId = body.domainId;
+      tools = body.tools || [];
+    }
+
     const latestMessage = getMessageContent(messages[messages.length - 1]);
 
     console.log('[CHAT-GRPC-API] Request includes tools:', {
@@ -228,6 +282,45 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Upload attachments to S3 if present
+    const attachmentMetadata: AnyAttachmentMetadata[] = [];
+    if (uploadedFiles.length > 0 && currentChatId) {
+      console.log('[CHAT-GRPC-API] Uploading attachments to S3');
+
+      for (const file of uploadedFiles) {
+        try {
+          // Determine attachment type from MIME type
+          let attachmentType: 'image' | 'audio' | 'document' | 'file' = 'file';
+          if (file.type.startsWith('image/')) {
+            attachmentType = 'image';
+          } else if (file.type.startsWith('audio/')) {
+            attachmentType = 'audio';
+          } else if (file.type === 'application/pdf' || file.type.includes('document')) {
+            attachmentType = 'document';
+          }
+
+          const result = await s3ChatAttachmentService.uploadAttachment({
+            file,
+            organizationId,
+            chatId: currentChatId,
+            messageId: messageId || `msg_${Date.now()}`,
+            type: attachmentType
+          });
+
+          attachmentMetadata.push(result.metadata);
+
+          console.log('[CHAT-GRPC-API] Uploaded attachment:', {
+            filename: file.name,
+            type: attachmentType,
+            s3Key: result.s3Key
+          });
+        } catch (error) {
+          console.error('[CHAT-GRPC-API] Failed to upload attachment:', file.name, error);
+          // Continue with other files even if one fails
+        }
+      }
+    }
+
     // Save user message
     if (currentChatId && latestMessage) {
       console.log('[CHAT-GRPC-API] Saving user message to database');
@@ -236,7 +329,10 @@ export async function POST(req: NextRequest) {
         userId: userId,
         organizationId: organizationId,
         content: latestMessage,
-        role: 'user'
+        role: 'user',
+        metadata: attachmentMetadata.length > 0
+          ? { attachments: attachmentMetadata }
+          : undefined
       };
 
       const messageResult = await chatApplicationService.sendMessage(userMessageDTO);
