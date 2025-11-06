@@ -56,6 +56,154 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         clean_path = path.strip('/')
         return f"s3://{bucket}/{clean_path}"
 
+    def _log_request(self, method: str, **fields) -> None:
+        """Log request in compact single-line format.
+
+        Args:
+            method: Method name for context
+            **fields: Key-value pairs to log
+        """
+        field_str = ", ".join(f"{k}='{v}'" for k, v in fields.items())
+        logger.info(f"[{method}] Request: {field_str}")
+
+    def _log_dataframe(self, df: pl.DataFrame, context: str, show_sample: bool = True) -> None:
+        """Log DataFrame details in compact format.
+
+        Args:
+            df: Polars DataFrame to log
+            context: Context string for logging
+            show_sample: Whether to show sample row
+        """
+        sample = f", sample={df.head(1).to_dicts()[0]}" if show_sample and len(df) > 0 else ""
+        logger.info(f"[{context}] DataFrame: shape={df.shape}, cols={df.columns}{sample}")
+
+    def _log_delta_state(self, delta_table: DeltaTable, context: str) -> None:
+        """Log Delta table state in compact format.
+
+        Args:
+            delta_table: Delta table instance
+            context: Context string for logging
+        """
+        logger.info(f"[{context}] Delta: version={delta_table.version()}, files={len(delta_table.files())}")
+
+    def _log_field_mismatch(self, input_fields: set, schema_fields: set, context: str) -> None:
+        """Log field mismatches between input and schema.
+
+        Args:
+            input_fields: Fields present in input data
+            schema_fields: Fields in Delta Lake schema
+            context: Context string for logging
+        """
+        missing = input_fields - schema_fields
+        extra = schema_fields - input_fields
+
+        if missing:
+            logger.warning(f"[{context}] Fields in input NOT in schema (will be dropped): {sorted(missing)}")
+        if extra:
+            logger.info(f"[{context}] Fields in schema not in input (null-filled): {sorted(extra)}")
+
+    def _validate_s3_path(self, request, method: str) -> tuple:
+        """Validate s3_path field exists and is not empty.
+
+        Args:
+            request: Request object with s3_path field
+            method: Method name for error messages
+
+        Returns:
+            Tuple of (success: bool, s3_uri: str, error_response: Optional[Response])
+            If success=False, error_response should be returned immediately
+        """
+        if not hasattr(request, 's3_path'):
+            logger.error(f"[{method}] s3_path field missing from request!")
+            return False, None, table_service_pb2.TableResponse(
+                success=False, message="s3_path field is missing from request"
+            )
+
+        if not request.s3_path:
+            logger.error(f"[{method}] s3_path is empty!")
+            return False, None, table_service_pb2.TableResponse(
+                success=False, message="s3_path is required but empty"
+            )
+
+        s3_uri = self._to_s3_uri(request.s3_path)
+        return True, s3_uri, None
+
+    def _get_delta_table_safe(self, s3_uri: str, storage_options: dict, method: str, must_exist: bool = True):
+        """Safely load Delta table with error handling.
+
+        Args:
+            s3_uri: Full S3 URI to Delta table
+            storage_options: S3 connection options
+            method: Method name for logging
+            must_exist: If True, failure to load is an error; if False, it's a warning
+
+        Returns:
+            Tuple of (delta_table: Optional[DeltaTable], error_msg: Optional[str])
+        """
+        try:
+            delta_table = DeltaTable(s3_uri, storage_options=storage_options)
+            self._log_delta_state(delta_table, method)
+            return delta_table, None
+        except Exception as e:
+            log_func = logger.error if must_exist else logger.warning
+            log_func(f"[{method}] Delta table not found at {s3_uri}: {e}")
+            return None, str(e)
+
+    def _extract_protobuf_values(self, values: List) -> List[Any]:
+        """Extract Python values from list of RowDataValue protobuf objects.
+
+        Args:
+            values: List of RowDataValue protobuf objects
+
+        Returns:
+            List of extracted Python values
+        """
+        result = []
+        for val in values:
+            if val.HasField('text_value'):
+                result.append(val.text_value)
+            elif val.HasField('number_value'):
+                result.append(val.number_value)
+            elif val.HasField('boolean_value'):
+                result.append(val.boolean_value)
+            elif val.HasField('date_value'):
+                result.append(val.date_value)
+            elif val.HasField('json_value'):
+                result.append(val.json_value)
+            else:
+                result.append(None)
+        return result
+
+    def _verify_write_operation(self, s3_uri: str, storage_options: dict, method: str, expected_min_rows: int = 0) -> bool:
+        """Verify write operation succeeded by checking Delta table state.
+
+        Args:
+            s3_uri: Full S3 URI to Delta table
+            storage_options: S3 connection options
+            method: Method name for logging
+            expected_min_rows: Minimum expected row count (0 = skip row check)
+
+        Returns:
+            True if verification passed, False otherwise
+        """
+        try:
+            updated_table = DeltaTable(s3_uri, storage_options=storage_options)
+            self._log_delta_state(updated_table, f"{method} AFTER write")
+
+            # Read back to verify data
+            arrow_table = updated_table.to_pyarrow_table()
+            logger.info(f"[{method}] Verification: {arrow_table.num_rows} rows, {arrow_table.num_columns} cols")
+
+            if expected_min_rows > 0 and arrow_table.num_rows < expected_min_rows:
+                logger.error(f"[{method}] VERIFICATION FAILED: Expected >={expected_min_rows} rows, got {arrow_table.num_rows}")
+                return False
+
+            logger.info(f"[{method}] ✅ Verification passed")
+            return True
+        except Exception as e:
+            logger.error(f"[{method}] Verification error: {e}")
+            return False
+
     def _get_delta_schema_as_pyarrow(self, delta_table: DeltaTable) -> pa.Schema:
         """Convert Delta Lake schema to PyArrow schema.
 
@@ -239,32 +387,18 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         # Log first record for debugging and detect field mismatches
         if records:
             first_record_keys = list(records[0].keys())
-            logger.info(f"[_create_dataframe_with_schema] First record keys: {first_record_keys}")
-            logger.info(f"[_create_dataframe_with_schema] First record: {records[0]}")
+            logger.info(f"[_create_dataframe_with_schema] First record: keys={first_record_keys}, sample={records[0]}")
 
             # CRITICAL: Detect fields in input that are NOT in Delta Lake schema
             input_fields = set(first_record_keys)
             schema_fields = set(polars_field_names)
-            missing_in_schema = input_fields - schema_fields
-            extra_in_schema = schema_fields - input_fields
-
-            if missing_in_schema:
-                logger.warning(f"[_create_dataframe_with_schema] ⚠️  FIELDS IN INPUT BUT NOT IN DELTA SCHEMA (WILL BE DROPPED): {sorted(missing_in_schema)}")
-                logger.warning(f"[_create_dataframe_with_schema] This will cause DATA LOSS - these fields will be silently ignored!")
-
-            if extra_in_schema:
-                logger.info(f"[_create_dataframe_with_schema] Fields in schema but not in input (will be filled with nulls): {sorted(extra_in_schema)}")
+            self._log_field_mismatch(input_fields, schema_fields, "_create_dataframe_with_schema")
 
             # DEFENSIVE: Filter records to only include fields that exist in schema
-            # This prevents silent data loss by making the filtering explicit
+            missing_in_schema = input_fields - schema_fields
             if missing_in_schema:
-                logger.warning(f"[_create_dataframe_with_schema] Filtering out unknown fields from records...")
-                filtered_records = []
-                for record in records:
-                    filtered_record = {k: v for k, v in record.items() if k in schema_fields}
-                    filtered_records.append(filtered_record)
-                records = filtered_records
-                logger.info(f"[_create_dataframe_with_schema] Filtered records to only include schema fields")
+                logger.warning(f"[_create_dataframe_with_schema] Filtering {len(missing_in_schema)} unknown fields...")
+                records = [{k: v for k, v in record.items() if k in schema_fields} for record in records]
 
         # 4. Create DataFrame with EXPLICIT schema (no inference, no casting)
         # AIDEV-NOTE: Zero-copy friendly - types match Delta Lake from creation
@@ -272,15 +406,13 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         # Any extra fields in records will be silently dropped by Polars
         df = pl.DataFrame(records, schema=polars_schema)
 
-        actual_df_columns = df.columns
-        logger.info(f"[_create_dataframe_with_schema] Final DataFrame schema: {df.schema}")
-        logger.info(f"[_create_dataframe_with_schema] Final DataFrame columns: {actual_df_columns}")
+        # Log final DataFrame state
+        logger.info(f"[_create_dataframe_with_schema] Created DataFrame: shape={df.shape}, cols={df.columns}")
 
         # Final validation: confirm what was dropped
-        if records and len(first_record_keys) != len(actual_df_columns):
-            dropped_count = len(first_record_keys) - len(actual_df_columns)
-            logger.error(f"[_create_dataframe_with_schema] ❌ DATA LOSS DETECTED: {dropped_count} fields were dropped during DataFrame creation!")
-            logger.error(f"[_create_dataframe_with_schema] Input had {len(first_record_keys)} fields, DataFrame has {len(actual_df_columns)} fields")
+        if records and len(first_record_keys) != len(df.columns):
+            dropped = len(first_record_keys) - len(df.columns)
+            logger.error(f"[_create_dataframe_with_schema] ❌ DATA LOSS: {dropped} fields dropped (input={len(first_record_keys)}, output={len(df.columns)})")
 
         return df
 
@@ -317,38 +449,17 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
     def CreateTable(self, request: table_service_pb2.CreateTableRequest, context) -> table_service_pb2.TableResponse:
         """Create a new Delta table with the specified schema."""
         try:
-            # Debug logging - log all request fields
-            logger.info(f"[CreateTable] Request received:")
-            logger.info(f"  - name: '{request.name}'")
-            logger.info(f"  - description: '{request.description}'")
-            logger.info(f"  - user_id: '{request.user_id}'")
-            logger.info(f"  - organization_id: '{request.organization_id}'")
-            logger.info(f"  - s3_path: '{getattr(request, 's3_path', 'MISSING')}'")
-            logger.info(f"  - Request fields: {dir(request)}")
-            logger.info(f"  - Has s3_path field: {hasattr(request, 's3_path')}")
-            
-            # Check if s3_path exists and is not empty
-            if not hasattr(request, 's3_path'):
-                logger.error("[CreateTable] s3_path field is missing from request!")
-                return table_service_pb2.TableResponse(
-                    success=False,
-                    message="s3_path field is missing from request"
-                )
-            
-            if not request.s3_path:
-                logger.error("[CreateTable] s3_path is empty!")
-                return table_service_pb2.TableResponse(
-                    success=False,
-                    message="s3_path is required but empty"
-                )
-            
-            logger.info(f"Creating table: {request.name} at {request.s3_path}")
+            # Compact logging
+            self._log_request("CreateTable", name=request.name, organization_id=request.organization_id,
+                            user_id=request.user_id, s3_path=request.s3_path)
 
-            # Convert relative path to full S3 URI
-            s3_uri = self._to_s3_uri(request.s3_path)
+            # Validate s3_path
+            valid, s3_uri, error_response = self._validate_s3_path(request, "CreateTable")
+            if not valid:
+                return error_response
+
             storage_options = self._get_storage_options()
-
-            logger.info(f"Writing to S3 URI: {s3_uri}")
+            logger.info(f"[CreateTable] Writing to {s3_uri}")
 
             # Build schema from structured table fields
             schema = self._build_schema_from_table_fields(request.schema.fields)
@@ -388,19 +499,16 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 metadata=dict(request.metadata),
                 s3_path=request.s3_path
             )
-            
-            logger.info(f"Successfully created table: {request.name} at {request.s3_path}")
+
+            logger.info(f"[CreateTable] ✅ Created table '{request.name}'")
             return table_service_pb2.TableResponse(
                 success=True,
                 table=table,
                 message="Table created successfully"
             )
-            
+
         except Exception as e:
-            logger.error(f"Error creating table {request.name}: {e}")
-            logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"[CreateTable] Error: {type(e).__name__}: {e}", exc_info=True)
             return table_service_pb2.TableResponse(
                 success=False,
                 message=f"Failed to create table: {str(e)}"
@@ -409,120 +517,53 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
     def CreateRows(self, request: table_service_pb2.CreateRowsRequest, context) -> table_service_pb2.CreateRowsResponse:
         """Efficiently create multiple rows in a Delta table."""
         try:
-            # Debug logging - log all request fields
-            logger.info(f"[CreateRows] Request received:")
-            logger.info(f"  - table_id: '{request.table_id}'")
-            logger.info(f"  - user_id: '{request.user_id}'")
-            logger.info(f"  - organization_id: '{request.organization_id}'")
-            logger.info(f"  - s3_path: '{getattr(request, 's3_path', 'MISSING')}'")
-            logger.info(f"  - rows_data count: {len(request.rows_data)}")
-            logger.info(f"  - Request fields: {dir(request)}")
-            logger.info(f"  - Has s3_path field: {hasattr(request, 's3_path')}")
-            
-            # Check if s3_path exists and is not empty
-            if not hasattr(request, 's3_path'):
-                logger.error("[CreateRows] s3_path field is missing from request!")
-                return table_service_pb2.CreateRowsResponse(
-                    success=False,
-                    message="s3_path field is missing from request"
-                )
-            
-            if not request.s3_path:
-                logger.error("[CreateRows] s3_path is empty!")
-                return table_service_pb2.CreateRowsResponse(
-                    success=False,
-                    message="s3_path is required but empty"
-                )
-            
-            logger.info(f"Creating {len(request.rows_data)} rows in table: {request.table_id} at {request.s3_path}")
+            # Compact logging
+            self._log_request("CreateRows", table_id=request.table_id, organization_id=request.organization_id,
+                            rows_count=len(request.rows_data), s3_path=request.s3_path)
 
-            # Convert relative path to full S3 URI
-            s3_uri = self._to_s3_uri(request.s3_path)
+            # Validate s3_path
+            valid, s3_uri, error_response = self._validate_s3_path(request, "CreateRows")
+            if not valid:
+                # Convert TableResponse to CreateRowsResponse
+                return table_service_pb2.CreateRowsResponse(success=False, message=error_response.message)
+
             storage_options = self._get_storage_options()
 
             # AIDEV-NOTE: Delta table MUST exist (created by CreateTable)
             # Fail fast if table doesn't exist - this indicates a bug in the call sequence
-            try:
-                delta_table = DeltaTable(s3_uri, storage_options=storage_options)
-                logger.info(f"[CreateRows] Delta table exists (version {delta_table.version()})")
-            except Exception as e:
-                logger.error(f"[CreateRows] Delta table does not exist at {s3_uri}: {e}")
+            delta_table, error_msg = self._get_delta_table_safe(s3_uri, storage_options, "CreateRows", must_exist=True)
+            if not delta_table:
                 return table_service_pb2.CreateRowsResponse(
                     success=False,
-                    message=f"Delta table not found. Call CreateTable before CreateRows: {e}"
+                    message=f"Delta table not found. Call CreateTable before CreateRows: {error_msg}"
                 )
 
             # Always use schema-aware method (prevents Null type errors)
-            logger.info(f"[CreateRows] Using schema-aware DataFrame creation")
             df = self._create_dataframe_with_schema(request.rows_data, delta_table)
-
-            # DIAGNOSTIC: Log DataFrame details after creation
-            logger.info(f"[CreateRows] DataFrame details:")
-            logger.info(f"  - Shape: {len(df)} rows x {len(df.columns)} columns")
-            logger.info(f"  - Columns: {df.columns}")
-            logger.info(f"  - Schema: {df.schema}")
-            logger.info(f"  - Sample data (first row): {df.head(1)}")
-
-            logger.info(f"Appending {len(df)} rows to S3 URI: {s3_uri}")
+            self._log_dataframe(df, "CreateRows", show_sample=True)
 
             # Write to Delta table with S3 storage
             # AIDEV-NOTE: schema_mode="merge" allows schema evolution (new columns added automatically)
-            # This enables adding new fields to tables without schema mismatch errors
-            # Get write mode from request (default to "append" for backward compatibility)
             write_mode = request.mode if request.mode else "append"
-            logger.info(f"[CreateRows] Write mode from request: '{write_mode}'")
+            logger.info(f"[CreateRows] Writing {len(df)} rows (mode={write_mode}, schema_mode=merge)")
 
             # CRITICAL FIX: Normalize to large_string before writing to prevent string_view
-            # Write Arrow table directly - don't convert to Polars (Polars uses string_view)
             arrow_table = df.to_arrow()
             arrow_table = self._normalize_arrow_table_to_large_string(arrow_table)
 
-            logger.info(f"[CreateRows] Calling write_deltalake with mode='{write_mode}' and schema_mode='merge'...")
             # AIDEV-NOTE: Passing PyArrow table directly preserves large_string type
-            write_deltalake(
-                s3_uri,
-                arrow_table,
-                mode=write_mode,  # Use mode from request ("append" or "overwrite")
-                schema_mode="merge",  # Allow adding new columns (schema evolution)
-                storage_options=storage_options
-            )
-            logger.info(f"[CreateRows] write_deltalake completed without exception (mode: {write_mode})")
+            write_deltalake(s3_uri, arrow_table, mode=write_mode, schema_mode="merge", storage_options=storage_options)
 
-            # VERIFICATION: Check Delta table state after write
-            try:
-                updated_table = DeltaTable(s3_uri, storage_options=storage_options)
-                logger.info(f"[CreateRows] Delta table AFTER write:")
-                logger.info(f"  - Version: {updated_table.version()}")
-                logger.info(f"  - Files: {len(updated_table.files())}")
-                logger.info(f"  - File list: {updated_table.files()}")
-
-                # Read back to verify data was actually written using PyArrow
-                arrow_table = updated_table.to_pyarrow_table()
-                logger.info(f"[CreateRows] Verification read (PyArrow):")
-                logger.info(f"  - Total rows in table: {arrow_table.num_rows}")
-                logger.info(f"  - Total columns: {arrow_table.num_columns}")
-                logger.info(f"  - Schema: {arrow_table.schema}")
-
-                if arrow_table.num_rows == 0:
-                    logger.error(f"[CreateRows] VERIFICATION FAILED: Table is empty after write!")
-                    return table_service_pb2.CreateRowsResponse(
-                        success=False,
-                        message="Verification failed: Table is empty after write"
-                    )
-
-                logger.info(f"[CreateRows] ✅ VERIFICATION PASSED: {arrow_table.num_rows} rows in table")
-            except Exception as e:
-                logger.error(f"[CreateRows] VERIFICATION ERROR: Could not verify write: {e}")
-                logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
-                import traceback
-                logger.error(f"Traceback: {traceback.format_exc()}")
-                # Don't fail the request on verification errors - the write succeeded
-                logger.warning(f"[CreateRows] Skipping verification due to error, but write completed successfully")
+            # Verify write succeeded
+            if not self._verify_write_operation(s3_uri, storage_options, "CreateRows", expected_min_rows=1):
+                return table_service_pb2.CreateRowsResponse(
+                    success=False,
+                    message="Verification failed: Table is empty after write"
+                )
             
             # Create row entities for response
-            rows = []
-            for row_data in request.rows_data:
-                row = table_service_pb2.Row(
+            rows = [
+                table_service_pb2.Row(
                     row_id=row_data.id,
                     table_id=request.table_id,
                     row_data=row_data,
@@ -533,21 +574,19 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     organization_id=request.organization_id,
                     is_deleted=False
                 )
-                rows.append(row)
-            
-            logger.info(f"Successfully created {len(df)} rows in table: {request.table_id}")
+                for row_data in request.rows_data
+            ]
+
+            logger.info(f"[CreateRows] ✅ Created {len(df)} rows in '{request.table_id}'")
             return table_service_pb2.CreateRowsResponse(
                 success=True,
                 rows=rows,
                 rows_created=len(df),
                 message=f"Successfully created {len(df)} rows"
             )
-            
+
         except Exception as e:
-            logger.error(f"Error creating rows in table {request.table_id}: {e}")
-            logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"[CreateRows] Error: {type(e).__name__}: {e}", exc_info=True)
             return table_service_pb2.CreateRowsResponse(
                 success=False,
                 message=f"Failed to create rows: {str(e)}"
@@ -569,169 +608,99 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # When new fields are added in PostgreSQL, we need to sync them to Delta Lake
             # This allows sorting and filtering on newly added fields
 
-            logger.info(f"[UpdateTable] Request received:")
-            logger.info(f"  - table_id: '{request.table_id}'")
-            logger.info(f"  - name: '{request.name}'")
-            logger.info(f"  - s3_path: '{getattr(request, 's3_path', 'MISSING')}'")
-            logger.info(f"  - schema fields count: {len(request.schema.fields) if request.schema else 0}")
-            logger.info(f"  - schema fields: {[f.name for f in request.schema.fields] if request.schema else []}")
+            # Compact logging
+            field_count = len(request.schema.fields) if request.schema else 0
+            self._log_request("UpdateTable", table_id=request.table_id, name=request.name,
+                            s3_path=request.s3_path, field_count=field_count)
 
-            # Check if s3_path exists and is not empty
-            if not hasattr(request, 's3_path'):
-                logger.error("[UpdateTable] s3_path field is missing from request!")
-                return table_service_pb2.TableResponse(
-                    success=False,
-                    message="s3_path field is missing from request"
-                )
+            # Validate s3_path
+            valid, s3_uri, error_response = self._validate_s3_path(request, "UpdateTable")
+            if not valid:
+                return error_response
 
-            if not request.s3_path:
-                logger.error("[UpdateTable] s3_path is empty!")
-                return table_service_pb2.TableResponse(
-                    success=False,
-                    message="s3_path is required but empty"
-                )
-
-            # Convert relative path to full S3 URI
-            s3_uri = self._to_s3_uri(request.s3_path)
             storage_options = self._get_storage_options()
 
-            logger.info(f"Updating table schema at: {s3_uri}")
-
             # Read existing Delta table to check current schema
-            try:
-                delta_table = DeltaTable(s3_uri, storage_options=storage_options)
-                # AIDEV-NOTE: Use helper method to convert Delta Lake schema to PyArrow
-                current_schema = self._get_delta_schema_as_pyarrow(delta_table)
-                current_columns = [field.name for field in current_schema]
-                logger.info(f"[UpdateTable] Current Delta Lake columns: {current_columns}")
-            except Exception as e:
-                logger.warning(f"[UpdateTable] Could not read existing table (might not exist yet): {e}")
+            delta_table, error_msg = self._get_delta_table_safe(s3_uri, storage_options, "UpdateTable", must_exist=False)
+            if not delta_table:
                 # Table might not exist yet - that's ok, it will be created on first row insert
                 return table_service_pb2.TableResponse(
                     success=True,
-                    message=f"Table schema update queued (table will be created on first data insert)"
+                    message="Table schema update queued (table will be created on first data insert)"
                 )
 
-            # Build new schema from request
+            # AIDEV-NOTE: Use helper method to convert Delta Lake schema to PyArrow
+            current_schema = self._get_delta_schema_as_pyarrow(delta_table)
+            current_columns = [field.name for field in current_schema]
+            logger.info(f"[UpdateTable] Current columns: {current_columns}")
+
+            # Build new schema from request and find columns to add
             new_schema = self._build_schema_from_table_fields(request.schema.fields)
             new_columns = [field.name for field in new_schema]
-            logger.info(f"[UpdateTable] New schema columns: {new_columns}")
-
-            # Find columns that need to be added
             columns_to_add = [col for col in new_columns if col not in current_columns]
-            logger.info(f"[UpdateTable] Columns to add: {columns_to_add}")
+
+            logger.info(f"[UpdateTable] Schema change: new={new_columns}, to_add={columns_to_add}")
 
             if not columns_to_add:
-                logger.info("[UpdateTable] No new columns to add, schema is already up to date")
-                return table_service_pb2.TableResponse(
-                    success=True,
-                    message="Schema is already up to date"
-                )
+                return table_service_pb2.TableResponse(success=True, message="Schema is already up to date")
 
             # AIDEV-NOTE: Schema evolution via empty DataFrame write
             # Delta Lake's schema_mode="merge" will add new columns automatically
-            # We write an empty DataFrame with the new schema to trigger evolution
-            # This is the safest approach - no data modification, just schema update
-
-            # Create empty Polars DataFrame with new schema only (columns to add)
+            # Map PyArrow types to Polars types for new columns only
             schema_dict = {}
             for field in new_schema:
                 if field.name in columns_to_add:
-                    # Map PyArrow types to Polars types for empty DataFrame
                     if field.type == pa.float64():
                         schema_dict[field.name] = pl.Float64
                     elif field.type == pa.bool_():
                         schema_dict[field.name] = pl.Boolean
                     elif field.type == pa.timestamp('us'):
                         schema_dict[field.name] = pl.Datetime('us')
-                    else:  # Default to String for text, JSON, etc.
+                    else:
                         schema_dict[field.name] = pl.Utf8
 
-            # Create empty DataFrame with new columns only
+            # Create empty DataFrame and trigger schema evolution
+            logger.info(f"[UpdateTable] Adding columns: {list(schema_dict.keys())}")
             df_schema = pl.DataFrame(schema=schema_dict)
-            logger.info(f"[UpdateTable] Created empty DataFrame with schema: {df_schema.columns}")
+            arrow_table = self._normalize_arrow_table_to_large_string(df_schema.to_arrow())
 
-            # CRITICAL FIX: Normalize to large_string before writing to prevent string_view
-            # Write Arrow table directly - don't convert to Polars (Polars uses string_view)
-            arrow_table = df_schema.to_arrow()
-            arrow_table = self._normalize_arrow_table_to_large_string(arrow_table)
-
-            # Write empty Arrow table to trigger schema evolution
-            # mode="append" won't add any rows (Arrow table is empty)
-            # schema_mode="merge" will add the new columns to the schema
             # AIDEV-NOTE: Passing PyArrow table directly preserves large_string type
-            from deltalake import write_deltalake
-            write_deltalake(
-                s3_uri,
-                arrow_table,  # Pass Arrow directly, not Polars!
-                mode="append",
-                schema_mode="merge",  # Critical: enables adding new columns
-                storage_options=storage_options
-            )
+            write_deltalake(s3_uri, arrow_table, mode="append", schema_mode="merge", storage_options=storage_options)
 
-            # Verify schema was updated
+            # Verify schema evolution succeeded
             updated_table = DeltaTable(s3_uri, storage_options=storage_options)
-            # AIDEV-NOTE: Use helper method to convert Delta Lake schema to PyArrow
             updated_schema = self._get_delta_schema_as_pyarrow(updated_table)
             updated_columns = [field.name for field in updated_schema]
-            logger.info(f"[UpdateTable] Delta table AFTER schema evolution:")
-            logger.info(f"  - Columns: {updated_columns}")
-            logger.info(f"  - Version: {updated_table.version()}")
+
+            self._log_delta_state(updated_table, "UpdateTable AFTER evolution")
+            logger.info(f"[UpdateTable] Updated columns: {updated_columns}")
 
             # Verify all new columns were added
-            missing_columns = [col for col in columns_to_add if col not in updated_columns]
-            if missing_columns:
-                logger.error(f"[UpdateTable] Failed to add columns: {missing_columns}")
-                return table_service_pb2.TableResponse(
-                    success=False,
-                    message=f"Failed to add columns: {missing_columns}"
-                )
+            missing = [col for col in columns_to_add if col not in updated_columns]
+            if missing:
+                return table_service_pb2.TableResponse(success=False, message=f"Failed to add columns: {missing}")
 
             # AIDEV-NOTE: Backfill boolean columns with false (not null)
-            # When adding new boolean columns, existing rows have null values
-            # This causes filtering issues (null != false), so we set them to false
-            # This matches user expectations: unchecked checkbox = false, not null
-            boolean_columns_added = []
-            for field in new_schema:
-                if field.name in columns_to_add and field.type == pa.bool_():
-                    boolean_columns_added.append(field.name)
+            # Matches user expectations: unchecked checkbox = false, not null
+            boolean_cols = [f.name for f in new_schema if f.name in columns_to_add and f.type == pa.bool_()]
 
-            if boolean_columns_added:
-                logger.info(f"[UpdateTable] Backfilling boolean columns with false: {boolean_columns_added}")
+            if boolean_cols:
+                logger.info(f"[UpdateTable] Backfilling {len(boolean_cols)} boolean columns: {boolean_cols}")
                 try:
-                    # Use Delta Lake UPDATE to set null values to false
-                    # This ensures immediate filterability of the new boolean column
-                    for col_name in boolean_columns_added:
-                        # Build predicate for null values in this column
-                        predicate = f"`{col_name}` IS NULL"
+                    for col_name in boolean_cols:
+                        updated_table.update(predicate=f"`{col_name}` IS NULL", updates={col_name: "false"})
+                    logger.info(f"[UpdateTable] ✅ Backfilled {len(boolean_cols)} boolean columns")
+                except Exception as e:
+                    logger.warning(f"[UpdateTable] Backfill failed (non-critical): {e}")
 
-                        # Update null values to false
-                        updated_table.update(
-                            predicate=predicate,
-                            updates={col_name: "false"}
-                        )
-
-                        logger.info(f"[UpdateTable] Backfilled column '{col_name}' with false")
-
-                    logger.info(f"[UpdateTable] Successfully backfilled {len(boolean_columns_added)} boolean columns")
-
-                except Exception as backfill_error:
-                    # Log error but don't fail the entire operation
-                    # Schema evolution succeeded, backfill is optimization
-                    logger.warning(f"[UpdateTable] Failed to backfill boolean columns: {backfill_error}")
-                    logger.warning(f"[UpdateTable] Schema evolution succeeded, but existing rows will have null values")
-
-            logger.info(f"[UpdateTable] Successfully added {len(columns_to_add)} columns: {columns_to_add}")
+            logger.info(f"[UpdateTable] ✅ Added {len(columns_to_add)} columns: {columns_to_add}")
             return table_service_pb2.TableResponse(
                 success=True,
                 message=f"Schema updated: added {len(columns_to_add)} columns"
             )
 
         except Exception as e:
-            logger.error(f"Error updating table {request.table_id}: {e}")
-            logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"[UpdateTable] Error: {type(e).__name__}: {e}", exc_info=True)
             return table_service_pb2.TableResponse(
                 success=False,
                 message=f"Failed to update table: {str(e)}"
@@ -761,100 +730,48 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
     def UpdateRows(self, request: table_service_pb2.UpdateRowsRequest, context) -> table_service_pb2.UpdateRowsResponse:
         """Update multiple rows using Delta Lake merge operation."""
         try:
-            # Debug logging - log all request fields
-            logger.info(f"[UpdateRows] Request received:")
-            logger.info(f"  - table_id: '{request.table_id}'")
-            logger.info(f"  - user_id: '{request.user_id}'")
-            logger.info(f"  - organization_id: '{request.organization_id}'")
-            logger.info(f"  - s3_path: '{getattr(request, 's3_path', 'MISSING')}'")
-            logger.info(f"  - rows_data count: {len(request.rows_data)}")
+            # Compact logging
+            self._log_request("UpdateRows", table_id=request.table_id, organization_id=request.organization_id,
+                            rows_count=len(request.rows_data), s3_path=request.s3_path)
 
-            # Check if s3_path exists and is not empty
-            if not hasattr(request, 's3_path'):
-                logger.error("[UpdateRows] s3_path field is missing from request!")
-                return table_service_pb2.UpdateRowsResponse(
-                    success=False,
-                    message="s3_path field is missing from request"
-                )
+            # Validate s3_path
+            valid, s3_uri, error_response = self._validate_s3_path(request, "UpdateRows")
+            if not valid:
+                return table_service_pb2.UpdateRowsResponse(success=False, message=error_response.message)
 
-            if not request.s3_path:
-                logger.error("[UpdateRows] s3_path is empty!")
-                return table_service_pb2.UpdateRowsResponse(
-                    success=False,
-                    message="s3_path is required but empty"
-                )
-
-            logger.info(f"Updating {len(request.rows_data)} rows in table: {request.table_id} at {request.s3_path}")
-
-            # Convert relative path to full S3 URI
-            s3_uri = self._to_s3_uri(request.s3_path)
             storage_options = self._get_storage_options()
 
             # AIDEV-NOTE: Delta table MUST exist (we're updating existing rows)
-            # Fail fast if table doesn't exist
-            try:
-                delta_table = DeltaTable(s3_uri, storage_options=storage_options)
-                logger.info(f"[UpdateRows] Delta table exists (version {delta_table.version()})")
-            except Exception as e:
-                logger.error(f"[UpdateRows] Delta table does not exist: {e}")
+            delta_table, error_msg = self._get_delta_table_safe(s3_uri, storage_options, "UpdateRows", must_exist=True)
+            if not delta_table:
                 return table_service_pb2.UpdateRowsResponse(
                     success=False,
-                    message=f"Cannot update rows in non-existent table: {e}"
+                    message=f"Cannot update rows in non-existent table: {error_msg}"
                 )
 
-            # DIAGNOSTIC: Log what fields are in the request vs Delta Lake schema
+            # Validate input fields match schema
             if request.rows_data:
-                # Get fields from first row in request
                 first_row = request.rows_data[0]
-                input_field_ids = ['id'] + list(first_row.data.keys())
-                logger.info(f"[UpdateRows] Input request field IDs: {sorted(input_field_ids)}")
+                input_fields = set(['id'] + list(first_row.data.keys()))
+                delta_schema = pa.schema(delta_table.schema().to_arrow(as_large_types=True))
+                schema_fields = set([f.name for f in delta_schema])
 
-                # Get fields from Delta Lake schema
-                delta_schema = delta_table.schema().to_arrow(as_large_types=True)
-                delta_field_names = [f.name for f in pa.schema(delta_schema)]
-                logger.info(f"[UpdateRows] Delta Lake schema field IDs: {sorted(delta_field_names)}")
+                self._log_field_mismatch(input_fields, schema_fields, "UpdateRows")
 
-                # Compare
-                input_set = set(input_field_ids)
-                delta_set = set(delta_field_names)
-                missing_in_delta = input_set - delta_set
-                extra_in_delta = delta_set - input_set
-
-                if missing_in_delta:
-                    logger.error(f"[UpdateRows] ❌ CRITICAL: Input has fields NOT in Delta schema: {sorted(missing_in_delta)}")
-                    logger.error(f"[UpdateRows] These fields will be DROPPED causing DATA LOSS!")
-
-                    # VALIDATION: Reject update to prevent silent data loss
-                    # This indicates a schema synchronization issue between frontend and backend
+                # VALIDATION: Reject update to prevent silent data loss
+                missing = input_fields - schema_fields
+                if missing:
                     return table_service_pb2.UpdateRowsResponse(
                         success=False,
-                        message=f"Cannot update rows: Fields {sorted(missing_in_delta)} do not exist in table schema. Schema may not be synchronized. Please refresh the page or contact support."
+                        message=f"Cannot update rows: Fields {sorted(missing)} not in table schema. Refresh page."
                     )
-
-                if extra_in_delta:
-                    logger.info(f"[UpdateRows] Delta schema has fields not in input (will remain unchanged): {sorted(extra_in_delta)}")
-
-            # Always use schema-aware method (prevents Null type errors)
-            logger.info(f"[UpdateRows] Using schema-aware DataFrame creation")
             df = self._create_dataframe_with_schema(request.rows_data, delta_table)
-
-            # DIAGNOSTIC: Log DataFrame details before merge
-            logger.info(f"[UpdateRows] DataFrame details:")
-            logger.info(f"  - Shape: {len(df)} rows x {len(df.columns)} columns")
-            logger.info(f"  - Columns: {df.columns}")
-            logger.info(f"  - Schema: {df.schema}")
-            logger.info(f"  - Sample data (first row): {df.head(1)}")
-
-            logger.info(f"Merging {len(df)} rows to S3 URI: {s3_uri}")
+            self._log_dataframe(df, "UpdateRows", show_sample=True)
 
             # Perform merge operation using Delta Lake native merge
-            # AIDEV-NOTE: This performs efficient row-level updates without rewriting entire table
-            # Matches rows by 'id' field and updates all columns when matched
-            logger.info(f"[UpdateRows] Executing Delta Lake merge operation...")
-
-            # CRITICAL FIX: Normalize to large_string before merge to prevent string_view
-            source_arrow = df.to_arrow()
-            source_arrow = self._normalize_arrow_table_to_large_string(source_arrow)
+            # AIDEV-NOTE: Efficient row-level updates without rewriting entire table
+            logger.info(f"[UpdateRows] Merging {len(df)} rows...")
+            source_arrow = self._normalize_arrow_table_to_large_string(df.to_arrow())
 
             delta_table.merge(
                 source=source_arrow,
@@ -863,24 +780,14 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 target_alias='target'
             ).when_matched_update_all().execute()
 
-            logger.info(f"[UpdateRows] Merge operation completed successfully")
+            # Log post-merge state
+            self._log_delta_state(DeltaTable(s3_uri, storage_options=storage_options), "UpdateRows AFTER merge")
 
-            # VERIFICATION: Check Delta table state after merge
-            try:
-                updated_table = DeltaTable(s3_uri, storage_options=storage_options)
-                logger.info(f"[UpdateRows] Delta table AFTER merge:")
-                logger.info(f"  - Version: {updated_table.version()}")
-                logger.info(f"  - Files: {len(updated_table.files())}")
-            except Exception as e:
-                logger.warning(f"[UpdateRows] Could not verify merge result: {e}")
-
-            return table_service_pb2.UpdateRowsResponse(
-                success=True,
-                rows_updated=len(df)
-            )
+            logger.info(f"[UpdateRows] ✅ Updated {len(df)} rows in '{request.table_id}'")
+            return table_service_pb2.UpdateRowsResponse(success=True, rows_updated=len(df))
 
         except Exception as e:
-            logger.error(f"[UpdateRows] Error updating rows: {e}", exc_info=True)
+            logger.error(f"[UpdateRows] Error: {type(e).__name__}: {e}", exc_info=True)
             return table_service_pb2.UpdateRowsResponse(
                 success=False,
                 message=f"Error updating rows: {str(e)}"
@@ -889,56 +796,26 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
     def DeleteRows(self, request: table_service_pb2.DeleteRowsRequest, context) -> table_service_pb2.DeleteRowsResponse:
         """Delete multiple rows using Delta Lake delete operation."""
         try:
-            # Debug logging - log all request fields
-            logger.info(f"[DeleteRows] Request received:")
-            logger.info(f"  - table_id: '{request.table_id}'")
-            logger.info(f"  - user_id: '{request.user_id}'")
-            logger.info(f"  - organization_id: '{request.organization_id}'")
-            logger.info(f"  - s3_path: '{getattr(request, 's3_path', 'MISSING')}'")
-            logger.info(f"  - row_ids count: {len(request.row_ids)}")
-
-            # Check if s3_path exists and is not empty
-            if not hasattr(request, 's3_path'):
-                logger.error("[DeleteRows] s3_path field is missing from request!")
-                return table_service_pb2.DeleteRowsResponse(
-                    success=False,
-                    message="s3_path field is missing from request"
-                )
-
-            if not request.s3_path:
-                logger.error("[DeleteRows] s3_path is empty!")
-                return table_service_pb2.DeleteRowsResponse(
-                    success=False,
-                    message="s3_path is required but empty"
-                )
+            # Compact logging
+            self._log_request("DeleteRows", table_id=request.table_id, organization_id=request.organization_id,
+                            row_ids_count=len(request.row_ids), s3_path=request.s3_path)
 
             if len(request.row_ids) == 0:
-                logger.warning("[DeleteRows] No row IDs provided")
-                return table_service_pb2.DeleteRowsResponse(
-                    success=True,
-                    rows_deleted=0
-                )
+                return table_service_pb2.DeleteRowsResponse(success=True, rows_deleted=0)
 
-            logger.info(f"Deleting {len(request.row_ids)} rows from table: {request.table_id} at {request.s3_path}")
+            # Validate s3_path
+            valid, s3_uri, error_response = self._validate_s3_path(request, "DeleteRows")
+            if not valid:
+                return table_service_pb2.DeleteRowsResponse(success=False, message=error_response.message)
 
-            # Convert relative path to full S3 URI
-            s3_uri = self._to_s3_uri(request.s3_path)
             storage_options = self._get_storage_options()
 
-            logger.info(f"Deleting from S3 URI: {s3_uri}")
-
             # Load existing Delta table
-            try:
-                dt = DeltaTable(s3_uri, storage_options=storage_options)
-                logger.info(f"[DeleteRows] Delta table BEFORE delete:")
-                logger.info(f"  - Version: {dt.version()}")
-                logger.info(f"  - Files: {len(dt.files())}")
-            except Exception as e:
-                logger.error(f"[DeleteRows] Could not read Delta table: {e}")
-                return table_service_pb2.DeleteRowsResponse(
-                    success=False,
-                    message=f"Delta table not found: {e}"
-                )
+            dt, error_msg = self._get_delta_table_safe(s3_uri, storage_options, "DeleteRows", must_exist=True)
+            if not dt:
+                return table_service_pb2.DeleteRowsResponse(success=False, message=f"Delta table not found: {error_msg}")
+
+            self._log_delta_state(dt, "DeleteRows BEFORE delete")
 
             # Build delete predicate (id IN ('row1', 'row2', ...))
             # AIDEV-NOTE: Escape single quotes in row IDs to prevent SQL injection
@@ -946,30 +823,19 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             row_ids_str = "', '".join(escaped_ids)
             predicate = f"id IN ('{row_ids_str}')"
 
-            logger.info(f"[DeleteRows] Executing Delta Lake delete with predicate: {predicate}")
+            logger.info(f"[DeleteRows] Executing delete with predicate: {predicate}")
 
-            # Perform efficient row-level delete using Delta Lake native delete
-            # AIDEV-NOTE: This performs efficient row-level deletes without rewriting entire table
+            # AIDEV-NOTE: Efficient row-level deletes without rewriting entire table
             dt.delete(predicate)
 
-            logger.info(f"[DeleteRows] Delete operation completed successfully")
+            # Log post-delete state
+            self._log_delta_state(DeltaTable(s3_uri, storage_options=storage_options), "DeleteRows AFTER delete")
 
-            # VERIFICATION: Check Delta table state after delete
-            try:
-                updated_table = DeltaTable(s3_uri, storage_options=storage_options)
-                logger.info(f"[DeleteRows] Delta table AFTER delete:")
-                logger.info(f"  - Version: {updated_table.version()}")
-                logger.info(f"  - Files: {len(updated_table.files())}")
-            except Exception as e:
-                logger.warning(f"[DeleteRows] Could not verify delete result: {e}")
-
-            return table_service_pb2.DeleteRowsResponse(
-                success=True,
-                rows_deleted=len(request.row_ids)
-            )
+            logger.info(f"[DeleteRows] ✅ Deleted {len(request.row_ids)} rows from '{request.table_id}'")
+            return table_service_pb2.DeleteRowsResponse(success=True, rows_deleted=len(request.row_ids))
 
         except Exception as e:
-            logger.error(f"[DeleteRows] Error deleting rows: {e}", exc_info=True)
+            logger.error(f"[DeleteRows] Error: {type(e).__name__}: {e}", exc_info=True)
             return table_service_pb2.DeleteRowsResponse(
                 success=False,
                 message=f"Error deleting rows: {str(e)}"
@@ -1261,42 +1127,17 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
     def QueryRows(self, request: table_service_pb2.QueryRowsRequest, context) -> table_service_pb2.QueryRowsResponse:
         """Query rows with filters and pagination - returns Arrow IPC for zero-copy transfer."""
         try:
-            # Debug logging - log all request fields
-            logger.info(f"[QueryRows] Request received:")
-            logger.info(f"  - table_id: '{request.table_id}'")
-            logger.info(f"  - user_id: '{request.user_id}'")
-            logger.info(f"  - organization_id: '{request.organization_id}'")
-            logger.info(f"  - s3_path: '{getattr(request, 's3_path', 'MISSING')}'")
-            logger.info(f"  - order_by: '{request.order_by}'")
-            logger.info(f"  - order_direction: '{request.order_direction}'")
-            logger.info(f"  - limit: {request.limit}")
-            logger.info(f"  - offset: {request.offset}")
-            logger.info(f"  - filters count: {len(request.filters)}")
+            # Compact logging
+            self._log_request("QueryRows", table_id=request.table_id, s3_path=request.s3_path,
+                            order_by=request.order_by, direction=request.order_direction,
+                            limit=request.limit, offset=request.offset, filters=len(request.filters))
 
-            # Check if s3_path exists and is not empty
-            if not hasattr(request, 's3_path'):
-                logger.error("[QueryRows] s3_path field is missing from request!")
-                return table_service_pb2.QueryRowsResponse(
-                    success=False,
-                    message="s3_path field is missing from request"
-                )
+            # Validate s3_path
+            valid, s3_uri, error_response = self._validate_s3_path(request, "QueryRows")
+            if not valid:
+                return table_service_pb2.QueryRowsResponse(success=False, message=error_response.message)
 
-            if not request.s3_path:
-                logger.error("[QueryRows] s3_path is empty!")
-                return table_service_pb2.QueryRowsResponse(
-                    success=False,
-                    message="s3_path is required but empty"
-                )
-
-            # Log filter information - request.filters is now a list of RowFilter objects, not a map
-            filter_summary = [f"{f.field}:{f.operator}={f.value}" for f in request.filters] if request.filters else []
-            logger.info(f"Querying table: {request.table_id} at {request.s3_path} with filters: {filter_summary}")
-
-            # Convert relative path to full S3 URI
-            s3_uri = self._to_s3_uri(request.s3_path)
             storage_options = self._get_storage_options()
-
-            logger.info(f"Reading from S3 URI: {s3_uri}")
 
             # Read Delta table from S3/MinIO
             delta_table = DeltaTable(s3_uri, storage_options=storage_options)
@@ -1442,33 +1283,21 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Apply ordering
             if request.order_by:
                 # User-specified sort
-                logger.info(f"[QueryRows] Sorting by '{request.order_by}' ({request.order_direction})")
-
                 # Validate column exists
                 if request.order_by not in df.columns:
-                    logger.error(f"[QueryRows] Sort column '{request.order_by}' not found in DataFrame!")
-                    logger.error(f"  - Available columns: {df.columns}")
+                    logger.error(f"[QueryRows] Sort column '{request.order_by}' not found! Available: {df.columns}")
                     return table_service_pb2.QueryRowsResponse(
                         success=False,
                         message=f"Sort column '{request.order_by}' not found in table"
                     )
 
                 # Get field type from schema to handle empty strings in numeric columns
-                field_type = None
-                for field in schema:
-                    if field.name == request.order_by:
-                        field_type = field.type
-                        break
+                field_type = next((f.type for f in schema if f.name == request.order_by), None)
 
-                # AIDEV-NOTE: Diagnostic logging for sorting
-                # Log sample values and statistics to help debug sorting issues
-                sort_col_data = df.select(request.order_by).to_series()
-                logger.info(f"[QueryRows] Sorting diagnostics for '{request.order_by}':")
-                logger.info(f"  - Field type: {field_type}")
-                logger.info(f"  - Total rows: {len(sort_col_data)}")
-                logger.info(f"  - Null count: {sort_col_data.null_count()}")
-                logger.info(f"  - Unique values count: {sort_col_data.n_unique()}")
-                logger.info(f"  - Sample unique values (first 10): {sort_col_data.unique().head(10).to_list()}")
+                # AIDEV-NOTE: Diagnostic logging for sorting (compact)
+                sort_col = df.select(request.order_by).to_series()
+                logger.info(f"[QueryRows] Sort: col={request.order_by}, type={field_type}, rows={len(sort_col)}, "
+                          f"nulls={sort_col.null_count()}, unique={sort_col.n_unique()}")
 
                 # AIDEV-NOTE: Re-cast numeric/boolean columns for safe sorting
                 # Handles legacy data where empty strings might be mixed with numbers
@@ -1529,18 +1358,15 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             if request.limit > 0:
                 df = df.slice(0, request.limit)
 
-            # Convert Polars DataFrame to PyArrow Table (zero-copy)
-            arrow_table = df.to_arrow()
-
-            # Serialize to Arrow IPC format (zero-copy stream)
+            # Convert Polars DataFrame to PyArrow Table (zero-copy) and serialize to Arrow IPC
             import io
+            arrow_table = df.to_arrow()
             sink = io.BytesIO()
             with pa.ipc.new_stream(sink, arrow_table.schema) as writer:
                 writer.write_table(arrow_table)
 
             arrow_ipc_bytes = sink.getvalue()
-
-            logger.info(f"Successfully queried table: {request.table_id}, returned {len(df)} rows as Arrow IPC ({len(arrow_ipc_bytes)} bytes)")
+            logger.info(f"[QueryRows] ✅ Returned {len(df)}/{total_count} rows ({len(arrow_ipc_bytes)} bytes)")
             return table_service_pb2.QueryRowsResponse(
                 success=True,
                 arrow_ipc_stream=arrow_ipc_bytes,
@@ -1549,10 +1375,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             )
 
         except Exception as e:
-            logger.error(f"Error querying table {request.table_id}: {e}")
-            logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"[QueryRows] Error: {type(e).__name__}: {e}", exc_info=True)
             return table_service_pb2.QueryRowsResponse(
                 success=False,
                 message=f"Failed to query table: {str(e)}"
@@ -1570,102 +1393,59 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         try:
             import pyarrow.compute as pc
 
-            logger.info(f"[GetTableStats] Request received:")
-            logger.info(f"  - table_id: '{request.table_id}'")
-            logger.info(f"  - s3_path: '{request.s3_path}'")
-            logger.info(f"  - organization_id: '{request.organization_id}'")
+            # Compact logging
+            self._log_request("GetTableStats", table_id=request.table_id, s3_path=request.s3_path,
+                            organization_id=request.organization_id)
 
             if not request.s3_path:
-                logger.error("[GetTableStats] s3_path is required")
-                return table_service_pb2.GetTableStatsResponse(
-                    success=False,
-                    message="s3_path is required"
-                )
+                return table_service_pb2.GetTableStatsResponse(success=False, message="s3_path is required")
 
-            # Convert to S3 URI
+            # Convert to S3 URI and load Delta table (metadata only - no data files read!)
             s3_uri = self._to_s3_uri(request.s3_path)
             storage_options = self._get_storage_options()
-
-            logger.info(f"[GetTableStats] Reading Delta table metadata from: {s3_uri}")
-
-            # Load Delta table (metadata only - no data files read!)
             delta_table = DeltaTable(s3_uri, storage_options=storage_options)
 
             # AIDEV-NOTE: Check if table is empty to avoid Rust panic
-            # Newly created tables have schema but no data files yet
-            # Accessing file metadata on empty tables causes index out of bounds panic
             table_files = delta_table.files()
-            table_version = delta_table.version()
-
-            logger.info(f"[GetTableStats] Table state: version={table_version}, files={len(table_files)}")
+            self._log_delta_state(delta_table, "GetTableStats")
 
             # Handle empty table case (schema only, no data)
             if len(table_files) == 0:
-                logger.info(f"[GetTableStats] Table is empty (no data files yet), returning zeros")
                 return table_service_pb2.GetTableStatsResponse(
-                    success=True,
-                    row_count=0,
-                    size_bytes=0,
-                    message="Table is empty (no data files)"
+                    success=True, row_count=0, size_bytes=0, message="Table is empty (no data files)"
                 )
 
             # Get add actions from transaction log
-            # AIDEV-NOTE: add_actions contains metadata about files including num_records and size_bytes
-            # This reads only the transaction log (_delta_log/*.json), not the actual data files
-            # get_add_actions() returns arro3.core.RecordBatch in deltalake 1.2.1+
+            # AIDEV-NOTE: Reads only transaction log (_delta_log/*.json), not data files
             try:
-                add_actions_arro3 = delta_table.get_add_actions(flatten=True)
+                add_actions = pa.table(delta_table.get_add_actions(flatten=True))
 
-                # Convert arro3.RecordBatch to pyarrow.Table using PyCapsule interface (zero-copy)
-                # PyArrow compute functions require PyArrow objects, not arro3
-                # Use pa.table() which accepts objects implementing __arrow_c_stream__ protocol
-                add_actions = pa.table(add_actions_arro3)
-
-                # Double-check that add_actions is not empty before accessing columns
                 if len(add_actions) == 0:
-                    logger.info(f"[GetTableStats] Add actions is empty, returning zeros")
                     return table_service_pb2.GetTableStatsResponse(
-                        success=True,
-                        row_count=0,
-                        size_bytes=0,
-                        message="Table has no add actions"
+                        success=True, row_count=0, size_bytes=0, message="Table has no add actions"
                     )
 
-                # Sum num_records across all files to get total row count
-                row_count = pc.sum(add_actions['num_records']).as_py()
+                # Sum stats from metadata
+                row_count = pc.sum(add_actions['num_records']).as_py() or 0
+                size_bytes = pc.sum(add_actions['size_bytes']).as_py() or 0
 
-                # Sum size_bytes across all files to get total size
-                size_bytes = pc.sum(add_actions['size_bytes']).as_py()
-
-                # Handle None/null results from sum (can happen with empty tables)
-                row_count = row_count if row_count is not None else 0
-                size_bytes = size_bytes if size_bytes is not None else 0
-
-                logger.info(f"[GetTableStats] Retrieved stats from metadata: {row_count} rows, {size_bytes} bytes")
-
+                logger.info(f"[GetTableStats] ✅ Stats: {row_count} rows, {size_bytes} bytes")
                 return table_service_pb2.GetTableStatsResponse(
                     success=True,
                     row_count=row_count,
                     size_bytes=size_bytes,
-                    message=f"Statistics retrieved from Delta Lake metadata"
+                    message="Statistics retrieved from Delta Lake metadata"
                 )
 
-            except Exception as metadata_error:
+            except Exception as e:
                 # Catch Rust panics or other errors from get_add_actions
-                logger.warning(f"[GetTableStats] Could not get add actions (likely empty table): {metadata_error}")
-                logger.info(f"[GetTableStats] Returning zeros for empty table")
+                logger.warning(f"[GetTableStats] Could not get add actions (empty table?): {e}")
                 return table_service_pb2.GetTableStatsResponse(
-                    success=True,
-                    row_count=0,
-                    size_bytes=0,
-                    message="Table is empty (could not read metadata)"
+                    success=True, row_count=0, size_bytes=0, message="Table is empty (could not read metadata)"
                 )
 
         except Exception as e:
-            logger.error(f"[GetTableStats] Error getting table stats for {request.table_id}: {e}")
-            logger.error(f"[GetTableStats] Exception details: {type(e).__name__}: {str(e)}")
-            import traceback
-            logger.error(f"[GetTableStats] Traceback: {traceback.format_exc()}")
+            logger.error(f"[GetTableStats] Error: {type(e).__name__}: {e}", exc_info=True)
             return table_service_pb2.GetTableStatsResponse(
                 success=False,
                 message=f"Failed to get table stats: {str(e)}"
