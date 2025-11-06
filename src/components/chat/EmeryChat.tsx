@@ -20,7 +20,7 @@ import { RightPanelResizeHandle } from '@/components/ui/right-panel-resize-handl
 import CustomChatInput from './CustomChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
 import { createChatContextForPage, type ChatContextConfig } from '@/components/layout/types'
-import type { DomainType } from '@/ddd/domain/rag/value-objects'
+import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { ToolPanel } from './ToolPanel'
 import { useChatHandler } from './ChatProvider'

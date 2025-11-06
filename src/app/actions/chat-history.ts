@@ -18,7 +18,7 @@ import type {
   CreateChatSessionDTO
 } from '@/app/mappers/chat-mapper'
 import { ChatUtils } from '@/ddd/domain/chat/entities/chat'
-import type { DomainType } from '@/ddd/domain/rag/value-objects'
+import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
 
 /**
  * Get chat sessions for a given context (domain + user)

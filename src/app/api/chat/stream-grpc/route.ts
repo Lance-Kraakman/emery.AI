@@ -1,17 +1,17 @@
 /**
  * gRPC-based Chat Streaming API Route
- * 
+ *
  * Architecture:
  * - Next.js: Handles authentication, database operations, session management
- * - gRPC Service: Handles AI processing, RAG context, LLM streaming
- * 
+ * - gRPC Service: Handles AI processing, LLM streaming
+ *
  * Flow:
  * 1. Next.js: Authenticate user, create/get chat session, save user message
  * 2. Next.js: Get conversation history from database
  * 3. Next.js: Call gRPC service for AI processing with message + history
- * 4. gRPC: Process RAG context, generate AI response, stream back
+ * 4. gRPC: Generate AI response, stream back
  * 5. Next.js: Stream response to frontend, save assistant message
- * 
+ *
  * AIDEV-NOTE: Clean separation - database stays in Next.js, AI processing in gRPC
  */
 
@@ -32,12 +32,31 @@ import type { EnrichToolsWithUserApiKeyCommand } from '@/ddd/application/service
 // Import user API key utilities
 import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
 
-// Import RAG services
-import { DualContextRagService, type DomainContextOptions } from '@/ddd/application/services/chat/dual-context-rag-service';
-
 // Import gRPC client
 import { getChatProcessingClient, type StreamingChatResponse, type ChatProcessingOptions } from '@/lib/grpc/chat-processing-client';
 import type { HistoryMessage } from '@/lib/grpc/generated/agent_worker';
+import type { MessagePart } from '@llamaindex/chat-ui';
+
+/**
+ * Extract text content from Message parts array
+ * Expects MessagePart[] format only - no backward compatibility
+ */
+function getMessageContent(message: { parts?: MessagePart[] }): string {
+  if (!message?.parts || message.parts.length === 0) return '';
+
+  // Find the first text part
+  const textPart = message.parts.find((part: MessagePart) =>
+    typeof part === 'string' || (typeof part === 'object' && (part as any)?.type === 'text')
+  );
+
+  if (typeof textPart === 'string') return textPart;
+  if (textPart && typeof textPart === 'object' && 'text' in textPart) {
+    return (textPart as any).text;
+  }
+
+  // Fallback: convert first part to string
+  return String(message.parts[0] || '');
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -87,7 +106,7 @@ export async function POST(req: NextRequest) {
 
     // 2. Parse request and get user's agent API key for tools
     const { messages, chatId, messageId, domainType, domainId, tools = [] } = await req.json();
-    const latestMessage = messages[messages.length - 1]?.content;
+    const latestMessage = getMessageContent(messages[messages.length - 1]);
 
     console.log('[CHAT-GRPC-API] Request includes tools:', {
       toolCount: tools.length,
@@ -332,10 +351,6 @@ export async function POST(req: NextRequest) {
     const processingOptions: ChatProcessingOptions = {
       domainType: resolvedDomainType,
       domainId: resolvedDomainId,
-      enableRag: true, // Enable RAG by default
-      ragThreshold: 0.3,
-      maxRagDocs: 5,
-      primaryRagWeight: 0.7,
       tools: enrichedTools, // DDD-enriched tools with user API key authentication
       defaultModel: defaultModel // Organization's default AI model
     };
@@ -387,49 +402,6 @@ export async function POST(req: NextRequest) {
         }
       }
     });
-
-    // 6. Get RAG context using DualContextRagService
-    console.log('[CHAT-GRPC-API] Gathering RAG context using DualContextRagService');
-    let ragContextForGrpc = '';
-    try {
-      // Initialize dual-context RAG service
-      const tableRepository = getDynamicTableRepository();
-      const agentRepository = getAgentRepository();
-      const dualContextRagService = new DualContextRagService(tableRepository, agentRepository);
-
-      // Build context options
-      const contextOptions: DomainContextOptions = {
-        domainType: resolvedDomainType,
-        domainId: resolvedDomainId,
-        organizationId,
-        query: latestMessage,
-        primaryWeight: processingOptions.primaryRagWeight || 0.7,
-        maxPrimaryDocs: 10,
-        maxSecondaryDocs: 20,
-        similarityThreshold: processingOptions.ragThreshold || 0.3
-      };
-
-      // Get dual-context RAG results
-      const dualContextResult = await dualContextRagService.getDualContext(contextOptions);
-
-      if (dualContextResult.totalDocuments > 0) {
-        ragContextForGrpc = dualContextRagService.formatContextForSystemMessage(dualContextResult);
-        ragSources = dualContextRagService.getRagSourceSummary(dualContextResult);
-
-        // Add assembled RAG context to processing options
-        processingOptions.assembledRagContext = ragContextForGrpc;
-        processingOptions.ragSources = ragSources;
-
-        console.log(`[CHAT-GRPC-API] Generated RAG context with ${dualContextResult.primaryContext.length} primary + ${dualContextResult.secondaryContext.length} secondary docs`);
-        console.log(`[CHAT-GRPC-API] Context type: ${resolvedDomainType || 'organization'} chat`);
-        console.log(`[CHAT-GRPC-API] RAG context size: ${ragContextForGrpc.length} chars`);
-      } else {
-        console.log('[CHAT-GRPC-API] No relevant RAG context found');
-      }
-    } catch (ragError) {
-      console.error('[CHAT-GRPC-API] RAG context generation failed:', ragError);
-      // Continue without RAG context
-    }
 
     // 7. Call gRPC service for AI processing
     console.log('[CHAT-GRPC-API] Calling gRPC ChatProcessingService for AI processing');
