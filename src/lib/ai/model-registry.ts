@@ -235,6 +235,35 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       type: 'inference-api',
     },
   },
+
+  // Vision models
+  'llava-hf/llava-1.5-7b-hf': {
+    id: 'llava-hf/llava-1.5-7b-hf',
+    name: 'LLaVA 1.5 7B',
+    provider: 'huggingface',
+    description: 'Vision-language model for image understanding and visual question answering. Supports multimodal inputs.',
+    contextWindow: 4096,
+    maxOutputTokens: 2048,
+    capabilities: {
+      toolCalling: false,
+      streaming: true,
+      vision: true,
+      jsonMode: false,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0.10,      // Estimated pricing for vision models
+      outputPer1M: 0.40,     // Estimated pricing for vision models
+      currency: 'USD',
+      inputCreditsPerK: 0.25,    // 0.25 credits per 1K input tokens
+      outputCreditsPerK: 1.0,    // 1.0 credits per 1K output tokens
+    },
+    tier: 'free',            // Available to all users
+    category: 'balanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
 };
 
 /**
