@@ -632,7 +632,7 @@ if (goog.DEBUG && !COMPILED) {
  * @constructor
  */
 proto.emery.agents.ChatContext = function(opt_data) {
-  jspb.Message.initialize(this, opt_data, 0, -1, proto.emery.agents.ChatContext.repeatedFields_, null);
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
 };
 goog.inherits(proto.emery.agents.ChatContext, jspb.Message);
 if (goog.DEBUG && !COMPILED) {
@@ -7389,13 +7389,6 @@ proto.emery.agents.CancelMessageResponse.prototype.setMessage = function(value) 
 
 
 
-/**
- * List of repeated fields within this message type.
- * @private {!Array<number>}
- * @const
- */
-proto.emery.agents.ChatContext.repeatedFields_ = [8];
-
 
 
 if (jspb.Message.GENERATE_TO_OBJECT) {
@@ -7428,13 +7421,7 @@ proto.emery.agents.ChatContext.prototype.toObject = function(opt_includeInstance
 proto.emery.agents.ChatContext.toObject = function(includeInstance, msg) {
   var f, obj = {
     domainType: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    domainId: jspb.Message.getFieldWithDefault(msg, 2, 0),
-    enableRag: jspb.Message.getBooleanFieldWithDefault(msg, 3, false),
-    ragThreshold: jspb.Message.getFloatingPointFieldWithDefault(msg, 4, 0.0),
-    maxRagDocs: jspb.Message.getFieldWithDefault(msg, 5, 0),
-    primaryRagWeight: jspb.Message.getFloatingPointFieldWithDefault(msg, 6, 0.0),
-    assembledRagContext: jspb.Message.getFieldWithDefault(msg, 7, ""),
-    ragSourcesList: (f = jspb.Message.getRepeatedField(msg, 8)) == null ? undefined : f
+    domainId: jspb.Message.getFieldWithDefault(msg, 2, 0)
   };
 
   if (includeInstance) {
@@ -7479,30 +7466,6 @@ proto.emery.agents.ChatContext.deserializeBinaryFromReader = function(msg, reade
       var value = /** @type {number} */ (reader.readInt32());
       msg.setDomainId(value);
       break;
-    case 3:
-      var value = /** @type {boolean} */ (reader.readBool());
-      msg.setEnableRag(value);
-      break;
-    case 4:
-      var value = /** @type {number} */ (reader.readFloat());
-      msg.setRagThreshold(value);
-      break;
-    case 5:
-      var value = /** @type {number} */ (reader.readInt32());
-      msg.setMaxRagDocs(value);
-      break;
-    case 6:
-      var value = /** @type {number} */ (reader.readFloat());
-      msg.setPrimaryRagWeight(value);
-      break;
-    case 7:
-      var value = /** @type {string} */ (reader.readString());
-      msg.setAssembledRagContext(value);
-      break;
-    case 8:
-      var value = /** @type {string} */ (reader.readString());
-      msg.addRagSources(value);
-      break;
     default:
       reader.skipField();
       break;
@@ -7546,48 +7509,6 @@ proto.emery.agents.ChatContext.serializeBinaryToWriter = function(message, write
       f
     );
   }
-  f = message.getEnableRag();
-  if (f) {
-    writer.writeBool(
-      3,
-      f
-    );
-  }
-  f = message.getRagThreshold();
-  if (f !== 0.0) {
-    writer.writeFloat(
-      4,
-      f
-    );
-  }
-  f = message.getMaxRagDocs();
-  if (f !== 0) {
-    writer.writeInt32(
-      5,
-      f
-    );
-  }
-  f = message.getPrimaryRagWeight();
-  if (f !== 0.0) {
-    writer.writeFloat(
-      6,
-      f
-    );
-  }
-  f = message.getAssembledRagContext();
-  if (f.length > 0) {
-    writer.writeString(
-      7,
-      f
-    );
-  }
-  f = message.getRagSourcesList();
-  if (f.length > 0) {
-    writer.writeRepeatedString(
-      8,
-      f
-    );
-  }
 };
 
 
@@ -7624,133 +7545,6 @@ proto.emery.agents.ChatContext.prototype.getDomainId = function() {
  */
 proto.emery.agents.ChatContext.prototype.setDomainId = function(value) {
   return jspb.Message.setProto3IntField(this, 2, value);
-};
-
-
-/**
- * optional bool enable_rag = 3;
- * @return {boolean}
- */
-proto.emery.agents.ChatContext.prototype.getEnableRag = function() {
-  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 3, false));
-};
-
-
-/**
- * @param {boolean} value
- * @return {!proto.emery.agents.ChatContext} returns this
- */
-proto.emery.agents.ChatContext.prototype.setEnableRag = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 3, value);
-};
-
-
-/**
- * optional float rag_threshold = 4;
- * @return {number}
- */
-proto.emery.agents.ChatContext.prototype.getRagThreshold = function() {
-  return /** @type {number} */ (jspb.Message.getFloatingPointFieldWithDefault(this, 4, 0.0));
-};
-
-
-/**
- * @param {number} value
- * @return {!proto.emery.agents.ChatContext} returns this
- */
-proto.emery.agents.ChatContext.prototype.setRagThreshold = function(value) {
-  return jspb.Message.setProto3FloatField(this, 4, value);
-};
-
-
-/**
- * optional int32 max_rag_docs = 5;
- * @return {number}
- */
-proto.emery.agents.ChatContext.prototype.getMaxRagDocs = function() {
-  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 5, 0));
-};
-
-
-/**
- * @param {number} value
- * @return {!proto.emery.agents.ChatContext} returns this
- */
-proto.emery.agents.ChatContext.prototype.setMaxRagDocs = function(value) {
-  return jspb.Message.setProto3IntField(this, 5, value);
-};
-
-
-/**
- * optional float primary_rag_weight = 6;
- * @return {number}
- */
-proto.emery.agents.ChatContext.prototype.getPrimaryRagWeight = function() {
-  return /** @type {number} */ (jspb.Message.getFloatingPointFieldWithDefault(this, 6, 0.0));
-};
-
-
-/**
- * @param {number} value
- * @return {!proto.emery.agents.ChatContext} returns this
- */
-proto.emery.agents.ChatContext.prototype.setPrimaryRagWeight = function(value) {
-  return jspb.Message.setProto3FloatField(this, 6, value);
-};
-
-
-/**
- * optional string assembled_rag_context = 7;
- * @return {string}
- */
-proto.emery.agents.ChatContext.prototype.getAssembledRagContext = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 7, ""));
-};
-
-
-/**
- * @param {string} value
- * @return {!proto.emery.agents.ChatContext} returns this
- */
-proto.emery.agents.ChatContext.prototype.setAssembledRagContext = function(value) {
-  return jspb.Message.setProto3StringField(this, 7, value);
-};
-
-
-/**
- * repeated string rag_sources = 8;
- * @return {!Array<string>}
- */
-proto.emery.agents.ChatContext.prototype.getRagSourcesList = function() {
-  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 8));
-};
-
-
-/**
- * @param {!Array<string>} value
- * @return {!proto.emery.agents.ChatContext} returns this
- */
-proto.emery.agents.ChatContext.prototype.setRagSourcesList = function(value) {
-  return jspb.Message.setField(this, 8, value || []);
-};
-
-
-/**
- * @param {string} value
- * @param {number=} opt_index
- * @return {!proto.emery.agents.ChatContext} returns this
- */
-proto.emery.agents.ChatContext.prototype.addRagSources = function(value, opt_index) {
-  return jspb.Message.addToRepeatedField(this, 8, value, opt_index);
-};
-
-
-/**
- * Clears the list making it empty but non-null.
- * @return {!proto.emery.agents.ChatContext} returns this
- */
-proto.emery.agents.ChatContext.prototype.clearRagSourcesList = function() {
-  return this.setRagSourcesList([]);
 };
 
 

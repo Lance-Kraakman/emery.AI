@@ -606,7 +606,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         agent = ToolCallingAgent(
             tools=smolagents_tools,  # Can be empty list
             model=model,
-            max_steps=10
+            max_steps=10,
+            planning_interval=1,
         )
         agent.name = "chat_tool_calling"
         agent.description = f"Chat agent with {len(smolagents_tools)} tools available ({model_id})"
