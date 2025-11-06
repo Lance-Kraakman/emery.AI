@@ -577,7 +577,7 @@ export function EmeryChat() {
   const isFullWidth = canvasState === 'collapsed'
 
   return (
-    <div className={`relative flex bg-card border-l border-border flex-shrink-0 h-screen`} style={{ width: isFullWidth ? '100%' : `${chatWidth}px` }}>
+    <div className={`relative flex bg-card flex-shrink-0 h-screen`} style={{ width: isFullWidth ? '100%' : `${chatWidth}px` }}>
       {/* Resize handle */}
       {!isFullWidth && (
         <RightPanelResizeHandle
