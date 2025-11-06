@@ -540,10 +540,10 @@ export class ViewApplicationService {
       const tableFields = table.fields;
 
       // 6. Convert aggregations to format expected by table service
-      // AIDEV-NOTE: S3 Parquet files use actual field names, not field_{id} format
-      // We must map field IDs to actual field names for Python/Polars to find the columns
+      // AIDEV-NOTE: Delta Lake columns use numeric field IDs (field.id.value), not field names
+      // The backend expects field IDs as strings like "1", "4", "5", not names like "age"
       const aggregationParams = aggregations.map(agg => {
-        // Look up the actual field to get its name
+        // Look up the actual field to get its ID
         const field = tableFields.find(f => f.id.value === agg.fieldId);
         if (!field) {
           throw new Error(`Field ${agg.fieldId} not found in table ${table.id.value}`);
@@ -556,9 +556,9 @@ export class ViewApplicationService {
         });
 
         return {
-          fieldId: field.name,  // Use actual field name for S3 Parquet columns
+          fieldId: field.id.value.toString(),  // Use numeric field ID for Delta Lake columns
           type: agg.aggregationType,
-          alias: field.name,    // Alias matches field name
+          alias: field.name,    // Alias uses human-readable field name for display
           formatType: agg.formatType || 'number',
         };
       });
@@ -583,31 +583,33 @@ export class ViewApplicationService {
 
       const aggregatedRow = result[0];
 
-      // Debug logging to verify column names
-      const expectedFieldNames = aggregations.map(a => {
+      // Debug logging to verify column names (should be numeric field IDs)
+      const expectedFieldIds = aggregations.map(a => {
         const field = tableFields.find(f => f.id.value === a.fieldId);
-        return field?.name || `field_${a.fieldId}`;
+        return field?.id.value.toString() || `unknown_${a.fieldId}`;
       });
 
       logger.debug("Aggregated row columns", {
         columns: Object.keys(aggregatedRow.toPlainObject(tableFields)),
-        expectedFields: expectedFieldNames,
+        expectedFieldIds: expectedFieldIds,
       });
 
       const results: AggregationResult[] = aggregations.map((agg, index) => {
-        // Look up field name for this aggregation
+        // Look up field for this aggregation
         const field = tableFields.find(f => f.id.value === agg.fieldId);
         if (!field) {
           throw new Error(`Field ${agg.fieldId} not found during result extraction`);
         }
 
-        // Use actual field name to access result from S3 Parquet
-        const fieldValue = aggregatedRow.getFieldValue(field.name);
+        // Use field ID to access aggregation result (Python now returns columns with numeric IDs)
+        const fieldIdString = field.id.value.toString();
+        const fieldValue = aggregatedRow.getFieldValue(fieldIdString);
         const value = fieldValue?.value;
 
         logger.debug("Extracting aggregation value", {
           fieldId: agg.fieldId,
           fieldName: field.name,
+          fieldIdString,
           hasFieldValue: !!fieldValue,
           value,
         });
@@ -847,7 +849,7 @@ export class ViewApplicationService {
       }
 
       return {
-        fieldId: field.name,
+        fieldId: field.id.value.toString(),  // Use numeric field ID for Delta Lake columns
         type: agg.aggregationType,
         alias: agg.label || field.name,
         formatType: 'number',

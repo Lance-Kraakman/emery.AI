@@ -163,11 +163,6 @@ export class Row {
       const fieldKey = field.id.value.toString();
       const value = data[fieldKey];
 
-      // AIDEV-NOTE: Debug logging for document field values
-      if (field.type === 'document' || field.type === 'file') {
-        console.log(`[Row.fromPlainObject] ${field.type} field "${field.name}" (ID ${fieldKey}) incoming value:`, JSON.stringify(value, null, 2));
-      }
-
       // AIDEV-NOTE: CRITICAL FIX - Always include ALL fields, even if null/undefined
       // This prevents data loss during partial updates where only changed fields are sent.
       // Previously, null/undefined optional fields were skipped, causing them to be lost

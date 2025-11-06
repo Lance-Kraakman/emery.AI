@@ -60,6 +60,9 @@ import type { DocumentArtifact } from '../types/chat-artifacts'
 import { getDocumentDisplayInfo } from '../types/chat-artifacts'
 import { fetchTiptapDocumentContent, updateTiptapDocumentContent } from '@/app/actions/artifacts'
 import styles from './DocumentArtifactViewer.module.css'
+import { createDebugLogger } from '@/lib/utils/debug-logger'
+
+const logger = createDebugLogger('DocumentArtifactViewer')
 
 interface DocumentArtifactViewerProps {
   artifact: DocumentArtifact
@@ -155,7 +158,7 @@ export function DocumentArtifactViewer({
             setLoadAttempts(prev => prev + 1)
           }
         } catch (error) {
-          console.error('Error loading TipTap content:', error)
+          logger.error('Error loading TipTap content', error)
           const errorMsg = error instanceof Error ? error.message : 'Error loading document content'
           setContent(`<p>Error loading document content: ${errorMsg}</p>`)
           setLoadError(errorMsg)
@@ -322,7 +325,7 @@ export function DocumentArtifactViewer({
             setHasChanges(false)
           }
         } catch (error) {
-          console.error('Auto-save failed:', error)
+          logger.error('Auto-save failed', error)
           // Keep contentRecentlyChanged true so user knows there are unsaved changes
         }
       }
@@ -355,10 +358,10 @@ export function DocumentArtifactViewer({
             onSave(JSON.stringify(tiptapContent), documentTitle)
           }
         } else {
-          console.error('Failed to save document:', result.error)
+          logger.error('Failed to save document', result.error)
         }
       } catch (error) {
-        console.error('Error saving document:', error)
+        logger.error('Error saving document', error)
       }
     }
   }, [editor, onSave, documentTitle, documentField.id, artifact.data])

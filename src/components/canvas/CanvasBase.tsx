@@ -24,7 +24,6 @@ export function CanvasBase({
 }: CanvasBaseProps) {
   return (
     <div className={`flex flex-col relative h-full ${className}`}>
-      {/* Page Content - pages handle their own styling */}
       <div className="flex-1 relative overflow-y-auto">
         {children}
       </div>

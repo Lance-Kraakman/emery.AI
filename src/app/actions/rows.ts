@@ -368,7 +368,12 @@ export async function updateRowsData(
     // Merge each update with existing row data
     const mergedUpdates = updates.map(update => {
       const existingData = existingRowMap.get(update.rowId) || {};
-      const mergedData = { ...existingData, ...update.data, id: update.rowId };
+
+      // AIDEV-NOTE: Convert field names to IDs before merging (DSG sends field names)
+      // This is critical for complex fields like documents/files to deserialize correctly
+      const convertedUpdateData = convertFieldNamesToIds(update.data, table.fields);
+
+      const mergedData = { ...existingData, ...convertedUpdateData, id: update.rowId };
       const row = Row.fromPlainObject(mergedData, tableId, table.fields);
 
       return {

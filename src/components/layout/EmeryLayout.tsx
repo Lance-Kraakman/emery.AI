@@ -1,6 +1,7 @@
 'use client'
 
 import React, { Suspense, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { Loading } from '@/components/ui/loading'
@@ -11,6 +12,9 @@ import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-stat
 import type { EmeryLayoutProps, ChatContextConfig} from './types'
 import { ChatProvider, useChatHandler } from '@/components/chat/ChatProvider'
 import { ChatSection, useChatCanvas } from '@llamaindex/chat-ui'
+import { createDebugLogger } from '@/lib/utils/debug-logger'
+
+const logger = createDebugLogger('EmeryLayout')
 
 /**
  * EmeryLayout - Core layout component with LlamaIndex ChatCanvas integration
@@ -53,12 +57,7 @@ function EmeryLayoutInner({
   sidebarData
 }: EmeryLayoutInnerProps) {
   // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders when unrelated state changes
-  const sidebarState = useStore(uiStateStore, uiStateSelectors.sidebarState)
-  const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
-  const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
   const setChatContext = uiStateActions.setChatContext
-  const setSidebarState = uiStateActions.setSidebarState
-  const setChatState = uiStateActions.setChatState
 
   // Set chat context when provided
   React.useEffect(() => {
@@ -116,7 +115,7 @@ function EmeryLayoutWithChat({ children }: { children: React.ReactNode }) {
   return (
     <ChatSection
       handler={handler}
-      className="flex-1 flex min-h-0 overflow-hidden"
+      className="flex-1 flex min-h-0 overflow-hidden p-0"
       autoOpenCanvas={false}
     >
       <EmeryLayoutContent displayedArtifact={displayedArtifact}>
@@ -134,21 +133,30 @@ function EmeryLayoutContent({
   children: React.ReactNode
   displayedArtifact: any
 }) {
-  const { openArtifactInCanvas, displayedArtifact: canvasArtifact } = useChatCanvas()
+  const pathname = usePathname()
+  const { openArtifactInCanvas, displayedArtifact: canvasArtifact, closeCanvas } = useChatCanvas()
 
   // AIDEV-NOTE: Bridge global UI state artifacts to ChatCanvas context
   // This allows table cell clicks (which set global state) to open artifacts in ChatCanvas
   useEffect(() => {
     if (displayedArtifact) {
-      console.log('[EMERY-LAYOUT] Bridge: Opening artifact from global state in ChatCanvas:', displayedArtifact)
+      logger.debug('Bridge: Opening artifact in ChatCanvas', { type: displayedArtifact.type })
       openArtifactInCanvas(displayedArtifact)
       // Clear global state after bridging to ChatCanvas
       uiStateActions.closeArtifact()
     }
   }, [displayedArtifact, openArtifactInCanvas])
 
+  // AIDEV-NOTE: Close canvas when navigating to a different page via sidebar
+  // This ensures clean state when switching between pages/apps/agents
+  useEffect(() => {
+    if (canvasArtifact) {
+      closeCanvas()
+    }
+  }, [pathname]) // Only depend on pathname, don't include closeCanvas or canvasArtifact to avoid unnecessary closures
+
   return (
-    <div className="flex-1 flex min-h-0 overflow-hidden">
+    <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Show Canvas on LHS when artifact is open, otherwise show Main Content */}
       {canvasArtifact ? (
         <div className="flex-1 overflow-x-hidden min-h-0">
@@ -184,14 +192,12 @@ export function EmeryLayout(props: EmeryLayoutInnerProps) {
 // Loading skeletons
 function SidebarSkeleton() {
   return (
-    <div className="w-64 h-full bg-card border-r border-border animate-pulse">
-      <div>
+    <div className="w-64 h-full bg-card border-r border-border animate-pulse flex flex-col gap-4 p-4">
+      <div className="h-10 bg-muted rounded" />
+      <div className="flex flex-col gap-2">
         <div className="h-8 bg-muted rounded" />
-        <div>
-          <div className="h-6 bg-muted rounded" />
-          <div className="h-6 bg-muted rounded" />
-          <div className="h-6 bg-muted rounded" />
-        </div>
+        <div className="h-8 bg-muted rounded" />
+        <div className="h-8 bg-muted rounded" />
       </div>
     </div>
   )
@@ -199,16 +205,14 @@ function SidebarSkeleton() {
 
 function ChatSkeleton() {
   return (
-    <div className="h-full bg-card border-l border-border animate-pulse">
-      <div >
-        <div className="h-8 bg-muted rounded" />
-        <div className="flex-1">
-          <div className="h-16 bg-muted rounded" />
-          <div className="h-16 bg-muted rounded" />
-          <div className="h-16 bg-muted rounded" />
-        </div>
-        <div className="h-10 bg-muted rounded" />
+    <div className="w-96 h-full bg-card animate-pulse flex flex-col gap-4 p-4">
+      <div className="h-12 bg-muted rounded" />
+      <div className="flex-1 flex flex-col gap-3">
+        <div className="h-20 bg-muted rounded" />
+        <div className="h-20 bg-muted rounded" />
+        <div className="h-20 bg-muted rounded" />
       </div>
+      <div className="h-12 bg-muted rounded" />
     </div>
   )
 }

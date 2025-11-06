@@ -74,11 +74,6 @@ export class RowSerializer {
     // DO NOT use { ...plain } as it preserves numeric keys from corruption
     const result: Record<string, any> = { id: plain.id };
 
-    console.log(`[RowSerializer.serializeForStorage] Row ${row.id.value}:`, {
-      fieldCount: fields.length,
-      plainKeys: Object.keys(plain)
-    });
-
     for (const field of fields) {
       const fieldKey = field.id.value;
       const value = plain[fieldKey];
@@ -341,19 +336,12 @@ export class RowSerializer {
     arr: any[],
     field: TableField
   ): FileArrayFieldValue | DocumentArrayFieldValue | RelationArrayFieldValue {
-    console.log(`[RowSerializer.validateComplexFieldArray] Field "${field.name}" (ID ${field.id.value}):`, {
-      type: field.type,
-      arrayLength: arr.length,
-      sample: arr.length > 0 ? JSON.stringify(arr[0]).substring(0, 150) : 'empty'
-    });
-
     if (arr.length === 0) return [];
 
     // Use type guards from domain layer
     switch (field.type) {
       case 'document':
         const isValidDoc = isDocumentArray(arr);
-        console.log(`[RowSerializer.validateComplexFieldArray] Document validation result: ${isValidDoc}`);
         if (!isValidDoc) {
           console.warn(`[RowSerializer.validateComplexFieldArray] Document array FAILED validation for field "${field.name}"`, {
             sample: JSON.stringify(arr[0])
@@ -362,7 +350,6 @@ export class RowSerializer {
         return isValidDoc ? arr : [];
       case 'file':
         const isValidFile = isFileArray(arr);
-        console.log(`[RowSerializer.validateComplexFieldArray] File validation result: ${isValidFile}`);
         if (!isValidFile) {
           console.warn(`[RowSerializer.validateComplexFieldArray] File array FAILED validation for field "${field.name}"`, {
             sample: JSON.stringify(arr[0])
