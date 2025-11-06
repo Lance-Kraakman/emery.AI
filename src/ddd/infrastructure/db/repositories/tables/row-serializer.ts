@@ -111,33 +111,18 @@ export class RowSerializer {
   }
 
   /**
-   * Wrap complex field values for Delta Lake JSON storage
+   * Prepare complex field values for Delta Lake JSON storage
    *
-   * AIDEV-NOTE: Delta Lake stores complex types as JSON strings.
-   * We wrap arrays/objects with field ID for proper deserialization:
+   * AIDEV-NOTE: No wrapping needed - field ID is already the column name in Delta Lake.
+   * Just return the value as-is to be stringified by TableGrpcMapper.
    *
    * Example:
-   *   Input:  docs = [{id: 1}, {id: 2}]
-   *   Output: {10: [{id: 1}, {id: 2}]} (where 10 is field ID)
-   *
-   * This wrapper helps identify the field when parsing JSON from Delta Lake,
-   * ensuring we unwrap to the correct structure during deserialization.
+   *   Input:  [{id: 1}, {id: 2}]
+   *   Output: [{id: 1}, {id: 2}]  (stored as JSON string in column "10")
    */
   private static wrapComplexFieldForStorage(value: any, field: TableField): any {
-    const fieldKey = field.id.value.toString();
-    console.log(`[RowSerializer.serializeForStorage] Field "${field.name}" (ID ${fieldKey}):`, {
-      type: field.type,
-      valueType: typeof value,
-      isArray: Array.isArray(value),
-      value: Array.isArray(value) ? `array[${value.length}]` : value
-    });
-
-    if (value && (Array.isArray(value) || typeof value === 'object')) {
-      // Wrap: [...] → {fieldId: [...]}
-      return { [fieldKey]: value };
-    }
-
-    // null, undefined, or primitive → store as-is
+    // No wrapper needed - field ID is already the Delta Lake column name
+    // TableGrpcMapper will stringify: [...] → '[...]'
     return value;
   }
 
@@ -201,13 +186,11 @@ export class RowSerializer {
     fields: readonly TableField[]
   ): Record<string, any> {
     // AIDEV-NOTE: Build result from scratch to avoid corrupted keys
-    console.log(`[RowSerializer.deserializeFromStorage] Input data keys:`, Object.keys(data));
     const result: Record<string, any> = { id: data.id };
 
     for (const field of fields) {
       const fieldKey = field.id.value.toString();
       const value = data[fieldKey];
-      console.log(`[RowSerializer.deserializeFromStorage] Field "${field.name}" (ID ${fieldKey}): value=`, value === undefined ? 'UNDEFINED' : typeof value);
       result[fieldKey] = this.deserializeFieldValue(value, field);
     }
 
@@ -238,17 +221,17 @@ export class RowSerializer {
   /**
    * Unwrap complex field values from Delta Lake JSON storage
    *
-   * AIDEV-NOTE: Reverses the wrapping from serializeFieldValue.
-   * Handles both numeric field IDs and field names as wrapper keys.
+   * AIDEV-NOTE: Since we no longer wrap on write, JSON strings contain direct arrays.
+   * Simply parse and validate.
    *
    * Example:
-   *   Storage: '{"10": [{id: 1}]}'
-   *   Parsed:  {10: [{id: 1}]}
-   *   Returned: [{id: 1}]  ← unwrapped
+   *   Storage: '[{id: 1}]'
+   *   Parsed:  [{id: 1}]
+   *   Returned: [{id: 1}]  ← validated array
    *
-   * @param value - Raw value from storage (JSON string or pre-parsed object)
+   * @param value - Raw value from storage (JSON string or pre-parsed array)
    * @param field - Field definition with type information
-   * @returns Unwrapped array matching field type (FileArrayFieldValue | DocumentArrayFieldValue | RelationArrayFieldValue)
+   * @returns Validated array matching field type (FileArrayFieldValue | DocumentArrayFieldValue | RelationArrayFieldValue)
    */
   private static unwrapComplexFieldFromStorage(
     value: StoredComplexField | string | null | undefined,
@@ -263,6 +246,12 @@ export class RowSerializer {
     if (typeof value === 'string' && value.length > 0) {
       try {
         const parsed = JSON.parse(value);
+        // After parse, should be a direct array
+        if (Array.isArray(parsed)) {
+          return this.validateComplexFieldArray(parsed, field);
+        }
+        // If not an array, might be legacy wrapped format - try unwrapping
+        console.warn(`[RowSerializer.unwrapComplexFieldFromStorage] Expected array but got object for field "${field.name}", attempting to unwrap`);
         return this.unwrapParsedComplexField(parsed, field);
       } catch (e) {
         console.warn(`[RowSerializer.unwrapComplexFieldFromStorage] Failed to parse JSON for field "${field.name}" (ID ${field.id.value}):`, e);
@@ -270,8 +259,14 @@ export class RowSerializer {
       }
     }
 
-    // Handle already-parsed values (from Arrow or direct objects)
+    // Handle already-parsed arrays (from Arrow or direct values)
+    if (Array.isArray(value)) {
+      return this.validateComplexFieldArray(value, field);
+    }
+
+    // Handle already-parsed objects (legacy wrapped format)
     if (value && typeof value === 'object') {
+      console.warn(`[RowSerializer.unwrapComplexFieldFromStorage] Expected array but got object for field "${field.name}", attempting to unwrap`);
       return this.unwrapParsedComplexField(value, field);
     }
 
@@ -281,7 +276,10 @@ export class RowSerializer {
   }
 
   /**
-   * Unwrap a parsed complex field value (removes wrapper object if present)
+   * Unwrap a parsed complex field value (handles legacy wrapped format)
+   *
+   * AIDEV-NOTE: This is for backwards compatibility with data written before
+   * removing the field ID wrapper. New data should be direct arrays.
    *
    * @param parsed - Parsed object that may be wrapped
    * @param field - Field definition
@@ -291,36 +289,24 @@ export class RowSerializer {
     parsed: any,
     field: TableField
   ): FileArrayFieldValue | DocumentArrayFieldValue | RelationArrayFieldValue | null {
-    console.log(`[RowSerializer.unwrapParsedComplexField] Field "${field.name}" (ID ${field.id.value}):`, {
-      parsedType: typeof parsed,
-      isArray: Array.isArray(parsed),
-      keys: typeof parsed === 'object' && parsed ? Object.keys(parsed) : 'N/A',
-      sample: JSON.stringify(parsed).substring(0, 100)
-    });
-
     if (!parsed) return null;
 
     // If already an array, validate and return
     if (Array.isArray(parsed)) {
-      console.log(`[RowSerializer.unwrapParsedComplexField] Already an array, validating...`);
       return this.validateComplexFieldArray(parsed, field);
     }
 
-    // If object, try to unwrap using field ID or field name
+    // If object, try to unwrap using field ID or field name (legacy format)
     if (typeof parsed === 'object') {
       const fieldKey = field.id.value.toString();
       const fieldName = field.name;
 
-      console.log(`[RowSerializer.unwrapParsedComplexField] Trying to unwrap object. FieldKey="${fieldKey}", FieldName="${fieldName}"`);
-
       // Try unwrapping by field ID first: {5: [...]} → [...]
       if (fieldKey in parsed) {
-        console.log(`[RowSerializer.unwrapParsedComplexField] Found wrapper with fieldKey "${fieldKey}"`);
         const unwrapped = parsed[fieldKey];
 
         // Check if still wrapped (double wrapper): {5: {sdf: [...]}}
         if (unwrapped && typeof unwrapped === 'object' && !Array.isArray(unwrapped) && fieldName in unwrapped) {
-          console.log(`[RowSerializer.unwrapParsedComplexField] Found double wrapper, unwrapping again by fieldName "${fieldName}"`);
           const doubleUnwrapped = unwrapped[fieldName];
           return Array.isArray(doubleUnwrapped) ? this.validateComplexFieldArray(doubleUnwrapped, field) : null;
         }
@@ -330,15 +316,13 @@ export class RowSerializer {
 
       // Try unwrapping by field name: {"sdf": [...]} → [...]
       if (fieldName in parsed) {
-        console.log(`[RowSerializer.unwrapParsedComplexField] Found wrapper with fieldName "${fieldName}"`);
         const unwrapped = parsed[fieldName];
         return Array.isArray(unwrapped) ? this.validateComplexFieldArray(unwrapped, field) : null;
       }
 
       // No valid wrapper found
-      console.warn(`[RowSerializer.unwrapParsedComplexField] No valid wrapper found for field "${field.name}" (ID ${fieldKey})`, {
-        keys: Object.keys(parsed),
-        expected: [fieldKey, fieldName]
+      console.warn(`[RowSerializer.unwrapParsedComplexField] Could not unwrap legacy format for field "${field.name}" (ID ${fieldKey})`, {
+        keys: Object.keys(parsed)
       });
       return null;
     }
