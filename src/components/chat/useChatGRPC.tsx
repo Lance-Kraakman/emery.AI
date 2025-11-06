@@ -11,6 +11,7 @@ import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/ch
 import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
+import type { AnyAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata'
 
 const logger = createDebugLogger('ChatGRPC')
 
@@ -42,6 +43,61 @@ function createTextMessage(content: string, role: 'user' | 'assistant' | 'system
     id: id || generateId(),
     role,
     parts: [{ type: 'text', text: content }],
+  }
+}
+
+/**
+ * Helper to create a Message with multiple parts (multimodal)
+ * AIDEV-NOTE: Supports text, images, audio, files in a single message
+ */
+function createMultimodalMessage(
+  parts: MessagePart[],
+  role: 'user' | 'assistant' | 'system',
+  id?: string
+): ChatMessage {
+  return {
+    id: id || generateId(),
+    role,
+    parts,
+  }
+}
+
+/**
+ * Helper to create an image MessagePart from attachment metadata
+ */
+function createImagePart(attachment: AnyAttachmentMetadata): MessagePart {
+  return {
+    type: 'data-file',
+    name: attachment.filename,
+    url: attachment.url,
+    mimeType: attachment.mimeType,
+    size: attachment.sizeBytes,
+  }
+}
+
+/**
+ * Helper to create an audio MessagePart from attachment metadata
+ */
+function createAudioPart(attachment: AnyAttachmentMetadata): MessagePart {
+  return {
+    type: 'data-file',
+    name: attachment.filename,
+    url: attachment.url,
+    mimeType: attachment.mimeType,
+    size: attachment.sizeBytes,
+  }
+}
+
+/**
+ * Helper to create a file MessagePart from attachment metadata
+ */
+function createFilePart(attachment: AnyAttachmentMetadata): MessagePart {
+  return {
+    type: 'data-file',
+    name: attachment.filename,
+    url: attachment.url,
+    mimeType: attachment.mimeType,
+    size: attachment.sizeBytes,
   }
 }
 
@@ -81,7 +137,7 @@ interface ExtendedChatHandler extends ChatHandler {
   // Base ChatHandler fields
   isLoading: boolean
   messages: ChatMessage[]
-  append: (message: Message) => Promise<string>
+  append: (message: Message, attachments?: File[]) => Promise<string>
   setMessages: (messages: ChatMessage[]) => void
   // Custom fields
   scrollRef?: React.RefObject<HTMLDivElement>
@@ -95,6 +151,11 @@ interface ExtendedChatHandler extends ChatHandler {
   availableTools: ToolDTO[]
   addTool: (tool: ToolDTO) => void
   removeTool: (tool: ToolDTO) => void
+  // Attachment management
+  pendingAttachments: File[]
+  addAttachment: (file: File) => void
+  removeAttachment: (index: number) => void
+  clearAttachments: () => void
   // Step progress tracking
   currentStep: { type: string; name: string; index: number } | null
   // Cancellation
@@ -138,7 +199,10 @@ export function useChatGRPC(
   // Tool management state
   const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([])
   const [availableTools, setAvailableTools] = useState<ToolDTO[]>([])
-  
+
+  // Attachment management state
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([])
+
   // Generate domain-specific storage key for this chat session
   const chatStorageKey = `emery-chat-${contextOptions?.domainType || chatContext?.domainType || 'general'}-${contextOptions?.domainId || chatContext?.domainId || 'default'}`
 
@@ -222,13 +286,32 @@ export function useChatGRPC(
     }
   }, [messages, isClient, chatStorageKey])
 
-  const append = async (message: Message) => {
+  const append = async (message: Message, attachments?: File[]) => {
     const messageContent = getMessageContent(message)
-    const userMessage = createTextMessage(messageContent, message.role as 'user' | 'assistant')
+
+    // Use provided attachments or pending attachments
+    const filesToAttach = attachments || pendingAttachments
+
+    // Create message with text and any attachments
+    const userMessage = filesToAttach.length > 0
+      ? createMultimodalMessage(
+          [
+            { type: 'text', text: messageContent },
+            // Note: Actual file parts will be created after S3 upload by API route
+            // For now, we just show pending files in UI
+          ],
+          message.role as 'user' | 'assistant'
+        )
+      : createTextMessage(messageContent, message.role as 'user' | 'assistant')
 
     setMessages((prev) => [...prev, userMessage])
     setIsLoading(true)
     setInput('')
+
+    // Clear pending attachments since we're sending them
+    if (!attachments && filesToAttach.length > 0) {
+      clearAttachments()
+    }
 
     // Generate message ID for cancellation tracking
     const messageId = `msg_${Date.now()}_${generateId()}`
@@ -278,8 +361,9 @@ export function useChatGRPC(
       }
 
       logger.debug('Tool list for gRPC', { count: allTools.length, tools: allTools.map(t => t.name) })
+      logger.debug('Attachments', { count: filesToAttach.length, files: filesToAttach.map(f => f.name) })
 
-      const requestBody = {
+      const requestData = {
         messages: chatMessages,
         chatId: currentChatId,
         messageId: messageId, // For cancellation tracking
@@ -288,15 +372,35 @@ export function useChatGRPC(
         tools: allTools
       }
 
+      // Use FormData if there are attachments, otherwise JSON
+      let requestBody: FormData | string
+      let headers: Record<string, string> = {}
+
+      if (filesToAttach.length > 0) {
+        // Use FormData for multipart/form-data with files
+        const formData = new FormData()
+        formData.append('data', JSON.stringify(requestData))
+
+        // Append each file
+        filesToAttach.forEach((file, index) => {
+          formData.append(`file_${index}`, file)
+        })
+
+        requestBody = formData
+        // Don't set Content-Type - browser will set it with boundary
+      } else {
+        // Use JSON for text-only messages
+        requestBody = JSON.stringify(requestData)
+        headers['Content-Type'] = 'application/json'
+      }
+
       // Call the gRPC-based streaming chat API
       const response = await fetch('/api/chat/stream-grpc', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         credentials: 'include', // Ensure cookies are included in the request
         signal: abortControllerRef.current?.signal, // For abort support
-        body: JSON.stringify(requestBody),
+        body: requestBody,
       })
 
       if (!response.ok) {
@@ -528,6 +632,22 @@ export function useChatGRPC(
     setSelectedTools(prev => prev.filter(t => t.name !== tool.name))
   }
 
+  // Attachment management functions
+  const addAttachment = (file: File) => {
+    setPendingAttachments(prev => [...prev, file])
+    logger.debug('Added attachment', { filename: file.name, type: file.type, size: file.size })
+  }
+
+  const removeAttachment = (index: number) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== index))
+    logger.debug('Removed attachment', { index })
+  }
+
+  const clearAttachments = () => {
+    setPendingAttachments([])
+    logger.debug('Cleared all attachments')
+  }
+
   return {
     // Base ChatHandler required fields
     status: isLoading ? 'streaming' : 'ready',
@@ -549,6 +669,11 @@ export function useChatGRPC(
     availableTools,
     addTool,
     removeTool,
+    // Attachment management
+    pendingAttachments,
+    addAttachment,
+    removeAttachment,
+    clearAttachments,
     // Step progress and cancellation
     currentStep,
     cancelMessage,
