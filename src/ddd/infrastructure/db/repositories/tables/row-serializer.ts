@@ -341,14 +341,34 @@ export class RowSerializer {
     arr: any[],
     field: TableField
   ): FileArrayFieldValue | DocumentArrayFieldValue | RelationArrayFieldValue {
+    console.log(`[RowSerializer.validateComplexFieldArray] Field "${field.name}" (ID ${field.id.value}):`, {
+      type: field.type,
+      arrayLength: arr.length,
+      sample: arr.length > 0 ? JSON.stringify(arr[0]).substring(0, 150) : 'empty'
+    });
+
     if (arr.length === 0) return [];
 
     // Use type guards from domain layer
     switch (field.type) {
       case 'document':
-        return isDocumentArray(arr) ? arr : [];
+        const isValidDoc = isDocumentArray(arr);
+        console.log(`[RowSerializer.validateComplexFieldArray] Document validation result: ${isValidDoc}`);
+        if (!isValidDoc) {
+          console.warn(`[RowSerializer.validateComplexFieldArray] Document array FAILED validation for field "${field.name}"`, {
+            sample: JSON.stringify(arr[0])
+          });
+        }
+        return isValidDoc ? arr : [];
       case 'file':
-        return isFileArray(arr) ? arr : [];
+        const isValidFile = isFileArray(arr);
+        console.log(`[RowSerializer.validateComplexFieldArray] File validation result: ${isValidFile}`);
+        if (!isValidFile) {
+          console.warn(`[RowSerializer.validateComplexFieldArray] File array FAILED validation for field "${field.name}"`, {
+            sample: JSON.stringify(arr[0])
+          });
+        }
+        return isValidFile ? arr : [];
       case 'relation':
         // Relation arrays are less strictly typed
         return arr;

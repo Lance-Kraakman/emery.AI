@@ -3,14 +3,14 @@
 import React from 'react'
 import {
   ChatCanvas,
+  useChatCanvas
 } from '@llamaindex/chat-ui'
-import { X, Code, FileText } from 'lucide-react'
+import { X, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DocumentArtifactViewer, FileArtifactViewer } from './artifacts'
 import {
   isDocumentArtifact,
   isFileArtifact,
-  isEmeryArtifact,
   type DocumentArtifact,
   type FileArtifact
 } from './types/chat-artifacts'
@@ -18,81 +18,76 @@ import {
 /**
  * EmeryCanvas - Custom Canvas with Emery-specific artifact viewers
  *
- * This component wraps LlamaIndex's ChatCanvas and adds custom renderers
- * for Emery document and file artifacts while maintaining support for
- * standard artifacts (code, etc.).
+ * This component wraps LlamaIndex's ChatCanvas and adds custom standalone
+ * viewers for Emery document and file artifacts while maintaining support
+ * for standard artifacts (code, etc.).
  *
- * AIDEV-NOTE: Must be used inside ChatSection context. For LHS positioning,
- * the parent container (EmeryLayout) handles CSS positioning.
+ * AIDEV-NOTE: Custom viewers use useChatCanvas() directly as standalone
+ * components rather than wrapping in ChatCanvas.DocumentArtifact to avoid
+ * type filtering that would reject custom artifact types like 'emery-document'.
  */
 
-// Custom renderer for Document artifacts
-function DocumentArtifactRenderer() {
-  const renderFn = ({ artifact, closeCanvas }: { artifact: any; closeCanvas: () => void }) => {
-    if (!isDocumentArtifact(artifact)) return null
+// Standalone viewer for Emery Document artifacts
+function EmeryDocumentViewer() {
+  const { displayedArtifact, closeCanvas } = useChatCanvas()
 
-    return (
-      <DocumentArtifactViewer
-        key={`doc-${artifact.data.documentField.id}-${artifact.data.tableId}-${artifact.data.fieldId}`}
-        artifact={artifact as DocumentArtifact}
-        onClose={closeCanvas}
-        className="h-full"
-      />
-    )
+  if (!displayedArtifact || !isDocumentArtifact(displayedArtifact)) {
+    return null
   }
 
   return (
-    <ChatCanvas.DocumentArtifact>
-      {renderFn as any}
-    </ChatCanvas.DocumentArtifact>
+    <DocumentArtifactViewer
+      key={`doc-${displayedArtifact.data.documentField.id}-${displayedArtifact.data.tableId}-${displayedArtifact.data.fieldId}`}
+      artifact={displayedArtifact as DocumentArtifact}
+      onClose={closeCanvas}
+      className="h-full"
+    />
   )
 }
 
-// Custom renderer for File artifacts (using document type as workaround)
-function FileArtifactRenderer() {
-  const renderFn = ({ artifact, closeCanvas }: { artifact: any; closeCanvas: () => void }) => {
-    if (!isFileArtifact(artifact)) return null
+// Standalone viewer for Emery File artifacts
+function EmeryFileViewer() {
+  const { displayedArtifact, closeCanvas } = useChatCanvas()
 
-    return (
-      <div className="h-full flex flex-col">
-        {/* Header for file artifacts */}
-        <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <FileText className="h-4 w-4 text-green-600 flex-shrink-0" />
-            <div className="min-w-0 flex-1">
-              <h3 className="font-medium text-sm truncate">
-                {artifact.data.fileField.name}
-              </h3>
-              <p className="text-xs text-muted-foreground">File</p>
-            </div>
-          </div>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={closeCanvas}
-            className="h-7 w-7 p-0 flex-shrink-0"
-            title="Close canvas"
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        </div>
-
-        {/* Content for file artifacts */}
-        <div className="flex-1 overflow-auto p-4">
-          <FileArtifactViewer
-            artifact={artifact as FileArtifact}
-            className="h-full"
-          />
-        </div>
-      </div>
-    )
+  if (!displayedArtifact || !isFileArtifact(displayedArtifact)) {
+    return null
   }
 
+  const artifact = displayedArtifact as FileArtifact
+
   return (
-    <ChatCanvas.DocumentArtifact>
-      {renderFn as any}
-    </ChatCanvas.DocumentArtifact>
+    <div className="h-full flex flex-col">
+      {/* Header for file artifacts */}
+      <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <FileText className="h-4 w-4 text-green-600 flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <h3 className="font-medium text-sm truncate">
+              {artifact.data.fileField.name}
+            </h3>
+            <p className="text-xs text-muted-foreground">File</p>
+          </div>
+        </div>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={closeCanvas}
+          className="h-7 w-7 p-0 flex-shrink-0"
+          title="Close canvas"
+        >
+          <X className="h-3 w-3" />
+        </Button>
+      </div>
+
+      {/* Content for file artifacts */}
+      <div className="flex-1 overflow-auto p-4">
+        <FileArtifactViewer
+          artifact={artifact}
+          className="h-full"
+        />
+      </div>
+    </div>
   )
 }
 
@@ -100,9 +95,9 @@ export function EmeryCanvas() {
   return (
     <div className="h-full flex flex-col bg-card">
       <ChatCanvas className="h-full w-full border-0">
-        {/* Custom Emery artifact renderers */}
-        <DocumentArtifactRenderer />
-        <FileArtifactRenderer />
+        {/* Custom Emery artifact viewers - standalone components */}
+        <EmeryDocumentViewer />
+        <EmeryFileViewer />
 
         {/* Standard LlamaIndex artifact renderers */}
         <ChatCanvas.CodeArtifact />
