@@ -24,7 +24,7 @@ import type { ToolDTO } from '@/app/mappers/tool-mapper'
 interface ExtendedChatHandler extends ChatHandler {
   isLoading: boolean
   messages: any[] // This shouldnt be any
-  append: (message: any) => Promise<string>
+  append: (message: any, attachments?: File[]) => Promise<string>
   setMessages: (messages: any[]) => void
   scrollRef?: React.RefObject<HTMLDivElement>
   scrollToBottom?: () => void
@@ -36,6 +36,11 @@ interface ExtendedChatHandler extends ChatHandler {
   availableTools: ToolDTO[]
   addTool: (tool: ToolDTO) => void
   removeTool: (tool: ToolDTO) => void
+  // Attachment management
+  pendingAttachments: File[]
+  addAttachment: (file: File) => void
+  removeAttachment: (index: number) => void
+  clearAttachments: () => void
   currentStep: { type: string; name: string; index: number } | null
   cancelMessage?: () => Promise<void>
 }
