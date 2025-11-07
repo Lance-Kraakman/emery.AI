@@ -307,6 +307,7 @@ export default function AgentDetailsView({ agent }: AgentDetailsViewProps) {
                   showInherit={true}
                   inheritLabel="Inherit from organization"
                   inheritFromModel="IBM Granite 3.3 8B"
+                  requiredCapabilities={['toolCalling']}
                 />
                 <p className="text-xs text-muted-foreground">
                   Set the default AI model for this agent. Skills can override this setting.
