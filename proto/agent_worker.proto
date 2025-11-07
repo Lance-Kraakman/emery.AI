@@ -179,8 +179,9 @@ service ChatProcessingService {
 
 // Request for AI message processing
 message ProcessMessageRequest {
-  // Input message for AI processing
-  string message_content = 1;        // User message content
+  // Input message for AI processing (multimodal support)
+  repeated MessagePart message_parts = 1;  // User message content as structured parts (text + images)
+
   string user_id = 2;                // User identifier for context
   int32 organization_id = 3;         // Organization for multi-tenant routing
 
@@ -212,10 +213,26 @@ message ProcessMessageResponse {
   int64 timestamp = 6;               // Response timestamp
 }
 
-// Simple conversation history message (passed TO gRPC, not managed BY it)
+// Multimodal message part (text or image)
+message MessagePart {
+  oneof part {
+    TextPart text = 1;
+    ImageUrlPart image_url = 2;
+  }
+}
+
+message TextPart {
+  string text = 1;
+}
+
+message ImageUrlPart {
+  string url = 1;                    // Image URL (HTTP URL or S3 pre-signed URL)
+}
+
+// Conversation history message with multimodal support
 message HistoryMessage {
   string role = 1;                   // user, assistant, system
-  string content = 2;                // message content
+  repeated MessagePart content_parts = 2;  // Message content as structured parts (text + images)
   int64 timestamp = 3;               // when it was created
 }
 

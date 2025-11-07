@@ -268,8 +268,8 @@ class InstructionConfig(_message.Message):
     def __init__(self, instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., model: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageRequest(_message.Message):
-    __slots__ = ("message_content", "user_id", "organization_id", "context", "conversation_history", "tools", "model", "message_id")
-    MESSAGE_CONTENT_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("message_parts", "user_id", "organization_id", "context", "conversation_history", "tools", "model", "message_id")
+    MESSAGE_PARTS_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
@@ -277,7 +277,7 @@ class ProcessMessageRequest(_message.Message):
     TOOLS_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
-    message_content: str
+    message_parts: _containers.RepeatedCompositeFieldContainer[MessagePart]
     user_id: str
     organization_id: int
     context: ChatContext
@@ -285,7 +285,7 @@ class ProcessMessageRequest(_message.Message):
     tools: _containers.RepeatedCompositeFieldContainer[ToolConfig]
     model: str
     message_id: str
-    def __init__(self, message_content: _Optional[str] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., context: _Optional[_Union[ChatContext, _Mapping]] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ..., message_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, message_parts: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., context: _Optional[_Union[ChatContext, _Mapping]] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ..., message_id: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageResponse(_message.Message):
     __slots__ = ("content_chunk", "rag_context", "complete", "error", "step_progress", "timestamp")
@@ -303,15 +303,35 @@ class ProcessMessageResponse(_message.Message):
     timestamp: int
     def __init__(self, content_chunk: _Optional[_Union[ContentChunk, _Mapping]] = ..., rag_context: _Optional[_Union[RagContext, _Mapping]] = ..., complete: _Optional[_Union[ProcessingComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., step_progress: _Optional[_Union[StepProgress, _Mapping]] = ..., timestamp: _Optional[int] = ...) -> None: ...
 
+class MessagePart(_message.Message):
+    __slots__ = ("text", "image_url")
+    TEXT_FIELD_NUMBER: _ClassVar[int]
+    IMAGE_URL_FIELD_NUMBER: _ClassVar[int]
+    text: TextPart
+    image_url: ImageUrlPart
+    def __init__(self, text: _Optional[_Union[TextPart, _Mapping]] = ..., image_url: _Optional[_Union[ImageUrlPart, _Mapping]] = ...) -> None: ...
+
+class TextPart(_message.Message):
+    __slots__ = ("text",)
+    TEXT_FIELD_NUMBER: _ClassVar[int]
+    text: str
+    def __init__(self, text: _Optional[str] = ...) -> None: ...
+
+class ImageUrlPart(_message.Message):
+    __slots__ = ("url",)
+    URL_FIELD_NUMBER: _ClassVar[int]
+    url: str
+    def __init__(self, url: _Optional[str] = ...) -> None: ...
+
 class HistoryMessage(_message.Message):
-    __slots__ = ("role", "content", "timestamp")
+    __slots__ = ("role", "content_parts", "timestamp")
     ROLE_FIELD_NUMBER: _ClassVar[int]
-    CONTENT_FIELD_NUMBER: _ClassVar[int]
+    CONTENT_PARTS_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     role: str
-    content: str
+    content_parts: _containers.RepeatedCompositeFieldContainer[MessagePart]
     timestamp: int
-    def __init__(self, role: _Optional[str] = ..., content: _Optional[str] = ..., timestamp: _Optional[int] = ...) -> None: ...
+    def __init__(self, role: _Optional[str] = ..., content_parts: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., timestamp: _Optional[int] = ...) -> None: ...
 
 class ContentChunk(_message.Message):
     __slots__ = ("content", "sequence")

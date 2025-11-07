@@ -209,6 +209,27 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         endpoint=ModelEndpoint(type="inference-api"),
     ),
 
+    # Vision-language model for image understanding
+    "Qwen/Qwen2-VL-7B-Instruct": ModelMetadata(
+        id="Qwen/Qwen2-VL-7B-Instruct",
+        name="Qwen2-VL 7B Instruct",
+        provider="huggingface",
+        description="Vision-language model for image understanding and analysis with tool calling support.",
+        context_window=32768,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=True,       # Vision capability for image inputs
+            json_mode=True,
+            multimodal=True,   # Multimodal support (text + images)
+        ),
+        pricing=ModelPricing(input_per_1m=0.20, output_per_1m=0.80),
+        tier=ModelTier.FREE,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
     # AIDEV-NOTE: Multimodal models removed - SmolVLM and Phi-4 don't support text-only chat
     # through HF Inference API. They only work for image-to-text tasks, not conversational AI.
     # SmolVLM models throw: "Task 'conversational' not supported for provider 'replicate'"
@@ -320,3 +341,8 @@ def can_access_model(
         return model_id in available_models
 
     return True
+
+
+def get_default_vision_model() -> str:
+    """Get default vision model for multimodal tasks with images."""
+    return "Qwen/Qwen2-VL-7B-Instruct"

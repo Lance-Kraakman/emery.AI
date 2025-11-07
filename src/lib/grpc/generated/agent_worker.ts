@@ -387,8 +387,8 @@ export interface InstructionConfig {
 
 /** Request for AI message processing */
 export interface ProcessMessageRequest {
-  /** Input message for AI processing */
-  messageContent: string;
+  /** Input message for AI processing (multimodal support) */
+  messageParts: MessagePart[];
   /** User identifier for context */
   userId: string;
   /** Organization for multi-tenant routing */
@@ -433,12 +433,27 @@ export interface ProcessMessageResponse {
   timestamp: number;
 }
 
-/** Simple conversation history message (passed TO gRPC, not managed BY it) */
+/** Multimodal message part (text or image) */
+export interface MessagePart {
+  text?: TextPart | undefined;
+  imageUrl?: ImageUrlPart | undefined;
+}
+
+export interface TextPart {
+  text: string;
+}
+
+export interface ImageUrlPart {
+  /** Image URL (HTTP URL or S3 pre-signed URL) */
+  url: string;
+}
+
+/** Conversation history message with multimodal support */
 export interface HistoryMessage {
   /** user, assistant, system */
   role: string;
-  /** message content */
-  content: string;
+  /** Message content as structured parts (text + images) */
+  contentParts: MessagePart[];
   /** when it was created */
   timestamp: number;
 }
@@ -2675,7 +2690,7 @@ export const InstructionConfig: MessageFns<InstructionConfig> = {
 
 function createBaseProcessMessageRequest(): ProcessMessageRequest {
   return {
-    messageContent: "",
+    messageParts: [],
     userId: "",
     organizationId: 0,
     context: undefined,
@@ -2688,8 +2703,8 @@ function createBaseProcessMessageRequest(): ProcessMessageRequest {
 
 export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
   encode(message: ProcessMessageRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.messageContent !== "") {
-      writer.uint32(10).string(message.messageContent);
+    for (const v of message.messageParts) {
+      MessagePart.encode(v!, writer.uint32(10).fork()).join();
     }
     if (message.userId !== "") {
       writer.uint32(18).string(message.userId);
@@ -2727,7 +2742,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
             break;
           }
 
-          message.messageContent = reader.string();
+          message.messageParts.push(MessagePart.decode(reader, reader.uint32()));
           continue;
         }
         case 2: {
@@ -2797,7 +2812,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
 
   fromJSON(object: any): ProcessMessageRequest {
     return {
-      messageContent: isSet(object.messageContent) ? globalThis.String(object.messageContent) : "",
+      messageParts: globalThis.Array.isArray(object?.messageParts)
+        ? object.messageParts.map((e: any) => MessagePart.fromJSON(e))
+        : [],
       userId: isSet(object.userId) ? globalThis.String(object.userId) : "",
       organizationId: isSet(object.organizationId) ? globalThis.Number(object.organizationId) : 0,
       context: isSet(object.context) ? ChatContext.fromJSON(object.context) : undefined,
@@ -2812,8 +2829,8 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
 
   toJSON(message: ProcessMessageRequest): unknown {
     const obj: any = {};
-    if (message.messageContent !== "") {
-      obj.messageContent = message.messageContent;
+    if (message.messageParts?.length) {
+      obj.messageParts = message.messageParts.map((e) => MessagePart.toJSON(e));
     }
     if (message.userId !== "") {
       obj.userId = message.userId;
@@ -2844,7 +2861,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
   },
   fromPartial<I extends Exact<DeepPartial<ProcessMessageRequest>, I>>(object: I): ProcessMessageRequest {
     const message = createBaseProcessMessageRequest();
-    message.messageContent = object.messageContent ?? "";
+    message.messageParts = object.messageParts?.map((e) => MessagePart.fromPartial(e)) || [];
     message.userId = object.userId ?? "";
     message.organizationId = object.organizationId ?? 0;
     message.context = (object.context !== undefined && object.context !== null)
@@ -3015,8 +3032,202 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
   },
 };
 
+function createBaseMessagePart(): MessagePart {
+  return { text: undefined, imageUrl: undefined };
+}
+
+export const MessagePart: MessageFns<MessagePart> = {
+  encode(message: MessagePart, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.text !== undefined) {
+      TextPart.encode(message.text, writer.uint32(10).fork()).join();
+    }
+    if (message.imageUrl !== undefined) {
+      ImageUrlPart.encode(message.imageUrl, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MessagePart {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMessagePart();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.text = TextPart.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.imageUrl = ImageUrlPart.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): MessagePart {
+    return {
+      text: isSet(object.text) ? TextPart.fromJSON(object.text) : undefined,
+      imageUrl: isSet(object.imageUrl) ? ImageUrlPart.fromJSON(object.imageUrl) : undefined,
+    };
+  },
+
+  toJSON(message: MessagePart): unknown {
+    const obj: any = {};
+    if (message.text !== undefined) {
+      obj.text = TextPart.toJSON(message.text);
+    }
+    if (message.imageUrl !== undefined) {
+      obj.imageUrl = ImageUrlPart.toJSON(message.imageUrl);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<MessagePart>, I>>(base?: I): MessagePart {
+    return MessagePart.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MessagePart>, I>>(object: I): MessagePart {
+    const message = createBaseMessagePart();
+    message.text = (object.text !== undefined && object.text !== null) ? TextPart.fromPartial(object.text) : undefined;
+    message.imageUrl = (object.imageUrl !== undefined && object.imageUrl !== null)
+      ? ImageUrlPart.fromPartial(object.imageUrl)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseTextPart(): TextPart {
+  return { text: "" };
+}
+
+export const TextPart: MessageFns<TextPart> = {
+  encode(message: TextPart, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.text !== "") {
+      writer.uint32(10).string(message.text);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TextPart {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTextPart();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.text = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TextPart {
+    return { text: isSet(object.text) ? globalThis.String(object.text) : "" };
+  },
+
+  toJSON(message: TextPart): unknown {
+    const obj: any = {};
+    if (message.text !== "") {
+      obj.text = message.text;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TextPart>, I>>(base?: I): TextPart {
+    return TextPart.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TextPart>, I>>(object: I): TextPart {
+    const message = createBaseTextPart();
+    message.text = object.text ?? "";
+    return message;
+  },
+};
+
+function createBaseImageUrlPart(): ImageUrlPart {
+  return { url: "" };
+}
+
+export const ImageUrlPart: MessageFns<ImageUrlPart> = {
+  encode(message: ImageUrlPart, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.url !== "") {
+      writer.uint32(10).string(message.url);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ImageUrlPart {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseImageUrlPart();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.url = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ImageUrlPart {
+    return { url: isSet(object.url) ? globalThis.String(object.url) : "" };
+  },
+
+  toJSON(message: ImageUrlPart): unknown {
+    const obj: any = {};
+    if (message.url !== "") {
+      obj.url = message.url;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ImageUrlPart>, I>>(base?: I): ImageUrlPart {
+    return ImageUrlPart.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ImageUrlPart>, I>>(object: I): ImageUrlPart {
+    const message = createBaseImageUrlPart();
+    message.url = object.url ?? "";
+    return message;
+  },
+};
+
 function createBaseHistoryMessage(): HistoryMessage {
-  return { role: "", content: "", timestamp: 0 };
+  return { role: "", contentParts: [], timestamp: 0 };
 }
 
 export const HistoryMessage: MessageFns<HistoryMessage> = {
@@ -3024,8 +3235,8 @@ export const HistoryMessage: MessageFns<HistoryMessage> = {
     if (message.role !== "") {
       writer.uint32(10).string(message.role);
     }
-    if (message.content !== "") {
-      writer.uint32(18).string(message.content);
+    for (const v of message.contentParts) {
+      MessagePart.encode(v!, writer.uint32(18).fork()).join();
     }
     if (message.timestamp !== 0) {
       writer.uint32(24).int64(message.timestamp);
@@ -3053,7 +3264,7 @@ export const HistoryMessage: MessageFns<HistoryMessage> = {
             break;
           }
 
-          message.content = reader.string();
+          message.contentParts.push(MessagePart.decode(reader, reader.uint32()));
           continue;
         }
         case 3: {
@@ -3076,7 +3287,9 @@ export const HistoryMessage: MessageFns<HistoryMessage> = {
   fromJSON(object: any): HistoryMessage {
     return {
       role: isSet(object.role) ? globalThis.String(object.role) : "",
-      content: isSet(object.content) ? globalThis.String(object.content) : "",
+      contentParts: globalThis.Array.isArray(object?.contentParts)
+        ? object.contentParts.map((e: any) => MessagePart.fromJSON(e))
+        : [],
       timestamp: isSet(object.timestamp) ? globalThis.Number(object.timestamp) : 0,
     };
   },
@@ -3086,8 +3299,8 @@ export const HistoryMessage: MessageFns<HistoryMessage> = {
     if (message.role !== "") {
       obj.role = message.role;
     }
-    if (message.content !== "") {
-      obj.content = message.content;
+    if (message.contentParts?.length) {
+      obj.contentParts = message.contentParts.map((e) => MessagePart.toJSON(e));
     }
     if (message.timestamp !== 0) {
       obj.timestamp = Math.round(message.timestamp);
@@ -3101,7 +3314,7 @@ export const HistoryMessage: MessageFns<HistoryMessage> = {
   fromPartial<I extends Exact<DeepPartial<HistoryMessage>, I>>(object: I): HistoryMessage {
     const message = createBaseHistoryMessage();
     message.role = object.role ?? "";
-    message.content = object.content ?? "";
+    message.contentParts = object.contentParts?.map((e) => MessagePart.fromPartial(e)) || [];
     message.timestamp = object.timestamp ?? 0;
     return message;
   },
