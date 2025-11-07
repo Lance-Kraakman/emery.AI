@@ -265,6 +265,35 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
     },
   },
 
+  // Vision-language model for image understanding
+  'Qwen/Qwen2-VL-7B-Instruct': {
+    id: 'Qwen/Qwen2-VL-7B-Instruct',
+    name: 'Qwen2-VL 7B Instruct',
+    provider: 'huggingface',
+    description: 'Vision-language model for image understanding and analysis with tool calling support.',
+    contextWindow: 32768,
+    maxOutputTokens: 8192,
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: true,      // Vision capability for image inputs
+      jsonMode: true,
+      multimodal: true,  // Multimodal support (text + images)
+    },
+    pricing: {
+      inputPer1M: 0.20,
+      outputPer1M: 0.80,
+      currency: 'USD',
+      inputCreditsPerK: 0.5,     // 0.5 credits per 1K input tokens
+      outputCreditsPerK: 2.0,    // 2.0 credits per 1K output tokens
+    },
+    tier: 'free',
+    category: 'balanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
   // AIDEV-NOTE: Multimodal models removed - SmolVLM and Phi-4 don't support text-only chat
   // through HF Inference API. They only work for image-to-text tasks, not conversational AI.
   // SmolVLM models throw: "Task 'conversational' not supported for provider 'replicate'"
