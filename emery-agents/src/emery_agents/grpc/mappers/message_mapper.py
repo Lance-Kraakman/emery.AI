@@ -73,12 +73,24 @@ def proto_parts_to_smolagents_content(
                 "text": part.text.text
             })
         elif part.HasField('image_url'):
-            # Download S3 image and convert to PIL Image
-            pil_image = download_image_from_url(part.image_url.url)
-            content_parts.append({
-                "type": "image",
-                "image": pil_image  # PIL Image object, not URL
-            })
+            # Download S3 image and convert to PIL Image with error handling
+            image_url = part.image_url.url
+            logger.info(f"🖼️ Processing image URL: {image_url[:80]}...")
+
+            try:
+                pil_image = download_image_from_url(image_url)
+                content_parts.append({
+                    "type": "image",
+                    "image": pil_image  # PIL Image object, not URL
+                })
+                logger.info(f"✅ Successfully added image to content: {pil_image.size} {pil_image.mode}")
+            except requests.exceptions.RequestException as e:
+                logger.error(f"❌ Failed to download image from URL: {str(e)}")
+                logger.warning("⚠️ Skipping image, continuing with text-only message")
+                # Continue processing without the image - don't crash the whole message
+            except Exception as e:
+                logger.error(f"❌ Unexpected error processing image: {str(e)}")
+                logger.warning("⚠️ Skipping image, continuing with text-only message")
 
     # Optimization: return string if only one text part
     if len(content_parts) == 1 and content_parts[0]["type"] == "text":
