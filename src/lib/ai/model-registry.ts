@@ -265,90 +265,10 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
     },
   },
 
-  // Multimodal models with tool calling (2025)
-  'HuggingFaceTB/SmolVLM-256M-Instruct': {
-    id: 'HuggingFaceTB/SmolVLM-256M-Instruct',
-    name: 'SmolVLM 256M Instruct',
-    provider: 'huggingface',
-    description: 'Ultra-lightweight vision-language model with tool calling. Perfect for edge deployment and fast inference with image understanding.',
-    contextWindow: 8192,
-    maxOutputTokens: 2048,
-    capabilities: {
-      toolCalling: true,   // Vision + tool calling support
-      streaming: true,
-      vision: true,
-      jsonMode: true,
-      multimodal: true,
-    },
-    pricing: {
-      inputPer1M: 0.05,      // Very cheap due to small size
-      outputPer1M: 0.20,
-      currency: 'USD',
-      inputCreditsPerK: 0.125,   // 0.125 credits per 1K input tokens
-      outputCreditsPerK: 0.5,    // 0.5 credits per 1K output tokens
-    },
-    tier: 'free',
-    category: 'fast',
-    endpoint: {
-      type: 'inference-api',
-    },
-  },
-
-  'HuggingFaceTB/SmolVLM-500M-Instruct': {
-    id: 'HuggingFaceTB/SmolVLM-500M-Instruct',
-    name: 'SmolVLM 500M Instruct',
-    provider: 'huggingface',
-    description: 'Small vision-language model with tool calling. Balanced performance and efficiency for multimodal agent workflows.',
-    contextWindow: 8192,
-    maxOutputTokens: 2048,
-    capabilities: {
-      toolCalling: true,   // Vision + tool calling support
-      streaming: true,
-      vision: true,
-      jsonMode: true,
-      multimodal: true,
-    },
-    pricing: {
-      inputPer1M: 0.08,
-      outputPer1M: 0.30,
-      currency: 'USD',
-      inputCreditsPerK: 0.2,     // 0.2 credits per 1K input tokens
-      outputCreditsPerK: 0.75,   // 0.75 credits per 1K output tokens
-    },
-    tier: 'free',
-    category: 'fast',
-    endpoint: {
-      type: 'inference-api',
-    },
-  },
-
-  'microsoft/Phi-4-multimodal-instruct': {
-    id: 'microsoft/Phi-4-multimodal-instruct',
-    name: 'Microsoft Phi-4 Multimodal',
-    provider: 'huggingface',
-    description: 'Advanced multimodal model with vision, audio, and tool calling. Excellent instruction following and function calling capabilities. 128K context.',
-    contextWindow: 128000,
-    maxOutputTokens: 4096,
-    capabilities: {
-      toolCalling: true,   // Strong tool calling capabilities
-      streaming: true,
-      vision: true,
-      jsonMode: true,
-      multimodal: true,
-    },
-    pricing: {
-      inputPer1M: 0.25,
-      outputPer1M: 1.00,
-      currency: 'USD',
-      inputCreditsPerK: 0.625,   // 0.625 credits per 1K input tokens
-      outputCreditsPerK: 2.5,    // 2.5 credits per 1K output tokens
-    },
-    tier: 'free',
-    category: 'advanced',
-    endpoint: {
-      type: 'inference-api',
-    },
-  },
+  // AIDEV-NOTE: Multimodal models removed - SmolVLM and Phi-4 don't support text-only chat
+  // through HF Inference API. They only work for image-to-text tasks, not conversational AI.
+  // SmolVLM models throw: "Task 'conversational' not supported for provider 'replicate'"
+  // Phi-4 multimodal is not deployed on HF Inference API (only Azure AI, DeepInfra, etc.)
 };
 
 /**
