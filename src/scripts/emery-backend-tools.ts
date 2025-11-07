@@ -108,17 +108,52 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
     id: "table_crud",
     app: "emery",
     name: "Table Management",
-    description: "Manage data tables",
+    description: "Comprehensive table and row management with 9 operations. TABLE: create_table (create new table), read_table (get details), update_table (modify metadata), delete_table (remove table), list_tables (list all). ROWS: create_row (add row), get_rows (query with pagination, default 100 rows), update_row (modify row), delete_row (remove row).",
     type: "action",
     inputs: {
-      operation: {
+      method: {
         type: "string",
-        description: "CRUD operation (create, read, update, delete)",
+        description: "Operation: create_table, read_table, update_table, delete_table, list_tables, create_row, get_rows, update_row, delete_row",
         required: true
       },
-      table_data: {
+      table_id: {
+        type: "string",
+        description: "Table ID (required for most operations)",
+        required: false
+      },
+      row_id: {
+        type: "string",
+        description: "Row ID (required for update_row, delete_row)",
+        required: false
+      },
+      data: {
         type: "object",
-        description: "Table data for the operation",
+        description: "Data payload. For create_table: {name, databaseId, description}. For create_row/update_row: field values {field_1: value1, field_2: value2}. For update_table: {name, description}",
+        required: false
+      },
+      limit: {
+        type: "number",
+        description: "Max rows to return for get_rows (default: 100)",
+        required: false
+      },
+      offset: {
+        type: "number",
+        description: "Pagination offset for get_rows (default: 0)",
+        required: false
+      },
+      order_by: {
+        type: "string",
+        description: "Field to sort by for get_rows",
+        required: false
+      },
+      order_direction: {
+        type: "string",
+        description: "Sort direction for get_rows: ASC or DESC",
+        required: false
+      },
+      filters: {
+        type: "object",
+        description: "Filter criteria for queries",
         required: false
       }
     }
@@ -284,6 +319,32 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       data: {
         type: "object",
         description: "Data for the operation",
+        required: false
+      }
+    }
+  },
+
+  // AI Tools (from embedding_tool.py)
+  "generate_embedding": {
+    id: "generate_embedding",
+    app: "emery",
+    name: "Generate Embedding",
+    description: "Generate vector embeddings for text using HuggingFace sentence-transformer models",
+    type: "action",
+    inputs: {
+      text: {
+        type: "string",
+        description: "Text string or array of text strings to embed",
+        required: true
+      },
+      model: {
+        type: "string",
+        description: "HuggingFace model ID (default: sentence-transformers/all-mpnet-base-v2). Supported models: all-mpnet-base-v2 (768d), all-MiniLM-L6-v2 (384d), all-MiniLM-L12-v2 (384d)",
+        required: false
+      },
+      normalize: {
+        type: "boolean",
+        description: "Apply L2 normalization to embeddings (default: true)",
         required: false
       }
     }

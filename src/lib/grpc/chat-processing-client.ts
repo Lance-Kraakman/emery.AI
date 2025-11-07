@@ -12,6 +12,7 @@ import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import path from 'path';
 import type { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import type { MessagePart as LlamaIndexMessagePart } from '@llamaindex/chat-ui';
 import type {
   ProcessMessageRequest,
   ProcessMessageResponse,
@@ -21,8 +22,10 @@ import type {
   RagContext,
   ProcessingComplete,
   ProcessingError,
-  StepProgress
+  StepProgress,
+  MessagePart
 } from './generated/agent_worker';
+import { toProtoMessageParts } from './mappers/message-part-mapper';
 
 // Load protobuf definition
 const PROTO_PATH = path.join(process.cwd(), 'proto', 'agent_worker.proto');
@@ -75,12 +78,14 @@ export class ChatProcessingClient {
 
   /**
    * Process a message and stream AI response
-   * 
+   *
    * This is a server-side method called by Next.js API routes.
    * The actual streaming to browser happens at the API route level.
+   *
+   * Accepts multimodal message parts (text + images) via LlamaIndex format.
    */
   async processMessage(
-    messageContent: string,
+    messageParts: LlamaIndexMessagePart[],
     userId: string,
     organizationId: number,
     conversationHistory: HistoryMessage[] = [],
@@ -93,13 +98,17 @@ export class ChatProcessingClient {
     const actualMessageId = messageId || `msg_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     console.log(`[CHAT-GRPC-CLIENT] Processing message ${actualMessageId} for user ${userId} in org ${organizationId}`);
-    console.log(`[CHAT-GRPC-CLIENT] Message preview: ${messageContent.substring(0, 100)}...`);
+    console.log(`[CHAT-GRPC-CLIENT] Message parts: ${messageParts.length}`);
     console.log(`[CHAT-GRPC-CLIENT] History messages: ${conversationHistory.length}`);
+
+    // Convert LlamaIndex MessageParts to Protocol Buffer format
+    const protoMessageParts = toProtoMessageParts(messageParts);
+    console.log(`[CHAT-GRPC-CLIENT] Converted to ${protoMessageParts.length} proto message parts`);
 
     // Build request
     const request: ProcessMessageRequest = {
       context: undefined, // Will set below if needed
-      messageContent: messageContent,
+      messageParts: protoMessageParts,
       userId: userId,
       organizationId: organizationId,
       conversationHistory: conversationHistory,

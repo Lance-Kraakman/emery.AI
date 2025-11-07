@@ -5,6 +5,7 @@ import type { FieldDTO } from '@/app/mappers/field-mapper';
 import { RelationField } from '@/components/tables/fields/RelationField';
 import { FileField } from '@/components/tables/fields/FileField';
 import { DocumentField } from '@/components/tables/fields/DocumentField';
+import { EmbeddingField } from '@/components/tables/fields/EmbeddingField';
 import { FileTypeDetector } from '@/ddd/domain/tables/services/file-type-detector';
 import { createFileArtifact, createDocumentArtifact } from '@/components/chat/types/chat-artifacts';
 import { uiStateActions } from '@/stores/ui-state.store';
@@ -165,10 +166,20 @@ export default function CellRenderer({ field, value, readOnly = false, organizat
           onDocumentOpen={handleFileOpen}
         />
       );
-      
+
+    case 'embedding':
+      // Use unified EmbeddingField component (display mode)
+      return (
+        <EmbeddingField
+          value={value}
+          isEditMode={false}
+          compact={true}
+        />
+      );
+
     case 'number':
       return <span>{typeof value === 'number' ? value.toLocaleString() : value}</span>;
-      
+
     default:
       return <span>{String(value)}</span>;
   }

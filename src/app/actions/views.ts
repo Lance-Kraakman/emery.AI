@@ -654,3 +654,180 @@ export async function executeChartView(
     return null;
   }
 }
+
+/**
+ * Get form view configuration for rendering
+ *
+ * AIDEV-NOTE: Used by FormBlock to fetch form configuration and field definitions.
+ * Returns all necessary data for client-side form rendering.
+ */
+export async function getFormViewConfiguration(
+  viewId: number
+): Promise<{
+  viewName: string;
+  viewDescription?: string;
+  formConfig: any;
+  tableFields: any[];
+  tableId: number;
+} | null> {
+  try {
+    await requirePermission("data:view");
+    await requireCurrentOrganization();
+
+    if (!viewId) {
+      return null;
+    }
+
+    const viewService = getViewApplicationService();
+
+    // Get form view configuration via application service
+    const result = await viewService.getFormViewConfiguration({
+      viewId: ViewId.fromNumber(viewId),
+    });
+
+    if (!result.success || !result.data) {
+      console.error("Failed to get form view configuration:", result.error);
+      return null;
+    }
+
+    return result.data;
+  } catch (error) {
+    console.error("Error getting form view configuration:", error);
+    return null;
+  }
+}
+
+/**
+ * Submit a form view to create a new row
+ *
+ * AIDEV-NOTE: Used by FormBlock to submit form data and create new table rows.
+ * Validates form data against form configuration before creating the row.
+ *
+ * @param viewId - Form view ID
+ * @param formData - Submitted form data with field names as keys
+ * @param revalidateUrl - Optional URL to revalidate after submission
+ */
+export async function submitFormView(
+  viewId: number,
+  formData: Record<string, any>,
+  revalidateUrl?: string
+): Promise<Result<{ rowId: string }>> {
+  try {
+    const session = await requirePermission("data:create");
+    await requireCurrentOrganization();
+
+    if (!viewId) {
+      return {
+        success: false,
+        error: "View ID is required",
+      };
+    }
+
+    if (!formData || Object.keys(formData).length === 0) {
+      return {
+        success: false,
+        error: "Form data is required",
+      };
+    }
+
+    const viewService = getViewApplicationService();
+
+    // 1. Get form view configuration
+    const configResult = await viewService.getFormViewConfiguration({
+      viewId: ViewId.fromNumber(viewId),
+    });
+
+    if (!configResult.success || !configResult.data) {
+      return {
+        success: false,
+        error: configResult.error || "Failed to get form view configuration",
+      };
+    }
+
+    const { formConfig, tableFields, tableId } = configResult.data;
+
+    // 2. Validate required fields from form configuration
+    // AIDEV-NOTE: Form configuration specifies which fields are required
+    // We need to validate that all required fields have values
+    const requiredFieldErrors: string[] = [];
+
+    for (const page of formConfig.pages) {
+      for (const fieldConfig of page.fields) {
+        // Check if field is required (either in field config or in table field definition)
+        const tableField = tableFields.find((f: any) => f.id === fieldConfig.fieldId);
+        if (!tableField) continue;
+
+        const isRequired = fieldConfig.required !== undefined
+          ? fieldConfig.required
+          : tableField.required;
+
+        if (isRequired) {
+          const fieldValue = formData[tableField.name];
+          if (fieldValue === undefined || fieldValue === null || fieldValue === '') {
+            const label = fieldConfig.label || tableField.name;
+            requiredFieldErrors.push(`${label} is required`);
+          }
+        }
+      }
+    }
+
+    if (requiredFieldErrors.length > 0) {
+      return {
+        success: false,
+        error: requiredFieldErrors.join(', '),
+      };
+    }
+
+    // 3. Convert field names to field IDs for Row entity
+    // AIDEV-NOTE: Form data comes with field names as keys: { name: "value", age: 123 }
+    // But Row.fromPlainObject expects numeric field IDs: { 6: "value", 7: 123 }
+    const convertedData: Record<string, any> = {};
+
+    for (const field of tableFields) {
+      const fieldKey = field.id.toString();
+      if (formData[field.name] !== undefined) {
+        convertedData[fieldKey] = formData[field.name];
+      }
+    }
+
+    // 4. Create Row entity from converted data
+    const { Row } = await import("@/ddd/domain/tables/value-objects/row");
+    const row = Row.fromPlainObject(convertedData, tableId, tableFields);
+
+    // 5. Create row via table application service
+    const tableAppService = (await import("@/ddd/application/di/container")).getTableApplicationService();
+
+    const createResult = await tableAppService.createRow({
+      tableId: TableId.fromNumber(tableId),
+      data: row,
+      createdBy: UserId.fromString(session.user.id),
+    });
+
+    if (!createResult.success || !createResult.data) {
+      return {
+        success: false,
+        error: createResult.error || "Failed to create row",
+      };
+    }
+
+    // 6. Revalidate path if provided
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath("/data");
+    }
+
+    return {
+      success: true,
+      data: {
+        rowId: createResult.data.id.value,
+      },
+    };
+  } catch (error) {
+    console.error("Error submitting form view:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to submit form",
+    };
+  }
+}

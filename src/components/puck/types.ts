@@ -13,6 +13,7 @@ import { SpaceProps } from "./blocks/Space";
 import { TableBlockProps } from "./blocks/TableBlock/TableBlock";
 import { MetricBlockProps } from "./blocks/MetricBlock/MetricBlock";
 import { ChartBlockProps } from "./blocks/ChartBlock/ChartBlock";
+import { FormBlockProps } from "./blocks/FormBlock/FormBlock";
 
 import { RootProps } from "./root";
 
@@ -56,6 +57,7 @@ export type Components = {
   TableBlock: TableBlockProps;
   MetricBlock: MetricBlockProps;
   ChartBlock: ChartBlockProps;
+  FormBlock: FormBlockProps;
 };
 
 export type UserConfig = Config<{

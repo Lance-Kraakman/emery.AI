@@ -17,6 +17,7 @@ from huggingface_hub import InferenceClient
 from .model_registry import (
     get_model_metadata,
     get_default_model_for_tier,
+    get_default_vision_model,
     calculate_token_cost,
     ModelTier,
 )
@@ -64,20 +65,25 @@ class CustomInferenceModel(Model):
         logger.info(f"🔧 Model name: {model_name}")
 
     def generate(self, messages: List[Any], stop_sequences: Optional[List[str]] = None, **kwargs) -> Any:
-        """Generate response using dedicated endpoint with correct model name."""
+        """
+        Generate response using dedicated endpoint or HF Inference API.
+
+        Accepts messages in HuggingFace format (already converted by mapper):
+        [{"role": "user", "content": [{"type": "text", "text": "..."}, {"type": "image_url", "image_url": {"url": "..."}}]}]
+        """
         try:
-            # Convert messages to the format expected by your endpoint
+            # Convert messages to the format expected by HF API
             chat_messages = []
             for msg in messages:
                 # Handle both dict and ChatMessage object formats
                 if hasattr(msg, 'role') and hasattr(msg, 'content'):
-                    # ChatMessage object
+                    # ChatMessage object - preserve content structure
                     chat_messages.append({
                         "role": msg.role,
                         "content": msg.content
                     })
                 elif isinstance(msg, dict):
-                    # Dictionary format
+                    # Dictionary format (from mapper) - already in HF format
                     chat_messages.append({
                         "role": msg.get("role", "user"),
                         "content": msg.get("content", "")
@@ -152,6 +158,37 @@ class SmolagentsModelProvider:
         """Initialize provider with HuggingFace token."""
         self.hf_token = self._get_hf_token()
         logger.info("✅ SmolagentsModelProvider initialized with model registry support")
+
+    def get_model_for_message(
+        self,
+        has_images: bool,
+        model_id: Optional[str] = None,
+    ) -> CustomInferenceModel:
+        """
+        Get appropriate model for message based on content type.
+
+        Args:
+            has_images: Whether the message contains image content
+            model_id: Optional specific model ID to use (overrides smart selection)
+
+        Returns:
+            Configured model instance (vision model if images present, text model otherwise)
+        """
+        # Use explicit model if provided
+        if model_id:
+            logger.info(f"🔧 Using explicit model: {model_id}")
+            return self.get_model(model_id=model_id)
+
+        # Smart model selection based on content
+        if has_images:
+            vision_model_id = get_default_vision_model()
+            logger.info(f"🖼️ Images detected, using vision model: {vision_model_id}")
+            return self.get_model(model_id=vision_model_id)
+        else:
+            # Use default text model
+            default_model_id = get_default_model_for_tier(ModelTier.FREE)
+            logger.info(f"📝 Text only, using default model: {default_model_id}")
+            return self.get_model(model_id=default_model_id)
 
     def get_model(
         self,

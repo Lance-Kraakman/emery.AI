@@ -405,19 +405,30 @@ def load_file_crud(config: ToolConfig) -> Any:
 
 
 def load_table_crud(config: ToolConfig) -> Any:
-    """Load Table CRUD tool with method-specific routing."""
+    """
+    Load comprehensive Table CRUD tool with table and row operations.
+
+    AIDEV-NOTE: Supports 9 operations total:
+    - Table operations (5): create_table, read_table, update_table, delete_table, list_tables
+    - Row operations (4): create_row, get_rows, update_row, delete_row
+    """
 
     class TableCrudTool(BaseCrudTool):
-        """CRUD operations for Emery tables."""
+        """Comprehensive CRUD operations for Emery tables and rows."""
 
         name = "table_crud"
-        description = "Create, read, update, delete, and list tables in your organization. Supports dynamic table schema management and data operations."
+        description = "Comprehensive table and row management. Table operations: create_table (create new table), read_table (get table details), update_table (modify metadata), delete_table (remove table), list_tables (list all tables). Row operations: create_row (add row), get_rows (query with pagination), update_row (modify row), delete_row (remove row)."
         inputs = {
-            "method": {"type": "string", "description": "CRUD operation: create, read, update, delete, list"},
-            "table_id": {"type": "string", "description": "Table ID for read, update, delete operations", "nullable": True},
-            "data": {"type": "object", "description": "Table data for create and update operations", "nullable": True},
-            "filters": {"type": "object", "description": "Filter criteria for list operation", "nullable": True},
-            "auth_token": {"type": "string", "description": "Internal API authentication token"},
+            "method": {"type": "string", "description": "Operation: create_table, read_table, update_table, delete_table, list_tables, create_row, get_rows, update_row, delete_row"},
+            "table_id": {"type": "string", "description": "Table ID (required for most operations)", "nullable": True},
+            "row_id": {"type": "string", "description": "Row ID (required for update_row, delete_row)", "nullable": True},
+            "data": {"type": "object", "description": "Data payload. For create_table: {name, databaseId, description}. For create_row/update_row: field values {field_1: value1, field_2: value2}. For update_table: {name, description}", "nullable": True},
+            "limit": {"type": "integer", "description": "Max rows to return for get_rows (default: 100)", "nullable": True},
+            "offset": {"type": "integer", "description": "Pagination offset for get_rows (default: 0)", "nullable": True},
+            "order_by": {"type": "string", "description": "Field to sort by for get_rows", "nullable": True},
+            "order_direction": {"type": "string", "description": "Sort direction: ASC or DESC", "nullable": True},
+            "filters": {"type": "object", "description": "Filter criteria for queries", "nullable": True},
+            "auth_token": {"type": "string", "description": "User API key (user_xxx format) or Bearer token"},
             "organization_id": {"type": "string", "description": "Organization ID for RLS context"}
         }
         output_type = "object"
@@ -426,13 +437,19 @@ def load_table_crud(config: ToolConfig) -> Any:
             super().__init__("table", "crud")
 
         def forward(self, method: str, auth_token: str, organization_id: str,
-                   table_id: Optional[str] = None, data: Optional[Dict] = None,
-                   filters: Optional[Dict] = None) -> Dict[str, Any]:
-            """Execute table CRUD operation."""
+                   table_id: Optional[str] = None, row_id: Optional[str] = None,
+                   data: Optional[Dict] = None, limit: Optional[int] = None,
+                   offset: Optional[int] = None, order_by: Optional[str] = None,
+                   order_direction: Optional[str] = None, filters: Optional[Dict] = None) -> Dict[str, Any]:
+            """Execute table or row CRUD operation."""
 
-            if method == "create":
+            # ============================================================
+            # TABLE OPERATIONS
+            # ============================================================
+
+            if method == "create_table":
                 if not data:
-                    return {"success": False, "error": "Table data is required for create operation"}
+                    return {"success": False, "error": "Table data is required for create_table. Provide {name, databaseId, description}"}
 
                 return self._make_api_request(
                     endpoint="tables",
@@ -442,9 +459,9 @@ def load_table_crud(config: ToolConfig) -> Any:
                     organization_id=organization_id
                 )
 
-            elif method == "read":
+            elif method == "read_table":
                 if not table_id:
-                    return {"success": False, "error": "Table ID is required for read operation"}
+                    return {"success": False, "error": "Table ID is required for read_table operation"}
 
                 return self._make_api_request(
                     endpoint=f"tables/{table_id}",
@@ -453,11 +470,11 @@ def load_table_crud(config: ToolConfig) -> Any:
                     organization_id=organization_id
                 )
 
-            elif method == "update":
+            elif method == "update_table":
                 if not table_id:
-                    return {"success": False, "error": "Table ID is required for update operation"}
+                    return {"success": False, "error": "Table ID is required for update_table operation"}
                 if not data:
-                    return {"success": False, "error": "Table data is required for update operation"}
+                    return {"success": False, "error": "Table data is required for update_table. Provide {name, description, metadata}"}
 
                 return self._make_api_request(
                     endpoint=f"tables/{table_id}",
@@ -467,9 +484,9 @@ def load_table_crud(config: ToolConfig) -> Any:
                     organization_id=organization_id
                 )
 
-            elif method == "delete":
+            elif method == "delete_table":
                 if not table_id:
-                    return {"success": False, "error": "Table ID is required for delete operation"}
+                    return {"success": False, "error": "Table ID is required for delete_table operation"}
 
                 return self._make_api_request(
                     endpoint=f"tables/{table_id}",
@@ -478,7 +495,7 @@ def load_table_crud(config: ToolConfig) -> Any:
                     organization_id=organization_id
                 )
 
-            elif method == "list":
+            elif method == "list_tables":
                 endpoint = "tables"
                 if filters:
                     query_params = []
@@ -494,8 +511,93 @@ def load_table_crud(config: ToolConfig) -> Any:
                     organization_id=organization_id
                 )
 
+            # ============================================================
+            # ROW OPERATIONS
+            # ============================================================
+
+            elif method == "create_row":
+                if not table_id:
+                    return {"success": False, "error": "Table ID is required for create_row operation"}
+                if not data:
+                    return {"success": False, "error": "Row data is required for create_row. Provide field values {field_1: value1, field_2: value2}"}
+
+                return self._make_api_request(
+                    endpoint="rows",
+                    method="POST",
+                    data={"tableId": int(table_id), "data": data},
+                    auth_token=auth_token,
+                    organization_id=organization_id
+                )
+
+            elif method == "get_rows":
+                if not table_id:
+                    return {"success": False, "error": "Table ID is required for get_rows operation"}
+
+                # Build query parameters
+                query_params = [f"tableId={table_id}"]
+
+                # Add pagination parameters
+                if limit is not None:
+                    query_params.append(f"limit={limit}")
+                else:
+                    query_params.append("limit=100")  # Default to 100
+
+                if offset is not None:
+                    query_params.append(f"offset={offset}")
+                else:
+                    query_params.append("offset=0")  # Default to 0
+
+                # Add sorting parameters
+                if order_by:
+                    query_params.append(f"orderBy={order_by}")
+                if order_direction:
+                    query_params.append(f"orderDirection={order_direction}")
+
+                endpoint = "rows?" + "&".join(query_params)
+
+                return self._make_api_request(
+                    endpoint=endpoint,
+                    method="GET",
+                    auth_token=auth_token,
+                    organization_id=organization_id
+                )
+
+            elif method == "update_row":
+                if not table_id:
+                    return {"success": False, "error": "Table ID is required for update_row operation"}
+                if not row_id:
+                    return {"success": False, "error": "Row ID is required for update_row operation"}
+                if not data:
+                    return {"success": False, "error": "Row data is required for update_row. Provide updated field values"}
+
+                return self._make_api_request(
+                    endpoint="rows",
+                    method="PUT",
+                    data={"tableId": int(table_id), "rowId": row_id, "data": data},
+                    auth_token=auth_token,
+                    organization_id=organization_id
+                )
+
+            elif method == "delete_row":
+                if not table_id:
+                    return {"success": False, "error": "Table ID is required for delete_row operation"}
+                if not row_id:
+                    return {"success": False, "error": "Row ID is required for delete_row operation"}
+
+                endpoint = f"rows?tableId={table_id}&rowId={row_id}"
+
+                return self._make_api_request(
+                    endpoint=endpoint,
+                    method="DELETE",
+                    auth_token=auth_token,
+                    organization_id=organization_id
+                )
+
             else:
-                return {"success": False, "error": f"Unknown method: {method}. Supported: create, read, update, delete, list"}
+                return {
+                    "success": False,
+                    "error": f"Unknown method: {method}. Supported: create_table, read_table, update_table, delete_table, list_tables, create_row, get_rows, update_row, delete_row"
+                }
 
     return TableCrudTool()
 
