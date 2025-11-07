@@ -365,7 +365,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
     async def _stream_tool_calling_agent_response(
         self,
-        conversation_messages: List[Dict[str, Any]],
+        conversation_messages: List['ChatMessage'],
         tools: List['agent_worker_pb2.ToolConfig'],
         rag_context_data: Optional['RagContextData'],
         domain_context: Optional['agent_worker_pb2.ChatContext'] = None,
@@ -376,8 +376,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         Stream AI response using ToolCallingAgent with proper streaming support.
         Always uses ToolCallingAgent approach whether tools are provided or not.
 
-        AIDEV-NOTE: Uses agent.run() and simulates streaming by chunking the result
-        since smolagents doesn't natively support streaming.
+        AIDEV-NOTE: Accepts smolagents ChatMessage objects with PIL Image support.
+        Smolagents handles conversion to HuggingFace API format internally.
         """
 
         try:
@@ -400,9 +400,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             )
             logger.info(f"🤖 Created ToolCallingAgent with {len(smolagents_tools)} tools")
 
-            # 4. Build conversation prompt
-            full_prompt = self._build_conversation_prompt(system_prompt, conversation_messages)
-            logger.info(f"💬 Built conversation prompt: {len(full_prompt)} chars")
+            # 4. Build conversation with system message
+            # Import smolagents types
+            from smolagents.models import ChatMessage, MessageRole
+
+            # Prepend system message to conversation
+            system_message = ChatMessage(
+                role=MessageRole.SYSTEM,
+                content=system_prompt
+            )
+            all_messages = [system_message] + conversation_messages
+            logger.info(f"💬 Built conversation: {len(all_messages)} messages (including system)")
 
             # 5. Execute with ToolCallingAgent with real streaming
             logger.info("🚀 Executing ToolCallingAgent with stream=True...")
@@ -415,7 +423,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             final_answer_text = ""
 
             # Use stream=True for real-time step-by-step progress
-            for step in agent.run(full_prompt, stream=True):
+            # Pass ChatMessage list directly (smolagents handles HF API conversion)
+            for step in agent.run(all_messages, stream=True):
                 logger.info(f"📊 Step {step_index}: {type(step).__name__}")
 
                 if isinstance(step, PlanningStep):
@@ -616,16 +625,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         agent.description = f"Chat agent with {len(smolagents_tools)} tools available ({model_id})"
 
         return agent
-
-    def _build_conversation_prompt(self, system_prompt: str, conversation_messages: List[Dict[str, str]]) -> str:
-        """Build full conversation prompt for ToolCallingAgent."""
-        full_prompt = system_prompt + "\n\n" if system_prompt else ""
-
-        for msg in conversation_messages:
-            role_prefix = msg['role'].upper() + ": "
-            full_prompt += role_prefix + msg['content'] + "\n"
-
-        return full_prompt.strip()
 
     async def _stream_text_chunks(self, text: str, chunk_size: int = 5) -> AsyncIterator[str]:
         """Stream text by word chunks to simulate streaming."""
