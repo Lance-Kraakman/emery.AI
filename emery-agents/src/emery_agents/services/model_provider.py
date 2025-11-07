@@ -8,10 +8,10 @@ Supports model selection hierarchy: skill > agent > organization > default.
 
 import os
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from dataclasses import dataclass
 
-from smolagents.models import Model
+from smolagents.models import Model, ChatMessage, MessageRole
 from huggingface_hub import InferenceClient
 
 from .model_registry import (
@@ -64,26 +64,27 @@ class CustomInferenceModel(Model):
         logger.info(f"🔧 CustomInferenceModel initialized with endpoint: {endpoint_url}")
         logger.info(f"🔧 Model name: {model_name}")
 
-    def generate(self, messages: List[Any], stop_sequences: Optional[List[str]] = None, **kwargs) -> Any:
+    def generate(self, messages: List[Union[ChatMessage, Dict[str, Any]]], stop_sequences: Optional[List[str]] = None, **kwargs) -> Any:
         """
         Generate response using dedicated endpoint or HF Inference API.
 
-        Accepts messages in HuggingFace format (already converted by mapper):
-        [{"role": "user", "content": [{"type": "text", "text": "..."}, {"type": "image_url", "image_url": {"url": "..."}}]}]
+        Accepts messages in two formats:
+        1. ChatMessage objects (smolagents native format with PIL Images)
+        2. Dict format (legacy HuggingFace format)
         """
         try:
             # Convert messages to the format expected by HF API
             chat_messages = []
             for msg in messages:
-                # Handle both dict and ChatMessage object formats
-                if hasattr(msg, 'role') and hasattr(msg, 'content'):
-                    # ChatMessage object - preserve content structure
+                if isinstance(msg, ChatMessage):
+                    # ChatMessage object - convert MessageRole enum to string
+                    role_str = msg.role.value
                     chat_messages.append({
-                        "role": msg.role,
+                        "role": role_str,
                         "content": msg.content
                     })
                 elif isinstance(msg, dict):
-                    # Dictionary format (from mapper) - already in HF format
+                    # Dictionary format - already in HF format
                     chat_messages.append({
                         "role": msg.get("role", "user"),
                         "content": msg.get("content", "")

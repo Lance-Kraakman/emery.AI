@@ -22,6 +22,7 @@ import grpc
 from grpc import aio
 
 from smolagents import ToolCallingAgent
+from smolagents.models import ChatMessage, MessageRole
 from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .mappers import ProtoMapper
 from .mappers.message_mapper import (
@@ -365,7 +366,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
     async def _stream_tool_calling_agent_response(
         self,
-        conversation_messages: List['ChatMessage'],
+        conversation_messages: List[ChatMessage],
         tools: List['agent_worker_pb2.ToolConfig'],
         rag_context_data: Optional['RagContextData'],
         domain_context: Optional['agent_worker_pb2.ChatContext'] = None,
@@ -401,9 +402,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"🤖 Created ToolCallingAgent with {len(smolagents_tools)} tools")
 
             # 4. Build conversation with system message
-            # Import smolagents types
-            from smolagents.models import ChatMessage, MessageRole
-
             # Prepend system message to conversation
             system_message = ChatMessage(
                 role=MessageRole.SYSTEM,
@@ -412,7 +410,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             all_messages = [system_message] + conversation_messages
             logger.info(f"💬 Built conversation: {len(all_messages)} messages (including system)")
 
-            # 5. Execute with ToolCallingAgent with real streaming
+            # 5. Store messages in agent memory for model access
+            # AIDEV-NOTE: smolagents agent.run() expects a string, but the model needs ChatMessage objects
+            # We inject messages into agent memory so the model can access multimodal content
+            if agent.memory is not None:
+                # Clear existing messages and add our conversation
+                agent.memory.messages = all_messages
+                logger.info(f"📝 Injected {len(all_messages)} ChatMessage objects into agent memory")
+            else:
+                logger.warning("⚠️ Agent has no memory - multimodal messages may not work correctly")
+
+            # 6. Execute with ToolCallingAgent with real streaming
             logger.info("🚀 Executing ToolCallingAgent with stream=True...")
 
             # Import smolagents step types for proper type checking
@@ -422,9 +430,20 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             step_index = 0
             final_answer_text = ""
 
+            # Extract last user message text for agent.run() prompt
+            last_user_content = conversation_messages[-1].content if conversation_messages else "Continue the conversation"
+            if isinstance(last_user_content, list):
+                # Multimodal - extract text parts
+                text_parts = [part["text"] for part in last_user_content if part.get("type") == "text"]
+                user_prompt = " ".join(text_parts) if text_parts else "Process the provided image"
+            else:
+                user_prompt = last_user_content
+
+            logger.info(f"💬 User prompt for agent.run(): {user_prompt[:100]}...")
+
             # Use stream=True for real-time step-by-step progress
-            # Pass ChatMessage list directly (smolagents handles HF API conversion)
-            for step in agent.run(all_messages, stream=True):
+            # Pass string prompt (agent memory contains full ChatMessage history)
+            for step in agent.run(user_prompt, stream=True):
                 logger.info(f"📊 Step {step_index}: {type(step).__name__}")
 
                 if isinstance(step, PlanningStep):
