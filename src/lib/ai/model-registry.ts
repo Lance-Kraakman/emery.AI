@@ -100,11 +100,11 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
     id: 'Qwen/Qwen2.5-7B-Instruct',
     name: 'Qwen 2.5 7B Instruct',
     provider: 'huggingface',
-    description: 'Fast and efficient model for general chat and instruction following.',
+    description: 'Fast and efficient model for general chat, instruction following, and tool calling.',
     contextWindow: 32768,
     maxOutputTokens: 8192,
     capabilities: {
-      toolCalling: false,
+      toolCalling: true,  // Supports function/tool calling
       streaming: true,
       vision: false,
       jsonMode: true,
@@ -156,11 +156,11 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
     id: 'Qwen/Qwen2.5-Coder-7B-Instruct',
     name: 'Qwen 2.5 Coder 7B',
     provider: 'huggingface',
-    description: 'Specialized model for code generation and programming tasks.',
+    description: 'Specialized model for code generation, programming tasks, and tool calling for development workflows.',
     contextWindow: 32768,
     maxOutputTokens: 8192,
     capabilities: {
-      toolCalling: false,
+      toolCalling: true,  // Excellent for tool use workflows
       streaming: true,
       vision: false,
       jsonMode: true,
@@ -260,6 +260,91 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
     },
     tier: 'free',            // Available to all users
     category: 'balanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  // Multimodal models with tool calling (2025)
+  'HuggingFaceTB/SmolVLM-256M-Instruct': {
+    id: 'HuggingFaceTB/SmolVLM-256M-Instruct',
+    name: 'SmolVLM 256M Instruct',
+    provider: 'huggingface',
+    description: 'Ultra-lightweight vision-language model with tool calling. Perfect for edge deployment and fast inference with image understanding.',
+    contextWindow: 8192,
+    maxOutputTokens: 2048,
+    capabilities: {
+      toolCalling: true,   // Vision + tool calling support
+      streaming: true,
+      vision: true,
+      jsonMode: true,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0.05,      // Very cheap due to small size
+      outputPer1M: 0.20,
+      currency: 'USD',
+      inputCreditsPerK: 0.125,   // 0.125 credits per 1K input tokens
+      outputCreditsPerK: 0.5,    // 0.5 credits per 1K output tokens
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'HuggingFaceTB/SmolVLM-500M-Instruct': {
+    id: 'HuggingFaceTB/SmolVLM-500M-Instruct',
+    name: 'SmolVLM 500M Instruct',
+    provider: 'huggingface',
+    description: 'Small vision-language model with tool calling. Balanced performance and efficiency for multimodal agent workflows.',
+    contextWindow: 8192,
+    maxOutputTokens: 2048,
+    capabilities: {
+      toolCalling: true,   // Vision + tool calling support
+      streaming: true,
+      vision: true,
+      jsonMode: true,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0.08,
+      outputPer1M: 0.30,
+      currency: 'USD',
+      inputCreditsPerK: 0.2,     // 0.2 credits per 1K input tokens
+      outputCreditsPerK: 0.75,   // 0.75 credits per 1K output tokens
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'microsoft/Phi-4-multimodal': {
+    id: 'microsoft/Phi-4-multimodal',
+    name: 'Microsoft Phi-4 Multimodal',
+    provider: 'huggingface',
+    description: 'Advanced multimodal model with vision, audio, and tool calling. Excellent instruction following and function calling capabilities.',
+    contextWindow: 16384,
+    maxOutputTokens: 4096,
+    capabilities: {
+      toolCalling: true,   // Strong tool calling capabilities
+      streaming: true,
+      vision: true,
+      jsonMode: true,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0.25,
+      outputPer1M: 1.00,
+      currency: 'USD',
+      inputCreditsPerK: 0.625,   // 0.625 credits per 1K input tokens
+      outputCreditsPerK: 2.5,    // 2.5 credits per 1K output tokens
+    },
+    tier: 'free',
+    category: 'advanced',
     endpoint: {
       type: 'inference-api',
     },
