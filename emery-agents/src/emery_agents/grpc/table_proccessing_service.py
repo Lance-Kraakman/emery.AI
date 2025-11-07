@@ -1277,6 +1277,12 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 agg_config = request.aggregation
 
                 # Build Polars aggregation expressions
+                # AIDEV-NOTE: Null Handling in Aggregations
+                # - fill_null(0): Treats null values as zeros for numeric aggregations
+                # - Why: User expectation is "average of 20 rows" not "average of 12 non-null rows"
+                # - Example: AVG([10, 20, null, null]) = 7.5 (not 15)
+                # - Applied to: SUM, AVG, MIN, MAX
+                # - NOT applied to: COUNT (counts all rows), COUNT_EMPTY (counts nulls specifically)
                 agg_exprs = []
                 for agg_func in agg_config.aggregations:
                     field_id = agg_func.field_id  # Numeric field ID as string, e.g., "10", "11"
@@ -1284,15 +1290,15 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     # Map protobuf aggregation type to Polars expression
                     # AIDEV-NOTE: Use field_id as alias to ensure column names match what TypeScript expects
                     if agg_func.type == table_service_pb2.AGG_TYPE_SUM:
-                        agg_exprs.append(pl.col(field_id).sum().alias(field_id))
+                        agg_exprs.append(pl.col(field_id).fill_null(0).sum().alias(field_id))
                     elif agg_func.type == table_service_pb2.AGG_TYPE_AVG:
-                        agg_exprs.append(pl.col(field_id).mean().alias(field_id))
+                        agg_exprs.append(pl.col(field_id).fill_null(0).mean().alias(field_id))
                     elif agg_func.type == table_service_pb2.AGG_TYPE_COUNT:
                         agg_exprs.append(pl.col(field_id).count().alias(field_id))
                     elif agg_func.type == table_service_pb2.AGG_TYPE_MIN:
-                        agg_exprs.append(pl.col(field_id).min().alias(field_id))
+                        agg_exprs.append(pl.col(field_id).fill_null(0).min().alias(field_id))
                     elif agg_func.type == table_service_pb2.AGG_TYPE_MAX:
-                        agg_exprs.append(pl.col(field_id).max().alias(field_id))
+                        agg_exprs.append(pl.col(field_id).fill_null(0).max().alias(field_id))
                     elif agg_func.type == table_service_pb2.AGG_TYPE_COUNT_DISTINCT:
                         agg_exprs.append(pl.col(field_id).n_unique().alias(field_id))
                     elif agg_func.type == table_service_pb2.AGG_TYPE_COUNT_EMPTY:
