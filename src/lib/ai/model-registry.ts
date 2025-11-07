@@ -322,12 +322,12 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
     },
   },
 
-  'microsoft/Phi-4-multimodal': {
-    id: 'microsoft/Phi-4-multimodal',
+  'microsoft/Phi-4-multimodal-instruct': {
+    id: 'microsoft/Phi-4-multimodal-instruct',
     name: 'Microsoft Phi-4 Multimodal',
     provider: 'huggingface',
-    description: 'Advanced multimodal model with vision, audio, and tool calling. Excellent instruction following and function calling capabilities.',
-    contextWindow: 16384,
+    description: 'Advanced multimodal model with vision, audio, and tool calling. Excellent instruction following and function calling capabilities. 128K context.',
+    contextWindow: 128000,
     maxOutputTokens: 4096,
     capabilities: {
       toolCalling: true,   // Strong tool calling capabilities
