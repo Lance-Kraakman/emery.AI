@@ -635,6 +635,17 @@ export function useChatGRPC(
 
   const removeTool = (tool: ToolDTO) => {
     setSelectedTools(prev => prev.filter(t => t.name !== tool.name))
+
+    // Also remove the tool reference from input text
+    if (tool.insertText) {
+      const insertText = tool.insertText // TypeScript narrowing
+      setInput(prev => {
+        // Remove all occurrences of the tool reference (e.g., "@table:customers")
+        const regex = new RegExp(insertText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')
+        return prev.replace(regex, '').trim()
+      })
+      logger.debug('Removed tool reference from input', { insertText })
+    }
   }
 
   // Attachment management functions

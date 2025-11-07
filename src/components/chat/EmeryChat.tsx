@@ -507,22 +507,10 @@ export function EmeryChat() {
     }
   }
 
-  // Handle removing tool from panel
+  // Handle removing tool from panel - delegates to handler which also removes from input
   const handleRemoveTool = (toolToRemove: ToolDTO) => {
-    // Remove from selected tools using unified ToolDTO comparison
-    const updatedTools = selectedTools.filter(tool => {
-      // For reference tools, use id if available, otherwise use insertText
-      if (tool.id && toolToRemove.id) {
-        return tool.id !== toolToRemove.id
-      }
-      // For system tools or fallback, use name
-      return tool.name !== toolToRemove.name
-    })
-    setSelectedTools(updatedTools)
-
-    // TODO: Also update the input text to remove the tool reference
-    // This would require access to the input element's value and updating it
-    logger.debug('Tool removed', { tool: toolToRemove.name })
+    handler.removeTool(toolToRemove)
+    logger.debug('Tool removed via handler', { tool: toolToRemove.name })
   }
 
   // Determine layout based on canvas state
