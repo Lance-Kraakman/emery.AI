@@ -210,11 +210,11 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
     ),
 
     # Vision-language model for image understanding
-    "Qwen/Qwen2-VL-7B-Instruct": ModelMetadata(
-        id="Qwen/Qwen2-VL-7B-Instruct",
-        name="Qwen2-VL 7B Instruct",
+    "Qwen/Qwen2.5-VL-7B-Instruct": ModelMetadata(
+        id="Qwen/Qwen2.5-VL-7B-Instruct",
+        name="Qwen2.5-VL 7B Instruct",
         provider="huggingface",
-        description="Vision-language model for image understanding and analysis with tool calling support.",
+        description="Updated vision-language model for image understanding and analysis with tool calling support. Trained on agentic tasks (April 2025), 32k context window.",
         context_window=32768,
         max_output_tokens=8192,
         capabilities=ModelCapabilities(
@@ -345,4 +345,4 @@ def can_access_model(
 
 def get_default_vision_model() -> str:
     """Get default vision model for multimodal tasks with images."""
-    return "Qwen/Qwen2-VL-7B-Instruct"
+    return "Qwen/Qwen2.5-VL-7B-Instruct"
