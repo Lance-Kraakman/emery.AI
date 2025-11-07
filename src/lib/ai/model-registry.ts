@@ -266,11 +266,11 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
   },
 
   // Vision-language model for image understanding
-  'Qwen/Qwen2-VL-7B-Instruct': {
-    id: 'Qwen/Qwen2-VL-7B-Instruct',
-    name: 'Qwen2-VL 7B Instruct',
+  'Qwen/Qwen2.5-VL-7B-Instruct': {
+    id: 'Qwen/Qwen2.5-VL-7B-Instruct',
+    name: 'Qwen2.5-VL 7B Instruct',
     provider: 'huggingface',
-    description: 'Vision-language model for image understanding and analysis with tool calling support.',
+    description: 'Updated vision-language model for image understanding and analysis with tool calling support. Trained on agentic tasks (April 2025), 32k context window.',
     contextWindow: 32768,
     maxOutputTokens: 8192,
     capabilities: {
