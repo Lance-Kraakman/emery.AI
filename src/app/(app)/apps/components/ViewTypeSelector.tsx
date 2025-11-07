@@ -9,8 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface ViewTypeSelectorProps {
-  value: 'grid' | 'metric' | 'chart';
-  onChange: (value: 'grid' | 'metric' | 'chart') => void;
+  value: 'grid' | 'metric' | 'chart' | 'form';
+  onChange: (value: 'grid' | 'metric' | 'chart' | 'form') => void;
   disabled?: boolean;
 }
 
@@ -19,10 +19,11 @@ export function ViewTypeSelector({ value, onChange, disabled }: ViewTypeSelector
     <div className="space-y-2">
       <Label>View Type</Label>
       <Tabs value={value} onValueChange={(val) => onChange(val as any)} className={disabled ? 'opacity-50 pointer-events-none' : ''}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="grid">Grid</TabsTrigger>
           <TabsTrigger value="metric">Metric</TabsTrigger>
           <TabsTrigger value="chart">Chart</TabsTrigger>
+          <TabsTrigger value="form">Form</TabsTrigger>
         </TabsList>
       </Tabs>
     </div>

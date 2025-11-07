@@ -9,6 +9,7 @@
  */
 
 import { AggregationConfig, type AggregationConfigProps } from './aggregation-config';
+import { FormViewConfig, FormViewConfigValidator } from './form-view-config';
 
 /**
  * Grid View Configuration
@@ -63,7 +64,8 @@ export interface ChartViewConfig {
 export type ViewConfigData =
   | GridViewConfig
   | MetricViewConfig
-  | ChartViewConfig;
+  | ChartViewConfig
+  | FormViewConfig;
 
 export class ViewConfig {
   private constructor(private readonly _config: ViewConfigData) {
@@ -97,6 +99,13 @@ export class ViewConfig {
     });
   }
 
+  static createForm(config: Omit<FormViewConfig, 'type'>): ViewConfig {
+    return new ViewConfig({
+      type: 'form',
+      ...config,
+    });
+  }
+
   /**
    * Create from JSON (database deserialization)
    */
@@ -118,6 +127,9 @@ export class ViewConfig {
         break;
       case 'chart':
         this.validateChartConfig(this._config);
+        break;
+      case 'form':
+        this.validateFormConfig(this._config);
         break;
       case 'grid':
         // Grid config has no required fields
@@ -168,6 +180,11 @@ export class ViewConfig {
     }
   }
 
+  private validateFormConfig(config: FormViewConfig): void {
+    // Delegate to FormViewConfigValidator for comprehensive validation
+    FormViewConfigValidator.validate(config);
+  }
+
   /**
    * Get the view type
    */
@@ -195,6 +212,10 @@ export class ViewConfig {
 
   isChart(): this is { config: ChartViewConfig } {
     return this._config.type === 'chart';
+  }
+
+  isForm(): this is { config: FormViewConfig } {
+    return this._config.type === 'form';
   }
 
   /**

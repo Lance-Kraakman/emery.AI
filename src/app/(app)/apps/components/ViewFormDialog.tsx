@@ -56,7 +56,7 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [tableId, setTableId] = useState<number | undefined>();
-  const [viewType, setViewType] = useState<'grid' | 'metric' | 'chart'>('grid');
+  const [viewType, setViewType] = useState<'grid' | 'metric' | 'chart' | 'form'>('grid');
 
   // Metric view configuration
   const [selectedFieldId, setSelectedFieldId] = useState<number | undefined>();

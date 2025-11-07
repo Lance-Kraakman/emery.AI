@@ -110,6 +110,12 @@ export class View {
     if (this._viewType.isMetric() && !this._viewConfig.isMetric()) {
       throw new Error("Metric view type requires metric view configuration");
     }
+    if (this._viewType.isChart() && !this._viewConfig.isChart()) {
+      throw new Error("Chart view type requires chart view configuration");
+    }
+    if (this._viewType.isForm() && !this._viewConfig.isForm()) {
+      throw new Error("Form view type requires form view configuration");
+    }
 
     // Validate that field IDs in filters exist in the table
     // Note: This validation should ideally be done with the actual table schema

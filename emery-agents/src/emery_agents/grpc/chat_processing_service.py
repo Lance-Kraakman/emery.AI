@@ -24,6 +24,11 @@ from grpc import aio
 from smolagents import ToolCallingAgent
 from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .mappers import ProtoMapper
+from .mappers.message_mapper import (
+    build_conversation_messages,
+    has_images,
+    extract_text_from_parts
+)
 from ..services.model_provider import SmolagentsModelProvider
 from ..services.tool_loader import UnifiedToolLoader
 from ..rag.rag_processor import RagProcessor
@@ -97,7 +102,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         """
         
         start_time = time.time()
-        message_content = request.message_content
+        message_parts = request.message_parts
         user_id = request.user_id
         org_id = request.organization_id
         message_id = request.message_id if request.message_id else f"msg_{int(time.time() * 1000)}"
@@ -105,7 +110,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         # Register message stream for cancellation tracking
         self.active_streams[message_id] = False  # False = not cancelled
         logger.info(f"🚀 Processing message {message_id} for user {user_id} in org {org_id}")
-        logger.info(f"📝 Message preview: {message_content[:100]}...")
+
+        # Extract text preview for logging
+        text_preview = extract_text_from_parts(message_parts)
+        has_image_content = has_images(message_parts)
+        logger.info(f"📝 Message preview: {text_preview[:100]}...")
+        if has_image_content:
+            logger.info(f"🖼️ Message contains images")
 
         # Always use ToolCallingAgent - handles empty tools gracefully
         tools_count = len(request.tools) if hasattr(request, 'tools') and request.tools else 0
@@ -116,23 +127,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # Tools can still be provided for specific data access if needed
             logger.debug("🔧 Processing without RAG context (RAG system removed)")
 
-            # 2. Build Conversation Context
-            conversation_messages = []
-            
-            # Add conversation history (passed from Next.js)
-            for hist_msg in request.conversation_history:
-                conversation_messages.append({
-                    'role': hist_msg.role,
-                    'content': hist_msg.content
-                })
-            
-            # Add current user message
-            conversation_messages.append({
-                'role': 'user',
-                'content': message_content
-            })
-            
-            logger.info(f"💬 Built conversation with {len(conversation_messages)} messages")
+            # 2. Build Conversation Context using mapper
+            # Converts protobuf MessageParts to HuggingFace format
+            conversation_messages = build_conversation_messages(
+                request.conversation_history,
+                message_parts
+            )
+
+            logger.info(f"💬 Built conversation with {len(conversation_messages)} messages (HF format)")
 
             # 3. Generate AI Response using ToolCallingAgent (always)
             sequence = 0
@@ -159,7 +161,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 tools_to_use,
                 None,  # RAG context removed
                 domain_context=request.context,
-                org_model=org_model
+                org_model=org_model,
+                has_images=has_image_content
             ):
                 # Check for cancellation
                 if self.active_streams.get(message_id, False):
@@ -362,11 +365,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
     async def _stream_tool_calling_agent_response(
         self,
-        conversation_messages: List[Dict[str, str]],
+        conversation_messages: List[Dict[str, Any]],
         tools: List['agent_worker_pb2.ToolConfig'],
         rag_context_data: Optional['RagContextData'],
         domain_context: Optional['agent_worker_pb2.ChatContext'] = None,
-        org_model: Optional[str] = None
+        org_model: Optional[str] = None,
+        has_images: bool = False
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream AI response using ToolCallingAgent with proper streaming support.
@@ -388,8 +392,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             smolagents_tools = self._convert_tools_to_smolagents(tools)
             logger.info(f"🔧 Converted {len(smolagents_tools)} tools for ToolCallingAgent")
 
-            # 3. Create ToolCallingAgent with model provider and organization model override
-            agent = self._create_agent_with_model_provider(smolagents_tools, org_model=org_model)
+            # 3. Create ToolCallingAgent with model provider and smart model selection
+            agent = self._create_agent_with_model_provider(
+                smolagents_tools,
+                org_model=org_model,
+                has_images=has_images
+            )
             logger.info(f"🤖 Created ToolCallingAgent with {len(smolagents_tools)} tools")
 
             # 4. Build conversation prompt
@@ -570,21 +578,39 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.error(f"❌ Tool conversion traceback: {traceback.format_exc()}")
             return []
 
-    def _create_agent_with_model_provider(self, smolagents_tools: List[Any], org_model: Optional[str] = None) -> ToolCallingAgent:
-        """Create ToolCallingAgent using simplified model provider with organization model override."""
-        # Use simplified model provider
+    def _create_agent_with_model_provider(
+        self,
+        smolagents_tools: List[Any],
+        org_model: Optional[str] = None,
+        has_images: bool = False
+    ) -> ToolCallingAgent:
+        """
+        Create ToolCallingAgent using model provider with smart vision model selection.
+
+        If images are present and no explicit model is specified, uses vision model.
+        Otherwise uses organization model or default text model.
+        """
         model_provider = SmolagentsModelProvider()
 
-        # Resolve model selection: use org_model if provided, otherwise use default
-        model_id = model_provider.resolve_model_selection(org_model=org_model)
-        model = model_provider.get_model(model_id=model_id)
+        # Smart model selection:
+        # 1. If org_model specified: use that (explicit override)
+        # 2. If images present: use vision model
+        # 3. Otherwise: use default text model
+        if org_model:
+            logger.info(f"🔧 Using explicit organization model: {org_model}")
+            model = model_provider.get_model(model_id=org_model)
+            model_id = org_model
+        else:
+            # Use smart model selection based on content
+            model = model_provider.get_model_for_message(has_images=has_images)
+            model_id = model.model_name
+
         logger.info(f"🤖 Creating ToolCallingAgent with model: {model_id}")
 
         agent = ToolCallingAgent(
             tools=smolagents_tools,  # Can be empty list
             model=model,
             max_steps=10,
-            planning_interval=1,
         )
         agent.name = "chat_tool_calling"
         agent.description = f"Chat agent with {len(smolagents_tools)} tools available ({model_id})"

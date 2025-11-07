@@ -44,6 +44,7 @@ import { createEmptyDSGRow, dsgRowToPlainObject } from '@/app/mappers/dsg-mapper
 import { RelationField } from '@/components/tables/fields/RelationField'
 import { FileField } from '@/components/tables/fields/FileField'
 import { DocumentField } from '@/components/tables/fields/DocumentField'
+import { EmbeddingField } from '@/components/tables/fields/EmbeddingField'
 import { FileTypeDetector } from '@/ddd/domain/tables/services/file-type-detector'
 import { createFileArtifact, createDocumentArtifact } from '@/components/chat/types/chat-artifacts'
 import { uiStateActions } from '@/stores/ui-state.store'
@@ -260,6 +261,19 @@ const DocumentCell = ({ rowData, setRowData, columnData }: CellProps<any, any> &
   )
 }
 
+const EmbeddingCell = ({ rowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO } }) => {
+  const { field } = columnData
+  const value = rowData?.[field.name]
+
+  return (
+    <EmbeddingField
+      value={value}
+      isEditMode={false}  // Read-only for now
+      compact={true}
+    />
+  )
+}
+
 // Loading state component
 const LoadingState = () => (
   <div className="flex items-center justify-center h-32 text-muted-foreground">
@@ -384,6 +398,7 @@ export function DynamicDataSheetGrid({
     RelationCell,
     FileCell,
     DocumentCell,
+    EmbeddingCell,
   })
 
   /**

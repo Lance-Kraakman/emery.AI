@@ -96,6 +96,18 @@ export interface ChartViewExecutionResult {
   dataMode: 'raw' | 'aggregated';
 }
 
+export interface ExecuteFormViewCommand {
+  viewId: ViewId;
+}
+
+export interface FormViewExecutionResult {
+  viewName: string;
+  viewDescription?: string;
+  formConfig: any;        // FormViewConfig serialized as plain object
+  tableFields: any[];     // TableField DTOs
+  tableId: number;
+}
+
 export class ViewApplicationService {
   constructor(
     private readonly dataSourceRepository: ViewRepository,
@@ -939,6 +951,99 @@ export class ViewApplicationService {
     }
 
     return dataPoints;
+  }
+
+  /**
+   * Get form view configuration for rendering a form
+   *
+   * AIDEV-NOTE: This method prepares all necessary data for rendering a form view.
+   * Returns form configuration, table schema, and metadata for client-side rendering.
+   *
+   * Flow:
+   * 1. Get view and validate it's a form view
+   * 2. Extract form configuration from viewConfig
+   * 3. Fetch table and field definitions
+   * 4. Return DTOs for client-side form rendering
+   */
+  async getFormViewConfiguration(
+    command: ExecuteFormViewCommand
+  ): Promise<Result<FormViewExecutionResult>> {
+    try {
+      logger.debug("Getting form view configuration", { viewId: command.viewId.value });
+
+      // 1. Get view
+      const view = await this.dataSourceRepository.findById(command.viewId);
+      if (!view) {
+        return {
+          success: false,
+          error: `View ${command.viewId.value} not found`,
+        };
+      }
+
+      // 2. Verify view type is form
+      if (!view.viewType.isForm()) {
+        return {
+          success: false,
+          error: `View type '${view.viewType.value}' is not a form view`,
+        };
+      }
+
+      // 3. Get form configuration
+      const viewConfig = view.viewConfig;
+      if (!viewConfig.isForm()) {
+        return {
+          success: false,
+          error: "View config is not a form configuration",
+        };
+      }
+
+      const formConfig = viewConfig.config;
+
+      // 4. Get table and fields for field definitions
+      const table = await this.tableApplicationService.getTable(view.tableId);
+      if (!table) {
+        return {
+          success: false,
+          error: "Failed to fetch table",
+        };
+      }
+
+      // 5. Convert table fields to plain objects for client consumption
+      const tableFieldDTOs = table.fields.map(field => ({
+        id: field.id.value,
+        name: field.name,
+        type: field.type,
+        required: field.required ?? false,
+        orderIndex: field.orderIndex,
+        relatedTableId: field.relatedTableId?.value ?? null,
+        metadata: field.metadata,
+        createdAt: field.createdAt,
+      }));
+
+      logger.summary("Form view configuration retrieved successfully", {
+        viewId: command.viewId.value,
+        viewName: view.name,
+        pageCount: formConfig.pages.length,
+        fieldCount: formConfig.pages.reduce((sum, page) => sum + page.fields.length, 0),
+      });
+
+      return {
+        success: true,
+        data: {
+          viewName: view.name,
+          viewDescription: view.description,
+          formConfig: formConfig,
+          tableFields: tableFieldDTOs,
+          tableId: view.tableId.value,
+        },
+      };
+    } catch (error) {
+      logger.error("Error getting form view configuration", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error getting form view configuration",
+      };
+    }
   }
 
   /**

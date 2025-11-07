@@ -29,6 +29,7 @@ interface UseGridColumnsParams {
   RelationCell?: CellComponent<any, any>
   FileCell?: CellComponent<any, any>
   DocumentCell?: CellComponent<any, any>
+  EmbeddingCell?: CellComponent<any, any>
 }
 
 /**
@@ -54,6 +55,7 @@ export function useGridColumns({
   RelationCell,
   FileCell,
   DocumentCell,
+  EmbeddingCell,
 }: UseGridColumnsParams) {
   return useMemo(() => {
     // AIDEV-NOTE: Using react-datasheet-grid built-in column types for standard fields
@@ -150,6 +152,22 @@ export function useGridColumns({
           }
           break
 
+        case 'embedding':
+          // Custom component for embedding vector display
+          if (EmbeddingCell) {
+            columnConfig = {
+              component: EmbeddingCell,
+              disableKeys: true,
+              columnData: { field }
+            }
+            basis = 200
+            minWidth = 150
+          } else {
+            // Fallback to textColumn if EmbeddingCell not provided
+            columnConfig = textColumn
+          }
+          break
+
         default:
           // Fallback to textColumn for unknown types
           columnConfig = textColumn
@@ -187,5 +205,5 @@ export function useGridColumns({
 
     // Return ID column first, then field columns, then add column button
     return [idColumn, ...fieldColumns, addColumnCol]
-  }, [fields, organizationId, tableId, onUpdateRow, onEditField, onDeleteField, onAddColumn, availableTables, onSort, onClearSort, RelationCell, FileCell, DocumentCell])
+  }, [fields, organizationId, tableId, onUpdateRow, onEditField, onDeleteField, onAddColumn, availableTables, onSort, onClearSort, RelationCell, FileCell, DocumentCell, EmbeddingCell])
 }

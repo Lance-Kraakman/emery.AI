@@ -38,6 +38,7 @@ import type { HistoryMessage } from '@/lib/grpc/generated/agent_worker';
 import type { MessagePart } from '@llamaindex/chat-ui';
 import { s3ChatAttachmentService } from '@/ddd/infrastructure/multimodal/s3-chat-attachment-service';
 import type { AnyAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
+import { messageWithAttachmentsToProtoParts } from '@/lib/grpc/mappers/message-part-mapper';
 
 /**
  * Extract text content from Message parts array
@@ -351,13 +352,26 @@ export async function POST(req: NextRequest) {
         organizationId: organizationId,
         limit: 10 // Last 10 messages for context
       });
-      
+
       if (historyResult.success && historyResult.data?.messages) {
-        conversationHistory = historyResult.data.messages.map(msg => ({
-          role: msg.role,
-          content: msg.content,
-          timestamp: new Date(msg.createdAt).getTime()
-        }));
+        conversationHistory = historyResult.data.messages.map(msg => {
+          // Convert message with attachments to protobuf MessagePart format
+          const attachments = msg.metadata?.attachments || [];
+          const contentParts = messageWithAttachmentsToProtoParts(
+            msg.content,
+            attachments.map((att: any) => ({
+              type: att.type,
+              url: att.url,
+              mimeType: att.mimeType
+            }))
+          );
+
+          return {
+            role: msg.role,
+            contentParts: contentParts,
+            timestamp: new Date(msg.createdAt).getTime()
+          };
+        });
         console.log(`[CHAT-GRPC-API] Retrieved ${conversationHistory.length} historical messages`);
       }
     }
@@ -500,18 +514,41 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // 7. Call gRPC service for AI processing
+    // 7. Prepare current user message with attachments as MessagePart[]
+    const currentMessageParts: MessagePart[] = messages[messages.length - 1].parts || [
+      { type: 'text' as const, text: latestMessage }
+    ];
+
+    // Add uploaded attachment URLs to message parts
+    if (attachmentMetadata.length > 0) {
+      console.log('[CHAT-GRPC-API] Adding attachment URLs to current message parts');
+      for (const attachment of attachmentMetadata) {
+        if (attachment.type === 'image' && attachment.url) {
+          currentMessageParts.push({
+            type: 'data-file' as const,
+            data: {
+              url: attachment.url,
+              mediaType: attachment.mimeType || 'image/png'
+            }
+          } as MessagePart);
+        }
+      }
+    }
+
+    console.log('[CHAT-GRPC-API] Current message has', currentMessageParts.length, 'parts');
+
+    // 8. Call gRPC service for AI processing
     console.log('[CHAT-GRPC-API] Calling gRPC ChatProcessingService for AI processing');
     const startTime = Date.now();
-    
+
     // Create readable stream for frontend
     const readableStream = new ReadableStream({
       start(controller) {
         const grpcClient = getChatProcessingClient(organizationId.toString());
-        
-        // Process message with gRPC service
+
+        // Process message with gRPC service (now accepts MessagePart[])
         grpcClient.processMessage(
-          latestMessage,
+          currentMessageParts,
           userId,
           organizationId,
           conversationHistory,
