@@ -664,23 +664,6 @@ export function useChatGRPC(
     logger.debug('Cleared all attachments')
   }
 
-  // Add loading indicator as an inline message
-  const displayMessages = useMemo(() => {
-    if (isLoading && currentStep) {
-      // Create a temporary loading message that will appear inline
-      const loadingMessage: ChatMessage = {
-        id: '__loading__',
-        role: 'assistant',
-        parts: [{
-          type: 'text',
-          text: '__LOADING__', // Special marker for custom rendering
-        }],
-      }
-      return [...messages, loadingMessage]
-    }
-    return messages
-  }, [messages, isLoading, currentStep])
-
   return {
     // Base ChatHandler required fields
     status: isLoading ? 'streaming' : 'ready',
@@ -689,7 +672,7 @@ export function useChatGRPC(
     },
     isLoading,
     append,
-    messages: displayMessages, // Include loading indicator in messages
+    messages, // Return original messages array
     setMessages,
     scrollRef,
     scrollToBottom,

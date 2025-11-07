@@ -265,36 +265,32 @@ function ChatContentWithCanvas({
             </div>
           )}
 
-          {/* ChatMessages component with custom loading state styling */}
+          {/* ChatMessages component with proper composition pattern */}
           <ChatMessages
-            className="flex-1 h-full bg-transparent [&_.message]:bg-background [&_.message.assistant]:bg-muted [&_.message.user]:bg-primary [&_.message.user]:text-primary-foreground [&_.message]:p-4 [&_.message]:rounded-lg [&_.message]:my-2 [&_.message]:mx-4 [&_p]:text-sm [&_p]:leading-relaxed [&_.chat-messages-loading]:hidden"
+            className="flex-1 h-full bg-transparent [&_.message]:bg-background [&_.message.assistant]:bg-muted [&_.message.user]:bg-primary [&_.message.user]:text-primary-foreground [&_.message]:p-4 [&_.message]:rounded-lg [&_.message]:my-2 [&_.message]:mx-4 [&_p]:text-sm [&_p]:leading-relaxed"
           >
-            {/* Intercept and render loading messages with custom UI */}
-            {handler.messages.map((msg, idx) => {
-              // Check if this is our special loading indicator message
-              if (msg.id === '__loading__' && handler.currentStep) {
-                return (
-                  <div key="__loading__" className="flex gap-3 px-4 py-2 mx-4 mb-2">
-                    {/* Bot Avatar */}
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    {/* Step Progress */}
-                    <div className="flex-1 min-w-0">
-                      <StepProgressIndicator
-                        currentStep={handler.currentStep}
-                        isLoading={handler.isLoading}
-                        onCancel={handler.cancelMessage}
-                      />
-                    </div>
-                  </div>
-                )
-              }
-              // Return null for other messages - let ChatMessages handle them
-              return null
-            })}
+            {/* Library handles rendering all messages */}
+            <ChatMessages.List />
+
+            {/* Custom loading indicator - shown when isLoading=true */}
+            <ChatMessages.Loading>
+              <div className="flex gap-3 px-4 py-2 mx-4 mb-2">
+                {/* Bot Avatar */}
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                {/* Step Progress */}
+                <div className="flex-1 min-w-0">
+                  <StepProgressIndicator
+                    currentStep={handler.currentStep}
+                    isLoading={handler.isLoading}
+                    onCancel={handler.cancelMessage}
+                  />
+                </div>
+              </div>
+            </ChatMessages.Loading>
           </ChatMessages>
         </div>
       </div>
