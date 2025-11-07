@@ -209,66 +209,10 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         endpoint=ModelEndpoint(type="inference-api"),
     ),
 
-    # Multimodal models with tool calling (2025)
-    "HuggingFaceTB/SmolVLM-256M-Instruct": ModelMetadata(
-        id="HuggingFaceTB/SmolVLM-256M-Instruct",
-        name="SmolVLM 256M Instruct",
-        provider="huggingface",
-        description="Ultra-lightweight vision-language model with tool calling. Perfect for edge deployment and fast inference with image understanding.",
-        context_window=8192,
-        max_output_tokens=2048,
-        capabilities=ModelCapabilities(
-            tool_calling=True,
-            streaming=True,
-            vision=True,
-            json_mode=True,
-            multimodal=True,
-        ),
-        pricing=ModelPricing(input_per_1m=0.05, output_per_1m=0.20),
-        tier=ModelTier.FREE,
-        category=ModelCategory.FAST,
-        endpoint=ModelEndpoint(type="inference-api"),
-    ),
-
-    "HuggingFaceTB/SmolVLM-500M-Instruct": ModelMetadata(
-        id="HuggingFaceTB/SmolVLM-500M-Instruct",
-        name="SmolVLM 500M Instruct",
-        provider="huggingface",
-        description="Small vision-language model with tool calling. Balanced performance and efficiency for multimodal agent workflows.",
-        context_window=8192,
-        max_output_tokens=2048,
-        capabilities=ModelCapabilities(
-            tool_calling=True,
-            streaming=True,
-            vision=True,
-            json_mode=True,
-            multimodal=True,
-        ),
-        pricing=ModelPricing(input_per_1m=0.08, output_per_1m=0.30),
-        tier=ModelTier.FREE,
-        category=ModelCategory.FAST,
-        endpoint=ModelEndpoint(type="inference-api"),
-    ),
-
-    "microsoft/Phi-4-multimodal-instruct": ModelMetadata(
-        id="microsoft/Phi-4-multimodal-instruct",
-        name="Microsoft Phi-4 Multimodal",
-        provider="huggingface",
-        description="Advanced multimodal model with vision, audio, and tool calling. Excellent instruction following and function calling capabilities. 128K context.",
-        context_window=128000,
-        max_output_tokens=4096,
-        capabilities=ModelCapabilities(
-            tool_calling=True,
-            streaming=True,
-            vision=True,
-            json_mode=True,
-            multimodal=True,
-        ),
-        pricing=ModelPricing(input_per_1m=0.25, output_per_1m=1.00),
-        tier=ModelTier.FREE,
-        category=ModelCategory.ADVANCED,
-        endpoint=ModelEndpoint(type="inference-api"),
-    ),
+    # AIDEV-NOTE: Multimodal models removed - SmolVLM and Phi-4 don't support text-only chat
+    # through HF Inference API. They only work for image-to-text tasks, not conversational AI.
+    # SmolVLM models throw: "Task 'conversational' not supported for provider 'replicate'"
+    # Phi-4 multimodal is not deployed on HF Inference API (only Azure AI, DeepInfra, etc.)
 }
 
 
