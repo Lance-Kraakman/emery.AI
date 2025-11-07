@@ -25,22 +25,25 @@ export function toProtoMessagePart(part: LlamaIndexMessagePart): MessagePart | n
   // Handle text part
   if (part.type === 'text') {
     return MessagePart.fromPartial({
-      text: TextPart.fromPartial({ text: part.text })
+      text: TextPart.fromPartial({ text: (part as any).text })
     });
   }
 
   // Handle direct image part
   if (part.type === 'image') {
     return MessagePart.fromPartial({
-      imageUrl: ImageUrlPart.fromPartial({ url: part.image })
+      imageUrl: ImageUrlPart.fromPartial({ url: (part as any).image })
     });
   }
 
   // Handle data-file part (for S3 uploaded images)
-  if (part.type === 'data-file' && part.data?.mediaType?.startsWith('image/')) {
-    return MessagePart.fromPartial({
-      imageUrl: ImageUrlPart.fromPartial({ url: part.data.url })
-    });
+  if (part.type === 'data-file') {
+    const dataPart = part as any;
+    if (dataPart.data?.mediaType?.startsWith('image/')) {
+      return MessagePart.fromPartial({
+        imageUrl: ImageUrlPart.fromPartial({ url: dataPart.data.url })
+      });
+    }
   }
 
   // Unsupported part type (e.g., audio, video) - return null
@@ -109,7 +112,7 @@ export function extractTextFromParts(parts: LlamaIndexMessagePart[]): string {
   return parts
     .map(part => {
       if (typeof part === 'string') return part;
-      if (part.type === 'text') return part.text;
+      if (part.type === 'text') return (part as any).text;
       return '';
     })
     .filter(Boolean)
@@ -125,7 +128,8 @@ export function extractTextFromParts(parts: LlamaIndexMessagePart[]): string {
 export function hasImageParts(parts: LlamaIndexMessagePart[]): boolean {
   return parts.some(part => {
     if (typeof part === 'string') return false;
+    const typedPart = part as any;
     return part.type === 'image' ||
-           (part.type === 'data-file' && part.data?.mediaType?.startsWith('image/'));
+           (part.type === 'data-file' && typedPart.data?.mediaType?.startsWith('image/'));
   });
 }
