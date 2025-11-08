@@ -145,52 +145,51 @@ export function UsageSettingsClient({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Credit Balance Card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Coins className="h-5 w-5" />
-              <CardTitle className="text-lg">Credit Balance</CardTitle>
+    <div className="space-y-4">
+      {/* Top Section - Credit Balance, Model Config, and Plan in one row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Credit Balance - Compact */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Coins className="h-4 w-4" />
+                <CardTitle className="text-sm font-medium">Credit Balance</CardTitle>
+              </div>
+              <Button variant="outline" size="sm" className="h-7 text-xs">Buy Credits</Button>
             </div>
-            <Button variant="outline" size="sm">Buy Credits</Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
+          </CardHeader>
+          <CardContent className="space-y-2">
             <div>
               <p className="text-3xl font-bold">{creditBalance.toLocaleString()}</p>
-              <p className="text-sm text-muted-foreground">credits available</p>
+              <p className="text-xs text-muted-foreground">credits available</p>
             </div>
             {creditStats && (
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                <div>
-                  <p className="text-sm font-medium">Used This Month</p>
-                  <p className="text-2xl font-semibold">{creditStats.creditsUsedCurrentMonth?.toLocaleString() || 0}</p>
+              <div className="flex gap-3 pt-2 text-xs">
+                <div className="flex-1 rounded-md bg-muted/50 p-2">
+                  <p className="text-muted-foreground">Used</p>
+                  <p className="font-semibold">{creditStats.creditsUsedCurrentMonth?.toLocaleString() || 0}</p>
                 </div>
-                <div>
-                  <p className="text-sm font-medium">Executions</p>
-                  <p className="text-2xl font-semibold">{creditStats.totalExecutions?.toLocaleString() || 0}</p>
+                <div className="flex-1 rounded-md bg-muted/50 p-2">
+                  <p className="text-muted-foreground">Runs</p>
+                  <p className="font-semibold">{creditStats.totalExecutions?.toLocaleString() || 0}</p>
                 </div>
               </div>
             )}
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Model Configuration & Tier */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Model Configuration */}
         <Card>
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4" />
-              <CardTitle className="text-base">Model Configuration</CardTitle>
+              <CardTitle className="text-sm font-medium">Model Configuration</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="default-model" className="text-sm">Default AI Model</Label>
+          <CardContent className="space-y-2">
+            <div className="space-y-1">
+              <Label htmlFor="default-model" className="text-xs">Default AI Model</Label>
               <ModelSelector
                 value={defaultModel}
                 onChange={setDefaultModel}
@@ -200,7 +199,7 @@ export function UsageSettingsClient({
                 requiredCapabilities={['toolCalling']}
               />
             </div>
-            <Button onClick={handleSave} disabled={isSaving} className="w-full mt-2" size="sm">
+            <Button onClick={handleSave} disabled={isSaving} className="w-full" size="sm">
               {isSaving ? (
                 <>
                   <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
@@ -216,12 +215,13 @@ export function UsageSettingsClient({
           </CardContent>
         </Card>
 
+        {/* Current Plan */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Current Plan</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Current Plan</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
+          <CardContent className="space-y-2">
+            <div className="space-y-1">
               <p className="text-sm font-medium capitalize">{organizationTier} Tier</p>
               <p className="text-xs text-muted-foreground">Upgrade for more credits and features</p>
             </div>
@@ -232,12 +232,12 @@ export function UsageSettingsClient({
 
       {/* Usage Breakdown Tabs */}
       <Card>
-        <CardHeader>
-          <CardTitle>Usage Breakdown</CardTitle>
-          <CardDescription>View credit usage by different dimensions</CardDescription>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Usage Breakdown</CardTitle>
+          <CardDescription className="text-xs">View credit usage by different dimensions</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
             <TabsList>
               <TabsTrigger value="model">By Model</TabsTrigger>
               <TabsTrigger value="agent">By Agent</TabsTrigger>
@@ -245,17 +245,17 @@ export function UsageSettingsClient({
               <TabsTrigger value="type">By Type</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="model" className="space-y-4">
+            <TabsContent value="model" className="space-y-3">
               <div className="flex justify-end">
                 <Button variant="outline" size="sm" onClick={() => handleExportCSV('model')}>
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="h-3 w-3 mr-1.5" />
                   Export CSV
                 </Button>
               </div>
               {isLoadingBreakdown ? (
-                <div className="text-center py-8 text-muted-foreground">Loading...</div>
+                <div className="text-center py-6 text-sm text-muted-foreground">Loading...</div>
               ) : modelBreakdown.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">No usage data available</div>
+                <div className="text-center py-6 text-sm text-muted-foreground">No usage data available</div>
               ) : (
                 <div className="rounded-md border">
                   <table className="w-full text-sm">
@@ -282,17 +282,17 @@ export function UsageSettingsClient({
               )}
             </TabsContent>
 
-            <TabsContent value="agent" className="space-y-4">
+            <TabsContent value="agent" className="space-y-3">
               <div className="flex justify-end">
                 <Button variant="outline" size="sm" onClick={() => handleExportCSV('agent')}>
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="h-3 w-3 mr-1.5" />
                   Export CSV
                 </Button>
               </div>
               {isLoadingBreakdown ? (
-                <div className="text-center py-8 text-muted-foreground">Loading...</div>
+                <div className="text-center py-6 text-sm text-muted-foreground">Loading...</div>
               ) : agentBreakdown.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">No usage data available</div>
+                <div className="text-center py-6 text-sm text-muted-foreground">No usage data available</div>
               ) : (
                 <div className="rounded-md border">
                   <table className="w-full text-sm">
@@ -319,17 +319,17 @@ export function UsageSettingsClient({
               )}
             </TabsContent>
 
-            <TabsContent value="user" className="space-y-4">
+            <TabsContent value="user" className="space-y-3">
               <div className="flex justify-end">
                 <Button variant="outline" size="sm" onClick={() => handleExportCSV('user')}>
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="h-3 w-3 mr-1.5" />
                   Export CSV
                 </Button>
               </div>
               {isLoadingBreakdown ? (
-                <div className="text-center py-8 text-muted-foreground">Loading...</div>
+                <div className="text-center py-6 text-sm text-muted-foreground">Loading...</div>
               ) : userBreakdown.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">No usage data available</div>
+                <div className="text-center py-6 text-sm text-muted-foreground">No usage data available</div>
               ) : (
                 <div className="rounded-md border">
                   <table className="w-full text-sm">
@@ -356,17 +356,17 @@ export function UsageSettingsClient({
               )}
             </TabsContent>
 
-            <TabsContent value="type" className="space-y-4">
+            <TabsContent value="type" className="space-y-3">
               <div className="flex justify-end">
                 <Button variant="outline" size="sm" onClick={() => handleExportCSV('type')}>
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="h-3 w-3 mr-1.5" />
                   Export CSV
                 </Button>
               </div>
               {isLoadingBreakdown ? (
-                <div className="text-center py-8 text-muted-foreground">Loading...</div>
+                <div className="text-center py-6 text-sm text-muted-foreground">Loading...</div>
               ) : typeBreakdown.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">No usage data available</div>
+                <div className="text-center py-6 text-sm text-muted-foreground">No usage data available</div>
               ) : (
                 <div className="rounded-md border">
                   <table className="w-full text-sm">

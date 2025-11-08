@@ -26,7 +26,7 @@ import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository } from '@/ddd/application/di/container';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository } from '@/ddd/application/di/getters';
-import type { CreateChatDTO, SendMessageDTO } from '@/app/dtos/chat.dto';
+import type { CreateChatDTO, SendMessageDTO, ExecutionStep, ExecutionStepMetadata } from '@/app/dtos/chat.dto';
 import type { EnrichToolsWithUserApiKeyCommand } from '@/ddd/application/services/tools/tool-configuration-application-service';
 
 // Import user API key utilities
@@ -59,6 +59,26 @@ function getMessageContent(message: { parts?: MessagePart[] }): string {
 
   // Fallback: convert first part to string
   return String(message.parts[0] || '');
+}
+
+/**
+ * Convert gRPC step progress to ExecutionStep for persistence
+ */
+function collectStep(
+  stepType: string,
+  stepName: string,
+  stepIndex: number,
+  content: string,
+  metadata?: Record<string, any>
+): ExecutionStep {
+  return {
+    type: stepType as ExecutionStep['type'],
+    name: stepName,
+    content: content,
+    index: stepIndex,
+    timestamp: Date.now(),
+    metadata: metadata as ExecutionStepMetadata
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -471,6 +491,7 @@ export async function POST(req: NextRequest) {
     // 6. Set up streaming response
     let fullAssistantResponse = '';
     let ragSources: any[] = [];
+    let collectedSteps: ExecutionStep[] = [];
 
     const responseStream = new TransformStream({
       start() {
@@ -498,17 +519,18 @@ export async function POST(req: NextRequest) {
                 metadata: {
                   ragSources: ragSources,
                   processingTime: Date.now() - startTime,
-                  modelUsed: 'qwen-coder' // This will come from gRPC response
+                  modelUsed: 'qwen-coder', // This will come from gRPC response
+                  executionSteps: collectedSteps // Persist execution steps
                 }
               };
 
               await chatApplicationService.sendMessage(assistantMessageDTO);
-              console.log(`[CHAT-GRPC-API] Saved assistant response to chat ${currentChatId}`);
+              console.log(`[CHAT-GRPC-API] Saved assistant response to chat ${currentChatId} with ${collectedSteps.length} execution steps`);
             } catch (error) {
               console.error('[CHAT-GRPC-API] Failed to save assistant response:', error);
             }
           };
-          
+
           saveAssistantMessage();
         }
       }
@@ -574,10 +596,20 @@ export async function POST(req: NextRequest) {
                   metadata: step.metadata
                 });
 
-                // Send step progress event to frontend as SSE-like JSON
                 // Convert metadata to plain object if it's a Map
                 const plainMetadata = step.metadata ? { ...step.metadata } : {};
 
+                // Collect step for persistence
+                const executionStep = collectStep(
+                  stepTypeName,
+                  step.stepName,
+                  step.stepIndex,
+                  step.content,
+                  plainMetadata
+                );
+                collectedSteps.push(executionStep);
+
+                // Send step progress event to frontend as SSE-like JSON
                 const stepEvent = {
                   type: 'step_progress',
                   stepType: stepTypeName,

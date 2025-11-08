@@ -433,10 +433,14 @@ export interface ProcessMessageResponse {
   timestamp: number;
 }
 
-/** Multimodal message part (text or image) */
+/** Multimodal message part (text, image, or file attachment) */
 export interface MessagePart {
   text?: TextPart | undefined;
-  imageUrl?: ImageUrlPart | undefined;
+  imageUrl?:
+    | ImageUrlPart
+    | undefined;
+  /** Generic file attachment (PDF, audio, documents, etc.) */
+  file?: FilePart | undefined;
 }
 
 export interface TextPart {
@@ -446,6 +450,17 @@ export interface TextPart {
 export interface ImageUrlPart {
   /** Image URL (HTTP URL or S3 pre-signed URL) */
   url: string;
+}
+
+export interface FilePart {
+  /** File URL (S3 pre-signed URL) */
+  url: string;
+  /** MIME type (application/pdf, audio/mpeg, etc.) */
+  mimeType: string;
+  /** Original filename */
+  filename: string;
+  /** File size in bytes */
+  size: number;
 }
 
 /** Conversation history message with multimodal support */
@@ -3033,7 +3048,7 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
 };
 
 function createBaseMessagePart(): MessagePart {
-  return { text: undefined, imageUrl: undefined };
+  return { text: undefined, imageUrl: undefined, file: undefined };
 }
 
 export const MessagePart: MessageFns<MessagePart> = {
@@ -3043,6 +3058,9 @@ export const MessagePart: MessageFns<MessagePart> = {
     }
     if (message.imageUrl !== undefined) {
       ImageUrlPart.encode(message.imageUrl, writer.uint32(18).fork()).join();
+    }
+    if (message.file !== undefined) {
+      FilePart.encode(message.file, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -3070,6 +3088,14 @@ export const MessagePart: MessageFns<MessagePart> = {
           message.imageUrl = ImageUrlPart.decode(reader, reader.uint32());
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.file = FilePart.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3083,6 +3109,7 @@ export const MessagePart: MessageFns<MessagePart> = {
     return {
       text: isSet(object.text) ? TextPart.fromJSON(object.text) : undefined,
       imageUrl: isSet(object.imageUrl) ? ImageUrlPart.fromJSON(object.imageUrl) : undefined,
+      file: isSet(object.file) ? FilePart.fromJSON(object.file) : undefined,
     };
   },
 
@@ -3093,6 +3120,9 @@ export const MessagePart: MessageFns<MessagePart> = {
     }
     if (message.imageUrl !== undefined) {
       obj.imageUrl = ImageUrlPart.toJSON(message.imageUrl);
+    }
+    if (message.file !== undefined) {
+      obj.file = FilePart.toJSON(message.file);
     }
     return obj;
   },
@@ -3106,6 +3136,7 @@ export const MessagePart: MessageFns<MessagePart> = {
     message.imageUrl = (object.imageUrl !== undefined && object.imageUrl !== null)
       ? ImageUrlPart.fromPartial(object.imageUrl)
       : undefined;
+    message.file = (object.file !== undefined && object.file !== null) ? FilePart.fromPartial(object.file) : undefined;
     return message;
   },
 };
@@ -3222,6 +3253,114 @@ export const ImageUrlPart: MessageFns<ImageUrlPart> = {
   fromPartial<I extends Exact<DeepPartial<ImageUrlPart>, I>>(object: I): ImageUrlPart {
     const message = createBaseImageUrlPart();
     message.url = object.url ?? "";
+    return message;
+  },
+};
+
+function createBaseFilePart(): FilePart {
+  return { url: "", mimeType: "", filename: "", size: 0 };
+}
+
+export const FilePart: MessageFns<FilePart> = {
+  encode(message: FilePart, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.url !== "") {
+      writer.uint32(10).string(message.url);
+    }
+    if (message.mimeType !== "") {
+      writer.uint32(18).string(message.mimeType);
+    }
+    if (message.filename !== "") {
+      writer.uint32(26).string(message.filename);
+    }
+    if (message.size !== 0) {
+      writer.uint32(32).int64(message.size);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FilePart {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFilePart();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.url = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.mimeType = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.filename = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.size = longToNumber(reader.int64());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FilePart {
+    return {
+      url: isSet(object.url) ? globalThis.String(object.url) : "",
+      mimeType: isSet(object.mimeType) ? globalThis.String(object.mimeType) : "",
+      filename: isSet(object.filename) ? globalThis.String(object.filename) : "",
+      size: isSet(object.size) ? globalThis.Number(object.size) : 0,
+    };
+  },
+
+  toJSON(message: FilePart): unknown {
+    const obj: any = {};
+    if (message.url !== "") {
+      obj.url = message.url;
+    }
+    if (message.mimeType !== "") {
+      obj.mimeType = message.mimeType;
+    }
+    if (message.filename !== "") {
+      obj.filename = message.filename;
+    }
+    if (message.size !== 0) {
+      obj.size = Math.round(message.size);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FilePart>, I>>(base?: I): FilePart {
+    return FilePart.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FilePart>, I>>(object: I): FilePart {
+    const message = createBaseFilePart();
+    message.url = object.url ?? "";
+    message.mimeType = object.mimeType ?? "";
+    message.filename = object.filename ?? "";
+    message.size = object.size ?? 0;
     return message;
   },
 };

@@ -213,11 +213,17 @@ message ProcessMessageResponse {
   int64 timestamp = 6;               // Response timestamp
 }
 
-// Multimodal message part (text or image)
+// Multimodal message part (text, image, or file attachment)
+// AIDEV-NOTE: Multi-attachment support implemented (2025-01)
+// - ImageUrlPart: Vision model support (PIL Images → base64)
+// - FilePart: Text extraction from PDFs, audio transcription, documents
+// - Simple extraction approach (no embeddings/RAG initially)
+// - Files processed async in message_mapper.py using file_processor.py
 message MessagePart {
   oneof part {
     TextPart text = 1;
     ImageUrlPart image_url = 2;
+    FilePart file = 3;                // Generic file attachment (PDF, audio, documents, etc.)
   }
 }
 
@@ -227,6 +233,13 @@ message TextPart {
 
 message ImageUrlPart {
   string url = 1;                    // Image URL (HTTP URL or S3 pre-signed URL)
+}
+
+message FilePart {
+  string url = 1;                    // File URL (S3 pre-signed URL)
+  string mime_type = 2;              // MIME type (application/pdf, audio/mpeg, etc.)
+  string filename = 3;               // Original filename
+  int64 size = 4;                    // File size in bytes
 }
 
 // Conversation history message with multimodal support

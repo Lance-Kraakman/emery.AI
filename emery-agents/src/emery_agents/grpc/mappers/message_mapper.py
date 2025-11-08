@@ -6,8 +6,10 @@ Clean separation of concerns for message transformation logic.
 
 AIDEV-NOTE: Uses smolagents native ChatMessage format with PIL Image objects.
 Images are downloaded from S3 URLs and converted to PIL.Image for vision model support.
+Files (PDFs, audio, documents) are processed to extract text content.
 """
 import logging
+import asyncio
 from typing import List, Dict, Any
 from io import BytesIO
 
@@ -17,6 +19,7 @@ from smolagents.models import ChatMessage, MessageRole
 
 from ...grpc.generated import agent_worker_pb2
 from .message_types import MessageContentList, TextContentPart, ImageContentPart
+from ...services.file_processor import process_file
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +49,7 @@ def download_image_from_url(url: str) -> Image.Image:
     return image
 
 
-def proto_parts_to_smolagents_content(
+async def proto_parts_to_smolagents_content(
     message_parts: List[agent_worker_pb2.MessagePart]
 ) -> MessageContentList:
     """
@@ -62,6 +65,7 @@ def proto_parts_to_smolagents_content(
         List of content parts (TextContentPart | ImageContentPart)
 
     AIDEV-NOTE: Images are downloaded from S3 URLs and converted to PIL Image objects.
+    Files (PDFs, audio, documents) are processed to extract text content.
     PIL Images must be converted to base64 data URLs before sending to HuggingFace API.
     """
     content_parts: MessageContentList = []
@@ -87,10 +91,33 @@ def proto_parts_to_smolagents_content(
             except requests.exceptions.RequestException as e:
                 logger.error(f"❌ Failed to download image from URL: {str(e)}")
                 logger.warning("⚠️ Skipping image, continuing with text-only message")
-                # Continue processing without the image - don't crash the whole message
             except Exception as e:
                 logger.error(f"❌ Unexpected error processing image: {str(e)}")
                 logger.warning("⚠️ Skipping image, continuing with text-only message")
+
+        elif part.HasField('file'):
+            # Process file (PDF, audio, document) and extract text
+            file_url = part.file.url
+            mime_type = part.file.mime_type
+            filename = part.file.filename
+            logger.info(f"📎 Processing file: {filename} ({mime_type})")
+
+            try:
+                # Extract text from file
+                extracted_text = await process_file(file_url, mime_type, filename)
+                content_parts.append(TextContentPart(
+                    type="text",
+                    text=extracted_text
+                ))
+                logger.info(f"✅ Successfully extracted text from file: {len(extracted_text)} chars")
+            except Exception as e:
+                logger.error(f"❌ Failed to process file: {str(e)}")
+                logger.warning("⚠️ Skipping file, continuing with message")
+                # Add error note to message
+                content_parts.append(TextContentPart(
+                    type="text",
+                    text=f"[File: {filename}] (Processing failed: {str(e)})"
+                ))
 
     # Always return list format (no string optimization)
     return content_parts
@@ -126,7 +153,7 @@ def has_images(message_parts: List[agent_worker_pb2.MessagePart]) -> bool:
     return any(part.HasField('image_url') for part in message_parts)
 
 
-def build_conversation_messages(
+async def build_conversation_messages(
     history: List[agent_worker_pb2.HistoryMessage],
     current_message_parts: List[agent_worker_pb2.MessagePart]
 ) -> List[ChatMessage]:
@@ -135,6 +162,7 @@ def build_conversation_messages(
 
     Combines conversation history with current user message into smolagents native format.
     Supports multimodal messages with PIL Image objects for vision models.
+    Processes file attachments (PDFs, audio, documents) to extract text.
 
     Args:
         history: Previous messages from conversation history
@@ -150,14 +178,14 @@ def build_conversation_messages(
 
     # Add conversation history
     for hist_msg in history:
-        content = proto_parts_to_smolagents_content(hist_msg.content_parts)
+        content = await proto_parts_to_smolagents_content(hist_msg.content_parts)
         messages.append(ChatMessage(
             role=MessageRole(hist_msg.role.lower()),
             content=content
         ))
 
     # Add current user message
-    content = proto_parts_to_smolagents_content(current_message_parts)
+    content = await proto_parts_to_smolagents_content(current_message_parts)
     messages.append(ChatMessage(
         role=MessageRole.USER,
         content=content

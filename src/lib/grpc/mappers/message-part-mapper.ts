@@ -6,7 +6,7 @@
  */
 
 import type { MessagePart as LlamaIndexMessagePart } from '@llamaindex/chat-ui';
-import { MessagePart, TextPart, ImageUrlPart } from '../generated/agent_worker';
+import { MessagePart, TextPart, ImageUrlPart, FilePart } from '../generated/agent_worker';
 
 /**
  * Convert single LlamaIndex MessagePart to Protocol Buffer MessagePart
@@ -36,18 +36,36 @@ export function toProtoMessagePart(part: LlamaIndexMessagePart): MessagePart | n
     });
   }
 
-  // Handle data-file part (for S3 uploaded images)
+  // Handle data-file part (for S3 uploaded files - images, PDFs, audio, etc.)
   if (part.type === 'data-file') {
     const dataPart = part as any;
-    if (dataPart.data?.mediaType?.startsWith('image/')) {
+    const mediaType = dataPart.data?.mediaType || dataPart.data?.type || '';
+    const url = dataPart.data?.url || '';
+
+    if (!url) {
+      console.warn('[message-part-mapper] data-file missing URL:', dataPart);
+      return null;
+    }
+
+    // Images use ImageUrlPart for vision model support
+    if (mediaType.startsWith('image/')) {
       return MessagePart.fromPartial({
-        imageUrl: ImageUrlPart.fromPartial({ url: dataPart.data.url })
+        imageUrl: ImageUrlPart.fromPartial({ url })
       });
     }
+
+    // All other files (PDFs, audio, documents) use FilePart
+    return MessagePart.fromPartial({
+      file: FilePart.fromPartial({
+        url,
+        mimeType: mediaType,
+        filename: dataPart.data?.name || dataPart.data?.filename || 'file',
+        size: Number(dataPart.data?.size || 0)
+      })
+    });
   }
 
-  // Unsupported part type (e.g., audio, video) - return null
-  // Can be extended in future for other media types
+  // Unsupported part type - return null
   return null;
 }
 
