@@ -463,19 +463,22 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             all_messages = [system_message] + conversation_messages
             logger.info(f"💬 Built conversation: {len(all_messages)} messages (including system)")
 
-            # 5. Extract images and text from last message for agent.run()
-            # AIDEV-NOTE: smolagents agent.run() uses the `images` parameter, NOT agent.memory.messages
-            # Only the last message's images can be passed (smolagents limitation)
+            # 5. Build task with full conversation context
+            # AIDEV-NOTE: Since we create a NEW agent per request, agent.memory won't persist
+            # between requests. Instead, we include full conversation history in the task prompt.
             last_message = conversation_messages[-1] if conversation_messages else None
 
-            # Extract images using helper function
+            # Extract images from last message (smolagents limitation - only last message images)
             images = self._extract_images_from_message(last_message) if last_message else []
 
-            # Extract text using helper function
-            user_text = self._extract_text_from_message(last_message) if last_message else "Continue the conversation"
+            # Build task with conversation history instead of just last message
+            task_with_context = self._build_task_with_conversation_context(
+                conversation_messages,
+                system_prompt
+            )
 
             logger.info(f"🖼️ Extracted {len(images)} images from last message")
-            logger.info(f"💬 User prompt: {user_text[:100]}...")
+            logger.info(f"💬 Task with context: {len(task_with_context)} chars, {len(conversation_messages)} messages")
 
             # 6. Execute with ToolCallingAgent with real streaming
             logger.info("🚀 Executing ToolCallingAgent with stream=True...")
@@ -490,11 +493,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # Use stream=True for real-time step-by-step progress
             # Pass images via official smolagents API (images parameter)
             # AIDEV-NOTE: smolagents only supports images from the last message, not conversation history
+            # AIDEV-NOTE: reset=True is explicit - we manage conversation history ourselves in task prompt
             for step in agent.run(
-                task=user_text,
+                task=task_with_context,  # Task includes full conversation history
                 stream=True,
                 images=images if images else None,  # Official API for passing PIL Images
-                reset=False  # Preserve conversation history
+                reset=True  # Reset agent memory since we manage history in task prompt
             ):
                 logger.info(f"📊 Step {step_index}: {type(step).__name__}")
 
@@ -733,6 +737,60 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 text_parts.append(part["text"])
 
         return " ".join(text_parts).strip()
+
+    def _build_task_with_conversation_context(
+        self,
+        conversation_messages: List[ChatMessage],
+        system_prompt: str
+    ) -> str:
+        """
+        Build task prompt with full conversation history.
+
+        Since we create a NEW agent per request, agent.memory doesn't persist
+        between requests. Instead, we include the full conversation history
+        in the task prompt itself.
+
+        Args:
+            conversation_messages: List of ChatMessage objects (user and assistant)
+            system_prompt: System prompt to include as context
+
+        Returns:
+            Formatted task string with conversation history
+
+        AIDEV-NOTE: This is the key to context persistence - we manually format
+        conversation history into the task prompt instead of relying on agent.memory
+        which doesn't persist across agent instances.
+        """
+        if not conversation_messages:
+            return "Continue the conversation"
+
+        # Build conversation history as text
+        history_parts = []
+
+        # Add system context at the beginning
+        if system_prompt:
+            history_parts.append(f"SYSTEM CONTEXT:\n{system_prompt}\n")
+
+        # Add previous conversation (all but last message)
+        if len(conversation_messages) > 1:
+            history_parts.append("CONVERSATION HISTORY:")
+            for msg in conversation_messages[:-1]:
+                role = msg.role.value.upper()
+                text = self._extract_text_from_message(msg)
+                if text:
+                    history_parts.append(f"{role}: {text}")
+
+        # Add current message as the task
+        last_message = conversation_messages[-1]
+        current_text = self._extract_text_from_message(last_message)
+
+        if history_parts:
+            # If we have history, format with clear separation
+            history_str = "\n".join(history_parts)
+            return f"{history_str}\n\nCURRENT USER MESSAGE:\n{current_text}"
+        else:
+            # First message in conversation
+            return current_text
 
     def _extract_planning_step(self, step: PlanningStep, index: int) -> StepProgressDict:
         """
