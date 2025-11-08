@@ -19,17 +19,14 @@ function StepHistoryItem({ step }: { step: ExecutionStep }) {
   const hasMetadata = step.metadata && (step.metadata.tool || step.metadata.arguments)
 
   return (
-    <div className="border-l-2 border-muted pl-3 py-2">
+    <div className="pl-1 py-1">
       <div className="flex items-start gap-2">
-        <div className={`mt-0.5 ${config.color}`}>
+        <div className={`${config.color}`}>
           <Icon className="h-4 w-4" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">{step.name}</span>
-            <span className="text-xs text-muted-foreground">
-              {new Date(step.timestamp).toLocaleTimeString()}
-            </span>
           </div>
 
           {step.content && (
@@ -55,7 +52,7 @@ function StepHistoryItem({ step }: { step: ExecutionStep }) {
                 {step.metadata?.tool ? `Tool: ${step.metadata.tool}` : 'Details'}
               </summary>
               {showDetails && (
-                <div className="mt-2 p-2 bg-muted/50 rounded text-xs space-y-1">
+                <div className="mt-2 p-2 bg-transparent rounded text-xs space-y-1">
                   {step.metadata?.tool && (
                     <div>
                       <span className="font-medium">Tool:</span> {step.metadata.tool}
@@ -105,10 +102,7 @@ export function StepHistoryDisplay({ steps }: StepHistoryDisplayProps) {
   }
 
   return (
-    <div className="my-4 bg-muted/30 rounded-lg p-3 space-y-1">
-      <div className="text-xs font-medium text-muted-foreground mb-2">
-        Execution Steps ({steps.length})
-      </div>
+    <div className="my-2 space-y-1">
       {steps.map((step) => (
         <StepHistoryItem key={`${step.index}-${step.timestamp}`} step={step} />
       ))}

@@ -20,7 +20,7 @@ import { ToolDropdown } from './ToolDropdown';
 import { resolveReferences } from '@/app/actions/references';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { toolResolverService } from '@/ddd/domain/tools/services/tool-resolver-service';
-import { useAutoResizeTextarea } from '@/hooks/useAutoResizeTextarea';
+import { useChatInputState } from '@/hooks/useChatInputState';
 
 interface CustomChatInputProps {
   onSendMessage: (message: string) => void;
@@ -53,8 +53,8 @@ export default function CustomChatInput({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-resize textarea based on content (single line that grows)
-  useAutoResizeTextarea(inputRef, inputValue, {
+  // Auto-resize textarea and track single-line mode for conditional layout
+  const { isSingleLine } = useChatInputState(inputRef, inputValue, {
     minHeight: 44,  // Single line height (~2.75rem)
     maxHeight: 400  // Max height before scrolling
   });
@@ -315,7 +315,23 @@ export default function CustomChatInput({
         </div>
       )}
 
-      <div className="relative">
+      {/* Conditional layout: single-row when compact, traditional when multi-line */}
+      <div className={isSingleLine ? "flex items-center gap-2" : "relative"}>
+        {/* File upload button - inline when single-line */}
+        {isSingleLine && (
+          <Button
+            onClick={handleFileButtonClick}
+            disabled={disabled}
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 flex-shrink-0"
+            title="Attach file (images, audio, documents)"
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
+        )}
+
+        {/* Textarea */}
         <Textarea
           ref={inputRef}
           value={inputValue}
@@ -324,43 +340,60 @@ export default function CustomChatInput({
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
-          className="resize-none px-3 pr-12 pb-10"
+          className={isSingleLine
+            ? "resize-none px-3 py-2 flex-1 min-w-0"
+            : "resize-none px-3 pr-12 pb-10"
+          }
         />
 
-        {/* Bottom action bar - positioned inside textarea */}
-        <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-          {/* File upload button */}
-          <Button
-            onClick={handleFileButtonClick}
-            disabled={disabled}
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0"
-            title="Attach file (images, audio, documents)"
-          >
-            <Paperclip className="h-4 w-4" />
-          </Button>
-
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.txt"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-
-          {/* Send Button */}
+        {/* Send button - inline when single-line */}
+        {isSingleLine && (
           <Button
             onClick={handleSendMessage}
             disabled={!inputValue.trim() || disabled}
             size="sm"
-            className="h-8 w-8 p-0 rounded-full shadow-sm hover:shadow-md transition-shadow"
+            className="h-8 w-8 p-0 flex-shrink-0 rounded-full shadow-sm hover:shadow-md transition-shadow"
           >
             <Send className="h-3 w-3" />
           </Button>
-        </div>
+        )}
+
+        {/* Bottom action bar - only show when multi-line */}
+        {!isSingleLine && (
+          <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+            {/* File upload button */}
+            <Button
+              onClick={handleFileButtonClick}
+              disabled={disabled}
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              title="Attach file (images, audio, documents)"
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
+
+            {/* Send Button */}
+            <Button
+              onClick={handleSendMessage}
+              disabled={!inputValue.trim() || disabled}
+              size="sm"
+              className="h-8 w-8 p-0 rounded-full shadow-sm hover:shadow-md transition-shadow"
+            >
+              <Send className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.txt"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
 
         {/* Tool Dropdown */}
         <ToolDropdown
