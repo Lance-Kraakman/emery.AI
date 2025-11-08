@@ -492,6 +492,27 @@ export function useChatGRPC(
                       : msg
                   ))
                 }
+              } else if (eventData.type === 'message_complete') {
+                // Handle completion with execution steps metadata
+                logger.debug('Received message completion with metadata', {
+                  stepCount: eventData.metadata?.executionSteps?.length || 0,
+                  ragSourcesCount: eventData.metadata?.ragSources?.length || 0
+                })
+
+                // Update the assistant message with final metadata
+                setMessages((prev) => prev.map((msg) =>
+                  msg.id === assistantId
+                    ? createTextMessage(
+                        assistantMessage,
+                        'assistant',
+                        assistantId,
+                        eventData.metadata // Include execution steps and other metadata
+                      )
+                    : msg
+                ))
+
+                // Clear streaming steps now that metadata is persisted
+                setStreamingSteps([])
               }
             } catch (e) {
               logger.debug('Failed to parse SSE event', e)
@@ -520,7 +541,7 @@ export function useChatGRPC(
     } finally {
       setIsLoading(false)
       setCurrentStep(null)
-      setStreamingSteps([]) // Clear steps after completion
+      // Note: streamingSteps are cleared in message_complete handler after metadata is persisted
       setCurrentMessageId(null)
       abortControllerRef.current = null
     }

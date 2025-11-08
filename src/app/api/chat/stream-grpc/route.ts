@@ -676,6 +676,26 @@ export async function POST(req: NextRequest) {
                   });
                 }
 
+                // Send completion event with execution steps metadata to frontend
+                const completionEvent = {
+                  type: 'message_complete',
+                  metadata: {
+                    executionSteps: collectedSteps,
+                    ragSources: ragSources,
+                    modelUsed: response.complete.modelUsed,
+                    totalTokens: response.complete.totalTokens
+                  }
+                };
+
+                try {
+                  const eventData = `data: ${JSON.stringify(completionEvent)}\n\n`;
+                  const eventChunk = new TextEncoder().encode(eventData);
+                  controller.enqueue(eventChunk);
+                  console.log(`[CHAT-GRPC-API] Sent completion event with ${collectedSteps.length} execution steps`);
+                } catch (jsonError) {
+                  console.error('[CHAT-GRPC-API] Failed to send completion event:', jsonError);
+                }
+
                 controller.close();
                 
               } else if (response.type === 'error' && response.error) {
