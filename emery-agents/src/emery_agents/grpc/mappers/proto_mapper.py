@@ -7,10 +7,10 @@ No complex abstractions - just direct mapping functions.
 """
 
 from typing import List, Dict, Any, Optional, TypedDict
-from .generated import agent_worker_pb2
-from ..entities.task import TaskRequest, TriggerData
-from ..entities.agent import AgentConfig
-from ..types import TaskStatus, WorkerStatus
+from ..generated import agent_worker_pb2
+from ...entities.task import TaskRequest, TriggerData
+from ...entities.agent import AgentConfig
+from ...types import TaskStatus, WorkerStatus
 
 
 # Type definitions for structured return values
@@ -51,16 +51,16 @@ class CancelTaskResponseDict(TypedDict):
 
 class ProtoMapper:
     """Handles conversion between protobuf messages and domain entities."""
-    
+
     def task_request_from_proto(self, proto: agent_worker_pb2.TaskRequest) -> TaskRequest:
         """Convert protobuf TaskRequest to domain entity."""
         # Convert agent config
-        
+
         # Convert trigger data
         trigger_data = TriggerData(
             payload=dict(proto.trigger_data.payload)
         )
-        
+
         # Handle oneof execution_mode
         skill_name = None
 
@@ -79,7 +79,7 @@ class ProtoMapper:
             skill_name=skill_name,
             instruction_config=proto.instruction_config
         )
-    
+
     def task_progress_to_proto(self, progress: TaskProgressDict) -> agent_worker_pb2.TaskProgress:
         """
         Convert domain TaskProgress to protobuf.
@@ -104,7 +104,7 @@ class ProtoMapper:
             timestamp_ms=progress.timestamp_ms,
             progress_percent=progress.progress_percent
         )
-    
+
     def worker_info_to_proto(self, info: WorkerInfoDict) -> agent_worker_pb2.WorkerInfo:
         """Convert domain WorkerInfo to protobuf."""
         # Map status string to protobuf enum
@@ -115,7 +115,7 @@ class ProtoMapper:
             "WORKER_UNHEALTHY": agent_worker_pb2.WORKER_UNHEALTHY,
             "WORKER_SHUTTING_DOWN": agent_worker_pb2.WORKER_SHUTTING_DOWN,
         }
-        
+
         return agent_worker_pb2.WorkerInfo(
             worker_id=info.worker_id,
             version=info.version,
@@ -127,14 +127,14 @@ class ProtoMapper:
             uptime_seconds=info.uptime_seconds,
             supported_tools=info.supported_tools
         )
-    
+
     def cancel_task_request_from_proto(self, proto: agent_worker_pb2.CancelTaskRequest) -> CancelTaskRequestDict:
         """Convert protobuf CancelTaskRequest - simplified to return dict."""
         return {
             'task_id': proto.task_id,
             'reason': proto.reason
         }
-    
+
     def cancel_task_response_to_proto(self, response: CancelTaskResponseDict) -> agent_worker_pb2.CancelTaskResponse:
         """Convert domain CancelTaskResponse to protobuf."""
         return agent_worker_pb2.CancelTaskResponse(

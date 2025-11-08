@@ -20,6 +20,7 @@ from typing import AsyncIterator, Optional, List, Dict, Any
 
 import grpc
 from grpc import aio
+from PIL import Image
 
 from smolagents import ToolCallingAgent
 from smolagents.models import ChatMessage, MessageRole
@@ -30,6 +31,7 @@ from .mappers.message_mapper import (
     has_images,
     extract_text_from_parts
 )
+from .mappers.message_types import MessageContentList
 from ..services.model_provider import SmolagentsModelProvider
 from ..services.tool_loader import UnifiedToolLoader
 from ..rag.rag_processor import RagProcessor
@@ -410,15 +412,19 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             all_messages = [system_message] + conversation_messages
             logger.info(f"💬 Built conversation: {len(all_messages)} messages (including system)")
 
-            # 5. Store messages in agent memory for model access
-            # AIDEV-NOTE: smolagents agent.run() expects a string, but the model needs ChatMessage objects
-            # We inject messages into agent memory so the model can access multimodal content
-            if agent.memory is not None:
-                # Clear existing messages and add our conversation
-                agent.memory.messages = all_messages
-                logger.info(f"📝 Injected {len(all_messages)} ChatMessage objects into agent memory")
-            else:
-                logger.warning("⚠️ Agent has no memory - multimodal messages may not work correctly")
+            # 5. Extract images and text from last message for agent.run()
+            # AIDEV-NOTE: smolagents agent.run() uses the `images` parameter, NOT agent.memory.messages
+            # Only the last message's images can be passed (smolagents limitation)
+            last_message = conversation_messages[-1] if conversation_messages else None
+
+            # Extract images using helper function
+            images = self._extract_images_from_message(last_message) if last_message else []
+
+            # Extract text using helper function
+            user_text = self._extract_text_from_message(last_message) if last_message else "Continue the conversation"
+
+            logger.info(f"🖼️ Extracted {len(images)} images from last message")
+            logger.info(f"💬 User prompt: {user_text[:100]}...")
 
             # 6. Execute with ToolCallingAgent with real streaming
             logger.info("🚀 Executing ToolCallingAgent with stream=True...")
@@ -430,20 +436,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             step_index = 0
             final_answer_text = ""
 
-            # Extract last user message text for agent.run() prompt
-            last_user_content = conversation_messages[-1].content if conversation_messages else "Continue the conversation"
-            if isinstance(last_user_content, list):
-                # Multimodal - extract text parts
-                text_parts = [part["text"] for part in last_user_content if part.get("type") == "text"]
-                user_prompt = " ".join(text_parts) if text_parts else "Process the provided image"
-            else:
-                user_prompt = last_user_content
-
-            logger.info(f"💬 User prompt for agent.run(): {user_prompt[:100]}...")
-
             # Use stream=True for real-time step-by-step progress
-            # Pass string prompt (agent memory contains full ChatMessage history)
-            for step in agent.run(user_prompt, stream=True):
+            # Pass images via official smolagents API (images parameter)
+            # AIDEV-NOTE: smolagents only supports images from the last message, not conversation history
+            for step in agent.run(
+                task=user_text,
+                stream=True,
+                images=images if images else None,  # Official API for passing PIL Images
+                reset=False  # Preserve conversation history
+            ):
                 logger.info(f"📊 Step {step_index}: {type(step).__name__}")
 
                 if isinstance(step, PlanningStep):
@@ -644,6 +645,59 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         agent.description = f"Chat agent with {len(smolagents_tools)} tools available ({model_id})"
 
         return agent
+
+    def _extract_images_from_message(self, message: ChatMessage) -> list[Image.Image]:
+        """
+        Extract PIL Image objects from ChatMessage content.
+
+        Args:
+            message: ChatMessage object with content as MessageContentList
+
+        Returns:
+            List of PIL.Image objects (empty if no images)
+
+        AIDEV-NOTE: Used to pass images to agent.run() via the official images parameter.
+        Smolagents expects list[PIL.Image], not URLs or base64 strings.
+        Content is always MessageContentList (list of content parts).
+        """
+        if not message or not message.content:
+            return []
+
+        content: MessageContentList = message.content
+
+        # Extract all images from content parts
+        images: list[Image.Image] = []
+        for part in content:
+            if part.get("type") == "image":
+                images.append(part["image"])
+
+        return images
+
+    def _extract_text_from_message(self, message: ChatMessage) -> str:
+        """
+        Extract text content from ChatMessage.
+
+        Args:
+            message: ChatMessage object with content as MessageContentList
+
+        Returns:
+            Combined text string (empty string if no text content)
+
+        AIDEV-NOTE: Used to extract text for agent.run() task parameter.
+        Content is always MessageContentList (list of content parts).
+        """
+        if not message or not message.content:
+            return ""
+
+        content: MessageContentList = message.content
+
+        # Extract all text from content parts
+        text_parts: list[str] = []
+        for part in content:
+            if part.get("type") == "text":
+                text_parts.append(part["text"])
+
+        return " ".join(text_parts).strip()
 
     async def _stream_text_chunks(self, text: str, chunk_size: int = 5) -> AsyncIterator[str]:
         """Stream text by word chunks to simulate streaming."""

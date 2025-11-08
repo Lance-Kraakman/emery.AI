@@ -53,10 +53,10 @@ export function CreateTableDialog({ isOpen, onClose, onTableCreated, selectedDat
           form.reset()
           onClose()
 
-          // AIDEV-NOTE: Don't call onTableCreated() here to avoid race condition
-          // The refetch would replace store data before navigation completes,
-          // potentially removing the optimistically added table if server response is delayed.
-          // The next natural refetch will include this table.
+          // AIDEV-NOTE: Trigger refetch after navigation completes
+          // The 100ms delay ensures navigation finishes and component tree stabilizes
+          // before refetching, allowing store updates to propagate to the new route
+          setTimeout(() => onTableCreated(), 100)
         } else {
           setError(result.error || "Failed to create table")
         }

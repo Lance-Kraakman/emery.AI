@@ -24,10 +24,11 @@ import type { UpdateTableCommand } from '@/ddd/application/services/tables/table
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   return withAuthenticatedRoute(request, async (user) => {
-    const tableId = parseIntParam(params.id, 'table id');
+    const { id } = await params;
+    const tableId = parseIntParam(id, 'table id');
     const tableService = getTableApplicationService();
 
     const table = await tableService.getTable(TableId.fromNumber(tableId));
@@ -60,10 +61,11 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   return withAuthenticatedRoute(request, async (user) => {
-    const tableId = parseIntParam(params.id, 'table id');
+    const { id } = await params;
+    const tableId = parseIntParam(id, 'table id');
     const body = await parseJsonBody(request);
 
     if (!body) {
@@ -118,10 +120,11 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   return withAuthenticatedRoute(request, async (user) => {
-    const tableId = parseIntParam(params.id, 'table id');
+    const { id } = await params;
+    const tableId = parseIntParam(id, 'table id');
     const tableService = getTableApplicationService();
 
     // Verify table exists before attempting deletion

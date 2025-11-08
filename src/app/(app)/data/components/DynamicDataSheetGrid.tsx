@@ -545,7 +545,7 @@ export function DynamicDataSheetGrid({
           </div>
         ) : (
           <DataSheetGrid
-            key={`grid-${tableId}`}  // CRITICAL: Stable key prevents remount on data updates, preserves scroll position and selection
+            key={`grid-${tableId}-${fields.length}`}  // CRITICAL: Remount on column count change, but stable during data updates to preserve scroll position
             value={state.data}
             onChange={handleChange}
             columns={columns}
