@@ -271,7 +271,7 @@ function ChatContentWithCanvas({
 
           {/* ChatMessages component with inline loading indicator */}
           <ChatMessages
-            className="flex-1 h-full bg-transparent [&_.message]:bg-background [&_.message.assistant]:bg-muted [&_.message.user]:bg-primary [&_.message.user]:text-primary-foreground [&_.message]:p-4 [&_.message]:rounded-lg [&_.message]:my-2 [&_.message]:mx-4 [&_p]:text-sm [&_p]:leading-relaxed"
+            className="flex-1 h-full bg-transparent [&_.message]:bg-background [&_.message.assistant]:bg-muted [&_.message.user]:bg-primary [&_.message.user]:text-primary-foreground [&_.message]:px-4 [&_.message]:py-2 [&_.message]:rounded-lg [&_.message]:my-1 [&_.message]:mx-4 [&_p]:text-sm [&_p]:leading-snug [&_p]:my-0.5"
           >
             <ChatMessages.List>
               {/* Render all messages using library's ChatMessage component */}
@@ -283,7 +283,7 @@ function ChatContentWithCanvas({
                   <React.Fragment key={message.id || index}>
                     {/* Show step history for assistant messages with steps - BEFORE the message */}
                     {message.role === 'assistant' && steps && steps.length > 0 && (
-                      <div className="mx-4 mb-2">
+                      <div className="mx-4 mb-1">
                         <StepHistoryDisplay steps={steps} />
                       </div>
                     )}
@@ -297,14 +297,14 @@ function ChatContentWithCanvas({
 
               {/* Real-time streaming steps - display accumulated steps during execution */}
               {handler.isLoading && handler.streamingSteps && handler.streamingSteps.length > 0 && (
-                <div className="mx-4 mb-2">
+                <div className="mx-4 mb-1">
                   <StepHistoryDisplay steps={handler.streamingSteps} />
                 </div>
               )}
 
               {/* Inline loading indicator - appears after last message (Claude-like) */}
               {handler.isLoading && handler.currentStep && (
-                <div className="flex gap-3 px-4 py-2 mx-4 mb-2">
+                <div className="flex gap-3 px-4 py-1 mx-4 mb-1">
                   {/* Bot Avatar */}
                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                     <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -339,7 +339,7 @@ function ChatContentWithCanvas({
       />
 
       {/* Input area */}
-      <div className="flex-shrink-0 py-4 px-3 border-t border-border/10 bg-card">
+      <div className="flex-shrink-0 py-2 px-3 border-t border-border/10 bg-card">
         <CustomChatInput
           onSendMessage={async (message) => {
             // Send message with proper MessagePart format
