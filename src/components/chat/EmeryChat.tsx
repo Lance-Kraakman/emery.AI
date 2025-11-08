@@ -14,6 +14,7 @@ import {
   ChevronRight, 
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
 import { RightPanelResizeHandle } from '@/components/ui/right-panel-resize-handle'
@@ -270,9 +271,7 @@ function ChatContentWithCanvas({
           )}
 
           {/* ChatMessages component with inline loading indicator */}
-          <ChatMessages
-            className="flex-1 h-full bg-transparent [&_.message]:bg-background [&_.message.assistant]:bg-muted [&_.message.user]:bg-primary [&_.message.user]:text-primary-foreground [&_.message]:px-4 [&_.message]:py-2 [&_.message]:rounded-lg [&_.message]:my-1 [&_.message]:mx-4 [&_p]:text-sm [&_p]:leading-snug [&_p]:my-0.5"
-          >
+          <ChatMessages className="flex-1 h-full bg-transparent">
             <ChatMessages.List>
               {/* Render all messages using library's ChatMessage component */}
               {handler.messages.map((message: EmeryChatMessage, index) => {
@@ -290,7 +289,16 @@ function ChatContentWithCanvas({
                     <ChatMessage
                       message={message}
                       isLast={index === handler.messages.length - 1}
-                    />
+                      className={cn(
+                        "px-4 py-2 rounded-lg my-1 mx-4 transition-colors",
+                        message.role === 'user' && "bg-primary text-primary-foreground",
+                        message.role === 'assistant' && "bg-muted"
+                      )}
+                    >
+                      <ChatMessage.Avatar />
+                      <ChatMessage.Content className="[&_p]:text-sm [&_p]:leading-snug [&_p]:my-0.5" />
+                      <ChatMessage.Actions />
+                    </ChatMessage>
                   </React.Fragment>
                 )
               })}
