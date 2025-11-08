@@ -304,12 +304,14 @@ class ProcessMessageResponse(_message.Message):
     def __init__(self, content_chunk: _Optional[_Union[ContentChunk, _Mapping]] = ..., rag_context: _Optional[_Union[RagContext, _Mapping]] = ..., complete: _Optional[_Union[ProcessingComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., step_progress: _Optional[_Union[StepProgress, _Mapping]] = ..., timestamp: _Optional[int] = ...) -> None: ...
 
 class MessagePart(_message.Message):
-    __slots__ = ("text", "image_url")
+    __slots__ = ("text", "image_url", "file")
     TEXT_FIELD_NUMBER: _ClassVar[int]
     IMAGE_URL_FIELD_NUMBER: _ClassVar[int]
+    FILE_FIELD_NUMBER: _ClassVar[int]
     text: TextPart
     image_url: ImageUrlPart
-    def __init__(self, text: _Optional[_Union[TextPart, _Mapping]] = ..., image_url: _Optional[_Union[ImageUrlPart, _Mapping]] = ...) -> None: ...
+    file: FilePart
+    def __init__(self, text: _Optional[_Union[TextPart, _Mapping]] = ..., image_url: _Optional[_Union[ImageUrlPart, _Mapping]] = ..., file: _Optional[_Union[FilePart, _Mapping]] = ...) -> None: ...
 
 class TextPart(_message.Message):
     __slots__ = ("text",)
@@ -322,6 +324,18 @@ class ImageUrlPart(_message.Message):
     URL_FIELD_NUMBER: _ClassVar[int]
     url: str
     def __init__(self, url: _Optional[str] = ...) -> None: ...
+
+class FilePart(_message.Message):
+    __slots__ = ("url", "mime_type", "filename", "size")
+    URL_FIELD_NUMBER: _ClassVar[int]
+    MIME_TYPE_FIELD_NUMBER: _ClassVar[int]
+    FILENAME_FIELD_NUMBER: _ClassVar[int]
+    SIZE_FIELD_NUMBER: _ClassVar[int]
+    url: str
+    mime_type: str
+    filename: str
+    size: int
+    def __init__(self, url: _Optional[str] = ..., mime_type: _Optional[str] = ..., filename: _Optional[str] = ..., size: _Optional[int] = ...) -> None: ...
 
 class HistoryMessage(_message.Message):
     __slots__ = ("role", "content_parts", "timestamp")

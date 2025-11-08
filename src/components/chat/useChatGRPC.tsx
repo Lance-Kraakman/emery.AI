@@ -17,6 +17,7 @@ const logger = createDebugLogger('ChatGRPC')
 
 interface ChatMessage extends Message {
   id: string
+  experimental_metadata?: any
 }
 
 /**
@@ -38,11 +39,17 @@ function getMessageContent(message: Message): string {
 /**
  * Helper to create a Message with text content
  */
-function createTextMessage(content: string, role: 'user' | 'assistant' | 'system', id?: string): ChatMessage {
+function createTextMessage(
+  content: string,
+  role: 'user' | 'assistant' | 'system',
+  id?: string,
+  metadata?: any
+): ChatMessage {
   return {
     id: id || generateId(),
     role,
     parts: [{ type: 'text', text: content }],
+    experimental_metadata: metadata
   }
 }
 
@@ -256,7 +263,7 @@ export function useChatGRPC(
 
         // Convert DTOs to ChatMessage format
         const chatMessages: ChatMessage[] = result.data.messages.map(msg =>
-          createTextMessage(msg.content, msg.role as 'user' | 'assistant', msg.id)
+          createTextMessage(msg.content, msg.role as 'user' | 'assistant', msg.id, msg.metadata)
         )
 
         setMessages(chatMessages)

@@ -30,7 +30,9 @@ import { createDocumentArtifact, createFileArtifact } from './types/chat-artifac
 import { fetchFileArtifactData, getFileDownloadUrl, getDocumentFieldValue, getDocumentDownloadUrl } from '@/app/actions/artifacts'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import { StepProgressIndicator } from './StepProgressIndicator'
+import { StepHistoryDisplay } from './StepHistoryDisplay'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
+import type { ExecutionStep } from '@/app/dtos/chat.dto'
 
 const logger = createDebugLogger('EmeryChat')
 
@@ -272,13 +274,25 @@ function ChatContentWithCanvas({
           >
             <ChatMessages.List>
               {/* Render all messages using library's ChatMessage component */}
-              {handler.messages.map((message, index) => (
-                <ChatMessage
-                  key={message.id || index}
-                  message={message}
-                  isLast={index === handler.messages.length - 1}
-                />
-              ))}
+              {handler.messages.map((message, index) => {
+                // Extract execution steps from message metadata
+                const steps = (message as any).experimental_metadata?.executionSteps as ExecutionStep[] | undefined
+
+                return (
+                  <React.Fragment key={message.id || index}>
+                    <ChatMessage
+                      message={message}
+                      isLast={index === handler.messages.length - 1}
+                    />
+                    {/* Show step history for assistant messages with steps */}
+                    {message.role === 'assistant' && steps && steps.length > 0 && (
+                      <div className="mx-4 mb-2">
+                        <StepHistoryDisplay steps={steps} />
+                      </div>
+                    )}
+                  </React.Fragment>
+                )
+              })}
 
               {/* Inline loading indicator - appears after last message (Claude-like) */}
               {handler.isLoading && handler.currentStep && (

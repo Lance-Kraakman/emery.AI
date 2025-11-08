@@ -64,27 +64,11 @@ export interface GetChatsDTO {
   offset?: number;
 }
 
-/**
- * Metadata for execution steps
- */
-export interface ExecutionStepMetadata {
-  tool?: string
-  arguments?: string
-  observations?: string
-  error?: string
-}
+// Re-export execution step types from domain for convenience
+export type {
+  ExecutionStep,
+  ExecutionStepMetadata
+} from '@/ddd/domain/chat/value-objects/execution-step';
 
-/**
- * Execution step from agent processing
- *
- * Steps are collected during agent execution and persisted in message metadata.
- * They provide transparency into the agent's reasoning and tool usage.
- */
-export interface ExecutionStep {
-  type: 'PLANNING' | 'ACTION' | 'REASONING' | 'FINAL'
-  name: string
-  content: string
-  index: number
-  timestamp: number
-  metadata?: ExecutionStepMetadata
-}
+// Re-export ChatMessageMetadata from domain for convenience
+export type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';

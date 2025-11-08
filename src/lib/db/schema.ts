@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
 import type { ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
 import type { PuckDataStructure } from '@/ddd/domain/puck/value-objects/puck-data';
+import type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 
 // AIDEV-NOTE: Authenticated user role for RLS policies
 export const authenticatedRole = pgRole('authenticated', {
@@ -144,11 +145,11 @@ export const views = pgTable("views", {
     order: number;
   }>>(),
 
-  // View type (grid, metric)
+  // View type (grid, metric, chart, form)
   // AIDEV-NOTE: Determines how data is transformed and displayed.
   // Defaults to 'grid' for backward compatibility with existing views.
   viewType: text("view_type")
-    .$type<'grid' | 'metric'>()
+    .$type<'grid' | 'metric' | 'chart' | 'form'>()
     .notNull()
     .default('grid'),
 
@@ -156,7 +157,7 @@ export const views = pgTable("views", {
   // AIDEV-NOTE: Schema varies by viewType. Validated by ViewConfig Value Object.
   viewConfig: jsonb("view_config")
     .$type<{
-      type: 'grid' | 'metric';
+      type: 'grid' | 'metric' | 'chart' | 'form';
       [key: string]: any;
     }>()
     .notNull()
@@ -1006,20 +1007,9 @@ export const chatMessages: any = pgTable("chat_messages", {
   // Message content
   role: text("role").notNull(), // 'user' | 'assistant' | 'system'
   content: text("content").notNull(),
-  
+
   // AI and processing metadata
-  metadata: jsonb("metadata").$type<{
-    ragSources?: Array<{
-      documentId: string;
-      title: string;
-      similarity: number;
-      domainType: string;
-    }>;
-    modelUsed?: string;
-    processingTime?: number;
-    tokenCount?: number;
-    error?: string;
-  }>(),
+  metadata: jsonb("metadata").$type<ChatMessageMetadata>(),
   
   // Message ordering and organization
   messageIndex: integer("message_index").notNull(), // Sequential order within chat

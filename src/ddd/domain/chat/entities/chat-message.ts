@@ -1,15 +1,16 @@
 /**
  * ChatMessage Domain Entity
- * 
+ *
  * Represents individual messages within a chat session.
  * Manages message content, metadata, RAG sources, and AI processing information.
- * 
+ *
  * AIDEV-NOTE: Domain entity for chat messages - contains business rules for
  * message validation, RAG source tracking, and conversation flow management
  */
 
 import { ChatId, ChatMessageId } from "../../shared/value-objects";
 import type { AnyAttachmentMetadata } from "../../../domain/multimodal/value-objects/attachment-metadata";
+import type { ExecutionStep } from "../value-objects/execution-step";
 
 export interface ChatMessageMetadata {
   ragSources?: Array<{
@@ -24,6 +25,8 @@ export interface ChatMessageMetadata {
   error?: string;
   // Multimodal attachments (images, audio, documents)
   attachments?: AnyAttachmentMetadata[];
+  // Agent execution steps (planning, actions, reasoning)
+  executionSteps?: ExecutionStep[];
 }
 
 export interface ChatMessage {
