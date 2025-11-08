@@ -3,3 +3,11 @@
 
 export { ConnectionId } from './connection-id';
 export { AppName } from './app-name';
+export type {
+  ConnectionPaginationOptions,
+  PaginatedResult
+} from './pagination';
+export {
+  createDefaultPaginationOptions,
+  isValidPaginationOptions
+} from './pagination';

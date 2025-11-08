@@ -3,7 +3,7 @@
 
 import { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
 import { Connection, ConnectionStatus } from '@/ddd/domain/connections/entities/connection';
-import { ConnectionId, AppName } from '@/ddd/domain/connections/value-objects';
+import { ConnectionId, AppName, ConnectionPaginationOptions, PaginatedResult } from '@/ddd/domain/connections/value-objects';
 import { UserId } from '@/ddd/domain/shared/value-objects';
 import { pipedreamClient, getExternalUserId } from '@/lib/pipedream/client';
 import { PipedreamConnectionMapper } from './connection-mapper';
@@ -79,7 +79,87 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
       return [];
     }
   }
-  
+
+  async findByUserIdPaginated(userId: UserId, options: ConnectionPaginationOptions): Promise<PaginatedResult<Connection>> {
+    try {
+      if (!pipedreamClient) {
+        console.error('[ConnectionRepo] Pipedream client not available');
+        return { data: [], hasMore: false };
+      }
+
+      const externalUserId = getExternalUserId(userId.value);
+      console.log(`[ConnectionRepo] Fetching paginated connections for user ${userId.value} (limit: ${options.limit}, after: ${options.after || 'none'})`);
+
+      // Build pagination parameters for Pipedream API
+      const params: any = {
+        external_user_id: externalUserId,
+        limit: options.limit
+      };
+
+      if (options.after) {
+        params.after = options.after;
+      }
+
+      if (options.before) {
+        params.before = options.before;
+      }
+
+      const response = await pipedreamClient.accounts.list(params);
+
+      // Handle different response structures from Pipedream SDK
+      // Paginated responses may have { data: [], cursor: { next: string } } structure
+      let accounts: any[];
+      let nextCursor: string | undefined;
+      let hasMore = false;
+
+      if (Array.isArray(response)) {
+        // Legacy response format - no pagination metadata
+        accounts = response;
+        hasMore = accounts.length >= options.limit;
+      } else if (response && typeof response === 'object') {
+        // Modern paginated response format
+        accounts = (response as any).data || [];
+        const cursor = (response as any).cursor || (response as any).page_info;
+        nextCursor = cursor?.next || cursor?.next_cursor;
+        hasMore = cursor?.has_more ?? (accounts.length >= options.limit);
+      } else {
+        accounts = [];
+      }
+
+      console.log(`[ConnectionRepo] Received ${accounts.length} accounts from Pipedream (hasMore: ${hasMore}, nextCursor: ${nextCursor || 'none'})`);
+
+      // Map and filter accounts to domain entities
+      const connections = accounts
+        .filter(account => {
+          const isValid = PipedreamConnectionMapper.isValidPipedreamAccount(account);
+          if (!isValid) {
+            console.warn(`[ConnectionRepo] Skipping invalid account:`, account);
+          }
+          return isValid;
+        })
+        .map(account => {
+          try {
+            return PipedreamConnectionMapper.toDomainEntity(userId, account);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            console.error(`[ConnectionRepo] Failed to map account ${account.id}:`, errorMessage);
+            return null;
+          }
+        })
+        .filter((conn): conn is Connection => conn !== null);
+
+      return {
+        data: connections,
+        nextCursor,
+        hasMore
+      };
+
+    } catch (error) {
+      console.error(`[ConnectionRepo] Failed to fetch paginated connections for user ${userId.value}:`, error);
+      return { data: [], hasMore: false };
+    }
+  }
+
   async findByUserAndApp(userId: UserId, appName: AppName): Promise<Connection | null> {
     const connections = await this.findByUserId(userId);
 

@@ -145,18 +145,21 @@ export function UsageSettingsClient({
   };
 
   return (
-    <div className="space-y-4">
-      {/* Top Section - Credit Balance, Model Config, and Plan in one row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {/* Credit Balance - Compact */}
-        <Card>
+    <div className="space-y-3 sm:space-y-4">
+      {/* Top Section - Responsive grid */}
+      <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2 lg:grid-cols-3">
+        {/* Credit Balance - Full width on md, 1/3 on lg */}
+        <Card className="md:col-span-2 lg:col-span-1">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Coins className="h-4 w-4" />
                 <CardTitle className="text-sm font-medium">Credit Balance</CardTitle>
               </div>
-              <Button variant="outline" size="sm" className="h-7 text-xs">Buy Credits</Button>
+              {/* Buy Credits button - only show on large screens in header */}
+              <Button variant="outline" size="sm" className="hidden h-7 text-xs lg:flex">
+                Buy Credits
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -165,7 +168,7 @@ export function UsageSettingsClient({
               <p className="text-xs text-muted-foreground">credits available</p>
             </div>
             {creditStats && (
-              <div className="flex gap-3 pt-2 text-xs">
+              <div className="flex gap-2 pt-2 text-xs">
                 <div className="flex-1 rounded-md bg-muted/50 p-2">
                   <p className="text-muted-foreground">Used</p>
                   <p className="font-semibold">{creditStats.creditsUsedCurrentMonth?.toLocaleString() || 0}</p>
@@ -176,6 +179,10 @@ export function UsageSettingsClient({
                 </div>
               </div>
             )}
+            {/* Buy Credits button - show on mobile/tablet */}
+            <Button variant="outline" size="sm" className="h-8 w-full text-xs lg:hidden">
+              Buy Credits
+            </Button>
           </CardContent>
         </Card>
 
@@ -199,16 +206,18 @@ export function UsageSettingsClient({
                 requiredCapabilities={['toolCalling']}
               />
             </div>
-            <Button onClick={handleSave} disabled={isSaving} className="w-full" size="sm">
+            <Button onClick={handleSave} disabled={isSaving} className="h-8 w-full" size="sm">
               {isSaving ? (
                 <>
-                  <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
-                  Saving...
+                  <RefreshCw className="h-3 w-3 mr-1.5 animate-spin" />
+                  <span className="hidden sm:inline">Saving...</span>
+                  <span className="sm:hidden">Saving</span>
                 </>
               ) : (
                 <>
-                  <Save className="h-3 w-3 mr-2" />
-                  Save Changes
+                  <Save className="h-3 w-3 mr-1.5" />
+                  <span className="hidden sm:inline">Save Changes</span>
+                  <span className="sm:hidden">Save</span>
                 </>
               )}
             </Button>
@@ -225,7 +234,10 @@ export function UsageSettingsClient({
               <p className="text-sm font-medium capitalize">{organizationTier} Tier</p>
               <p className="text-xs text-muted-foreground">Upgrade for more credits and features</p>
             </div>
-            <Button variant="outline" size="sm" className="w-full">Upgrade Plan</Button>
+            <Button variant="outline" size="sm" className="h-8 w-full">
+              <span className="hidden sm:inline">Upgrade Plan</span>
+              <span className="sm:hidden">Upgrade</span>
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -247,9 +259,10 @@ export function UsageSettingsClient({
 
             <TabsContent value="model" className="space-y-3">
               <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={() => handleExportCSV('model')}>
+                <Button variant="outline" size="sm" className="h-8" onClick={() => handleExportCSV('model')}>
                   <Download className="h-3 w-3 mr-1.5" />
-                  Export CSV
+                  <span className="hidden sm:inline">Export CSV</span>
+                  <span className="sm:hidden">Export</span>
                 </Button>
               </div>
               {isLoadingBreakdown ? (
@@ -284,9 +297,10 @@ export function UsageSettingsClient({
 
             <TabsContent value="agent" className="space-y-3">
               <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={() => handleExportCSV('agent')}>
+                <Button variant="outline" size="sm" className="h-8" onClick={() => handleExportCSV('agent')}>
                   <Download className="h-3 w-3 mr-1.5" />
-                  Export CSV
+                  <span className="hidden sm:inline">Export CSV</span>
+                  <span className="sm:hidden">Export</span>
                 </Button>
               </div>
               {isLoadingBreakdown ? (
@@ -321,9 +335,10 @@ export function UsageSettingsClient({
 
             <TabsContent value="user" className="space-y-3">
               <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={() => handleExportCSV('user')}>
+                <Button variant="outline" size="sm" className="h-8" onClick={() => handleExportCSV('user')}>
                   <Download className="h-3 w-3 mr-1.5" />
-                  Export CSV
+                  <span className="hidden sm:inline">Export CSV</span>
+                  <span className="sm:hidden">Export</span>
                 </Button>
               </div>
               {isLoadingBreakdown ? (
@@ -358,9 +373,10 @@ export function UsageSettingsClient({
 
             <TabsContent value="type" className="space-y-3">
               <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={() => handleExportCSV('type')}>
+                <Button variant="outline" size="sm" className="h-8" onClick={() => handleExportCSV('type')}>
                   <Download className="h-3 w-3 mr-1.5" />
-                  Export CSV
+                  <span className="hidden sm:inline">Export CSV</span>
+                  <span className="sm:hidden">Export</span>
                 </Button>
               </div>
               {isLoadingBreakdown ? (

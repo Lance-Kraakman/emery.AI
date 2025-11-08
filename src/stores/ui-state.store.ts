@@ -23,7 +23,7 @@ export interface UIState {
   // Layout state (from LayoutProvider)
   sidebarState: PanelState
   chatState: PanelState
-  chatWidth: number // Resizable chat panel width in pixels
+  chatWidth: number // Resizable chat panel width in pixels (CSS handles min/max constraints)
   canvasState: PanelState
   canvasType: CanvasType
   breakpoint: LayoutBreakpoint
@@ -101,7 +101,7 @@ const initialState: UIState = {
   // Layout defaults
   sidebarState: 'expanded',
   chatState: 'collapsed',
-  chatWidth: 320, // Default chat panel width: 320px (down from 459px)
+  chatWidth: 600, // Default chat panel width - CSS handles min/max constraints responsively
   canvasType: 'chat',
   breakpoint: 'desktop',
   isMobile: false,
@@ -180,11 +180,11 @@ let persistenceCleanup: (() => void) | null = null
 if (typeof window !== 'undefined') {
   // Load persisted state
   const persistedState = persistence.load('emery-ui-state', initialState)
-  
+
   if (Object.keys(persistedState).length > 0) {
     uiStateStore.setState((state) => ({ ...state, ...persistedState }))
   }
-  
+
   // Setup auto-persistence
   persistenceCleanup = persistence.setupAutoPersist(
     uiStateStore,
@@ -209,9 +209,8 @@ export const uiStateActions = {
   },
 
   setChatWidth: (width: number) => {
-    // Clamp width between 280px (min) and 600px (max)
-    const clampedWidth = Math.min(Math.max(width, 280), 600)
-    uiStateStore.setState((currentState) => ({ ...currentState, chatWidth: clampedWidth }))
+    // CSS handles min/max constraints, just set the value
+    uiStateStore.setState((currentState) => ({ ...currentState, chatWidth: width }))
   },
 
   setCanvasState: (state: PanelState) => {
