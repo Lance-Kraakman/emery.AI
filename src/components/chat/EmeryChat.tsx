@@ -280,19 +280,26 @@ function ChatContentWithCanvas({
 
                 return (
                   <React.Fragment key={message.id || index}>
-                    <ChatMessage
-                      message={message}
-                      isLast={index === handler.messages.length - 1}
-                    />
-                    {/* Show step history for assistant messages with steps */}
+                    {/* Show step history for assistant messages with steps - BEFORE the message */}
                     {message.role === 'assistant' && steps && steps.length > 0 && (
                       <div className="mx-4 mb-2">
                         <StepHistoryDisplay steps={steps} />
                       </div>
                     )}
+                    <ChatMessage
+                      message={message}
+                      isLast={index === handler.messages.length - 1}
+                    />
                   </React.Fragment>
                 )
               })}
+
+              {/* Real-time streaming steps - display accumulated steps during execution */}
+              {handler.isLoading && handler.streamingSteps && handler.streamingSteps.length > 0 && (
+                <div className="mx-4 mb-2">
+                  <StepHistoryDisplay steps={handler.streamingSteps} />
+                </div>
+              )}
 
               {/* Inline loading indicator - appears after last message (Claude-like) */}
               {handler.isLoading && handler.currentStep && (
@@ -539,12 +546,19 @@ export function EmeryChat() {
   const isFullWidth = canvasState === 'collapsed'
 
   return (
-    <div className={`relative flex bg-card flex-shrink-0 h-full`} style={{ width: isFullWidth ? '100%' : `${chatWidth}px` }}>
+    <div
+      className={`relative flex bg-card flex-shrink-0 h-full`}
+      style={{
+        width: isFullWidth ? '100%' : `${chatWidth}px`,
+        // CSS-based responsive constraints (sidebar = 256px when expanded)
+        maxWidth: 'calc((100vw - 256px) / 2)',  // 50% of available screen space
+        minWidth: 'max(280px, calc((100vw - 256px) * 0.2))' // Larger of 280px or 20% of available space
+      }}
+    >
       {/* Resize handle */}
       {!isFullWidth && (
         <RightPanelResizeHandle
           onResize={setChatWidth}
-          minWidth={280}
         />
       )}
 

@@ -12,6 +12,7 @@ import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
 import type { AnyAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata'
+import type { ExecutionStep } from '@/ddd/domain/chat/value-objects/execution-step'
 
 const logger = createDebugLogger('ChatGRPC')
 
@@ -168,6 +169,7 @@ interface ExtendedChatHandler extends ChatHandler {
   clearAttachments: () => void
   // Step progress tracking
   currentStep: { type: string; name: string; index: number } | null
+  streamingSteps: ExecutionStep[]
   // Cancellation
   cancelMessage?: () => Promise<void>
 }
@@ -201,6 +203,7 @@ export function useChatGRPC(
     index: number
     content?: string
   } | null>(null)
+  const [streamingSteps, setStreamingSteps] = useState<ExecutionStep[]>([])
   const [currentMessageId, setCurrentMessageId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -336,6 +339,7 @@ export function useChatGRPC(
 
     setMessages((prev) => [...prev, userMessage])
     setIsLoading(true)
+    setStreamingSteps([]) // Reset steps for new message
 
     // Set optimistic "Thinking..." state immediately for instant UX feedback
     setCurrentStep({
@@ -489,6 +493,17 @@ export function useChatGRPC(
                   index: eventData.stepIndex,
                   content: eventData.content // Include step content for display
                 })
+
+                // Also accumulate step for history display
+                const executionStep: ExecutionStep = {
+                  type: eventData.stepType as ExecutionStep['type'],
+                  name: eventData.stepName,
+                  index: eventData.stepIndex,
+                  content: eventData.content || '',
+                  timestamp: Date.now(),
+                  metadata: eventData.metadata || {}
+                }
+                setStreamingSteps(prev => [...prev, executionStep])
               } else if (eventData.type === 'content') {
                 // Content chunk from assistant response
                 assistantMessage += eventData.text
@@ -533,6 +548,7 @@ export function useChatGRPC(
     } finally {
       setIsLoading(false)
       setCurrentStep(null)
+      setStreamingSteps([]) // Clear steps after completion
       setCurrentMessageId(null)
       abortControllerRef.current = null
     }
@@ -727,6 +743,7 @@ export function useChatGRPC(
     clearAttachments,
     // Step progress and cancellation
     currentStep,
+    streamingSteps,
     cancelMessage,
   }
 }

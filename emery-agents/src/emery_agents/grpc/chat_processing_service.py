@@ -61,6 +61,21 @@ class StepProgressDict(TypedDict):
     step_index: int
 
 
+def _populate_protobuf_map(proto_map, data: Dict[str, str]) -> None:
+    """
+    Explicitly populate a protobuf ScalarMap field.
+
+    Protobuf map fields require field-by-field assignment, not dict assignment.
+    This ensures proper serialization to the wire format.
+
+    Args:
+        proto_map: The protobuf ScalarMap field to populate
+        data: Dictionary of string key-value pairs
+    """
+    for key, value in data.items():
+        proto_map[key] = str(value)
+
+
 class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingServiceServicer):
     """
     gRPC service implementation for ChatProcessingService.
@@ -211,22 +226,36 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     if response_type == "step_progress":
                         # Send step progress update
                         step_type_map = {
-                            "STEP_PLANNING": agent_worker_pb2.STEP_PLANNING,
-                            "STEP_ACTION": agent_worker_pb2.STEP_ACTION,
-                            "STEP_REASONING": agent_worker_pb2.STEP_REASONING,
-                            "STEP_FINAL": agent_worker_pb2.STEP_FINAL
+                            "PLANNING": agent_worker_pb2.STEP_PLANNING,
+                            "ACTION": agent_worker_pb2.STEP_ACTION,
+                            "REASONING": agent_worker_pb2.STEP_REASONING,
+                            "FINAL": agent_worker_pb2.STEP_FINAL
                         }
 
+                        logger.debug(f"📤 Creating StepProgress protobuf message: type={response_dict.get('step_type')}, name={response_dict.get('step_name')}")
+
+                        # Create StepProgress message without metadata
+                        step_progress_msg = agent_worker_pb2.StepProgress(
+                            step_type=step_type_map.get(response_dict.get("step_type"), agent_worker_pb2.STEP_PLANNING),
+                            step_name=response_dict.get("step_name", ""),
+                            content=response_dict.get("content", ""),
+                            step_index=response_dict.get("step_index", 0)
+                        )
+
+                        # Explicitly populate metadata map field (protobuf requires field-by-field assignment)
+                        metadata = response_dict.get("metadata", {})
+                        if metadata:
+                            logger.debug(f"📦 Populating metadata with {len(metadata)} fields: {list(metadata.keys())}")
+                            _populate_protobuf_map(step_progress_msg.metadata, metadata)
+                        else:
+                            logger.debug("📦 No metadata to populate")
+
+                        # Create response with properly populated step_progress
                         step_response = agent_worker_pb2.ProcessMessageResponse(
-                            step_progress=agent_worker_pb2.StepProgress(
-                                step_type=step_type_map.get(response_dict.get("step_type"), agent_worker_pb2.STEP_PLANNING),
-                                step_name=response_dict.get("step_name", ""),
-                                content=response_dict.get("content", ""),
-                                metadata=response_dict.get("metadata", {}),
-                                step_index=response_dict.get("step_index", 0)
-                            ),
+                            step_progress=step_progress_msg,
                             timestamp=int(time.time() * 1000)
                         )
+                        logger.debug(f"✅ Yielding StepProgress message to gRPC client")
                         yield step_response
 
                     elif response_type == "content_chunk":
@@ -486,7 +515,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                     # Extract final answer text
                     if isinstance(step, FinalAnswerStep):
-                        final_answer_text = str(step.answer)
+                        logger.debug(f"FinalAnswerStep attributes: {dir(step)}")
+                        final_answer_text = str(step.output)  # Fixed: use 'output' not 'answer'
                     else:
                         final_answer_text = str(step)
 
@@ -507,9 +537,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 # Yield step progress for non-final steps
                 if step_data:
+                    logger.debug(f"Yielding step {step_index}: type={step_data['step_type']}, name={step_data['step_name']}")
                     yield step_data
 
                 step_index += 1
+
+            # Log summary of collected steps
+            logger.info(f"✅ Completed streaming with {step_index} steps")
 
             # Extract token usage after execution completes
             self.last_token_usage = self._extract_token_usage_from_agent(agent)
@@ -721,34 +755,62 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         Extract typed data from ActionStep.
 
         ActionStep has 'tool_calls' (list of ToolCall objects) and 'observations'.
+        When tool_calls is empty/None, uses model_output for raw LLM response.
         Uses proper type access instead of hasattr checks.
         """
         # Extract tool info from tool_calls
         tool_name = "unknown"
         tool_args = "{}"
+        step_type = "ACTION"
+        step_name = "Tool: unknown"
+        content = ""
 
         if step.tool_calls and len(step.tool_calls) > 0:
+            # Has valid tool calls
             tool_call = step.tool_calls[0]
             tool_name = tool_call.name
             tool_args = str(tool_call.arguments)
+            step_name = f"Tool: {tool_name}"
 
-        # Format observations (truncate if too long)
-        observations = ""
-        if step.observations:
-            obs = str(step.observations)
-            MAX_LENGTH = 500
-            observations = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
+            # Format observations (truncate if too long)
+            if step.observations:
+                obs = str(step.observations)
+                MAX_LENGTH = 500
+                content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
+        else:
+            # No tool calls - check for raw model output
+            logger.debug(f"ActionStep without tool_calls: model_output={'exists' if step.model_output else 'None'}")
+
+            if step.model_output:
+                # Use model's raw output as reasoning step
+                step_type = "REASONING"
+                step_name = "Model Reasoning (No Tool Call)"
+                raw_output = str(step.model_output)
+                MAX_LENGTH = 500
+                content = raw_output[:MAX_LENGTH] + "..." if len(raw_output) > MAX_LENGTH else raw_output
+            else:
+                # Fallback: use observations if available
+                step_name = "Agent Step"
+                if step.observations:
+                    obs = str(step.observations)
+                    MAX_LENGTH = 500
+                    content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
+
+        # Build metadata dict with only non-None string values (protobuf requires map<string, string>)
+        metadata_dict: Dict[str, str] = {}
+        if tool_name != "unknown":
+            metadata_dict["tool"] = tool_name
+        if tool_args != "{}":
+            metadata_dict["arguments"] = tool_args
+        if content:
+            metadata_dict["observations"] = content
 
         return StepProgressDict(
             type="step_progress",
-            step_type="ACTION",
-            step_name=f"Tool: {tool_name}",
-            content=observations,
-            metadata=StepMetadata(
-                tool=tool_name,
-                arguments=tool_args,
-                observations=observations
-            ),
+            step_type=step_type,
+            step_name=step_name,
+            content=content,
+            metadata=metadata_dict,
             step_index=index
         )
 
