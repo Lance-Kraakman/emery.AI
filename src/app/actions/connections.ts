@@ -790,8 +790,111 @@ export async function getConnectionHealthSummary(): Promise<Result<{
 }
 
 /**
+ * Get available apps from database for connection management (paginated)
+ * Returns OAuth-enabled apps that users can connect to
+ */
+export async function getAvailableAppsPaginated(options?: {
+  limit?: number;
+  offset?: number;
+  search?: string;
+}): Promise<Result<{
+  apps: Array<{
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    icon: string;
+  }>;
+  total: number;
+  hasMore: boolean;
+}>> {
+  try {
+    // Import here to avoid circular dependencies
+    const { drizzle } = await import('drizzle-orm/postgres-js');
+    const postgres = (await import('postgres')).default;
+    const { appTypes } = await import('@/lib/db/schema');
+    const { eq, sql, ilike, or } = await import('drizzle-orm');
+
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error('DATABASE_URL environment variable is required');
+    }
+
+    const client = postgres(connectionString, { max: 1 });
+    const db = drizzle(client);
+
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    const search = options?.search;
+
+    console.log(`[ConnectionActions] Loading available apps from database (limit: ${limit}, offset: ${offset}, search: ${search || 'none'})`);
+
+    // Build query conditions
+    let conditions = eq(appTypes.supportsOAuth, true);
+
+    // Add search filter if provided
+    if (search) {
+      conditions = sql`${appTypes.supportsOAuth} = true AND (${ilike(appTypes.name, `%${search}%`)} OR ${ilike(appTypes.description, `%${search}%`)})`;
+    }
+
+    // Get total count
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(appTypes)
+      .where(conditions);
+
+    const total = Number(countResult[0]?.count || 0);
+
+    // Get paginated apps
+    const apps = await db
+      .select({
+        id: appTypes.id,
+        name: appTypes.name,
+        description: appTypes.description,
+        category: appTypes.category,
+        iconUrl: appTypes.iconUrl,
+      })
+      .from(appTypes)
+      .where(conditions)
+      .orderBy(appTypes.name)
+      .limit(limit)
+      .offset(offset);
+
+    console.log(`[ConnectionActions] Found ${apps.length} of ${total} available apps`);
+
+    // Map to expected format
+    const availableApps = apps.map(app => ({
+      id: app.id,
+      name: app.name,
+      description: app.description || `Connect to ${app.name}`,
+      category: app.category || 'other',
+      icon: app.iconUrl || `/icons/${app.id}.svg`,
+    }));
+
+    await client.end();
+
+    return {
+      success: true,
+      data: {
+        apps: availableApps,
+        total,
+        hasMore: offset + apps.length < total
+      }
+    };
+
+  } catch (error) {
+    console.error('[ConnectionActions] Error getting available apps:', error);
+    return {
+      success: false,
+      error: 'Failed to get available apps'
+    };
+  }
+}
+
+/**
  * Get available apps from database for connection management
  * Returns OAuth-enabled apps that users can connect to
+ * @deprecated Use getAvailableAppsPaginated for better performance with large app lists
  */
 export async function getAvailableApps(): Promise<Result<Array<{
   id: string;
