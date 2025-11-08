@@ -210,10 +210,22 @@ export function useChatGRPC(
   // Generate domain-specific storage key for this chat session
   const chatStorageKey = `emery-chat-${contextOptions?.domainType || chatContext?.domainType || 'general'}-${contextOptions?.domainId || chatContext?.domainId || 'default'}`
 
-  // Auto-scroll to bottom function
+  // Check if user is near bottom of scroll container (within 100px)
+  const isNearBottom = () => {
+    if (!scrollRef.current) return true
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
+    const threshold = 100 // px from bottom
+    return scrollHeight - scrollTop - clientHeight < threshold
+  }
+
+  // Auto-scroll to bottom with smooth animation
+  // Only scrolls if user is already near bottom (doesn't interrupt if they scrolled up)
   const scrollToBottom = () => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    if (scrollRef.current && isNearBottom()) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      })
     }
   }
 
@@ -274,10 +286,17 @@ export function useChatGRPC(
     }
   }
 
-  // Auto-scroll when messages change
+  // Auto-scroll when messages change or during active streaming
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
+  }, [messages, isLoading])
+
+  // Auto-scroll when step panel appears or updates
+  useEffect(() => {
+    if (currentStep && isLoading) {
+      scrollToBottom()
+    }
+  }, [currentStep, isLoading])
 
   // Persist messages when they change (client-side only)
   useEffect(() => {
@@ -310,6 +329,15 @@ export function useChatGRPC(
 
     setMessages((prev) => [...prev, userMessage])
     setIsLoading(true)
+
+    // Set optimistic "Thinking..." state immediately for instant UX feedback
+    setCurrentStep({
+      type: 'PLANNING',
+      name: 'Thinking...',
+      content: '',
+      index: 0
+    })
+
     setInput('')
 
     // Clear pending attachments since we're sending them
