@@ -13,13 +13,9 @@ import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
 import type { AnyAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata'
 import type { ExecutionStep } from '@/ddd/domain/chat/value-objects/execution-step'
+import type { ExtendedChatHandler, ChatMessage, CurrentStepProgress } from './types/extended-chat-handler'
 
 const logger = createDebugLogger('ChatGRPC')
-
-interface ChatMessage extends Message {
-  id: string
-  experimental_metadata?: any
-}
 
 /**
  * Helper to extract text content from Message parts
@@ -141,37 +137,6 @@ function extractToolReferencesFromMessage(message: string): Array<{name: string,
   }
 
   return toolReferences
-}
-
-// Extended ChatHandler interface with scroll functionality, persistence, and tool management
-interface ExtendedChatHandler extends ChatHandler {
-  // Base ChatHandler fields
-  isLoading: boolean
-  messages: ChatMessage[]
-  append: (message: Message, attachments?: File[]) => Promise<string>
-  setMessages: (messages: ChatMessage[]) => void
-  // Custom fields
-  scrollRef?: React.RefObject<HTMLDivElement>
-  scrollToBottom?: () => void
-  clearMessages?: () => void
-  currentChatId?: string
-  switchToChat?: (chatId: string) => Promise<void>
-  createNewChat?: () => Promise<void>
-  // Tool management
-  selectedTools: ToolDTO[]
-  availableTools: ToolDTO[]
-  addTool: (tool: ToolDTO) => void
-  removeTool: (tool: ToolDTO) => void
-  // Attachment management
-  pendingAttachments: File[]
-  addAttachment: (file: File) => void
-  removeAttachment: (index: number) => void
-  clearAttachments: () => void
-  // Step progress tracking
-  currentStep: { type: string; name: string; index: number } | null
-  streamingSteps: ExecutionStep[]
-  // Cancellation
-  cancelMessage?: () => Promise<void>
 }
 
 /**
@@ -503,7 +468,14 @@ export function useChatGRPC(
                   timestamp: Date.now(),
                   metadata: eventData.metadata || {}
                 }
-                setStreamingSteps(prev => [...prev, executionStep])
+                // Add deduplication to prevent duplicate steps from SSE
+                setStreamingSteps(prev => {
+                  // Check if step already exists based on index and type
+                  if (prev.find(s => s.index === executionStep.index && s.type === executionStep.type)) {
+                    return prev
+                  }
+                  return [...prev, executionStep]
+                })
               } else if (eventData.type === 'content') {
                 // Content chunk from assistant response
                 assistantMessage += eventData.text

@@ -4,7 +4,7 @@ import React, { createContext, useContext } from 'react'
 import { useChatGRPC } from './useChatGRPC'
 import type { ChatHandler } from '@llamaindex/chat-ui'
 import type { ChatContextConfig } from '@/components/layout/types'
-import type { ToolDTO } from '@/app/mappers/tool-mapper'
+import type { ExtendedChatHandler } from './types/extended-chat-handler'
 
 /**
  * ChatProvider - Isolates chat state management to prevent unnecessary re-renders
@@ -19,31 +19,6 @@ import type { ToolDTO } from '@/app/mappers/tool-mapper'
  * inside this provider, we prevent the handler object from being recreated in the
  * parent layout component, which was causing cascade re-renders.
  */
-
-// Extended handler interface that includes our custom methods
-interface ExtendedChatHandler extends ChatHandler {
-  isLoading: boolean
-  messages: any[] // This shouldnt be any
-  append: (message: any, attachments?: File[]) => Promise<string>
-  setMessages: (messages: any[]) => void
-  scrollRef?: React.RefObject<HTMLDivElement>
-  scrollToBottom?: () => void
-  clearMessages?: () => void
-  currentChatId?: string
-  switchToChat?: (chatId: string) => Promise<void>
-  createNewChat?: () => Promise<void>
-  selectedTools: ToolDTO[]
-  availableTools: ToolDTO[]
-  addTool: (tool: ToolDTO) => void
-  removeTool: (tool: ToolDTO) => void
-  // Attachment management
-  pendingAttachments: File[]
-  addAttachment: (file: File) => void
-  removeAttachment: (index: number) => void
-  clearAttachments: () => void
-  currentStep: { type: string; name: string; index: number } | null
-  cancelMessage?: () => Promise<void>
-}
 
 // Context for chat handler
 const ChatHandlerContext = createContext<ExtendedChatHandler | null>(null)

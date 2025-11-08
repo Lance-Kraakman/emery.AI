@@ -33,6 +33,7 @@ import { StepProgressIndicator } from './StepProgressIndicator'
 import { StepHistoryDisplay } from './StepHistoryDisplay'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
 import type { ExecutionStep } from '@/app/dtos/chat.dto'
+import type { ChatMessage as EmeryChatMessage } from './types/extended-chat-handler'
 
 const logger = createDebugLogger('EmeryChat')
 
@@ -274,9 +275,9 @@ function ChatContentWithCanvas({
           >
             <ChatMessages.List>
               {/* Render all messages using library's ChatMessage component */}
-              {handler.messages.map((message, index) => {
+              {handler.messages.map((message: EmeryChatMessage, index) => {
                 // Extract execution steps from message metadata
-                const steps = (message as any).experimental_metadata?.executionSteps as ExecutionStep[] | undefined
+                const steps = message.experimental_metadata?.executionSteps
 
                 return (
                   <React.Fragment key={message.id || index}>
@@ -344,7 +345,8 @@ function ChatContentWithCanvas({
             // Send message with proper MessagePart format
             handler.append({
               role: 'user',
-              parts: [{ type: 'text', text: message }]
+              parts: [{ type: 'text', text: message }],
+              id: generateId() // Add id for type compatibility
             })
           }}
           onToolsChange={onToolsChange}
