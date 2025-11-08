@@ -290,9 +290,9 @@ function ChatContentWithCanvas({
                       message={message}
                       isLast={index === handler.messages.length - 1}
                       className={cn(
-                        "px-4 py-2 rounded-lg my-1 mx-4 transition-colors",
-                        message.role === 'user' && "bg-primary text-primary-foreground",
-                        message.role === 'assistant' && "bg-muted"
+                        "rounded-md my-1 mx-4 transition-colors",
+                        message.role === 'user' && "border border-input px-2.5 py-1",
+                        message.role === 'assistant' && "px-3 py-1.5"
                       )}
                     >
                       <ChatMessage.Avatar />
