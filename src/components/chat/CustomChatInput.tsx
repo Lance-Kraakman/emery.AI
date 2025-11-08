@@ -20,6 +20,7 @@ import { ToolDropdown } from './ToolDropdown';
 import { resolveReferences } from '@/app/actions/references';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { toolResolverService } from '@/ddd/domain/tools/services/tool-resolver-service';
+import { useAutoResizeTextarea } from '@/hooks/useAutoResizeTextarea';
 
 interface CustomChatInputProps {
   onSendMessage: (message: string) => void;
@@ -51,6 +52,12 @@ export default function CustomChatInput({
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-resize textarea based on content (single line that grows)
+  useAutoResizeTextarea(inputRef, inputValue, {
+    minHeight: 44,  // Single line height (~2.75rem)
+    maxHeight: 400  // Max height before scrolling
+  });
 
   // Detect @ tools and show/hide dropdown
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -316,7 +323,8 @@ export default function CustomChatInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className="min-h-[220px] max-h-[400px] resize-none px-3 pr-12 pb-10"
+          rows={1}
+          className="resize-none px-3 pr-12 pb-10"
         />
 
         {/* Bottom action bar - positioned inside textarea */}
