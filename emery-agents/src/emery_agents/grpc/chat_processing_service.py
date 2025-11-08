@@ -16,14 +16,15 @@ All database operations remain in Next.js ChatApplicationService.
 import logging
 import time
 import asyncio
-from typing import AsyncIterator, Optional, List, Dict, Any
+from typing import AsyncIterator, Optional, List, Dict, Any, TypedDict, Literal
 
 import grpc
 from grpc import aio
 from PIL import Image
 
-from smolagents import ToolCallingAgent
+from smolagents import ToolCallingAgent, AgentText
 from smolagents.models import ChatMessage, MessageRole
+from smolagents.memory import ActionStep, PlanningStep, FinalAnswerStep
 from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .mappers import ProtoMapper
 from .mappers.message_mapper import (
@@ -38,6 +39,26 @@ from ..rag.rag_processor import RagProcessor
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+# Type definitions for step progress
+StepType = Literal["PLANNING", "ACTION", "REASONING", "FINAL"]
+
+class StepMetadata(TypedDict, total=False):
+    """Metadata for execution steps."""
+    tool: str
+    arguments: str
+    observations: str
+    error: str
+
+class StepProgressDict(TypedDict):
+    """Typed structure for step progress events."""
+    type: Literal["step_progress"]
+    step_type: StepType
+    step_name: str
+    content: str
+    metadata: StepMetadata
+    step_index: int
 
 
 class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingServiceServicer):
@@ -132,7 +153,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             # 2. Build Conversation Context using mapper
             # Converts protobuf MessageParts to HuggingFace format
-            conversation_messages = build_conversation_messages(
+            # AIDEV-NOTE: Now async to support file processing (PDFs, audio, documents)
+            conversation_messages = await build_conversation_messages(
                 request.conversation_history,
                 message_parts
             )
@@ -447,59 +469,31 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             ):
                 logger.info(f"📊 Step {step_index}: {type(step).__name__}")
 
-                if isinstance(step, PlanningStep):
-                    # Agent is planning next action
-                    planning_content = str(step.thoughts) if hasattr(step, 'thoughts') else "Planning next action..."
-                    logger.info(f"🧠 Planning: {planning_content[:100]}...")
+                # Use typed extraction helpers (no hasattr checks)
+                step_data: StepProgressDict | None = None
 
-                    yield {
-                        "type": "step_progress",
-                        "step_type": "STEP_PLANNING",
-                        "step_name": "Planning",
-                        "content": planning_content,
-                        "metadata": {},
-                        "step_index": step_index
-                    }
+                if isinstance(step, PlanningStep):
+                    step_data = self._extract_planning_step(step, step_index)
+                    logger.info(f"🧠 Planning: {step_data['content'][:100]}...")
 
                 elif isinstance(step, ActionStep):
-                    # Agent is executing a tool
-                    tool_name = step.tool_name if hasattr(step, 'tool_name') else "unknown"
-                    tool_args = str(step.tool_arguments) if hasattr(step, 'tool_arguments') else "{}"
-                    observations = str(step.observations) if hasattr(step, 'observations') else ""
-
-                    logger.info(f"🔧 Action: {tool_name} with args {tool_args[:100]}")
-
-                    yield {
-                        "type": "step_progress",
-                        "step_type": "STEP_ACTION",
-                        "step_name": f"Tool: {tool_name}",
-                        "content": observations,
-                        "metadata": {
-                            "tool": tool_name,
-                            "arguments": tool_args
-                        },
-                        "step_index": step_index
-                    }
+                    step_data = self._extract_action_step(step, step_index)
+                    logger.info(f"🔧 Action: {step_data['step_name']}")
 
                 elif isinstance(step, (FinalAnswerStep, AgentText)):
-                    # Final answer reached
-                    # FinalAnswerStep has .answer attribute, AgentText can be converted to string
+                    # Extract final step indicator
+                    step_data = self._extract_final_step(step_index)
+
+                    # Extract final answer text
                     if isinstance(step, FinalAnswerStep):
-                        final_answer_text = str(step.answer) if hasattr(step, 'answer') else str(step)
+                        final_answer_text = str(step.answer)
                     else:
                         final_answer_text = str(step)
 
                     logger.info(f"✅ Final answer: {len(final_answer_text)} chars")
 
-                    # Yield final step indicator
-                    yield {
-                        "type": "step_progress",
-                        "step_type": "STEP_FINAL",
-                        "step_name": "Final Answer",
-                        "content": "Generating final response...",
-                        "metadata": {},
-                        "step_index": step_index
-                    }
+                    # Yield step indicator
+                    yield step_data
 
                     # Stream final answer as content chunks
                     async for chunk in self._stream_text_chunks(final_answer_text):
@@ -507,6 +501,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                             "type": "content_chunk",
                             "content": chunk
                         }
+
+                    step_index += 1
+                    continue
+
+                # Yield step progress for non-final steps
+                if step_data:
+                    yield step_data
 
                 step_index += 1
 
@@ -698,6 +699,73 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 text_parts.append(part["text"])
 
         return " ".join(text_parts).strip()
+
+    def _extract_planning_step(self, step: PlanningStep, index: int) -> StepProgressDict:
+        """
+        Extract typed data from PlanningStep.
+
+        PlanningStep has 'plan' attribute containing the planning text.
+        No hasattr checks needed - smolagents guarantees this structure.
+        """
+        return StepProgressDict(
+            type="step_progress",
+            step_type="PLANNING",
+            step_name="Planning",
+            content=step.plan,
+            metadata=StepMetadata(),
+            step_index=index
+        )
+
+    def _extract_action_step(self, step: ActionStep, index: int) -> StepProgressDict:
+        """
+        Extract typed data from ActionStep.
+
+        ActionStep has 'tool_calls' (list of ToolCall objects) and 'observations'.
+        Uses proper type access instead of hasattr checks.
+        """
+        # Extract tool info from tool_calls
+        tool_name = "unknown"
+        tool_args = "{}"
+
+        if step.tool_calls and len(step.tool_calls) > 0:
+            tool_call = step.tool_calls[0]
+            tool_name = tool_call.name
+            tool_args = str(tool_call.arguments)
+
+        # Format observations (truncate if too long)
+        observations = ""
+        if step.observations:
+            obs = str(step.observations)
+            MAX_LENGTH = 500
+            observations = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
+
+        return StepProgressDict(
+            type="step_progress",
+            step_type="ACTION",
+            step_name=f"Tool: {tool_name}",
+            content=observations,
+            metadata=StepMetadata(
+                tool=tool_name,
+                arguments=tool_args,
+                observations=observations
+            ),
+            step_index=index
+        )
+
+    def _extract_final_step(self, index: int) -> StepProgressDict:
+        """
+        Extract typed data for final step.
+
+        Final step is just a marker indicating response generation.
+        """
+        return StepProgressDict(
+            type="step_progress",
+            step_type="FINAL",
+            step_name="Final Answer",
+            content="Generating final response...",
+            metadata=StepMetadata(),
+            step_index=index
+        )
 
     async def _stream_text_chunks(self, text: str, chunk_size: int = 5) -> AsyncIterator[str]:
         """Stream text by word chunks to simulate streaming."""
