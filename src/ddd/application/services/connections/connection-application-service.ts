@@ -3,7 +3,7 @@
 
 import { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
 import { Connection, ConnectionStatus } from '@/ddd/domain/connections/entities/connection';
-import { ConnectionId, AppName } from '@/ddd/domain/connections/value-objects';
+import { ConnectionId, AppName, ConnectionPaginationOptions, PaginatedResult } from '@/ddd/domain/connections/value-objects';
 import { UserId } from '@/ddd/domain/shared/value-objects';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
@@ -53,6 +53,68 @@ export class ConnectionApplicationService {
       return {
         success: false,
         error: `Failed to fetch connections: ${errorMessage}`
+      };
+    }
+  }
+
+  /**
+   * Get paginated connections for a user with cursor-based navigation
+   * Optimized for large connection lists with incremental loading
+   *
+   * @param userId - User to fetch connections for
+   * @param options - Pagination options (limit, cursor)
+   * @param deduplicateOptions - Deduplication settings
+   */
+  async getUserConnectionsPaginated(
+    userId: UserId,
+    options: ConnectionPaginationOptions,
+    deduplicateOptions: { deduplicate?: boolean } = { deduplicate: true }
+  ): Promise<Result<PaginatedResult<Connection>>> {
+    try {
+      logger.debug('Getting paginated user connections', {
+        userId: userId.value,
+        limit: options.limit,
+        after: options.after,
+        deduplicate: deduplicateOptions.deduplicate
+      });
+
+      const paginatedResult = await this.connectionRepository.findByUserIdPaginated(userId, options);
+
+      // Sort by most recent first
+      const sortedConnections = paginatedResult.data.sort((a, b) =>
+        b.connectedAt.getTime() - a.connectedAt.getTime()
+      );
+
+      // Apply deduplication if requested
+      const finalConnections = deduplicateOptions.deduplicate
+        ? this.deduplicateConnections(sortedConnections)
+        : sortedConnections;
+
+      logger.summary('Retrieved paginated connections', {
+        userId: userId.value,
+        fetched: paginatedResult.data.length,
+        returned: finalConnections.length,
+        hasMore: paginatedResult.hasMore,
+        nextCursor: paginatedResult.nextCursor,
+        duplicatesFiltered: deduplicateOptions.deduplicate
+      });
+
+      return {
+        success: true,
+        data: {
+          data: finalConnections,
+          nextCursor: paginatedResult.nextCursor,
+          hasMore: paginatedResult.hasMore,
+          totalCount: paginatedResult.totalCount
+        }
+      };
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`Error fetching paginated connections for user ${userId.value}`, error);
+      return {
+        success: false,
+        error: `Failed to fetch paginated connections: ${errorMessage}`
       };
     }
   }

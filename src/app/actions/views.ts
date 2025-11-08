@@ -781,14 +781,42 @@ export async function submitFormView(
     // 3. Convert field names to field IDs for Row entity
     // AIDEV-NOTE: Form data comes with field names as keys: { name: "value", age: 123 }
     // But Row.fromPlainObject expects numeric field IDs: { 6: "value", 7: 123 }
+    console.log('[submitFormView] tableFields count:', tableFields.length);
+    console.log('[submitFormView] tableFields structure:', JSON.stringify(tableFields, null, 2));
+    console.log('[submitFormView] formData keys:', Object.keys(formData));
+
     const convertedData: Record<string, any> = {};
 
     for (const field of tableFields) {
+      console.log('[submitFormView] Processing field:', {
+        id: field.id,
+        name: field.name,
+        type: field.type,
+        required: field.required,
+        hasIdProperty: 'id' in field,
+        idType: typeof field.id,
+        idValue: field.id,
+      });
+
+      if (field.id === undefined || field.id === null) {
+        console.error('[submitFormView] ERROR: Field has undefined/null ID:', {
+          field: field,
+          fieldName: field.name,
+          allFieldProperties: Object.keys(field),
+        });
+        continue; // Skip this field
+      }
+
       const fieldKey = field.id.toString();
+      console.log('[submitFormView] Field key conversion:', { fieldId: field.id, fieldKey, fieldName: field.name });
+
       if (formData[field.name] !== undefined) {
         convertedData[fieldKey] = formData[field.name];
+        console.log('[submitFormView] Added to convertedData:', { fieldKey, value: formData[field.name] });
       }
     }
+
+    console.log('[submitFormView] Final convertedData:', convertedData);
 
     // 4. Create Row entity from converted data
     const { Row } = await import("@/ddd/domain/tables/value-objects/row");

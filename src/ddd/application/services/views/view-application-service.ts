@@ -1009,16 +1009,44 @@ export class ViewApplicationService {
       }
 
       // 5. Convert table fields to plain objects for client consumption
-      const tableFieldDTOs = table.fields.map(field => ({
-        id: field.id.value,
-        name: field.name,
-        type: field.type,
-        required: field.required ?? false,
-        orderIndex: field.orderIndex,
-        relatedTableId: field.relatedTableId?.value ?? null,
-        metadata: field.metadata,
-        createdAt: field.createdAt,
-      }));
+      logger.debug("Converting table fields to DTOs", { fieldCount: table.fields.length });
+
+      const tableFieldDTOs = table.fields.map((field, index) => {
+        // Log each field during conversion to catch undefined IDs
+        logger.debug(`[getFormViewConfiguration] Converting field ${index}:`, {
+          hasIdProperty: 'id' in field,
+          idObject: field.id,
+          idValue: field.id?.value,
+          idType: typeof field.id,
+          name: field.name,
+          type: field.type,
+        });
+
+        if (!field.id || field.id.value === undefined || field.id.value === null) {
+          logger.error('[getFormViewConfiguration] ERROR: Field has undefined/null ID during DTO conversion:', {
+            fieldIndex: index,
+            fieldName: field.name,
+            fieldId: field.id,
+            idValue: field.id?.value,
+          });
+        }
+
+        return {
+          id: field.id.value,
+          name: field.name,
+          type: field.type,
+          required: field.required ?? false,
+          orderIndex: field.orderIndex,
+          relatedTableId: field.relatedTableId?.value ?? null,
+          metadata: field.metadata,
+          createdAt: field.createdAt,
+        };
+      });
+
+      logger.debug('[getFormViewConfiguration] DTOs created:', {
+        dtoCount: tableFieldDTOs.length,
+        dtos: JSON.stringify(tableFieldDTOs, null, 2),
+      });
 
       logger.summary("Form view configuration retrieved successfully", {
         viewId: command.viewId.value,

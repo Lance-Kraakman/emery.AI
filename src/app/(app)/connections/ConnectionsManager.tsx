@@ -2,14 +2,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { getUserOAuthConnections, getAppConnectionUrl, disconnectOAuthAccount, getUserConnectionsWithDuplicates, getAvailableApps } from '@/app/actions/connections';
+import { getUserOAuthConnectionsPaginated, getAppConnectionUrl, disconnectOAuthAccount, getAvailableApps } from '@/app/actions/connections';
 import { Button } from '@/components/ui/button';
 import { UnifiedConnectionsGrid } from './components/UnifiedConnectionsGrid';
 import { ConnectionDTO as Connection } from '@/app/mappers/connection-mapper';
 
 export function ConnectionsManager() {
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [allConnections, setAllConnections] = useState<Connection[]>([]);
   const [availableApps, setAvailableApps] = useState<Array<{
     id: string;
     name: string;
@@ -17,12 +16,15 @@ export function ConnectionsManager() {
     category: string;
     icon: string;
   }>>([]);
-  const [showAllDuplicates, setShowAllDuplicates] = useState(false);
-  const [duplicateCount, setDuplicateCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const [disconnectingAccount, setDisconnectingAccount] = useState<string | null>(null);
+
+  // Pagination state
+  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
+  const [hasMore, setHasMore] = useState(false);
 
   useEffect(() => {
     loadConnections();
@@ -52,32 +54,20 @@ export function ConnectionsManager() {
       setLoading(true);
       setError(null);
 
-      // Get both deduplicated and all connections for full management capabilities
-      const [deduplicatedResult, allConnectionsResult] = await Promise.all([
-        getUserOAuthConnections(), // Returns deduplicated by default
-        getUserConnectionsWithDuplicates() // Returns all with duplicate analysis
-      ]);
+      // Use paginated API with default page size of 50
+      const result = await getUserOAuthConnectionsPaginated({ limit: 50 });
 
-      if (deduplicatedResult.success) {
-        console.log('🔍 Deduplicated connections data:', JSON.stringify(deduplicatedResult.data, null, 2));
-        setConnections(deduplicatedResult.data || []);
-      } else {
-        setError(deduplicatedResult.error || 'Failed to load connections');
-      }
-
-      if (allConnectionsResult.success && allConnectionsResult.data) {
-        console.log('🔍 All connections with duplicates:', {
-          total: allConnectionsResult.data.connections.length,
-          duplicates: allConnectionsResult.data.duplicateCount,
-          groups: allConnectionsResult.data.duplicateGroups.length
+      if (result.success && result.data) {
+        console.log('🔍 Paginated connections loaded:', {
+          count: result.data.connections.length,
+          hasMore: result.data.hasMore,
+          nextCursor: result.data.nextCursor
         });
-        setAllConnections(allConnectionsResult.data.connections);
-        setDuplicateCount(allConnectionsResult.data.duplicateCount);
+        setConnections(result.data.connections);
+        setNextCursor(result.data.nextCursor);
+        setHasMore(result.data.hasMore);
       } else {
-        // If we can't get duplicate info, just use the main connections
-        setAllConnections(deduplicatedResult.data || []);
-        setDuplicateCount(0);
-        console.warn('Could not load duplicate analysis:', allConnectionsResult.error);
+        setError(result.error || 'Failed to load connections');
       }
     } catch (err) {
       setError('Failed to load connections');
@@ -85,7 +75,47 @@ export function ConnectionsManager() {
     } finally {
       setLoading(false);
     }
-  }, []); // No dependencies needed since it only uses external functions and setters
+  }, []);
+
+  const loadMoreConnections = useCallback(async () => {
+    if (!hasMore || !nextCursor || loadingMore) {
+      return;
+    }
+
+    try {
+      setLoadingMore(true);
+      setError(null);
+
+      console.log('📄 Loading more connections with cursor:', nextCursor);
+
+      const result = await getUserOAuthConnectionsPaginated({
+        limit: 50,
+        cursor: nextCursor
+      });
+
+      if (result.success && result.data) {
+        const { connections: newConnections, nextCursor: newCursor, hasMore: moreAvailable } = result.data;
+
+        console.log('📄 More connections loaded:', {
+          count: newConnections.length,
+          hasMore: moreAvailable,
+          nextCursor: newCursor
+        });
+
+        // Append new connections to existing ones
+        setConnections(prev => [...prev, ...newConnections]);
+        setNextCursor(newCursor);
+        setHasMore(moreAvailable);
+      } else {
+        setError(result.error || 'Failed to load more connections');
+      }
+    } catch (err) {
+      setError('Failed to load more connections');
+      console.error('Error loading more connections:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [hasMore, nextCursor, loadingMore]);
 
   const loadAvailableApps = useCallback(async () => {
     try {
@@ -211,15 +241,14 @@ export function ConnectionsManager() {
       <UnifiedConnectionsGrid
         apps={availableApps}
         connections={connections}
-        allConnections={allConnections}
-        showAllDuplicates={showAllDuplicates}
-        duplicateCount={duplicateCount}
         connectingApp={connectingApp}
         disconnectingAccount={disconnectingAccount}
+        hasMore={hasMore}
+        loadingMore={loadingMore}
         onConnect={handleConnectApp}
         onDisconnect={handleDisconnectAccount}
         onReconnect={(appId) => handleConnectApp(appId, false, true)}
-        onToggleDuplicates={() => setShowAllDuplicates(!showAllDuplicates)}
+        onLoadMore={loadMoreConnections}
       />
     </div>
   );

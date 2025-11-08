@@ -6,13 +6,76 @@
 import { requireAuth } from "./permissions";
 import { getConnectionApplicationService } from "@/ddd/application/di/container";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
-import { AppName, ConnectionId } from "@/ddd/domain/connections/value-objects";
+import { AppName, ConnectionId, createDefaultPaginationOptions } from "@/ddd/domain/connections/value-objects";
 import { ConnectionMapper, type ConnectionDTO } from "@/app/mappers/connection-mapper";
 import type { Result } from "./types";
 
 /**
+ * Get user's OAuth connections (paginated) - optimized for large connection lists
+ * Returns connections sorted by most recent first with cursor-based pagination
+ *
+ * @param options - Pagination options { limit, cursor }
+ * @returns Paginated result with connections, nextCursor, and hasMore flag
+ */
+export async function getUserOAuthConnectionsPaginated(options?: {
+  limit?: number;
+  cursor?: string;
+}): Promise<Result<{
+  connections: ConnectionDTO[];
+  nextCursor?: string;
+  hasMore: boolean;
+}>> {
+  try {
+    const session = await requireAuth();
+    const connectionService = getConnectionApplicationService();
+
+    const limit = options?.limit || 50;
+    const cursor = options?.cursor;
+
+    console.log(`[ConnectionActions] Getting paginated OAuth connections for user ${session.user.id} (limit: ${limit}, cursor: ${cursor || 'none'})`);
+
+    const paginationOptions = cursor
+      ? { limit, after: cursor }
+      : createDefaultPaginationOptions(limit);
+
+    const result = await connectionService.getUserConnectionsPaginated(
+      UserId.fromString(session.user.id),
+      paginationOptions
+    );
+
+    if (result.success && result.data) {
+      console.log(`[ConnectionActions] Retrieved ${result.data.data.length} connections (hasMore: ${result.data.hasMore})`);
+
+      const connectionDTOs = ConnectionMapper.toDTOArray(result.data.data);
+
+      return {
+        success: true,
+        data: {
+          connections: connectionDTOs,
+          nextCursor: result.data.nextCursor,
+          hasMore: result.data.hasMore
+        }
+      };
+    } else {
+      console.error(`[ConnectionActions] Failed to get paginated connections:`, result.error);
+      return { success: false, error: result.error };
+    }
+  } catch (error: unknown) {
+    console.error('[ConnectionActions] Error getting paginated OAuth connections:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      success: false,
+      error: errorMessage.includes('Authentication required')
+        ? 'Authentication required'
+        : 'Failed to fetch connections'
+    };
+  }
+}
+
+/**
  * Get user's OAuth connections - replaces getUserOAuthConnections from pipedream.ts
  * Returns connections sorted by most recent first
+ * @deprecated Use getUserOAuthConnectionsPaginated for better performance with large lists
  */
 export async function getUserOAuthConnections(): Promise<Result<ConnectionDTO[]>> {
   try {
