@@ -1,8 +1,9 @@
 'use client'
 
 import React from 'react'
-import { Loader2, Brain, Wrench, CheckCircle2, XCircle } from 'lucide-react'
+import { Loader2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { getStepConfig } from '@/lib/chat/step-config'
 
 interface StepProgressIndicatorProps {
   currentStep: {
@@ -18,11 +19,7 @@ interface StepProgressIndicatorProps {
 /**
  * Step Progress Indicator
  *
- * Shows real-time agent execution progress:
- * - PLANNING: Agent is thinking about what to do
- * - ACTION: Agent is executing a tool
- * - REASONING: Agent is analyzing results
- * - FINAL: Agent is generating final answer
+ * Shows real-time agent execution progress during message generation
  */
 export function StepProgressIndicator({
   currentStep,
@@ -33,20 +30,10 @@ export function StepProgressIndicator({
     return null
   }
 
-  const getStepMessage = () => {
-    switch (currentStep.type) {
-      case 'PLANNING':
-        return 'Thinking...'
-      case 'ACTION':
-        return currentStep.name ? `Using ${currentStep.name}...` : 'Executing action...'
-      case 'REASONING':
-        return 'Processing results...'
-      case 'FINAL':
-        return 'Finalizing response...'
-      default:
-        return 'Working...'
-    }
-  }
+  const config = getStepConfig(currentStep.type)
+  const message = currentStep.name && currentStep.type === 'ACTION'
+    ? `Using ${currentStep.name}...`
+    : config.loadingMessage
 
   return (
     <div className="transition-all duration-300">
@@ -54,7 +41,7 @@ export function StepProgressIndicator({
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span className="text-sm">
-            {getStepMessage()}
+            {message}
           </span>
         </div>
 

@@ -1,47 +1,12 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Brain, Wrench, Lightbulb, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { ExecutionStep } from '@/app/dtos/chat.dto'
+import { getStepConfig } from '@/lib/chat/step-config'
 
 interface StepHistoryDisplayProps {
   steps: ExecutionStep[]
-}
-
-/**
- * Get icon and color for step type
- */
-function getStepIcon(type: ExecutionStep['type']): {
-  icon: React.ReactNode
-  color: string
-} {
-  switch (type) {
-    case 'PLANNING':
-      return {
-        icon: <Brain className="h-4 w-4" />,
-        color: 'text-blue-500'
-      }
-    case 'ACTION':
-      return {
-        icon: <Wrench className="h-4 w-4" />,
-        color: 'text-orange-500'
-      }
-    case 'REASONING':
-      return {
-        icon: <Lightbulb className="h-4 w-4" />,
-        color: 'text-yellow-500'
-      }
-    case 'FINAL':
-      return {
-        icon: <CheckCircle2 className="h-4 w-4" />,
-        color: 'text-green-500'
-      }
-    default:
-      return {
-        icon: <CheckCircle2 className="h-4 w-4" />,
-        color: 'text-gray-500'
-      }
-  }
 }
 
 /**
@@ -49,14 +14,15 @@ function getStepIcon(type: ExecutionStep['type']): {
  */
 function StepHistoryItem({ step }: { step: ExecutionStep }) {
   const [showDetails, setShowDetails] = useState(false)
-  const { icon, color } = getStepIcon(step.type)
+  const config = getStepConfig(step.type)
+  const Icon = config.icon
   const hasMetadata = step.metadata && (step.metadata.tool || step.metadata.arguments)
 
   return (
     <div className="border-l-2 border-muted pl-3 py-2">
       <div className="flex items-start gap-2">
-        <div className={`mt-0.5 ${color}`}>
-          {icon}
+        <div className={`mt-0.5 ${config.color}`}>
+          <Icon className="h-4 w-4" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
