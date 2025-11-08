@@ -140,16 +140,25 @@ export class Row {
   /**
    * Create Row from plain object with numeric field IDs as keys
    * AIDEV-NOTE: Reads from numeric field IDs (10, 11, 12) not field names.
+   * Accepts both TableField entities and plain DTOs for flexibility.
    * @param data - Plain object with numeric field IDs: {id: "123", 10: "value", 11: "value"}
    * @param tableId - Table ID
-   * @param tableFields - Table fields to map IDs to field definitions
+   * @param tableFields - Table fields (entities or DTOs) to map IDs to field definitions
    * @returns Row entity
    */
   static fromPlainObject(
     data: Record<string, any> & { id?: string },
     tableId: number,
-    tableFields: TableField[]
+    tableFields: TableField[] | Array<{ id: number; name: string; type: string; required: boolean; [key: string]: any }>
   ): Row {
+    // Helper to get field ID from either TableField entity or DTO
+    const getFieldId = (field: any): number => {
+      if (typeof field.id === 'number') {
+        return field.id; // DTO
+      }
+      return field.id.value; // TableField entity
+    };
+
     // Validate required fields
     // AIDEV-NOTE: Data uses numeric field IDs as keys, not field names
     for (const field of tableFields) {
@@ -158,7 +167,7 @@ export class Row {
         continue;
       }
 
-      const fieldKey = field.id.value.toString();
+      const fieldKey = getFieldId(field).toString();
       if (field.required && data[fieldKey] === undefined) {
         throw new Error(`${field.name} (field ${fieldKey}) is required`);
       }
@@ -173,7 +182,7 @@ export class Row {
       }
 
       // Read value using numeric field ID as key
-      const fieldKey = field.id.value.toString();
+      const fieldKey = getFieldId(field).toString();
       const value = data[fieldKey];
 
       // AIDEV-NOTE: CRITICAL FIX - Always include ALL fields, even if null/undefined
@@ -188,7 +197,7 @@ export class Row {
 
       // Always push FieldValue for every field in schema, preserving complete row state
       // AIDEV-NOTE: Store numeric field ID (e.g., "1", "10"), not field name
-      fieldValues.push(new FieldValue(field.id.value.toString(), value, field.type));
+      fieldValues.push(new FieldValue(getFieldId(field).toString(), value, field.type));
     }
 
     return new Row(
@@ -198,7 +207,7 @@ export class Row {
     );
   }
 
-  private static validateFieldValue(field: TableField, value: any): void {
+  private static validateFieldValue(field: TableField | { name: string; type: string; [key: string]: any }, value: any): void {
     switch (field.type) {
       case 'number':
         if (typeof value !== 'number' && (typeof value !== 'string' || isNaN(Number(value)))) {
@@ -213,7 +222,7 @@ export class Row {
             if (!file || typeof file !== 'object') {
               throw new Error(`${field.name}[${i}] must be an object`);
             }
-            
+
             // Validate required file properties
             const requiredFileProps = ['id', 'name', 'size', 'mimeType', 's3Key', 'uploadedAt'];
             for (const prop of requiredFileProps) {
