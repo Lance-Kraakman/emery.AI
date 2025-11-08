@@ -14,57 +14,11 @@ import { createDebugLogger } from '@/lib/utils/debug-logger'
 import type { AnyAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata'
 import type { ExecutionStep } from '@/ddd/domain/chat/value-objects/execution-step'
 import type { ExtendedChatHandler, ChatMessage, CurrentStepProgress } from './types/extended-chat-handler'
+import { createTextMessage, createMultimodalMessage, getMessageContent } from '@/lib/chat/message-helpers'
+import { createExecutionStep, addStepDeduped } from '@/lib/chat/step-collection'
+import { isStepProgressEvent, isContentEvent, isMessageCompleteEvent } from '@/lib/chat/types/sse-events'
 
 const logger = createDebugLogger('ChatGRPC')
-
-/**
- * Helper to extract text content from Message parts
- */
-function getMessageContent(message: Message): string {
-  if (!message.parts || message.parts.length === 0) return ''
-
-  // Find the first text part
-  const textPart = message.parts.find((part: MessagePart) => typeof part === 'string' || (typeof part === 'object' && part?.type === 'text'))
-
-  if (typeof textPart === 'string') return textPart
-  if (textPart && typeof textPart === 'object' && 'text' in textPart) return textPart.text
-
-  // Fallback: convert first part to string
-  return String(message.parts[0] || '')
-}
-
-/**
- * Helper to create a Message with text content
- */
-function createTextMessage(
-  content: string,
-  role: 'user' | 'assistant' | 'system',
-  id?: string,
-  metadata?: any
-): ChatMessage {
-  return {
-    id: id || generateId(),
-    role,
-    parts: [{ type: 'text', text: content }],
-    experimental_metadata: metadata
-  }
-}
-
-/**
- * Helper to create a Message with multiple parts (multimodal)
- * AIDEV-NOTE: Supports text, images, audio, files in a single message
- */
-function createMultimodalMessage(
-  parts: MessagePart[],
-  role: 'user' | 'assistant' | 'system',
-  id?: string
-): ChatMessage {
-  return {
-    id: id || generateId(),
-    role,
-    parts,
-  }
-}
 
 /**
  * Helper to create an image MessagePart from attachment metadata
@@ -451,32 +405,25 @@ export function useChatGRPC(
             try {
               const eventData = JSON.parse(line.substring(6))
 
-              if (eventData.type === 'step_progress') {
+              if (isStepProgressEvent(eventData)) {
                 setCurrentStep({
                   type: eventData.stepType,
                   name: eventData.stepName,
                   index: eventData.stepIndex,
-                  content: eventData.content // Include step content for display
+                  content: eventData.content
                 })
 
-                // Also accumulate step for history display
-                const executionStep: ExecutionStep = {
-                  type: eventData.stepType as ExecutionStep['type'],
-                  name: eventData.stepName,
-                  index: eventData.stepIndex,
-                  content: eventData.content || '',
-                  timestamp: Date.now(),
-                  metadata: eventData.metadata || {}
-                }
-                // Add deduplication to prevent duplicate steps from SSE
-                setStreamingSteps(prev => {
-                  // Check if step already exists based on index and type
-                  if (prev.find(s => s.index === executionStep.index && s.type === executionStep.type)) {
-                    return prev
-                  }
-                  return [...prev, executionStep]
-                })
-              } else if (eventData.type === 'content') {
+                // Accumulate step for history display with deduplication
+                const executionStep = createExecutionStep(
+                  eventData.stepType,
+                  eventData.stepName,
+                  eventData.stepIndex,
+                  eventData.content || '',
+                  eventData.metadata
+                )
+                setStreamingSteps(prev => addStepDeduped(prev, executionStep))
+
+              } else if (isContentEvent(eventData)) {
                 // Content chunk from assistant response
                 assistantMessage += eventData.text
 
@@ -492,11 +439,11 @@ export function useChatGRPC(
                       : msg
                   ))
                 }
-              } else if (eventData.type === 'message_complete') {
+              } else if (isMessageCompleteEvent(eventData)) {
                 // Handle completion with execution steps metadata
                 logger.debug('Received message completion with metadata', {
-                  stepCount: eventData.metadata?.executionSteps?.length || 0,
-                  ragSourcesCount: eventData.metadata?.ragSources?.length || 0
+                  stepCount: eventData.metadata.executionSteps?.length || 0,
+                  ragSourcesCount: eventData.metadata.ragSources?.length || 0
                 })
 
                 // Update the assistant message with final metadata

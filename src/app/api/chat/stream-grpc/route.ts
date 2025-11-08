@@ -32,6 +32,10 @@ import type { EnrichToolsWithUserApiKeyCommand } from '@/ddd/application/service
 // Import user API key utilities
 import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
 
+// Import shared chat utilities
+import { getMessageContent } from '@/lib/chat/message-helpers';
+import { processStepProgress, processContentChunk, processCompletion, encodeSSEEvent } from '@/lib/chat/event-processors';
+
 // Import gRPC client
 import { getChatProcessingClient, type StreamingChatResponse, type ChatProcessingOptions } from '@/lib/grpc/chat-processing-client';
 import type { HistoryMessage } from '@/lib/grpc/generated/agent_worker';
@@ -39,47 +43,6 @@ import type { MessagePart } from '@llamaindex/chat-ui';
 import { s3ChatAttachmentService } from '@/ddd/infrastructure/multimodal/s3-chat-attachment-service';
 import type { AnyAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
 import { messageWithAttachmentsToProtoParts } from '@/lib/grpc/mappers/message-part-mapper';
-
-/**
- * Extract text content from Message parts array
- * Expects MessagePart[] format only - no backward compatibility
- */
-function getMessageContent(message: { parts?: MessagePart[] }): string {
-  if (!message?.parts || message.parts.length === 0) return '';
-
-  // Find the first text part
-  const textPart = message.parts.find((part: MessagePart) =>
-    typeof part === 'string' || (typeof part === 'object' && (part as any)?.type === 'text')
-  );
-
-  if (typeof textPart === 'string') return textPart;
-  if (textPart && typeof textPart === 'object' && 'text' in textPart) {
-    return (textPart as any).text;
-  }
-
-  // Fallback: convert first part to string
-  return String(message.parts[0] || '');
-}
-
-/**
- * Convert gRPC step progress to ExecutionStep for persistence
- */
-function collectStep(
-  stepType: string,
-  stepName: string,
-  stepIndex: number,
-  content: string,
-  metadata?: Record<string, any>
-): ExecutionStep {
-  return {
-    type: stepType as ExecutionStep['type'],
-    name: stepName,
-    content: content,
-    index: stepIndex,
-    timestamp: Date.now(),
-    metadata: metadata as ExecutionStepMetadata
-  };
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -586,60 +549,45 @@ export async function POST(req: NextRequest) {
               if (response.type === 'step_progress' && response.stepProgress) {
                 // Real-time step execution progress
                 const step = response.stepProgress;
-                const stepTypeNames = ['PLANNING', 'ACTION', 'REASONING', 'FINAL'];
-                const stepTypeName = stepTypeNames[step.stepType || 0];
-
-                console.log(`[CHAT-GRPC-API] Step progress [${step.stepIndex}]:`, {
-                  type: stepTypeName,
-                  name: step.stepName,
-                  contentLength: step.content?.length || 0,
-                  metadata: step.metadata
-                });
 
                 // Convert metadata to plain object if it's a Map
                 const plainMetadata = step.metadata ? { ...step.metadata } : {};
 
-                // Collect step for persistence
-                const executionStep = collectStep(
-                  stepTypeName,
+                // Process step progress and update collection
+                const { event: stepEvent, updatedSteps } = processStepProgress(
+                  step.stepType,
                   step.stepName,
                   step.stepIndex,
                   step.content,
-                  plainMetadata
+                  plainMetadata,
+                  collectedSteps
                 );
-                collectedSteps.push(executionStep);
+                collectedSteps = updatedSteps;
 
-                // Send step progress event to frontend as SSE-like JSON
-                const stepEvent = {
-                  type: 'step_progress',
-                  stepType: stepTypeName,
-                  stepName: step.stepName,
-                  stepIndex: step.stepIndex,
-                  content: step.content,
-                  metadata: plainMetadata
-                };
+                console.log(`[CHAT-GRPC-API] Step progress [${step.stepIndex}]:`, {
+                  type: stepEvent.stepType,
+                  name: stepEvent.stepName,
+                  contentLength: stepEvent.content?.length || 0
+                });
 
+                // Send step progress event to frontend
                 try {
-                  const eventData = `data: ${JSON.stringify(stepEvent)}\n\n`;
-                  const eventChunk = new TextEncoder().encode(eventData);
-                  controller.enqueue(eventChunk);
+                  controller.enqueue(encodeSSEEvent(stepEvent));
                 } catch (jsonError) {
                   console.error('[CHAT-GRPC-API] Failed to serialize step event:', jsonError);
                   console.error('[CHAT-GRPC-API] Problematic metadata:', step.metadata);
                 }
 
               } else if (response.type === 'content' && response.content) {
-                // Stream content chunk to frontend as SSE event
-                fullAssistantResponse += response.content;
+                // Process content chunk and update response
+                const { event: contentEvent, updatedResponse } = processContentChunk(
+                  response.content,
+                  fullAssistantResponse
+                );
+                fullAssistantResponse = updatedResponse;
 
-                const contentEvent = {
-                  type: 'content',
-                  text: response.content
-                };
-
-                const eventData = `data: ${JSON.stringify(contentEvent)}\n\n`;
-                const eventChunk = new TextEncoder().encode(eventData);
-                controller.enqueue(eventChunk);
+                // Send content event to frontend
+                controller.enqueue(encodeSSEEvent(contentEvent));
 
               } else if (response.type === 'rag_context' && response.ragContext) {
                 // Store RAG sources for later saving to database
@@ -677,20 +625,15 @@ export async function POST(req: NextRequest) {
                 }
 
                 // Send completion event with execution steps metadata to frontend
-                const completionEvent = {
-                  type: 'message_complete',
-                  metadata: {
-                    executionSteps: collectedSteps,
-                    ragSources: ragSources,
-                    modelUsed: response.complete.modelUsed,
-                    totalTokens: response.complete.totalTokens
-                  }
-                };
+                const completionEvent = processCompletion(
+                  response.complete.modelUsed,
+                  response.complete.totalTokens,
+                  collectedSteps,
+                  ragSources
+                );
 
                 try {
-                  const eventData = `data: ${JSON.stringify(completionEvent)}\n\n`;
-                  const eventChunk = new TextEncoder().encode(eventData);
-                  controller.enqueue(eventChunk);
+                  controller.enqueue(encodeSSEEvent(completionEvent));
                   console.log(`[CHAT-GRPC-API] Sent completion event with ${collectedSteps.length} execution steps`);
                 } catch (jsonError) {
                   console.error('[CHAT-GRPC-API] Failed to send completion event:', jsonError);
