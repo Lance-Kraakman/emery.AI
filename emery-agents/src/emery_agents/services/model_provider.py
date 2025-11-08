@@ -8,9 +8,12 @@ Supports model selection hierarchy: skill > agent > organization > default.
 
 import os
 import logging
+import base64
+from io import BytesIO
 from typing import Optional, List, Dict, Any, Union
 from dataclasses import dataclass
 
+from PIL import Image
 from smolagents.models import Model, ChatMessage, MessageRole
 from huggingface_hub import InferenceClient
 
@@ -21,6 +24,7 @@ from .model_registry import (
     calculate_token_cost,
     ModelTier,
 )
+from ..grpc.mappers.message_types import MessageContentList
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +68,63 @@ class CustomInferenceModel(Model):
         logger.info(f"🔧 CustomInferenceModel initialized with endpoint: {endpoint_url}")
         logger.info(f"🔧 Model name: {model_name}")
 
+    def _convert_pil_to_base64_url(self, pil_image: Image.Image) -> str:
+        """
+        Convert PIL Image to base64 data URL for HuggingFace API.
+
+        HuggingFace Inference API requires images as base64-encoded data URLs.
+        Format: "data:image/jpeg;base64,{base64_string}"
+
+        Args:
+            pil_image: PIL Image object
+
+        Returns:
+            Base64 data URL string
+        """
+        buffered = BytesIO()
+        image_format = getattr(pil_image, 'format', None) or "JPEG"
+        pil_image.save(buffered, format=image_format)
+        base64_image = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        mime_type = f"image/{image_format.lower()}"
+        return f"data:{mime_type};base64,{base64_image}"
+
+    def _process_message_content(self, content: MessageContentList) -> list[dict]:
+        """
+        Convert smolagents content format to HuggingFace API format.
+
+        Transforms PIL Images to base64 data URLs for API serialization.
+
+        Args:
+            content: MessageContentList (list of content parts)
+
+        Returns:
+            List of dicts in HuggingFace API format
+        """
+        processed: list[dict] = []
+
+        for part in content:
+            part_type = part.get("type")
+
+            if part_type == "text":
+                processed.append({
+                    "type": "text",
+                    "text": part["text"]
+                })
+            elif part_type == "image":
+                # Convert PIL Image to base64 data URL
+                pil_image: Image.Image = part["image"]
+                base64_url = self._convert_pil_to_base64_url(pil_image)
+                processed.append({
+                    "type": "image_url",
+                    "image_url": {"url": base64_url}
+                })
+                logger.info(f"✅ Converted PIL Image to base64 data URL")
+            elif part_type == "image_url":
+                # Already in HuggingFace format
+                processed.append(part)
+
+        return processed
+
     def generate(self, messages: List[Union[ChatMessage, Dict[str, Any]]], stop_sequences: Optional[List[str]] = None, **kwargs) -> Any:
         """
         Generate response using dedicated endpoint or HF Inference API.
@@ -73,26 +134,26 @@ class CustomInferenceModel(Model):
         2. Dict format (legacy HuggingFace format)
         """
         try:
-            # Convert messages to the format expected by HF API
-            chat_messages = []
+            # Convert messages to HuggingFace API format
+            chat_messages: list[dict] = []
+
             for msg in messages:
                 if isinstance(msg, ChatMessage):
-                    # ChatMessage object - convert MessageRole enum to string
                     role_str = msg.role.value
+                    content: MessageContentList = msg.content
+
+                    # Process content: convert PIL Images to base64
+                    processed_content = self._process_message_content(content)
+
                     chat_messages.append({
                         "role": role_str,
-                        "content": msg.content
+                        "content": processed_content
                     })
                 elif isinstance(msg, dict):
-                    # Dictionary format - already in HF format
-                    chat_messages.append({
-                        "role": msg.get("role", "user"),
-                        "content": msg.get("content", "")
-                    })
+                    # Legacy dict format (if needed)
+                    chat_messages.append(msg)
                 else:
-                    # Unknown format, log and skip
                     logger.warning(f"Unknown message format: {type(msg)}")
-                    continue
 
             logger.info(f"🚀 Generating with {len(chat_messages)} messages using model: {self.model_name}")
 

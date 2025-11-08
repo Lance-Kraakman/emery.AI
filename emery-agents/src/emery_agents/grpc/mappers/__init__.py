@@ -18,6 +18,14 @@ from .proto_mapper import (
     CancelTaskResponseDict,
 )
 
+from .message_types import (
+    TextContentPart,
+    ImageContentPart,
+    ImageUrlContentPart,
+    ContentPart,
+    MessageContentList,
+)
+
 __all__ = [
     # Message mapping functions (chat/vision)
     'download_image_from_url',
@@ -31,4 +39,10 @@ __all__ = [
     'WorkerInfoDict',
     'CancelTaskRequestDict',
     'CancelTaskResponseDict',
+    # Message content types
+    'TextContentPart',
+    'ImageContentPart',
+    'ImageUrlContentPart',
+    'ContentPart',
+    'MessageContentList',
 ]

@@ -290,6 +290,33 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
             sortDirection: chartConfig.sortDirection,
           });
           break;
+        case 'form':
+          // Create form with all table fields by default
+          // AIDEV-NOTE: This creates a working form immediately with all fields.
+          // Users can later customize via form builder UI (to be implemented).
+          viewTypeVO = ViewType.form();
+          viewConfigVO = ViewConfig.createForm({
+            pages: [
+              {
+                id: crypto.randomUUID(),
+                title: 'Form',
+                description: undefined,
+                order: 0,
+                fields: fields.map((field, index) => ({
+                  fieldId: field.id,
+                  order: index,
+                  label: field.name,
+                  helpText: undefined,
+                  placeholder: undefined,
+                  required: field.required || false,
+                  visible: true,
+                })),
+              },
+            ],
+            submitButtonText: 'Submit',
+            successMessage: 'Form submitted successfully!',
+          });
+          break;
         case 'grid':
         default:
           viewTypeVO = ViewType.grid();

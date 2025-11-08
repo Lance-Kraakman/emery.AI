@@ -8,7 +8,7 @@ AIDEV-NOTE: Uses smolagents native ChatMessage format with PIL Image objects.
 Images are downloaded from S3 URLs and converted to PIL.Image for vision model support.
 """
 import logging
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any
 from io import BytesIO
 
 import requests
@@ -16,6 +16,7 @@ from PIL import Image
 from smolagents.models import ChatMessage, MessageRole
 
 from ...grpc.generated import agent_worker_pb2
+from .message_types import MessageContentList, TextContentPart, ImageContentPart
 
 logger = logging.getLogger(__name__)
 
@@ -47,31 +48,30 @@ def download_image_from_url(url: str) -> Image.Image:
 
 def proto_parts_to_smolagents_content(
     message_parts: List[agent_worker_pb2.MessagePart]
-) -> Union[str, List[Dict[str, Any]]]:
+) -> MessageContentList:
     """
     Convert protobuf MessageParts to smolagents content format.
 
-    Smolagents supports two content formats:
-    - str: For text-only messages (optimized)
-    - List[Dict]: For multimodal messages (text + images)
+    Returns list of content parts - ALWAYS list format (no string optimization).
+    Frontend sends MessagePart[] arrays, we keep the same structure.
 
     Args:
         message_parts: List of protobuf MessagePart objects
 
     Returns:
-        str if single text part, List[Dict] if multimodal
+        List of content parts (TextContentPart | ImageContentPart)
 
     AIDEV-NOTE: Images are downloaded from S3 URLs and converted to PIL Image objects.
-    Smolagents handles conversion to HuggingFace base64 format internally.
+    PIL Images must be converted to base64 data URLs before sending to HuggingFace API.
     """
-    content_parts = []
+    content_parts: MessageContentList = []
 
     for part in message_parts:
         if part.HasField('text'):
-            content_parts.append({
-                "type": "text",
-                "text": part.text.text
-            })
+            content_parts.append(TextContentPart(
+                type="text",
+                text=part.text.text
+            ))
         elif part.HasField('image_url'):
             # Download S3 image and convert to PIL Image with error handling
             image_url = part.image_url.url
@@ -79,10 +79,10 @@ def proto_parts_to_smolagents_content(
 
             try:
                 pil_image = download_image_from_url(image_url)
-                content_parts.append({
-                    "type": "image",
-                    "image": pil_image  # PIL Image object, not URL
-                })
+                content_parts.append(ImageContentPart(
+                    type="image",
+                    image=pil_image  # PIL Image object, not URL
+                ))
                 logger.info(f"✅ Successfully added image to content: {pil_image.size} {pil_image.mode}")
             except requests.exceptions.RequestException as e:
                 logger.error(f"❌ Failed to download image from URL: {str(e)}")
@@ -92,10 +92,7 @@ def proto_parts_to_smolagents_content(
                 logger.error(f"❌ Unexpected error processing image: {str(e)}")
                 logger.warning("⚠️ Skipping image, continuing with text-only message")
 
-    # Optimization: return string if only one text part
-    if len(content_parts) == 1 and content_parts[0]["type"] == "text":
-        return content_parts[0]["text"]
-
+    # Always return list format (no string optimization)
     return content_parts
 
 

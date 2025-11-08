@@ -406,28 +406,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         for row_data in rows_data:
             record = {'id': row_data.id}
 
-            # DIAGNOSTIC: Log raw protobuf data to identify None value source
-            logger.info(f"[DIAGNOSTIC] Row ID: {row_data.id}")
-            logger.info(f"[DIAGNOSTIC] Raw protobuf data keys: {list(row_data.data.keys())}")
-
             for key, value in row_data.data.items():
-                # DIAGNOSTIC: Log field extraction details
-                has_text = value.HasField('text_value')
-                has_number = value.HasField('number_value')
-                has_bool = value.HasField('boolean_value')
-                has_date = value.HasField('date_value')
-                has_json = value.HasField('json_value')
-                has_embedding = value.HasField('embedding_value')
-                logger.info(f"[DIAGNOSTIC] Field '{key}': text={has_text}, number={has_number}, bool={has_bool}, date={has_date}, json={has_json}, embedding={has_embedding}")
-
-                if has_text:
-                    logger.info(f"[DIAGNOSTIC] Field '{key}' text_value: '{value.text_value}'")
-                if has_number:
-                    logger.info(f"[DIAGNOSTIC] Field '{key}' number_value: {value.number_value}")
-                if has_bool:
-                    logger.info(f"[DIAGNOSTIC] Field '{key}' boolean_value: {value.boolean_value}")
-                if has_embedding:
-                    logger.info(f"[DIAGNOSTIC] Field '{key}' embedding_value: {len(value.embedding_value.values)} dimensions")
                 if value.HasField('text_value'):
                     record[key] = value.text_value
                 elif value.HasField('number_value'):
