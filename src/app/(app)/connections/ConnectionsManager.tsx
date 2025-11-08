@@ -2,13 +2,25 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { getUserOAuthConnectionsPaginated, getAppConnectionUrl, disconnectOAuthAccount, getAvailableApps } from '@/app/actions/connections';
+import { getUserOAuthConnectionsPaginated, getAppConnectionUrl, disconnectOAuthAccount, getAvailableAppsPaginated } from '@/app/actions/connections';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UnifiedConnectionsGrid } from './components/UnifiedConnectionsGrid';
 import { ConnectionDTO as Connection } from '@/app/mappers/connection-mapper';
 
+type TabValue = 'connections' | 'browse';
+
 export function ConnectionsManager() {
+  const [activeTab, setActiveTab] = useState<TabValue>('connections');
+
+  // My Connections tab state
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+  const [connectionsLoadingMore, setConnectionsLoadingMore] = useState(false);
+  const [connectionsNextCursor, setConnectionsNextCursor] = useState<string | undefined>(undefined);
+  const [connectionsHasMore, setConnectionsHasMore] = useState(false);
+
+  // Browse Apps tab state
   const [availableApps, setAvailableApps] = useState<Array<{
     id: string;
     name: string;
@@ -16,20 +28,29 @@ export function ConnectionsManager() {
     category: string;
     icon: string;
   }>>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [appsLoading, setAppsLoading] = useState(false);
+  const [appsLoadingMore, setAppsLoadingMore] = useState(false);
+  const [appsOffset, setAppsOffset] = useState(0);
+  const [appsTotal, setAppsTotal] = useState(0);
+  const [appsHasMore, setAppsHasMore] = useState(false);
+  const [appsSearch, setAppsSearch] = useState('');
+
+  // Shared state
   const [error, setError] = useState<string | null>(null);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const [disconnectingAccount, setDisconnectingAccount] = useState<string | null>(null);
 
-  // Pagination state
-  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
-  const [hasMore, setHasMore] = useState(false);
-
+  // Load connections on mount
   useEffect(() => {
     loadConnections();
-    loadAvailableApps();
   }, []);
+
+  // Load apps when Browse tab is accessed
+  useEffect(() => {
+    if (activeTab === 'browse' && availableApps.length === 0 && !appsLoading) {
+      loadAvailableApps();
+    }
+  }, [activeTab]);
 
   // Handle successful connection redirect
   useEffect(() => {
@@ -51,7 +72,7 @@ export function ConnectionsManager() {
 
   const loadConnections = useCallback(async () => {
     try {
-      setLoading(true);
+      setConnectionsLoading(true);
       setError(null);
 
       // Use paginated API with default page size of 50
@@ -64,8 +85,8 @@ export function ConnectionsManager() {
           nextCursor: result.data.nextCursor
         });
         setConnections(result.data.connections);
-        setNextCursor(result.data.nextCursor);
-        setHasMore(result.data.hasMore);
+        setConnectionsNextCursor(result.data.nextCursor);
+        setConnectionsHasMore(result.data.hasMore);
       } else {
         setError(result.error || 'Failed to load connections');
       }
@@ -73,24 +94,24 @@ export function ConnectionsManager() {
       setError('Failed to load connections');
       console.error('Error loading connections:', err);
     } finally {
-      setLoading(false);
+      setConnectionsLoading(false);
     }
   }, []);
 
   const loadMoreConnections = useCallback(async () => {
-    if (!hasMore || !nextCursor || loadingMore) {
+    if (!connectionsHasMore || !connectionsNextCursor || connectionsLoadingMore) {
       return;
     }
 
     try {
-      setLoadingMore(true);
+      setConnectionsLoadingMore(true);
       setError(null);
 
-      console.log('📄 Loading more connections with cursor:', nextCursor);
+      console.log('📄 Loading more connections with cursor:', connectionsNextCursor);
 
       const result = await getUserOAuthConnectionsPaginated({
         limit: 50,
-        cursor: nextCursor
+        cursor: connectionsNextCursor
       });
 
       if (result.success && result.data) {
@@ -104,8 +125,8 @@ export function ConnectionsManager() {
 
         // Append new connections to existing ones
         setConnections(prev => [...prev, ...newConnections]);
-        setNextCursor(newCursor);
-        setHasMore(moreAvailable);
+        setConnectionsNextCursor(newCursor);
+        setConnectionsHasMore(moreAvailable);
       } else {
         setError(result.error || 'Failed to load more connections');
       }
@@ -113,18 +134,37 @@ export function ConnectionsManager() {
       setError('Failed to load more connections');
       console.error('Error loading more connections:', err);
     } finally {
-      setLoadingMore(false);
+      setConnectionsLoadingMore(false);
     }
-  }, [hasMore, nextCursor, loadingMore]);
+  }, [connectionsHasMore, connectionsNextCursor, connectionsLoadingMore]);
 
-  const loadAvailableApps = useCallback(async () => {
+  const loadAvailableApps = useCallback(async (reset = false) => {
     try {
-      console.log('📱 Loading available apps from database...');
-      const result = await getAvailableApps();
+      setAppsLoading(true);
+      setError(null);
+
+      const offset = reset ? 0 : appsOffset;
+
+      console.log(`📱 Loading available apps from database (offset: ${offset}, search: ${appsSearch || 'none'})...`);
+
+      const result = await getAvailableAppsPaginated({
+        limit: 50,
+        offset,
+        search: appsSearch || undefined
+      });
 
       if (result.success && result.data) {
-        console.log(`📱 Loaded ${result.data.length} available apps`);
-        setAvailableApps(result.data);
+        console.log(`📱 Loaded ${result.data.apps.length} of ${result.data.total} available apps`);
+
+        if (reset) {
+          setAvailableApps(result.data.apps);
+          setAppsOffset(0);
+        } else {
+          setAvailableApps(result.data.apps);
+        }
+
+        setAppsTotal(result.data.total);
+        setAppsHasMore(result.data.hasMore);
       } else {
         console.error('❌ Failed to load available apps:', result.error);
         setError(result.error || 'Failed to load available apps');
@@ -132,8 +172,50 @@ export function ConnectionsManager() {
     } catch (err) {
       console.error('❌ Error loading available apps:', err);
       setError('Failed to load available apps');
+    } finally {
+      setAppsLoading(false);
     }
-  }, []);
+  }, [appsOffset, appsSearch]);
+
+  const loadMoreApps = useCallback(async () => {
+    if (!appsHasMore || appsLoadingMore) {
+      return;
+    }
+
+    try {
+      setAppsLoadingMore(true);
+      setError(null);
+
+      const newOffset = appsOffset + 50;
+
+      console.log(`📄 Loading more apps (offset: ${newOffset})...`);
+
+      const result = await getAvailableAppsPaginated({
+        limit: 50,
+        offset: newOffset,
+        search: appsSearch || undefined
+      });
+
+      if (result.success && result.data) {
+        const { apps: newApps, total, hasMore } = result.data;
+
+        console.log(`📄 More apps loaded: ${newApps.length} of ${total}`);
+
+        // Append new apps to existing ones
+        setAvailableApps(prev => [...prev, ...newApps]);
+        setAppsOffset(newOffset);
+        setAppsTotal(total);
+        setAppsHasMore(hasMore);
+      } else {
+        setError(result.error || 'Failed to load more apps');
+      }
+    } catch (err) {
+      setError('Failed to load more apps');
+      console.error('Error loading more apps:', err);
+    } finally {
+      setAppsLoadingMore(false);
+    }
+  }, [appsHasMore, appsLoadingMore, appsOffset, appsSearch]);
 
   const handleDisconnectAccount = async (accountId: string) => {
     console.log('🗑️ Disconnect button clicked for account:', accountId);
@@ -214,22 +296,13 @@ export function ConnectionsManager() {
   };
 
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <RefreshCw className="w-6 h-6 animate-spin text-primary" />
-        <span className="ml-2 text-muted-foreground">Loading connections...</span>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {error && (
         <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
           <div className="text-destructive font-medium">{error}</div>
           <button
-            onClick={loadConnections}
+            onClick={() => activeTab === 'connections' ? loadConnections() : loadAvailableApps(true)}
             className="mt-2 text-destructive hover:text-destructive/80 text-sm underline transition-colors"
           >
             Try again
@@ -237,19 +310,61 @@ export function ConnectionsManager() {
         </div>
       )}
 
-      {/* Unified Connections Grid */}
-      <UnifiedConnectionsGrid
-        apps={availableApps}
-        connections={connections}
-        connectingApp={connectingApp}
-        disconnectingAccount={disconnectingAccount}
-        hasMore={hasMore}
-        loadingMore={loadingMore}
-        onConnect={handleConnectApp}
-        onDisconnect={handleDisconnectAccount}
-        onReconnect={(appId) => handleConnectApp(appId, false, true)}
-        onLoadMore={loadMoreConnections}
-      />
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabValue)}>
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="connections">
+            My Connections {connections.length > 0 && `(${connections.length})`}
+          </TabsTrigger>
+          <TabsTrigger value="browse">
+            Browse Apps {appsTotal > 0 && `(${appsTotal})`}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="connections" className="mt-6">
+          {connectionsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="w-6 h-6 animate-spin text-primary" />
+              <span className="ml-2 text-muted-foreground">Loading connections...</span>
+            </div>
+          ) : (
+            <UnifiedConnectionsGrid
+              mode="connections"
+              connections={connections}
+              connectingApp={connectingApp}
+              disconnectingAccount={disconnectingAccount}
+              hasMore={connectionsHasMore}
+              loadingMore={connectionsLoadingMore}
+              onConnect={handleConnectApp}
+              onDisconnect={handleDisconnectAccount}
+              onReconnect={(appId) => handleConnectApp(appId, false, true)}
+              onLoadMore={loadMoreConnections}
+            />
+          )}
+        </TabsContent>
+
+        <TabsContent value="browse" className="mt-6">
+          {appsLoading && availableApps.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="w-6 h-6 animate-spin text-primary" />
+              <span className="ml-2 text-muted-foreground">Loading apps...</span>
+            </div>
+          ) : (
+            <UnifiedConnectionsGrid
+              mode="browse"
+              apps={availableApps}
+              connections={connections}
+              connectingApp={connectingApp}
+              disconnectingAccount={disconnectingAccount}
+              hasMore={appsHasMore}
+              loadingMore={appsLoadingMore}
+              onConnect={handleConnectApp}
+              onDisconnect={handleDisconnectAccount}
+              onReconnect={(appId) => handleConnectApp(appId, false, true)}
+              onLoadMore={loadMoreApps}
+            />
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

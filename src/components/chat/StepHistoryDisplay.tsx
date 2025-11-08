@@ -19,7 +19,7 @@ function StepHistoryItem({ step }: { step: ExecutionStep }) {
   const hasMetadata = step.metadata && (step.metadata.tool || step.metadata.arguments)
 
   return (
-    <div className="pl-1 py-1">
+    <div className="pl-1 py-0.5">
       <div className="flex items-start gap-2">
         <div className={`${config.color}`}>
           <Icon className="h-4 w-4" />
@@ -102,7 +102,7 @@ export function StepHistoryDisplay({ steps }: StepHistoryDisplayProps) {
   }
 
   return (
-    <div className="my-2 space-y-1">
+    <div className="my-1 space-y-0.5">
       {steps.map((step) => (
         <StepHistoryItem key={`${step.index}-${step.timestamp}`} step={step} />
       ))}

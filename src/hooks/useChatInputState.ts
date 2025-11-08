@@ -82,7 +82,8 @@ export function useChatInputState(
     textarea.style.overflowY = newHeight >= maxHeight ? 'auto' : 'hidden'
 
     // Update single-line state (true if at minimum height)
-    setIsSingleLine(newHeight <= minHeight)
+    // AIDEV-NOTE: Add 2px tolerance for padding/line-height to prevent false multi-line detection
+    setIsSingleLine(newHeight <= minHeight + 2)
   }, [textareaRef, minHeight, maxHeight])
 
   // Resize whenever value changes (user types, paste, etc.)

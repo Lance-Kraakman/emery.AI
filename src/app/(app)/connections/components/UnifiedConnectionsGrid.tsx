@@ -10,7 +10,8 @@ import { AppConnectionCard, type AppInfo } from './AppConnectionCard';
 import { ConnectionDTO as Connection } from '@/app/mappers/connection-mapper';
 
 interface UnifiedConnectionsGridProps {
-  apps: AppInfo[];
+  mode: 'connections' | 'browse';
+  apps?: AppInfo[];
   connections: Connection[];
   connectingApp?: string | null;
   disconnectingAccount?: string | null;
@@ -27,6 +28,7 @@ type SortType = 'name' | 'status' | 'recent';
 type ViewType = 'grid' | 'list';
 
 export function UnifiedConnectionsGrid({
+  mode,
   apps,
   connections,
   connectingApp,
@@ -45,23 +47,43 @@ export function UnifiedConnectionsGrid({
 
   // Create unified app data with connection status
   const unifiedApps = useMemo(() => {
-    return apps.map(app => {
-      // Find connection for this app (use first match for display)
-      const connection = connections.find(c => c.app === app.id);
-
-      return {
-        app,
+    if (mode === 'connections') {
+      // Show only connections
+      return connections.map(connection => ({
+        app: {
+          id: connection.app,
+          name: connection.app.charAt(0).toUpperCase() + connection.app.slice(1).replace(/-/g, ' '),
+          description: `Connected as ${connection.account_name}`,
+          category: 'connected',
+          icon: `/icons/${connection.app}.svg`
+        },
         connection,
-        status: !connection
-          ? 'available'
-          : (connection.status === 'connected' || connection.status === 'active')
-            ? 'connected'
-            : connection.status === 'error'
-              ? 'error'
-              : 'unknown'
-      };
-    });
-  }, [apps, connections]);
+        status: (connection.status === 'connected' || connection.status === 'active')
+          ? 'connected'
+          : connection.status === 'error'
+            ? 'error'
+            : 'unknown'
+      }));
+    } else {
+      // Browse mode: Show all available apps with connection status
+      return (apps || []).map(app => {
+        // Find connection for this app (use first match for display)
+        const connection = connections.find(c => c.app === app.id);
+
+        return {
+          app,
+          connection,
+          status: !connection
+            ? 'available'
+            : (connection.status === 'connected' || connection.status === 'active')
+              ? 'connected'
+              : connection.status === 'error'
+                ? 'error'
+                : 'unknown'
+        };
+      });
+    }
+  }, [mode, apps, connections]);
 
   // Filter and sort apps
   const filteredAndSortedApps = useMemo(() => {
@@ -122,9 +144,13 @@ export function UnifiedConnectionsGrid({
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div>
-            <h2 className="text-lg font-medium">App Connections</h2>
+            <h2 className="text-lg font-medium">
+              {mode === 'connections' ? 'My Connections' : 'Browse Apps'}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Manage apps that your agents can use on your behalf
+              {mode === 'connections'
+                ? 'Your connected OAuth accounts'
+                : 'Connect apps that your agents can use on your behalf'}
             </p>
           </div>
 

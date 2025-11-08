@@ -282,7 +282,7 @@ function ChatContentWithCanvas({
                   <React.Fragment key={message.id || index}>
                     {/* Show step history for assistant messages with steps - BEFORE the message */}
                     {message.role === 'assistant' && steps && steps.length > 0 && (
-                      <div className="mx-4 mb-1">
+                      <div className="mx-4 mb-0.5">
                         <StepHistoryDisplay steps={steps} />
                       </div>
                     )}
@@ -290,13 +290,17 @@ function ChatContentWithCanvas({
                       message={message}
                       isLast={index === handler.messages.length - 1}
                       className={cn(
-                        "rounded-md my-1 mx-4 transition-colors",
-                        message.role === 'user' && "border border-input px-2.5 py-1",
-                        message.role === 'assistant' && "px-3 py-1.5"
+                        "my-0.5 mx-4",
+                        message.role === 'assistant' && "rounded-md px-3 py-1.5 transition-colors"
                       )}
                     >
                       <ChatMessage.Avatar />
-                      <ChatMessage.Content className="[&_p]:text-sm [&_p]:leading-snug [&_p]:my-0.5" />
+                      <ChatMessage.Content
+                        className={cn(
+                          "[&_p]:text-sm [&_p]:leading-snug [&_p]:my-0.5",
+                          message.role === 'user' && "border border-input rounded-md px-2.5 py-1 inline-block"
+                        )}
+                      />
                       <ChatMessage.Actions />
                     </ChatMessage>
                   </React.Fragment>
@@ -305,14 +309,14 @@ function ChatContentWithCanvas({
 
               {/* Real-time streaming steps - display accumulated steps during execution */}
               {handler.isLoading && handler.streamingSteps && handler.streamingSteps.length > 0 && (
-                <div className="mx-4 mb-1">
+                <div className="mx-4 mb-0.5">
                   <StepHistoryDisplay steps={handler.streamingSteps} />
                 </div>
               )}
 
               {/* Inline loading indicator - appears after last message (Claude-like) */}
               {handler.isLoading && handler.currentStep && (
-                <div className="flex gap-3 px-4 py-1 mx-4 mb-1">
+                <div className="flex gap-3 px-4 py-1 mx-4 mb-0.5">
                   {/* Bot Avatar */}
                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                     <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -560,9 +564,9 @@ export function EmeryChat() {
       className={`relative flex bg-card flex-shrink-0 h-full`}
       style={{
         width: isFullWidth ? '100%' : `${chatWidth}px`,
-        // CSS-based responsive constraints (sidebar = 256px when expanded)
-        maxWidth: 'calc((100vw - 256px) / 2)',  // 50% of available screen space
-        minWidth: 'max(280px, calc((100vw - 256px) * 0.2))' // Larger of 280px or 20% of available space
+        // CSS-based responsive constraints using shadcn's --sidebar-width variable
+        maxWidth: 'calc((100vw - var(--sidebar-width, 256px)) / 2)',  // 50% of available screen space
+        minWidth: 'max(280px, calc((100vw - var(--sidebar-width, 256px)) * 0.2))' // Larger of 280px or 20% of available space
       }}
     >
       {/* Resize handle */}
