@@ -2,7 +2,7 @@
 
 import React from "react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
-import { ChevronDown, Edit, Trash2, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react"
+import { ChevronDown, Edit, Trash2, ArrowUp, ArrowDown, ArrowUpDown, Lock } from "lucide-react"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import { createDebugLogger } from "@/lib/utils/debug-logger"
 import { useGrid } from './grid/GridContext'
@@ -20,6 +20,9 @@ interface ColumnHeaderProps {
 export function ColumnHeader({ field, onEdit, onDelete, onSort, onClearSort }: ColumnHeaderProps) {
   // AIDEV-NOTE: Read sortState directly from grid context to avoid stale props
   const { sortState: globalSortState } = useGrid()
+
+  // Check if field is auto-generated (read-only)
+  const isAutoField = ['last-updated', 'created-at'].includes(field.type)
 
   // Calculate this field's sort state
   const sortState = globalSortState?.field === field.name && globalSortState?.field != null
@@ -77,7 +80,14 @@ export function ColumnHeader({ field, onEdit, onDelete, onSort, onClearSort }: C
 
   return (
     <div className="flex items-center justify-between w-full gap-1">
-      <span className="truncate flex-1">{field.name}</span>
+      <div className="flex items-center gap-1.5 truncate flex-1">
+        <span className="truncate">{field.name}</span>
+        {isAutoField && (
+          <div title={`Auto-generated ${field.type} field (read-only)`}>
+            <Lock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+          </div>
+        )}
+      </div>
 
       {/* Sort Button - Enhanced with better visual feedback */}
       {onSort && (

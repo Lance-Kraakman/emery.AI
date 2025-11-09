@@ -18,13 +18,50 @@ export type FieldType =
   | 'relation'
   | 'file'
   | 'document'
-  | 'embedding';
+  | 'embedding'
+  | 'single-select'
+  | 'multi-select'
+  | 'autonumber'
+  | 'last-updated'
+  | 'created-at';
 
 export interface EmbeddingFieldMetadata {
   embeddingSize: 384 | 768 | 1536 | 3072;
   sourceFieldId?: number;
   model?: string;
   normalize?: boolean;
+}
+
+// AIDEV-NOTE: Field type configurations for new Baserow-inspired field types
+
+export interface SelectOption {
+  id: number;
+  value: string;
+  color: string;
+}
+
+export interface SingleSelectFieldConfig {
+  options: SelectOption[];
+  defaultOption?: number;
+}
+
+export interface MultiSelectFieldConfig {
+  options: SelectOption[];
+  maxSelections?: number;
+}
+
+export interface AutonumberFieldConfig {
+  startingNumber?: number;  // Default: 1
+  prefix?: string;           // Optional: "INV-"
+  suffix?: string;           // Optional: "-2025"
+  digits?: number;           // Zero-padding: 5 → "00001"
+  currentValue?: number;     // Track highest value (persisted)
+}
+
+export interface TimestampFieldConfig {
+  timezone?: string;         // Default: UTC
+  includeTime?: boolean;     // Default: true
+  watchFields?: string[];    // For last-updated: only update when specific fields change
 }
 
 export interface CreateTableFieldData {
@@ -162,15 +199,31 @@ export class TableField {
       'relation': 'JSONB',
       'file': 'JSONB',
       'document': 'JSONB',
-      'embedding': 'JSONB'  // Metadata stored in PostgreSQL, vectors in Delta Lake
+      'embedding': 'JSONB',  // Metadata stored in PostgreSQL, vectors in Delta Lake
+      'single-select': 'TEXT',  // Store option value as text
+      'multi-select': 'JSONB',  // Store array of option values
+      'autonumber': 'TEXT',     // Allow prefix/suffix formatting (e.g., "INV-00001")
+      'last-updated': 'TIMESTAMP WITH TIME ZONE',
+      'created-at': 'TIMESTAMP WITH TIME ZONE'
     };
 
     return typeMapping[this._type];
   }
 
   requiresGinIndex(): boolean {
-    const complexTypes: FieldType[] = ['relation', 'file', 'document'];
+    const complexTypes: FieldType[] = ['relation', 'file', 'document', 'multi-select'];
     return complexTypes.includes(this._type);
+  }
+
+  // AIDEV-NOTE: Auto-field helpers for fields that are automatically managed by the system
+  isAutoField(): boolean {
+    const autoTypes: FieldType[] = ['autonumber', 'last-updated', 'created-at'];
+    return autoTypes.includes(this._type);
+  }
+
+  isReadOnly(): boolean {
+    // Auto-fields are read-only - cannot be manually set by users
+    return this.isAutoField();
   }
 
   // Validation methods (consolidated from FieldProcessor)
@@ -289,6 +342,78 @@ export class TableField {
           valid: false,
           error: `${this._name} must have ${metadata.embeddingSize} dimensions, got ${value.length}`
         };
+      }
+    }
+
+    return { valid: true };
+  }
+
+  // AIDEV-NOTE: Validation for new Baserow-inspired field types
+  private validateSingleSelect(value: unknown): { valid: boolean; error?: string } {
+    // Allow null/undefined for optional fields
+    if (value === null || value === undefined) {
+      return { valid: true };
+    }
+
+    if (typeof value !== 'string' && typeof value !== 'number') {
+      return { valid: false, error: `${this._name} must be a string or number` };
+    }
+
+    const config = this._metadata as SingleSelectFieldConfig | undefined;
+    if (config && config.options && config.options.length > 0) {
+      const validValues = config.options.map(o => o.value);
+      const validIds = config.options.map(o => o.id);
+
+      // Accept either option value (string) or option ID (number)
+      const isValid = validValues.includes(String(value)) ||
+                      (typeof value === 'number' && validIds.includes(value));
+
+      if (!isValid) {
+        return {
+          valid: false,
+          error: `${this._name} must be one of: ${validValues.join(', ')}`
+        };
+      }
+    }
+
+    return { valid: true };
+  }
+
+  private validateMultiSelect(value: unknown): { valid: boolean; error?: string } {
+    // Allow null/undefined for optional fields
+    if (value === null || value === undefined) {
+      return { valid: true };
+    }
+
+    if (!Array.isArray(value)) {
+      return { valid: false, error: `${this._name} must be an array` };
+    }
+
+    const config = this._metadata as MultiSelectFieldConfig | undefined;
+
+    // Check max selections limit
+    if (config?.maxSelections && value.length > config.maxSelections) {
+      return {
+        valid: false,
+        error: `${this._name} can have maximum ${config.maxSelections} selections`
+      };
+    }
+
+    // Validate each value is a valid option
+    if (config && config.options && config.options.length > 0) {
+      const validValues = config.options.map(o => o.value);
+      const validIds = config.options.map(o => o.id);
+
+      for (const val of value) {
+        const isValid = validValues.includes(String(val)) ||
+                        (typeof val === 'number' && validIds.includes(val));
+
+        if (!isValid) {
+          return {
+            valid: false,
+            error: `${this._name} contains invalid option: ${val}. Valid options: ${validValues.join(', ')}`
+          };
+        }
       }
     }
 

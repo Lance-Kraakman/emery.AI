@@ -27,6 +27,7 @@ import type { DatabaseOperation } from '@/ddd/domain/scheduling/value-objects/tr
 import type { ITaskRepository, CreateTaskData } from '@/ddd/domain/tasks/repositories/task-repository';
 import { type TriggerContext } from '@/ddd/domain/tasks/entities/task';
 import { TaskId } from '@/ddd/domain/tasks/value-objects/task-id';
+import { AutoFieldProcessor } from './auto-field-processor';
 
 const logger = createDebugLogger('TableService');
 
@@ -141,6 +142,8 @@ export interface SearchTableRowsCommand {
 export type TableApplicationServiceResult<T = any> = Result<T>;
 
 export class TableApplicationService {
+  private readonly autoFieldProcessor: AutoFieldProcessor;
+
   constructor(
     private readonly dynamicTableService: DynamicTableService,
     private readonly databaseRepository: IDatabaseRepository,
@@ -148,7 +151,11 @@ export class TableApplicationService {
     private readonly dynamicTableRepository: IDynamicTableRepository,
     private readonly triggerMatchingService?: ITriggerMatchingService,
     private readonly taskRepository?: ITaskRepository
-  ) {}
+  ) {
+    // AIDEV-NOTE: Initialize AutoFieldProcessor for handling auto-generated fields
+    // (created-at, last-updated, autonumber)
+    this.autoFieldProcessor = new AutoFieldProcessor();
+  }
 
   /**
    * Create a new dynamic table
@@ -728,14 +735,24 @@ export class TableApplicationService {
         return ResultHelpers.failure(`Table ${tableId.value} not found`);
       }
 
+      // AIDEV-NOTE: Process auto-fields BEFORE storing to data lake
+      // Convert Row → named object → process auto-fields → Row
+      const namedData = data.toNamedObject(table.fields);
+      const enrichedNamedData = this.autoFieldProcessor.processAutoFields(
+        table,
+        namedData,
+        'create'
+      );
+      const enrichedRow = Row.fromNamedObject(enrichedNamedData, tableId.value, table.fields);
+
       // Validate relation fields
-      const relationValidation = await this.validateRelationFields(table, data);
+      const relationValidation = await this.validateRelationFields(table, enrichedRow);
       if (!relationValidation.valid) {
         return ResultHelpers.failure(relationValidation.error || 'Relation validation failed');
       }
 
       // Insert single row using batch method
-      const rows = await this.dynamicTableRepository.insertRows(tableId, [data]);
+      const rows = await this.dynamicTableRepository.insertRows(tableId, [enrichedRow]);
       const createdRow = rows[0];
 
       // Emit table trigger event (non-blocking)
@@ -774,8 +791,16 @@ export class TableApplicationService {
         return ResultHelpers.failure(`Table ${tableId.value} not found`);
       }
 
-      // Validate relation fields for all rows
-      for (const row of rows) {
+      // AIDEV-NOTE: Process auto-fields for all rows in batch
+      // Each row gets its own created-at timestamp and sequential autonumber
+      const enrichedRows = rows.map(row => {
+        const namedData = row.toNamedObject(table.fields);
+        const enrichedNamedData = this.autoFieldProcessor.processAutoFields(table, namedData, 'create');
+        return Row.fromNamedObject(enrichedNamedData, tableId.value, table.fields);
+      });
+
+      // Validate relation fields for all enriched rows
+      for (const row of enrichedRows) {
         const relationValidation = await this.validateRelationFields(table, row);
         if (!relationValidation.valid) {
           return ResultHelpers.failure(relationValidation.error || 'Relation validation failed');
@@ -783,7 +808,7 @@ export class TableApplicationService {
       }
 
       // Batch insert all rows in single gRPC call
-      const createdRows = await this.dynamicTableRepository.insertRows(tableId, rows);
+      const createdRows = await this.dynamicTableRepository.insertRows(tableId, enrichedRows);
 
       // Emit table trigger events for each created row (non-blocking)
       // AIDEV-NOTE: For bulk operations, emit event per row to allow fine-grained agent triggering
@@ -820,11 +845,22 @@ export class TableApplicationService {
         return ResultHelpers.failure(`Table ${tableId.value} not found`);
       }
 
-      // Get previous row data for UPDATE trigger event
+      // Get previous row data for UPDATE trigger event and watchFields comparison
       const previousRow = await this.dynamicTableRepository.getRow(tableId, rowId.value);
 
+      // AIDEV-NOTE: Process auto-fields for updates (last-updated timestamps)
+      // Convert Row → named object → process auto-fields → Row
+      const namedData = data.toNamedObject(table.fields);
+      const enrichedNamedData = this.autoFieldProcessor.processAutoFields(
+        table,
+        namedData,
+        'update',
+        previousRow?.toNamedObject(table.fields)
+      );
+      const enrichedRow = Row.fromNamedObject(enrichedNamedData, tableId.value, table.fields);
+
       // Validate relation fields
-      const relationValidation = await this.validateRelationFields(table, data);
+      const relationValidation = await this.validateRelationFields(table, enrichedRow);
       if (!relationValidation.valid) {
         return ResultHelpers.failure(relationValidation.error || 'Relation validation failed');
       }
@@ -832,7 +868,7 @@ export class TableApplicationService {
       // Update single row using batch method
       const updatedRows = await this.dynamicTableRepository.updateRows(tableId, [{
         rowId: rowId.value,
-        row: data
+        row: enrichedRow
       }]);
       const updatedRow = updatedRows[0];
 
@@ -874,8 +910,21 @@ export class TableApplicationService {
         return ResultHelpers.failure(`Table ${tableId.value} not found`);
       }
 
-      // Validate relation fields for all rows
-      for (const update of updates) {
+      // AIDEV-NOTE: Process auto-fields for bulk updates
+      // For performance, we don't fetch previous row data for watchFields comparison in bulk updates
+      // All last-updated fields will be updated
+      const enrichedUpdates = updates.map(update => {
+        const namedData = update.data.toNamedObject(table.fields);
+        const enrichedNamedData = this.autoFieldProcessor.processAutoFields(table, namedData, 'update');
+        const enrichedRow = Row.fromNamedObject(enrichedNamedData, tableId.value, table.fields);
+        return {
+          rowId: update.rowId,
+          data: enrichedRow
+        };
+      });
+
+      // Validate relation fields for all enriched rows
+      for (const update of enrichedUpdates) {
         const relationValidation = await this.validateRelationFields(table, update.data);
         if (!relationValidation.valid) {
           return ResultHelpers.failure(
@@ -887,7 +936,7 @@ export class TableApplicationService {
       // Bulk update using repository (single Delta Lake merge)
       const updatedRows = await this.dynamicTableRepository.updateRows(
         tableId,
-        updates.map(u => ({
+        enrichedUpdates.map(u => ({
           rowId: u.rowId.value,
           row: u.data
         }))
@@ -980,8 +1029,15 @@ export class TableApplicationService {
         return ResultHelpers.failure(`Table ${tableId.value} not found`);
       }
 
+      // AIDEV-NOTE: Process auto-fields for all rows in bulk create
+      const enrichedRows = rows.map(row => {
+        const namedData = row.toNamedObject(table.fields);
+        const enrichedNamedData = this.autoFieldProcessor.processAutoFields(table, namedData, 'create');
+        return Row.fromNamedObject(enrichedNamedData, tableId.value, table.fields);
+      });
+
       // Batch insert all rows in single call
-      const createdRows = await this.dynamicTableRepository.insertRows(tableId, rows);
+      const createdRows = await this.dynamicTableRepository.insertRows(tableId, enrichedRows);
 
       return ResultHelpers.success(createdRows);
 

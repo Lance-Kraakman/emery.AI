@@ -45,6 +45,8 @@ import { RelationField } from '@/components/tables/fields/RelationField'
 import { FileField } from '@/components/tables/fields/FileField'
 import { DocumentField } from '@/components/tables/fields/DocumentField'
 import { EmbeddingField } from '@/components/tables/fields/EmbeddingField'
+import { SingleSelectField } from '@/components/tables/fields/SingleSelectField'
+import { MultiSelectField } from '@/components/tables/fields/MultiSelectField'
 import { FileTypeDetector } from '@/ddd/domain/tables/services/file-type-detector'
 import { createFileArtifact, createDocumentArtifact } from '@/components/chat/types/chat-artifacts'
 import { uiStateActions } from '@/stores/ui-state.store'
@@ -274,6 +276,50 @@ const EmbeddingCell = ({ rowData, columnData }: CellProps<any, any> & { columnDa
   )
 }
 
+const SingleSelectCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO; onUpdateRow: Function; onFieldUpdate: (updates: Partial<FieldDTO>) => Promise<void> } }) => {
+  const { field, onUpdateRow, onFieldUpdate } = columnData
+  const value = rowData?.[field.name]
+  const options = field.metadata?.options || []
+
+  return (
+    <SingleSelectField
+      value={value}
+      onChange={(newValue) => {
+        setRowData({ ...rowData, [field.name]: newValue })
+        // Don't call onUpdateRow immediately - let the main handleChange handle it
+      }}
+      options={options}
+      isEditMode={true}
+      compact={true}
+      field={field}
+      onFieldUpdate={onFieldUpdate}
+    />
+  )
+}
+
+const MultiSelectCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO; onUpdateRow: Function; onFieldUpdate: (updates: Partial<FieldDTO>) => Promise<void> } }) => {
+  const { field, onUpdateRow, onFieldUpdate } = columnData
+  const value = rowData?.[field.name]
+  const options = field.metadata?.options || []
+  const maxSelections = field.metadata?.maxSelections
+
+  return (
+    <MultiSelectField
+      value={value || []}
+      onChange={(newValue) => {
+        setRowData({ ...rowData, [field.name]: newValue })
+        // Don't call onUpdateRow immediately - let the main handleChange handle it
+      }}
+      options={options}
+      maxSelections={maxSelections}
+      isEditMode={true}
+      compact={true}
+      field={field}
+      onFieldUpdate={onFieldUpdate}
+    />
+  )
+}
+
 // Loading state component
 const LoadingState = () => (
   <div className="flex items-center justify-center h-32 text-muted-foreground">
@@ -383,6 +429,26 @@ export function DynamicDataSheetGrid({
     }
   }, [tableId, onRefresh])
 
+  const handleFieldUpdate = useCallback(async (field: FieldDTO, updates: Partial<FieldDTO>) => {
+    const result = await updateField({
+      tableId,
+      fieldName: field.name,
+      updates: {
+        name: updates.name,
+        type: updates.type,
+        required: updates.required ?? undefined,
+        relatedTableId: updates.relatedTableId ?? undefined,
+        metadata: updates.metadata ?? undefined
+      }
+    })
+
+    if (result.success) {
+      onRefresh()
+    } else {
+      throw new Error(result.error || "Failed to update field")
+    }
+  }, [tableId, onRefresh])
+
   // Use custom hook for column building
   const columns = useGridColumns({
     fields,
@@ -393,12 +459,15 @@ export function DynamicDataSheetGrid({
     onEditField: handleEditField,
     onDeleteField: handleDeleteField,
     onAddColumn: handleAddColumn,
+    onFieldUpdate: handleFieldUpdate,
     onSort,
     onClearSort,
     RelationCell,
     FileCell,
     DocumentCell,
     EmbeddingCell,
+    SingleSelectCell,
+    MultiSelectCell,
   })
 
   /**
