@@ -405,7 +405,15 @@ export function useChatGRPC(
             try {
               const eventData = JSON.parse(line.substring(6))
 
-              if (isStepProgressEvent(eventData)) {
+              if (eventData.type === 'chat_created') {
+                // AIDEV-NOTE: Backend sends chatId immediately when chat is created
+                // This ensures we track the same chat from the first message
+                const chatId = eventData.chatId
+                logger.summary('Chat created', { chatId })
+                setCurrentChatId(chatId)
+                onChatCreated?.(chatId)
+
+              } else if (isStepProgressEvent(eventData)) {
                 setCurrentStep({
                   type: eventData.stepType,
                   name: eventData.stepName,
