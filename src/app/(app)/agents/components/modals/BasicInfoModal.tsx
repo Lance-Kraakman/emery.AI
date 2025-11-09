@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, X, User, Pencil } from 'lucide-react';
+import { Loader2, Save, X, User, Pencil, Sparkles } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import { UserSelect } from '@/components/ui/UserSelect';
@@ -17,6 +17,7 @@ import { useSession } from 'next-auth/react';
 import { AgentAvatar } from '@/components/agents/AgentAvatar';
 import type { AvatarConfigV1 } from '@/lib/avatars';
 import { AvatarCustomizationModal } from './AvatarCustomizationModal';
+import { ModelSelector } from '@/components/ai/ModelSelector';
 
 interface BasicInfoModalProps {
   isOpen: boolean;
@@ -32,6 +33,7 @@ interface FormData {
   status: string;
   ownerId: string;
   avatarConfig?: AvatarConfigV1 | null;
+  defaultModel?: string | null;
 }
 
 interface User {
@@ -49,7 +51,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
     description: '',
     status: 'active',
     ownerId: '',
-    avatarConfig: null
+    avatarConfig: null,
+    defaultModel: null
   });
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -75,7 +78,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
         description: agent.description || '',
         status: agent.status || 'active',
         ownerId: agent.ownerId || '',
-        avatarConfig: agent.avatarConfig || null
+        avatarConfig: agent.avatarConfig || null,
+        defaultModel: agent.defaultModel || null
       };
       setFormData(initialData);
       setHasChanges(false);
@@ -120,7 +124,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
         formData.description !== (agent.description || '') ||
         formData.status !== (agent.status || 'active') ||
         formData.ownerId !== (agent.ownerId || '') ||
-        JSON.stringify(formData.avatarConfig) !== JSON.stringify(agent.avatarConfig)
+        JSON.stringify(formData.avatarConfig) !== JSON.stringify(agent.avatarConfig) ||
+        formData.defaultModel !== (agent.defaultModel || null)
       );
       setHasChanges(hasChanged);
     }
@@ -140,6 +145,7 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
         description: formData.description.trim(),
         status: formData.status as 'active' | 'inactive' | 'archived',
         avatarConfig: formData.avatarConfig,
+        defaultModel: formData.defaultModel,
         ...(canManageAgents && formData.ownerId && { ownerId: formData.ownerId })
       });
 
@@ -341,6 +347,31 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
           <p className="text-xs text-muted-foreground">
             Optional: Provide details about the agent's purpose and skills
           </p>
+        </div>
+
+        {/* AI Configuration */}
+        <div className="space-y-2 pt-4 border-t">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="h-4 w-4 text-muted-foreground" />
+            <Label className="text-sm font-medium m-0">AI Configuration</Label>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="model" className="text-sm font-medium">
+              Default Model
+            </Label>
+            <ModelSelector
+              value={formData.defaultModel || null}
+              onChange={(model) => setFormData(prev => ({ ...prev, defaultModel: model }))}
+              organizationTier="free"
+              showInherit={true}
+              inheritLabel="Inherit from organization"
+              requiredCapabilities={['toolCalling']}
+              disabled={isSaving}
+            />
+            <p className="text-xs text-muted-foreground">
+              Set the default AI model for this agent. Leave unset to inherit from organization settings.
+            </p>
+          </div>
         </div>
       </div>
 

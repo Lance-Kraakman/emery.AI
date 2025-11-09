@@ -18,12 +18,23 @@ import type { ToolConfigDTO } from './agent.dto';
  * Task instructions for a schedule
  * Defines WHAT task to create when the schedule triggers
  *
- * Same structure as skill step instructions - supports @ mentions for tools/skills/files
+ * AIDEV-NOTE: Aligned with smolagents API format (2025-01)
+ * - task: Main instruction text → agent.run(task=...)
+ * - images: Image URLs for vision models
+ * - attachments: File metadata (preprocessed to text)
  */
 export interface TaskInstructionsDTO {
-  instructions: string;           // Full task instructions with @ references
-  tools: ToolConfigDTO[];        // Tools selected via @ mentions or UI
-  metadata?: Record<string, any>; // Additional task metadata
+  task: string;                                      // Main instruction text (required)
+  images?: Array<{ url: string; s3Key?: string }>;  // Image attachments
+  attachments?: Array<{                             // File attachments (preprocessed)
+    type: 'pdf' | 'audio' | 'document' | 'text';
+    url: string;
+    filename: string;
+    mimeType: string;
+    preprocessed: true;
+  }>;
+  tools: ToolConfigDTO[];                           // Tools selected via @ mentions or UI
+  metadata?: Record<string, any>;                   // Additional task metadata
 }
 
 /**

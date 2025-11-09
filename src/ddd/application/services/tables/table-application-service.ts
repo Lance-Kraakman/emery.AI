@@ -1111,11 +1111,45 @@ export class TableApplicationService {
             tableChange: event
           };
 
+          // Build enhanced task instruction text with event context
+          const eventDataPreview = JSON.stringify(event.rowData, null, 2);
+          const baseInstruction = match.schedule.taskInstructions.task || '';
+
+          const enhancedTask = `
+DATABASE EVENT TRIGGER
+Table: ${event.tableName} (ID: ${event.tableId})
+Operation: ${event.operation}
+Row ID: ${event.rowId}
+Timestamp: ${event.timestamp.toISOString()}
+
+Row Data:
+${eventDataPreview}
+
+${event.previousRowData ? `
+Previous Data:
+${JSON.stringify(event.previousRowData, null, 2)}
+` : ''}
+
+INSTRUCTIONS:
+${baseInstruction}
+          `.trim();
+
           const taskData: CreateTaskData = {
             agentId: match.agent.id.value,
             organizationId: event.organizationId.value,
             name: match.schedule.name || `Table ${event.operation} trigger`,
-            instructions: match.schedule.taskInstructions,
+            instructions: {
+              ...match.schedule.taskInstructions,
+              task: enhancedTask,
+              metadata: {
+                ...match.schedule.taskInstructions.metadata,
+                triggeredBy: 'DATABASE_EVENT',
+                tableName: event.tableName,
+                tableId: event.tableId,
+                operation: event.operation,
+                rowId: event.rowId
+              }
+            },
             triggerContext
           };
 

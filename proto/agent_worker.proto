@@ -28,7 +28,8 @@ message TaskRequest {
   string owner_id = 7;             // Agent owner ID for OAuth credentials
   int32 timeout_seconds = 8;       // Task execution timeout (default: 300)
   string name = 10;
-  string organization_model = 11;  // Organization default model (fallback for agent)
+  string agent_model = 11;         // Agent default model (overrides organization model in hierarchy)
+  string organization_model = 12;  // Organization default model (fallback for agent model)
 }
 
 // AIDEV-NOTE: Simplified for single-instruction execution (removed step_id and step_type)
@@ -160,12 +161,31 @@ message TriggerData {
   map<string, string> payload = 1;
 }
 
-// Instruction-based execution configuration for auto-routing
+// AIDEV-NOTE: Task instruction format aligned with smolagents API
+// - task: Main text instruction → agent.run(task=...)
+// - images: Image URLs → downloaded → agent.run(images=[PIL.Image, ...])
+// - attachments: File metadata (preprocessed to text, already in task field)
 message InstructionConfig {
-  string instructions = 1;           // Natural language instructions
-  repeated ToolConfig tools = 2;     // Optional tools for this task
-  repeated ServerConfig servers = 3; // Optional servers for this task
-  string model = 4;                  // Optional: model override for this instruction
+  string task = 1;                          // Main instruction text (required)
+  repeated ImageAttachment images = 2;       // Image URLs (optional)
+  repeated FileAttachment attachments = 3;   // File metadata (optional, for tracking)
+  repeated ToolConfig tools = 4;             // Optional tools for this task
+  repeated ServerConfig servers = 5;         // Optional servers for this task
+  string model = 6;                          // Optional: model override for this instruction
+}
+
+// Image attachment for task instructions
+message ImageAttachment {
+  string url = 1;      // S3 pre-signed URL or HTTP URL
+  string s3_key = 2;   // S3 key for reference (optional)
+}
+
+// File attachment metadata (files are preprocessed to text)
+message FileAttachment {
+  string type = 1;        // pdf, audio, document, text
+  string url = 2;         // S3 pre-signed URL
+  string filename = 3;    // Original filename
+  string mime_type = 4;   // MIME type
 }
 
 // gRPC Chat Processing Service - AI operations only (stateless)

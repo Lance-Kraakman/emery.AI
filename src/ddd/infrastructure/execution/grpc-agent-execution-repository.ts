@@ -27,21 +27,10 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
    * Execute agent via gRPC worker
    */
   async executeAgent(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
-    const { agentId, instructions, skillName, tools, executionId, organizationId, timeoutSeconds, onProgress } = request;
+    const { agentId, instructions, tools, executionId, organizationId, timeoutSeconds, onProgress, agentModel, organizationModel } = request;
 
     console.log(`[GRPC-EXECUTION-REPO] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
-    console.log(`[GRPC-EXECUTION-REPO-DEBUG] Capability routing:`, {
-      skillName,
-      skillNameType: typeof skillName,
-      skillNameTruthy: !!skillName,
-      skillNameLength: skillName?.length,
-      willUseCapabilityMode: !!skillName
-    });
-    if (skillName) {
-      console.log(`[GRPC-EXECUTION-REPO] Capability-based execution: ${skillName}`);
-    } else {
-      console.log(`[GRPC-EXECUTION-REPO] Instruction-based execution (no capability name)`);
-    }
+    console.log(`[GRPC-EXECUTION-REPO] Model selection: agentModel=${agentModel || 'none'}, orgModel=${organizationModel || 'none'}`);
 
     try {
       // 1. Load agent configuration (delegated to agent repository)
@@ -50,15 +39,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         throw new Error(`Agent ${agentId} not found`);
       }
 
-      // 2. Load organization for model selection hierarchy
-      const orgRepository = getOrganizationRepository();
-      const organization = await orgRepository.findById(agent.organizationId);
-      const organizationModel = organization?.defaultModel || null;
-
-      console.log(`[GRPC-EXECUTION-REPO] Agent model: ${agent.defaultModel || 'not set (will use org/system default)'}`);
-      console.log(`[GRPC-EXECUTION-REPO] Organization model: ${organizationModel || 'not set (will use system default)'}`);
-
-      // 3. Determine organization context
+      // 2. Determine organization context
       const targetOrganizationId = organizationId || agent.organizationId;
       const organizationIdStr = targetOrganizationId.toString();
 
@@ -70,46 +51,36 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       // 4. Enrich agent with API key in tools (following chat pattern)
       const enrichedAgent = this.enrichAgentTools(agent);
 
-      // 5. Create proto task request - use capability mode if skillName provided
-      const taskRequest = skillName
-        ? createTaskRequest({
-            taskId: executionId,
-            agentId: agent.id.value,
-            skillName: skillName, // Use capability-based execution
-            agent: enrichedAgent, // Use enriched agent with API key in tool configs
-            triggerData: {}, // Empty for proto compatibility
-            organizationId: organizationIdStr,
-            ownerId: agent.ownerId.value,
-            timeoutSeconds: timeoutSeconds || 300,
-            organizationModel: organizationModel || undefined // Pass organization model for hierarchy
-          })
-        : createTaskRequest({
-            taskId: executionId,
-            agentId: agent.id.value,
-            instructionConfig: { // Use instruction-based execution
-              instructions,
-              tools: this.enrichTools((tools || []).map(tool =>
-                tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
-              ), agent.apiKey?.value)
-            },
-            agent: enrichedAgent,
-            triggerData: {}, // Empty for proto compatibility
-            organizationId: organizationIdStr,
-            ownerId: agent.ownerId.value,
-            timeoutSeconds: timeoutSeconds || 300,
-            organizationModel: organizationModel || undefined // Pass organization model for hierarchy
-          });
+      // 5. Create proto task request - always use instruction-based execution
+      const taskRequest = createTaskRequest({
+        taskId: executionId,
+        agentId: agent.id.value,
+        instructionConfig: { // Instruction-based execution with task instructions
+          task: instructions,
+          tools: this.enrichTools((tools || []).map(tool =>
+            tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
+          ), agent.apiKey?.value)
+        },
+        agent: enrichedAgent,
+        triggerData: {}, // Empty for proto compatibility
+        organizationId: organizationIdStr,
+        ownerId: agent.ownerId.value,
+        timeoutSeconds: timeoutSeconds || 300,
+        agentModel: agentModel || undefined, // Pass agent model for hierarchy
+        organizationModel: organizationModel || undefined // Pass organization model for hierarchy
+      });
 
       // AIDEV-DEBUG: Log what we're actually sending to Python
       console.log('[GRPC-DEBUG] TaskRequest being sent:', JSON.stringify({
         taskId: taskRequest.taskId,
         agentId: taskRequest.agentId,
-        skillName: taskRequest.skillName,
         hasInstructionConfig: !!taskRequest.instructionConfig,
         instructionConfig: taskRequest.instructionConfig,
         instructionsText: instructions,
         toolsCount: tools?.length || 0,
-        organizationId: taskRequest.organizationId
+        organizationId: taskRequest.organizationId,
+        agentModel: taskRequest.agentModel,
+        organizationModel: taskRequest.organizationModel
       }, null, 2));
 
       // 5. Initialize execution tracking
@@ -194,8 +165,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
               inputTokens: tokenUsage.inputTokens,
               outputTokens: tokenUsage.outputTokens,
               metadata: {
-                taskName: skillName || 'instruction_based',
-                skillName: skillName,
+                taskName: 'task_execution',
                 success: true
               }
             }).catch((error) => {

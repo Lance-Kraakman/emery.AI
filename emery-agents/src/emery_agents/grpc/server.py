@@ -60,16 +60,31 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         }
 
         try:
-            # Extract model parameters from proto request for model selection hierarchy
-            agent_model = None
-            if hasattr(task_request, 'agent_config') and task_request.agent_config:
-                agent_model = getattr(task_request.agent_config, 'default_model', None)
-                if agent_model:
-                    logger.info(f"🔧 [TASK-{task_request.task_id[:8]}] Agent model override: {agent_model}")
+            # DEBUG: Log raw request fields FIRST
+            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] RAW REQUEST FIELDS:")
+            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] - agent_model field: {repr(getattr(task_request, 'agent_model', 'FIELD_NOT_FOUND'))}")
+            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] - organization_model field: {repr(getattr(task_request, 'organization_model', 'FIELD_NOT_FOUND'))}")
+            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] - agent_model type: {type(getattr(task_request, 'agent_model', None))}")
+            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] - organization_model type: {type(getattr(task_request, 'organization_model', None))}")
+            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] - agent_model bool: {bool(getattr(task_request, 'agent_model', None))}")
+            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] - organization_model bool: {bool(getattr(task_request, 'organization_model', None))}")
 
-            org_model = getattr(task_request, 'organization_model', None)
+            # Extract model parameters from proto request for model selection hierarchy
+            # AIDEV-NOTE: Model hierarchy: agent_model (request) → agent_config.default_model → org_model → system default
+            agent_model = getattr(task_request, 'agent_model', None) or None  # Direct agent_model from request (preferred)
+            if not agent_model and hasattr(task_request, 'agent_config') and task_request.agent_config:
+                agent_model = getattr(task_request.agent_config, 'default_model', None)  # Fallback to agent config
+
+            if agent_model:
+                logger.info(f"🔧 [TASK-{task_request.task_id[:8]}] Agent model: {agent_model}")
+            else:
+                logger.info(f"⚠️  [TASK-{task_request.task_id[:8]}] NO agent_model found")
+
+            org_model = getattr(task_request, 'organization_model', None) or None
             if org_model:
                 logger.info(f"🔧 [TASK-{task_request.task_id[:8]}] Organization model: {org_model}")
+            else:
+                logger.info(f"⚠️  [TASK-{task_request.task_id[:8]}] NO organization_model found")
 
             # Convert TaskRequest to ExecutionContext (simplified - no DDD)
             execution_context = self.agent_executor.determine_execution_context(task_request)
@@ -77,6 +92,8 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             # Add model parameters to execution context
             execution_context.agent_model = agent_model
             execution_context.org_model = org_model
+
+            logger.info(f"🔧 [TASK-{task_request.task_id[:8]}] Model context set: agent={agent_model or 'none'}, org={org_model or 'none'}")
 
             # Stream execution progress (simplified - direct executor)
             async for progress_dict in self.agent_executor.execute_task(execution_context):

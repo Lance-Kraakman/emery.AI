@@ -100,11 +100,9 @@ export class SchedulerService implements ISchedulerService {
         const task = Task.create({
           agentId: agent.id,
           organizationId: agent.organizationId,
-          name: schedule.name || `Scheduled: ${schedule.taskInstructions.instructions.substring(0, 50)}`,
-          skillName: undefined,
+          name: schedule.name || `Scheduled: ${schedule.taskInstructions.task.substring(0, 50)}`,
           instructions: {
-            instructions: schedule.taskInstructions.instructions,
-            tools: schedule.taskInstructions.tools,
+            ...schedule.taskInstructions,
             metadata: {
               ...schedule.taskInstructions.metadata,
               scheduleType: schedule.trigger.type,

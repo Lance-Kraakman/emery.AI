@@ -212,7 +212,9 @@ export interface TaskRequest {
   /** Task execution timeout (default: 300) */
   timeoutSeconds: number;
   name: string;
-  /** Organization default model (fallback for agent) */
+  /** Agent default model (overrides organization model in hierarchy) */
+  agentModel: string;
+  /** Organization default model (fallback for agent model) */
   organizationModel: string;
 }
 
@@ -373,16 +375,45 @@ export interface TriggerData_PayloadEntry {
   value: string;
 }
 
-/** Instruction-based execution configuration for auto-routing */
+/**
+ * AIDEV-NOTE: Task instruction format aligned with smolagents API
+ * - task: Main text instruction → agent.run(task=...)
+ * - images: Image URLs → downloaded → agent.run(images=[PIL.Image, ...])
+ * - attachments: File metadata (preprocessed to text, already in task field)
+ */
 export interface InstructionConfig {
-  /** Natural language instructions */
-  instructions: string;
+  /** Main instruction text (required) */
+  task: string;
+  /** Image URLs (optional) */
+  images: ImageAttachment[];
+  /** File metadata (optional, for tracking) */
+  attachments: FileAttachment[];
   /** Optional tools for this task */
   tools: ToolConfig[];
   /** Optional servers for this task */
   servers: ServerConfig[];
   /** Optional: model override for this instruction */
   model: string;
+}
+
+/** Image attachment for task instructions */
+export interface ImageAttachment {
+  /** S3 pre-signed URL or HTTP URL */
+  url: string;
+  /** S3 key for reference (optional) */
+  s3Key: string;
+}
+
+/** File attachment metadata (files are preprocessed to text) */
+export interface FileAttachment {
+  /** pdf, audio, document, text */
+  type: string;
+  /** S3 pre-signed URL */
+  url: string;
+  /** Original filename */
+  filename: string;
+  /** MIME type */
+  mimeType: string;
 }
 
 /** Request for AI message processing */
@@ -433,7 +464,14 @@ export interface ProcessMessageResponse {
   timestamp: number;
 }
 
-/** Multimodal message part (text, image, or file attachment) */
+/**
+ * Multimodal message part (text, image, or file attachment)
+ * AIDEV-NOTE: Multi-attachment support implemented (2025-01)
+ * - ImageUrlPart: Vision model support (PIL Images → base64)
+ * - FilePart: Text extraction from PDFs, audio transcription, documents
+ * - Simple extraction approach (no embeddings/RAG initially)
+ * - Files processed async in message_mapper.py using file_processor.py
+ */
 export interface MessagePart {
   text?: TextPart | undefined;
   imageUrl?:
@@ -595,6 +633,7 @@ function createBaseTaskRequest(): TaskRequest {
     ownerId: "",
     timeoutSeconds: 0,
     name: "",
+    agentModel: "",
     organizationModel: "",
   };
 }
@@ -631,8 +670,11 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     if (message.name !== "") {
       writer.uint32(82).string(message.name);
     }
+    if (message.agentModel !== "") {
+      writer.uint32(90).string(message.agentModel);
+    }
     if (message.organizationModel !== "") {
-      writer.uint32(90).string(message.organizationModel);
+      writer.uint32(98).string(message.organizationModel);
     }
     return writer;
   },
@@ -729,6 +771,14 @@ export const TaskRequest: MessageFns<TaskRequest> = {
             break;
           }
 
+          message.agentModel = reader.string();
+          continue;
+        }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
           message.organizationModel = reader.string();
           continue;
         }
@@ -755,6 +805,7 @@ export const TaskRequest: MessageFns<TaskRequest> = {
       ownerId: isSet(object.ownerId) ? globalThis.String(object.ownerId) : "",
       timeoutSeconds: isSet(object.timeoutSeconds) ? globalThis.Number(object.timeoutSeconds) : 0,
       name: isSet(object.name) ? globalThis.String(object.name) : "",
+      agentModel: isSet(object.agentModel) ? globalThis.String(object.agentModel) : "",
       organizationModel: isSet(object.organizationModel) ? globalThis.String(object.organizationModel) : "",
     };
   },
@@ -791,6 +842,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     if (message.name !== "") {
       obj.name = message.name;
     }
+    if (message.agentModel !== "") {
+      obj.agentModel = message.agentModel;
+    }
     if (message.organizationModel !== "") {
       obj.organizationModel = message.organizationModel;
     }
@@ -818,6 +872,7 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     message.ownerId = object.ownerId ?? "";
     message.timeoutSeconds = object.timeoutSeconds ?? 0;
     message.name = object.name ?? "";
+    message.agentModel = object.agentModel ?? "";
     message.organizationModel = object.organizationModel ?? "";
     return message;
   },
@@ -2594,22 +2649,28 @@ export const TriggerData_PayloadEntry: MessageFns<TriggerData_PayloadEntry> = {
 };
 
 function createBaseInstructionConfig(): InstructionConfig {
-  return { instructions: "", tools: [], servers: [], model: "" };
+  return { task: "", images: [], attachments: [], tools: [], servers: [], model: "" };
 }
 
 export const InstructionConfig: MessageFns<InstructionConfig> = {
   encode(message: InstructionConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.instructions !== "") {
-      writer.uint32(10).string(message.instructions);
+    if (message.task !== "") {
+      writer.uint32(10).string(message.task);
+    }
+    for (const v of message.images) {
+      ImageAttachment.encode(v!, writer.uint32(18).fork()).join();
+    }
+    for (const v of message.attachments) {
+      FileAttachment.encode(v!, writer.uint32(26).fork()).join();
     }
     for (const v of message.tools) {
-      ToolConfig.encode(v!, writer.uint32(18).fork()).join();
+      ToolConfig.encode(v!, writer.uint32(34).fork()).join();
     }
     for (const v of message.servers) {
-      ServerConfig.encode(v!, writer.uint32(26).fork()).join();
+      ServerConfig.encode(v!, writer.uint32(42).fork()).join();
     }
     if (message.model !== "") {
-      writer.uint32(34).string(message.model);
+      writer.uint32(50).string(message.model);
     }
     return writer;
   },
@@ -2626,7 +2687,7 @@ export const InstructionConfig: MessageFns<InstructionConfig> = {
             break;
           }
 
-          message.instructions = reader.string();
+          message.task = reader.string();
           continue;
         }
         case 2: {
@@ -2634,7 +2695,7 @@ export const InstructionConfig: MessageFns<InstructionConfig> = {
             break;
           }
 
-          message.tools.push(ToolConfig.decode(reader, reader.uint32()));
+          message.images.push(ImageAttachment.decode(reader, reader.uint32()));
           continue;
         }
         case 3: {
@@ -2642,11 +2703,27 @@ export const InstructionConfig: MessageFns<InstructionConfig> = {
             break;
           }
 
-          message.servers.push(ServerConfig.decode(reader, reader.uint32()));
+          message.attachments.push(FileAttachment.decode(reader, reader.uint32()));
           continue;
         }
         case 4: {
           if (tag !== 34) {
+            break;
+          }
+
+          message.tools.push(ToolConfig.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.servers.push(ServerConfig.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
             break;
           }
 
@@ -2664,7 +2741,13 @@ export const InstructionConfig: MessageFns<InstructionConfig> = {
 
   fromJSON(object: any): InstructionConfig {
     return {
-      instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
+      task: isSet(object.task) ? globalThis.String(object.task) : "",
+      images: globalThis.Array.isArray(object?.images)
+        ? object.images.map((e: any) => ImageAttachment.fromJSON(e))
+        : [],
+      attachments: globalThis.Array.isArray(object?.attachments)
+        ? object.attachments.map((e: any) => FileAttachment.fromJSON(e))
+        : [],
       tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
       servers: globalThis.Array.isArray(object?.servers)
         ? object.servers.map((e: any) => ServerConfig.fromJSON(e))
@@ -2675,8 +2758,14 @@ export const InstructionConfig: MessageFns<InstructionConfig> = {
 
   toJSON(message: InstructionConfig): unknown {
     const obj: any = {};
-    if (message.instructions !== "") {
-      obj.instructions = message.instructions;
+    if (message.task !== "") {
+      obj.task = message.task;
+    }
+    if (message.images?.length) {
+      obj.images = message.images.map((e) => ImageAttachment.toJSON(e));
+    }
+    if (message.attachments?.length) {
+      obj.attachments = message.attachments.map((e) => FileAttachment.toJSON(e));
     }
     if (message.tools?.length) {
       obj.tools = message.tools.map((e) => ToolConfig.toJSON(e));
@@ -2695,10 +2784,196 @@ export const InstructionConfig: MessageFns<InstructionConfig> = {
   },
   fromPartial<I extends Exact<DeepPartial<InstructionConfig>, I>>(object: I): InstructionConfig {
     const message = createBaseInstructionConfig();
-    message.instructions = object.instructions ?? "";
+    message.task = object.task ?? "";
+    message.images = object.images?.map((e) => ImageAttachment.fromPartial(e)) || [];
+    message.attachments = object.attachments?.map((e) => FileAttachment.fromPartial(e)) || [];
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.servers = object.servers?.map((e) => ServerConfig.fromPartial(e)) || [];
     message.model = object.model ?? "";
+    return message;
+  },
+};
+
+function createBaseImageAttachment(): ImageAttachment {
+  return { url: "", s3Key: "" };
+}
+
+export const ImageAttachment: MessageFns<ImageAttachment> = {
+  encode(message: ImageAttachment, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.url !== "") {
+      writer.uint32(10).string(message.url);
+    }
+    if (message.s3Key !== "") {
+      writer.uint32(18).string(message.s3Key);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ImageAttachment {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseImageAttachment();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.url = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.s3Key = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ImageAttachment {
+    return {
+      url: isSet(object.url) ? globalThis.String(object.url) : "",
+      s3Key: isSet(object.s3Key) ? globalThis.String(object.s3Key) : "",
+    };
+  },
+
+  toJSON(message: ImageAttachment): unknown {
+    const obj: any = {};
+    if (message.url !== "") {
+      obj.url = message.url;
+    }
+    if (message.s3Key !== "") {
+      obj.s3Key = message.s3Key;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ImageAttachment>, I>>(base?: I): ImageAttachment {
+    return ImageAttachment.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ImageAttachment>, I>>(object: I): ImageAttachment {
+    const message = createBaseImageAttachment();
+    message.url = object.url ?? "";
+    message.s3Key = object.s3Key ?? "";
+    return message;
+  },
+};
+
+function createBaseFileAttachment(): FileAttachment {
+  return { type: "", url: "", filename: "", mimeType: "" };
+}
+
+export const FileAttachment: MessageFns<FileAttachment> = {
+  encode(message: FileAttachment, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.type !== "") {
+      writer.uint32(10).string(message.type);
+    }
+    if (message.url !== "") {
+      writer.uint32(18).string(message.url);
+    }
+    if (message.filename !== "") {
+      writer.uint32(26).string(message.filename);
+    }
+    if (message.mimeType !== "") {
+      writer.uint32(34).string(message.mimeType);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FileAttachment {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFileAttachment();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.url = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.filename = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.mimeType = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FileAttachment {
+    return {
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+      url: isSet(object.url) ? globalThis.String(object.url) : "",
+      filename: isSet(object.filename) ? globalThis.String(object.filename) : "",
+      mimeType: isSet(object.mimeType) ? globalThis.String(object.mimeType) : "",
+    };
+  },
+
+  toJSON(message: FileAttachment): unknown {
+    const obj: any = {};
+    if (message.type !== "") {
+      obj.type = message.type;
+    }
+    if (message.url !== "") {
+      obj.url = message.url;
+    }
+    if (message.filename !== "") {
+      obj.filename = message.filename;
+    }
+    if (message.mimeType !== "") {
+      obj.mimeType = message.mimeType;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FileAttachment>, I>>(base?: I): FileAttachment {
+    return FileAttachment.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FileAttachment>, I>>(object: I): FileAttachment {
+    const message = createBaseFileAttachment();
+    message.type = object.type ?? "";
+    message.url = object.url ?? "";
+    message.filename = object.filename ?? "";
+    message.mimeType = object.mimeType ?? "";
     return message;
   },
 };

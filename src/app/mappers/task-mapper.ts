@@ -5,7 +5,7 @@
  * Handles conversion from Value Objects to serializable primitives.
  */
 
-import type { Task as TaskEntity, TaskInstructions } from '@/ddd/domain/tasks/entities/task';
+import type { Task as TaskEntity, TaskInstructions, TriggerContext } from '@/ddd/domain/tasks/entities/task';
 
 // DTO representing a task as returned by server actions to the frontend
 export interface TaskDTO {
@@ -13,8 +13,8 @@ export interface TaskDTO {
   agentId: number;                    // Converted from AgentId value object
   organizationId: number;             // Converted from OrganizationId value object
   name: string;
-  skillName: string | null;
   instructions: TaskInstructions;
+  triggerContext: TriggerContext | null; // What triggered this task (schedule, manual, etc.)
   status: string;                     // Converted from TaskStatus value object
   result: any;
   error: string | null;
@@ -34,8 +34,8 @@ export function taskToDTO(task: TaskEntity): TaskDTO {
     agentId: task.agentId.value,
     organizationId: task.organizationId.value,
     name: task.name,
-    skillName: task.skillName,
     instructions: task.instructions,
+    triggerContext: task.triggerContext,
     status: task.status.value,
     result: task.result,
     error: task.error,

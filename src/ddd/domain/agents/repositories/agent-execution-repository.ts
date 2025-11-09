@@ -11,12 +11,13 @@
 export interface AgentExecutionRequest {
   agentId: number;
   instructions: string;
-  skillName?: string; // Optional - for capability-based execution
   tools?: Array<{name: string, version?: string, config?: Record<string, any>}>;
   servers?: Array<{name: string, endpoint?: string, config?: Record<string, any>}>;
   executionId: string;
   organizationId?: number;
   ownerId?: string;
+  agentModel?: string; // Optional - agent's default model (overrides org model)
+  organizationModel?: string; // Optional - organization's default model
   timeoutSeconds?: number;
   onProgress?: (logMessage: string) => void; // Callback for real-time log messages
 }

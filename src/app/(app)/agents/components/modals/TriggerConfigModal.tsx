@@ -153,11 +153,8 @@ export function TriggerConfigModal({
       }
 
       // Load task instructions if available (new format)
-      // @ts-ignore - TODO: Fix after ScheduleConfigurationDTO migration complete
       setScheduleName(schedule.name || '');
-      // @ts-ignore - TODO: Fix after ScheduleConfigurationDTO migration complete
-      setTaskInstructions(schedule.taskInstructions?.instructions || '');
-      // @ts-ignore - TODO: Fix after ScheduleConfigurationDTO migration complete
+      setTaskInstructions(schedule.taskInstructions?.task || '');
       setTaskTools(schedule.taskInstructions?.tools || []);
 
       setCurrentStep('select');
@@ -253,7 +250,7 @@ export function TriggerConfigModal({
       const newSchedule: ScheduleConfigurationDTO = {
         trigger: triggerConfig.toJSON() as any, // AIDEV-NOTE: toJSON() returns plain object compatible with TriggerConfigDTO
         taskInstructions: {
-          instructions: taskInstructions,
+          task: taskInstructions,
           tools: taskTools,
           metadata: {}
         },
@@ -266,7 +263,7 @@ export function TriggerConfigModal({
       console.log('[TriggerConfigModal] Schedule object created', {
         newSchedule,
         hasValidTrigger: !!newSchedule.trigger,
-        hasValidInstructions: !!newSchedule.taskInstructions?.instructions
+        hasValidInstructions: !!newSchedule.taskInstructions?.task
       });
 
       // Step 3: Update schedules array based on mode

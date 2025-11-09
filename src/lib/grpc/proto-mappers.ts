@@ -77,23 +77,39 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
 
 /**
  * Map instruction config to protobuf InstructionConfig
+ *
+ * AIDEV-NOTE: Updated to support multimodal task instructions (2025-01)
+ * - task: Main text instruction
+ * - images: Image URLs for vision models
+ * - attachments: File metadata (preprocessed to text)
  */
 export function mapInstructionConfigToProto(instructionConfig: {
-  instructions: string;
+  task: string;
+  images?: Array<{ url: string; s3Key?: string }>;
+  attachments?: Array<{ type: string; url: string; filename: string; mimeType: string }>;
   tools?: ToolConfig[];
-  model?: string;
+  metadata?: Record<string, any>;
 }): InstructionConfigProto {
   return {
-    instructions: instructionConfig.instructions,
+    task: instructionConfig.task,
+    images: instructionConfig.images?.map(img => ({ url: img.url, s3Key: img.s3Key || '' })) || [],
+    attachments: instructionConfig.attachments?.map(att => ({
+      type: att.type,
+      url: att.url,
+      filename: att.filename,
+      mimeType: att.mimeType
+    })) || [],
     tools: instructionConfig.tools?.filter(tool => tool !== null && tool !== undefined)?.map(mapToolToProto) || [],
     servers: [], // Servers removed from task instructions
-    model: instructionConfig.model || '' // Empty model will be resolved by worker using hierarchy
+    model: '' // Empty model will be resolved by worker using hierarchy
   };
 }
 
 /**
  * Create complete TaskRequest proto message from TypeScript types
  * Supports both direct capability execution and instruction-based auto-routing
+ *
+ * AIDEV-NOTE: Updated for multimodal support (2025-01)
  */
 export function createTaskRequest(params: {
   taskId: string;
@@ -101,14 +117,18 @@ export function createTaskRequest(params: {
   // Execution mode - use one of the following
   skillName?: string;  // Direct capability execution
   instructionConfig?: {     // Instruction-based execution with auto-routing
-    instructions: string;
+    task: string;
+    images?: Array<{ url: string; s3Key?: string }>;
+    attachments?: Array<{ type: string; url: string; filename: string; mimeType: string }>;
     tools?: ToolConfig[];
+    metadata?: Record<string, any>;
   };
   agent: Agent;
   triggerData: Record<string, any>;
   organizationId: string;
   ownerId: string;
   timeoutSeconds?: number;
+  agentModel?: string; // Agent default model (overrides organization model)
   organizationModel?: string; // Organization default model (fallback for agent model)
 }): TaskRequest {
   // Convert trigger data to string map format expected by proto
@@ -131,8 +151,19 @@ export function createTaskRequest(params: {
     organizationId: params.organizationId,
     ownerId: params.ownerId,
     timeoutSeconds: params.timeoutSeconds || 300,
+    agentModel: params.agentModel || '', // Agent default model (overrides org model in hierarchy)
     organizationModel: params.organizationModel || '' // Organization default model for fallback
   };
+
+  // Debug logging for model selection
+  console.log(`[PROTO-MAPPER] TaskRequest model fields set:`, {
+    agentModel: request.agentModel,
+    organizationModel: request.organizationModel,
+    agentModelLength: request.agentModel?.length,
+    organizationModelLength: request.organizationModel?.length,
+    agentModelParam: params.agentModel,
+    organizationModelParam: params.organizationModel
+  });
 
   // Set execution mode (oneof field)
   if (params.skillName) {

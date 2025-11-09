@@ -11,9 +11,9 @@ import type { CreateTaskDTO } from "@/app/dtos/task.dto";
 export async function createTask(data: CreateTaskData): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const { agentId, name, skillName, instructions, createdBy } = data;
+      const { agentId, name, instructions, createdBy } = data;
 
-      if (!name || !instructions?.instructions) {
+      if (!name || !instructions?.task) {
         return {
           success: false,
           error: "Task name and instructions are required",
@@ -30,7 +30,6 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
         agentId,
         name,
         instructions,
-        skillName,
         createdBy: createdBy || session.user.id,
         organizationId: currentOrg.id
       };

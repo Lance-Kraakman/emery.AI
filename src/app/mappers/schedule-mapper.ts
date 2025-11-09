@@ -25,7 +25,9 @@ export class ScheduleMapper {
 
       // Convert TaskInstructions with tools
       taskInstructions: {
-        instructions: schedule.taskInstructions.instructions,
+        task: schedule.taskInstructions.task,
+        images: schedule.taskInstructions.images,
+        attachments: schedule.taskInstructions.attachments,
         tools: (schedule.taskInstructions.tools || []).map(tool => tool.toPlain()),
         metadata: schedule.taskInstructions.metadata
       },
@@ -46,7 +48,9 @@ export class ScheduleMapper {
 
       // Convert TaskInstructionsDTO with tools
       taskInstructions: {
-        instructions: dto.taskInstructions.instructions,
+        task: dto.taskInstructions.task,
+        images: dto.taskInstructions.images,
+        attachments: dto.taskInstructions.attachments,
         tools: (dto.taskInstructions.tools || []).map(toolDTO =>
           ToolConfig.fromPlain(toolDTO)
         ),
