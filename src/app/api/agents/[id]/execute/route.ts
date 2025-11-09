@@ -92,7 +92,7 @@ export async function POST(
 
     // Create task instructions
     const taskInstructions: TaskInstructions = {
-      instructions,
+      task: instructions,
       tools: toolConfigs,
       metadata
     };

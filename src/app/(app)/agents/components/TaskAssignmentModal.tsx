@@ -69,7 +69,7 @@ export function TaskAssignmentModal({ isOpen, onClose, agent, onSuccess }: TaskA
         agentId: agent.id,
         name: taskName.trim(),
         instructions: {
-          instructions: instructions.trim(),
+          task: instructions.trim(),
           tools: domainTools,
           metadata: {}
         }

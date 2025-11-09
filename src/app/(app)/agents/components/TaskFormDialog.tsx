@@ -40,7 +40,7 @@ export default function TaskFormDialog({ isOpen, onClose, agent }: TaskFormDialo
         name,
         skillName: skillName || undefined, // Auto-route if empty
         instructions: {
-          instructions,
+          task: instructions,
           tools: undefined,
           metadata: {}
         }

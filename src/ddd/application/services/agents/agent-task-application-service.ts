@@ -18,6 +18,7 @@ import type { CreateTaskDTO, ExecuteTaskDTO, TaskExecutionResultDTO, TaskDTO } f
 import { taskToDTO } from '@/app/mappers/task-mapper';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
+import { getOrganizationRepository } from '@/ddd/application/di/container';
 
 const logger = createDebugLogger('AgentTaskService');
 
@@ -86,7 +87,6 @@ export class AgentTaskApplicationService {
         agentId,
         organizationId,
         name: dto.name,
-        skillName: dto.skillName,
         instructions: dto.instructions,
         createdBy,
         status: TaskStatus.pending()
@@ -98,7 +98,6 @@ export class AgentTaskApplicationService {
         agentId: task.agentId.value,
         organizationId: task.organizationId.value,
         name: task.name,
-        skillName: task.skillName || null,
         instructions: task.instructions,
         status: task.status.value,
         createdBy: task.createdBy?.value || null,
@@ -167,22 +166,31 @@ export class AgentTaskApplicationService {
         };
       }
 
-      // 3. Start task execution (domain logic)
+      // 3. Load organization model for model selection hierarchy
+      const orgRepository = getOrganizationRepository();
+      const organization = await orgRepository.findById(agent.organizationId);
+      const organizationModel = organization?.defaultModel || undefined;
+      const agentModel = agent.defaultModel || undefined;
+
+      logger.summary(`Model selection: agentModel=${agentModel || 'none'}, orgModel=${organizationModel || 'none'}`);
+
+      // 4. Start task execution (domain logic)
       task.start();
       await this.taskRepository.update(task.id, {
         status: task.status.value,
         startedAt: task.startedAt
       });
 
-      // 4. Execute via execution repository
+      // 5. Execute via execution repository
       const executionRequest: AgentExecutionRequest = {
         agentId: task.agentId.value,
-        instructions: task.instructions.instructions,
-        skillName: task.skillName || undefined,
+        instructions: task.instructions.task,
         tools: task.instructions.tools,
         executionId: task.id.value,
         organizationId: task.organizationId.value,
         ownerId: agent.ownerId.value,
+        agentModel,
+        organizationModel,
         timeoutSeconds,
         onProgress: (logMessage: string) => {
           task.appendLog(logMessage);

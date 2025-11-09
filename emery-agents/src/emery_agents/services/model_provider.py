@@ -351,6 +351,12 @@ class SmolagentsModelProvider:
         Returns:
             Model ID to use for execution
         """
+        # DEBUG: Log all parameters at entry
+        logger.info(f"🔍 [MODEL-PROVIDER] resolve_model_selection called with:")
+        logger.info(f"🔍 [MODEL-PROVIDER] - skill_model: {repr(skill_model)}")
+        logger.info(f"🔍 [MODEL-PROVIDER] - agent_model: {repr(agent_model)}")
+        logger.info(f"🔍 [MODEL-PROVIDER] - org_model: {repr(org_model)}")
+
         if skill_model:
             logger.info(f"📌 Using skill model override: {skill_model}")
             return skill_model

@@ -157,7 +157,7 @@ describe('Agent Task Execution Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         name: 'Creation Test Task',
         instructions: {
-          instructions: 'Test task creation without execution',
+          task: 'Test task creation without execution',
           tools: [ToolConfig.basic('python_repl')]
         }
       };
@@ -188,7 +188,7 @@ describe('Agent Task Execution Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         name: 'Individual Execution Test',
         instructions: {
-          instructions: 'Calculate 3 + 5 using python',
+          task: 'Calculate 3 + 5 using python',
           tools: [ToolConfig.basic('python_repl')]
         }
       };
@@ -244,7 +244,7 @@ describe('Agent Task Execution Integration Tests', () => {
           organizationId: testContext.organizationId.value,
           name: testCase.input.name,
           instructions: {
-            instructions: testCase.input.instructions,
+            task: testCase.input.instructions,
             tools: testCase.input.tools
           },
           createdBy: testContext.ownerUserId.value,
@@ -306,7 +306,7 @@ describe('Agent Task Execution Integration Tests', () => {
           organizationId: testContext.organizationId.value,
           name,
           instructions: {
-            instructions: `Task instructions for ${name}`,
+            task: `Task instructions for ${name}`,
             tools: [ToolConfig.basic('python_repl')],
           }
         });
@@ -347,7 +347,7 @@ describe('Agent Task Execution Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         name: 'Cancellation Test Task',
         instructions: {
-          instructions: 'This task will be cancelled',
+          task: 'This task will be cancelled',
           tools: [ToolConfig.basic('python_repl')],
         }
       });
@@ -429,7 +429,7 @@ describe('Agent Task Execution Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         name: 'Org 1 Task',
         instructions: {
-          instructions: 'Task in organization 1',
+          task: 'Task in organization 1',
           tools: [ToolConfig.basic('python_repl')],
         }
       });
@@ -440,7 +440,7 @@ describe('Agent Task Execution Integration Tests', () => {
         organizationId: org2Context.organizationId.value,
         name: 'Org 2 Task',
         instructions: {
-          instructions: 'Task in organization 2',
+          task: 'Task in organization 2',
           tools: [ToolConfig.basic('python_repl')],
         }
       });

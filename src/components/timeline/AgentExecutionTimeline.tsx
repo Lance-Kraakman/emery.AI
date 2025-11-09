@@ -15,7 +15,7 @@ interface TimelineTask {
   end: Date;
   status: 'completed' | 'failed' | 'in_progress' | 'pending' | 'scheduled';
   type: 'execution' | 'scheduled';
-  skillName?: string;
+  triggerContext?: any; // Trigger information (schedule name, type, etc.)
   error?: string;
   task?: TaskDTO; // Full task data for details
   lane: string; // Swim lane identifier
@@ -34,7 +34,7 @@ interface AgentExecutionTimelineProps {
   className?: string;
 }
 
-type ViewMode = 'day' | 'week' | 'month' | '3months' | 'year';
+type ViewMode = 'hour' | '6hours' | '12hours' | 'day' | 'week' | 'month' | '3months' | 'year';
 
 const STATUS_COLORS = {
   completed: '#10b981',
@@ -53,6 +53,9 @@ const STATUS_BACKGROUND = {
 };
 
 const VIEW_CONFIG = {
+  hour: { days: 1/24, label: 'Hour', tickFormat: 'HH:mm', tickCount: 12, todayLabel: 'Now' },
+  '6hours': { days: 0.25, label: '6 Hours', tickFormat: 'HH:mm', tickCount: 6, todayLabel: 'Last 6h' },
+  '12hours': { days: 0.5, label: '12 Hours', tickFormat: 'HH:mm', tickCount: 12, todayLabel: 'Last 12h' },
   day: { days: 1, label: 'Day', tickFormat: 'HH:mm', tickCount: 12, todayLabel: 'Today' },
   week: { days: 7, label: 'Week', tickFormat: 'EEE dd', tickCount: 7, todayLabel: 'This Week' },
   month: { days: 30, label: 'Month', tickFormat: 'MMM dd', tickCount: 10, todayLabel: 'This Month' },
@@ -86,6 +89,14 @@ export function AgentExecutionTimeline({ tasks, schedules = [], className = '' }
       return { startDate: start, endDate: end };
     }
 
+    // For hour/sub-day views, calculate using hours
+    if (config.days < 1) {
+      const hours = config.days * 24;
+      const start = new Date(currentDate.getTime() - (hours / 2) * 60 * 60 * 1000);
+      const end = new Date(currentDate.getTime() + (hours / 2) * 60 * 60 * 1000);
+      return { startDate: start, endDate: end };
+    }
+
     // For other views, center on current date
     const start = subDays(currentDate, Math.floor(config.days / 2));
     const end = addDays(currentDate, Math.ceil(config.days / 2));
@@ -94,12 +105,24 @@ export function AgentExecutionTimeline({ tasks, schedules = [], className = '' }
 
   const handlePrevious = () => {
     const config = VIEW_CONFIG[viewMode];
-    setCurrentDate(prev => subDays(prev, config.days));
+    if (config.days < 1) {
+      // For sub-day views, navigate by hours
+      const hours = config.days * 24;
+      setCurrentDate(prev => new Date(prev.getTime() - hours * 60 * 60 * 1000));
+    } else {
+      setCurrentDate(prev => subDays(prev, config.days));
+    }
   };
 
   const handleNext = () => {
     const config = VIEW_CONFIG[viewMode];
-    setCurrentDate(prev => addDays(prev, config.days));
+    if (config.days < 1) {
+      // For sub-day views, navigate by hours
+      const hours = config.days * 24;
+      setCurrentDate(prev => new Date(prev.getTime() + hours * 60 * 60 * 1000));
+    } else {
+      setCurrentDate(prev => addDays(prev, config.days));
+    }
   };
 
   const handleToday = () => {
@@ -122,7 +145,7 @@ export function AgentExecutionTimeline({ tasks, schedules = [], className = '' }
 
       if (isWithinInterval(start, { start: startDate, end: endDate }) ||
           isWithinInterval(end, { start: startDate, end: endDate })) {
-        const laneName = task.skillName || 'Manual Tasks';
+        const laneName = task.triggerContext?.scheduleName || 'Manual Tasks';
 
         if (!lanes.has(laneName)) {
           lanes.set(laneName, []);
@@ -135,7 +158,7 @@ export function AgentExecutionTimeline({ tasks, schedules = [], className = '' }
           end,
           status: task.status as TimelineTask['status'],
           type: 'execution',
-          skillName: task.skillName || undefined,
+          triggerContext: task.triggerContext,
           error: task.error || undefined,
           task,
           lane: laneName,
@@ -163,7 +186,7 @@ export function AgentExecutionTimeline({ tasks, schedules = [], className = '' }
 
             lanes.get(laneName)!.push({
               id: `scheduled-${idx}-${occIdx}`,
-              name: schedule.name || schedule.taskInstructions.instructions.substring(0, 50) + '...',
+              name: schedule.name || schedule.taskInstructions.task.substring(0, 50) + '...',
               start: date,
               end: endTime,
               status: 'scheduled',
@@ -312,12 +335,12 @@ export function AgentExecutionTimeline({ tasks, schedules = [], className = '' }
         </div>
 
         {/* View Mode Selector */}
-        <div className="flex gap-1">
+        <div className="flex gap-1 overflow-x-auto scrollbar-hide">
           {(Object.keys(VIEW_CONFIG) as ViewMode[]).map((mode) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors relative ${
+              className={`px-2 md:px-3 py-1.5 text-xs font-medium transition-colors relative whitespace-nowrap ${
                 viewMode === mode
                   ? 'text-primary'
                   : 'text-muted-foreground hover:text-foreground'
@@ -463,7 +486,6 @@ export function AgentExecutionTimeline({ tasks, schedules = [], className = '' }
                                 <TaskCard
                                   task={{
                                     ...task.task,
-                                    skillName: task.task.skillName || undefined,
                                     error: task.task.error || undefined,
                                     completedAt: task.task.completedAt ? task.task.completedAt.toISOString() : undefined,
                                     startedAt: task.task.startedAt ? task.task.startedAt.toISOString() : undefined,

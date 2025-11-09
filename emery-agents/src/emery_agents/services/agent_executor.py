@@ -10,12 +10,15 @@ import os
 import time
 import json
 from typing import Dict, Any, List, Optional, Union, AsyncIterator
+from io import BytesIO
 
 from smolagents import CodeAgent, ToolCallingAgent
+from PIL import Image
+import aiohttp
 
 from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode, AgentId, OrganizationId
-from ..grpc.generated.agent_worker_pb2 import TaskRequest, SkillConfig, ToolConfig, TokenUsage as TokenUsageProto
+from ..grpc.generated.agent_worker_pb2 import TaskRequest, SkillConfig, ToolConfig, TokenUsage as TokenUsageProto, ImageAttachment
 from .model_provider import SmolagentsModelProvider
 from .tool_loader import UnifiedToolLoader
 
@@ -65,6 +68,42 @@ class AgentExecutor:
             cost_usd=getattr(tu, 'cost_usd', 0.0)
         )
 
+    async def _download_images(self, image_attachments: List[ImageAttachment]) -> List[Image.Image]:
+        """
+        Download images from URLs and convert to PIL.Image objects.
+
+        AIDEV-NOTE: Similar to chat system's message_mapper.py:download_image_from_url()
+        Downloads images from S3 pre-signed URLs for vision model support.
+
+        Args:
+            image_attachments: List of ImageAttachment protobuf objects with URLs
+
+        Returns:
+            List of PIL.Image objects ready for agent.run(images=...)
+        """
+        if not image_attachments:
+            return []
+
+        pil_images = []
+        async with aiohttp.ClientSession() as session:
+            for img_attachment in image_attachments:
+                try:
+                    logger.info(f"Downloading image from: {img_attachment.url[:50]}...")
+                    async with session.get(img_attachment.url) as response:
+                        if response.status == 200:
+                            image_data = await response.read()
+                            pil_img = Image.open(BytesIO(image_data))
+                            pil_images.append(pil_img)
+                            logger.info(f"Successfully loaded image: {pil_img.size}")
+                        else:
+                            logger.warning(f"Failed to download image: HTTP {response.status}")
+                except Exception as e:
+                    logger.error(f"Error downloading image from {img_attachment.url}: {e}")
+                    continue
+
+        logger.info(f"Downloaded {len(pil_images)}/{len(image_attachments)} images")
+        return pil_images
+
     # =========================================================================
     # Routing Logic (from CapabilityRoutingService)
     # =========================================================================
@@ -107,7 +146,7 @@ class AgentExecutor:
 
         return ExecutionContext(
             mode=ExecutionMode.SKILL,
-            instructions=skill.instructions,
+            task=skill.instructions,  # Changed from 'instructions'
             available_tools=tool_names,
             agent_id=request.agent_id if hasattr(request, 'agent_id') else None,
             organization_id=request.organization_id if hasattr(request, 'organization_id') else None,
@@ -132,10 +171,16 @@ class AgentExecutor:
         agent_model = request.agent_config.default_model if hasattr(request.agent_config, 'default_model') else None
         org_model = request.organization_model if hasattr(request, 'organization_model') else None
 
+        # Extract images and attachments (new multimodal support)
+        images = list(instruction_config.images) if hasattr(instruction_config, 'images') and instruction_config.images else []
+        attachments = list(instruction_config.attachments) if hasattr(instruction_config, 'attachments') and instruction_config.attachments else []
+
         return ExecutionContext(
             mode=ExecutionMode.INSTRUCTION,
-            instructions=instruction_config.instructions,
+            task=instruction_config.task,  # Changed from 'instructions'
             available_tools=tool_names,
+            images=images,
+            attachments=attachments,
             agent_id=request.agent_id if hasattr(request, 'agent_id') else None,
             organization_id=request.organization_id if hasattr(request, 'organization_id') else None,
             skill_name=None,
@@ -195,8 +240,22 @@ class AgentExecutor:
                 # Create direct tool execution agent
                 agent = await self._create_direct_execution_agent(context)
 
-                # Execute instructions directly
-                result = agent.run(context.instructions)
+                # Download images if any (multimodal support)
+                pil_images = await self._download_images(context.images)
+
+                yield {
+                    "status": "in_progress",
+                    "output": json.dumps({
+                        "message": "Executing task",
+                        "images_loaded": len(pil_images)
+                    }),
+                    "error_message": "",
+                    "timestamp_ms": int(time.time() * 1000),
+                    "progress_percent": 50.0
+                }
+
+                # Execute task with text + images (smolagents format)
+                result = agent.run(task=context.task, images=pil_images or None)
 
                 # Extract token usage from result
                 token_usage_proto = self._extract_token_usage(result)
@@ -234,17 +293,23 @@ class AgentExecutor:
                 # Create smolagents agent for this skill
                 agent = await self._create_skill_agent(skill, context, context_id)
 
+                # Download images if any (multimodal support)
+                pil_images = await self._download_images(context.images)
+
                 # Execute the skill instructions
                 yield {
                     "status": "in_progress",
-                    "output": json.dumps({"message": f"Executing: {skill.instructions[:100]}..."}),
+                    "output": json.dumps({
+                        "message": f"Executing: {context.task[:100]}...",
+                        "images_loaded": len(pil_images)
+                    }),
                     "error_message": "",
                     "timestamp_ms": int(time.time() * 1000),
                     "progress_percent": 50.0
                 }
 
-                # Execute skill instructions directly
-                result = agent.run(skill.instructions)
+                # Execute task with text + images (smolagents format)
+                result = agent.run(task=context.task, images=pil_images or None)
 
                 # Extract token usage from result
                 token_usage_proto = self._extract_token_usage(result)
@@ -291,11 +356,18 @@ class AgentExecutor:
             tool_configs = self._create_tool_configs_with_context(context.available_tools, context)
             tools = self.tool_loader.load_tools(tool_configs)
 
+        # DEBUG: Log context model fields before resolution
+        logger.info(f"🔍 [EXECUTOR] Context model fields:")
+        logger.info(f"🔍 [EXECUTOR] - context.agent_model: {repr(context.agent_model)}")
+        logger.info(f"🔍 [EXECUTOR] - context.org_model: {repr(context.org_model)}")
+
         # Resolve model using hierarchy: agent_model → org_model → system default
         model_id = self.model_provider.resolve_model_selection(
             agent_model=context.agent_model,
             org_model=context.org_model
         )
+        logger.info(f"🔍 [EXECUTOR] Resolved model_id: {repr(model_id)}")
+
         model = self.model_provider.get_model(model_id)
 
         agent = ToolCallingAgent(
@@ -403,12 +475,12 @@ class AgentExecutor:
 
     def _generate_context_id(self, context: ExecutionContext) -> str:
         """Generate unique ID for execution context."""
-        return f"ctx_{hash(context.instructions + str(context.available_tools)) % 10000}"
+        return f"ctx_{hash(context.task + str(context.available_tools)) % 10000}"
 
     async def validate_execution_context(self, context: ExecutionContext) -> bool:
         """Validate that execution context is valid."""
         try:
-            if not context.instructions:
+            if not context.task:
                 return False
 
             if context.max_steps and context.max_steps <= 0:

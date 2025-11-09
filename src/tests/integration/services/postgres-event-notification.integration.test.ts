@@ -109,7 +109,7 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
           organizationId: testContext.organizationId.value,
           name: 'Event Trigger Test Task',
           instructions: {
-            instructions: 'Test event notification system',
+            task: 'Test event notification system',
             tools: [],
           }
         });
@@ -175,7 +175,7 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
             organizationId: testContext.organizationId.value,
             name: `Concurrent Event Test ${i + 1}`,
             instructions: {
-              instructions: `Concurrent test task ${i + 1}`,
+              task: `Concurrent test task ${i + 1}`,
               tools: [],
               }
           })
@@ -240,7 +240,7 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
         // Use test API endpoint to trigger event (validates our channel fix in the API)
         const response = await testClient.post('/api/test-manual-trigger', {
           agentId: testAgentId,
-          instructions: 'API endpoint trigger test'
+          task: 'API endpoint trigger test'
         });
 
         expect(response.success).toBe(true);
@@ -299,7 +299,7 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
           organizationId: testContext.organizationId.value,
           name: 'Event Timing Test',
           instructions: {
-            instructions: 'Test immediate event notification',
+            task: 'Test immediate event notification',
             tools: [],
           }
         });

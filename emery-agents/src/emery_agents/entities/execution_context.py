@@ -9,8 +9,8 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 from ..types import AgentId, OrganizationId, ExecutionMode
 
-# Import from generated protobuf for SkillConfig
-from ..grpc.generated.agent_worker_pb2 import SkillConfig
+# Import from generated protobuf
+from ..grpc.generated.agent_worker_pb2 import SkillConfig, ImageAttachment, FileAttachment
 
 
 # Constants
@@ -20,12 +20,23 @@ DEFAULT_TIMEOUT_SECONDS = 300
 
 @dataclass
 class ExecutionContext:
-    """Execution context for agent tasks - simplified without value objects."""
+    """
+    Execution context for agent tasks - aligned with smolagents API.
+
+    AIDEV-NOTE: Task instruction format aligned with smolagents agent.run():
+    - task: Main text instruction → agent.run(task=...)
+    - images: Image URLs → downloaded to PIL.Image → agent.run(images=[...])
+    - attachments: File metadata (preprocessed files already in task text)
+    """
 
     # Core execution properties
     mode: ExecutionMode
-    instructions: str
+    task: str                              # Main instruction text (changed from 'instructions')
     available_tools: List[str]
+
+    # Multimodal content (optional)
+    images: List[ImageAttachment] = field(default_factory=list)       # Image URLs
+    attachments: List[FileAttachment] = field(default_factory=list)   # File metadata
 
     # Optional context
     agent_id: Optional[AgentId] = None
@@ -58,8 +69,10 @@ class ExecutionContext:
         """Create new context with different tools."""
         return ExecutionContext(
             mode=self.mode,
-            instructions=self.instructions,
+            task=self.task,
             available_tools=tools,
+            images=self.images,
+            attachments=self.attachments,
             agent_id=self.agent_id,
             organization_id=self.organization_id,
             skill_name=self.skill_name,

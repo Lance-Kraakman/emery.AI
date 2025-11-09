@@ -18,12 +18,24 @@ import type { AvatarConfig } from '@/lib/avatars';
 
 /**
  * Task instructions that define WHAT a schedule should do when triggered
- * Same structure as skill step instructions
+ *
+ * AIDEV-NOTE: Aligned with smolagents API format (2025-01)
+ * - task: Main instruction text → agent.run(task=...)
+ * - images: Image URLs for vision models
+ * - attachments: File metadata (preprocessed to text)
  */
 export interface TaskInstructions {
-  instructions: string;           // Full task instructions with @ references
-  tools?: ToolConfig[];           // Tools to use for this specific task
-  metadata?: Record<string, any>; // Additional task metadata
+  task: string;                     // Main instruction text (required)
+  images?: Array<{ url: string; s3Key?: string }>;       // Image attachments
+  attachments?: Array<{                                  // File attachments (preprocessed)
+    type: 'pdf' | 'audio' | 'document' | 'text';
+    url: string;
+    filename: string;
+    mimeType: string;
+    preprocessed: true;              // Flag indicating text already extracted
+  }>;
+  tools?: ToolConfig[];             // Tools to use for this specific task
+  metadata?: Record<string, any>;   // Additional task metadata
 }
 
 /**
@@ -62,7 +74,15 @@ export interface ScheduleConfigurationJSON {
     requiresSignature?: boolean;
   };
   taskInstructions: {
-    instructions: string;
+    task: string;
+    images?: Array<{ url: string; s3Key?: string }>;
+    attachments?: Array<{
+      type: 'pdf' | 'audio' | 'document' | 'text';
+      url: string;
+      filename: string;
+      mimeType: string;
+      preprocessed: true;
+    }>;
     tools?: Array<{ name: string; config: Record<string, any> }>;
     metadata?: Record<string, any>;
   };
@@ -120,7 +140,9 @@ export class AgentFactory {
       schedules: (record.schedules || []).map((s: any) => ({
         trigger: TriggerConfigFromJSON(s.trigger),
         taskInstructions: {
-          instructions: s.taskInstructions.instructions || '',
+          task: s.taskInstructions.task || s.taskInstructions.instructions || '', // Support both old and new format
+          images: s.taskInstructions.images || [],
+          attachments: s.taskInstructions.attachments || [],
           tools: (s.taskInstructions.tools || []).map((t: any) =>
             t instanceof ToolConfig ? t : ToolConfig.fromPlain(t)
           ),
@@ -152,7 +174,9 @@ export class AgentFactory {
       schedules: agent.schedules.map(schedule => ({
         trigger: schedule.trigger.toJSON() as ScheduleConfigurationJSON['trigger'],
         taskInstructions: {
-          instructions: schedule.taskInstructions.instructions,
+          task: schedule.taskInstructions.task,
+          images: schedule.taskInstructions.images,
+          attachments: schedule.taskInstructions.attachments,
           tools: (schedule.taskInstructions.tools || []).map(t => t.toPlain()),
           metadata: schedule.taskInstructions.metadata
         },

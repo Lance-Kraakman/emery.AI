@@ -44,8 +44,46 @@ export interface TriggerContext {
   tableChange?: TableChangeEvent; // For DATABASE_EVENT triggers
 }
 
+/**
+ * Image attachment for task instructions
+ *
+ * AIDEV-NOTE: Images are downloaded from S3 URLs at execution time
+ * and passed to smolagents agent.run(images=[PIL.Image, ...])
+ */
+export interface ImageAttachment {
+  url: string;      // S3 pre-signed URL
+  s3Key?: string;   // S3 key for reference
+}
+
+/**
+ * File attachment metadata for task instructions
+ *
+ * AIDEV-NOTE: Non-image files (PDFs, audio, documents) are preprocessed
+ * to text and included in the 'task' field. This interface preserves
+ * metadata for audit/tracking purposes.
+ */
+export interface FileAttachment {
+  type: 'pdf' | 'audio' | 'document' | 'text';
+  url: string;
+  filename: string;
+  mimeType: string;
+  preprocessed: true;  // Flag indicating text already extracted and in 'task'
+}
+
+/**
+ * Task instruction configuration
+ *
+ * AIDEV-NOTE: This structure directly maps to smolagents agent.run() parameters:
+ * - task: Main instruction text → agent.run(task=...)
+ * - images: Image URLs → downloaded → agent.run(images=[PIL.Image, ...])
+ * - attachments: File metadata (preprocessed files already in task text)
+ * - tools: Available tools for agent
+ * - metadata: Additional context
+ */
 export interface TaskInstructions {
-  instructions: string;
+  task: string;                     // Primary instruction text (required)
+  images?: ImageAttachment[];       // Image attachments (optional)
+  attachments?: FileAttachment[];   // Non-image files (optional, for metadata)
   tools?: ToolConfig[];
   metadata?: Record<string, any>;
 }
@@ -55,7 +93,6 @@ export interface TaskConfig {
   agentId: AgentId;
   organizationId: OrganizationId;
   name: string;
-  skillName?: string;
   instructions: TaskInstructions;
   triggerContext?: TriggerContext; // Optional - what triggered this task
   status?: TaskStatus;
@@ -71,7 +108,6 @@ export interface TaskConfig {
 export interface CreateTaskData {
   agentId: AgentId;
   name: string;
-  skillName?: string; // Optional - system can auto-route
   instructions: TaskInstructions; // Task configuration
   triggerContext?: TriggerContext; // What triggered this task
   createdBy?: UserId;
@@ -83,7 +119,6 @@ export class Task {
     public readonly agentId: AgentId,
     public readonly organizationId: OrganizationId,
     public readonly name: string,
-    public readonly skillName: string | null,
     public readonly instructions: TaskInstructions,
     public readonly triggerContext: TriggerContext | null,
     private _status: TaskStatus,
@@ -114,7 +149,6 @@ export class Task {
       config.agentId,
       config.organizationId,
       config.name,
-      config.skillName || null,
       config.instructions,
       config.triggerContext || null,
       config.status || TaskStatus.pending(),
@@ -133,7 +167,6 @@ export class Task {
     agentId: number;
     organizationId: number;
     name: string;
-    skillName?: string | null;
     instructions: any; // JSONB from database
     triggerContext?: any; // JSONB from database
     status: string;
@@ -150,7 +183,6 @@ export class Task {
       AgentId.fromNumber(data.agentId),
       OrganizationId.fromNumber(data.organizationId),
       data.name,
-      data.skillName || null,
       data.instructions as TaskInstructions,
       data.triggerContext as TriggerContext | null || null,
       TaskStatus.fromString(data.status),
@@ -169,7 +201,6 @@ export class Task {
     agentId: number;
     organizationId: number;
     name: string;
-    skillName: string | null;
     instructions: any;
     triggerContext: TriggerContext | null;
     status: string;
@@ -186,7 +217,6 @@ export class Task {
       agentId: this.agentId.value,
       organizationId: this.organizationId.value,
       name: this.name,
-      skillName: this.skillName,
       instructions: this.instructions,
       triggerContext: this.triggerContext,
       status: this._status.value,

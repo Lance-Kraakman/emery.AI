@@ -109,6 +109,7 @@ export class AgentWorkerTestClient {
         organizationId: this.config.organizationId,
         ownerId: request.ownerId,
         timeoutSeconds: request.timeoutSeconds || 300,
+        agentModel: '', // Empty string will use org/system default
         organizationModel: '', // Empty string will use system default
         agentConfig: {
           name: request.name,
@@ -119,10 +120,15 @@ export class AgentWorkerTestClient {
         } as TriggerData,
         
         // Set execution mode
-        ...(request.instructions 
-          ? { 
+        ...(request.instructions
+          ? {
               instruction_config: {
-                instructions: request.instructions
+                task: request.instructions,
+                images: [],
+                attachments: [],
+                tools: [],
+                servers: [],
+                model: ''
               } as InstructionConfig
             }
           : { capability_name: request.skillName }

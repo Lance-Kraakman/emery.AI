@@ -122,7 +122,7 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       const createRequest: CreateTaskDTO = {
         agentId: ownerAgentId,
         name: 'Test Task',
-        instructions: { instructions: 'Test instructions' },
+        instructions: { task: 'Test instructions' },
         createdBy: ownerId.value,
         organizationId
       };
@@ -159,7 +159,7 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       const createRequest: CreateTaskDTO = {
         agentId: ownerAgentId, // Trying to assign to someone else's agent
         name: 'Unauthorized Task',
-        instructions: { instructions: 'Should fail' },
+        instructions: { task: 'Should fail' },
         createdBy: otherUserId,
         organizationId
       };
@@ -179,7 +179,7 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       const createRequest: CreateTaskDTO = {
         agentId: ownerAgentId, // Admin assigning to someone else's agent
         name: 'Admin Task',
-        instructions: { instructions: 'Admin can assign' },
+        instructions: { task: 'Admin can assign' },
         createdBy: otherUserId,
         organizationId
       };
@@ -211,7 +211,7 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       const createRequest: CreateTaskDTO = {
         agentId: ownerAgentId,
         name: 'Allowed User Task',
-        instructions: { instructions: 'Specific user allowed' },
+        instructions: { task: 'Specific user allowed' },
         createdBy: otherUserId,
         organizationId
       };
@@ -244,7 +244,7 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       const createRequest: CreateTaskDTO = {
         agentId: ownerAgentId,
         name: 'Team Member Task',
-        instructions: { instructions: 'Team member assigning' },
+        instructions: { task: 'Team member assigning' },
         createdBy: otherUserId,
         organizationId
       };
@@ -282,7 +282,7 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       const createRequest: CreateTaskDTO = {
         agentId: ownerAgentId,
         name: 'Blocked Admin Task',
-        instructions: { instructions: 'Admin should be blocked' },
+        instructions: { task: 'Admin should be blocked' },
         createdBy: otherUserId,
         organizationId
       };
@@ -301,7 +301,7 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       const createRequest: CreateTaskDTO = {
         teamId,
         name: 'Team Task',
-        instructions: { instructions: 'Task for team' },
+        instructions: { task: 'Task for team' },
         createdBy: ownerId.value,
         organizationId
       };
@@ -326,7 +326,7 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       const createRequest: CreateTaskDTO = {
         teamId,
         name: 'Outsider Task',
-        instructions: { instructions: 'Should fail' },
+        instructions: { task: 'Should fail' },
         createdBy: outsiderUser.id,
         organizationId
       };
@@ -362,7 +362,7 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       const createRequest: CreateTaskDTO = {
         teamId,
         name: 'Special User Team Task',
-        instructions: { instructions: 'Allowed user assigning to team' },
+        instructions: { task: 'Allowed user assigning to team' },
         createdBy: outsiderUser.id,
         organizationId
       };
@@ -393,7 +393,7 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       const createRequest: CreateTaskDTO = {
         agentId: ownerAgentId, // Target agent
         name: 'Agent to Agent Task',
-        instructions: { instructions: 'Agent routing task' },
+        instructions: { task: 'Agent routing task' },
         createdBy: otherUserId, // Owner of source agent
         organizationId
       };
@@ -413,7 +413,7 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       const initialTask = await agentTaskService.createTask({
         agentId: ownerAgentId,
         name: 'Initial Task',
-        instructions: { instructions: 'To be routed' },
+        instructions: { task: 'To be routed' },
         createdBy: ownerId.value,
         organizationId
       });
@@ -475,7 +475,7 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       const createRequest: CreateTaskDTO = {
         agentId: otherOrgAgent.id.value,
         name: 'Cross-Org Task',
-        instructions: { instructions: 'Should fail' },
+        instructions: { task: 'Should fail' },
         createdBy: ownerId.value,
         organizationId // Different from agent's org
       };

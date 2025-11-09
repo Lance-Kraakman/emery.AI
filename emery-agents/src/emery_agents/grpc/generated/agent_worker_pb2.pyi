@@ -47,7 +47,7 @@ STEP_REASONING: StepType
 STEP_FINAL: StepType
 
 class TaskRequest(_message.Message):
-    __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name", "organization_model")
+    __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name", "agent_model", "organization_model")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     AGENT_ID_FIELD_NUMBER: _ClassVar[int]
     SKILL_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -58,6 +58,7 @@ class TaskRequest(_message.Message):
     OWNER_ID_FIELD_NUMBER: _ClassVar[int]
     TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
+    AGENT_MODEL_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_MODEL_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     agent_id: int
@@ -69,8 +70,9 @@ class TaskRequest(_message.Message):
     owner_id: str
     timeout_seconds: int
     name: str
+    agent_model: str
     organization_model: str
-    def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ..., organization_model: _Optional[str] = ...) -> None: ...
+    def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ..., agent_model: _Optional[str] = ..., organization_model: _Optional[str] = ...) -> None: ...
 
 class TaskProgress(_message.Message):
     __slots__ = ("task_id", "status", "output_json", "error_message", "timestamp_ms", "progress_percent", "token_usage")
@@ -256,16 +258,40 @@ class TriggerData(_message.Message):
     def __init__(self, payload: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class InstructionConfig(_message.Message):
-    __slots__ = ("instructions", "tools", "servers", "model")
-    INSTRUCTIONS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("task", "images", "attachments", "tools", "servers", "model")
+    TASK_FIELD_NUMBER: _ClassVar[int]
+    IMAGES_FIELD_NUMBER: _ClassVar[int]
+    ATTACHMENTS_FIELD_NUMBER: _ClassVar[int]
     TOOLS_FIELD_NUMBER: _ClassVar[int]
     SERVERS_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
-    instructions: str
+    task: str
+    images: _containers.RepeatedCompositeFieldContainer[ImageAttachment]
+    attachments: _containers.RepeatedCompositeFieldContainer[FileAttachment]
     tools: _containers.RepeatedCompositeFieldContainer[ToolConfig]
     servers: _containers.RepeatedCompositeFieldContainer[ServerConfig]
     model: str
-    def __init__(self, instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., model: _Optional[str] = ...) -> None: ...
+    def __init__(self, task: _Optional[str] = ..., images: _Optional[_Iterable[_Union[ImageAttachment, _Mapping]]] = ..., attachments: _Optional[_Iterable[_Union[FileAttachment, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., model: _Optional[str] = ...) -> None: ...
+
+class ImageAttachment(_message.Message):
+    __slots__ = ("url", "s3_key")
+    URL_FIELD_NUMBER: _ClassVar[int]
+    S3_KEY_FIELD_NUMBER: _ClassVar[int]
+    url: str
+    s3_key: str
+    def __init__(self, url: _Optional[str] = ..., s3_key: _Optional[str] = ...) -> None: ...
+
+class FileAttachment(_message.Message):
+    __slots__ = ("type", "url", "filename", "mime_type")
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    URL_FIELD_NUMBER: _ClassVar[int]
+    FILENAME_FIELD_NUMBER: _ClassVar[int]
+    MIME_TYPE_FIELD_NUMBER: _ClassVar[int]
+    type: str
+    url: str
+    filename: str
+    mime_type: str
+    def __init__(self, type: _Optional[str] = ..., url: _Optional[str] = ..., filename: _Optional[str] = ..., mime_type: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageRequest(_message.Message):
     __slots__ = ("message_parts", "user_id", "organization_id", "context", "conversation_history", "tools", "model", "message_id")
