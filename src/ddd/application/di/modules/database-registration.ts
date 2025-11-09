@@ -16,6 +16,8 @@ import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/da
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import type { ITriggerMatchingService } from '@/ddd/domain/scheduling/services/trigger-matching-service';
+import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
 
 import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/databases/drizzle-database-repository';
 import { DynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/dynamic-table-repository';
@@ -43,10 +45,12 @@ export interface DatabaseServices {
 export interface DatabaseDependencies {
   db: ContextAwareDbClient;
   organizationRepository: IOrganizationRepository;
+  triggerMatchingService?: ITriggerMatchingService;
+  taskRepository?: ITaskRepository;
 }
 
 export function registerDatabaseServices(deps: DatabaseDependencies): DatabaseServices {
-  const { db, organizationRepository } = deps;
+  const { db, organizationRepository, triggerMatchingService, taskRepository } = deps;
 
   // Register repositories
   const databaseRepository = new DrizzleDatabaseRepository(db);
@@ -75,7 +79,9 @@ export function registerDatabaseServices(deps: DatabaseDependencies): DatabaseSe
     dynamicTableService,
     databaseRepository,
     organizationRepository,
-    dynamicTableRepository
+    dynamicTableRepository,
+    triggerMatchingService,
+    taskRepository
   );
 
   const fileApplicationService = new FileUseCases(

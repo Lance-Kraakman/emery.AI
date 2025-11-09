@@ -11,14 +11,38 @@
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { TaskId } from '../value-objects/task-id';
 import { TaskStatus, TASK_STATUS } from '../value-objects/task-status';
-import { 
-  AgentId, 
-  OrganizationId, 
+import {
+  AgentId,
+  OrganizationId,
   UserId
 } from '@/ddd/domain/shared/value-objects';
+import type { TableChangeEvent } from '@/ddd/domain/scheduling/types/scheduling-types';
 
 // Re-export TaskStatus for external use
 export { TaskStatus };
+
+/**
+ * Trigger context provides information about what triggered this task
+ *
+ * AIDEV-NOTE: For DATABASE_EVENT triggers, agents can access row data in two ways:
+ * 1. Direct access: triggerContext.tableChange.rowData (plain object)
+ * 2. Type-safe entity: Row.fromPlainObject(rowData, tableId, tableFields)
+ *
+ * Example:
+ * ```typescript
+ * if (task.triggerContext?.type === 'DATABASE_EVENT') {
+ *   const { tableId, rowData } = task.triggerContext.tableChange;
+ *   const table = await tableService.getTable(tableId);
+ *   const row = Row.fromPlainObject(rowData, tableId, table.fields);
+ *   // Now use row.getFieldValue(), row.toPlainObject(), etc.
+ * }
+ * ```
+ */
+export interface TriggerContext {
+  type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL';
+  scheduleName?: string; // Name of the schedule that triggered this task
+  tableChange?: TableChangeEvent; // For DATABASE_EVENT triggers
+}
 
 export interface TaskInstructions {
   instructions: string;
@@ -33,6 +57,7 @@ export interface TaskConfig {
   name: string;
   skillName?: string;
   instructions: TaskInstructions;
+  triggerContext?: TriggerContext; // Optional - what triggered this task
   status?: TaskStatus;
   result?: any;
   error?: string;
@@ -48,6 +73,7 @@ export interface CreateTaskData {
   name: string;
   skillName?: string; // Optional - system can auto-route
   instructions: TaskInstructions; // Task configuration
+  triggerContext?: TriggerContext; // What triggered this task
   createdBy?: UserId;
 }
 
@@ -59,6 +85,7 @@ export class Task {
     public readonly name: string,
     public readonly skillName: string | null,
     public readonly instructions: TaskInstructions,
+    public readonly triggerContext: TriggerContext | null,
     private _status: TaskStatus,
     private _result: any | null,
     private _error: string | null,
@@ -71,17 +98,17 @@ export class Task {
 
   static create(config: TaskConfig): Task {
     const now = new Date();
-    
+
     // AIDEV-NOTE: Value Objects provide built-in validation, no need for manual checks
     // Validate required Value Objects
     if (!config.organizationId) {
       throw new Error('Task creation failed: organizationId is required');
     }
-    
+
     if (!config.agentId) {
       throw new Error('Task creation failed: agentId is required');
     }
-    
+
     return new Task(
       config.id || TaskId.generate(),
       config.agentId,
@@ -89,6 +116,7 @@ export class Task {
       config.name,
       config.skillName || null,
       config.instructions,
+      config.triggerContext || null,
       config.status || TaskStatus.pending(),
       config.result || null,
       config.error || null,
@@ -107,6 +135,7 @@ export class Task {
     name: string;
     skillName?: string | null;
     instructions: any; // JSONB from database
+    triggerContext?: any; // JSONB from database
     status: string;
     result?: any;
     error?: string | null;
@@ -123,6 +152,7 @@ export class Task {
       data.name,
       data.skillName || null,
       data.instructions as TaskInstructions,
+      data.triggerContext as TriggerContext | null || null,
       TaskStatus.fromString(data.status),
       data.result || null,
       data.error || null,
@@ -141,6 +171,7 @@ export class Task {
     name: string;
     skillName: string | null;
     instructions: any;
+    triggerContext: TriggerContext | null;
     status: string;
     result: any;
     error: string | null;
@@ -157,6 +188,7 @@ export class Task {
       name: this.name,
       skillName: this.skillName,
       instructions: this.instructions,
+      triggerContext: this.triggerContext,
       status: this._status.value,
       result: this._result,
       error: this._error,

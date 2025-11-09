@@ -6,7 +6,7 @@
 
 import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
-import type { TriggerConfig } from '../value-objects/trigger-config';
+import type { TriggerConfig, DatabaseOperation } from '../value-objects/trigger-config';
 import type { ScheduleConfiguration } from '@/ddd/domain/agents/entities/agent';
 
 /**
@@ -108,7 +108,7 @@ export interface RagReindexEvent {
 }
 
 /**
- * Task event data (from database notifications) 
+ * Task event data (from database notifications)
  */
 export interface TaskEvent {
   taskId: string;
@@ -122,6 +122,25 @@ export interface TaskEvent {
   tableId?: string;
   operation?: string;
   data?: any;
+}
+
+/**
+ * Table change event - immutable snapshot of table operation
+ * Stored in Task.triggerContext for agent execution context
+ *
+ * AIDEV-NOTE: rowData is a plain object snapshot that can be reconstructed
+ * into a Row entity using Row.fromPlainObject(rowData, tableId, tableFields)
+ * This allows agents to access type-safe Row entity methods when needed.
+ */
+export interface TableChangeEvent {
+  tableId: number;                        // Table ID (matches TableId.value type)
+  tableName: string;
+  operation: DatabaseOperation;
+  organizationId: OrganizationId;
+  rowId: string;
+  rowData: Record<string, any>;           // Snapshot with field IDs as keys
+  previousRowData?: Record<string, any>;  // For UPDATE operations
+  timestamp: Date;
 }
 
 /**

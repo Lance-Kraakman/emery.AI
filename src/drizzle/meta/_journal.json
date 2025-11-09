@@ -176,6 +176,13 @@
       "when": 1762400955855,
       "tag": "0024_faithful_goliath",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1762639070552,
+      "tag": "0025_strange_baron_strucker",
+      "breakpoints": true
     }
   ]
 }
