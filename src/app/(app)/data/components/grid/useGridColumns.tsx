@@ -23,6 +23,7 @@ interface UseGridColumnsParams {
   onEditField: (field: FieldDTO) => void
   onDeleteField: (fieldName: string) => void
   onAddColumn: (data: { name: string; type: FieldType; required: boolean; relatedTableId?: number }) => Promise<void>
+  onFieldUpdate: (field: FieldDTO, updates: Partial<FieldDTO>) => Promise<void>
   onSort?: (field: string, direction: 'asc' | 'desc') => void
   onClearSort?: () => void
   // Custom cell components for complex field types
@@ -30,6 +31,8 @@ interface UseGridColumnsParams {
   FileCell?: CellComponent<any, any>
   DocumentCell?: CellComponent<any, any>
   EmbeddingCell?: CellComponent<any, any>
+  SingleSelectCell?: CellComponent<any, any>
+  MultiSelectCell?: CellComponent<any, any>
 }
 
 /**
@@ -50,12 +53,15 @@ export function useGridColumns({
   onEditField,
   onDeleteField,
   onAddColumn,
+  onFieldUpdate,
   onSort,
   onClearSort,
   RelationCell,
   FileCell,
   DocumentCell,
   EmbeddingCell,
+  SingleSelectCell,
+  MultiSelectCell,
 }: UseGridColumnsParams) {
   return useMemo(() => {
     // AIDEV-NOTE: Using react-datasheet-grid built-in column types for standard fields
@@ -168,6 +174,65 @@ export function useGridColumns({
           }
           break
 
+        case 'single-select':
+          // Custom component for single select dropdown
+          if (SingleSelectCell) {
+            columnConfig = {
+              component: SingleSelectCell,
+              disableKeys: true,
+              columnData: {
+                field,
+                onUpdateRow,
+                onFieldUpdate: (updates: Partial<FieldDTO>) => onFieldUpdate(field, updates)
+              }
+            }
+            basis = 200
+            minWidth = 150
+          } else {
+            columnConfig = textColumn
+          }
+          break
+
+        case 'multi-select':
+          // Custom component for multi select
+          if (MultiSelectCell) {
+            columnConfig = {
+              component: MultiSelectCell,
+              disableKeys: true,
+              columnData: {
+                field,
+                onUpdateRow,
+                onFieldUpdate: (updates: Partial<FieldDTO>) => onFieldUpdate(field, updates)
+              }
+            }
+            basis = 250
+            minWidth = 180
+          } else {
+            columnConfig = textColumn
+          }
+          break
+
+        case 'autonumber':
+          // Use textColumn to display formatted strings (e.g., "INV-00001")
+          columnConfig = {
+            ...textColumn,
+            disabled: false  // Allow editing to support manual overrides
+          }
+          basis = 180  // Wider to accommodate prefix/suffix
+          minWidth = 150
+          break
+
+        case 'last-updated':
+        case 'created-at':
+          // Read-only date column for auto-managed timestamps
+          columnConfig = {
+            ...dateColumn,
+            disabled: true  // Make read-only
+          }
+          basis = 180
+          minWidth = 150
+          break
+
         default:
           // Fallback to textColumn for unknown types
           columnConfig = textColumn
@@ -205,5 +270,5 @@ export function useGridColumns({
 
     // Return ID column first, then field columns, then add column button
     return [idColumn, ...fieldColumns, addColumnCol]
-  }, [fields, organizationId, tableId, onUpdateRow, onEditField, onDeleteField, onAddColumn, availableTables, onSort, onClearSort, RelationCell, FileCell, DocumentCell, EmbeddingCell])
+  }, [fields, organizationId, tableId, onUpdateRow, onEditField, onDeleteField, onAddColumn, onFieldUpdate, availableTables, onSort, onClearSort, RelationCell, FileCell, DocumentCell, EmbeddingCell, SingleSelectCell, MultiSelectCell])
 }

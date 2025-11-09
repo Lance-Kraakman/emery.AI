@@ -138,6 +138,102 @@ export class Row {
   }
 
   /**
+   * Convert row to plain object with field NAMES as keys
+   * AIDEV-NOTE: Used by AutoFieldProcessor which works with field names, not IDs
+   * @param fields - Table fields to map IDs to names
+   * @returns Object with field name keys: {id: "123", name: "value", status: "active"}
+   */
+  toNamedObject(fields: readonly TableField[]): Record<string, any> {
+    const obj: Record<string, any> = {
+      id: this.id.value  // Include row ID in the returned data
+    };
+
+    // Create lookup map from field ID to field name
+    const fieldMap = new Map<string, TableField>();
+    for (const field of fields) {
+      fieldMap.set(field.id.value.toString(), field);
+    }
+
+    for (const fieldValue of this.fieldValues) {
+      const field = fieldMap.get(fieldValue.fieldId);
+      if (!field) {
+        continue; // Skip fields that don't exist in schema (shouldn't happen)
+      }
+
+      const value = fieldValue.value;
+
+      // Convert Date objects to ISO strings for JSON serialization
+      if (fieldValue.fieldType === 'date' && value instanceof Date) {
+        obj[field.name] = value.toISOString();
+      } else {
+        // All other types: return value as-is (arrays, objects, strings, primitives)
+        obj[field.name] = value;
+      }
+    }
+
+    return obj;
+  }
+
+  /**
+   * Create Row from plain object with field NAMES as keys
+   * AIDEV-NOTE: Used by AutoFieldProcessor which works with field names, not IDs
+   * @param data - Plain object with field names: {id: "123", name: "value", status: "active"}
+   * @param tableId - Table ID
+   * @param tableFields - Table fields to map names to IDs
+   * @returns Row entity
+   */
+  static fromNamedObject(
+    data: Record<string, any> & { id?: string },
+    tableId: number,
+    tableFields: TableField[]
+  ): Row {
+    // Create lookup map from field name to field
+    const fieldMap = new Map<string, TableField>();
+    for (const field of tableFields) {
+      fieldMap.set(field.name, field);
+    }
+
+    // Validate required fields
+    for (const field of tableFields) {
+      // Skip 'id' field - it's auto-generated if not provided
+      if (field.name === 'id') {
+        continue;
+      }
+
+      if (field.required && data[field.name] === undefined) {
+        throw new Error(`${field.name} is required`);
+      }
+    }
+
+    const fieldValues: FieldValue[] = [];
+
+    for (const field of tableFields) {
+      // Skip 'id' field - Row.id is the authoritative source
+      if (field.name === 'id') {
+        continue;
+      }
+
+      // Read value using field name as key
+      const value = data[field.name];
+
+      // Validate data type for non-null values
+      if (value !== undefined && value !== null) {
+        Row.validateFieldValue(field, value);
+      }
+
+      // Always push FieldValue for every field in schema
+      // Store numeric field ID (e.g., "1", "10"), not field name
+      fieldValues.push(new FieldValue(field.id.value.toString(), value, field.type));
+    }
+
+    return new Row(
+      data.id || crypto.randomUUID(),
+      tableId,
+      fieldValues
+    );
+  }
+
+  /**
    * Create Row from plain object with numeric field IDs as keys
    * AIDEV-NOTE: Reads from numeric field IDs (10, 11, 12) not field names.
    * Accepts both TableField entities and plain DTOs for flexibility.

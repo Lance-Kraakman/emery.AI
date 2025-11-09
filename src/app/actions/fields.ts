@@ -48,6 +48,42 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
       };
     }
 
+    // Initialize autonumber field with currentValue based on existing rows
+    if (type === 'autonumber' && result.data) {
+      try {
+        // Get count of existing rows to set appropriate starting value
+        const rows = await tableApplicationService.getRows(
+          TableId.fromNumber(tableId),
+          {
+            limit: 1000, // Get reasonable sample
+            offset: 0
+          }
+        );
+
+        const rowCount = rows.length || 0;
+        const startingNumber = (typeof data.metadata?.startingNumber === 'number' ? data.metadata.startingNumber : 1);
+
+        // Set currentValue to max(rowCount, startingNumber) so next value starts after existing rows
+        const currentValue = Math.max(rowCount, startingNumber);
+
+        // Update field metadata with currentValue
+        await tableApplicationService.updateField({
+          tableId: TableId.fromNumber(tableId),
+          fieldName: name,
+          metadata: {
+            ...data.metadata,
+            startingNumber,
+            currentValue
+          }
+        });
+
+        logger.debug(`Initialized autonumber field "${name}" with currentValue=${currentValue} (${rowCount} existing rows)`);
+      } catch (error) {
+        logger.error('Failed to initialize autonumber currentValue:', error);
+        // Don't fail the whole operation, field is still created
+      }
+    }
+
     // Note: RAG reindexing is now handled automatically by database triggers
 
     // Revalidate the appropriate path
@@ -56,7 +92,7 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
     } else {
       revalidatePath('/data'); // Default path for field operations
     }
-    
+
     return {
       success: true,
       data: result.data ? FieldMapper.toDTO(result.data) : null,
@@ -114,6 +150,7 @@ export async function updateField(data: {
     type?: FieldType
     required?: boolean
     relatedTableId?: number
+    metadata?: Record<string, any>
   }
 }, revalidateUrl?: string): Promise<Result> {
   try {
@@ -135,7 +172,7 @@ export async function updateField(data: {
       name: updates.name,
       type: updates.type,
       required: updates.required,
-      metadata: updates.relatedTableId ? { relatedTableId: updates.relatedTableId } : undefined
+      metadata: updates.metadata || (updates.relatedTableId ? { relatedTableId: updates.relatedTableId } : undefined)
     });
 
     if (!result.success) {
