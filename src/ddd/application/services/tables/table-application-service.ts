@@ -1,9 +1,9 @@
 /**
  * Table Application Service
- * 
+ *
  * Orchestrates dynamic table operations with business logic and validation.
  * Handles table creation, updates, deletion, and access control.
- * 
+ *
  * AIDEV-NOTE: Application service for table management - handles business
  * rules, validation, and coordination between repositories
  */
@@ -21,6 +21,12 @@ import { type FileFieldValue, isFileArray } from '@/ddd/domain/tables/value-obje
 import { Row, RowId } from '@/ddd/domain/tables/value-objects/row';
 import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
+import type { ITriggerMatchingService } from '@/ddd/domain/scheduling/services/trigger-matching-service';
+import type { TableChangeEvent } from '@/ddd/domain/scheduling/types/scheduling-types';
+import type { DatabaseOperation } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import type { ITaskRepository, CreateTaskData } from '@/ddd/domain/tasks/repositories/task-repository';
+import { type TriggerContext } from '@/ddd/domain/tasks/entities/task';
+import { TaskId } from '@/ddd/domain/tasks/value-objects/task-id';
 
 const logger = createDebugLogger('TableService');
 
@@ -139,7 +145,9 @@ export class TableApplicationService {
     private readonly dynamicTableService: DynamicTableService,
     private readonly databaseRepository: IDatabaseRepository,
     private readonly organizationRepository: IOrganizationRepository,
-    private readonly dynamicTableRepository: IDynamicTableRepository
+    private readonly dynamicTableRepository: IDynamicTableRepository,
+    private readonly triggerMatchingService?: ITriggerMatchingService,
+    private readonly taskRepository?: ITaskRepository
   ) {}
 
   /**
@@ -728,8 +736,20 @@ export class TableApplicationService {
 
       // Insert single row using batch method
       const rows = await this.dynamicTableRepository.insertRows(tableId, [data]);
+      const createdRow = rows[0];
 
-      return ResultHelpers.success(rows[0]);
+      // Emit table trigger event (non-blocking)
+      await this.handleTableTriggers({
+        tableId: tableId.value,
+        tableName: table.name,
+        operation: 'INSERT',
+        organizationId: table.organizationId,
+        rowId: createdRow.id.value,
+        rowData: createdRow.toPlainObject(table.fields),
+        timestamp: new Date()
+      });
+
+      return ResultHelpers.success(createdRow);
 
     } catch (error) {
       logger.error('Error creating row:', error);
@@ -765,6 +785,20 @@ export class TableApplicationService {
       // Batch insert all rows in single gRPC call
       const createdRows = await this.dynamicTableRepository.insertRows(tableId, rows);
 
+      // Emit table trigger events for each created row (non-blocking)
+      // AIDEV-NOTE: For bulk operations, emit event per row to allow fine-grained agent triggering
+      for (const createdRow of createdRows) {
+        await this.handleTableTriggers({
+          tableId: tableId.value,
+          tableName: table.name,
+          operation: 'INSERT',
+          organizationId: table.organizationId,
+          rowId: createdRow.id.value,
+          rowData: createdRow.toPlainObject(table.fields),
+          timestamp: new Date()
+        });
+      }
+
       return ResultHelpers.success(createdRows);
 
     } catch (error) {
@@ -786,6 +820,9 @@ export class TableApplicationService {
         return ResultHelpers.failure(`Table ${tableId.value} not found`);
       }
 
+      // Get previous row data for UPDATE trigger event
+      const previousRow = await this.dynamicTableRepository.getRow(tableId, rowId.value);
+
       // Validate relation fields
       const relationValidation = await this.validateRelationFields(table, data);
       if (!relationValidation.valid) {
@@ -797,8 +834,21 @@ export class TableApplicationService {
         rowId: rowId.value,
         row: data
       }]);
+      const updatedRow = updatedRows[0];
 
-      return ResultHelpers.success(updatedRows[0]);
+      // Emit table trigger event (non-blocking)
+      await this.handleTableTriggers({
+        tableId: tableId.value,
+        tableName: table.name,
+        operation: 'UPDATE',
+        organizationId: table.organizationId,
+        rowId: updatedRow.id.value,
+        rowData: updatedRow.toPlainObject(table.fields),
+        previousRowData: previousRow?.toPlainObject(table.fields),
+        timestamp: new Date()
+      });
+
+      return ResultHelpers.success(updatedRow);
 
     } catch (error) {
       logger.error('Error updating row:', error);
@@ -866,8 +916,24 @@ export class TableApplicationService {
         return ResultHelpers.failure(`Table ${tableId.value} not found`);
       }
 
+      // Get row data before deletion for DELETE trigger event
+      const rowToDelete = await this.dynamicTableRepository.getRow(tableId, rowId.value);
+
       // Delete row using repository (pass as single-element array)
       await this.dynamicTableRepository.deleteRows(tableId, [rowId.value]);
+
+      // Emit table trigger event (non-blocking)
+      if (rowToDelete) {
+        await this.handleTableTriggers({
+          tableId: tableId.value,
+          tableName: table.name,
+          operation: 'DELETE',
+          organizationId: table.organizationId,
+          rowId: rowId.value,
+          rowData: rowToDelete.toPlainObject(table.fields),
+          timestamp: new Date()
+        });
+      }
 
       return ResultHelpers.success(undefined);
 
@@ -1001,6 +1067,83 @@ export class TableApplicationService {
     } catch (error) {
       logger.error('Error searching table rows:', error);
       return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to search table rows');
+    }
+  }
+
+  /**
+   * Handle table triggers for DATABASE_EVENT schedules
+   * Emits table change events and creates tasks for matching agent schedules
+   *
+   * AIDEV-NOTE: This method is called after successful row operations (create, update, delete)
+   * to trigger any agents that are listening for table changes.
+   */
+  private async handleTableTriggers(event: TableChangeEvent): Promise<void> {
+    // Skip if trigger matching service not available (backward compatibility)
+    if (!this.triggerMatchingService || !this.taskRepository) {
+      logger.debug('Trigger matching service not available, skipping table triggers');
+      return;
+    }
+
+    try {
+      // Find all agent schedules that match this table change event
+      const matches = await this.triggerMatchingService.findMatchingSchedules(event);
+
+      if (matches.length === 0) {
+        logger.debug('No matching schedules found for table change', {
+          tableId: event.tableId,
+          operation: event.operation
+        });
+        return;
+      }
+
+      logger.debug(`Found ${matches.length} matching schedule(s) for table trigger`, {
+        tableId: event.tableId,
+        operation: event.operation,
+        agentCount: matches.length
+      });
+
+      // Create a task for each matching schedule
+      for (const match of matches) {
+        try {
+          const triggerContext: TriggerContext = {
+            type: 'DATABASE_EVENT',
+            scheduleName: match.schedule.name,
+            tableChange: event
+          };
+
+          const taskData: CreateTaskData = {
+            agentId: match.agent.id.value,
+            organizationId: event.organizationId.value,
+            name: match.schedule.name || `Table ${event.operation} trigger`,
+            instructions: match.schedule.taskInstructions,
+            triggerContext
+          };
+
+          const task = await this.taskRepository.create(taskData);
+
+          logger.summary('Created task from table trigger', {
+            taskId: task.id.value,
+            agentId: match.agent.id.value,
+            scheduleName: match.schedule.name,
+            tableId: event.tableId,
+            operation: event.operation
+          });
+        } catch (taskError) {
+          logger.error('Failed to create task for table trigger', {
+            error: taskError,
+            agentId: match.agent.id.value,
+            scheduleName: match.schedule.name
+          });
+          // Continue creating tasks for other matches even if one fails
+        }
+      }
+    } catch (error) {
+      logger.error('Error handling table triggers', {
+        error,
+        tableId: event.tableId,
+        operation: event.operation
+      });
+      // Don't throw - table operation should succeed even if trigger handling fails
     }
   }
 

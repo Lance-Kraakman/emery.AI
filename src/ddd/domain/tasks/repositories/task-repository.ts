@@ -17,6 +17,7 @@ export interface CreateTaskData {
   name: string;
   skillName?: string | null;
   instructions: any; // JSONB from database
+  triggerContext?: any; // JSONB trigger context
   status?: string;
   result?: any;
   error?: string | null;

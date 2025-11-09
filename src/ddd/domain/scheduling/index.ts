@@ -25,5 +25,13 @@ export type {
   CleanupResult,
   RagReindexEvent,
   TaskEvent,
+  TableChangeEvent,
   EventDispatcherConfig
 } from './types/scheduling-types';
+
+// Domain Services
+export { TriggerMatchingService } from './services/trigger-matching-service';
+export type {
+  ITriggerMatchingService,
+  MatchedSchedule
+} from './services/trigger-matching-service';

@@ -846,11 +846,12 @@ export const tasks = pgTable("tasks", {
   name: text("name").notNull(),
   skillName: text("skill_name"), // Optional - system can auto-route if not specified
   instructions: jsonb("instructions").notNull(), // Step-like config: {instructions: string, tools?: ToolConfig[], servers?: ServerConfig[]}
+  triggerContext: jsonb("trigger_context"), // What triggered this task: {type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL', scheduleName?: string, tableChange?: TableChangeEvent}
   status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed, cancelled, timeout
   result: jsonb("result"), // Final output data
   error: text("error"),
   logs: jsonb("logs").$type<string[]>().default([]), // Execution logs from gRPC TaskProgress
-  
+
   // Execution tracking
   startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
