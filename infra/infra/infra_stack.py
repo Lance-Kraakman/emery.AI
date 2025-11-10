@@ -442,7 +442,10 @@ class InfraStack(Stack):
             "maximumPercent": 200
         }
 
-        # AIDEV-NOTE: No service dependencies needed - init containers handle migration timing
+        # AIDEV-NOTE: Scheduler service depends on frontend service to ensure migrations complete first
+        # Container dependencies only work within same task definition, so we use service-level dependency
+        # This ensures frontend (with migration init container) starts and becomes healthy before scheduler
+        scheduler_service.node.add_dependency(frontend_service.service)
 
         # Create the Fargate service for the Python gRPC backend
         agent_service = ecs_patterns.NetworkLoadBalancedFargateService(
