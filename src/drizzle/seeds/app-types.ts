@@ -172,47 +172,34 @@ async function loadPipedreamMetadata(): Promise<{
   tools: Record<string, PipedreamTool>;
   appIcons: Record<string, string>;
 }> {
-  const tsPath = path.join(process.cwd(), 'src', 'ddd', 'domain', 'tools', 'config', 'pipedream-tools.generated.ts');
+  console.log('Loading Pipedream metadata from unified_metadata.json...');
 
-  if (!fs.existsSync(tsPath)) {
-    throw new Error(
-      `Pipedream tools not generated. Run: pnpm tsx src/scripts/fetch-pipedream-tools.ts\n` +
-      `Expected file: ${tsPath}`
-    );
+  // Load from JSON instead of TypeScript dynamic import (Docker-compatible)
+  const jsonPath = path.join(process.cwd(), 'src', 'lib', 'data', 'unified_metadata.json');
+
+  if (!fs.existsSync(jsonPath)) {
+    console.warn('Unified metadata not found - skipping Pipedream apps');
+    console.warn(`Expected file: ${jsonPath}`);
+    return { tools: {}, appIcons: {} };
   }
 
-  console.log('Loading Pipedream metadata from TypeScript config...');
+  try {
+    const unifiedMetadata = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+    const PIPEDREAM_TOOLS = unifiedMetadata.pipedream_tools || {};
+    const appIcons = unifiedMetadata.app_icons || {};
 
-  // Dynamic import - fail fast if it doesn't work
-  const pipedreamModule = await import(tsPath.replace('.ts', '.js'));
-  const { PIPEDREAM_TOOLS } = pipedreamModule;
+    console.log(`Loaded ${Object.keys(PIPEDREAM_TOOLS).length} Pipedream tools from unified metadata`);
+    console.log(`Loaded ${Object.keys(appIcons).length} app icon URLs from unified metadata`);
 
-  if (!PIPEDREAM_TOOLS || typeof PIPEDREAM_TOOLS !== 'object') {
-    throw new Error(`Invalid PIPEDREAM_TOOLS export in ${tsPath}`);
+    return {
+      tools: PIPEDREAM_TOOLS,
+      appIcons
+    };
+  } catch (error) {
+    console.error('Failed to load unified metadata:', error);
+    console.warn('Skipping Pipedream apps due to load error');
+    return { tools: {}, appIcons: {} };
   }
-
-  console.log(`Loaded ${Object.keys(PIPEDREAM_TOOLS).length} Pipedream tools from TypeScript`);
-
-  // Also load app icons from unified metadata JSON
-  const jsonPath = path.join(process.cwd(), 'emery-agents', 'src', 'emery_agents', 'execution', 'tools', 'unified_metadata.json');
-  let appIcons: Record<string, string> = {};
-
-  if (fs.existsSync(jsonPath)) {
-    try {
-      const unifiedMetadata = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
-      appIcons = unifiedMetadata.app_icons || {};
-      console.log(`Loaded ${Object.keys(appIcons).length} app icon URLs from unified metadata`);
-    } catch (error) {
-      console.warn('Could not load app icons from unified metadata:', error);
-    }
-  } else {
-    console.warn('Unified metadata not found - app icons will use fallback');
-  }
-
-  return {
-    tools: PIPEDREAM_TOOLS,
-    appIcons
-  };
 }
 
 function extractAppStats(metadata: Record<string, PipedreamTool>): Record<string, number> {
