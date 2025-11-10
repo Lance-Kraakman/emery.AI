@@ -344,8 +344,8 @@ async function generateUnifiedMetadata(
     emery_tools: EMERY_BACKEND_TOOLS
   };
 
-  // Backend unified JSON output (for Python workers)
-  const backendOutputDir = path.join(process.cwd(), 'emery-agents', 'src', 'emery_agents', 'execution', 'tools');
+  // Backend unified JSON output (for Python workers and seeds)
+  const backendOutputDir = path.join(process.cwd(), 'src', 'lib', 'data');
   const backendOutputPath = path.join(backendOutputDir, 'unified_metadata.json');
 
   // Ensure backend directory exists
