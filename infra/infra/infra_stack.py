@@ -93,7 +93,7 @@ class InfraStack(Stack):
         db_parameter_group = rds.ParameterGroup(
             self, f"{prefix}PostgresParams",
             engine=rds.DatabaseInstanceEngine.postgres(
-                version=rds.PostgresEngineVersion.VER_16_3
+                version=rds.PostgresEngineVersion.VER_16_10
             ),
             parameters={
                 "rds.force_ssl": "0"  # Allow non-SSL connections for development
@@ -105,7 +105,7 @@ class InfraStack(Stack):
         db_instance = rds.DatabaseInstance(
             self, f"{prefix}PostgresDB",
             engine=rds.DatabaseInstanceEngine.postgres(
-                version=rds.PostgresEngineVersion.VER_16_3
+                version=rds.PostgresEngineVersion.VER_16_10
             ),
             instance_type=ec2.InstanceType.of(
                 ec2.InstanceClass.BURSTABLE4_GRAVITON, ec2.InstanceSize.MICRO
