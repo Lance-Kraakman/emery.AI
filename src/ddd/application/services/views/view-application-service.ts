@@ -1008,10 +1008,23 @@ export class ViewApplicationService {
         };
       }
 
-      // 5. Convert table fields to plain objects for client consumption
-      logger.debug("Converting table fields to DTOs", { fieldCount: table.fields.length });
+      // 5. Filter fields for form display
+      // AIDEV-NOTE: Exclude auto-managed fields (autonumber, timestamps) and complex fields (embedding, relation)
+      // These fields are either system-generated or too complex for standard form input:
+      // - autonumber: Auto-generated sequence numbers (e.g., "INV-00001")
+      // - created-at/last-updated: Automatically managed timestamps
+      // - embedding: System-generated vector embeddings from documents
+      // - relation: Complex field type better managed through dedicated UI
+      const FORM_EXCLUDED_FIELD_TYPES = ['autonumber', 'created-at', 'last-updated', 'embedding', 'relation'];
+      const formFields = table.fields.filter(field => !FORM_EXCLUDED_FIELD_TYPES.includes(field.type));
 
-      const tableFieldDTOs = table.fields.map((field, index) => {
+      logger.debug("Converting table fields to DTOs for form", {
+        totalFieldCount: table.fields.length,
+        formFieldCount: formFields.length,
+        excludedCount: table.fields.length - formFields.length
+      });
+
+      const tableFieldDTOs = formFields.map((field, index) => {
         // Log each field during conversion to catch undefined IDs
         logger.debug(`[getFormViewConfiguration] Converting field ${index}:`, {
           hasIdProperty: 'id' in field,

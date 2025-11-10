@@ -14,8 +14,11 @@ import {
   NumberFieldInput,
   BooleanFieldInput,
   DateFieldInput,
+  SingleSelectFieldInput,
+  MultiSelectFieldInput,
 } from './field-inputs';
 import { cn } from '@/lib/utils';
+import type { SelectOption } from '@/ddd/domain/tables/value-objects/table-field';
 
 // Types matching the domain layer FormViewConfig
 export interface FormPageField {
@@ -192,6 +195,29 @@ export function FormPage({
             {...commonProps}
             value={fieldValue || null}
             onChange={(value) => onChange(fieldName, value)}
+          />
+        );
+
+      case 'single-select':
+        return (
+          <SingleSelectFieldInput
+            key={tableField.id}
+            {...commonProps}
+            value={fieldValue ?? null}
+            onChange={(value) => onChange(fieldName, value)}
+            options={(tableField.metadata?.options as SelectOption[] | undefined) || []}
+          />
+        );
+
+      case 'multi-select':
+        return (
+          <MultiSelectFieldInput
+            key={tableField.id}
+            {...commonProps}
+            value={fieldValue ?? null}
+            onChange={(value) => onChange(fieldName, value)}
+            options={(tableField.metadata?.options as SelectOption[] | undefined) || []}
+            maxSelections={tableField.metadata?.maxSelections as number | undefined}
           />
         );
 

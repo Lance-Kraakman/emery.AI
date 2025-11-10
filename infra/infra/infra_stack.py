@@ -93,7 +93,7 @@ class InfraStack(Stack):
         db_parameter_group = rds.ParameterGroup(
             self, f"{prefix}PostgresParams",
             engine=rds.DatabaseInstanceEngine.postgres(
-                version=rds.PostgresEngineVersion.VER_16_10
+                version=rds.PostgresEngineVersion.VER_16_9
             ),
             parameters={
                 "rds.force_ssl": "0"  # Allow non-SSL connections for development
@@ -105,7 +105,7 @@ class InfraStack(Stack):
         db_instance = rds.DatabaseInstance(
             self, f"{prefix}PostgresDB",
             engine=rds.DatabaseInstanceEngine.postgres(
-                version=rds.PostgresEngineVersion.VER_16_10
+                version=rds.PostgresEngineVersion.VER_16_9
             ),
             instance_type=ec2.InstanceType.of(
                 ec2.InstanceClass.BURSTABLE4_GRAVITON, ec2.InstanceSize.MICRO
@@ -232,6 +232,10 @@ class InfraStack(Stack):
             self, f"{prefix}FrontendTaskDef",
             cpu=512,
             memory_limit_mib=1024,
+            runtime_platform=ecs.RuntimePlatform(
+                cpu_architecture=ecs.CpuArchitecture.X86_64,
+                operating_system_family=ecs.OperatingSystemFamily.LINUX
+            ),
         )
 
         # Add migration init container (runs first, must complete successfully)
@@ -377,6 +381,10 @@ class InfraStack(Stack):
             self, f"{prefix}SchedulerTaskDef",
             cpu=512,
             memory_limit_mib=1024,
+            runtime_platform=ecs.RuntimePlatform(
+                cpu_architecture=ecs.CpuArchitecture.X86_64,
+                operating_system_family=ecs.OperatingSystemFamily.LINUX
+            ),
         )
 
         scheduler_container = scheduler_task_definition.add_container(
@@ -451,6 +459,10 @@ class InfraStack(Stack):
                     **app_secrets_map
                 }
             ),
+            runtime_platform=ecs.RuntimePlatform(
+                cpu_architecture=ecs.CpuArchitecture.X86_64,
+                operating_system_family=ecs.OperatingSystemFamily.LINUX
+            ),
             public_load_balancer=True,
             security_groups=[db_client_sg, agent_grpc_sg],
             # AIDEV-NOTE: Critical fix for ECS service stability
@@ -459,6 +471,18 @@ class InfraStack(Stack):
         )
 
         # AIDEV-NOTE: Agent service doesn't need database migrations
+
+        # AIDEV-NOTE: Configure TCP health check for NLB target group
+        # TCP health checks verify port connectivity without interfering with gRPC application logic
+        # This is required for the NLB to stabilize and register healthy targets
+        agent_service.target_group.configure_health_check(
+            port="50051",
+            protocol=elbv2.Protocol.TCP,
+            interval=Duration.seconds(30),
+            timeout=Duration.seconds(10),
+            healthy_threshold_count=2,
+            unhealthy_threshold_count=2,
+        )
 
         # AIDEV-NOTE: Add ECR permissions to agent task execution role for pulling images
         agent_image_uri = os.environ.get('AGENT_IMAGE_URI')
@@ -479,10 +503,6 @@ class InfraStack(Stack):
             )
         )
 
-        # AIDEV-NOTE: No health checks for gRPC service - relies on ECS task health only
-        # The gRPC agent is internal-only, accessed by frontend via internal network
-        # TCP health checks on gRPC can be unreliable during model loading
-        
         # AIDEV-NOTE: Configure deployment settings for agent service stability
         cfn_agent_service = agent_service.service.node.default_child
         cfn_agent_service.deployment_configuration = {

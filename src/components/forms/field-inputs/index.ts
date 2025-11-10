@@ -9,3 +9,5 @@ export { TextFieldInput, type TextFieldInputProps } from './TextFieldInput';
 export { NumberFieldInput, type NumberFieldInputProps } from './NumberFieldInput';
 export { BooleanFieldInput, type BooleanFieldInputProps } from './BooleanFieldInput';
 export { DateFieldInput, type DateFieldInputProps } from './DateFieldInput';
+export { SingleSelectFieldInput, type SingleSelectFieldInputProps } from './SingleSelectFieldInput';
+export { MultiSelectFieldInput, type MultiSelectFieldInputProps } from './MultiSelectFieldInput';
