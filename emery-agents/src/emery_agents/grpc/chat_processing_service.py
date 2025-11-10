@@ -1,16 +1,28 @@
 """
 ChatProcessingService Implementation
 
-Stateless gRPC service for AI chat processing operations only.
+Stateful gRPC service for AI chat processing with persistent agent sessions.
 Database operations (sessions, message persistence, history) are handled by Next.js.
 
-AIDEV-NOTE: Clean separation - this service only handles AI processing:
+AIDEV-NOTE: Session-based architecture with agent persistence:
+- SessionManager maintains agent instances in memory
+- Agents persist between messages (reset=False)
+- Conversation history restored from database after restart/timeout
+- Automatic cleanup (30 min idle, 4 hour max lifetime)
+
+AI Processing features:
 - RAG context retrieval
-- LLM response generation  
+- LLM response generation
 - Tool execution
 - OAuth proxy operations
 
 All database operations remain in Next.js ChatApplicationService.
+
+AIDEV-NOTE: Refactored to use shared utilities:
+- ImageProcessor for image extraction
+- AgentFactory for agent creation
+- TokenUsageExtractor for token tracking
+- UnifiedToolLoader enhanced methods
 """
 
 import logging
@@ -35,6 +47,10 @@ from .mappers.message_mapper import (
 from .mappers.message_types import MessageContentList
 from ..services.model_provider import SmolagentsModelProvider
 from ..services.tool_loader import UnifiedToolLoader
+from ..services.session_manager import SessionManager
+from ..services.image_processor import ImageProcessor
+from ..services.agent_factory import AgentFactory, AgentConfig
+from ..services.token_usage_extractor import TokenUsageExtractor
 from ..rag.rag_processor import RagProcessor
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -97,24 +113,35 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         self.last_token_usage = None  # Store token usage from last agent execution
         self.active_streams: Dict[str, bool] = {}  # Track active message streams for cancellation
 
+        # Initialize session manager for stateful agent persistence
+        self.session_manager = SessionManager(
+            idle_timeout=1800,  # 30 minutes
+            max_lifetime=14400  # 4 hours
+        )
+        self.session_manager.start_cleanup_task()
+        logger.info("✅ SessionManager initialized with automatic cleanup")
+
         # Initialize AI processing services - no database dependencies
-        logger.info("Initializing ChatProcessingService for AI operations only")
+        logger.info("Initializing ChatProcessingService with shared utilities")
 
         # Import services at runtime to avoid circular dependencies
         try:
             # RAG processing (always available - no external dependencies)
-            # RagProcessor already imported at top
             self.rag_processor = RagProcessor()
             logger.info("✅ RagProcessor initialized successfully")
 
             # Tool loader for converting ToolConfig to smolagents tools
             try:
-                # UnifiedToolLoader already imported at top
                 self.tool_registry = UnifiedToolLoader()
                 logger.info("✅ UnifiedToolLoader initialized successfully")
             except ImportError as tool_error:
                 logger.warning(f"⚠️ ToolRegistryRepository not available: {tool_error}")
                 self.tool_registry = None
+
+            # Model provider and AgentFactory (shared utilities)
+            self.model_provider = SmolagentsModelProvider()
+            self.agent_factory = AgentFactory(self.model_provider)
+            logger.info("✅ AgentFactory initialized successfully")
 
             logger.info("✅ ChatProcessingService initialized successfully")
 
@@ -122,6 +149,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.error(f"❌ Failed to import core services: {e}")
             self.rag_processor = None
             self.tool_registry = None
+            self.model_provider = None
+            self.agent_factory = None
 
     async def ProcessMessage(
         self,
@@ -145,10 +174,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         user_id = request.user_id
         org_id = request.organization_id
         message_id = request.message_id if request.message_id else f"msg_{int(time.time() * 1000)}"
+        session_id = request.session_id if request.session_id else f"{org_id}_{user_id}"
 
         # Register message stream for cancellation tracking
         self.active_streams[message_id] = False  # False = not cancelled
-        logger.info(f"🚀 Processing message {message_id} for user {user_id} in org {org_id}")
+        logger.info(f"🚀 Processing message {message_id} for user {user_id} in org {org_id} (session: {session_id})")
 
         # Extract text preview for logging
         text_preview = extract_text_from_parts(message_parts)
@@ -202,7 +232,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 None,  # RAG context removed
                 domain_context=request.context,
                 org_model=org_model,
-                has_images=has_image_content
+                has_images=has_image_content,
+                session_id=session_id,
+                user_id=user_id,
+                org_id=org_id,
+                conversation_history=request.conversation_history
             ):
                 # Check for cancellation
                 if self.active_streams.get(message_id, False):
@@ -289,8 +323,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # 4. Send completion marker
             processing_time = int((time.time() - start_time) * 1000)
 
-            # Convert stored token usage to protobuf
-            token_usage_proto = self._convert_token_usage_to_proto(self.last_token_usage)
+            # Convert stored token usage to protobuf using shared utility
+            token_usage_proto = TokenUsageExtractor.to_proto(self.last_token_usage)
 
             complete_response = agent_worker_pb2.ProcessMessageResponse(
                 complete=agent_worker_pb2.ProcessingComplete(
@@ -424,11 +458,18 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         rag_context_data: Optional['RagContextData'],
         domain_context: Optional['agent_worker_pb2.ChatContext'] = None,
         org_model: Optional[str] = None,
-        has_images: bool = False
+        has_images: bool = False,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        org_id: Optional[int] = None,
+        conversation_history: Optional[List] = None
     ) -> AsyncIterator[Dict[str, Any]]:
         """
-        Stream AI response using ToolCallingAgent with proper streaming support.
-        Always uses ToolCallingAgent approach whether tools are provided or not.
+        Stream AI response using ToolCallingAgent with stateful session support.
+
+        Session Management:
+        - HOT PATH: Reuse existing agent from session (agent.memory persists)
+        - COLD PATH: Create new agent and restore from conversation history
 
         AIDEV-NOTE: Accepts smolagents ChatMessage objects with PIL Image support.
         Smolagents handles conversion to HuggingFace API format internally.
@@ -446,39 +487,78 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             smolagents_tools = self._convert_tools_to_smolagents(tools)
             logger.info(f"🔧 Converted {len(smolagents_tools)} tools for ToolCallingAgent")
 
-            # 3. Create ToolCallingAgent with model provider and smart model selection
-            agent = self._create_agent_with_model_provider(
-                smolagents_tools,
-                org_model=org_model,
-                has_images=has_images
-            )
-            logger.info(f"🤖 Created ToolCallingAgent with {len(smolagents_tools)} tools")
+            # 3. Get or create agent with session management
+            # HOT PATH: Check if agent exists in session
+            logger.info(f"🔍 [SESSION-DEBUG] Checking for existing session: {session_id}")
+            logger.info(f"🔍 [SESSION-DEBUG] Conversation history length: {len(conversation_history) if conversation_history else 0}")
 
-            # 4. Build conversation with system message
-            # Prepend system message to conversation
-            system_message = ChatMessage(
-                role=MessageRole.SYSTEM,
-                content=system_prompt
-            )
-            all_messages = [system_message] + conversation_messages
-            logger.info(f"💬 Built conversation: {len(all_messages)} messages (including system)")
+            agent = self.session_manager.get_agent(session_id) if session_id else None
 
-            # 5. Build task with full conversation context
-            # AIDEV-NOTE: Since we create a NEW agent per request, agent.memory won't persist
-            # between requests. Instead, we include full conversation history in the task prompt.
+            if agent:
+                # Agent exists in memory - HOT PATH (fast, memory persists)
+                logger.info(f"♻️  [HOT-PATH] Reusing existing agent from session {session_id}")
+                logger.info(f"🧠 [MEMORY-DEBUG] Agent memory has {len(agent.memory.steps)} steps")
+
+                # Debug: Log memory step types
+                step_types = [type(step).__name__ for step in agent.memory.steps]
+                logger.info(f"🧠 [MEMORY-DEBUG] Step types: {step_types}")
+
+            else:
+                # Agent doesn't exist - COLD PATH (create + restore from history)
+                logger.info(f"✨ [COLD-PATH] Creating new agent for session {session_id}")
+
+                # Create ToolCallingAgent with model provider
+                agent = self._create_agent_with_model_provider(
+                    smolagents_tools,
+                    org_model=org_model,
+                    has_images=has_images
+                )
+
+                logger.info(f"🧠 [MEMORY-DEBUG] New agent created, memory steps: {len(agent.memory.steps)}")
+
+                # Restore agent memory from conversation history if available
+                if conversation_history and len(conversation_history) > 0:
+                    logger.info(f"📚 [RESTORE-DEBUG] Restoring {len(conversation_history)} messages from history")
+                    restored_count = await self.session_manager.restore_agent_from_history(
+                        agent,
+                        conversation_history
+                    )
+                    logger.info(f"📚 [RESTORE-DEBUG] Restored {restored_count} messages to agent memory")
+                    logger.info(f"🧠 [MEMORY-DEBUG] After restoration, memory has {len(agent.memory.steps)} steps")
+
+                    # Debug: Log first few steps
+                    for i, step in enumerate(agent.memory.steps[:5]):
+                        logger.info(f"🧠 [MEMORY-DEBUG] Step {i}: {type(step).__name__}")
+                else:
+                    logger.info(f"📚 [RESTORE-DEBUG] No conversation history to restore")
+
+                # Register agent in session manager
+                if session_id:
+                    self.session_manager.register_agent(
+                        session_id=session_id,
+                        agent=agent,
+                        organization_id=org_id or 0,
+                        user_id=user_id or "",
+                        restored_from_history=bool(conversation_history),
+                        history_message_count=len(conversation_history) if conversation_history else 0
+                    )
+
+            logger.info(f"🤖 Using ToolCallingAgent with {len(smolagents_tools)} tools")
+            logger.info(f"🧠 [MEMORY-DEBUG] Final agent memory before execution: {len(agent.memory.steps)} steps")
+
+            # 4. Extract current user message (last message in conversation)
+            # AIDEV-NOTE: With reset=False, agent.memory persists, so we only need the current message
             last_message = conversation_messages[-1] if conversation_messages else None
 
             # Extract images from last message (smolagents limitation - only last message images)
             images = self._extract_images_from_message(last_message) if last_message else []
 
-            # Build task with conversation history instead of just last message
-            task_with_context = self._build_task_with_conversation_context(
-                conversation_messages,
-                system_prompt
-            )
+            # Extract current user message text (agent.memory has conversation history)
+            current_task = self._extract_text_from_message(last_message) if last_message else "Continue the conversation"
 
             logger.info(f"🖼️ Extracted {len(images)} images from last message")
-            logger.info(f"💬 Task with context: {len(task_with_context)} chars, {len(conversation_messages)} messages")
+            logger.info(f"💬 Current task: {len(current_task)} chars")
+            logger.info(f"🧠 Agent memory: {len(agent.memory.steps)} steps")
 
             # 6. Execute with ToolCallingAgent with real streaming
             logger.info("🚀 Executing ToolCallingAgent with stream=True...")
@@ -493,12 +573,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # Use stream=True for real-time step-by-step progress
             # Pass images via official smolagents API (images parameter)
             # AIDEV-NOTE: smolagents only supports images from the last message, not conversation history
-            # AIDEV-NOTE: reset=True is explicit - we manage conversation history ourselves in task prompt
+            # AIDEV-NOTE: reset=False for stateful sessions - agent.memory persists between messages
             for step in agent.run(
-                task=task_with_context,  # Task includes full conversation history
+                task=current_task,  # Only current message (agent.memory has conversation history)
                 stream=True,
                 images=images if images else None,  # Official API for passing PIL Images
-                reset=True  # Reset agent memory since we manage history in task prompt
+                reset=False  # Keep agent memory for stateful sessions
             ):
                 logger.info(f"📊 Step {step_index}: {type(step).__name__}")
 
@@ -549,6 +629,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # Log summary of collected steps
             logger.info(f"✅ Completed streaming with {step_index} steps")
 
+            # Debug: Log agent memory state after execution
+            logger.info(f"🧠 [MEMORY-DEBUG] After execution, agent memory has {len(agent.memory.steps)} steps")
+            step_types_after = [type(step).__name__ for step in agent.memory.steps]
+            logger.info(f"🧠 [MEMORY-DEBUG] Step types after execution: {step_types_after}")
+
             # Extract token usage after execution completes
             self.last_token_usage = self._extract_token_usage_from_agent(agent)
             if self.last_token_usage:
@@ -590,61 +675,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         return self._build_basic_system_prompt(domain_context)
 
     def _convert_tools_to_smolagents(self, tools: List['agent_worker_pb2.ToolConfig']) -> List[Any]:
-        """Convert protobuf ToolConfig objects to smolagents tools."""
-        if not tools:
-            logger.info("No tools provided to convert")
-            return []
-
+        """Convert protobuf ToolConfig objects to smolagents tools using shared utility."""
         if not self.tool_registry:
             logger.error("❌ Tool registry not available - tools cannot be loaded")
             return []
 
-        try:
-            core_tool_configs = []
-            logger.info(f"🔧 Converting {len(tools)} tools to smolagents format...")
-
-            for tool_config in tools:
-                logger.info(f"Converting tool: {tool_config.name}")
-                logger.info(f"  Config keys: {list(tool_config.config.keys()) if tool_config.config else 'none'}")
-                logger.info(f"  Config values: {dict(tool_config.config) if tool_config.config else {}}")
-
-                # Keep original tool name - let UnifiedToolLoader handle name resolution
-                tool_name = tool_config.name
-
-                core_config = agent_worker_pb2.ToolConfig(
-                    name=tool_name,
-                    version=tool_config.version or '',
-                    config=dict(tool_config.config) if tool_config.config else {}
-                )
-                core_tool_configs.append(core_config)
-                logger.info(f"  Created ToolConfig: name={core_config.name}, config={core_config.config}")
-
-            logger.info(f"🚀 Calling tool_registry.load_tools with {len(core_tool_configs)} configs...")
-            smolagents_tools = []
-
-            for core_config in core_tool_configs:
-                try:
-                    logger.info(f"🔧 Loading individual tool: {core_config.name}")
-                    # For chat system, use user API key mode - extract API key from enriched config
-                    api_key = core_config.config.get('api_key', '')
-                    logger.info(f"  Extracted API key from config: present={bool(api_key)}")
-                    tool_instance = self.tool_registry.load_tool(core_config, api_key=api_key, api_key_mode="user")
-                    smolagents_tools.append(tool_instance)
-                    logger.info(f"✅ Successfully loaded tool: {core_config.name}")
-                except Exception as tool_error:
-                    logger.error(f"❌ Failed to load tool {core_config.name}: {tool_error}")
-                    logger.error(f"❌ Tool config was: {core_config.config}")
-                    import traceback
-                    logger.error(f"❌ Tool loading traceback: {traceback.format_exc()}")
-
-            logger.info(f"✅ Successfully converted {len(smolagents_tools)} out of {len(tools)} tools")
-            return smolagents_tools
-
-        except Exception as tool_error:
-            logger.error(f"❌ Failed to convert tools: {tool_error}")
-            import traceback
-            logger.error(f"❌ Tool conversion traceback: {traceback.format_exc()}")
-            return []
+        # Use consolidated load_tools_from_configs method
+        return self.tool_registry.load_tools_from_configs(
+            tool_configs=tools,
+            api_key=None,  # API keys are in tool configs already
+            api_key_mode="user"  # Chat system uses user API key mode
+        )
 
     def _create_agent_with_model_provider(
         self,
@@ -652,65 +693,21 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         org_model: Optional[str] = None,
         has_images: bool = False
     ) -> ToolCallingAgent:
-        """
-        Create ToolCallingAgent using model provider with smart vision model selection.
-
-        If images are present and no explicit model is specified, uses vision model.
-        Otherwise uses organization model or default text model.
-        """
-        model_provider = SmolagentsModelProvider()
-
-        # Smart model selection:
-        # 1. If org_model specified: use that (explicit override)
-        # 2. If images present: use vision model
-        # 3. Otherwise: use default text model
-        if org_model:
-            logger.info(f"🔧 Using explicit organization model: {org_model}")
-            model = model_provider.get_model(model_id=org_model)
-            model_id = org_model
-        else:
-            # Use smart model selection based on content
-            model = model_provider.get_model_for_message(has_images=has_images)
-            model_id = model.model_name
-
-        logger.info(f"🤖 Creating ToolCallingAgent with model: {model_id}")
-
-        agent = ToolCallingAgent(
-            tools=smolagents_tools,  # Can be empty list
-            model=model,
+        """Create ToolCallingAgent using AgentFactory with smart vision model selection."""
+        agent_config = AgentConfig(
+            tools=smolagents_tools,
+            org_model=org_model,
+            has_images=has_images,
             max_steps=10,
+            agent_name="chat_tool_calling",
+            agent_description=f"Chat agent with {len(smolagents_tools)} tools available",
+            enable_caching=False
         )
-        agent.name = "chat_tool_calling"
-        agent.description = f"Chat agent with {len(smolagents_tools)} tools available ({model_id})"
-
-        return agent
+        return self.agent_factory.create_agent(agent_config)
 
     def _extract_images_from_message(self, message: ChatMessage) -> list[Image.Image]:
-        """
-        Extract PIL Image objects from ChatMessage content.
-
-        Args:
-            message: ChatMessage object with content as MessageContentList
-
-        Returns:
-            List of PIL.Image objects (empty if no images)
-
-        AIDEV-NOTE: Used to pass images to agent.run() via the official images parameter.
-        Smolagents expects list[PIL.Image], not URLs or base64 strings.
-        Content is always MessageContentList (list of content parts).
-        """
-        if not message or not message.content:
-            return []
-
-        content: MessageContentList = message.content
-
-        # Extract all images from content parts
-        images: list[Image.Image] = []
-        for part in content:
-            if part.get("type") == "image":
-                images.append(part["image"])
-
-        return images
+        """Extract PIL Image objects from ChatMessage content using shared utility."""
+        return ImageProcessor.extract_images_from_message(message)
 
     def _extract_text_from_message(self, message: ChatMessage) -> str:
         """
@@ -933,72 +930,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             total_sources=len(rag_context_data.sources)
         )
 
-    def _convert_token_usage_to_proto(self, token_usage) -> Optional[agent_worker_pb2.TokenUsage]:
-        """Convert token usage object to protobuf TokenUsage message."""
-        if not token_usage:
-            return None
-
-        return agent_worker_pb2.TokenUsage(
-            model_name=getattr(token_usage, 'model_name', ''),
-            input_tokens=getattr(token_usage, 'input_tokens', 0),
-            output_tokens=getattr(token_usage, 'output_tokens', 0),
-            total_tokens=getattr(token_usage, 'total_tokens', 0),
-            cost_usd=getattr(token_usage, 'cost_usd', 0.0)
-        )
-
     def _extract_token_usage_from_agent(self, agent) -> Optional[Any]:
-        """Extract accumulated token usage from agent's memory steps."""
-        try:
-            # Use agent.memory.steps instead of deprecated agent.logs
-            if not hasattr(agent, 'memory') or not agent.memory.steps:
-                logger.warning("No memory steps found in agent")
-                return None
-
-            logger.info(f"📊 Agent has {len(agent.memory.steps)} memory steps")
-
-            # Import step types from smolagents
-            from smolagents.memory import ActionStep, PlanningStep
-
-            # Aggregate token usage from all steps
-            total_input = 0
-            total_output = 0
-            model_name = ""
-
-            for i, step in enumerate(agent.memory.steps):
-                # Only ActionStep and PlanningStep have token_usage
-                if isinstance(step, (ActionStep, PlanningStep)):
-                    if step.token_usage:
-                        total_input += step.token_usage.input_tokens
-                        total_output += step.token_usage.output_tokens
-                        if not model_name:
-                            model_name = getattr(step.token_usage, 'model_name', '')
-                        logger.info(f"✅ Step {i} ({type(step).__name__}): input={step.token_usage.input_tokens}, output={step.token_usage.output_tokens}")
-                    else:
-                        logger.info(f"⚠️ Step {i} ({type(step).__name__}) has no token usage")
-                else:
-                    logger.info(f"ℹ️ Step {i}: {type(step).__name__} (no token tracking)")
-
-            if total_input == 0 and total_output == 0:
-                logger.warning(f"⚠️ Total token usage is zero after checking {len(agent.memory.steps)} steps")
-                return None
-
-            # Import TokenUsage from model_provider
-            from ..services.model_provider import TokenUsage, calculate_token_cost
-
-            # Calculate cost using model registry
-            cost = calculate_token_cost(model_name or self._get_model_name(), total_input, total_output)
-
-            return TokenUsage(
-                input_tokens=total_input,
-                output_tokens=total_output,
-                total_tokens=total_input + total_output,
-                cost_usd=cost,
-                model_name=model_name or self._get_model_name()
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to extract token usage from agent logs: {e}")
-            return None
+        """Extract accumulated token usage from agent's memory steps using shared utility."""
+        return TokenUsageExtractor.extract_from_agent_memory(
+            agent=agent,
+            default_model_name=self._get_model_name()
+        )
 
     def _build_system_prompt(
         self, 

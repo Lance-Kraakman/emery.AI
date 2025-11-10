@@ -339,14 +339,23 @@ class SmolagentsModelProvider:
         skill_model: Optional[str] = None,
         agent_model: Optional[str] = None,
         org_model: Optional[str] = None,
+        has_images: bool = False,
     ) -> str:
         """
-        Resolve model selection using hierarchy: skill > agent > org > default.
+        Resolve model selection using hierarchy with vision model support.
+
+        Priority:
+        1. skill_model (if provided)
+        2. agent_model (if provided)
+        3. org_model (if provided)
+        4. vision_model (if has_images=True and no explicit model)
+        5. default model
 
         Args:
             skill_model: Model override from skill configuration
             agent_model: Default model from agent configuration
             org_model: Default model from organization configuration
+            has_images: Whether the input contains images (triggers vision model)
 
         Returns:
             Model ID to use for execution
@@ -356,6 +365,7 @@ class SmolagentsModelProvider:
         logger.info(f"🔍 [MODEL-PROVIDER] - skill_model: {repr(skill_model)}")
         logger.info(f"🔍 [MODEL-PROVIDER] - agent_model: {repr(agent_model)}")
         logger.info(f"🔍 [MODEL-PROVIDER] - org_model: {repr(org_model)}")
+        logger.info(f"🔍 [MODEL-PROVIDER] - has_images: {has_images}")
 
         if skill_model:
             logger.info(f"📌 Using skill model override: {skill_model}")
@@ -368,6 +378,12 @@ class SmolagentsModelProvider:
         if org_model:
             logger.info(f"📌 Using organization default model: {org_model}")
             return org_model
+
+        # Smart selection: vision model if images present, otherwise default
+        if has_images:
+            vision_model = get_default_vision_model()
+            logger.info(f"🖼️ Images detected, using vision model: {vision_model}")
+            return vision_model
 
         # Fall back to system default
         default_model = get_default_model_for_tier(ModelTier.FREE)
