@@ -228,9 +228,9 @@ export function MultiSelectField({
             disabled={disabled}
           >
             {compact && selectedOptions.length > 0 ? (
-              // Compact mode: show badges inline
-              <div className="flex items-center gap-1 flex-1 min-w-0">
-                {selectedOptions.slice(0, 2).map((option) => (
+              // Compact mode: show badges inline with truncation
+              <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
+                {selectedOptions.slice(0, 1).map((option) => (
                   <Badge
                     key={option.id}
                     style={{
@@ -238,14 +238,15 @@ export function MultiSelectField({
                       color: '#fff',
                       borderColor: option.color
                     }}
-                    className="font-normal text-[10px] px-1.5 py-0"
+                    className="font-normal text-[10px] px-1.5 py-0 max-w-[80px] truncate"
+                    title={option.value}
                   >
                     {option.value}
                   </Badge>
                 ))}
-                {selectedOptions.length > 2 && (
-                  <span className="text-[10px] text-muted-foreground">
-                    +{selectedOptions.length - 2}
+                {selectedOptions.length > 1 && (
+                  <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                    +{selectedOptions.length - 1}
                   </span>
                 )}
               </div>
