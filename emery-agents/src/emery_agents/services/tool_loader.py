@@ -14,7 +14,13 @@ from ..grpc.generated.agent_worker_pb2 import ToolConfig
 
 
 class UnifiedToolLoader:
-    """Loads tools from the unified metadata containing both Pipedream and Emery tools."""
+    """
+    Loads tools from the unified metadata containing both Pipedream and Emery tools.
+
+    AIDEV-NOTE: Enhanced with consolidated methods from:
+    - agent_executor: create_tool_configs_with_context
+    - chat_processing_service: load_tools_from_configs
+    """
 
     def __init__(self, metadata_path: Optional[str] = None):
         """Initialize with path to unified metadata file."""
@@ -264,3 +270,112 @@ class UnifiedToolLoader:
                 results.append(tool)
 
         return results
+
+    # =========================================================================
+    # Consolidated Methods (from agent_executor and chat_processing_service)
+    # =========================================================================
+
+    def create_tool_configs_with_context(
+        self,
+        tool_names: List[str],
+        context: Dict[str, Any]
+    ) -> List[ToolConfig]:
+        """
+        Create tool configurations with enhanced context for Pipedream tools.
+
+        Consolidates functionality from agent_executor._create_tool_configs_with_context().
+
+        Args:
+            tool_names: List of tool names to create configs for
+            context: Execution context containing environment data (api_key, base_url, etc.)
+
+        Returns:
+            List of ToolConfig protobuf objects
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        tool_configs = []
+
+        for tool_name in tool_names:
+            config = {}
+
+            # Check if this is a Pipedream tool
+            is_pipedream_tool = any(tool_name.startswith(prefix) for prefix in [
+                "gmail_", "slack_", "github_", "google_", "notion_", "trello_",
+                "discord_", "linear_", "dropbox_", "airtable_", "hubspot_"
+            ])
+
+            if is_pipedream_tool:
+                # Extract API key from context environment
+                api_key = context.get("api_key") or (context.get("environment", {}).get("api_key"))
+                base_url = context.get("base_url") or (context.get("environment", {}).get("base_url", os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")))
+
+                if api_key:
+                    config = {
+                        "api_key": api_key,
+                        "base_url": base_url,
+                        "api_key_mode": "agent"
+                    }
+                    logger.info(f"Configured Pipedream tool {tool_name} with API key context")
+                else:
+                    logger.warning(f"Pipedream tool {tool_name} missing api_key in context")
+
+            tool_configs.append(ToolConfig(
+                name=tool_name,
+                version="1.0",
+                config=config
+            ))
+
+        return tool_configs
+
+    def load_tools_from_configs(
+        self,
+        tool_configs: List[ToolConfig],
+        api_key: Optional[str] = None,
+        api_key_mode: str = "agent"
+    ) -> List[Any]:
+        """
+        Load smolagents tools from ToolConfig protobuf objects.
+
+        Consolidates functionality from chat_processing_service._convert_tools_to_smolagents().
+        Handles errors gracefully, returning successfully loaded tools.
+
+        Args:
+            tool_configs: List of ToolConfig protobuf objects
+            api_key: Optional API key for tool authentication
+            api_key_mode: API key mode ("agent" or "user")
+
+        Returns:
+            List of successfully loaded tool instances
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        if not tool_configs:
+            logger.info("No tools provided to convert")
+            return []
+
+        logger.info(f"🔧 Converting {len(tool_configs)} tools to smolagents format...")
+
+        smolagents_tools = []
+
+        for tool_config in tool_configs:
+            try:
+                logger.info(f"🔧 Loading individual tool: {tool_config.name}")
+                # Extract API key from config for user mode
+                tool_api_key = tool_config.config.get('api_key', api_key) if tool_config.config else api_key
+                logger.info(f"  Extracted API key from config: present={bool(tool_api_key)}")
+
+                tool_instance = self.load_tool(tool_config, api_key=tool_api_key or "", api_key_mode=api_key_mode)
+                smolagents_tools.append(tool_instance)
+                logger.info(f"✅ Successfully loaded tool: {tool_config.name}")
+            except Exception as tool_error:
+                logger.error(f"❌ Failed to load tool {tool_config.name}: {tool_error}")
+                logger.error(f"❌ Tool config was: {tool_config.config if tool_config.config else 'empty'}")
+                import traceback
+                logger.error(f"❌ Tool loading traceback: {traceback.format_exc()}")
+                # Continue with other tools instead of failing completely
+
+        logger.info(f"✅ Successfully converted {len(smolagents_tools)} out of {len(tool_configs)} tools")
+        return smolagents_tools

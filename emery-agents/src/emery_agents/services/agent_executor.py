@@ -3,6 +3,12 @@ Agent Executor Service (Simplified)
 
 Merged routing + execution logic without DDD interfaces.
 Combines CapabilityRoutingService + SmolAgentsExecutionRepository.
+
+AIDEV-NOTE: Refactored to use shared utilities:
+- ImageProcessor for image downloading
+- AgentFactory for agent creation
+- TokenUsageExtractor for token tracking
+- UnifiedToolLoader enhanced methods
 """
 
 import logging
@@ -10,17 +16,18 @@ import os
 import time
 import json
 from typing import Dict, Any, List, Optional, Union, AsyncIterator
-from io import BytesIO
 
 from smolagents import CodeAgent, ToolCallingAgent
 from PIL import Image
-import aiohttp
 
 from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode, AgentId, OrganizationId
 from ..grpc.generated.agent_worker_pb2 import TaskRequest, SkillConfig, ToolConfig, TokenUsage as TokenUsageProto, ImageAttachment
 from .model_provider import SmolagentsModelProvider
 from .tool_loader import UnifiedToolLoader
+from .image_processor import ImageProcessor
+from .agent_factory import AgentFactory, AgentConfig
+from .token_usage_extractor import TokenUsageExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -35,74 +42,23 @@ class AgentExecutor:
     def __init__(
         self,
         model_provider: Optional[SmolagentsModelProvider] = None,
-        tool_loader: Optional[UnifiedToolLoader] = None
+        tool_loader: Optional[UnifiedToolLoader] = None,
+        agent_factory: Optional[AgentFactory] = None
     ):
         """Initialize with optional dependencies (creates defaults if not provided)."""
         self.model_provider = model_provider or SmolagentsModelProvider()
         self.tool_loader = tool_loader or UnifiedToolLoader()
-        self.agent_cache: Dict[str, Union[CodeAgent, ToolCallingAgent]] = {}
-        logger.info("AgentExecutor initialized")
+        self.agent_factory = agent_factory or AgentFactory(self.model_provider)
+        # Agent cache now managed by AgentFactory
+        logger.info("AgentExecutor initialized with shared utilities")
 
     def _extract_token_usage(self, result) -> Optional[TokenUsageProto]:
-        """
-        Extract token usage from agent execution result.
-
-        Args:
-            result: RunResult object from smolagents agent.run()
-
-        Returns:
-            TokenUsageProto if token usage data exists, None otherwise
-        """
-        if not hasattr(result, 'token_usage') or not result.token_usage:
-            logger.debug("No token_usage found in result")
-            return None
-
-        tu = result.token_usage
-        logger.info(f"Extracted token usage: {getattr(tu, 'total_tokens', 0)} tokens, ${getattr(tu, 'cost_usd', 0.0):.6f}")
-
-        return TokenUsageProto(
-            model_name=getattr(tu, 'model_name', ''),
-            input_tokens=getattr(tu, 'input_tokens', 0),
-            output_tokens=getattr(tu, 'output_tokens', 0),
-            total_tokens=getattr(tu, 'total_tokens', 0),
-            cost_usd=getattr(tu, 'cost_usd', 0.0)
-        )
+        """Extract token usage using consolidated TokenUsageExtractor."""
+        return TokenUsageExtractor.extract_from_result(result)
 
     async def _download_images(self, image_attachments: List[ImageAttachment]) -> List[Image.Image]:
-        """
-        Download images from URLs and convert to PIL.Image objects.
-
-        AIDEV-NOTE: Similar to chat system's message_mapper.py:download_image_from_url()
-        Downloads images from S3 pre-signed URLs for vision model support.
-
-        Args:
-            image_attachments: List of ImageAttachment protobuf objects with URLs
-
-        Returns:
-            List of PIL.Image objects ready for agent.run(images=...)
-        """
-        if not image_attachments:
-            return []
-
-        pil_images = []
-        async with aiohttp.ClientSession() as session:
-            for img_attachment in image_attachments:
-                try:
-                    logger.info(f"Downloading image from: {img_attachment.url[:50]}...")
-                    async with session.get(img_attachment.url) as response:
-                        if response.status == 200:
-                            image_data = await response.read()
-                            pil_img = Image.open(BytesIO(image_data))
-                            pil_images.append(pil_img)
-                            logger.info(f"Successfully loaded image: {pil_img.size}")
-                        else:
-                            logger.warning(f"Failed to download image: HTTP {response.status}")
-                except Exception as e:
-                    logger.error(f"Error downloading image from {img_attachment.url}: {e}")
-                    continue
-
-        logger.info(f"Downloaded {len(pil_images)}/{len(image_attachments)} images")
-        return pil_images
+        """Download images using consolidated ImageProcessor."""
+        return await ImageProcessor.download_images_from_attachments(image_attachments)
 
     # =========================================================================
     # Routing Logic (from CapabilityRoutingService)
@@ -255,7 +211,7 @@ class AgentExecutor:
                 }
 
                 # Execute task with text + images (smolagents format)
-                result = agent.run(task=context.task, images=pil_images or None)
+                result = agent.run(task=context.task, images=pil_images or None, reset=False)
 
                 # Extract token usage from result
                 token_usage_proto = self._extract_token_usage(result)
@@ -349,37 +305,28 @@ class AgentExecutor:
         self,
         context: ExecutionContext
     ) -> Union[CodeAgent, ToolCallingAgent]:
-        """Create agent for direct tool execution."""
-        # Load tools from context
+        """Create agent for direct tool execution using AgentFactory."""
+        # Load tools from context using consolidated method
         tools = []
         if context.available_tools:
-            tool_configs = self._create_tool_configs_with_context(context.available_tools, context)
+            tool_configs = self.tool_loader.create_tool_configs_with_context(
+                context.available_tools,
+                {"environment": context.environment}
+            )
             tools = self.tool_loader.load_tools(tool_configs)
 
-        # DEBUG: Log context model fields before resolution
-        logger.info(f"🔍 [EXECUTOR] Context model fields:")
-        logger.info(f"🔍 [EXECUTOR] - context.agent_model: {repr(context.agent_model)}")
-        logger.info(f"🔍 [EXECUTOR] - context.org_model: {repr(context.org_model)}")
-
-        # Resolve model using hierarchy: agent_model → org_model → system default
-        model_id = self.model_provider.resolve_model_selection(
-            agent_model=context.agent_model,
-            org_model=context.org_model
-        )
-        logger.info(f"🔍 [EXECUTOR] Resolved model_id: {repr(model_id)}")
-
-        model = self.model_provider.get_model(model_id)
-
-        agent = ToolCallingAgent(
+        # Create agent using AgentFactory
+        agent_config = AgentConfig(
             tools=tools,
-            model=model,
-            max_steps=context.max_steps
+            agent_model=context.agent_model,
+            org_model=context.org_model,
+            max_steps=context.max_steps,
+            agent_name="direct_executor",
+            agent_description="Direct tool execution agent",
+            enable_caching=False
         )
 
-        agent.name = "direct_executor"
-        agent.description = "Direct tool execution agent"
-
-        return agent
+        return self.agent_factory.create_agent(agent_config)
 
     async def _create_skill_agent(
         self,
@@ -387,9 +334,8 @@ class AgentExecutor:
         context: ExecutionContext,
         context_id: str
     ) -> Union[CodeAgent, ToolCallingAgent]:
-        """Create smolagents agent from skill configuration."""
-        if context_id in self.agent_cache:
-            return self.agent_cache[context_id]
+        """Create smolagents agent from skill configuration using AgentFactory."""
+        # Note: AgentFactory handles its own caching if enable_caching=True
 
         # Load tools for this skill
         tools = []
@@ -400,74 +346,26 @@ class AgentExecutor:
             except Exception as e:
                 logger.warning(f"Failed to load some tools for skill {skill.name}: {e}")
 
-        # Resolve model using hierarchy: skill_model → agent_model → org_model → system default
+        # Extract skill model if present
         skill_model = skill.model if hasattr(skill, 'model') and skill.model else None
-        model_id = self.model_provider.resolve_model_selection(
+
+        # Create agent using AgentFactory (handles caching internally)
+        agent_config = AgentConfig(
+            tools=tools,
             skill_model=skill_model,
             agent_model=context.agent_model,
-            org_model=context.org_model
+            org_model=context.org_model,
+            max_steps=context.max_steps,
+            agent_name=skill.name,
+            agent_description=skill.description,
+            enable_caching=True  # Enable caching for skill agents
         )
-        model = self.model_provider.get_model(model_id)
 
-        # Create ToolCallingAgent if we have tools, otherwise CodeAgent
-        if tools:
-            agent = ToolCallingAgent(
-                tools=tools,
-                model=model,
-                max_steps=context.max_steps
-            )
-        else:
-            agent = CodeAgent(
-                tools=[],
-                model=model,
-                additional_authorized_imports=["time", "json", "os", "sys"]
-            )
+        # Create ToolCallingAgent (AgentFactory always creates ToolCallingAgent)
+        # Note: If CodeAgent is truly needed, this would need special handling
+        return self.agent_factory.create_agent(agent_config)
 
-        agent.name = skill.name
-        agent.description = skill.description
-
-        self.agent_cache[context_id] = agent
-        return agent
-
-    def _create_tool_configs_with_context(
-        self,
-        tool_names: List[str],
-        context: ExecutionContext
-    ) -> List[ToolConfig]:
-        """Create tool configurations with enhanced context for Pipedream tools."""
-        tool_configs = []
-
-        for tool_name in tool_names:
-            config = {}
-
-            # Check if this is a Pipedream tool
-            is_pipedream_tool = any(tool_name.startswith(prefix) for prefix in [
-                "gmail_", "slack_", "github_", "google_", "notion_", "trello_",
-                "discord_", "linear_", "dropbox_", "airtable_", "hubspot_"
-            ])
-
-            if is_pipedream_tool:
-                # Extract API key from context environment
-                api_key = context.environment.get("api_key")
-                base_url = context.environment.get("base_url", os.getenv("NEXTJS_BASE_URL", "http://localhost:3000"))
-
-                if api_key:
-                    config = {
-                        "api_key": api_key,
-                        "base_url": base_url,
-                        "api_key_mode": "agent"
-                    }
-                    logger.info(f"Configured Pipedream tool {tool_name} with API key context")
-                else:
-                    logger.warning(f"Pipedream tool {tool_name} missing api_key in context")
-
-            tool_configs.append(ToolConfig(
-                name=tool_name,
-                version="1.0",
-                config=config
-            ))
-
-        return tool_configs
+    # Note: _create_tool_configs_with_context removed - now using tool_loader.create_tool_configs_with_context()
 
     # =========================================================================
     # Utility Methods
