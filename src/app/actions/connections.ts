@@ -814,12 +814,15 @@ export async function getAvailableAppsPaginated(options?: {
     const postgres = (await import('postgres')).default;
     const { appTypes } = await import('@/lib/db/schema');
     const { eq, sql, ilike, or } = await import('drizzle-orm');
+    const { parseConnectionString } = await import('@/lib/db/client-parser');
 
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
+    const rawConnectionString = process.env.DATABASE_URL;
+    if (!rawConnectionString) {
       throw new Error('DATABASE_URL environment variable is required');
     }
 
+    // Parse AWS RDS secret JSON into connection string if needed
+    const connectionString = parseConnectionString(rawConnectionString);
     const client = postgres(connectionString, { max: 1 });
     const db = drizzle(client);
 
@@ -909,12 +912,15 @@ export async function getAvailableApps(): Promise<Result<Array<{
     const postgres = (await import('postgres')).default;
     const { appTypes } = await import('@/lib/db/schema');
     const { eq } = await import('drizzle-orm');
+    const { parseConnectionString } = await import('@/lib/db/client-parser');
 
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
+    const rawConnectionString = process.env.DATABASE_URL;
+    if (!rawConnectionString) {
       throw new Error('DATABASE_URL environment variable is required');
     }
 
+    // Parse AWS RDS secret JSON into connection string if needed
+    const connectionString = parseConnectionString(rawConnectionString);
     const client = postgres(connectionString, { max: 1 });
     const db = drizzle(client);
 
