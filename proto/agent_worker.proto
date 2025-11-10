@@ -303,9 +303,14 @@ message ProcessingComplete {
 
 // Processing error information
 message ProcessingError {
-  string error_code = 1;             // Error code (RAG_FAILED, MODEL_ERROR, etc.)
-  string error_message = 2;          // Human-readable error message
+  string error_code = 1;             // Error code (rate_limit, input_too_large, etc.)
+  string error_message = 2;          // User-friendly error message (no technical details)
   map<string, string> error_details = 3; // Additional error context
+  // Error recovery metadata
+  string hint = 4;                   // Actionable hint for user (optional)
+  bool can_retry = 5;                // Can user retry this operation?
+  bool auto_retry = 6;               // Was this error auto-retried?
+  bool session_reset = 7;            // Was session reset due to this error?
 }
 
 // Real-time step execution progress (for stream=True agent execution)
