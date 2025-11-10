@@ -6,13 +6,76 @@
 import { requireAuth } from "./permissions";
 import { getConnectionApplicationService } from "@/ddd/application/di/container";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
-import { AppName, ConnectionId } from "@/ddd/domain/connections/value-objects";
+import { AppName, ConnectionId, createDefaultPaginationOptions } from "@/ddd/domain/connections/value-objects";
 import { ConnectionMapper, type ConnectionDTO } from "@/app/mappers/connection-mapper";
 import type { Result } from "./types";
 
 /**
+ * Get user's OAuth connections (paginated) - optimized for large connection lists
+ * Returns connections sorted by most recent first with cursor-based pagination
+ *
+ * @param options - Pagination options { limit, cursor }
+ * @returns Paginated result with connections, nextCursor, and hasMore flag
+ */
+export async function getUserOAuthConnectionsPaginated(options?: {
+  limit?: number;
+  cursor?: string;
+}): Promise<Result<{
+  connections: ConnectionDTO[];
+  nextCursor?: string;
+  hasMore: boolean;
+}>> {
+  try {
+    const session = await requireAuth();
+    const connectionService = getConnectionApplicationService();
+
+    const limit = options?.limit || 50;
+    const cursor = options?.cursor;
+
+    console.log(`[ConnectionActions] Getting paginated OAuth connections for user ${session.user.id} (limit: ${limit}, cursor: ${cursor || 'none'})`);
+
+    const paginationOptions = cursor
+      ? { limit, after: cursor }
+      : createDefaultPaginationOptions(limit);
+
+    const result = await connectionService.getUserConnectionsPaginated(
+      UserId.fromString(session.user.id),
+      paginationOptions
+    );
+
+    if (result.success && result.data) {
+      console.log(`[ConnectionActions] Retrieved ${result.data.data.length} connections (hasMore: ${result.data.hasMore})`);
+
+      const connectionDTOs = ConnectionMapper.toDTOArray(result.data.data);
+
+      return {
+        success: true,
+        data: {
+          connections: connectionDTOs,
+          nextCursor: result.data.nextCursor,
+          hasMore: result.data.hasMore
+        }
+      };
+    } else {
+      console.error(`[ConnectionActions] Failed to get paginated connections:`, result.error);
+      return { success: false, error: result.error };
+    }
+  } catch (error: unknown) {
+    console.error('[ConnectionActions] Error getting paginated OAuth connections:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      success: false,
+      error: errorMessage.includes('Authentication required')
+        ? 'Authentication required'
+        : 'Failed to fetch connections'
+    };
+  }
+}
+
+/**
  * Get user's OAuth connections - replaces getUserOAuthConnections from pipedream.ts
  * Returns connections sorted by most recent first
+ * @deprecated Use getUserOAuthConnectionsPaginated for better performance with large lists
  */
 export async function getUserOAuthConnections(): Promise<Result<ConnectionDTO[]>> {
   try {
@@ -555,54 +618,14 @@ export async function getAgentsNeedingConnections(): Promise<Result<AgentConnect
 
     // Get agents in this organization
     const agents = await agentService.getAgents({
-      organizationId: OrganizationId.fromNumber(session.user.currentOrganizationId!)
+      organizationId: session.user.currentOrganizationId!
     });
 
+    // AIDEV-NOTE: Agents no longer have tools at agent-level
+    // Tools are defined per-task (in skills and schedules)
+    // This function now returns empty array - connection management
+    // should be done at user/organization level, not agent level
     const agentSummaries: AgentConnectionSummary[] = [];
-
-    for (const agent of agents) {
-      const tools = agent.tools || [];
-
-      if (tools.length === 0) continue;
-
-      // Get connection status for agent tools
-      const toolStatusResult = await getToolConnectionStatus(tools, session.user.id);
-
-      if (!toolStatusResult.success) continue;
-
-      const toolStatuses = toolStatusResult.data || [];
-      const connectedTools = toolStatuses.filter(t => t.isConnected).length;
-      const disconnectedTools = toolStatuses.length - connectedTools;
-
-      // Collect all missing apps
-      const allMissingApps = new Set<string>();
-      toolStatuses.forEach(tool => {
-        tool.missingApps.forEach(app => allMissingApps.add(app));
-      });
-
-      // Determine connection health
-      let connectionHealth: 'healthy' | 'warning' | 'critical';
-      if (disconnectedTools === 0) {
-        connectionHealth = 'healthy';
-      } else if (connectedTools > disconnectedTools) {
-        connectionHealth = 'warning';
-      } else {
-        connectionHealth = 'critical';
-      }
-
-      // Only include agents that need connections
-      if (disconnectedTools > 0) {
-        agentSummaries.push({
-          agentId: agent.id.value,
-          agentName: agent.name,
-          totalTools: toolStatuses.length,
-          connectedTools,
-          disconnectedTools,
-          missingApps: Array.from(allMissingApps),
-          connectionHealth
-        });
-      }
-    }
 
     return {
       success: true,
@@ -693,48 +716,16 @@ export async function validateAgentConnections(
       };
     }
 
-    const tools = agent.tools || [];
-
-    if (tools.length === 0) {
-      return {
-        success: true,
-        data: {
-          valid: true,
-          warnings: [],
-          missingConnections: [],
-          toolStatuses: []
-        }
-      };
-    }
-
-    // Get tool connection status
-    const toolStatusResult = await getToolConnectionStatus(tools, session.user.id);
-
-    if (!toolStatusResult.success) {
-      return {
-        success: false,
-        error: toolStatusResult.error
-      };
-    }
-
-    const toolStatuses = toolStatusResult.data || [];
-    const allMissingApps = new Set<string>();
-    const warnings: string[] = [];
-
-    toolStatuses.forEach(tool => {
-      tool.missingApps.forEach(app => allMissingApps.add(app));
-      warnings.push(...tool.warnings);
-    });
-
-    const valid = allMissingApps.size === 0;
-
+    // AIDEV-NOTE: Agents no longer have tools at agent-level
+    // Tools are defined per-task (in skills and schedules)
+    // Always return valid since connection validation is per-task now
     return {
       success: true,
       data: {
-        valid,
-        warnings,
-        missingConnections: Array.from(allMissingApps),
-        toolStatuses
+        valid: true,
+        warnings: [],
+        missingConnections: [],
+        toolStatuses: []
       }
     };
   } catch (error) {
@@ -799,8 +790,111 @@ export async function getConnectionHealthSummary(): Promise<Result<{
 }
 
 /**
+ * Get available apps from database for connection management (paginated)
+ * Returns OAuth-enabled apps that users can connect to
+ */
+export async function getAvailableAppsPaginated(options?: {
+  limit?: number;
+  offset?: number;
+  search?: string;
+}): Promise<Result<{
+  apps: Array<{
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    icon: string;
+  }>;
+  total: number;
+  hasMore: boolean;
+}>> {
+  try {
+    // Import here to avoid circular dependencies
+    const { drizzle } = await import('drizzle-orm/postgres-js');
+    const postgres = (await import('postgres')).default;
+    const { appTypes } = await import('@/lib/db/schema');
+    const { eq, sql, ilike, or } = await import('drizzle-orm');
+
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error('DATABASE_URL environment variable is required');
+    }
+
+    const client = postgres(connectionString, { max: 1 });
+    const db = drizzle(client);
+
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    const search = options?.search;
+
+    console.log(`[ConnectionActions] Loading available apps from database (limit: ${limit}, offset: ${offset}, search: ${search || 'none'})`);
+
+    // Build query conditions
+    let conditions = eq(appTypes.supportsOAuth, true);
+
+    // Add search filter if provided
+    if (search) {
+      conditions = sql`${appTypes.supportsOAuth} = true AND (${ilike(appTypes.name, `%${search}%`)} OR ${ilike(appTypes.description, `%${search}%`)})`;
+    }
+
+    // Get total count
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(appTypes)
+      .where(conditions);
+
+    const total = Number(countResult[0]?.count || 0);
+
+    // Get paginated apps
+    const apps = await db
+      .select({
+        id: appTypes.id,
+        name: appTypes.name,
+        description: appTypes.description,
+        category: appTypes.category,
+        iconUrl: appTypes.iconUrl,
+      })
+      .from(appTypes)
+      .where(conditions)
+      .orderBy(appTypes.name)
+      .limit(limit)
+      .offset(offset);
+
+    console.log(`[ConnectionActions] Found ${apps.length} of ${total} available apps`);
+
+    // Map to expected format
+    const availableApps = apps.map(app => ({
+      id: app.id,
+      name: app.name,
+      description: app.description || `Connect to ${app.name}`,
+      category: app.category || 'other',
+      icon: app.iconUrl || `/icons/${app.id}.svg`,
+    }));
+
+    await client.end();
+
+    return {
+      success: true,
+      data: {
+        apps: availableApps,
+        total,
+        hasMore: offset + apps.length < total
+      }
+    };
+
+  } catch (error) {
+    console.error('[ConnectionActions] Error getting available apps:', error);
+    return {
+      success: false,
+      error: 'Failed to get available apps'
+    };
+  }
+}
+
+/**
  * Get available apps from database for connection management
  * Returns OAuth-enabled apps that users can connect to
+ * @deprecated Use getAvailableAppsPaginated for better performance with large app lists
  */
 export async function getAvailableApps(): Promise<Result<Array<{
   id: string;

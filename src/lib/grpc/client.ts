@@ -9,7 +9,7 @@ import path from 'path';
 // Load protobuf definition
 const PROTO_PATH = path.join(process.cwd(), 'proto', 'agent_worker.proto');
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
-  keepCase: true,
+  keepCase: false,  // Convert to camelCase to match generated TypeScript interfaces
   longs: String,
   enums: String,
   defaults: true,
@@ -21,15 +21,16 @@ const AgentWorkerService = protoDescriptor.emery.agents.AgentWorker;
 import { TaskProgress } from './generated/agent_worker';
 export type { TaskProgress };
 
-// Type definitions for our gRPC calls
+// Type definitions for our gRPC calls (camelCase to match loader config)
 export interface TaskRequest {
-  task_id: string;
-  agent_id: number;
-  capability_name: string;
-  trigger_data_json: string;
-  organization_id: string;
-  owner_id: string;
-  timeout_seconds?: number;
+  taskId: string;
+  agentId: number;
+  skillName?: string;
+  instructionConfig?: any;
+  triggerData: any;
+  organizationId: string;
+  ownerId: string;
+  timeoutSeconds?: number;
 }
 
 
@@ -47,7 +48,7 @@ export interface WorkerInfo {
   version: string;
   organization_id: string;
   status: WorkerStatus;
-  capabilities: string[];
+  skills: string[];
   active_tasks: number;
   max_concurrent_tasks: number;
   uptime_seconds: string;
@@ -63,7 +64,7 @@ export enum WorkerStatus {
 }
 
 export interface CancelTaskRequest {
-  task_id: string;
+  taskId: string;
   reason?: string;
 }
 
@@ -95,22 +96,22 @@ export class AgentWorkerClient {
     request: TaskRequest,
     onProgress: (progress: TaskProgress) => void
   ): Promise<void> {
-    console.log(`[GRPC-CLIENT] Executing task ${request.task_id} on worker ${this.address}`);
+    console.log(`[GRPC-CLIENT] Executing task ${request.taskId} on worker ${this.address}`);
     return new Promise((resolve, reject) => {
       const call = this.client.ExecuteTask(request);
 
       call.on('data', (progress: TaskProgress) => {
-        console.log(`[GRPC-PROGRESS] Task ${request.task_id}: ${progress.status}`, progress);
+        console.log(`[GRPC-PROGRESS] Task ${request.taskId}: ${progress.status}`, progress);
         onProgress(progress);
       });
 
       call.on('end', () => {
-        console.log(`[GRPC-END] Task ${request.task_id} stream ended`);
+        console.log(`[GRPC-END] Task ${request.taskId} stream ended`);
         resolve();
       });
 
       call.on('error', (error: grpc.ServiceError) => {
-        console.error(`[GRPC-ERROR] Task ${request.task_id} failed:`, error);
+        console.error(`[GRPC-ERROR] Task ${request.taskId} failed:`, error);
         if (error.code === grpc.status.UNAVAILABLE) {
           console.error(`[GRPC-CLIENT] Worker at ${this.address} is unavailable. Please ensure the worker is running.`);
         }
@@ -142,7 +143,7 @@ export class AgentWorkerClient {
     return new Promise((resolve, reject) => {
       this.client.CancelTask(request, (error: grpc.ServiceError | null, response: CancelTaskResponse) => {
         if (error) {
-          console.error(`[GRPC-ERROR] CancelTask ${request.task_id}:`, error);
+          console.error(`[GRPC-ERROR] CancelTask ${request.taskId}:`, error);
           reject(error);
         } else {
           resolve(response);

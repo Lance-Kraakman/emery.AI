@@ -2,14 +2,20 @@
 // Domain layer interface - implementation details handled in infrastructure layer
 
 import { Connection } from '../entities/connection';
-import { ConnectionId, AppName } from '../value-objects';
+import { ConnectionId, AppName, ConnectionPaginationOptions, PaginatedResult } from '../value-objects';
 import { UserId } from '@/ddd/domain/shared/value-objects';
 
 export interface IConnectionRepository {
   /**
    * Get all active connections for a user (fetched live from external provider)
+   * @deprecated Use findByUserIdPaginated instead for better performance
    */
   findByUserId(userId: UserId): Promise<Connection[]>;
+
+  /**
+   * Get paginated connections for a user (fetched live from external provider)
+   */
+  findByUserIdPaginated(userId: UserId, options: ConnectionPaginationOptions): Promise<PaginatedResult<Connection>>;
   
   /**
    * Get connection for specific app (returns null if not connected)

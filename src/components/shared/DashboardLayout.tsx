@@ -75,7 +75,7 @@ export function DashboardLayout<T extends { id: any }>({
   const hasRightPanel = selectedItem !== null;
   
   return (
-    <div className="flex h-full">
+    <div className="flex h-full overflow-y-auto">
       {/* Left Pane: Item List */}
       <div className={`${leftPanelWidth} ${hasRightPanel && !isPanelCollapsed ? 'border-r border-border' : ''} bg-card flex flex-col`}>
         {/* Header */}

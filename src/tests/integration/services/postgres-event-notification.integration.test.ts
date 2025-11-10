@@ -45,14 +45,13 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
       const agentResult = await agentService.createAgent({
         name: 'Event Test Agent',
         description: 'Agent for testing event notifications',
-        ownerId: testContext.ownerUserId,
-        organizationId: testContext.organizationId,
-        role: 'assistant',
-        agentType: 'data-collector'
+        ownerId: testContext.ownerUserId.value,
+        organizationId: testContext.organizationId.value,
+        role: 'assistant'
       });
-      
+
       if (agentResult.success && agentResult.data) {
-        testAgentId = agentResult.data.id;
+        testAgentId = AgentId.fromNumber(agentResult.data.id);
         console.log(`✅ Test agent created: id=${testAgentId.value}`);
       } else {
         throw new Error('Failed to create test agent');
@@ -105,19 +104,19 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
 
         // Create task via application service - RLS context already set in beforeEach
         const agentTaskService = getAgentTaskApplicationService();
-        const task = await agentTaskService.createTask({
-          agentId: testAgentId,
-          organizationId: testContext.organizationId,
+        const result = await agentTaskService.createTask({
+          agentId: testAgentId.value,
+          organizationId: testContext.organizationId.value,
           name: 'Event Trigger Test Task',
-          instructions: { 
-            instructions: 'Test event notification system',
+          instructions: {
+            task: 'Test event notification system',
             tools: [],
-            servers: []
           }
         });
-        const taskId = task.id;
+        expect(result.success).toBe(true);
+        const taskId = result.data!.id;
 
-        console.log(`📝 Task created with ID: ${taskId.value}`);
+        console.log(`📝 Task created with ID: ${taskId}`);
 
         // Wait for event notification (should be immediate)
         const eventPayload = await Promise.race([
@@ -129,7 +128,7 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
 
         // Verify event notification structure matches our channel fix
         expect(eventPayload.event_type).toBe('task_created');
-        expect(eventPayload.taskId).toBe(taskId.value);
+        expect(eventPayload.taskId).toBe(taskId);
         expect(eventPayload.agentId).toBe(testAgentId.value);
         expect(eventPayload.organizationId).toBe(testContext.organizationId.value);
         expect(eventPayload.instructions).toBe('Test event notification system');
@@ -172,19 +171,19 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
         const agentTaskService = getAgentTaskApplicationService();
         const taskPromises = Array.from({ length: eventCount }, (_, i) =>
           agentTaskService.createTask({
-            agentId: testAgentId,
-            organizationId: testContext.organizationId,
+            agentId: testAgentId.value,
+            organizationId: testContext.organizationId.value,
             name: `Concurrent Event Test ${i + 1}`,
-            instructions: { 
-              instructions: `Concurrent test task ${i + 1}`,
+            instructions: {
+              task: `Concurrent test task ${i + 1}`,
               tools: [],
-              servers: []
-            }
+              }
           })
         );
 
-        const tasks = await Promise.all(taskPromises);
-        const taskIds = tasks.map(task => task.id);
+        const results = await Promise.all(taskPromises);
+        results.forEach(result => expect(result.success).toBe(true));
+        const taskIds = results.map(result => result.data!.id);
         console.log(`📝 Created ${taskIds.length} concurrent tasks`);
 
         // Wait for all events (with timeout)
@@ -197,10 +196,10 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
 
         // Verify all events received
         expect(events).toHaveLength(eventCount);
-        
+
         const eventTaskIds = events.map(e => e.taskId);
-        const expectedTaskIds = taskIds.map(id => id.value);
-        
+        const expectedTaskIds = taskIds; // taskIds is already string[]
+
         // Check each expected task ID was notified
         expectedTaskIds.forEach(taskId => {
           expect(eventTaskIds).toContain(taskId);
@@ -241,7 +240,7 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
         // Use test API endpoint to trigger event (validates our channel fix in the API)
         const response = await testClient.post('/api/test-manual-trigger', {
           agentId: testAgentId,
-          instructions: 'API endpoint trigger test'
+          task: 'API endpoint trigger test'
         });
 
         expect(response.success).toBe(true);
@@ -295,16 +294,16 @@ describe('PostgreSQL Event Notification Integration Tests', () => {
 
         // Create task - RLS context already set in beforeEach
         const agentTaskService = getAgentTaskApplicationService();
-        await agentTaskService.createTask({
-          agentId: testAgentId,
-          organizationId: testContext.organizationId,
+        const result = await agentTaskService.createTask({
+          agentId: testAgentId.value,
+          organizationId: testContext.organizationId.value,
           name: 'Event Timing Test',
-          instructions: { 
-            instructions: 'Test immediate event notification',
+          instructions: {
+            task: 'Test immediate event notification',
             tools: [],
-            servers: []
           }
         });
+        expect(result.success).toBe(true);
 
         const responseTime = await Promise.race([
           eventPromise,

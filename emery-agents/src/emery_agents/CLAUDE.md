@@ -187,6 +187,52 @@ class CapabilityRouterAgent:
 - **Consistent model configuration** across the entire system
 - **Easy model updates** through single configuration point
 
+### Context-Specific Model Selection
+
+The `resolve_model_selection()` method is **context-agnostic** but receives different parameters based on execution context:
+
+#### 1. Chat System Context
+```python
+# Called from: chat_processing_service.py:410
+# Parameters: Only org_model
+model_id = model_provider.resolve_model_selection(org_model=request.model)
+
+# Hierarchy: Organization → Default
+# Use Case: Mission Control chat conversations
+# Set In: Organization settings (/settings/usage)
+```
+
+#### 2. Agent Task Execution Context (Future)
+```python
+# Parameters: agent_model + org_model
+model_id = model_provider.resolve_model_selection(
+    agent_model=agent.default_model,
+    org_model=organization.default_model
+)
+
+# Hierarchy: Agent → Organization → Default
+# Use Case: Agent executing task instructions
+# Set In: Agent configuration form
+```
+
+#### 3. Skill Execution Context (Future)
+```python
+# Parameters: skill_model + agent_model + org_model
+model_id = model_provider.resolve_model_selection(
+    skill_model=skill.model,
+    agent_model=agent.default_model,
+    org_model=organization.default_model
+)
+
+# Hierarchy: Skill → Agent → Organization → Default
+# Use Case: Skill tool execution
+# Set In: Skill configuration UI (not yet built)
+```
+
+**AIDEV-NOTE:** The model provider doesn't know about contexts - it just implements priority logic. Context-specific parameter selection happens at the caller level (chat service, task execution, skill execution).
+
+**See detailed documentation:** TypeScript side `/docs/model-selection-hierarchy.md`
+
 ## 🧪 Standardized Testing Infrastructure (2025-01)
 
 ### Problem Solved

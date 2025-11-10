@@ -5,36 +5,38 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { generateId } from 'ai'
 import {
-  ChatSection,
   ChatMessages,
-  useChatCanvas
+  ChatMessage,
+  useChatCanvas,
 } from '@llamaindex/chat-ui'
 import { 
   ChevronLeft, 
   ChevronRight, 
-  Database,
-  BarChart,
-  Users,
-  Code,
-  Lightbulb
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
-import { ChatCanvas } from './ChatCanvas'
+import { RightPanelResizeHandle } from '@/components/ui/right-panel-resize-handle'
+// import { ChatCanvas } from './ChatCanvas'
 import CustomChatInput from './CustomChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
-import { createChatContextForPage } from '@/components/layout/types'
-import type { DomainType } from '@/ddd/domain/rag/value-objects'
+import { createChatContextForPage, type ChatContextConfig } from '@/components/layout/types'
+import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { ToolPanel } from './ToolPanel'
 import { useChatHandler } from './ChatProvider'
-import { resolveReferences } from '@/app/actions/references'
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata'
 import { createDocumentArtifact, createFileArtifact } from './types/chat-artifacts'
-import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
-import { fetchFileArtifactData, getFileDownloadUrl, getDocumentFieldValue } from '@/app/actions/artifacts'
+import { fetchFileArtifactData, getFileDownloadUrl, getDocumentFieldValue, getDocumentDownloadUrl } from '@/app/actions/artifacts'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
+import { StepProgressIndicator } from './StepProgressIndicator'
+import { StepHistoryDisplay } from './StepHistoryDisplay'
+import { createDebugLogger } from '@/lib/utils/debug-logger'
+import type { ExecutionStep } from '@/app/dtos/chat.dto'
+import type { ChatMessage as EmeryChatMessage } from './types/extended-chat-handler'
+
+const logger = createDebugLogger('EmeryChat')
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
@@ -93,12 +95,12 @@ function EmeryChatHeader({
   }
 
   return (
-    <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
+    <div className="flex items-center justify-between py-4 px-4 bg-muted/20">
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-lg bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-              Emery
+              Dash
             </h3>
             <ChatHistoryDropdown
               currentChatId={currentChatId}
@@ -159,66 +161,15 @@ function EmeryChatHeader({
   )
 }
 
-// Context-aware suggestions component (extracted from mission-control)
-function ChatSuggestions({ 
-  onSuggestionClick, 
-  selectedIndex = -1,
-  domainType
-}: { 
-  onSuggestionClick: (suggestion: string) => void
-  selectedIndex?: number
-  domainType?: DomainType | 'organizations' | 'general'
-}) {
-  const suggestions = getSuggestionsForDomain(domainType)
-
-  if (suggestions.length === 0) return null
-
-  return (
-    <div className="px-4">
-      <div className="mb-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <Lightbulb className="h-3 w-3" />
-          Suggestions
-        </div>
-      </div>
-      <div>
-        {suggestions.map((suggestion, index) => (
-          <button
-            key={index}
-            className={`w-full flex items-center gap-2 px-0 py-2.5 text-left text-sm transition-colors duration-150 focus:outline-none border-b border-border/30 last:border-b-0 ${
-              selectedIndex === index 
-                ? 'bg-muted/70 text-foreground' 
-                : 'hover:bg-muted/50'
-            }`}
-            onClick={() => onSuggestionClick(suggestion.prompt)}
-          >
-            <div className="flex-shrink-0 text-muted-foreground">
-              {suggestion.icon}
-            </div>
-            <span className="flex-1 text-foreground truncate">
-              {suggestion.title}
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // Component that can access useChatCanvas hook inside ChatSection
 interface ChatContentWithCanvasProps {
   selectedTools: ToolDTO[]
   onToolsChange: (tools: ToolDTO[]) => void
   onAddTool: () => void
   onRemoveTool: (tool: ToolDTO) => void
-  showSuggestions: boolean
-  selectedSuggestionIndex: number
-  onSuggestionClick: (suggestion: string) => void
-  onKeyDown: (e: React.KeyboardEvent) => void
   isClient: boolean
-  handler: any
-  setShowSuggestions: (show: boolean) => void
-  chatContext: any
+  handler: ReturnType<typeof useChatHandler>
+  chatContext: ChatContextConfig | undefined
 }
 
 function ChatContentWithCanvas({
@@ -226,75 +177,81 @@ function ChatContentWithCanvas({
   onToolsChange,
   onAddTool,
   onRemoveTool,
-  showSuggestions,
-  selectedSuggestionIndex,
-  onSuggestionClick,
-  onKeyDown,
-  isClient,
   handler,
-  setShowSuggestions,
-  chatContext
 }: ChatContentWithCanvasProps) {
+  // AIDEV-NOTE: useChatCanvas must be called at component level, not inside handlers
   const { openArtifactInCanvas } = useChatCanvas()
 
-  // Handle tool click using canvas hook
+  // Handle tool click using global UI state for artifacts
   const handleToolClick = async (tool: ToolDTO) => {
-    console.log('Tool clicked:', tool)
+    logger.debug('Tool clicked', { tool: tool.name, category: tool.category })
 
     // Only handle reference tools for artifact opening (check via category or insertText pattern)
     if (!tool.insertText?.includes('@') || tool.insertText?.startsWith('@tool:')) {
-      console.log('System tool clicked:', tool.name)
+      logger.debug('System tool clicked', { tool: tool.name })
       return
     }
 
     if (tool.category === ToolCategory.DOCUMENTS) {
       // Fetch real document data using server action
-      // Note: DocumentToolConfig uses tableId/fieldId, not documentTableId/documentFieldId
+      // Note: Runtime values are now in ToolDTO root level, not in config
       const result = await getDocumentFieldValue(
-        tool.config.documentId!,
-        tool.config.organizationId,
-        tool.config.tableId!,
-        tool.config.fieldId!
+        tool.documentId!,
+        tool.organizationId!,
+        tool.tableId as number,
+        tool.fieldId!
       )
 
       if (result.success && result.data) {
-        // Create artifact and open in canvas using tool config data
+        // Get download URL for the document
+        const urlResult = await getDocumentDownloadUrl(
+          tool.documentId!,
+          tool.organizationId!,
+          tool.tableId as number,
+          tool.fieldId!
+        )
+
+        const downloadUrl = urlResult.success ? urlResult.data! : undefined
+
+        // Create artifact and open in canvas using LlamaIndex ChatCanvas
         const artifact = createDocumentArtifact(
           result.data,
-          tool.config.organizationId,
-          tool.config.tableId!,
-          tool.config.fieldId!,
-          'view'
+          tool.organizationId!,
+          tool.tableId as number,
+          tool.fieldId!,
+          'view',
+          downloadUrl
         )
+        // Open the artifact in canvas using hook from component level
         openArtifactInCanvas(artifact)
-        console.log('Document artifact opened in canvas:', artifact)
+        logger.debug('Document artifact opened', { documentId: tool.documentId, tableId: tool.tableId })
       } else {
-        console.error('Failed to fetch document data:', result.error)
+        logger.error('Failed to fetch document data', result.error)
       }
     } else if (tool.category === ToolCategory.FILES) {
-      // Fetch real file data using DTO config
+      // Fetch real file data using DTO runtime values
       const fileResult = await fetchFileArtifactData(
-        tool.config.fileId!,
-        tool.config.organizationId,
-        tool.config.filename!,
-        tool.config.fileMimeType!
+        tool.fileId!,
+        tool.organizationId!,
+        tool.filename!,
+        tool.mimeType!
       )
 
       if (fileResult.success && fileResult.data) {
         // Get download URL for the file
         const urlResult = await getFileDownloadUrl(
-          tool.config.fileId!,
-          tool.config.organizationId
+          tool.fileId!,
+          tool.organizationId!
         )
 
         const downloadUrl = urlResult.success ? urlResult.data! : ''
 
-        // Create artifact and open in canvas
+        // Create artifact and open in canvas using LlamaIndex ChatCanvas
         const artifact = createFileArtifact(fileResult.data, 1, 1, 'generic', downloadUrl)
         openArtifactInCanvas(artifact)
-        console.log('File artifact opened in canvas:', artifact)
+        logger.debug('File artifact opened', { fileId: tool.fileId, filename: tool.filename })
       } else {
-        console.error('Failed to fetch file data:', fileResult.error)
+        logger.error('Failed to fetch file data', fileResult.error)
       }
     }
     // Other tool types have different behaviors (agents, tables, databases)
@@ -303,33 +260,85 @@ function ChatContentWithCanvas({
   return (
     <div className="h-full flex flex-col">
       {/* Messages and suggestions container - scrollable */}
-      <div ref={handler.scrollRef} className="flex-1 overflow-y-auto flex flex-col px-1">
+      <div ref={handler.scrollRef} className="flex-1 overflow-y-auto flex flex-col">
         {/* Messages area */}
         <div className="flex-1">
           {/* Debug: Show message count */}
           {process.env.NODE_ENV === 'development' && (
-            <div className="text-xs text-gray-500 p-2">
+            <div className="text-xs text-gray-500 py-2">
               Messages: {handler.messages?.length || 0}
             </div>
           )}
 
-          {/* ChatMessages component */}
-          <ChatMessages
-            className="flex-1 h-full bg-transparent [&_.message]:bg-transparent [&_.message]:py-1 [&_.message]:px-2 [&_.message]:text-sm [&_.message]:leading-tight [&_p]:text-sm [&_p]:leading-5 [&_*]:text-sm"
-          />
+          {/* ChatMessages component with inline loading indicator */}
+          <ChatMessages className="flex-1 h-full bg-transparent">
+            <ChatMessages.List>
+              {/* Render all messages using library's ChatMessage component */}
+              {handler.messages.map((message: EmeryChatMessage, index) => {
+                // Extract execution steps from message metadata
+                const steps = message.experimental_metadata?.executionSteps
 
+                return (
+                  <React.Fragment key={message.id || index}>
+                    {/* Show step history for assistant messages with steps - BEFORE the message */}
+                    {message.role === 'assistant' && steps && steps.length > 0 && (
+                      <div className="mx-4 mb-0.5">
+                        <StepHistoryDisplay steps={steps} />
+                      </div>
+                    )}
+                    <ChatMessage
+                      message={message}
+                      isLast={index === handler.messages.length - 1}
+                      className={cn(
+                        "my-0.5 mx-4",
+                        message.role === 'assistant' && "rounded-md px-3 py-1.5 transition-colors"
+                      )}
+                    >
+                      <ChatMessage.Avatar />
+                      <ChatMessage.Content
+                        className={cn(
+                          "[&_p]:text-sm [&_p]:leading-snug [&_p]:my-0.5",
+                          message.role === 'user' && "border border-input rounded-md px-2.5 py-1 inline-block"
+                        )}
+                      />
+                      <ChatMessage.Actions />
+                    </ChatMessage>
+                  </React.Fragment>
+                )
+              })}
+
+              {/* Real-time streaming steps - display accumulated steps during execution */}
+              {handler.isLoading && handler.streamingSteps && handler.streamingSteps.length > 0 && (
+                <div className="mx-4 mb-0.5">
+                  <StepHistoryDisplay steps={handler.streamingSteps} />
+                </div>
+              )}
+
+              {/* Inline loading indicator - appears after last message (Claude-like) */}
+              {handler.isLoading && handler.currentStep && (
+                <div className="flex gap-3 px-4 py-1 mx-4 mb-0.5">
+                  {/* Bot Avatar */}
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  {/* Step Progress */}
+                  <div className="flex-1 min-w-0">
+                    <StepProgressIndicator
+                      currentStep={handler.currentStep}
+                      isLoading={handler.isLoading}
+                      onCancel={handler.cancelMessage}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state when no messages */}
+              <ChatMessages.Empty />
+            </ChatMessages.List>
+          </ChatMessages>
         </div>
-
-        {/* Suggestions at bottom of messages area when no messages */}
-        {isClient && showSuggestions && handler.messages.length === 0 && (
-          <div className="flex-shrink-0 mt-auto">
-            <ChatSuggestions
-              onSuggestionClick={onSuggestionClick}
-              selectedIndex={selectedSuggestionIndex}
-              domainType={chatContext?.domainType}
-            />
-          </div>
-        )}
       </div>
 
       {/* Tool Panel - with direct canvas access */}
@@ -342,16 +351,21 @@ function ChatContentWithCanvas({
       />
 
       {/* Input area */}
-      <div className="flex-shrink-0 p-4 border-t border-border/10 bg-card" onKeyDown={onKeyDown}>
+      <div className="flex-shrink-0 py-2 px-3 border-t border-border/10 bg-card">
         <CustomChatInput
           onSendMessage={async (message) => {
-            // Send message with tools
-            handler.append({ content: message, role: 'user' })
-            setShowSuggestions(false)
-            // Keep tools visible after sending (don't clear them)
+            // Send message with proper MessagePart format
+            handler.append({
+              role: 'user',
+              parts: [{ type: 'text', text: message }],
+              id: generateId() // Add id for type compatibility
+            })
           }}
           onToolsChange={onToolsChange}
           placeholder="Ask Emery anything... (type @ to add tools, docs, agents, etc.)"
+          pendingAttachments={handler.pendingAttachments}
+          onAttachmentAdd={handler.addAttachment}
+          onAttachmentRemove={handler.removeAttachment}
         />
       </div>
     </div>
@@ -371,18 +385,18 @@ export function EmeryChat() {
 
   // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders
   const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
+  const chatWidth = useStore(uiStateStore, uiStateSelectors.chatWidth)
   const canvasState = useStore(uiStateStore, uiStateSelectors.canvasState)
   const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
   const chatContext = useStore(uiStateStore, uiStateSelectors.chatContext)
   const toggleCanvas = uiStateActions.toggleCanvas
   const setChatContext = uiStateActions.setChatContext
+  const setChatWidth = uiStateActions.setChatWidth
 
   const { data: emeryData } = useEmery()
 
   // Chat session state
   const [currentChatId, setCurrentChatId] = useState<string | undefined>()
-  const [showSuggestions, setShowSuggestions] = useState(true)
-  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [isClient, setIsClient] = useState(false)
 
   // Tools state for @ tool selection
@@ -398,7 +412,7 @@ export function EmeryChat() {
 
   // Handle chat created callback from useChatGRPC
   const handleChatCreated = (chatId: string) => {
-    console.log('[EMERY-CHAT] New chat created:', chatId)
+    logger.summary('New chat created', { chatId })
     setCurrentChatId(chatId)
     // Trigger refresh of chat history dropdown
     handleChatHistoryUpdate()
@@ -430,7 +444,7 @@ export function EmeryChat() {
         }
       }
 
-      console.log('[EMERY-CHAT] Auto-detecting context:', { pathname, pageName, domainId })
+      logger.debug('Auto-detecting context', { pathname, pageName, domainId })
 
       // Create context based on detected page
       const detectedContext = createChatContextForPage(pageName, domainId, domainName)
@@ -450,11 +464,6 @@ export function EmeryChat() {
     setIsClient(true)
   }, [])
 
-  // AIDEV-NOTE: Removed complex text parsing - tools now come from explicit selection only
-  // This eliminates the parseReferencesWithContext runtime error and simplifies the architecture
-
-  // NOW ALL HOOKS ARE CALLED - CONDITIONAL RETURNS ARE SAFE BELOW THIS POINT
-
   // Don't render if hidden - return hidden div instead of null to avoid hook rule violations
   if (chatState === 'hidden') {
     return <div className="hidden" />
@@ -467,7 +476,7 @@ export function EmeryChat() {
   // Don't render if user is not authenticated
   if (!userId || !organizationId) {
     return (
-      <div className="w-96 h-full flex flex-col bg-card border-l border-border items-center justify-center p-8">
+      <div className="w-96 h-full flex flex-col bg-card items-center justify-center py-8">
         <p className="text-sm text-muted-foreground">Please sign in to use chat</p>
       </div>
     )
@@ -489,57 +498,37 @@ export function EmeryChat() {
     }
   }
   
-  // Collapsed state - just show header with expand button
+  // Collapsed state - show minimal icon strip with dashlet logo
   if (chatState === 'collapsed') {
     return (
-      <div className="w-12 h-full flex flex-col bg-card border-l border-border flex-shrink-0">
-        <EmeryChatHeader 
-          domainType={chatContext?.domainType}
-          domainName={chatContext?.domainName}
-          currentChatId={currentChatId}
-          onChatSelect={handleChatSelect}
-          onNewChat={handleNewChat}
-          onChatHistoryUpdate={handleChatHistoryUpdate}
-          userId={userId || ''}
-          organizationId={organizationId || 0}
-        />
-        <div className="flex-1" />
+      <div className="w-12 h-full flex flex-col bg-card flex-shrink-0 items-center py-4 gap-4">
+        {/* Dashlet logo */}
+        <button
+          onClick={() => uiStateActions.toggleChat()}
+          className="flex items-center justify-center hover:opacity-80 transition-opacity"
+          title="Expand chat"
+        >
+          <img
+            src="/assets/dashlet/logo_icon.svg"
+            alt="Dashlet"
+            className="h-6 w-6"
+          />
+        </button>
+
+        {/* Expand button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => uiStateActions.toggleChat()}
+          className="h-8 w-8"
+          title="Expand chat"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
       </div>
     )
   }
 
-  const suggestions = getSuggestionsPrompts(chatContext?.domainType)
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Check if reference dropdown is open to avoid conflicts
-    const referenceDropdownOpen = document.querySelector('[data-chat-search-dropdown]')
-    if (referenceDropdownOpen) return // Let reference dropdown handle navigation
-
-    // AIDEV-NOTE: Check if the event target is the chat input to avoid conflicts
-    const isFromChatInput = (e.target as HTMLElement)?.tagName === 'INPUT'
-    if (isFromChatInput) return // Let CustomChatInput handle its own events
-
-    if (!showSuggestions || suggestions.length === 0) return
-
-    if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setSelectedSuggestionIndex(prev => {
-        if (prev === -1) return suggestions.length - 1
-        return prev > 0 ? prev - 1 : suggestions.length - 1
-      })
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setSelectedSuggestionIndex(prev => {
-        if (prev === -1) return 0
-        return prev < suggestions.length - 1 ? prev + 1 : 0
-      })
-    } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
-      e.preventDefault()
-      handleSuggestionClick(suggestions[selectedSuggestionIndex])
-    } else if (e.key === 'Escape') {
-      setSelectedSuggestionIndex(-1)
-    }
-  }
 
   // Handle tool changes from chat input
   const handleToolsChange = (tools: ToolDTO[]) => {
@@ -561,43 +550,34 @@ export function EmeryChat() {
     }
   }
 
-  // Handle removing tool from panel
+  // Handle removing tool from panel - delegates to handler which also removes from input
   const handleRemoveTool = (toolToRemove: ToolDTO) => {
-    // Remove from selected tools using unified ToolDTO comparison
-    const updatedTools = selectedTools.filter(tool => {
-      // For reference tools, use id if available, otherwise use insertText
-      if (tool.id && toolToRemove.id) {
-        return tool.id !== toolToRemove.id
-      }
-      // For system tools or fallback, use name
-      return tool.name !== toolToRemove.name
-    })
-    setSelectedTools(updatedTools)
-
-    // TODO: Also update the input text to remove the tool reference
-    // This would require access to the input element's value and updating it
-    console.log('Tool removed:', toolToRemove)
+    handler.removeTool(toolToRemove)
+    logger.debug('Tool removed via handler', { tool: toolToRemove.name })
   }
-
-  const handleSuggestionClick = (suggestion: string) => {
-    console.log('Suggestion clicked:', suggestion)
-    setSelectedSuggestionIndex(-1)
-    setShowSuggestions(false) // Hide suggestions after selection
-
-    // Use the chat handler to send the suggestion
-    handler.append({ content: suggestion, role: 'user' })
-  }
-
-
-
 
   // Determine layout based on canvas state
   const isFullWidth = canvasState === 'collapsed'
-  
+
   return (
-    <div className={`flex bg-card border-l border-border flex-shrink-0 ${isFullWidth ? 'h-screen' : 'h-full'}`}>
+    <div
+      className={`relative flex bg-card flex-shrink-0 h-full`}
+      style={{
+        width: isFullWidth ? '100%' : `${chatWidth}px`,
+        // CSS-based responsive constraints using shadcn's --sidebar-width variable
+        maxWidth: 'calc((100vw - var(--sidebar-width, 256px)) / 2)',  // 50% of available screen space
+        minWidth: 'max(280px, calc((100vw - var(--sidebar-width, 256px)) * 0.2))' // Larger of 280px or 20% of available space
+      }}
+    >
+      {/* Resize handle */}
+      {!isFullWidth && (
+        <RightPanelResizeHandle
+          onResize={setChatWidth}
+        />
+      )}
+
       {/* Chat Section - now full width without sidebar */}
-      <div className={`flex flex-col ${isFullWidth ? 'h-screen' : 'h-full'} ${isFullWidth ? 'flex-1' : 'w-96'}`}>
+      <div className={`flex flex-col w-full h-full`}>
         <EmeryChatHeader 
           domainType={chatContext?.domainType}
           domainName={chatContext?.domainName}
@@ -610,110 +590,20 @@ export function EmeryChat() {
         />
         
         {/* Chat content area - takes remaining height after header */}
-        {/* AIDEV-NOTE: ChatSection provides LlamaIndex canvas context for reference tools */}
-        {/* Real handler from ChatProvider ensures messages array is always defined (no SSR flatMap errors) */}
+        {/* AIDEV-NOTE: ChatSection is now in EmeryLayout, wrapping the entire app */}
+        {/* This allows canvas to work across main content and chat areas */}
         <div className="flex-1 min-h-0 overflow-hidden" suppressHydrationWarning>
-          <ChatSection
+          <ChatContentWithCanvas
+            selectedTools={selectedTools}
+            onToolsChange={handleToolsChange}
+            onAddTool={handleAddTool}
+            onRemoveTool={handleRemoveTool}
+            isClient={isClient}
             handler={handler}
-            className="h-full"
-            autoOpenCanvas={false}
-          >
-            <ChatContentWithCanvas
-              selectedTools={selectedTools}
-              onToolsChange={handleToolsChange}
-              onAddTool={handleAddTool}
-              onRemoveTool={handleRemoveTool}
-              showSuggestions={showSuggestions}
-              selectedSuggestionIndex={selectedSuggestionIndex}
-              onSuggestionClick={handleSuggestionClick}
-              onKeyDown={handleKeyDown}
-              isClient={isClient}
-              handler={handler}
-              setShowSuggestions={setShowSuggestions}
-              chatContext={chatContext}
-            />
-          </ChatSection>
+            chatContext={chatContext}
+          />
         </div>
       </div>
     </div>
   )
-}
-
-// Helper functions for domain-specific suggestions
-function getSuggestionsForDomain(domainType?: DomainType | 'organizations' | 'general') {
-  switch (domainType) {
-    case 'agents':
-      return [
-        {
-          icon: <Code className="h-3 w-3" />,
-          title: "Help configure agent capabilities and tools",
-          prompt: "Help me configure this agent's capabilities and available tools for optimal performance."
-        },
-        {
-          icon: <BarChart className="h-3 w-3" />,
-          title: "Analyze agent performance and task execution",
-          prompt: "Analyze this agent's performance metrics and suggest optimizations for task execution."
-        }
-      ]
-      
-    case 'teams':
-      return [
-        {
-          icon: <Users className="h-3 w-3" />,
-          title: "Analyze team collaboration and productivity",
-          prompt: "Analyze our team's collaboration patterns and suggest productivity improvements."
-        },
-        {
-          icon: <BarChart className="h-3 w-3" />,
-          title: "Review team performance metrics and goals",
-          prompt: "Review our team's performance metrics and help optimize our goals and workflows."
-        }
-      ]
-      
-    case 'tables':
-      return [
-        {
-          icon: <Database className="h-3 w-3" />,
-          title: "Query table data with natural language",
-          prompt: "Help me query this table's data using natural language commands."
-        },
-        {
-          icon: <BarChart className="h-3 w-3" />,
-          title: "Analyze data patterns and generate insights",
-          prompt: "Analyze patterns in this table's data and generate actionable business insights."
-        }
-      ]
-      
-    case 'organizations':
-      return [
-        {
-          icon: <BarChart className="h-3 w-3" />,
-          title: "Generate organizational performance report",
-          prompt: "Generate a comprehensive report on our organizational performance and key metrics."
-        },
-        {
-          icon: <Users className="h-3 w-3" />,
-          title: "Analyze resource allocation and optimization",
-          prompt: "Analyze our current resource allocation and suggest optimization strategies."
-        }
-      ]
-      
-    default: // 'general' or mission-control
-      return [
-        {
-          icon: <Database className="h-3 w-3" />,
-          title: "Analyze database performance and optimization opportunities",
-          prompt: "Analyze the current database performance and suggest optimizations for our main tables and queries."
-        },
-        {
-          icon: <BarChart className="h-3 w-3" />,
-          title: "Generate comprehensive analytics report with KPIs",
-          prompt: "Generate a comprehensive analytics report showing key performance indicators, user engagement metrics, and business trends from our data."
-        }
-      ]
-  }
-}
-
-function getSuggestionsPrompts(domainType?: DomainType | 'organizations' | 'general'): string[] {
-  return getSuggestionsForDomain(domainType).map(s => s.prompt)
 }

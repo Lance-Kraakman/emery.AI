@@ -44,21 +44,21 @@ function ToolCard({ tool, onClick, onRemove, connectionStatus }: ToolCardProps) 
     if (isReferenceTool) {
       switch (tool.category) {
         case ToolCategory.DOCUMENTS:
-          return <FileText className="h-4 w-4 text-blue-600" />
+          return <FileText className="h-3.5 w-3.5 text-blue-600" />
         case ToolCategory.FILES:
-          return <File className="h-4 w-4 text-green-600" />
+          return <File className="h-3.5 w-3.5 text-green-600" />
         case ToolCategory.TABLES:
-          return <Database className="h-4 w-4 text-purple-600" />
+          return <Database className="h-3.5 w-3.5 text-purple-600" />
         case ToolCategory.AGENTS:
-          return <Users className="h-4 w-4 text-orange-600" />
+          return <Users className="h-3.5 w-3.5 text-orange-600" />
         case ToolCategory.DATABASES:
-          return <Database className="h-4 w-4 text-gray-600" />
+          return <Database className="h-3.5 w-3.5 text-gray-600" />
         default:
-          return <FileText className="h-4 w-4 text-gray-600" />
+          return <FileText className="h-3.5 w-3.5 text-gray-600" />
       }
     } else {
       // System tool icons - use generic icons for now
-      return <Plus className="h-4 w-4 text-gray-600" />
+      return <Plus className="h-3.5 w-3.5 text-gray-600" />
     }
   }
 
@@ -91,7 +91,7 @@ function ToolCard({ tool, onClick, onRemove, connectionStatus }: ToolCardProps) 
       <button
         onClick={onClick}
         className={`
-          flex items-center gap-2 px-3 py-2 rounded-md border text-sm
+          flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs
           transition-colors duration-150 flex-shrink-0 max-w-xs
           border-border bg-background hover:bg-muted/50 cursor-pointer
           ${canOpenArtifact ? 'hover:border-blue-300' : ''}
@@ -137,9 +137,9 @@ function ToolCard({ tool, onClick, onRemove, connectionStatus }: ToolCardProps) 
 
 function LoadingSkeleton() {
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-background animate-pulse">
-      <div className="h-4 w-4 bg-muted rounded" />
-      <div className="h-4 w-20 bg-muted rounded" />
+    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-border bg-background animate-pulse">
+      <div className="h-3.5 w-3.5 bg-muted rounded" />
+      <div className="h-3 w-20 bg-muted rounded" />
     </div>
   )
 }
@@ -216,9 +216,9 @@ export function ToolPanel({
 
   return (
     <div className={`border-t border-border bg-muted/10 ${className}`}>
-      <div className="px-4 py-3">
+      <div className="py-1.5">
         {/* Header */}
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
@@ -262,7 +262,7 @@ export function ToolPanel({
 
         {/* Connection Summary */}
         {showConnectionStatus && showConnectionSummary && connectionSummary && (
-          <div className="mb-3">
+          <div className="mb-1.5">
             <ConnectionSummaryCard
               tools={connectionStatuses}
               isLoading={isLoadingConnections}
@@ -277,7 +277,7 @@ export function ToolPanel({
 
         {/* Tools */}
         {!isCollapsed && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Loading State */}
             {isLoading && (
               <>
@@ -305,7 +305,7 @@ export function ToolPanel({
               })
             ) : !isLoading ? (
               /* Empty State with Helpful Hint */
-              <div className="text-sm text-muted-foreground py-2">
+              <div className="text-xs text-muted-foreground py-1">
                 Type @ to add tools, documents, agents, and more
               </div>
             ) : null}

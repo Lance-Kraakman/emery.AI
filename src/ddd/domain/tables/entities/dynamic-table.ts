@@ -115,11 +115,16 @@ export class DynamicTable {
    * Add a field to the table (within aggregate boundary)
    */
   addField(field: TableField): void {
+    // AIDEV-NOTE: Prevent creating field named 'id' (reserved for system row identifier)
+    if (field.name.toLowerCase() === 'id') {
+      throw new Error(`Field name 'id' is reserved for the system row identifier. Please choose a different name.`);
+    }
+
     // Check if field name already exists
     if (this._fields.some(f => f.name === field.name)) {
       throw new Error(`Field with name '${field.name}' already exists`);
     }
-    
+
     this._fields.push(field);
     this._updatedAt = new Date();
   }

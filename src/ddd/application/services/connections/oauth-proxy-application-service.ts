@@ -5,11 +5,17 @@
  * Orchestrates agent lookup, credential management, and OAuth execution.
  */
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { PipedreamClient } from '@pipedream/sdk';
+
+const logger = createDebugLogger('OAuthProxy');
 import { getExternalUserIdForAgent } from '@/lib/pipedream/client';
 import { ApiKey, UserId, AgentId } from '@/ddd/domain/shared/value-objects';
+import { AppName } from '@/ddd/domain/connections/value-objects';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import type { CredentialDelegationApplicationService } from '@/ddd/application/services/delegations/credential-delegation-application-service';
+import { UnauthorizedCredentialUsageError } from '@/ddd/domain/delegations/errors';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
 
@@ -29,7 +35,8 @@ export interface OAuthProxyResult {
 export class OAuthProxyApplicationService {
   constructor(
     private agentRepository: IAgentRepository,
-    private pipedreamClient: PipedreamClient | null = null
+    private pipedreamClient: PipedreamClient | null = null,
+    private delegationService?: CredentialDelegationApplicationService
   ) {}
 
   /**
@@ -51,12 +58,42 @@ export class OAuthProxyApplicationService {
         return ResultHelpers.failure<OAuthProxyResult>('Missing required fields: service, action');
       }
 
-      // 3. Update agent last used timestamp
+      // 3. SECURITY: Check credential delegation permission
+      if (this.delegationService) {
+        const serviceAppName = AppName.fromString(request.service);
+        const hasPermission = await this.delegationService.checkDelegation(
+          agent.id,
+          serviceAppName
+        );
+
+        if (!hasPermission) {
+          const error = new UnauthorizedCredentialUsageError(
+            agent.id.value,
+            agent.name,
+            request.service,
+            agent.ownerId.value
+          );
+          logger.error('Unauthorized credential usage attempt', {
+            agentId: agent.id.value,
+            agentName: agent.name,
+            service: request.service,
+            ownerId: agent.ownerId.value
+          });
+          return ResultHelpers.failure<OAuthProxyResult>(error.message);
+        }
+
+        logger.debug('Delegation check passed', {
+          agentId: agent.id.value,
+          service: request.service
+        });
+      }
+
+      // 4. Update agent last used timestamp
       await this.agentRepository.updateLastUsed(agent.id);
 
       console.log(`[OAUTH-PROXY] Agent ${agent.id.value} (${agent.name}) calling ${request.service}.${request.action} for user ${agent.ownerId.value}`);
 
-      // 4. Execute OAuth call using agent owner's credentials
+      // 5. Execute OAuth call using agent owner's credentials
       const result = await this.executeWithOwnerCredentials(
         agent.ownerId,
         request.service,

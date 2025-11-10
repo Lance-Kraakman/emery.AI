@@ -5,6 +5,7 @@ import { OrganizationName } from '@/ddd/domain/shared/value-objects/organization
 import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { TeamId } from '@/ddd/domain/shared/value-objects/team-id';
+import { AgentStatus } from '@/ddd/domain/shared/value-objects/agent-status';
 import type { CreateUserData } from '@/ddd/domain/users/entities/user';
 import type { CreateOrganizationData } from '@/ddd/domain/organizations/entities/organization';
 import { testClient } from './integration-helpers';
@@ -267,12 +268,12 @@ export async function createTestAgent(
       tools: [],
       servers: []
     },
-    capabilities: [],
-    organizationId: organizationId.value,
-    ownerId: ownerId.value,
-    isActive: true
+    skills: [],
+    organizationId: organizationId,
+    ownerId: ownerId,
+    status: AgentStatus.active()
   };
-  
+
   const agent = await agentRepository.create(createData);
   
   return {
@@ -312,9 +313,9 @@ export async function createTestTeam(
   }
   
   return {
-    id: result.data!.id,
+    id: TeamId.fromNumber(result.data!.id),
     name: result.data!.name,
-    organizationId: result.data!.organizationId
+    organizationId: OrganizationId.fromNumber(result.data!.organizationId)
   };
 }
 

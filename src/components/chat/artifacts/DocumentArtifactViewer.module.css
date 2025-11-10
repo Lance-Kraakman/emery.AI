@@ -163,7 +163,7 @@
 
 /* Code Blocks */
 .tiptapEditor :global(.ProseMirror pre) {
-  @apply bg-primary text-primary-foreground p-5 rounded-xl my-6 overflow-x-auto font-mono text-sm leading-relaxed border border-border;
+  @apply bg-primary text-primary-foreground rounded-xl my-6 overflow-x-auto font-mono text-sm leading-relaxed border border-border;
   background-color: hsl(var(--primary) / 0.95);
 }
 

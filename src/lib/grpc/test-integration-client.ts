@@ -25,7 +25,7 @@ export interface TaskExecutionRequest {
   taskId: string;
   agentId: number;
   instructions?: string;
-  capabilityName?: string;
+  skillName?: string;
   agentConfig: {
     name: string;
     role?: string;
@@ -83,7 +83,7 @@ export class AgentWorkerTestClient {
           version: response.getVersion(),
           organizationId: response.getOrganizationId(),
           status: response.getStatus(),
-          capabilities: response.getCapabilitiesList(),
+          skills: response.getCapabilitiesList(),
           activeTasks: response.getActiveTasks(),
           maxConcurrentTasks: response.getMaxConcurrentTasks(),
           uptimeSeconds: response.getUptimeSeconds(),
@@ -103,27 +103,35 @@ export class AgentWorkerTestClient {
     return new Promise((resolve, reject) => {
       // Build the gRPC request object
       const grpcRequest: TaskRequest = {
-        task_id: request.taskId,
-        agent_id: request.agentId,
-        organization_id: this.config.organizationId,
-        owner_id: request.ownerId,
-        timeout_seconds: request.timeoutSeconds || 300,
-        agent_config: {
+        name: request.name,
+        taskId: request.taskId,
+        agentId: request.agentId,
+        organizationId: this.config.organizationId,
+        ownerId: request.ownerId,
+        timeoutSeconds: request.timeoutSeconds || 300,
+        agentModel: '', // Empty string will use org/system default
+        organizationModel: '', // Empty string will use system default
+        agentConfig: {
           name: request.name,
           // Add other agent config fields as needed
         } as AgentConfig,
-        trigger_data: {
+        triggerData: {
           // Add trigger data fields as needed
         } as TriggerData,
         
         // Set execution mode
-        ...(request.instructions 
-          ? { 
+        ...(request.instructions
+          ? {
               instruction_config: {
-                instructions: request.instructions
+                task: request.instructions,
+                images: [],
+                attachments: [],
+                tools: [],
+                servers: [],
+                model: ''
               } as InstructionConfig
             }
-          : { capability_name: request.capabilityName }
+          : { capability_name: request.skillName }
         )
       };
 

@@ -426,7 +426,7 @@ describe('TableApplicationService Integration Tests', () => {
           }
 
           // Merge existing data with update data
-          const existingData = existingRow.toPlainObject();
+          const existingData = existingRow.toPlainObject(updateTestTable.fields);
           const mergedData = {
             ...existingData,
             ...testCase.input.updateData,
@@ -544,7 +544,7 @@ describe('TableApplicationService Integration Tests', () => {
     });
   });
 
-  describe('findRows', () => {
+  describe('getRows', () => {
     let collectionTestTable: DynamicTable;
 
     beforeEach(async () => {
@@ -583,7 +583,10 @@ describe('TableApplicationService Integration Tests', () => {
       for (const testCase of testCases) {
         console.log(`🧪 Running test: ${testCase.name}`);
         
-        const result = await tableAppService.getRows(collectionTestTable.id, testCase.input.options);
+        const result = await tableAppService.getRows(
+          collectionTestTable.id,
+          testCase.input.options || { limit: 1000, offset: 0 }
+        );
 
         expect(result).toBeDefined();
         expect(result.length).toBeGreaterThan(0);
@@ -643,21 +646,21 @@ describe('TableApplicationService Integration Tests', () => {
     const databaseApplicationService = getDatabaseApplicationService();
     const createDbResult = await databaseApplicationService.createDatabase({
       name: `Test Database ${timestamp}-${random}`,
-      organizationId: testContext.organizationId,
-      createdBy: testContext.ownerUserId
+      organizationId: testContext.organizationId.value,
+      createdBy: testContext.ownerUserId.value
     });
-    
+
     if (!createDbResult.success || !createDbResult.data) {
       throw new Error(`Failed to create test database: ${createDbResult.error}`);
     }
-    
+
     const testDbId = createDbResult.data.id;
-    
+
     // Create table using TableApplicationService
     const appService = getTableApplicationService();
     const createTableResult = await appService.createTable({
       name: tableName,
-      databaseId: testDbId,
+      databaseId: DatabaseId.fromNumber(testDbId),
       organizationId: testContext.organizationId,
       createdBy: testContext.ownerUserId
     });

@@ -1,1 +1,0 @@
-"""Shared value objects for domain modeling."""

@@ -13,20 +13,33 @@ import { Store } from '@tanstack/react-store'
 import type { TableDTO } from '@/app/mappers/table-mapper'
 import type { FieldDTO } from '@/app/mappers/field-mapper'
 import type { RowDTO, FieldValueDTO } from '@/app/mappers/row-mapper'
+import type { FilterConfig } from '@/lib/types/filters'
+import { createDebugLogger } from '@/lib/utils/debug-logger'
+
+const logger = createDebugLogger('DataStore')
 
 export interface DataState {
   // Current selection
   selectedTableId?: number
   selectedDatabaseId?: number
-  
+  selectedViewId?: number
+
   // Table and field data
   fields: FieldDTO[]
   rows: RowDTO[]
   availableTables: Array<{ id: number; name: string }>
+  viewsForCurrentTable: Array<{
+    id: number
+    name: string
+    viewType: 'grid' | 'metric' | 'dashboard' | 'recent-entries'
+    filters?: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>
+    sorting?: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>
+  }>
   
   // Search and filtering
   searchTerm: string
   fieldFilter: string
+  activeFilters: FilterConfig[]
   rowFilter: {
     field?: string
     operator?: 'equals' | 'contains' | 'startsWith' | 'endsWith' | 'greaterThan' | 'lessThan'
@@ -34,7 +47,7 @@ export interface DataState {
   }
   sortBy: {
     field?: string
-    order: 'asc' | 'desc'
+    order?: 'asc' | 'desc'
   }
   
   // Pagination
@@ -121,17 +134,20 @@ const initialState: DataState = {
   // Selection
   selectedTableId: undefined,
   selectedDatabaseId: undefined,
-  
+  selectedViewId: undefined,
+
   // Data
   fields: [],
   rows: [],
   availableTables: [],
+  viewsForCurrentTable: [],
   
   // Search and filtering
   searchTerm: '',
   fieldFilter: '',
+  activeFilters: [],
   rowFilter: {},
-  sortBy: { order: 'asc' },
+  sortBy: {},
   
   // Pagination
   currentPage: 1,
@@ -228,6 +244,14 @@ export const dataActions = {
     dataStore.setState((state) => ({ ...state, selectedDatabaseId: databaseId }))
   },
 
+  setSelectedView: (viewId?: number) => {
+    dataStore.setState((state) => ({ ...state, selectedViewId: viewId }))
+  },
+
+  clearSelectedView: () => {
+    dataStore.setState((state) => ({ ...state, selectedViewId: undefined }))
+  },
+
   // Data loading actions
   setFields: (fields: FieldDTO[]) => {
     dataStore.setState((state) => ({ ...state, fields, fieldsLoading: false }))
@@ -244,6 +268,16 @@ export const dataActions = {
 
   setAvailableTables: (tables: Array<{ id: number; name: string }>) => {
     dataStore.setState((state) => ({ ...state, availableTables: tables }))
+  },
+
+  setViewsForCurrentTable: (views: Array<{
+    id: number
+    name: string
+    viewType: 'grid' | 'metric' | 'dashboard' | 'recent-entries'
+    filters?: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>
+    sorting?: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>
+  }>) => {
+    dataStore.setState((state) => ({ ...state, viewsForCurrentTable: views }))
   },
 
   // Search and filter actions
@@ -268,9 +302,56 @@ export const dataActions = {
   },
 
   setSorting: (field: string, order: 'asc' | 'desc') => {
-    dataStore.setState((state) => ({ 
-      ...state, 
-      sortBy: { field, order } 
+    logger.debug('setSorting called', { field, order })
+    dataStore.setState((state) => {
+      logger.debug('setSorting old state', { sortBy: state.sortBy })
+      const newState = {
+        ...state,
+        sortBy: { field, order }
+      }
+      logger.debug('setSorting new state', { sortBy: newState.sortBy })
+      return newState
+    })
+    logger.debug('setSorting store state after', { sortBy: dataStore.state.sortBy })
+  },
+
+  clearSorting: () => {
+    logger.debug('clearSorting CALLED')
+    logger.debug('clearSorting state BEFORE', { sortBy: dataStore.state.sortBy })
+    dataStore.setState((state) => {
+      logger.debug('clearSorting inside setState old', { sortBy: state.sortBy })
+      const newState = {
+        ...state,
+        sortBy: {}
+      }
+      logger.debug('clearSorting inside setState new', { sortBy: newState.sortBy })
+      return newState
+    })
+    logger.debug('clearSorting state AFTER', { sortBy: dataStore.state.sortBy })
+  },
+
+  // Active filter actions
+  addFilter: (filter: FilterConfig) => {
+    dataStore.setState((state) => ({
+      ...state,
+      activeFilters: [...state.activeFilters, filter],
+      currentPage: 1 // Reset to first page when filter changes
+    }))
+  },
+
+  removeFilter: (index: number) => {
+    dataStore.setState((state) => ({
+      ...state,
+      activeFilters: state.activeFilters.filter((_, i) => i !== index),
+      currentPage: 1
+    }))
+  },
+
+  clearActiveFilters: () => {
+    dataStore.setState((state) => ({
+      ...state,
+      activeFilters: [],
+      currentPage: 1
     }))
   },
 
@@ -279,8 +360,9 @@ export const dataActions = {
       ...state,
       searchTerm: '',
       fieldFilter: '',
+      activeFilters: [],
       rowFilter: {},
-      sortBy: { order: 'asc' },
+      // Keep sortBy - clearing filters should not clear sort
       currentPage: 1
     }))
   },
@@ -622,13 +704,17 @@ export const dataSelectors = {
   // Selection selectors
   selectedTableId: (state: DataState) => state.selectedTableId,
   selectedDatabaseId: (state: DataState) => state.selectedDatabaseId,
+  selectedViewId: (state: DataState) => state.selectedViewId,
   selectedTable: (availableTables: Array<{ id: number; name: string }>) => (state: DataState) =>
     availableTables.find(table => table.id === state.selectedTableId),
+  selectedView: (state: DataState) =>
+    state.viewsForCurrentTable.find(view => view.id === state.selectedViewId),
 
   // Data selectors
   fields: (state: DataState) => state.fields,
   rows: (state: DataState) => state.rows,
   availableTables: (state: DataState) => state.availableTables,
+  viewsForCurrentTable: (state: DataState) => state.viewsForCurrentTable,
   
   // Filtered data selectors
   filteredRows: (state: DataState) => {
@@ -647,7 +733,8 @@ export const dataSelectors = {
     // Apply row filter
     if (state.rowFilter.field && state.rowFilter.value !== undefined) {
       filtered = filtered.filter(row => {
-        const fieldValue = row.fieldValues.find(fv => fv.fieldSlug === state.rowFilter.field)?.value
+        // AIDEV-NOTE: Assumes state.rowFilter.field is numeric field ID (e.g., "1", "10")
+        const fieldValue = row.fieldValues.find(fv => fv.fieldId === state.rowFilter.field)?.value
         const filterValue = state.rowFilter.value
 
         switch (state.rowFilter.operator) {
@@ -672,8 +759,9 @@ export const dataSelectors = {
     // Apply sorting
     if (state.sortBy.field) {
       filtered.sort((a, b) => {
-        const aValue = a.fieldValues.find(fv => fv.fieldSlug === state.sortBy.field)?.value || ''
-        const bValue = b.fieldValues.find(fv => fv.fieldSlug === state.sortBy.field)?.value || ''
+        // AIDEV-NOTE: Assumes state.sortBy.field is numeric field ID (e.g., "1", "10")
+        const aValue = a.fieldValues.find(fv => fv.fieldId === state.sortBy.field)?.value || ''
+        const bValue = b.fieldValues.find(fv => fv.fieldId === state.sortBy.field)?.value || ''
         
         let compareResult = 0
         if (typeof aValue === 'number' && typeof bValue === 'number') {
@@ -682,7 +770,7 @@ export const dataSelectors = {
           compareResult = String(aValue).localeCompare(String(bValue))
         }
 
-        return state.sortBy.order === 'asc' ? compareResult : -compareResult
+        return (state.sortBy.order || 'asc') === 'asc' ? compareResult : -compareResult
       })
     }
 
@@ -699,6 +787,7 @@ export const dataSelectors = {
   // Search and filter selectors
   searchTerm: (state: DataState) => state.searchTerm,
   fieldFilter: (state: DataState) => state.fieldFilter,
+  activeFilters: (state: DataState) => state.activeFilters,
   rowFilter: (state: DataState) => state.rowFilter,
   sortBy: (state: DataState) => state.sortBy,
 

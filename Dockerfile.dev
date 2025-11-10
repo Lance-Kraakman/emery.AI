@@ -1,0 +1,34 @@
+# AIDEV-NOTE: Development Dockerfile - skips build step for fast iteration
+FROM node:20-bookworm-slim
+WORKDIR /app
+
+# Install system dependencies for native modules (DuckDB, Sharp, etc.)
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    python3 \
+    make \
+    g++ \
+    libvips-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure git for any potential git operations
+RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+# Install pnpm globally
+RUN npm i -g pnpm
+
+# AIDEV-NOTE: Skip dependency installation in dev mode
+# Dependencies are provided via volume mount from host (faster iteration)
+# Copy source code
+COPY . .
+
+# Set development environment
+ENV NODE_ENV=development
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Copy entrypoint script
+COPY entrypoint.sh .
+
+EXPOSE 3000
+ENTRYPOINT ["./entrypoint.sh"]

@@ -5,22 +5,22 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Search, SlidersHorizontal, Grid, List } from 'lucide-react';
+import { Search, SlidersHorizontal, Grid, List, RefreshCw } from 'lucide-react';
 import { AppConnectionCard, type AppInfo } from './AppConnectionCard';
 import { ConnectionDTO as Connection } from '@/app/mappers/connection-mapper';
 
 interface UnifiedConnectionsGridProps {
-  apps: AppInfo[];
+  mode: 'connections' | 'browse';
+  apps?: AppInfo[];
   connections: Connection[];
-  allConnections?: Connection[];
-  showAllDuplicates?: boolean;
-  duplicateCount?: number;
   connectingApp?: string | null;
   disconnectingAccount?: string | null;
+  hasMore: boolean;
+  loadingMore: boolean;
   onConnect: (appId: string) => void;
   onDisconnect: (connectionId: string) => void;
   onReconnect?: (appId: string) => void;
-  onToggleDuplicates?: () => void;
+  onLoadMore: () => void;
 }
 
 type FilterType = 'all' | 'connected' | 'available' | 'error';
@@ -28,45 +28,62 @@ type SortType = 'name' | 'status' | 'recent';
 type ViewType = 'grid' | 'list';
 
 export function UnifiedConnectionsGrid({
+  mode,
   apps,
   connections,
-  allConnections,
-  showAllDuplicates = false,
-  duplicateCount = 0,
   connectingApp,
   disconnectingAccount,
+  hasMore,
+  loadingMore,
   onConnect,
   onDisconnect,
   onReconnect,
-  onToggleDuplicates
+  onLoadMore
 }: UnifiedConnectionsGridProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');
   const [sort, setSort] = useState<SortType>('status');
   const [viewType, setViewType] = useState<ViewType>('grid');
 
-  // Use the appropriate connections list based on duplicate toggle
-  const activeConnections = showAllDuplicates && allConnections ? allConnections : connections;
-
   // Create unified app data with connection status
   const unifiedApps = useMemo(() => {
-    return apps.map(app => {
-      // Find connection for this app (use first match for display)
-      const connection = activeConnections.find(c => c.app === app.id);
-
-      return {
-        app,
+    if (mode === 'connections') {
+      // Show only connections
+      return connections.map(connection => ({
+        app: {
+          id: connection.app,
+          name: connection.app.charAt(0).toUpperCase() + connection.app.slice(1).replace(/-/g, ' '),
+          description: `Connected as ${connection.account_name}`,
+          category: 'connected',
+          icon: `/icons/${connection.app}.svg`
+        },
         connection,
-        status: !connection
-          ? 'available'
-          : (connection.status === 'connected' || connection.status === 'active')
-            ? 'connected'
-            : connection.status === 'error'
-              ? 'error'
-              : 'unknown'
-      };
-    });
-  }, [apps, activeConnections]);
+        status: (connection.status === 'connected' || connection.status === 'active')
+          ? 'connected'
+          : connection.status === 'error'
+            ? 'error'
+            : 'unknown'
+      }));
+    } else {
+      // Browse mode: Show all available apps with connection status
+      return (apps || []).map(app => {
+        // Find connection for this app (use first match for display)
+        const connection = connections.find(c => c.app === app.id);
+
+        return {
+          app,
+          connection,
+          status: !connection
+            ? 'available'
+            : (connection.status === 'connected' || connection.status === 'active')
+              ? 'connected'
+              : connection.status === 'error'
+                ? 'error'
+                : 'unknown'
+        };
+      });
+    }
+  }, [mode, apps, connections]);
 
   // Filter and sort apps
   const filteredAndSortedApps = useMemo(() => {
@@ -127,14 +144,13 @@ export function UnifiedConnectionsGrid({
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div>
-            <h2 className="text-lg font-medium">App Connections</h2>
+            <h2 className="text-lg font-medium">
+              {mode === 'connections' ? 'My Connections' : 'Browse Apps'}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Manage apps that your agents can use on your behalf
-              {duplicateCount > 0 && (
-                <span className="ml-2 text-amber-600 font-medium">
-                  ({duplicateCount} duplicates {showAllDuplicates ? 'shown' : 'hidden'})
-                </span>
-              )}
+              {mode === 'connections'
+                ? 'Your connected OAuth accounts'
+                : 'Connect apps that your agents can use on your behalf'}
             </p>
           </div>
 
@@ -156,33 +172,6 @@ export function UnifiedConnectionsGrid({
             </Button>
           </div>
         </div>
-
-        {/* Duplicate Management Banner */}
-        {duplicateCount > 0 && onToggleDuplicates && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-amber-800 font-medium">
-                  {duplicateCount} duplicate connection{duplicateCount !== 1 ? 's' : ''} found
-                </div>
-                <div className="text-amber-700 text-sm">
-                  {showAllDuplicates
-                    ? `Showing all connections including duplicates`
-                    : `Duplicates are hidden for clarity`
-                  }
-                </div>
-              </div>
-              <Button
-                onClick={onToggleDuplicates}
-                variant="outline"
-                size="sm"
-                className="text-amber-800 border-amber-300 hover:bg-amber-100"
-              >
-                {showAllDuplicates ? 'Hide Duplicates' : 'Show All'}
-              </Button>
-            </div>
-          </div>
-        )}
 
         {/* Search and Filters */}
         <div className="flex flex-col sm:flex-row gap-4">
@@ -311,6 +300,27 @@ export function UnifiedConnectionsGrid({
               className={viewType === 'list' ? 'max-w-none' : ''}
             />
           ))}
+        </div>
+      )}
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center pt-6">
+          <Button
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            variant="outline"
+            size="lg"
+          >
+            {loadingMore ? (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                Loading more connections...
+              </>
+            ) : (
+              'Load More'
+            )}
+          </Button>
         </div>
       )}
     </div>

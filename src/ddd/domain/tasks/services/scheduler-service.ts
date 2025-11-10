@@ -65,19 +65,57 @@ export class SchedulerService implements ISchedulerService {
   ) {}
 
   async scheduleTask(request: ScheduleTaskRequest): Promise<void> {
-    // Update agent's trigger configuration
-    // This will be handled by the agent repository in the infrastructure layer
+    // Add new schedule to agent's schedules array
     const agent = await this.agentRepository.findById(request.agentId);
     if (agent) {
+      // Add the new schedule configuration to existing schedules
+      const updatedSchedules = [...agent.schedules, request.schedule];
       await this.agentRepository.update(request.agentId, {
-        trigger: request.trigger
+        schedules: updatedSchedules
       });
     }
   }
 
   async getTasksDueForExecution(before: Date = new Date()): Promise<Task[]> {
-    // AIDEV-NOTE: Temporarily return empty until repository methods are implemented
-    return [];
+    const dueTasks: Task[] = [];
+
+    // Get all agents
+    const agents = await this.agentRepository.findAll();
+
+    for (const agent of agents) {
+      // Iterate through each agent's schedules
+      for (const schedule of agent.schedules) {
+        // Only process enabled calendar triggers
+        if (!schedule.enabled || schedule.trigger.type !== 'CALENDAR') {
+          continue;
+        }
+
+        // Check if schedule is due for execution
+        const nextRun = this.calculateNextExecution(schedule.trigger);
+        if (!nextRun || nextRun > before) {
+          continue;
+        }
+
+        // Create a Task entity for this due schedule
+        const task = Task.create({
+          agentId: agent.id,
+          organizationId: agent.organizationId,
+          name: schedule.name || `Scheduled: ${schedule.taskInstructions.task.substring(0, 50)}`,
+          instructions: {
+            ...schedule.taskInstructions,
+            metadata: {
+              ...schedule.taskInstructions.metadata,
+              scheduleType: schedule.trigger.type,
+              scheduledFor: nextRun.toISOString()
+            }
+          }
+        });
+
+        dueTasks.push(task);
+      }
+    }
+
+    return dueTasks;
   }
 
   async getScheduledTasksForAgent(agentId: AgentId): Promise<ScheduledTask[]> {

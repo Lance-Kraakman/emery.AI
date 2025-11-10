@@ -1,27 +1,73 @@
 'use client'
 
 import { generateId } from 'ai'
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
-import { ChatHandler, Message } from '@llamaindex/chat-ui'
-import type { DomainType } from '@/ddd/domain/rag/value-objects'
+import { ChatHandler, Message, type MessagePart } from '@llamaindex/chat-ui'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
 import { createChatStreamRequest, type ChatContextOptions } from './types/chat-requests'
 import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/chat-history'
 import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
+import { createDebugLogger } from '@/lib/utils/debug-logger'
+import type { AnyAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata'
+import type { ExecutionStep } from '@/ddd/domain/chat/value-objects/execution-step'
+import type { ExtendedChatHandler, ChatMessage, CurrentStepProgress } from './types/extended-chat-handler'
+import { createTextMessage, createMultimodalMessage, getMessageContent } from '@/lib/chat/message-helpers'
+import { createExecutionStep, addStepDeduped } from '@/lib/chat/step-collection'
+import { isStepProgressEvent, isContentEvent, isMessageCompleteEvent } from '@/lib/chat/types/sse-events'
 
-interface ChatMessage extends Message {
-  id: string
+const logger = createDebugLogger('ChatGRPC')
+
+/**
+ * Helper to create an image MessagePart from attachment metadata
+ */
+function createImagePart(attachment: AnyAttachmentMetadata): MessagePart {
+  return {
+    type: 'data-file',
+    data: {
+      filename: attachment.filename,
+      mediaType: attachment.mimeType,
+      url: attachment.url,
+    }
+  }
+}
+
+/**
+ * Helper to create an audio MessagePart from attachment metadata
+ */
+function createAudioPart(attachment: AnyAttachmentMetadata): MessagePart {
+  return {
+    type: 'data-file',
+    data: {
+      filename: attachment.filename,
+      mediaType: attachment.mimeType,
+      url: attachment.url,
+    }
+  }
+}
+
+/**
+ * Helper to create a file MessagePart from attachment metadata
+ */
+function createFilePart(attachment: AnyAttachmentMetadata): MessagePart {
+  return {
+    type: 'data-file',
+    data: {
+      filename: attachment.filename,
+      mediaType: attachment.mimeType,
+      url: attachment.url,
+    }
+  }
 }
 
 /**
  * Extract tool references from message content
  * Finds patterns like @tool:gmail-create-draft and converts them to tool configs
  */
-function extractToolReferencesFromMessage(message: string): Array<{name: string, version: string, config: any}> {
-  const toolReferences: Array<{name: string, version: string, config: any}> = []
+function extractToolReferencesFromMessage(message: string): Array<{name: string, version: string, config: Record<string, unknown>}> {
+  const toolReferences: Array<{name: string, version: string, config: Record<string, unknown>}> = []
 
   // Match @tool:xxx patterns
   const toolMatches = message.match(/@tool:([a-zA-Z0-9_-]+)/g)
@@ -47,23 +93,6 @@ function extractToolReferencesFromMessage(message: string): Array<{name: string,
   return toolReferences
 }
 
-// Extended ChatHandler interface with scroll functionality, persistence, and tool management
-interface ExtendedChatHandler extends ChatHandler {
-  append: (message: Message) => Promise<string>
-  scrollRef?: React.RefObject<HTMLDivElement>
-  scrollToBottom?: () => void
-  clearMessages?: () => void
-  currentChatId?: string
-  switchToChat?: (chatId: string) => Promise<void>
-  createNewChat?: () => Promise<void>
-  onChatCreated?: (chatId: string) => void
-  // Tool management
-  selectedTools: ToolDTO[]
-  availableTools: ToolDTO[]
-  addTool: (tool: ToolDTO) => void
-  removeTool: (tool: ToolDTO) => void
-}
-
 /**
  * Generic gRPC-based Chat Handler
  * 
@@ -87,21 +116,45 @@ export function useChatGRPC(
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isClient, setIsClient] = useState(false)
   const [currentChatId, setCurrentChatId] = useState<string | undefined>()
+  const [currentStep, setCurrentStep] = useState<{
+    type: string
+    name: string
+    index: number
+    content?: string
+  } | null>(null)
+  const [streamingSteps, setStreamingSteps] = useState<ExecutionStep[]>([])
+  const [currentMessageId, setCurrentMessageId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
   // AIDEV-NOTE: Use fine-grained store subscription instead of useLayout()
   const chatContext = useStore(uiStateStore, uiStateSelectors.chatContext)
 
   // Tool management state
   const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([])
   const [availableTools, setAvailableTools] = useState<ToolDTO[]>([])
-  
+
+  // Attachment management state
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([])
+
   // Generate domain-specific storage key for this chat session
   const chatStorageKey = `emery-chat-${contextOptions?.domainType || chatContext?.domainType || 'general'}-${contextOptions?.domainId || chatContext?.domainId || 'default'}`
 
-  // Auto-scroll to bottom function
+  // Check if user is near bottom of scroll container (within 100px)
+  const isNearBottom = () => {
+    if (!scrollRef.current) return true
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
+    const threshold = 100 // px from bottom
+    return scrollHeight - scrollTop - clientHeight < threshold
+  }
+
+  // Auto-scroll to bottom with smooth animation
+  // Only scrolls if user is already near bottom (doesn't interrupt if they scrolled up)
   const scrollToBottom = () => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    if (scrollRef.current && isNearBottom()) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      })
     }
   }
 
@@ -124,29 +177,25 @@ export function useChatGRPC(
   // Load a specific chat session with full history
   const loadChatSession = async (chatId: string) => {
     try {
-      console.log('[CHAT-GRPC-HOOK] Loading chat session:', chatId)
+      logger.debug('Loading chat session', { chatId })
       const result = await loadChatWithFullHistory(chatId)
-      
+
       if (result.success && result.data) {
         setCurrentChatId(chatId)
-        
+
         // Convert DTOs to ChatMessage format
-        const chatMessages: ChatMessage[] = result.data.messages.map(msg => ({
-          id: msg.id,
-          content: msg.content,
-          role: msg.role as 'user' | 'assistant'
-        }))
-        
+        const chatMessages: ChatMessage[] = result.data.messages.map(msg =>
+          createTextMessage(msg.content, msg.role as 'user' | 'assistant', msg.id, msg.metadata)
+        )
+
         setMessages(chatMessages)
-        console.log(`[CHAT-GRPC-HOOK] Loaded ${chatMessages.length} messages for chat ${chatId}`)
+        logger.summary('Loaded messages', { count: chatMessages.length, chatId })
       } else {
-        console.error('[CHAT-GRPC-HOOK] Failed to load chat session:', result.error)
-        // Fall back to localStorage for this context
+        logger.error('Failed to load chat session', result.error)
         loadFromLocalStorage()
       }
     } catch (error) {
-      console.error('[CHAT-GRPC-HOOK] Error loading chat session:', error)
-      // Fall back to localStorage for this context
+      logger.error('Error loading chat session', error)
       loadFromLocalStorage()
     }
   }
@@ -161,15 +210,22 @@ export function useChatGRPC(
           setMessages(parsedMessages)
         }
       } catch (error) {
-        console.warn('[CHAT-GRPC-HOOK] Failed to load from localStorage:', error)
+        logger.debug('Failed to load from localStorage', error)
       }
     }
   }
 
-  // Auto-scroll when messages change
+  // Auto-scroll when messages change or during active streaming
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
+  }, [messages, isLoading])
+
+  // Auto-scroll when step panel appears or updates
+  useEffect(() => {
+    if (currentStep && isLoading) {
+      scrollToBottom()
+    }
+  }, [currentStep, isLoading])
 
   // Persist messages when they change (client-side only)
   useEffect(() => {
@@ -177,32 +233,66 @@ export function useChatGRPC(
       try {
         localStorage.setItem(chatStorageKey, JSON.stringify(messages))
       } catch (error) {
-        console.warn('[CHAT-GRPC-HOOK] Failed to persist messages:', error)
+        logger.debug('Failed to persist messages', error)
       }
     }
   }, [messages, isClient, chatStorageKey])
 
-  const append = async (message: Message) => {
-    const userMessage: ChatMessage = {
-      id: generateId(),
-      content: message.content,
-      role: message.role as 'user' | 'assistant',
-    }
+  const append = async (message: Message, attachments?: File[]) => {
+    const messageContent = getMessageContent(message)
+
+    // Use provided attachments or pending attachments
+    const filesToAttach = attachments || pendingAttachments
+
+    // Create message with text and any attachments
+    const userMessage = filesToAttach.length > 0
+      ? createMultimodalMessage(
+          [
+            { type: 'text', text: messageContent },
+            // Note: Actual file parts will be created after S3 upload by API route
+            // For now, we just show pending files in UI
+          ],
+          message.role as 'user' | 'assistant'
+        )
+      : createTextMessage(messageContent, message.role as 'user' | 'assistant')
 
     setMessages((prev) => [...prev, userMessage])
     setIsLoading(true)
+    setStreamingSteps([]) // Reset steps for new message
+
+    // Set optimistic "Thinking..." state immediately for instant UX feedback
+    setCurrentStep({
+      type: 'PLANNING',
+      name: 'Thinking...',
+      content: '',
+      index: 0
+    })
+
     setInput('')
 
+    // Clear pending attachments since we're sending them
+    if (!attachments && filesToAttach.length > 0) {
+      clearAttachments()
+    }
+
+    // Generate message ID for cancellation tracking
+    const messageId = `msg_${Date.now()}_${generateId()}`
+    setCurrentMessageId(messageId)
+
+    // Create abort controller for cancellation
+    abortControllerRef.current = new AbortController()
+
     try {
-      console.log('[CHAT-GRPC-HOOK] Calling gRPC-based chat API with tools:', {
-        selectedTools: selectedTools.length,
-        toolNames: selectedTools.map(t => t.name)
+      logger.debug('Calling chat API', {
+        messageId,
+        toolCount: selectedTools.length,
+        tools: selectedTools.map(t => t.name)
       })
 
-      // Prepare chat messages for API call
+      // Prepare chat messages for API call - send parts array for multimodal support
       const chatMessages = [...messages, userMessage].map(m => ({
         role: m.role as 'user' | 'assistant',
-        content: m.content,
+        parts: m.parts, // Send parts array to API
       }))
 
       // Prepare context data for API call using proper UI types
@@ -221,40 +311,58 @@ export function useChatGRPC(
       }))
 
       // 2. Extract tool references from message content (e.g., @tool:gmail-create-draft)
-      const messageToolReferences = extractToolReferencesFromMessage(userMessage.content)
-      console.log('[CHAT-GRPC-HOOK] Extracted tool references from message:', messageToolReferences)
-
-      // Debug: Log individual tool configs
-      messageToolReferences.forEach((tool, index) => {
-        console.log(`[CHAT-GRPC-HOOK] Tool ${index}: name=${tool.name}, config=`, tool.config)
-      })
+      const messageToolReferences = extractToolReferencesFromMessage(messageContent)
 
       // 3. Combine all tools (avoid duplicates by name)
-      const allTools = [...selectedToolData]
+      // Use unknown to accept both ToolDefinitionData and basic configs from message parsing
+      const allTools: Array<{name: string, version: string, config: unknown}> = [...selectedToolData]
       for (const toolRef of messageToolReferences) {
         if (!allTools.find(t => t.name === toolRef.name)) {
           allTools.push(toolRef)
         }
       }
 
-      console.log('[CHAT-GRPC-HOOK] Final tool list for gRPC:', allTools)
+      logger.debug('Tool list for gRPC', { count: allTools.length, tools: allTools.map(t => t.name) })
+      logger.debug('Attachments', { count: filesToAttach.length, files: filesToAttach.map(f => f.name) })
 
-      const requestBody = {
+      const requestData = {
         messages: chatMessages,
         chatId: currentChatId,
+        messageId: messageId, // For cancellation tracking
         ...(chatContextOptions?.domainType ? { domainType: chatContextOptions.domainType } : {}),
         ...(chatContextOptions?.domainId ? { domainId: chatContextOptions.domainId } : {}),
         tools: allTools
       }
-      
+
+      // Use FormData if there are attachments, otherwise JSON
+      let requestBody: FormData | string
+      let headers: Record<string, string> = {}
+
+      if (filesToAttach.length > 0) {
+        // Use FormData for multipart/form-data with files
+        const formData = new FormData()
+        formData.append('data', JSON.stringify(requestData))
+
+        // Append each file
+        filesToAttach.forEach((file, index) => {
+          formData.append(`file_${index}`, file)
+        })
+
+        requestBody = formData
+        // Don't set Content-Type - browser will set it with boundary
+      } else {
+        // Use JSON for text-only messages
+        requestBody = JSON.stringify(requestData)
+        headers['Content-Type'] = 'application/json'
+      }
+
       // Call the gRPC-based streaming chat API
       const response = await fetch('/api/chat/stream-grpc', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         credentials: 'include', // Ensure cookies are included in the request
-        body: JSON.stringify(requestBody),
+        signal: abortControllerRef.current?.signal, // For abort support
+        body: requestBody,
       })
 
       if (!response.ok) {
@@ -270,58 +378,122 @@ export function useChatGRPC(
 
       let assistantMessage = ''
       const assistantId = generateId()
+      let messageCreated = false // Track if we've added the message to UI yet
 
-      // Add empty assistant message that we'll stream into
-      setMessages((prev) => [...prev, {
-        id: assistantId,
-        content: '',
-        role: 'assistant' as const,
-      }])
+      logger.debug('Starting stream read')
 
-      console.log('[CHAT-GRPC-HOOK] Starting to read gRPC streaming response')
-
-      // Read the stream - gRPC API returns plain text stream
+      // Read the stream - gRPC API returns mixed SSE events and plain text
+      let buffer = ''
       while (true) {
         const { done, value } = await reader.read()
         if (done) {
-          console.log('[CHAT-GRPC-HOOK] Stream reading completed')
+          logger.debug('Stream completed')
+          setCurrentStep(null) // Clear step progress
           break
         }
 
-        // Decode the chunk - it's plain text from gRPC processing
+        // Decode the chunk
         const chunk = new TextDecoder().decode(value)
-        
-        if (chunk) {
-          assistantMessage += chunk
-          
-          // Update the assistant message in real-time
-          setMessages((prev) => prev.map((msg) =>
-            msg.id === assistantId
-              ? { ...msg, content: assistantMessage }
-              : msg
-          ))
+        buffer += chunk
+
+        // Process buffer for SSE events (data: {...}\n\n)
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || '' // Keep incomplete event in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const eventData = JSON.parse(line.substring(6))
+
+              if (isStepProgressEvent(eventData)) {
+                setCurrentStep({
+                  type: eventData.stepType,
+                  name: eventData.stepName,
+                  index: eventData.stepIndex,
+                  content: eventData.content
+                })
+
+                // Accumulate step for history display with deduplication
+                const executionStep = createExecutionStep(
+                  eventData.stepType,
+                  eventData.stepName,
+                  eventData.stepIndex,
+                  eventData.content || '',
+                  eventData.metadata
+                )
+                setStreamingSteps(prev => addStepDeduped(prev, executionStep))
+
+              } else if (isContentEvent(eventData)) {
+                // Content chunk from assistant response
+                assistantMessage += eventData.text
+
+                // Create message on first content chunk (not before)
+                if (!messageCreated) {
+                  setMessages((prev) => [...prev, createTextMessage(assistantMessage, 'assistant', assistantId)])
+                  messageCreated = true
+                } else {
+                  // Update the assistant message in real-time
+                  setMessages((prev) => prev.map((msg) =>
+                    msg.id === assistantId
+                      ? createTextMessage(assistantMessage, 'assistant', assistantId)
+                      : msg
+                  ))
+                }
+              } else if (isMessageCompleteEvent(eventData)) {
+                // Handle completion with execution steps metadata
+                logger.debug('Received message completion with metadata', {
+                  stepCount: eventData.metadata.executionSteps?.length || 0,
+                  ragSourcesCount: eventData.metadata.ragSources?.length || 0
+                })
+
+                // Update the assistant message with final metadata
+                setMessages((prev) => prev.map((msg) =>
+                  msg.id === assistantId
+                    ? createTextMessage(
+                        assistantMessage,
+                        'assistant',
+                        assistantId,
+                        eventData.metadata // Include execution steps and other metadata
+                      )
+                    : msg
+                ))
+
+                // Clear streaming steps now that metadata is persisted
+                setStreamingSteps([])
+              }
+            } catch (e) {
+              logger.debug('Failed to parse SSE event', e)
+            }
+          }
         }
       }
 
-      console.log('[CHAT-GRPC-HOOK] Final assistant message length:', assistantMessage.length)
+      logger.summary('Stream complete', { messageLength: assistantMessage.length })
 
       // Check for new chat creation after stream completes
       await checkForNewChat()
 
     } catch (error) {
-      console.error('[CHAT-GRPC-HOOK] Chat error:', error)
-      
-      // Add error message
-      setMessages((prev) => [...prev, {
-        id: generateId(),
-        content: `Sorry, there was an error processing your message: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
-        role: 'assistant' as const,
-      }])
+      logger.error('Chat error', error)
+
+      // Check if it was aborted
+      if (error instanceof Error && error.name === 'AbortError') {
+        logger.debug('Message cancelled by user')
+        setMessages((prev) => [...prev, createTextMessage('_Message cancelled by user_', 'assistant')])
+      } else {
+        // Add error message
+        const errorMsg = `Sorry, there was an error processing your message: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`
+        setMessages((prev) => [...prev, createTextMessage(errorMsg, 'assistant')])
+      }
     } finally {
       setIsLoading(false)
+      setCurrentStep(null)
+      // Note: streamingSteps are cleared in message_complete handler after metadata is persisted
+      setCurrentMessageId(null)
+      abortControllerRef.current = null
     }
 
-    return message.content as string
+    return messageContent
   }
 
   // Clear all messages and localStorage
@@ -332,7 +504,7 @@ export function useChatGRPC(
       try {
         localStorage.removeItem(chatStorageKey)
       } catch (error) {
-        console.warn('[CHAT-GRPC-HOOK] Failed to clear persisted messages:', error)
+        logger.debug('Failed to clear persisted messages', error)
       }
     }
   }
@@ -340,10 +512,10 @@ export function useChatGRPC(
   // Switch to a different chat session
   const switchToChat = async (chatId: string) => {
     try {
-      console.log('[CHAT-GRPC-HOOK] Switching to chat:', chatId)
+      logger.debug('Switching to chat', { chatId })
       await loadChatSession(chatId)
     } catch (error) {
-      console.error('[CHAT-GRPC-HOOK] Failed to switch chat:', error)
+      logger.error('Failed to switch chat', error)
     }
   }
 
@@ -366,32 +538,32 @@ export function useChatGRPC(
         organizationId,
         userId
       }
-      
-      console.log('[CHAT-GRPC-HOOK] Checking for new chat creation:', context)
-      
+
+      logger.debug('Checking for new chat', { context })
+
       // Get the current (most recent) chat for this context
       const result = await getCurrentChatSession(context)
-      
+
       if (result.success && result.data) {
         const newChatId = result.data.id
-        console.log('[CHAT-GRPC-HOOK] Found new chat created:', newChatId)
-        
+        logger.summary('New chat created', { chatId: newChatId })
+
         // Update current chat ID
         setCurrentChatId(newChatId)
-        
+
         // Notify parent component if callback provided
         onChatCreated?.(newChatId)
       }
-      
+
     } catch (error) {
-      console.error('[CHAT-GRPC-HOOK] Failed to check for new chat:', error)
+      logger.error('Failed to check for new chat', error)
     }
   }
 
   // Create a new chat session
   const createNewChat = async () => {
     try {
-      console.log('[CHAT-GRPC-HOOK] Creating new chat for context:', {
+      logger.debug('Creating new chat', {
         domainType: contextOptions?.domainType || chatContext?.domainType,
         domainId: contextOptions?.domainId || chatContext?.domainId
       })
@@ -409,7 +581,34 @@ export function useChatGRPC(
       // when the first message is sent with no chatId
 
     } catch (error) {
-      console.error('[CHAT-GRPC-HOOK] Failed to create new chat:', error)
+      logger.error('Failed to create new chat', error)
+    }
+  }
+
+  // Cancel current message processing
+  const cancelMessage = async () => {
+    if (!currentMessageId || !abortControllerRef.current) {
+      logger.debug('No message to cancel')
+      return
+    }
+
+    logger.debug('Cancelling message', { messageId: currentMessageId })
+
+    try {
+      // Abort the fetch request
+      abortControllerRef.current.abort()
+
+      // Also call backend cancellation API (fire and forget)
+      await fetch('/api/chat/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ messageId: currentMessageId })
+      }).catch(err => {
+        logger.debug('Backend cancel failed (non-critical)', err)
+      })
+    } catch (error) {
+      logger.error('Cancel error', error)
     }
   }
 
@@ -427,14 +626,44 @@ export function useChatGRPC(
 
   const removeTool = (tool: ToolDTO) => {
     setSelectedTools(prev => prev.filter(t => t.name !== tool.name))
+
+    // Also remove the tool reference from input text
+    if (tool.insertText) {
+      const insertText = tool.insertText // TypeScript narrowing
+      setInput(prev => {
+        // Remove all occurrences of the tool reference (e.g., "@table:customers")
+        const regex = new RegExp(insertText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')
+        return prev.replace(regex, '').trim()
+      })
+      logger.debug('Removed tool reference from input', { insertText })
+    }
+  }
+
+  // Attachment management functions
+  const addAttachment = (file: File) => {
+    setPendingAttachments(prev => [...prev, file])
+    logger.debug('Added attachment', { filename: file.name, type: file.type, size: file.size })
+  }
+
+  const removeAttachment = (index: number) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== index))
+    logger.debug('Removed attachment', { index })
+  }
+
+  const clearAttachments = () => {
+    setPendingAttachments([])
+    logger.debug('Cleared all attachments')
   }
 
   return {
-    input,
-    setInput,
+    // Base ChatHandler required fields
+    status: isLoading ? 'streaming' : 'ready',
+    sendMessage: async (msg: Message) => {
+      await append(msg)
+    },
     isLoading,
     append,
-    messages: messages.map(msg => ({ id: msg.id, content: msg.content, role: msg.role })), // Include id field required by ChatMessages component
+    messages, // Return original messages array
     setMessages,
     scrollRef,
     scrollToBottom,
@@ -447,6 +676,15 @@ export function useChatGRPC(
     availableTools,
     addTool,
     removeTool,
+    // Attachment management
+    pendingAttachments,
+    addAttachment,
+    removeAttachment,
+    clearAttachments,
+    // Step progress and cancellation
+    currentStep,
+    streamingSteps,
+    cancelMessage,
   }
 }
 

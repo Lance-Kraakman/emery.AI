@@ -1,8 +1,11 @@
-import { pgTable, text, uuid, serial, bigserial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, serial, bigserial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole, index, doublePrecision } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
+import type { ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
+import type { PuckDataStructure } from '@/ddd/domain/puck/value-objects/puck-data';
+import type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 
 // AIDEV-NOTE: Authenticated user role for RLS policies
 export const authenticatedRole = pgRole('authenticated', {
@@ -37,12 +40,13 @@ export const databases = pgTable("databases", {
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
-  slug: text("slug").notNull().unique(), // URL-safe database identifier
+  slug: text("slug").notNull(), // URL-safe database identifier (unique per organization)
   metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata for RAG indexing
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
+  unique("databases_org_slug_unique").on(table.organizationId, table.slug),
   pgPolicy("databases_tenant_isolation", {
     as: "permissive",
     for: "all",
@@ -78,23 +82,23 @@ export const fields = pgTable("fields", {
   type: text("type").notNull(), // text, number, boolean, email, url, date, file, relation
   orderIndex: integer("order_index").default(0),
   required: boolean("required").default(false),
-  
+
   // Configuration for complex field types (file, relation)
   fieldConfig: jsonb("field_config").$type<{
     // File field config
     allowedTypes?: string[]; // ['image/*', '.pdf', etc.]
     maxSize?: number; // in bytes
     multiple?: boolean;
-    
-    // Relation field config  
+
+    // Relation field config
     targetTableId?: number;
     relationshipType?: 'one-to-one' | 'one-to-many' | 'many-to-many';
     displayField?: string;
-    
+
     // Generic extension metadata
     [key: string]: any;
   }>(),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   pgPolicy("fields_tenant_isolation", {
@@ -102,6 +106,120 @@ export const fields = pgTable("fields", {
     for: "all",
     to: "public",
     using: sql`EXISTS (SELECT 1 FROM tables t WHERE t.id = table_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
+  }),
+]);
+
+// AIDEV-NOTE: Views - Filtered/sorted table configurations (Baserow view pattern) with tables
+// Defines filtered, sorted, paginated views of table data for components
+export const views = pgTable("views", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  tableId: integer("table_id").notNull().references(() => tables.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+
+  // Filter configuration (array of filter conditions)
+  filters: jsonb("filters").$type<Array<{
+    fieldId: number;
+    operator: string;
+    value?: string | number | boolean | null;
+  }>>().default(sql`'[]'::jsonb`).notNull(),
+
+  // Sort configuration (array of sort rules with priority)
+  sorting: jsonb("sorting").$type<Array<{
+    fieldId: number;
+    direction: 'asc' | 'desc';
+    priority: number;
+  }>>().default(sql`'[]'::jsonb`).notNull(),
+
+  // Pagination configuration
+  pagination: jsonb("pagination").$type<{
+    pageSize: number;
+    offset: number;
+  }>().default(sql`'{"pageSize": 50, "offset": 0}'::jsonb`).notNull(),
+
+  // Field mappings configuration (column visibility, order, and display names)
+  fieldMappings: jsonb("field_mappings").$type<Array<{
+    sourceFieldId: number;
+    displayName: string;
+    visible: boolean;
+    order: number;
+  }>>(),
+
+  // View type (grid, metric, chart, form)
+  // AIDEV-NOTE: Determines how data is transformed and displayed.
+  // Defaults to 'grid' for backward compatibility with existing views.
+  viewType: text("view_type")
+    .$type<'grid' | 'metric' | 'chart' | 'form'>()
+    .notNull()
+    .default('grid'),
+
+  // View-type-specific configuration stored as JSONB
+  // AIDEV-NOTE: Schema varies by viewType. Validated by ViewConfig Value Object.
+  viewConfig: jsonb("view_config")
+    .$type<{
+      type: 'grid' | 'metric' | 'chart' | 'form';
+      [key: string]: any;
+    }>()
+    .notNull()
+    .default(sql`'{"type": "grid"}'::jsonb`),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  // AIDEV-NOTE: No unique constraint on view names - users can name views however they want
+
+  // Index for organization queries
+  index("views_org_idx").on(table.organizationId),
+
+  // Index for table queries
+  index("views_table_idx").on(table.tableId),
+
+  // Index for view type queries (e.g., list all metric views)
+  index("views_type_idx").on(table.viewType),
+
+  // RLS: Users can view views in their organization
+  pgPolicy("views_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:view',
+        organization_id
+      )`,
+  }),
+
+  // RLS: Users can create views if they have data:manage permission
+  pgPolicy("views_create_permission", {
+    as: "permissive",
+    for: "insert",
+    to: "public",
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:manage',
+        organization_id
+      )`,
+  }),
+
+  // RLS: Users can manage views if they have data:manage permission
+  pgPolicy("views_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:manage',
+        organization_id
+      )`,
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'data:manage',
+        organization_id
+      )`,
   }),
 ]);
 
@@ -119,6 +237,24 @@ export const organizations = pgTable("organizations", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   stripeSubscriptionStatus: text("stripe_subscription_status"),
   analysisCapabilities: jsonb("analysis_capabilities").$type<OrganizationAnalysisCapabilities>(), // Type-safe organizational analysis configuration
+
+  // Model configuration fields for AI billing and access control
+  // AIDEV-NOTE: Model selection hierarchy - see /docs/model-selection-hierarchy.md
+  // Chat System: Uses organization.defaultModel → System Default
+  // Agent Tasks: Uses agent.defaultModel → organization.defaultModel → System Default
+  // Skill Execution: Uses skill.model → agent.defaultModel → organization.defaultModel → System Default
+  defaultModel: text("default_model"), // Organization-wide default model (used by chat and as fallback for agents/skills)
+  availableModels: jsonb("available_models").$type<string[]>().default(sql`'[]'::jsonb`), // Models available to this organization
+  tokenQuotaMonthly: integer("token_quota_monthly"), // Monthly token quota (null = unlimited)
+  tokenUsageCurrentMonth: integer("token_usage_current_month").default(0), // Current month's token usage
+  quotaResetAt: timestamp("quota_reset_at"), // When quota was last reset
+
+  // Credit system fields (1 credit = 1,000 tokens for user-facing billing)
+  // AIDEV-NOTE: Credits provide user-friendly billing units. Different models cost different credits per 1K tokens.
+  creditBalance: integer("credit_balance").default(0).notNull(), // Current available credits
+  creditsUsedCurrentMonth: integer("credits_used_current_month").default(0).notNull(), // Credits used this month
+  creditsResetAt: timestamp("credits_reset_at"), // When credits were last reset (for monthly free tier)
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   // RBAC-based policy for viewing organizations
@@ -411,17 +547,27 @@ export const agents = pgTable("agents", {
   role: text("role"),
   description: text("description"),
   persona: text("persona"),
-  ownerId: uuid("owner_id").notNull().references(() => users.id), // Agent owner (user)
-  tools: jsonb("tools"), // Available tools as JSONB for rich configuration
-  servers: jsonb("servers"), // Available servers as JSONB for rich configuration  
-  trigger: jsonb("trigger"), // Trigger configuration (JSON blob)
-  capabilities: jsonb("capabilities"), // STATIC: Array of Capability objects with steps (JSON blob)
+  ownerId: uuid("owner_id").notNull().references(() => users.id), // Agent owner - used for OAuth credential resolution via proxy
+  schedules: jsonb("schedules").$type<ScheduleConfigurationJSON[]>().default(sql`'[]'::jsonb`).notNull(), // Array of schedule configurations with task instructions
   databaseId: text("database_id"),
   status: text("status").default("active"),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   apiKey: text("api_key").unique(), // For API authentication
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
-  agentType: text("agent_type").default("general"), // Agent specialization type
+
+  // Model configuration
+  // AIDEV-NOTE: Used for agent task execution, NOT for chat conversations
+  // Hierarchy: agent.defaultModel → organization.defaultModel → System Default
+  // See /docs/model-selection-hierarchy.md for complete context-specific hierarchies
+  defaultModel: text("default_model"), // Agent-specific default model (overrides organization default for task execution only)
+
+  // Avatar configuration (JSON for extensibility)
+  avatarConfig: jsonb("avatar_config").$type<{
+    version: number;
+    icon?: string;
+    color?: string;
+  }>(),
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   // RBAC-based policy for viewing agents (resource-aware)
@@ -500,18 +646,211 @@ export const agents = pgTable("agents", {
   }),
 ]);
 
+// AIDEV-NOTE: Credential Delegations - OAuth credential sharing permissions
+// Tracks which agents have permission to use which owner's OAuth credentials (per service)
+// Security: Explicit approval required before agent can use owner's Gmail, Slack, etc.
+export const credentialDelegations = pgTable("credential_delegations", {
+  id: serial("id").primaryKey(),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: 'cascade' }), // User sharing their credentials
+  agentId: integer("agent_id").notNull().references(() => agents.id, { onDelete: 'cascade' }), // Agent authorized to use credentials
+  services: text("services").array().notNull(), // Array of OAuth services: ['gmail', 'slack', 'github']
+  status: text("status").notNull().default('approved'), // approved | pending | revoked
+  approvedAt: timestamp("approved_at"),
+  expiresAt: timestamp("expires_at"), // Optional time-limited delegation
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  // Unique constraint: one delegation per owner-agent pair
+  unique("unique_owner_agent_delegation").on(table.ownerId, table.agentId),
+  // Index for fast lookups by agent (most common query path)
+  index("delegations_agent_idx").on(table.agentId),
+  // Index for owner dashboard queries
+  index("delegations_owner_idx").on(table.ownerId),
+  // RLS: Users can view delegations they own or delegations for their agents
+  pgPolicy("delegations_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`
+      owner_id = current_setting('app.current_user_id')::uuid
+      OR EXISTS (
+        SELECT 1 FROM agents a
+        WHERE a.id = agent_id
+        AND a.organization_id = current_setting('app.current_organization_id')::integer
+        AND (
+          a.owner_id = current_setting('app.current_user_id')::uuid
+          OR user_has_permission(
+            current_setting('app.current_user_id')::uuid,
+            'agents:view',
+            a.organization_id,
+            'agent',
+            a.id
+          )
+        )
+      )
+    `
+  }),
+  // RLS: Only owners can create delegations for their credentials
+  pgPolicy("delegations_create_permission", {
+    as: "permissive",
+    for: "insert",
+    to: "public",
+    withCheck: sql`owner_id = current_setting('app.current_user_id')::uuid`
+  }),
+  // RLS: Only owners can update/delete their delegations
+  pgPolicy("delegations_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`owner_id = current_setting('app.current_user_id')::uuid`,
+    withCheck: sql`owner_id = current_setting('app.current_user_id')::uuid`
+  }),
+]);
+
+// AIDEV-NOTE: Skills - simplified single-instruction model with global skills support
+// Removed: skillSteps table (multi-step workflow)
+// Added: inputs, outputs, instructions (single natural language block), tools
+// Added: organizationId (required), agentId nullable (null = global skill)
+export const skills = pgTable("skills", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: 'cascade' }), // nullable for organization skills
+  name: text("name").notNull(),
+  description: text("description").default(''),
+
+  // NEW: Simplified single-instruction model
+  inputs: jsonb("inputs").$type<Array<{
+    name: string;
+    required: boolean;
+  }>>().default([]),
+  outputs: jsonb("outputs").$type<Array<{
+    name: string;
+  }>>().default([]),
+  instructions: text("instructions").notNull().default(''),
+  tools: jsonb("tools").default('[]').notNull(),
+
+  // Model configuration
+  // AIDEV-NOTE: Used for skill tool execution (future implementation)
+  // Hierarchy: skill.model → agent.defaultModel → organization.defaultModel → System Default
+  // See /docs/model-selection-hierarchy.md for complete context-specific hierarchies
+  // Status: Schema field exists, NOT yet mapped to Skill entity or exposed in UI
+  model: text("model"), // Skill-specific model override (highest priority for skill execution)
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  // Index for organization and agent queries
+  index("skills_organization_idx").on(table.organizationId),
+  index("skills_agent_idx").on(table.agentId),
+  // RBAC-based policy: handles both agent-scoped skills and organization skills
+  // AIDEV-NOTE: Must explicitly check agent_id IS NULL vs IS NOT NULL because SQL NULL comparisons return UNKNOWN
+  pgPolicy("skills_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        (agent_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = agent_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:view',
+              a.organization_id,
+              'agent',
+              a.id
+            )
+          )
+        ))
+        OR
+        (agent_id IS NULL AND user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'skills:view',
+          organization_id,
+          'organization',
+          organization_id
+        ))
+      )
+    `
+  }),
+  pgPolicy("skills_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        (agent_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = agent_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:manage',
+              a.organization_id,
+              'agent',
+              a.id
+            )
+          )
+        ))
+        OR
+        (agent_id IS NULL AND user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'skills:manage',
+          organization_id,
+          'organization',
+          organization_id
+        ))
+      )
+    `,
+    withCheck: sql`
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        (agent_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = agent_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:manage',
+              a.organization_id,
+              'agent',
+              a.id
+            )
+          )
+        ))
+        OR
+        (agent_id IS NULL AND user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'skills:manage',
+          organization_id,
+          'organization',
+          organization_id
+        ))
+      )
+    `
+  }),
+]);
+
+// AIDEV-NOTE: skillSteps table removed - replaced with single instructions field in skills table
+
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
   agentId: integer("agent_id").notNull().references(() => agents.id), // WHICH agent executes this
   organizationId: integer("organization_id").notNull().references(() => organizations.id), // Organization for RLS
   name: text("name").notNull(),
-  capabilityName: text("capability_name"), // Optional - system can auto-route if not specified
-  instructions: jsonb("instructions").notNull(), // Step-like config: {instructions: string, tools?: ToolConfig[], servers?: ServerConfig[]}
+  instructions: jsonb("instructions").notNull(), // Task instructions with tools: {task: string, images?: ImageAttachment[], tools?: ToolConfig[], metadata?: Record<string, any>}
+  triggerContext: jsonb("trigger_context"), // What triggered this task: {type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL', scheduleName?: string, tableChange?: TableChangeEvent}
   status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed, cancelled, timeout
   result: jsonb("result"), // Final output data
   error: text("error"),
   logs: jsonb("logs").$type<string[]>().default([]), // Execution logs from gRPC TaskProgress
-  
+
   // Execution tracking
   startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
@@ -620,175 +959,6 @@ export const verificationTokens = pgTable("verification_tokens", {
   expires: timestamp("expires").notNull(),
 });
 
-// RAG System Tables
-export const ragIndexes = pgTable("rag_indexes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  description: text("description"),
-  
-  // Scoping - configurable domain filtering
-  organizationId: integer("organization_id").notNull().references(() => organizations.id),
-  agentId: integer("agent_id").references(() => agents.id),
-  // Note: roleId removed for simplified RBAC - use organization-level permissions instead
-  
-  // Domain configuration - what to RAG against
-  domainTypes: jsonb("domain_types").notNull(), // ["tables", "files", "agents", "teams", "databases", "organizations"]
-  domainFilters: jsonb("domain_filters"), // Additional filtering criteria
-  
-  // Embedding configuration
-  embeddingModel: text("embedding_model").default("sentence-transformers/all-mpnet-base-v2"),
-  embeddingDimensions: integer("embedding_dimensions").default(768),
-  
-  // Status and metadata
-  status: text("status").default("active"), // active, building, error
-  lastIndexedAt: timestamp("last_indexed_at"),
-  documentCount: integer("document_count").default(0),
-  
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  // RBAC-based policies for RAG indexes
-  pgPolicy("rag_indexes_manage_permission", {
-    as: "permissive",
-    for: "all",
-    to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id
-      )`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id
-      )`,
-  }),
-  pgPolicy("rag_indexes_view_permission", {
-    as: "permissive",
-    for: "select",
-    to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:view',
-        organization_id
-      )`,
-  }),
-]);
-
-export const ragDocuments = pgTable("rag_documents", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  ragIndexId: uuid("rag_index_id").notNull().references(() => ragIndexes.id),
-  organizationId: integer("organization_id").notNull().references(() => organizations.id), // Denormalized for performance
-  
-  // Source identification
-  domainType: text("domain_type").notNull(), // "tables", "files", "agents", "teams", "databases", "organizations"
-  sourceId: text("source_id").notNull(), // ID of the source (table.id, file_path, etc.)
-  sourceName: text("source_name").notNull(), // Human readable name
-  
-  // Content
-  title: text("title").notNull(),
-  content: text("content").notNull(),
-  metadata: jsonb("metadata"), // Additional context about the source
-  
-  // Vector embedding using pgvector for fast similarity search
-  embedding: vector("embedding"),
-  
-  // Content hash for change detection
-  contentHash: text("content_hash").notNull(),
-  
-  // Timestamps
-  indexedAt: timestamp("indexed_at").defaultNow(),
-  sourceUpdatedAt: timestamp("source_updated_at"),
-}, (table) => [
-  // RBAC-based policies for RAG documents
-  pgPolicy("rag_documents_manage_permission", {
-    as: "permissive",
-    for: "all",
-    to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id
-      )`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id
-      )`,
-  }),
-  pgPolicy("rag_documents_view_permission", {
-    as: "permissive",
-    for: "select",
-    to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:view',
-        organization_id
-      )`,
-  }),
-]);
-
-export const ragQueryLogs = pgTable("rag_query_logs", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  ragIndexId: uuid("rag_index_id").notNull().references(() => ragIndexes.id),
-  organizationId: integer("organization_id").references(() => organizations.id), // Denormalized for performance
-  
-  // Query details
-  query: text("query").notNull(),
-  queryEmbedding: vector("query_embedding"),
-  
-  // Results
-  resultsCount: integer("results_count").notNull(),
-  topResults: jsonb("top_results"), // Store top matching documents with scores
-  
-  // Context
-  userId: uuid("user_id").references(() => users.id),
-  agentId: integer("agent_id").references(() => agents.id),
-  sessionId: text("session_id"),
-
-  // Search parameters
-  similarityMetric: text("similarity_metric"),
-  threshold: integer("threshold"),
-  
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  // RBAC-based policies for RAG query logs
-  pgPolicy("rag_query_logs_manage_permission", {
-    as: "permissive",
-    for: "all",
-    to: "public",
-    using: sql`(organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer)))
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        COALESCE(organization_id, (SELECT ri.organization_id FROM rag_indexes ri WHERE ri.id = rag_index_id))
-      )`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id
-      )`,
-  }),
-  pgPolicy("rag_query_logs_view_permission", {
-    as: "permissive",
-    for: "select",
-    to: "public",
-    using: sql`(user_id = current_setting('app.current_user_id')::uuid OR user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:view',
-        COALESCE(organization_id, (SELECT ri.organization_id FROM rag_indexes ri WHERE ri.id = rag_index_id))
-      ))
-      AND (organization_id = current_setting('app.current_organization_id')::integer OR (organization_id IS NULL AND EXISTS (SELECT 1 FROM rag_indexes ri WHERE ri.id = rag_index_id AND ri.organization_id = current_setting('app.current_organization_id')::integer)))`,
-  }),
-]);
-
 // Chat System Tables - Connected to All Domain Types
 export const chats = pgTable("chats", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -837,20 +1007,9 @@ export const chatMessages: any = pgTable("chat_messages", {
   // Message content
   role: text("role").notNull(), // 'user' | 'assistant' | 'system'
   content: text("content").notNull(),
-  
+
   // AI and processing metadata
-  metadata: jsonb("metadata").$type<{
-    ragSources?: Array<{
-      documentId: string;
-      title: string;
-      similarity: number;
-      domainType: string;
-    }>;
-    modelUsed?: string;
-    processingTime?: number;
-    tokenCount?: number;
-    error?: string;
-  }>(),
+  metadata: jsonb("metadata").$type<ChatMessageMetadata>(),
   
   // Message ordering and organization
   messageIndex: integer("message_index").notNull(), // Sequential order within chat
@@ -863,6 +1022,105 @@ export const chatMessages: any = pgTable("chat_messages", {
     for: "all",
     to: "public",
     using: sql`EXISTS (SELECT 1 FROM chats c WHERE c.id = chat_id AND c.organization_id = current_setting('app.current_organization_id')::integer)`,
+  }),
+]);
+
+// Token usage tracking for billing
+export const tokenUsageLogs = pgTable("token_usage_logs", {
+  id: serial("id").primaryKey(),
+
+  // Execution context
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'set null' }),
+
+  // Entity reference (what consumed the tokens)
+  entityType: text("entity_type").notNull(), // 'chat', 'skill', 'task', 'instruction'
+  entityId: text("entity_id"), // UUID for chat message, integer string for task/skill
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: 'set null' }),
+
+  // Model and token details
+  modelName: text("model_name").notNull(), // e.g., 'ibm-granite/granite-3.3-8b-instruct'
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  totalTokens: integer("total_tokens").notNull().default(0),
+
+  // Cost tracking
+  costUsd: doublePrecision("cost_usd").notNull().default(0), // Cost in USD (provider cost for internal tracking)
+  creditsUsed: doublePrecision("credits_used").notNull().default(0), // Credits consumed (user-facing billing)
+
+  // Metadata
+  processingTimeMs: integer("processing_time_ms"), // Processing time in milliseconds
+  metadata: jsonb("metadata").$type<{
+    taskName?: string;
+    skillName?: string;
+    chatContext?: string;
+    success?: boolean;
+    error?: string;
+  }>(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  // Indexes for efficient querying
+  index("token_usage_organization_idx").on(table.organizationId),
+  index("token_usage_user_idx").on(table.userId),
+  index("token_usage_entity_idx").on(table.entityType, table.entityId),
+  index("token_usage_created_at_idx").on(table.createdAt),
+
+  // RBAC policy: users can view usage for their organization
+  pgPolicy("token_usage_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        user_id = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'organizations:manage',
+          organization_id
+        )
+      )`
+  }),
+]);
+
+// AIDEV-NOTE: Credit purchases table - tracks when organizations buy credit packages
+export const creditPurchases = pgTable("credit_purchases", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+
+  // Package details
+  packageName: text("package_name").notNull(), // e.g., 'Starter', 'Professional', 'Business', 'Enterprise'
+  creditsPurchased: integer("credits_purchased").notNull(), // Number of credits purchased
+  amountPaidUsd: doublePrecision("amount_paid_usd").notNull(), // Amount paid in USD
+
+  // Payment tracking
+  stripePaymentIntentId: text("stripe_payment_intent_id"), // Stripe payment reference
+  paymentStatus: text("payment_status").notNull().default("completed"), // 'pending', 'completed', 'failed', 'refunded'
+
+  // Metadata
+  metadata: jsonb("metadata").$type<{
+    promoCode?: string;
+    discountApplied?: number;
+    notes?: string;
+  }>(),
+
+  purchasedAt: timestamp("purchased_at").defaultNow().notNull(),
+}, (table) => [
+  // Indexes for efficient querying
+  index("credit_purchases_organization_idx").on(table.organizationId),
+  index("credit_purchases_date_idx").on(table.purchasedAt),
+
+  // RBAC policy: only organization managers can view credit purchases
+  pgPolicy("credit_purchases_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'organizations:manage',
+        organization_id
+      )`
   }),
 ]);
 
@@ -906,7 +1164,27 @@ export interface OAuthToolDefinitionData {
   };
 }
 
-export type ToolDefinitionData = SystemToolDefinitionData | OAuthToolDefinitionData;
+export interface ReferenceToolDefinitionData {
+  type: "reference";
+  implementation: {
+    type: string;
+    backend_class: string;
+    requires_auth: boolean;
+  };
+  ui_config: {
+    insert_text: string;
+    icon?: string;
+  };
+  parameters: {
+    [key: string]: {
+      type: string;
+      description?: string;
+      required: boolean;
+    };
+  };
+}
+
+export type ToolDefinitionData = SystemToolDefinitionData | OAuthToolDefinitionData | ReferenceToolDefinitionData;
 
 // Simplified app types table
 export const appTypes = pgTable("app_types", {
@@ -931,3 +1209,158 @@ export const tools = pgTable("tools", {
   config: jsonb("config").$type<ToolDefinitionData>().notNull(), // Typed JSONB configuration
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// AIDEV-NOTE: Puck CMS Tables - Visual page builder system
+// Organization-scoped apps containing pages with Puck template data
+
+export const apps = pgTable("apps", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  description: text("description"),
+  themeConfig: jsonb("theme_config"),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  unique("apps_org_slug_unique").on(table.organizationId, table.slug),
+  index("apps_org_idx").on(table.organizationId),
+
+  // View permission: Users with apps:view in their org
+  pgPolicy("apps_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:view',
+        current_setting('app.current_organization_id')::integer
+      )`,
+  }),
+
+  // Create permission: Users with apps:create
+  pgPolicy("apps_create_permission", {
+    as: "permissive",
+    for: "insert",
+    to: "public",
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:create',
+        current_setting('app.current_organization_id')::integer
+      )`,
+  }),
+
+  // Manage permission: Users with apps:manage
+  pgPolicy("apps_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:manage',
+        current_setting('app.current_organization_id')::integer
+      )`,
+  }),
+
+  // Public read: Apps with published pages (NO AUTH REQUIRED)
+  pgPolicy("apps_public_read", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM pages p
+      WHERE p.app_id = id
+      AND p.is_published = true
+    )`,
+  }),
+]);
+
+export const pages = pgTable("pages", {
+  id: serial("id").primaryKey(),
+  appId: integer("app_id")
+    .notNull()
+    .references(() => apps.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  description: text("description"),
+  order: integer("order").default(0).notNull(),
+  templateData: jsonb("template_data").notNull().$type<PuckDataStructure>(),
+  themeConfig: jsonb("theme_config"),
+  isPublished: boolean("is_published").default(false).notNull(),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  unique("pages_app_slug_unique").on(table.appId, table.slug),
+  index("pages_app_idx").on(table.appId),
+  index("pages_order_idx").on(table.appId, table.order),
+
+  // View permission: Users with apps:view in their org
+  pgPolicy("pages_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM apps a
+      WHERE a.id = app_id
+      AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:view',
+        current_setting('app.current_organization_id')::integer
+      )
+    )`,
+  }),
+
+  // Manage permission: Users with apps:manage (for all operations)
+  pgPolicy("pages_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM apps a
+      WHERE a.id = app_id
+      AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:manage',
+        current_setting('app.current_organization_id')::integer
+      )
+    )`,
+  }),
+
+  // Publish permission: Users with apps:publish (for UPDATE on is_published)
+  pgPolicy("pages_publish_permission", {
+    as: "permissive",
+    for: "update",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM apps a
+      WHERE a.id = app_id
+      AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:publish',
+        current_setting('app.current_organization_id')::integer
+      )
+    )`,
+  }),
+
+  // Public read: Published pages only (NO AUTH REQUIRED)
+  pgPolicy("pages_public_read", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`is_published = true`,
+  }),
+]);

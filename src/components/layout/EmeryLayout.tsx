@@ -1,47 +1,62 @@
 'use client'
 
-import React, { Suspense } from 'react'
-import { EmerySidebar } from '@/components/EmerySidebar'
-import { Loading } from '@/components/ui/loading'
+import React, { Suspense, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
+import { AppSidebar } from '@/components/app-sidebar'
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { EmeryCanvas } from '@/components/chat/EmeryCanvas'
 import { EmeryChat } from '@/components/chat/EmeryChat'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
-import type { EmeryLayoutProps, ChatContextConfig } from './types'
-import { ChatProvider } from '@/components/chat/ChatProvider'
+import type { EmeryLayoutProps, ChatContextConfig} from './types'
+import { ChatProvider, useChatHandler } from '@/components/chat/ChatProvider'
+import { ChatSection, useChatCanvas } from '@llamaindex/chat-ui'
+import { createDebugLogger } from '@/lib/utils/debug-logger'
 
-/** p p
- * EmeryLayout - Core layout component with canvas expansion logic
- * 
- * Layout modes based on canvas state:
- * - Canvas Expanded: 3-panel (sidebar | canvas | chat)
- * - Canvas Collapsed: 2-panel (sidebar | chat-as-main)
- * 
- * The main content area becomes a canvas object that can be collapsed,
- * allowing the chat to expand to fill the main view area.
- * 
- * AIDEV-NOTE: This implements the canvas expansion logic where chat can
- * become the main view when canvas is collapsed, like current mission-control.
+const logger = createDebugLogger('EmeryLayout')
+
+/**
+ * EmeryLayout - Core layout component with LlamaIndex ChatCanvas integration
+ *
+ * Layout structure: Sidebar | (Main Content OR Canvas) | Chat
+ *
+ * Behavior:
+ * - Default: Sidebar | Main Content | Chat
+ * - Canvas Open: Sidebar | Canvas (replaces main content) | Chat
+ * - Chat Collapsed: Chat panel hidden visually but stays mounted in DOM
+ *
+ * Canvas appears on the LEFT side and replaces the main content area when
+ * an artifact is opened (from table cells, tool panel, or AI responses).
+ *
+ * ChatSection wraps the entire layout to provide unified canvas context,
+ * allowing artifacts to be opened from any component and displayed consistently.
+ *
+ * AIDEV-NOTE: Uses LlamaIndex ChatCanvas v0.6 with custom artifact renderers
+ * for DocumentArtifact and FileArtifact types.
  */
+
+interface SidebarData {
+  apps: any[]
+  agents: any[]
+  teams: any[]
+  skills: any[]
+  databases: any[]
+}
 
 interface EmeryLayoutInnerProps extends EmeryLayoutProps {
   // This component needs layout context, so it must be wrapped by LayoutProvider
+  sidebarData?: SidebarData
 }
 
 
 function EmeryLayoutInner({
   children,
   chatContext,
-  enableChat = true
+  enableChat = true,
+  sidebarData
 }: EmeryLayoutInnerProps) {
   // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders when unrelated state changes
-  const sidebarState = useStore(uiStateStore, uiStateSelectors.sidebarState)
-  const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
-  const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
-  const displayedArtifact = useStore(uiStateStore, uiStateSelectors.displayedArtifact)
   const setChatContext = uiStateActions.setChatContext
-  const setSidebarState = uiStateActions.setSidebarState
-  const setChatState = uiStateActions.setChatState
 
   // Set chat context when provided
   React.useEffect(() => {
@@ -50,123 +65,138 @@ function EmeryLayoutInner({
     }
   }, [setChatContext]) // AIDEV-NOTE: Removed chatContext to prevent infinite re-render loop
 
-  // Component that conditionally renders canvas or main content
-  // AIDEV-NOTE: Memoized to prevent re-renders when chat messages update
-  // Now reads artifact from TanStack store and uses EmeryCanvas (no ChatCanvasProvider needed)
-  const MainContentWithCanvas = React.memo(function MainContentWithCanvas({ children }: { children: React.ReactNode }) {
-    // Show canvas when artifact is displayed, otherwise show children
-    return displayedArtifact ? <div className="h-full"><EmeryCanvas /></div> : <>{children}</>
-  })
+  return (
+    <SidebarProvider>
+      <div className="flex h-screen w-full overflow-hidden bg-transparent">
+        {/* Sidebar - now receives server-fetched data */}
+        <Suspense fallback={<SidebarSkeleton />}>
+          <AppSidebar
+            apps={sidebarData?.apps || []}
+            agents={sidebarData?.agents || []}
+            teams={sidebarData?.teams || []}
+            skills={sidebarData?.skills || []}
+            databases={sidebarData?.databases || []}
+          />
+        </Suspense>
 
-  // Calculate responsive classes
-  const sidebarWidth = getSidebarWidth(sidebarState, isMobile)
-  const showSidebarOverlay = isMobile && sidebarState === 'expanded'
+        {/* Main Content Area + Chat - wrapped in ChatProvider for canvas context */}
+        <SidebarInset className="flex-1 flex min-h-0 overflow-hidden">
+          {enableChat ? (
+            <ChatProvider chatContext={chatContext}>
+              <Suspense fallback={<div className="flex-1 flex min-h-0 overflow-hidden"><ChatSkeleton /></div>}>
+                <EmeryLayoutWithChat>{children}</EmeryLayoutWithChat>
+              </Suspense>
+            </ChatProvider>
+          ) : (
+            <div className="flex-1 flex min-h-0 overflow-hidden">
+              <main className="flex-1 overflow-x-hidden min-h-0">
+                {children || (
+                  <div className="h-full flex items-center justify-center p-6">
+                    <div className="text-center text-muted-foreground">
+                      <p>Select a page from the sidebar to get started</p>
+                    </div>
+                  </div>
+                )}
+              </main>
+            </div>
+          )}
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
+  )
+}
+
+// Component that has access to ChatProvider context
+function EmeryLayoutWithChat({ children }: { children: React.ReactNode }) {
+  const handler = useChatHandler()
+  const displayedArtifact = useStore(uiStateStore, uiStateSelectors.displayedArtifact)
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Mobile Overlay for Sidebar */}
-      {showSidebarOverlay && (
-        <div
-          className="fixed inset-0 bg-black/50 z-20 md:hidden"
-          onClick={() => setSidebarState('collapsed')}
-        />
-      )}
+    <ChatSection
+      handler={handler}
+      className="flex-1 flex min-h-0 overflow-hidden p-0"
+      autoOpenCanvas={false}
+    >
+      <EmeryLayoutContent displayedArtifact={displayedArtifact}>
+        {children}
+      </EmeryLayoutContent>
+    </ChatSection>
+  )
+}
 
-      {/* Left Panel - Sidebar */}
-      <aside
-        className={`
-          h-screen
-          ${sidebarWidth}
-          ${isMobile ? 'fixed left-0 top-0 h-screen z-30 transform transition-transform duration-300' : ''}
-          ${isMobile && sidebarState === 'collapsed' ? '-translate-x-full' : 'translate-x-0'}
-          bg-card border-r border-border
-        `}
-      >
-        <Suspense fallback={<SidebarSkeleton />}>
-          <EmerySidebar />
-        </Suspense>
-      </aside>
+// Inner component with canvas bridge logic
+function EmeryLayoutContent({
+  children,
+  displayedArtifact
+}: {
+  children: React.ReactNode
+  displayedArtifact: any
+}) {
+  const pathname = usePathname()
+  const { openArtifactInCanvas, displayedArtifact: canvasArtifact, closeCanvas } = useChatCanvas()
 
-      {/* Main Content Area + Chat - 3-panel layout */}
-      {/* AIDEV-NOTE: Artifact state managed by TanStack store, ChatSection only wraps chat UI */}
-      <div className="flex-1 flex min-h-0 overflow-hidden h-screen">
-        {/* Main Content Area with Canvas */}
-        <main className="flex-1 overflow-y-auto h-full">
-          <MainContentWithCanvas>
-            {children || (
-              <div className="h-full flex items-center justify-center p-6">
-                <div className="text-center text-muted-foreground">
-                  <p>Select a page from the sidebar to get started</p>
-                </div>
+  // AIDEV-NOTE: Bridge global UI state artifacts to ChatCanvas context
+  // This allows table cell clicks (which set global state) to open artifacts in ChatCanvas
+  useEffect(() => {
+    if (displayedArtifact) {
+      logger.debug('Bridge: Opening artifact in ChatCanvas', { type: displayedArtifact.type })
+      openArtifactInCanvas(displayedArtifact)
+      // Clear global state after bridging to ChatCanvas
+      uiStateActions.closeArtifact()
+    }
+  }, [displayedArtifact, openArtifactInCanvas])
+
+  // AIDEV-NOTE: Close canvas when navigating to a different page via sidebar
+  // This ensures clean state when switching between pages/apps/agents
+  useEffect(() => {
+    if (canvasArtifact) {
+      closeCanvas()
+    }
+  }, [pathname]) // Only depend on pathname, don't include closeCanvas or canvasArtifact to avoid unnecessary closures
+
+  return (
+    <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/* Show Canvas on LHS when artifact is open, otherwise show Main Content */}
+      {canvasArtifact ? (
+        <div className="flex-1 overflow-x-hidden min-h-0">
+          <EmeryCanvas />
+        </div>
+      ) : (
+        <main className="flex-1 overflow-x-hidden min-h-0">
+          {children || (
+            <div className="h-full flex items-center justify-center p-6">
+              <div className="text-center text-muted-foreground">
+                <p>Select a page from the sidebar to get started</p>
               </div>
-            )}
-          </MainContentWithCanvas>
+            </div>
+          )}
         </main>
-
-        {/* Chat Area - EmeryChat controls its own width based on chatState */}
-        {enableChat && (
-          <ChatProvider chatContext={chatContext}>
-            <Suspense fallback={<ChatSkeleton />}>
-              <EmeryChat />
-            </Suspense>
-          </ChatProvider>
-        )}
-      </div>
-
-      {/* Mobile Chat Overlay */}
-      {isMobile && enableChat && chatState === 'expanded' && (
-        <ChatProvider chatContext={chatContext}>
-          <div
-            className="fixed inset-0 bg-black/50 z-20"
-            onClick={() => setChatState('collapsed')}
-          />
-          <div className="fixed right-0 top-0 h-screen w-80 z-30 bg-card border-l border-border">
-            <Suspense fallback={<ChatSkeleton />}>
-              <EmeryChat />
-            </Suspense>
-          </div>
-        </ChatProvider>
       )}
+
+      {/* Chat Area - EmeryChat controls its own width based on chatState */}
+      <Suspense fallback={<ChatSkeleton />}>
+        <EmeryChat />
+      </Suspense>
     </div>
   )
 }
 
 // Main exported component that ensures LayoutProvider is available
-export function EmeryLayout(props: EmeryLayoutProps) {
+export function EmeryLayout(props: EmeryLayoutInnerProps) {
   return (
     <EmeryLayoutInner {...props} />
   )
 }
 
-// Utility functions for responsive widths
-function getSidebarWidth(state: string, isMobile: boolean): string {
-  if (isMobile) {
-    return 'w-64' // Fixed width on mobile (overlay)
-  }
-  
-  switch (state) {
-    case 'collapsed':
-      return 'w-16'
-    case 'expanded':
-      return 'w-64'
-    case 'hidden':
-      return 'w-0'
-    default:
-      return 'w-64'
-  }
-}
-
 // Loading skeletons
 function SidebarSkeleton() {
   return (
-    <div className="w-64 h-full bg-card border-r border-border animate-pulse">
-      <div>
+    <div className="w-64 h-full bg-card border-r border-border animate-pulse flex flex-col gap-4 p-4">
+      <div className="h-10 bg-muted rounded" />
+      <div className="flex flex-col gap-2">
         <div className="h-8 bg-muted rounded" />
-        <div>
-          <div className="h-6 bg-muted rounded" />
-          <div className="h-6 bg-muted rounded" />
-          <div className="h-6 bg-muted rounded" />
-        </div>
+        <div className="h-8 bg-muted rounded" />
+        <div className="h-8 bg-muted rounded" />
       </div>
     </div>
   )
@@ -174,16 +204,14 @@ function SidebarSkeleton() {
 
 function ChatSkeleton() {
   return (
-    <div className="h-full bg-card border-l border-border animate-pulse">
-      <div >
-        <div className="h-8 bg-muted rounded" />
-        <div className="flex-1">
-          <div className="h-16 bg-muted rounded" />
-          <div className="h-16 bg-muted rounded" />
-          <div className="h-16 bg-muted rounded" />
-        </div>
-        <div className="h-10 bg-muted rounded" />
+    <div className="w-96 h-full bg-card animate-pulse flex flex-col gap-4 p-4">
+      <div className="h-12 bg-muted rounded" />
+      <div className="flex-1 flex flex-col gap-3">
+        <div className="h-20 bg-muted rounded" />
+        <div className="h-20 bg-muted rounded" />
+        <div className="h-20 bg-muted rounded" />
       </div>
+      <div className="h-12 bg-muted rounded" />
     </div>
   )
 }

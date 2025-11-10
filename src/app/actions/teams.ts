@@ -11,7 +11,7 @@ import { getTeamApplicationService } from "@/ddd/application/di/container";
 import { AgentId } from "@/ddd/domain/shared/value-objects";
 import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/lib/schemas";
 import type { Result, CreateTeamData, CreateTeamClientData, TeamMembershipData } from "./types";
-import type { CreateTeamCommand, UpdateTeamCommand, TeamFilters } from "@/ddd/application/services/teams/team-application-service";
+import type { CreateTeamDTO, UpdateTeamDTO, TeamFiltersDTO } from "@/app/dtos/team.dto";
 import { TeamId, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
 import { TeamMapper, type TeamDTO } from "@/app/mappers/team-mapper";
 
@@ -22,6 +22,21 @@ import { TeamMapper, type TeamDTO } from "@/app/mappers/team-mapper";
 export async function createTeamFromClient(data: CreateTeamClientData): Promise<Result> {
   // No conversion needed for teams since they use the same plain types
   return withAuthContext(() => createTeam(data));
+}
+
+/**
+ * Create a default team with minimal data
+ * Used for quick creation from sidebar + button
+ */
+export async function createDefaultTeam(): Promise<Result> {
+  // createTeamFromClient already uses withAuthContext, no need to wrap again
+  const defaultData: CreateTeamClientData = {
+    name: "Untitled Team",
+    purpose: "",
+    description: "",
+    organizationId: 0, // Will be set by createTeam from session
+  };
+  return createTeamFromClient(defaultData);
 }
 
 // Helper function for updating teams from client data (with plain types)
@@ -39,7 +54,7 @@ export async function createTeam(data: CreateTeamData): Promise<Result> {
 
     const teamApplicationService = getTeamApplicationService();
     
-    const command: CreateTeamCommand = {
+    const dto: CreateTeamDTO = {
       name,
       purpose,
       description,
@@ -49,7 +64,7 @@ export async function createTeam(data: CreateTeamData): Promise<Result> {
       organizationId: currentOrg.id
     };
 
-    const result = await teamApplicationService.createTeam(command);
+    const result = await teamApplicationService.createTeam(dto);
 
     if (!result.success || !result.data) {
       return {
@@ -65,7 +80,7 @@ export async function createTeam(data: CreateTeamData): Promise<Result> {
     revalidatePath('/teams');
     
     // Map domain entity to DTO for client serialization
-    const teamDTO = TeamMapper.toDTO(result.data);
+    const teamDTO = result.data;
     
     return {
       success: true,
@@ -113,8 +128,8 @@ export async function getTeams(organizationId?: number): Promise<TeamDTO[]> {
       const currentOrg = await requireCurrentOrganization();
       
       const teamApplicationService = getTeamApplicationService();
-      
-      const filters: TeamFilters = {
+
+      const filters: TeamFiltersDTO = {
         organizationId: organizationId || currentOrg.id
       };
       
@@ -166,8 +181,8 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
 
       const teamApplicationService = getTeamApplicationService();
       
-      const command: UpdateTeamCommand = {
-        teamId,
+      const dto: UpdateTeamDTO = {
+        id: teamId,
         name: data.name,
         purpose: data.purpose,
         description: data.description,
@@ -176,7 +191,7 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
         agentIds: data.agentIds
       };
 
-      const result = await teamApplicationService.updateTeam(command);
+      const result = await teamApplicationService.updateTeam(dto);
 
       if (!result.success || !result.data) {
         return {
@@ -190,7 +205,7 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
       revalidatePath('/teams');
       
       // Map domain entity to DTO for client serialization
-      const teamDTO = TeamMapper.toDTO(result.data);
+      const teamDTO = result.data;
       
       return {
         success: true,
@@ -211,7 +226,7 @@ export async function deleteTeam(teamId: number): Promise<Result> {
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("teams:manage");
-      
+
       if (!teamId) {
         return {
           success: false,
@@ -232,7 +247,7 @@ export async function deleteTeam(teamId: number): Promise<Result> {
       // Note: RAG reindexing is now handled automatically by database triggers
       revalidatePath('/dashboard');
       revalidatePath('/teams');
-      
+
       return {
         success: true,
         data: { message: "Team deleted successfully" },
@@ -242,6 +257,72 @@ export async function deleteTeam(teamId: number): Promise<Result> {
       return {
         success: false,
         error: "Failed to delete team",
+      };
+    }
+  });
+}
+
+/**
+ * Duplicate an existing team
+ * Appends " (Copy)" to the team name and copies all agent assignments
+ */
+export async function duplicateTeam(teamId: number): Promise<Result> {
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("teams:manage");
+      const currentOrg = await requireCurrentOrganization();
+
+      if (!teamId) {
+        return {
+          success: false,
+          error: "teamId is required",
+        };
+      }
+
+      const teamApplicationService = getTeamApplicationService();
+
+      // Get the original team
+      const originalTeam = await teamApplicationService.getTeam(teamId);
+      if (!originalTeam) {
+        return { success: false, error: "Team not found" };
+      }
+
+      // Create new name with " (Copy)" suffix
+      const newName = `${originalTeam.name} (Copy)`;
+
+      // Build DTO for the duplicate
+      const dto: CreateTeamDTO = {
+        name: newName,
+        purpose: originalTeam.purpose || undefined,
+        description: originalTeam.description || undefined,
+        responsibilities: originalTeam.responsibilities || undefined,
+        goals: originalTeam.goals || undefined,
+        agentIds: originalTeam.agentIds?.map(id => id.value.toString()) || undefined,
+        organizationId: currentOrg.id
+      };
+
+      const result = await teamApplicationService.createTeam(dto);
+
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          error: result.error || "Failed to duplicate team"
+        };
+      }
+
+      revalidatePath('/dashboard');
+      revalidatePath('/teams');
+
+      return {
+        success: true,
+        data: result.data,
+        warnings: result.warnings
+      };
+    } catch (error) {
+      console.error("Error duplicating team:", error);
+      return {
+        success: false,
+        error: "Failed to duplicate team",
       };
     }
   });
@@ -275,7 +356,7 @@ export async function addAgentToTeam(teamId: number, agentId: string): Promise<R
       revalidatePath('/teams');
       
       // Map domain entity to DTO for client serialization
-      const teamDTO = TeamMapper.toDTO(result.data);
+      const teamDTO = result.data;
       
       return {
         success: true,
@@ -453,7 +534,7 @@ export async function bulkAssignAgents(teamId: number, agentIds: string[]): Prom
       revalidatePath('/teams');
       
       // Map domain entity to DTO for client serialization
-      const teamDTO = TeamMapper.toDTO(result.data);
+      const teamDTO = result.data;
       
       return {
         success: true,

@@ -23,6 +23,7 @@ export interface UIState {
   // Layout state (from LayoutProvider)
   sidebarState: PanelState
   chatState: PanelState
+  chatWidth: number // Resizable chat panel width in pixels (CSS handles min/max constraints)
   canvasState: PanelState
   canvasType: CanvasType
   breakpoint: LayoutBreakpoint
@@ -100,10 +101,12 @@ const initialState: UIState = {
   // Layout defaults
   sidebarState: 'expanded',
   chatState: 'collapsed',
-  canvasState: 'collapsed',
+  chatWidth: 600, // Default chat panel width - CSS handles min/max constraints responsively
   canvasType: 'chat',
   breakpoint: 'desktop',
   isMobile: false,
+
+  canvasState: 'collapsed',
 
   // Canvas/Artifact state
   displayedArtifact: null,
@@ -177,19 +180,19 @@ let persistenceCleanup: (() => void) | null = null
 if (typeof window !== 'undefined') {
   // Load persisted state
   const persistedState = persistence.load('emery-ui-state', initialState)
-  
+
   if (Object.keys(persistedState).length > 0) {
     uiStateStore.setState((state) => ({ ...state, ...persistedState }))
   }
-  
+
   // Setup auto-persistence
   persistenceCleanup = persistence.setupAutoPersist(
-    uiStateStore, 
+    uiStateStore,
     'emery-ui-state',
     {
       key: 'emery-ui-state',
       enabled: true,
-      whitelist: ['sidebarState', 'chatState', 'canvasState', 'canvasType', 'openCollapsibles', 'isPanelCollapsed']
+      whitelist: ['sidebarState', 'chatState', 'chatWidth', 'canvasState', 'canvasType', 'openCollapsibles', 'isPanelCollapsed']
     }
   )
 }
@@ -203,6 +206,11 @@ export const uiStateActions = {
 
   setChatState: (state: PanelState) => {
     uiStateStore.setState((currentState) => ({ ...currentState, chatState: state }))
+  },
+
+  setChatWidth: (width: number) => {
+    // CSS handles min/max constraints, just set the value
+    uiStateStore.setState((currentState) => ({ ...currentState, chatWidth: width }))
   },
 
   setCanvasState: (state: PanelState) => {
@@ -285,102 +293,12 @@ export const uiStateActions = {
     uiStateStore.setState((state) => ({ ...state, selectedDatabaseForTable: databaseId }))
   },
 
-  // Collapsible actions
-  setOpenCollapsibles: (collapsibles: string[]) => {
-    uiStateStore.setState((state) => ({ ...state, openCollapsibles: collapsibles }))
-  },
-
-  toggleCollapsible: (id: string) => {
-    uiStateStore.setState((state) => {
-      const isOpen = state.openCollapsibles.includes(id)
-      const openCollapsibles = isOpen
-        ? state.openCollapsibles.filter(item => item !== id)
-        : [...state.openCollapsibles, id]
-      
-      return { ...state, openCollapsibles }
-    })
-  },
-
-  // Panel collapse actions
-  setPanelCollapsed: (panel: keyof UIState['isPanelCollapsed'], collapsed: boolean) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      isPanelCollapsed: {
-        ...state.isPanelCollapsed,
-        [panel]: collapsed
-      }
-    }))
-  },
-
-  togglePanelCollapsed: (panel: keyof UIState['isPanelCollapsed']) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      isPanelCollapsed: {
-        ...state.isPanelCollapsed,
-        [panel]: !state.isPanelCollapsed[panel]
-      }
-    }))
-  },
-
-  // Search expand actions
-  setSearchExpanded: (section: keyof UIState['isSearchExpanded'], expanded: boolean) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      isSearchExpanded: {
-        ...state.isSearchExpanded,
-        [section]: expanded
-      }
-    }))
-  },
-
-  toggleSearchExpanded: (section: keyof UIState['isSearchExpanded']) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      isSearchExpanded: {
-        ...state.isSearchExpanded,
-        [section]: !state.isSearchExpanded[section]
-      }
-    }))
-  },
-
-  // Modal actions
-  openModal: (modal: keyof UIState['modals']) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      modals: {
-        ...state.modals,
-        [modal]: true
-      }
-    }))
-  },
-
   closeModal: (modal: keyof UIState['modals']) => {
     uiStateStore.setState((state) => ({
       ...state,
       modals: {
         ...state.modals,
         [modal]: false
-      }
-    }))
-  },
-
-  toggleModal: (modal: keyof UIState['modals']) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      modals: {
-        ...state.modals,
-        [modal]: !state.modals[modal]
-      }
-    }))
-  },
-
-  // Form actions
-  setAgentCreateForm: (isOpen: boolean, editingAgent: string | null = null) => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      forms: {
-        ...state.forms,
-        agentCreate: { isOpen, editingAgent }
       }
     }))
   },
@@ -452,6 +370,7 @@ export const uiStateSelectors = {
   // Layout selectors
   sidebarState: (state: UIState) => state.sidebarState,
   chatState: (state: UIState) => state.chatState,
+  chatWidth: (state: UIState) => state.chatWidth,
   canvasState: (state: UIState) => state.canvasState,
   canvasType: (state: UIState) => state.canvasType,
   breakpoint: (state: UIState) => state.breakpoint,
