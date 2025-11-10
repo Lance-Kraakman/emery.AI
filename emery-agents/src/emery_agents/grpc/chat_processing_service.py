@@ -48,6 +48,8 @@ from .mappers.message_types import MessageContentList
 from ..services.model_provider import SmolagentsModelProvider
 from ..services.tool_loader import UnifiedToolLoader
 from ..services.session_manager import SessionManager
+from ..utils.error_classifier import classify_error
+from ..utils.error_messages import ErrorSeverity
 from ..services.image_processor import ImageProcessor
 from ..services.agent_factory import AgentFactory, AgentConfig
 from ..services.token_usage_extractor import TokenUsageExtractor
@@ -644,12 +646,73 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"✅ Completed streaming with {step_index} steps")
 
         except Exception as e:
-            logger.error(f"❌ ToolCallingAgent execution failed: {e}")
-            # Yield error as content chunk
+            # ============================================================
+            # Comprehensive Error Recovery System
+            # ============================================================
+
+            # 1. Classify error into user-friendly type
+            error_info = classify_error(e)
+
+            # 2. Log technical details to console ONLY (never show to user)
+            logger.error(f"❌ Agent execution failed: {error_info.technical_details}", exc_info=True)
+            logger.error(f"📊 Error classification: type={error_info.error_type}, "
+                        f"severity={error_info.severity.value}, "
+                        f"can_retry={error_info.can_retry}")
+
+            # 3. Handle based on error severity
+            session_was_reset = False
+
+            if error_info.severity == ErrorSeverity.TRANSIENT:
+                # TRANSIENT errors: Auto-retry not implemented in current flow
+                # (would require recursion/loop which could complicate streaming)
+                # Instead, we allow manual retry with preserved session
+                logger.info(f"⏳ Transient error detected: {error_info.error_type}")
+                logger.info("💡 Session preserved for manual retry")
+
+            elif error_info.severity == ErrorSeverity.RECOVERABLE:
+                # RECOVERABLE errors: Clear agent memory but keep session
+                if session_id:
+                    logger.info(f"🔄 Recoverable error - clearing agent memory for session {session_id}")
+                    self.session_manager.reset_agent_memory(session_id)
+                    self.session_manager.increment_error_count(session_id, error_info.error_type)
+
+                    # Check if error threshold exceeded
+                    if self.session_manager.should_remove_session_on_error(session_id):
+                        logger.warning(f"🚨 Error threshold exceeded - removing session {session_id}")
+                        await self.session_manager.remove_session_on_error(session_id, "error_threshold")
+                        session_was_reset = True
+                else:
+                    logger.warning("⚠️ No session_id provided - cannot track errors")
+
+            elif error_info.severity == ErrorSeverity.FATAL:
+                # FATAL errors: Remove session entirely
+                if session_id:
+                    logger.error(f"💀 Fatal error - removing session {session_id}")
+                    await self.session_manager.remove_session_on_error(session_id, error_info.error_type)
+                    session_was_reset = True
+
+            # 4. Send user-friendly error (NO technical details)
             yield {
-                "type": "content_chunk",
-                "content": f"I apologize, but I encountered an error processing your request: {str(e)}"
+                "type": "error",
+                "error": {
+                    "error_code": error_info.error_type,
+                    "error_message": error_info.user_message,
+                    "error_details": {
+                        "severity": error_info.severity.value
+                    },
+                    "hint": error_info.hint or "",
+                    "can_retry": error_info.can_retry,
+                    "auto_retry": False,  # Auto-retry not implemented in current flow
+                    "session_reset": session_was_reset
+                }
             }
+
+            logger.info(f"📨 Sent user-friendly error message (type={error_info.error_type})")
+
+        finally:
+            # Reset error count on successful completion (if we got here without error)
+            if session_id and 'error_info' not in locals():
+                self.session_manager.reset_error_count(session_id)
 
     def _build_system_prompt_with_rag(
         self,

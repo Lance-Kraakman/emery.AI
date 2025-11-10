@@ -13,6 +13,38 @@ import type { FieldDTO } from '@/app/mappers/field-mapper'
 import type { TableDTO } from '@/app/mappers/table-mapper'
 import type { FieldValue as DomainFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field'
+import type {
+  RelationValue,
+  RelationCellConfiguration,
+  FileValue,
+  FileCellConfiguration,
+  DocumentValue,
+  DocumentCellConfiguration,
+  EmbeddingValue,
+  EmbeddingCellConfiguration,
+  SingleSelectValue,
+  SingleSelectCellConfiguration,
+  MultiSelectValue,
+  MultiSelectCellConfiguration,
+} from './cell-types'
+import {
+  ID_COLUMN_WIDTH,
+  ADD_COLUMN_BUTTON_WIDTH,
+  SMALL_COLUMN_BASIS,
+  SMALL_COLUMN_MIN_WIDTH,
+  DEFAULT_COLUMN_BASIS,
+  DEFAULT_COLUMN_MIN_WIDTH,
+  MEDIUM_COLUMN_BASIS,
+  MEDIUM_COLUMN_MIN_WIDTH,
+  SELECT_COLUMN_BASIS,
+  SELECT_COLUMN_MIN_WIDTH,
+  WIDE_COLUMN_BASIS,
+  WIDE_COLUMN_MIN_WIDTH,
+  MULTI_SELECT_MIN_WIDTH,
+  COLUMN_GROW,
+  COLUMN_SHRINK,
+  FIXED_COLUMN_SHRINK
+} from './grid-constants'
 
 interface UseGridColumnsParams {
   fields: FieldDTO[]
@@ -26,13 +58,13 @@ interface UseGridColumnsParams {
   onFieldUpdate: (field: FieldDTO, updates: Partial<FieldDTO>) => Promise<void>
   onSort?: (field: string, direction: 'asc' | 'desc') => void
   onClearSort?: () => void
-  // Custom cell components for complex field types
-  RelationCell?: CellComponent<any, any>
-  FileCell?: CellComponent<any, any>
-  DocumentCell?: CellComponent<any, any>
-  EmbeddingCell?: CellComponent<any, any>
-  SingleSelectCell?: CellComponent<any, any>
-  MultiSelectCell?: CellComponent<any, any>
+  // Custom cell components for complex field types (now properly typed)
+  RelationCell?: CellComponent<RelationValue, RelationCellConfiguration>
+  FileCell?: CellComponent<FileValue, FileCellConfiguration>
+  DocumentCell?: CellComponent<DocumentValue, DocumentCellConfiguration>
+  EmbeddingCell?: CellComponent<EmbeddingValue, EmbeddingCellConfiguration>
+  SingleSelectCell?: CellComponent<SingleSelectValue, SingleSelectCellConfiguration>
+  MultiSelectCell?: CellComponent<MultiSelectValue, MultiSelectCellConfiguration>
 }
 
 /**
@@ -72,18 +104,18 @@ export function useGridColumns({
       ...keyColumn('id', textColumn),
       title: <span className="font-semibold text-muted-foreground">ID</span>,
       disabled: true,  // Non-editable
-      basis: 300,      // Increased from 100 to fit full UUID (36 chars)
-      grow: 0,
-      shrink: 0,
-      minWidth: 300,   // Increased from 80 to fit full UUID
+      basis: ID_COLUMN_WIDTH,
+      grow: COLUMN_GROW,
+      shrink: FIXED_COLUMN_SHRINK,
+      minWidth: ID_COLUMN_WIDTH,
       headerClassName: 'id-column-header'
     }
 
     // AIDEV-NOTE: Filter out 'id' field to prevent duplicate with built-in ID column
     const fieldColumns = fields.filter(field => field.name !== 'id').map(field => {
       let columnConfig
-      let basis = 150
-      let minWidth = 120
+      let basis = DEFAULT_COLUMN_BASIS
+      let minWidth = DEFAULT_COLUMN_MIN_WIDTH
 
       switch (field.type) {
         case 'text':
@@ -94,15 +126,15 @@ export function useGridColumns({
         case 'number':
           // Use built-in floatColumn - handles number parsing/formatting
           columnConfig = floatColumn
-          basis = 180  // Increased from 150 to show larger numbers
-          minWidth = 150  // Increased from 120
+          basis = MEDIUM_COLUMN_BASIS
+          minWidth = MEDIUM_COLUMN_MIN_WIDTH
           break
 
         case 'boolean':
           // Use built-in checkboxColumn - handles boolean rendering
           columnConfig = checkboxColumn
-          basis = 100
-          minWidth = 80
+          basis = SMALL_COLUMN_BASIS
+          minWidth = SMALL_COLUMN_MIN_WIDTH
           break
 
         case 'date':
@@ -119,8 +151,8 @@ export function useGridColumns({
               disableKeys: true,
               columnData: { field, onUpdateRow }
             }
-            basis = 250
-            minWidth = 150
+            basis = WIDE_COLUMN_BASIS
+            minWidth = WIDE_COLUMN_MIN_WIDTH
           } else {
             // Fallback to textColumn if RelationCell not provided
             columnConfig = textColumn
@@ -136,8 +168,8 @@ export function useGridColumns({
               disableKeys: true,
               columnData: { field, organizationId, tableId, onUpdateRow }
             }
-            basis = 250
-            minWidth = 150
+            basis = WIDE_COLUMN_BASIS
+            minWidth = WIDE_COLUMN_MIN_WIDTH
           } else {
             // Fallback to textColumn if FileCell not provided
             columnConfig = textColumn
@@ -153,8 +185,8 @@ export function useGridColumns({
               disableKeys: true,
               columnData: { field, organizationId, tableId, onUpdateRow }
             }
-            basis = 250
-            minWidth = 150
+            basis = WIDE_COLUMN_BASIS
+            minWidth = WIDE_COLUMN_MIN_WIDTH
           } else {
             // Fallback to textColumn if DocumentCell not provided
             columnConfig = textColumn
@@ -170,8 +202,8 @@ export function useGridColumns({
               disableKeys: true,
               columnData: { field }
             }
-            basis = 200
-            minWidth = 150
+            basis = SELECT_COLUMN_BASIS
+            minWidth = SELECT_COLUMN_MIN_WIDTH
           } else {
             // Fallback to textColumn if EmbeddingCell not provided
             columnConfig = textColumn
@@ -191,8 +223,8 @@ export function useGridColumns({
                 onFieldUpdate: (updates: Partial<FieldDTO>) => onFieldUpdate(field, updates)
               }
             }
-            basis = 200
-            minWidth = 150
+            basis = SELECT_COLUMN_BASIS
+            minWidth = SELECT_COLUMN_MIN_WIDTH
           } else {
             columnConfig = textColumn
           }
@@ -211,8 +243,8 @@ export function useGridColumns({
                 onFieldUpdate: (updates: Partial<FieldDTO>) => onFieldUpdate(field, updates)
               }
             }
-            basis = 250
-            minWidth = 180
+            basis = WIDE_COLUMN_BASIS
+            minWidth = MULTI_SELECT_MIN_WIDTH
           } else {
             columnConfig = textColumn
           }
@@ -224,8 +256,8 @@ export function useGridColumns({
             ...textColumn,
             disabled: false  // Allow editing to support manual overrides
           }
-          basis = 180  // Wider to accommodate prefix/suffix
-          minWidth = 150
+          basis = MEDIUM_COLUMN_BASIS
+          minWidth = MEDIUM_COLUMN_MIN_WIDTH
           break
 
         case 'last-updated':
@@ -235,8 +267,8 @@ export function useGridColumns({
             ...dateColumn,
             disabled: true  // Make read-only
           }
-          basis = 180
-          minWidth = 150
+          basis = MEDIUM_COLUMN_BASIS
+          minWidth = MEDIUM_COLUMN_MIN_WIDTH
           break
 
         default:
@@ -257,8 +289,8 @@ export function useGridColumns({
         ),
         disabled: false,
         basis,
-        grow: 0,
-        shrink: 1,
+        grow: COLUMN_GROW,
+        shrink: COLUMN_SHRINK,
         minWidth
       }
     })
@@ -268,10 +300,10 @@ export function useGridColumns({
       ...keyColumn('__add_column', textColumn),
       title: <AddColumnButton onAddColumn={onAddColumn} availableTables={availableTables} />,
       disabled: true,
-      basis: 50,
-      grow: 0,
-      shrink: 0,
-      minWidth: 50
+      basis: ADD_COLUMN_BUTTON_WIDTH,
+      grow: COLUMN_GROW,
+      shrink: FIXED_COLUMN_SHRINK,
+      minWidth: ADD_COLUMN_BUTTON_WIDTH
     }
 
     // Return ID column first, then field columns, then add column button

@@ -53,6 +53,47 @@ type StoredComplexField =
   | ComplexFieldWrapper<DocumentArrayFieldValue>
   | ComplexFieldWrapper<RelationArrayFieldValue>;
 
+/**
+ * Union type for all possible field values in serialized form (Domain → Storage)
+ * AIDEV-NOTE: Represents normalized field values ready for Delta Lake storage
+ */
+type SerializedFieldValue =
+  | string
+  | number
+  | boolean
+  | Date
+  | null
+  | FileArrayFieldValue
+  | DocumentArrayFieldValue
+  | RelationArrayFieldValue
+  | number[];  // multi-select option IDs
+
+/**
+ * Union type for all possible field values in deserialized form (Storage → Domain)
+ * AIDEV-NOTE: Represents parsed field values with Excel-like defaults applied
+ */
+type DeserializedFieldValue =
+  | string
+  | number
+  | boolean
+  | Date
+  | null
+  | FileArrayFieldValue
+  | DocumentArrayFieldValue
+  | RelationArrayFieldValue;
+
+/**
+ * Type for serialized row data with numeric field IDs
+ * Example: {id: "123", 10: "value", 11: 42, 12: [{id: 1}]}
+ */
+type SerializedRow = Record<string, SerializedFieldValue>;
+
+/**
+ * Type for deserialized row data with numeric field IDs
+ * Example: {id: "123", 10: "value", 11: 42, 12: [{id: 1}]}
+ */
+type DeserializedRow = Record<string, DeserializedFieldValue>;
+
 export class RowSerializer {
   // ============================================================================
   // SERIALIZATION: Domain → Storage (Outbound)
@@ -67,7 +108,7 @@ export class RowSerializer {
    * @param fields - Table field definitions
    * @returns Plain object with numeric IDs: {id: "123", 10: "value", 11: "value"}
    */
-  static serializeForStorage(row: Row, fields: readonly TableField[]): Record<string, any> {
+  static serializeForStorage(row: Row, fields: readonly TableField[]): SerializedRow {
     const plain = row.toPlainObject(fields);
 
     // AIDEV-NOTE: Build result from scratch to avoid corrupted keys
@@ -91,7 +132,7 @@ export class RowSerializer {
    * @param field - Field definition with type information
    * @returns Normalized value ready for storage
    */
-  private static serializeFieldValue(value: any, field: TableField): any {
+  private static serializeFieldValue(value: any, field: TableField): SerializedFieldValue {
     // Log multi-select serialization for debugging
     if (field.type === 'multi-select') {
       console.log('[RowSerializer.serializeFieldValue] Multi-select field', {
@@ -141,7 +182,7 @@ export class RowSerializer {
    * Empty strings cannot be cast to numeric types (Float64, Int64, Boolean).
    * We convert empty → null to enable proper Arrow type casting.
    */
-  private static normalizeSimpleFieldForStorage(value: any, field: TableField): any {
+  private static normalizeSimpleFieldForStorage(value: any, field: TableField): string | number | boolean | Date | null {
     const isEmpty = value === '' || value === null || value === undefined;
 
     switch (field.type) {
@@ -213,7 +254,7 @@ export class RowSerializer {
   static deserializeFromStorage(
     data: Record<string, any>,
     fields: readonly TableField[]
-  ): Record<string, any> {
+  ): DeserializedRow {
     // AIDEV-NOTE: Build result from scratch to avoid corrupted keys
     const result: Record<string, any> = { id: data.id };
 
@@ -440,7 +481,7 @@ export class RowSerializer {
    *
    * This ensures consistent, predictable behavior matching spreadsheet UX.
    */
-  private static applyExcelLikeDefaults(value: any, field: TableField): any {
+  private static applyExcelLikeDefaults(value: any, field: TableField): string | number | boolean | Date {
     if (value === null || value === undefined) {
       switch (field.type) {
         case 'boolean':

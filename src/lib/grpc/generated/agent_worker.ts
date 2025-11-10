@@ -565,12 +565,20 @@ export interface ProcessingComplete_MetadataEntry {
 
 /** Processing error information */
 export interface ProcessingError {
-  /** Error code (RAG_FAILED, MODEL_ERROR, etc.) */
+  /** Error code (rate_limit, input_too_large, etc.) */
   errorCode: string;
-  /** Human-readable error message */
+  /** User-friendly error message (no technical details) */
   errorMessage: string;
   /** Additional error context */
   errorDetails: { [key: string]: string };
+  /** Error recovery metadata */
+  hint: string;
+  /** Can user retry this operation? */
+  canRetry: boolean;
+  /** Was this error auto-retried? */
+  autoRetry: boolean;
+  /** Was session reset due to this error? */
+  sessionReset: boolean;
 }
 
 export interface ProcessingError_ErrorDetailsEntry {
@@ -4271,7 +4279,15 @@ export const ProcessingComplete_MetadataEntry: MessageFns<ProcessingComplete_Met
 };
 
 function createBaseProcessingError(): ProcessingError {
-  return { errorCode: "", errorMessage: "", errorDetails: {} };
+  return {
+    errorCode: "",
+    errorMessage: "",
+    errorDetails: {},
+    hint: "",
+    canRetry: false,
+    autoRetry: false,
+    sessionReset: false,
+  };
 }
 
 export const ProcessingError: MessageFns<ProcessingError> = {
@@ -4285,6 +4301,18 @@ export const ProcessingError: MessageFns<ProcessingError> = {
     Object.entries(message.errorDetails).forEach(([key, value]) => {
       ProcessingError_ErrorDetailsEntry.encode({ key: key as any, value }, writer.uint32(26).fork()).join();
     });
+    if (message.hint !== "") {
+      writer.uint32(34).string(message.hint);
+    }
+    if (message.canRetry !== false) {
+      writer.uint32(40).bool(message.canRetry);
+    }
+    if (message.autoRetry !== false) {
+      writer.uint32(48).bool(message.autoRetry);
+    }
+    if (message.sessionReset !== false) {
+      writer.uint32(56).bool(message.sessionReset);
+    }
     return writer;
   },
 
@@ -4322,6 +4350,38 @@ export const ProcessingError: MessageFns<ProcessingError> = {
           }
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.hint = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.canRetry = reader.bool();
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.autoRetry = reader.bool();
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.sessionReset = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4341,6 +4401,10 @@ export const ProcessingError: MessageFns<ProcessingError> = {
           return acc;
         }, {})
         : {},
+      hint: isSet(object.hint) ? globalThis.String(object.hint) : "",
+      canRetry: isSet(object.canRetry) ? globalThis.Boolean(object.canRetry) : false,
+      autoRetry: isSet(object.autoRetry) ? globalThis.Boolean(object.autoRetry) : false,
+      sessionReset: isSet(object.sessionReset) ? globalThis.Boolean(object.sessionReset) : false,
     };
   },
 
@@ -4361,6 +4425,18 @@ export const ProcessingError: MessageFns<ProcessingError> = {
         });
       }
     }
+    if (message.hint !== "") {
+      obj.hint = message.hint;
+    }
+    if (message.canRetry !== false) {
+      obj.canRetry = message.canRetry;
+    }
+    if (message.autoRetry !== false) {
+      obj.autoRetry = message.autoRetry;
+    }
+    if (message.sessionReset !== false) {
+      obj.sessionReset = message.sessionReset;
+    }
     return obj;
   },
 
@@ -4380,6 +4456,10 @@ export const ProcessingError: MessageFns<ProcessingError> = {
       },
       {},
     );
+    message.hint = object.hint ?? "";
+    message.canRetry = object.canRetry ?? false;
+    message.autoRetry = object.autoRetry ?? false;
+    message.sessionReset = object.sessionReset ?? false;
     return message;
   },
 };
