@@ -447,6 +447,9 @@ class InfraStack(Stack):
         # This ensures frontend (with migration init container) starts and becomes healthy before scheduler
         scheduler_service.node.add_dependency(frontend_service.service)
 
+        # AIDEV-NOTE: Add WORKER_ADDRESS to scheduler after agent service is created
+        # This will be done after agent_service definition below
+
         # Create the Fargate service for the Python gRPC backend
         agent_service = ecs_patterns.NetworkLoadBalancedFargateService(
             self, f"{prefix}AgentService",
@@ -532,6 +535,12 @@ class InfraStack(Stack):
                 "NEXTAUTH_URL",
                 f"https://{cloudfront_distribution.distribution_domain_name}"
             )
+
+        # Add WORKER_ADDRESS for scheduler container (gRPC client discovery)
+        scheduler_container.add_environment(
+            "WORKER_ADDRESS",
+            f"{agent_service.load_balancer.load_balancer_dns_name}:50051"
+        )
 
         # Create an S3 bucket for file storage
         storage_bucket = s3.Bucket(
