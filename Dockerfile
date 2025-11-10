@@ -71,6 +71,7 @@ COPY --from=builder /app/src/drizzle ./src/drizzle
 
 # Copy the entrypoint script
 COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
 
 EXPOSE 3000
 ENTRYPOINT ["./entrypoint.sh"]
