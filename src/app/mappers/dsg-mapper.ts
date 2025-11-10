@@ -98,23 +98,6 @@ export function createEmptyDSGRow(fields: FieldDTO[]): DSGRow {
 }
 
 /**
- * Convert RowDTO to DSG format
- * Note: getRowsDataDSG() server action already does this conversion,
- * but this utility is here for completeness and type safety
- */
-export function rowDTOToDSG(rowDTO: RowDTO): DSGRow {
-  const dsgRow: DSGRow = { id: rowDTO.id }
-
-  // AIDEV-NOTE: This function is likely broken - RowDTO now uses numeric field IDs,
-  // but DSG format expects field names. This needs field lookup to work correctly.
-  rowDTO.fieldValues.forEach(fv => {
-    dsgRow[fv.fieldId] = fv.value
-  })
-
-  return dsgRow
-}
-
-/**
  * Convert DSG row to plain object for server actions
  * Strips the 'id' field, leaving only field name → value mappings
  */
