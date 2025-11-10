@@ -46,7 +46,9 @@ const REQUIRED_FIELD_DEFAULTS: Record<string, FieldValue> = {
   file: [],                   // FileArrayFieldValue - empty array is valid
   relation: [],               // RelationArrayFieldValue - empty array is valid
   document: [],               // DocumentArrayFieldValue - empty array is valid
-  tiptap_doc: []              // DocumentArrayFieldValue - empty array is valid
+  tiptap_doc: [],             // DocumentArrayFieldValue - empty array is valid
+  'single-select': null,      // SingleSelectFieldValue - null for required (user must select)
+  'multi-select': []          // MultiSelectFieldValue - empty array is valid
 } as const;
 
 /**
@@ -62,7 +64,9 @@ const OPTIONAL_FIELD_DEFAULTS: Record<string, FieldValue> = {
   file: [],                   // FileArrayFieldValue - empty array
   relation: [],               // RelationArrayFieldValue - empty array
   document: [],               // DocumentArrayFieldValue - empty array
-  tiptap_doc: []              // DocumentArrayFieldValue - empty array
+  tiptap_doc: [],             // DocumentArrayFieldValue - empty array
+  'single-select': null,      // SingleSelectFieldValue - null allowed for optional
+  'multi-select': []          // MultiSelectFieldValue - empty array
 } as const;
 
 /**

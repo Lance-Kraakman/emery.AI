@@ -96,15 +96,14 @@ const RowNumberCell = ({ rowIndex }: { rowIndex: number }) => {
 
 // Direct field components for DataSheetGrid
 const RelationCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO; onUpdateRow: Function } }) => {
-  const { field, onUpdateRow } = columnData
-  const value = rowData?.[field.name]
+  // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
+  const { field } = columnData
 
   return (
     <RelationField
-      value={value || []}
+      value={rowData || []}  // ✅ rowData IS the field value
       onChange={(newValue) => {
-        setRowData({ ...rowData, [field.name]: newValue })
-        // Don't call onUpdateRow immediately - let the main handleChange handle it
+        setRowData(newValue)  // ✅ Set field value directly
       }}
       isEditMode={true}
       compact={true}
@@ -116,8 +115,8 @@ const RelationCell = ({ rowData, setRowData, columnData }: CellProps<any, any> &
 }
 
 const FileCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO; organizationId: number; tableId: number; onUpdateRow: Function } }) => {
-  const { field, organizationId, tableId, onUpdateRow } = columnData
-  const value = rowData?.[field.name]
+  // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
+  const { field, organizationId, tableId } = columnData
 
   const handleFileOpen = (file: any) => {
     try {
@@ -175,10 +174,9 @@ const FileCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { c
 
   return (
     <FileField
-      value={value || []}
+      value={rowData || []}  // ✅ rowData IS the field value
       onChange={(newValue) => {
-        setRowData({ ...rowData, [field.name]: newValue })
-        // Don't call onUpdateRow immediately - let the main handleChange handle it
+        setRowData(newValue)  // ✅ Set field value directly
       }}
       isEditMode={true}
       compact={true}
@@ -189,8 +187,8 @@ const FileCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { c
 }
 
 const DocumentCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO; organizationId: number; tableId: number; onUpdateRow: Function } }) => {
-  const { field, organizationId, tableId, onUpdateRow } = columnData
-  const value = rowData?.[field.name]
+  // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
+  const { field, organizationId, tableId } = columnData
 
   const handleDocumentOpen = (file: any) => {
     try {
@@ -248,10 +246,9 @@ const DocumentCell = ({ rowData, setRowData, columnData }: CellProps<any, any> &
 
   return (
     <DocumentField
-      value={value || []}
+      value={rowData || []}  // ✅ rowData IS the field value
       onChange={(newValue) => {
-        setRowData({ ...rowData, [field.name]: newValue })
-        // Don't call onUpdateRow immediately - let the main handleChange handle it
+        setRowData(newValue)  // ✅ Set field value directly
       }}
       isEditMode={true}
       compact={true}
@@ -264,12 +261,11 @@ const DocumentCell = ({ rowData, setRowData, columnData }: CellProps<any, any> &
 }
 
 const EmbeddingCell = ({ rowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO } }) => {
-  const { field } = columnData
-  const value = rowData?.[field.name]
+  // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
 
   return (
     <EmbeddingField
-      value={value}
+      value={rowData}  // ✅ rowData IS the field value
       isEditMode={false}  // Read-only for now
       compact={true}
     />
@@ -277,16 +273,23 @@ const EmbeddingCell = ({ rowData, columnData }: CellProps<any, any> & { columnDa
 }
 
 const SingleSelectCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO; onUpdateRow: Function; onFieldUpdate: (updates: Partial<FieldDTO>) => Promise<void> } }) => {
-  const { field, onUpdateRow, onFieldUpdate } = columnData
-  const value = rowData?.[field.name]
+  // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
+  // rowData = field value (e.g., 1, null, "")
+  // setRowData(newValue) = updates the field value
+  const { field, onFieldUpdate } = columnData
   const options = field.metadata?.options || []
 
   return (
     <SingleSelectField
-      value={value}
+      value={rowData}  // ✅ rowData IS the field value
       onChange={(newValue) => {
-        setRowData({ ...rowData, [field.name]: newValue })
-        // Don't call onUpdateRow immediately - let the main handleChange handle it
+        console.log('[SingleSelectCell] onChange', {
+          fieldName: field.name,
+          fieldId: field.id,
+          oldValue: rowData,
+          newValue
+        });
+        setRowData(newValue)  // ✅ Set field value directly
       }}
       options={options}
       isEditMode={true}
@@ -298,21 +301,28 @@ const SingleSelectCell = ({ rowData, setRowData, columnData }: CellProps<any, an
 }
 
 const MultiSelectCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO; onUpdateRow: Function; onFieldUpdate: (updates: Partial<FieldDTO>) => Promise<void> } }) => {
-  const { field, onUpdateRow, onFieldUpdate } = columnData
-  const value = rowData?.[field.name]
+  // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
+  // rowData = field value (e.g., [1, 2], [], null)
+  // setRowData(newValue) = updates the field value
+  const { field, onFieldUpdate } = columnData
   const options = field.metadata?.options || []
   const maxSelections = field.metadata?.maxSelections
 
   return (
     <MultiSelectField
-      value={value || []}
+      value={rowData || []}  // ✅ rowData IS the field value (array)
       onChange={(newValue) => {
-        setRowData({ ...rowData, [field.name]: newValue })
-        // Don't call onUpdateRow immediately - let the main handleChange handle it
+        console.log('[MultiSelectCell] onChange', {
+          fieldName: field.name,
+          fieldId: field.id,
+          oldValue: rowData,
+          newValue
+        })
+        setRowData(newValue)  // ✅ Set field value directly
       }}
       options={options}
       maxSelections={maxSelections}
-      isEditMode={true}
+      isEditMode={false}
       compact={true}
       field={field}
       onFieldUpdate={onFieldUpdate}
@@ -393,7 +403,8 @@ export function DynamicDataSheetGrid({
         name: updates.name,
         type: updates.type,
         required: updates.required ?? undefined,
-        relatedTableId: updates.relatedTableId ?? undefined
+        relatedTableId: updates.relatedTableId ?? undefined,
+        metadata: updates.metadata ?? undefined
       }
     })
 
@@ -413,13 +424,14 @@ export function DynamicDataSheetGrid({
     }
   }, [tableId, onRefresh])
 
-  const handleAddColumn = useCallback(async (data: { name: string; type: any; required: boolean; relatedTableId?: number }) => {
+  const handleAddColumn = useCallback(async (data: { name: string; type: any; required: boolean; relatedTableId?: number; metadata?: Record<string, any> }) => {
     const result = await createField({
       tableId,
       name: data.name,
       type: data.type,
       required: data.required,
-      relatedTableId: data.relatedTableId
+      relatedTableId: data.relatedTableId,
+      metadata: data.metadata
     })
 
     if (result.success) {
@@ -430,6 +442,13 @@ export function DynamicDataSheetGrid({
   }, [tableId, onRefresh])
 
   const handleFieldUpdate = useCallback(async (field: FieldDTO, updates: Partial<FieldDTO>) => {
+    console.log('[DynamicDataSheetGrid] handleFieldUpdate called', {
+      fieldName: field.name,
+      fieldType: field.type,
+      hasMetadata: !!updates.metadata,
+      optionCount: Array.isArray(updates.metadata?.options) ? updates.metadata.options.length : 0
+    });
+
     const result = await updateField({
       tableId,
       fieldName: field.name,
@@ -443,8 +462,15 @@ export function DynamicDataSheetGrid({
     })
 
     if (result.success) {
+      console.log('[DynamicDataSheetGrid] Field updated successfully', {
+        fieldName: field.name
+      });
       onRefresh()
     } else {
+      console.error('[DynamicDataSheetGrid] Field update failed', {
+        fieldName: field.name,
+        error: result.error
+      });
       throw new Error(result.error || "Failed to update field")
     }
   }, [tableId, onRefresh])
@@ -532,7 +558,26 @@ export function DynamicDataSheetGrid({
 
             // Compare each field
             fields.forEach(field => {
-              if (newRow[field.name] !== oldRow[field.name]) {
+              const hasChanged = newRow[field.name] !== oldRow[field.name];
+
+              // Log for single-select fields to diagnose update issues
+              if (field.type === 'single-select' && (hasChanged || newRow[field.name] !== undefined)) {
+                console.log('[handleChange] Single-select field check', {
+                  fieldName: field.name,
+                  fieldId: field.id,
+                  oldValue: oldRow[field.name],
+                  newValue: newRow[field.name],
+                  hasChanged,
+                  strictEqual: newRow[field.name] === oldRow[field.name]
+                });
+              }
+
+              if (hasChanged) {
+                console.log('[handleChange] ✅ Change detected, adding to changes array', {
+                  fieldName: field.name,
+                  fieldId: field.id,
+                  value: newRow[field.name]
+                });
                 changes.push({
                   rowId: newRow.id,
                   fieldId: field.id,
@@ -544,7 +589,6 @@ export function DynamicDataSheetGrid({
 
           changes.forEach(change => {
             dispatch({ type: 'CELL_CHANGED', payload: change })
-            // Call mutation - TanStack Query handles optimistic update
             onUpdateRow(change.rowId, change.fieldId, change.value)
           })
           break

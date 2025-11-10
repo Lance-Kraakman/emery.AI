@@ -64,13 +64,29 @@ export interface TimestampFieldConfig {
   watchFields?: string[];    // For last-updated: only update when specific fields change
 }
 
+export interface RelationFieldConfig {
+  targetTableId: number;
+  relationshipType?: 'one-to-one' | 'one-to-many' | 'many-to-many';
+  displayField?: string;
+}
+
+export interface FileFieldConfig {
+  allowedTypes?: string[];
+  maxSize?: number;
+  multiple?: boolean;
+}
+
+// AIDEV-NOTE: Field metadata stored as flexible Record for JSON compatibility
+// Runtime type checking should validate based on field type
+export type FieldMetadata = Record<string, unknown>;
+
 export interface CreateTableFieldData {
   name: string;
   type: FieldType;
   orderIndex?: number;
   relatedTableId?: TableId;
   required?: boolean;
-  metadata?: Record<string, any>;
+  metadata?: FieldMetadata | null;
 }
 
 export interface UpdateTableFieldData {
@@ -79,7 +95,7 @@ export interface UpdateTableFieldData {
   orderIndex?: number;
   relatedTableId?: TableId;
   required?: boolean;
-  metadata?: Record<string, any>;
+  metadata?: FieldMetadata | null;
 }
 
 export interface TableFieldPersistence {
@@ -90,7 +106,7 @@ export interface TableFieldPersistence {
   orderIndex: number | null;
   relatedTableId: number | null;
   required: boolean | null;
-  metadata?: Record<string, any>;
+  metadata?: FieldMetadata | null;
   createdAt: Date | null;
 }
 
@@ -102,7 +118,7 @@ export class TableField {
     private readonly _orderIndex: number | null,
     private readonly _relatedTableId: TableId | null, // For relation field types
     private readonly _required: boolean | null,
-    private readonly _metadata: Record<string, any> | undefined,
+    private readonly _metadata: FieldMetadata | null | undefined,
     private readonly _createdAt: Date | null
   ) {}
 
@@ -179,6 +195,45 @@ export class TableField {
       newType,
       this._orderIndex,
       this._relatedTableId,
+      this._required,
+      this._metadata,
+      this._createdAt
+    );
+  }
+
+  updateMetadata(newMetadata: Record<string, any> | undefined): TableField {
+    return new TableField(
+      this._id,
+      this._name,
+      this._type,
+      this._orderIndex,
+      this._relatedTableId,
+      this._required,
+      newMetadata,
+      this._createdAt
+    );
+  }
+
+  updateRequired(newRequired: boolean): TableField {
+    return new TableField(
+      this._id,
+      this._name,
+      this._type,
+      this._orderIndex,
+      this._relatedTableId,
+      newRequired,
+      this._metadata,
+      this._createdAt
+    );
+  }
+
+  updateRelatedTableId(newRelatedTableId: TableId | null): TableField {
+    return new TableField(
+      this._id,
+      this._name,
+      this._type,
+      this._orderIndex,
+      newRelatedTableId,
       this._required,
       this._metadata,
       this._createdAt

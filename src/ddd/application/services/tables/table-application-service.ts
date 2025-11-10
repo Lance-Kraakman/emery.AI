@@ -488,9 +488,10 @@ export class TableApplicationService {
       let updatedField = existingField;
       if (command.name) updatedField = updatedField.updateName(command.name);
       if (command.type) updatedField = updatedField.updateType(command.type);
-      // Note: required and metadata updates would need additional domain methods
+      if (command.required !== undefined) updatedField = updatedField.updateRequired(command.required);
+      if (command.metadata !== undefined) updatedField = updatedField.updateMetadata(command.metadata);
 
-      // 6. Update field in table using internal method  
+      // 6. Update field in table using internal method
       table.updateField(existingField.id, updatedField);
 
       // 5. Save the updated table
@@ -736,14 +737,14 @@ export class TableApplicationService {
       }
 
       // AIDEV-NOTE: Process auto-fields BEFORE storing to data lake
-      // Convert Row → named object → process auto-fields → Row
-      const namedData = data.toNamedObject(table.fields);
-      const enrichedNamedData = this.autoFieldProcessor.processAutoFields(
+      // Use plain object with field IDs to prevent field name/ID conversion bugs
+      const plainData = data.toPlainObject(table.fields);
+      const enrichedPlainData = this.autoFieldProcessor.processAutoFields(
         table,
-        namedData,
+        plainData,
         'create'
       );
-      const enrichedRow = Row.fromNamedObject(enrichedNamedData, tableId.value, table.fields);
+      const enrichedRow = Row.fromPlainObject(enrichedPlainData, tableId.value, table.fields);
 
       // Validate relation fields
       const relationValidation = await this.validateRelationFields(table, enrichedRow);
@@ -793,10 +794,11 @@ export class TableApplicationService {
 
       // AIDEV-NOTE: Process auto-fields for all rows in batch
       // Each row gets its own created-at timestamp and sequential autonumber
+      // Use plain object with field IDs to prevent field name/ID conversion bugs
       const enrichedRows = rows.map(row => {
-        const namedData = row.toNamedObject(table.fields);
-        const enrichedNamedData = this.autoFieldProcessor.processAutoFields(table, namedData, 'create');
-        return Row.fromNamedObject(enrichedNamedData, tableId.value, table.fields);
+        const plainData = row.toPlainObject(table.fields);
+        const enrichedPlainData = this.autoFieldProcessor.processAutoFields(table, plainData, 'create');
+        return Row.fromPlainObject(enrichedPlainData, tableId.value, table.fields);
       });
 
       // Validate relation fields for all enriched rows
@@ -849,15 +851,15 @@ export class TableApplicationService {
       const previousRow = await this.dynamicTableRepository.getRow(tableId, rowId.value);
 
       // AIDEV-NOTE: Process auto-fields for updates (last-updated timestamps)
-      // Convert Row → named object → process auto-fields → Row
-      const namedData = data.toNamedObject(table.fields);
-      const enrichedNamedData = this.autoFieldProcessor.processAutoFields(
+      // Use plain object with field IDs to prevent field name/ID conversion bugs
+      const plainData = data.toPlainObject(table.fields);
+      const enrichedPlainData = this.autoFieldProcessor.processAutoFields(
         table,
-        namedData,
+        plainData,
         'update',
-        previousRow?.toNamedObject(table.fields)
+        previousRow?.toPlainObject(table.fields)
       );
-      const enrichedRow = Row.fromNamedObject(enrichedNamedData, tableId.value, table.fields);
+      const enrichedRow = Row.fromPlainObject(enrichedPlainData, tableId.value, table.fields);
 
       // Validate relation fields
       const relationValidation = await this.validateRelationFields(table, enrichedRow);
@@ -913,10 +915,19 @@ export class TableApplicationService {
       // AIDEV-NOTE: Process auto-fields for bulk updates
       // For performance, we don't fetch previous row data for watchFields comparison in bulk updates
       // All last-updated fields will be updated
+      //
+      // CRITICAL FIX: Use toPlainObject/fromPlainObject to work with field IDs throughout
+      // This prevents field name/ID conversion bugs that corrupt single-select values
       const enrichedUpdates = updates.map(update => {
-        const namedData = update.data.toNamedObject(table.fields);
-        const enrichedNamedData = this.autoFieldProcessor.processAutoFields(table, namedData, 'update');
-        const enrichedRow = Row.fromNamedObject(enrichedNamedData, tableId.value, table.fields);
+        const plainData = update.data.toPlainObject(table.fields); // {2: 1} not {singleSelect: 1}
+        logger.debug('[updateRows] Row before auto-field processing', {
+          rowId: update.rowId.value,
+          plainDataKeys: Object.keys(plainData),
+          sampleFieldId: Object.keys(plainData)[1],
+          sampleValue: plainData[Object.keys(plainData)[1]]
+        });
+        const enrichedPlainData = this.autoFieldProcessor.processAutoFields(table, plainData, 'update');
+        const enrichedRow = Row.fromPlainObject(enrichedPlainData, tableId.value, table.fields);
         return {
           rowId: update.rowId,
           data: enrichedRow
@@ -1030,10 +1041,11 @@ export class TableApplicationService {
       }
 
       // AIDEV-NOTE: Process auto-fields for all rows in bulk create
+      // Use plain object with field IDs to prevent field name/ID conversion bugs
       const enrichedRows = rows.map(row => {
-        const namedData = row.toNamedObject(table.fields);
-        const enrichedNamedData = this.autoFieldProcessor.processAutoFields(table, namedData, 'create');
-        return Row.fromNamedObject(enrichedNamedData, tableId.value, table.fields);
+        const plainData = row.toPlainObject(table.fields);
+        const enrichedPlainData = this.autoFieldProcessor.processAutoFields(table, plainData, 'create');
+        return Row.fromPlainObject(enrichedPlainData, tableId.value, table.fields);
       });
 
       // Batch insert all rows in single call

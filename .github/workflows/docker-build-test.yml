@@ -14,12 +14,7 @@ env:
   AGENT_REPO: emery/agent
 
 jobs:
-  # This job will wait for tests to pass
-  tests:
-    uses: ./.github/workflows/tests.yml
-
   get-environment:
-    needs: tests
     runs-on: ubuntu-latest
     outputs:
       env_name: ${{ steps.get_env.outputs.env_name }}

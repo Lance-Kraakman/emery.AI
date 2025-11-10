@@ -338,14 +338,11 @@ export class TableGrpcMapper {
     if (value === null || value === undefined) {
       // AIDEV-NOTE: Empty protobuf oneof represents null value
       // Python/Polars will handle this as None/null for appropriate field types
-      // This prevents "Cannot cast string '' to Float64" errors
       return {};
     } else if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'number') {
       // AIDEV-NOTE: Embedding vectors - arrays of numbers
-      // Convert to protobuf FloatArray for efficient wire format
       return { embeddingValue: { values: value } };
     } else if (typeof value === 'number') {
-      // Numbers go to numberValue
       return { numberValue: value };
     } else if (typeof value === 'boolean') {
       return { booleanValue: value };
@@ -353,7 +350,6 @@ export class TableGrpcMapper {
       return { dateValue: value.getTime() };
     } else if (typeof value === 'string') {
       // AIDEV-NOTE: Check if string is actually a number to prevent type confusion
-      // This handles cases where grid sends '234.0' instead of 234.0
       const numericValue = Number(value);
       if (!isNaN(numericValue) && value.trim() !== '' && /^-?\d+\.?\d*$/.test(value.trim())) {
         return { numberValue: numericValue };
@@ -365,11 +361,17 @@ export class TableGrpcMapper {
       }
       return { textValue: value };
     } else if (typeof value === 'object') {
-      // Objects/arrays that weren't serialized by RowSerializer (shouldn't happen normally)
-      // Stringify them for storage
+      // AIDEV-NOTE: This should NEVER happen after fixing toPlainObject/fromPlainObject usage
+      // If you see this error, there's a bug in the serialization layer
+      console.error('[table-grpc-mapper] ❌ BUG: Received object instead of primitive for field value', {
+        value,
+        valueType: typeof value,
+        valueKeys: Object.keys(value),
+        stringified: JSON.stringify(value),
+        hint: 'Check that toPlainObject (not toNamedObject) is used in auto-field processing'
+      });
       return { jsonValue: JSON.stringify(value) };
     } else {
-      // Fallback to string
       return { textValue: String(value) };
     }
   }
@@ -488,6 +490,16 @@ export class TableGrpcMapper {
         return FieldType.FIELD_TYPE_DOCUMENT;
       case 'embedding':
         return FieldType.FIELD_TYPE_EMBEDDING;
+      case 'single-select':
+        return FieldType.FIELD_TYPE_SINGLE_SELECT;
+      case 'multi-select':
+        return FieldType.FIELD_TYPE_MULTI_SELECT;
+      case 'autonumber':
+        return FieldType.FIELD_TYPE_AUTONUMBER;
+      case 'last-updated':
+        return FieldType.FIELD_TYPE_LAST_UPDATED;
+      case 'created-at':
+        return FieldType.FIELD_TYPE_CREATED_AT;
       default:
         return FieldType.FIELD_TYPE_UNSPECIFIED;
     }
@@ -514,6 +526,16 @@ export class TableGrpcMapper {
         return 'document';
       case FieldType.FIELD_TYPE_EMBEDDING:
         return 'embedding';
+      case FieldType.FIELD_TYPE_SINGLE_SELECT:
+        return 'single-select';
+      case FieldType.FIELD_TYPE_MULTI_SELECT:
+        return 'multi-select';
+      case FieldType.FIELD_TYPE_AUTONUMBER:
+        return 'autonumber';
+      case FieldType.FIELD_TYPE_LAST_UPDATED:
+        return 'last-updated';
+      case FieldType.FIELD_TYPE_CREATED_AT:
+        return 'created-at';
       default:
         return 'text';
     }

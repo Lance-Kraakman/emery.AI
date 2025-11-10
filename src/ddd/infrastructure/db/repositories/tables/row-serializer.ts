@@ -102,7 +102,9 @@ export class RowSerializer {
   }
 
   private static isComplexFieldType(type: string): boolean {
-    return ['relation', 'document', 'file'].includes(type);
+    // AIDEV-NOTE: Complex fields are stored as JSON arrays in Delta Lake
+    // multi-select stores array of option IDs, single-select stores primitive value
+    return ['relation', 'document', 'file', 'multi-select'].includes(type);
   }
 
   /**
@@ -150,11 +152,32 @@ export class RowSerializer {
         return value;
 
       case 'text':
-        // Empty strings are valid for text fields
+      case 'single-select':
+      case 'autonumber':
+        // AIDEV-NOTE: Text-based fields (empty strings are valid)
+        // single-select stores option ID as text/number
+        // autonumber stores formatted strings like "INV-00001"
+
+        // Validate single-select values - log only if invalid (should never happen after fix)
+        if (field.type === 'single-select') {
+          const isValidType = typeof value === 'number' || typeof value === 'string' || value === null || value === undefined;
+          if (!isValidType) {
+            console.error('[RowSerializer] ❌ INVALID single-select type (BUG!)', {
+              fieldName: field.name,
+              fieldId: field.id.value,
+              value,
+              valueType: typeof value
+            });
+          }
+        }
+
         return value;
 
       case 'date':
-        // Empty → null for dates
+      case 'last-updated':
+      case 'created-at':
+        // AIDEV-NOTE: Timestamp fields (empty → null)
+        // Auto-fields (last-updated, created-at) are managed by AutoFieldProcessor
         return isEmpty ? null : value;
 
       default:
@@ -357,7 +380,9 @@ export class RowSerializer {
         }
         return isValidFile ? arr : [];
       case 'relation':
-        // Relation arrays are less strictly typed
+      case 'multi-select':
+        // AIDEV-NOTE: Relation and multi-select arrays are less strictly typed
+        // multi-select stores array of option IDs (numbers or strings)
         return arr;
       default:
         console.warn(`[RowSerializer.validateComplexFieldArray] Unknown complex field type: ${field.type}`);
@@ -374,6 +399,8 @@ export class RowSerializer {
    * - Number fields: Display as empty string '' (NOT zero)
    * - Boolean fields: Display as unchecked (false)
    * - Date fields: Display as empty string ''
+   * - Select fields: Display as empty string '' (no selection)
+   * - Auto-fields: Display as empty string '' (managed by AutoFieldProcessor)
    *
    * This ensures consistent, predictable behavior matching spreadsheet UX.
    */
@@ -387,7 +414,13 @@ export class RowSerializer {
         case 'text':
         case 'number':
         case 'date':
+        case 'single-select':
+        case 'autonumber':
+        case 'last-updated':
+        case 'created-at':
           // Excel: Empty cell = empty string (NOT zero for numbers)
+          // Select fields: Empty = no selection
+          // Auto-fields: Empty until managed by AutoFieldProcessor
           return '';
 
         default:
