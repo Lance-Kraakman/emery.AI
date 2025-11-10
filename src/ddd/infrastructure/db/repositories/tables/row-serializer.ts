@@ -92,6 +92,17 @@ export class RowSerializer {
    * @returns Normalized value ready for storage
    */
   private static serializeFieldValue(value: any, field: TableField): any {
+    // Log multi-select serialization for debugging
+    if (field.type === 'multi-select') {
+      console.log('[RowSerializer.serializeFieldValue] Multi-select field', {
+        fieldName: field.name,
+        fieldId: field.id.value,
+        value,
+        valueType: typeof value,
+        isArray: Array.isArray(value)
+      });
+    }
+
     // Complex types need special wrapping for Delta Lake JSON storage
     if (this.isComplexFieldType(field.type)) {
       return this.wrapComplexFieldForStorage(value, field);
@@ -227,9 +238,34 @@ export class RowSerializer {
     value: any,
     field: TableField
   ): string | number | boolean | Date | FileArrayFieldValue | DocumentArrayFieldValue | RelationArrayFieldValue | null {
+    // Log multi-select deserialization for debugging
+    if (field.type === 'multi-select') {
+      console.log('[RowSerializer.deserializeFieldValue] Multi-select field', {
+        fieldName: field.name,
+        fieldId: field.id.value,
+        value,
+        valueType: typeof value,
+        isArray: Array.isArray(value),
+        isNull: value === null,
+        isUndefined: value === undefined
+      });
+    }
+
     // Complex types: unwrap JSON and validate
     if (this.isComplexFieldType(field.type)) {
-      return this.unwrapComplexFieldFromStorage(value, field);
+      const result = this.unwrapComplexFieldFromStorage(value, field);
+
+      // Log multi-select deserialization result
+      if (field.type === 'multi-select') {
+        console.log('[RowSerializer.deserializeFieldValue] Multi-select unwrap result', {
+          fieldName: field.name,
+          result,
+          resultType: typeof result,
+          isArray: Array.isArray(result)
+        });
+      }
+
+      return result;
     }
 
     // Simple types: apply Excel-like defaults

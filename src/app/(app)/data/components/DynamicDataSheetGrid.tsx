@@ -322,7 +322,7 @@ const MultiSelectCell = ({ rowData, setRowData, columnData }: CellProps<any, any
       }}
       options={options}
       maxSelections={maxSelections}
-      isEditMode={false}
+      isEditMode={true}  // ✅ Enable interactive mode for editing
       compact={true}
       field={field}
       onFieldUpdate={onFieldUpdate}
