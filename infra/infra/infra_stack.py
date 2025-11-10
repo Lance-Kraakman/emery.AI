@@ -232,6 +232,10 @@ class InfraStack(Stack):
             self, f"{prefix}FrontendTaskDef",
             cpu=512,
             memory_limit_mib=1024,
+            runtime_platform=ecs.RuntimePlatform(
+                cpu_architecture=ecs.CpuArchitecture.X86_64,
+                operating_system_family=ecs.OperatingSystemFamily.LINUX
+            ),
         )
 
         # Add migration init container (runs first, must complete successfully)
@@ -377,6 +381,10 @@ class InfraStack(Stack):
             self, f"{prefix}SchedulerTaskDef",
             cpu=512,
             memory_limit_mib=1024,
+            runtime_platform=ecs.RuntimePlatform(
+                cpu_architecture=ecs.CpuArchitecture.X86_64,
+                operating_system_family=ecs.OperatingSystemFamily.LINUX
+            ),
         )
 
         scheduler_container = scheduler_task_definition.add_container(
@@ -450,6 +458,10 @@ class InfraStack(Stack):
                 secrets={
                     **app_secrets_map
                 }
+            ),
+            runtime_platform=ecs.RuntimePlatform(
+                cpu_architecture=ecs.CpuArchitecture.X86_64,
+                operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
             public_load_balancer=True,
             security_groups=[db_client_sg, agent_grpc_sg],
