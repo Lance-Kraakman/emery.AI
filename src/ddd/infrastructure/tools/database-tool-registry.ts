@@ -11,6 +11,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { eq, like, and, desc, or, ilike } from 'drizzle-orm';
+import { parseConnectionString } from '@/lib/db/client-parser';
 import type {
   IToolRegistryService,
   ToolDiscoveryOptions,
@@ -35,7 +36,9 @@ export class DatabaseToolRegistry implements IToolRegistryService {
       throw new Error('DATABASE_URL environment variable is required for DatabaseToolRegistry');
     }
 
-    const client = postgres(connectionString, { max: 10 });
+    // Parse AWS RDS secret JSON into connection string if needed
+    const parsedConnectionString = parseConnectionString(connectionString);
+    const client = postgres(parsedConnectionString, { max: 10 });
     this.db = drizzle(client);
   }
 
