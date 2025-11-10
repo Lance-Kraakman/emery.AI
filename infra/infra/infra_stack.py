@@ -198,6 +198,15 @@ class InfraStack(Stack):
             description="Allow gRPC traffic on port 50051"
         )
 
+        # Allow gRPC traffic from frontend and scheduler services (which use db_client_sg)
+        # AIDEV-NOTE: NLB preserves source IPs, so agent service sees ECS task IPs
+        # These tasks have db_client_sg, so we allow traffic from that security group
+        agent_grpc_sg.add_ingress_rule(
+            peer=db_client_sg,
+            connection=ec2.Port.tcp(50051),
+            description="Allow gRPC traffic from frontend and scheduler services"
+        )
+
         # Define the Docker image for the frontend, scheduler, and migration
         # AIDEV-NOTE: Use ECR image from CI/CD workflow, or build from source locally
         app_image = self._get_frontend_image()
