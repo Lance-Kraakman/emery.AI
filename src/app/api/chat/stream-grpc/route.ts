@@ -505,17 +505,23 @@ export async function POST(req: NextRequest) {
     ];
 
     // Add uploaded attachment URLs to message parts
+    // AIDEV-NOTE: Supports all attachment types (images, PDFs, audio, documents)
+    // Python file_processor.py handles PDF text extraction and audio transcription
     if (attachmentMetadata.length > 0) {
       console.log('[CHAT-GRPC-API] Adding attachment URLs to current message parts');
       for (const attachment of attachmentMetadata) {
-        if (attachment.type === 'image' && attachment.url) {
+        if (attachment.url) {
           currentMessageParts.push({
             type: 'data-file' as const,
             data: {
               url: attachment.url,
-              mediaType: attachment.mimeType || 'image/png'
+              mediaType: attachment.mimeType,
+              filename: attachment.filename,
+              size: attachment.sizeBytes
             }
           } as MessagePart);
+
+          console.log(`[CHAT-GRPC-API] Added attachment: ${attachment.filename} (${attachment.type}, ${attachment.sizeBytes} bytes)`);
         }
       }
     }
