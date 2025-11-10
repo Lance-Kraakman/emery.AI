@@ -36,6 +36,16 @@ export enum FieldType {
   FIELD_TYPE_DOCUMENT = 7,
   /** FIELD_TYPE_EMBEDDING - Fixed-size float32 list in Delta Lake */
   FIELD_TYPE_EMBEDDING = 8,
+  /** FIELD_TYPE_SINGLE_SELECT - Store option ID as text/number */
+  FIELD_TYPE_SINGLE_SELECT = 9,
+  /** FIELD_TYPE_MULTI_SELECT - Store array of option IDs as JSON */
+  FIELD_TYPE_MULTI_SELECT = 10,
+  /** FIELD_TYPE_AUTONUMBER - Auto-increment with formatting (e.g., "INV-00001") */
+  FIELD_TYPE_AUTONUMBER = 11,
+  /** FIELD_TYPE_LAST_UPDATED - Auto-updated timestamp */
+  FIELD_TYPE_LAST_UPDATED = 12,
+  /** FIELD_TYPE_CREATED_AT - Auto-set timestamp on creation */
+  FIELD_TYPE_CREATED_AT = 13,
   UNRECOGNIZED = -1,
 }
 
@@ -68,6 +78,21 @@ export function fieldTypeFromJSON(object: any): FieldType {
     case 8:
     case "FIELD_TYPE_EMBEDDING":
       return FieldType.FIELD_TYPE_EMBEDDING;
+    case 9:
+    case "FIELD_TYPE_SINGLE_SELECT":
+      return FieldType.FIELD_TYPE_SINGLE_SELECT;
+    case 10:
+    case "FIELD_TYPE_MULTI_SELECT":
+      return FieldType.FIELD_TYPE_MULTI_SELECT;
+    case 11:
+    case "FIELD_TYPE_AUTONUMBER":
+      return FieldType.FIELD_TYPE_AUTONUMBER;
+    case 12:
+    case "FIELD_TYPE_LAST_UPDATED":
+      return FieldType.FIELD_TYPE_LAST_UPDATED;
+    case 13:
+    case "FIELD_TYPE_CREATED_AT":
+      return FieldType.FIELD_TYPE_CREATED_AT;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -95,6 +120,16 @@ export function fieldTypeToJSON(object: FieldType): string {
       return "FIELD_TYPE_DOCUMENT";
     case FieldType.FIELD_TYPE_EMBEDDING:
       return "FIELD_TYPE_EMBEDDING";
+    case FieldType.FIELD_TYPE_SINGLE_SELECT:
+      return "FIELD_TYPE_SINGLE_SELECT";
+    case FieldType.FIELD_TYPE_MULTI_SELECT:
+      return "FIELD_TYPE_MULTI_SELECT";
+    case FieldType.FIELD_TYPE_AUTONUMBER:
+      return "FIELD_TYPE_AUTONUMBER";
+    case FieldType.FIELD_TYPE_LAST_UPDATED:
+      return "FIELD_TYPE_LAST_UPDATED";
+    case FieldType.FIELD_TYPE_CREATED_AT:
+      return "FIELD_TYPE_CREATED_AT";
     case FieldType.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";

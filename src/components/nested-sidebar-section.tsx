@@ -137,31 +137,33 @@ export function NestedSidebarSection<TParent, TChild>({
                           />
                         </div>
                       ) : (
-                        <CollapsibleTrigger className="w-full">
-                          <SidebarMenuButton asChild isActive={isParentActive(parent, pathname)} className="h-6">
-                            <div className="flex items-center justify-between w-full">
-                              <Link href={getParentHref(parent)} className="flex-1">
-                                <span className="group-data-[collapsible=icon]:hidden">
-                                  {getParentName(parent)}
-                                </span>
-                              </Link>
-                              <div className="flex items-center gap-1">
-                                {hasParentActions && (
-                                  <SidebarItemActions
-                                    onRename={onRenameParent ? () => setRenamingParentId(parentId) : undefined}
-                                    onDuplicate={onDuplicateParent ? () => onDuplicateParent(parent) : undefined}
-                                    onDelete={onDeleteParent ? () => onDeleteParent(parent) : undefined}
-                                  />
-                                )}
-                                {isOpen ? (
-                                  <ChevronDown className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
-                                ) : (
-                                  <ChevronRight className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
-                                )}
+                        <div className="flex items-center w-full">
+                          <CollapsibleTrigger className="flex-1">
+                            <SidebarMenuButton asChild isActive={isParentActive(parent, pathname)} className="h-6">
+                              <div className="flex items-center justify-between w-full">
+                                <Link href={getParentHref(parent)} className="flex-1">
+                                  <span className="group-data-[collapsible=icon]:hidden">
+                                    {getParentName(parent)}
+                                  </span>
+                                </Link>
+                                <div className="flex items-center gap-1">
+                                  {isOpen ? (
+                                    <ChevronDown className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          </SidebarMenuButton>
-                        </CollapsibleTrigger>
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
+                          {hasParentActions && (
+                            <SidebarItemActions
+                              onRename={onRenameParent ? () => setRenamingParentId(parentId) : undefined}
+                              onDuplicate={onDuplicateParent ? () => onDuplicateParent(parent) : undefined}
+                              onDelete={onDeleteParent ? () => onDeleteParent(parent) : undefined}
+                            />
+                          )}
+                        </div>
                       )}
                       <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
                         <SidebarMenuSub className="gap-0.5">

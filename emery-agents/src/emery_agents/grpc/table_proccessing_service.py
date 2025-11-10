@@ -265,6 +265,13 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 table_service_pb2.FIELD_TYPE_FILE: pa.large_string(),    # Store as JSON
                 table_service_pb2.FIELD_TYPE_RELATION: pa.large_string(), # Store as JSON
                 table_service_pb2.FIELD_TYPE_DOCUMENT: pa.large_string(), # Store as JSON
+                # AIDEV-NOTE: Select fields store option IDs (single) or arrays (multi) as JSON/text
+                table_service_pb2.FIELD_TYPE_SINGLE_SELECT: pa.large_string(), # Store option ID as text/number
+                table_service_pb2.FIELD_TYPE_MULTI_SELECT: pa.large_string(),  # Store array of option IDs as JSON
+                # AIDEV-NOTE: Auto-fields for system-managed values
+                table_service_pb2.FIELD_TYPE_AUTONUMBER: pa.large_string(),    # Formatted strings like "INV-00001"
+                table_service_pb2.FIELD_TYPE_LAST_UPDATED: pa.timestamp('us'), # Auto-updated timestamp
+                table_service_pb2.FIELD_TYPE_CREATED_AT: pa.timestamp('us'),   # Auto-set timestamp on creation
                 # EMBEDDING handled separately due to dynamic sizing
             }
 
@@ -407,22 +414,40 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             record = {'id': row_data.id}
 
             for key, value in row_data.data.items():
+                # Log detailed field value information for debugging
+                field_info = {
+                    'field_id': key,
+                    'has_text': value.HasField('text_value'),
+                    'has_number': value.HasField('number_value'),
+                    'has_boolean': value.HasField('boolean_value'),
+                    'has_date': value.HasField('date_value'),
+                    'has_json': value.HasField('json_value'),
+                    'has_embedding': value.HasField('embedding_value')
+                }
+
                 if value.HasField('text_value'):
                     record[key] = value.text_value
+                    logger.debug(f"[UpdateRows] Field {key}: TEXT_VALUE = {value.text_value}")
                 elif value.HasField('number_value'):
                     record[key] = value.number_value
+                    logger.debug(f"[UpdateRows] Field {key}: NUMBER_VALUE = {value.number_value}")
                 elif value.HasField('boolean_value'):
                     record[key] = value.boolean_value
+                    logger.debug(f"[UpdateRows] Field {key}: BOOLEAN_VALUE = {value.boolean_value}")
                 elif value.HasField('date_value'):
                     record[key] = value.date_value
+                    logger.debug(f"[UpdateRows] Field {key}: DATE_VALUE = {value.date_value}")
                 elif value.HasField('json_value'):
                     record[key] = value.json_value
+                    # ❌ This is where corrupted select fields end up!
+                    logger.warning(f"[UpdateRows] ⚠️ Field {key}: JSON_VALUE (should this be NUMBER for select fields?) = {value.json_value}")
                 elif value.HasField('embedding_value'):
                     # Convert protobuf repeated float to Python list for Polars
                     record[key] = list(value.embedding_value.values)
                     logger.info(f"[_create_dataframe_with_schema] Extracted embedding: field={key}, dimensions={len(record[key])}")
                 else:
                     record[key] = None  # Empty protobuf oneof = None
+                    logger.debug(f"[UpdateRows] Field {key}: NONE (empty protobuf oneof)")
 
             records.append(record)
 
@@ -465,28 +490,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
         except Exception as e:
             logger.error(f"Error parsing row JSON: {e}")
             raise ValueError(f"Invalid row JSON: {e}")
-
-    def _protobuf_value_from_python(self, value: Any) -> table_service_pb2.RowDataValue:
-        """Convert Python value to protobuf RowDataValue."""
-        result = table_service_pb2.RowDataValue()
-        if value is None:
-            # For None, we don't set any field - let it be unset
-            pass
-        elif isinstance(value, str):
-            result.text_value = value
-        elif isinstance(value, (int, float)):
-            result.number_value = float(value)
-        elif isinstance(value, bool):
-            result.boolean_value = value
-        elif isinstance(value, list):
-            # Convert list to JSON string for now
-            import json
-            result.json_value = json.dumps(value)
-        else:
-            # Convert complex objects to JSON string
-            import json
-            result.json_value = json.dumps(value)
-        return result
 
     def CreateTable(self, request: table_service_pb2.CreateTableRequest, context) -> table_service_pb2.TableResponse:
         """Create a new Delta table with the specified schema."""

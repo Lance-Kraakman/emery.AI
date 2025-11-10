@@ -428,7 +428,7 @@ export interface ProcessMessageRequest {
   context:
     | ChatContext
     | undefined;
-  /** Conversation history (passed from Next.js database) */
+  /** Conversation history (only used if session not in memory - for restoration after restart/timeout) */
   conversationHistory: HistoryMessage[];
   /** Tools for ToolCallingAgent execution (can be empty) */
   tools: ToolConfig[];
@@ -436,6 +436,8 @@ export interface ProcessMessageRequest {
   model: string;
   /** Unique message identifier for cancellation */
   messageId: string;
+  /** Required: session identifier (chat_id from database) */
+  sessionId: string;
 }
 
 /** Streaming response from AI processing */
@@ -2988,6 +2990,7 @@ function createBaseProcessMessageRequest(): ProcessMessageRequest {
     tools: [],
     model: "",
     messageId: "",
+    sessionId: "",
   };
 }
 
@@ -3016,6 +3019,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     }
     if (message.messageId !== "") {
       writer.uint32(66).string(message.messageId);
+    }
+    if (message.sessionId !== "") {
+      writer.uint32(74).string(message.sessionId);
     }
     return writer;
   },
@@ -3091,6 +3097,14 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
           message.messageId = reader.string();
           continue;
         }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.sessionId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3114,6 +3128,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
       tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
       model: isSet(object.model) ? globalThis.String(object.model) : "",
       messageId: isSet(object.messageId) ? globalThis.String(object.messageId) : "",
+      sessionId: isSet(object.sessionId) ? globalThis.String(object.sessionId) : "",
     };
   },
 
@@ -3143,6 +3158,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     if (message.messageId !== "") {
       obj.messageId = message.messageId;
     }
+    if (message.sessionId !== "") {
+      obj.sessionId = message.sessionId;
+    }
     return obj;
   },
 
@@ -3161,6 +3179,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.model = object.model ?? "";
     message.messageId = object.messageId ?? "";
+    message.sessionId = object.sessionId ?? "";
     return message;
   },
 };

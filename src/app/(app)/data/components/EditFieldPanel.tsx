@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { AlertTriangle } from "lucide-react"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
-import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
+import type { FieldType, SelectOption } from "@/ddd/domain/tables/value-objects/table-field"
 import type { TableDTO } from "@/app/mappers/table-mapper"
+import { SelectOptionsManager } from "@/components/tables/fields/SelectOptionsManager"
 
 interface EditFieldPanelProps {
   field: FieldDTO | null
@@ -25,6 +26,11 @@ const FIELD_TYPES: Array<{ value: FieldType; label: string }> = [
   { value: "number", label: "Number" },
   { value: "boolean", label: "Boolean" },
   { value: "date", label: "Date" },
+  { value: "single-select", label: "Single Select" },
+  { value: "multi-select", label: "Multiple Select" },
+  { value: "autonumber", label: "Auto Number" },
+  { value: "last-updated", label: "Last Updated" },
+  { value: "created-at", label: "Created At" },
   { value: "relation", label: "Relation" },
   { value: "file", label: "File" },
   { value: "document", label: "Document" },
@@ -37,6 +43,21 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
   const [required, setRequired] = useState(field?.required || false)
   const [relatedTableId, setRelatedTableId] = useState<number | undefined>(field?.relatedTableId ?? undefined)
   const [embeddingSize, setEmbeddingSize] = useState<number | undefined>()
+
+  // Autonumber config
+  const [autonumberPrefix, setAutonumberPrefix] = useState<string>("")
+  const [autonumberSuffix, setAutonumberSuffix] = useState<string>("")
+  const [autonumberDigits, setAutonumberDigits] = useState<number>(1)
+  const [autonumberStart, setAutonumberStart] = useState<number>(1)
+
+  // Timestamp config (last-updated, created-at)
+  const [includeTime, setIncludeTime] = useState<boolean>(true)
+
+  // Select field config (single-select, multi-select)
+  const [selectOptions, setSelectOptions] = useState<SelectOption[]>([])
+  const [defaultSelectOption, setDefaultSelectOption] = useState<number | undefined>()
+  const [maxSelections, setMaxSelections] = useState<number | undefined>()
+
   const [showTypeWarning, setShowTypeWarning] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -59,6 +80,37 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
         setEmbeddingSize(undefined)
       }
 
+      // Load autonumber config from metadata
+      if (field.type === 'autonumber' && field.metadata) {
+        setAutonumberPrefix(typeof field.metadata.prefix === 'string' ? field.metadata.prefix : "")
+        setAutonumberSuffix(typeof field.metadata.suffix === 'string' ? field.metadata.suffix : "")
+        setAutonumberDigits(typeof field.metadata.digits === 'number' ? field.metadata.digits : 1)
+        setAutonumberStart(typeof field.metadata.startingNumber === 'number' ? field.metadata.startingNumber : 1)
+      } else {
+        setAutonumberPrefix("")
+        setAutonumberSuffix("")
+        setAutonumberDigits(1)
+        setAutonumberStart(1)
+      }
+
+      // Load timestamp config from metadata
+      if ((field.type === 'last-updated' || field.type === 'created-at') && field.metadata) {
+        setIncludeTime(field.metadata.includeTime !== false)
+      } else {
+        setIncludeTime(true)
+      }
+
+      // Load select options from metadata
+      if ((field.type === 'single-select' || field.type === 'multi-select') && field.metadata) {
+        setSelectOptions(Array.isArray(field.metadata.options) ? field.metadata.options : [])
+        setDefaultSelectOption(typeof field.metadata.defaultOption === 'number' ? field.metadata.defaultOption : undefined)
+        setMaxSelections(typeof field.metadata.maxSelections === 'number' ? field.metadata.maxSelections : undefined)
+      } else {
+        setSelectOptions([])
+        setDefaultSelectOption(undefined)
+        setMaxSelections(undefined)
+      }
+
       setShowTypeWarning(false)
     }
   }, [field])
@@ -69,9 +121,23 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
     }
     setType(newType)
 
-    // Clear embedding size if switching away from embedding type
+    // Clear type-specific config when switching types
     if (newType !== 'embedding') {
       setEmbeddingSize(undefined)
+    }
+    if (newType !== 'autonumber') {
+      setAutonumberPrefix("")
+      setAutonumberSuffix("")
+      setAutonumberDigits(1)
+      setAutonumberStart(1)
+    }
+    if (newType !== 'last-updated' && newType !== 'created-at') {
+      setIncludeTime(true)
+    }
+    if (newType !== 'single-select' && newType !== 'multi-select') {
+      setSelectOptions([])
+      setDefaultSelectOption(undefined)
+      setMaxSelections(undefined)
     }
   }
 
@@ -86,10 +152,34 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
 
     setLoading(true)
     try {
-      // Build metadata for embedding fields
-      const metadata = type === 'embedding' && embeddingSize ? {
-        embeddingSize: embeddingSize.toString()
-      } : undefined
+      // Build metadata based on field type
+      let metadata: Record<string, any> | undefined = undefined
+
+      if (type === 'embedding' && embeddingSize) {
+        metadata = { embeddingSize: embeddingSize.toString() }
+      } else if (type === 'autonumber') {
+        metadata = {
+          startingNumber: autonumberStart,
+          prefix: autonumberPrefix || undefined,
+          suffix: autonumberSuffix || undefined,
+          digits: autonumberDigits > 0 ? autonumberDigits : undefined,
+        }
+      } else if (type === 'last-updated' || type === 'created-at') {
+        metadata = {
+          includeTime,
+          timezone: "UTC"
+        }
+      } else if (type === 'single-select') {
+        metadata = {
+          options: selectOptions,
+          defaultOption: defaultSelectOption
+        }
+      } else if (type === 'multi-select') {
+        metadata = {
+          options: selectOptions,
+          maxSelections: maxSelections
+        }
+      }
 
       await onSave(field, {
         name,
@@ -206,6 +296,121 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
               <p className="text-sm text-muted-foreground">
                 Choose the dimension size for embedding vectors
               </p>
+            </div>
+          )}
+
+          {/* Autonumber-specific: Configuration */}
+          {type === 'autonumber' && (
+            <div className="space-y-3 border rounded-lg p-3 bg-muted/30">
+              <div className="space-y-2">
+                <Label htmlFor="autonumberStart">Starting Number</Label>
+                <Input
+                  id="autonumberStart"
+                  type="number"
+                  min="1"
+                  value={autonumberStart}
+                  onChange={(e) => setAutonumberStart(parseInt(e.target.value) || 1)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
+                  <Label htmlFor="autonumberPrefix">Prefix (optional)</Label>
+                  <Input
+                    id="autonumberPrefix"
+                    placeholder="e.g., INV-"
+                    value={autonumberPrefix}
+                    onChange={(e) => setAutonumberPrefix(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="autonumberSuffix">Suffix (optional)</Label>
+                  <Input
+                    id="autonumberSuffix"
+                    placeholder="e.g., -2025"
+                    value={autonumberSuffix}
+                    onChange={(e) => setAutonumberSuffix(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="autonumberDigits">Zero Padding</Label>
+                <Input
+                  id="autonumberDigits"
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={autonumberDigits}
+                  onChange={(e) => setAutonumberDigits(parseInt(e.target.value) || 1)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Number of digits (e.g., 5 → 00001)
+                </p>
+              </div>
+              <div className="text-sm text-muted-foreground border-t pt-2 mt-2">
+                <strong>Preview:</strong> {autonumberPrefix}{String(autonumberStart).padStart(autonumberDigits, '0')}{autonumberSuffix}
+              </div>
+            </div>
+          )}
+
+          {/* Timestamp-specific: Configuration for last-updated and created-at */}
+          {(type === 'last-updated' || type === 'created-at') && (
+            <div className="space-y-3 border rounded-lg p-3 bg-muted/30">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="includeTime"
+                  checked={includeTime}
+                  onCheckedChange={(checked) => setIncludeTime(checked as boolean)}
+                />
+                <Label htmlFor="includeTime" className="text-sm font-normal cursor-pointer">
+                  Include time (not just date)
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {type === 'created-at'
+                  ? "Automatically set when row is created"
+                  : "Automatically updated when row is modified"}
+              </p>
+              <div className="text-sm text-amber-600 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <span>This field is read-only and automatically managed by the system</span>
+              </div>
+            </div>
+          )}
+
+          {/* Single-Select-specific: Options configuration */}
+          {type === 'single-select' && (
+            <div className="space-y-3 border rounded-lg p-3 bg-muted/30">
+              <SelectOptionsManager
+                options={selectOptions}
+                onChange={setSelectOptions}
+                defaultOption={defaultSelectOption}
+                onDefaultChange={setDefaultSelectOption}
+                showDefaultSelector={true}
+              />
+            </div>
+          )}
+
+          {/* Multi-Select-specific: Options configuration */}
+          {type === 'multi-select' && (
+            <div className="space-y-3 border rounded-lg p-3 bg-muted/30">
+              <SelectOptionsManager
+                options={selectOptions}
+                onChange={setSelectOptions}
+              />
+              <div className="space-y-2 pt-2 border-t">
+                <Label htmlFor="maxSelections">Maximum Selections (optional)</Label>
+                <Input
+                  id="maxSelections"
+                  type="number"
+                  min="1"
+                  placeholder="Unlimited"
+                  value={maxSelections || ""}
+                  onChange={(e) => setMaxSelections(e.target.value ? parseInt(e.target.value) : undefined)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty for unlimited selections
+                </p>
+              </div>
             </div>
           )}
         </div>

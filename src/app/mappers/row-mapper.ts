@@ -101,6 +101,11 @@ export class RowMapper {
         }
         // Return as-is since domain objects are already plain objects
         return Array.isArray(value) ? value : [];
+      case 'single-select':
+      case 'multi-select':
+        // Select fields store option IDs as numbers or strings
+        // Return as-is since the value is already the option ID
+        return value;
       default:
         console.warn(`Unknown field type: ${fieldType}, returning value as-is`);
         return value;

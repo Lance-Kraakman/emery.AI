@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { format, subDays, addDays, isWithinInterval } from 'date-fns';
 import { RRule } from 'rrule';
 import type { TaskDTO } from '@/app/mappers/task-mapper';
@@ -72,10 +72,39 @@ export function AgentExecutionTimeline({ tasks, schedules = [], className = '' }
   const [currentDate, setCurrentDate] = useState(new Date());
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [hasMounted, setHasMounted] = useState(false);
+  const timelineRef = useRef<HTMLDivElement>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     setHasMounted(true);
   }, []);
+
+  // Mouse wheel horizontal scroll handler
+  useEffect(() => {
+    const container = timelineRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Check if horizontal scroll intent (shift key or horizontal gesture)
+      const isHorizontalScroll = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
+
+      if (isHorizontalScroll) {
+        e.preventDefault();
+
+        const scrollAmount = e.deltaX || e.deltaY;
+        const config = VIEW_CONFIG[viewMode];
+        const totalDuration = config.days * 24 * 60 * 60 * 1000; // Convert days to milliseconds
+
+        // Calculate time shift (1% of viewport per 10px scroll)
+        const percentChange = scrollAmount / (container.clientWidth * 10);
+        const timeShift = totalDuration * percentChange;
+
+        setCurrentDate(prev => new Date(prev.getTime() + timeShift));
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [viewMode]);
 
   const { startDate, endDate } = useMemo(() => {
     const config = VIEW_CONFIG[viewMode];
@@ -299,7 +328,7 @@ export function AgentExecutionTimeline({ tasks, schedules = [], className = '' }
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
-      {/* Header with navigation and view selector */}
+      {/* Header - Simplified without navigation controls */}
       <div className="flex flex-col gap-3 mb-4 px-4 pt-4 border-b pb-3">
         <div className="flex items-center justify-between">
           <div>
@@ -307,30 +336,6 @@ export function AgentExecutionTimeline({ tasks, schedules = [], className = '' }
             <p className="text-sm text-muted-foreground">
               {format(startDate, 'MMM dd, yyyy')} - {format(endDate, 'MMM dd, yyyy')}
             </p>
-          </div>
-
-          {/* Navigation Controls */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handlePrevious}
-              className="p-1.5 rounded-md border hover:bg-accent transition-colors"
-              title={`Previous ${VIEW_CONFIG[viewMode].label.toLowerCase()}`}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              onClick={handleToday}
-              className="px-3 py-1.5 text-xs rounded-md border hover:bg-accent transition-colors"
-            >
-              {VIEW_CONFIG[viewMode].todayLabel}
-            </button>
-            <button
-              onClick={handleNext}
-              className="p-1.5 rounded-md border hover:bg-accent transition-colors"
-              title={`Next ${VIEW_CONFIG[viewMode].label.toLowerCase()}`}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
           </div>
         </div>
 
@@ -356,7 +361,7 @@ export function AgentExecutionTimeline({ tasks, schedules = [], className = '' }
       </div>
 
       {/* Gantt Chart */}
-      <div className="flex-1 overflow-auto">
+      <div ref={timelineRef} className="flex-1 overflow-auto">
         <div className="relative h-full pb-8" style={totalHeight > 0 ? { minHeight: Math.max(400, totalHeight + 60) } : { minHeight: 400 }}>
           {/* Time axis labels - Fixed at top */}
           <div className="sticky top-0 z-30 bg-card border-b border-border h-8 flex items-center">
@@ -509,23 +514,58 @@ export function AgentExecutionTimeline({ tasks, schedules = [], className = '' }
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-4 mt-4 px-4 pb-4 text-xs border-t pt-3">
-        {Object.entries(STATUS_COLORS).map(([status, color]) => (
-          <div key={status} className="flex items-center gap-1.5">
-            <div
-              className="w-3 h-3 rounded-sm"
-              style={{
-                backgroundColor: color,
-                opacity: status === 'scheduled' ? 0.5 : 1,
-                border: status === 'scheduled' ? `2px dashed ${color}` : 'none',
-              }}
-            />
-            <span className="text-muted-foreground capitalize">
-              {status.replace('_', ' ')}
-            </span>
+      {/* Bottom Navigation Bar - Sticky */}
+      <div className="sticky bottom-0 z-30 bg-card/95 backdrop-blur-sm border-t border-border shadow-lg">
+        <div className="flex items-center justify-between px-4 py-3 gap-4">
+          {/* Navigation Controls */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePrevious}
+              className="p-2 rounded-md border border-border hover:bg-accent hover:border-accent-foreground/20 transition-all"
+              title={`Previous ${VIEW_CONFIG[viewMode].label.toLowerCase()}`}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={handleToday}
+              className="px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-accent hover:border-accent-foreground/20 transition-all min-w-[100px]"
+            >
+              {VIEW_CONFIG[viewMode].todayLabel}
+            </button>
+            <button
+              onClick={handleNext}
+              className="p-2 rounded-md border border-border hover:bg-accent hover:border-accent-foreground/20 transition-all"
+              title={`Next ${VIEW_CONFIG[viewMode].label.toLowerCase()}`}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+
+            {/* Scroll Hint */}
+            <div className="ml-4 text-xs text-muted-foreground flex items-center gap-1.5 opacity-70">
+              <span className="hidden md:inline">Shift + scroll to pan</span>
+              <span className="md:hidden">Swipe to pan</span>
+            </div>
           </div>
-        ))}
+
+          {/* Legend */}
+          <div className="flex items-center gap-4 text-xs">
+            {Object.entries(STATUS_COLORS).map(([status, color]) => (
+              <div key={status} className="flex items-center gap-1.5">
+                <div
+                  className="w-3 h-3 rounded-sm"
+                  style={{
+                    backgroundColor: color,
+                    opacity: status === 'scheduled' ? 0.5 : 1,
+                    border: status === 'scheduled' ? `2px dashed ${color}` : 'none',
+                  }}
+                />
+                <span className="text-muted-foreground capitalize">
+                  {status.replace('_', ' ')}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

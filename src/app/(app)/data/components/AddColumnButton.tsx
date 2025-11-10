@@ -8,11 +8,12 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus } from "lucide-react"
-import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
+import type { FieldType, SelectOption } from "@/ddd/domain/tables/value-objects/table-field"
 import type { TableDTO } from "@/app/mappers/table-mapper"
+import { SelectOptionsManager } from "@/components/tables/fields/SelectOptionsManager"
 
 interface AddColumnButtonProps {
-  onAddColumn: (data: { name: string; type: FieldType; required: boolean; relatedTableId?: number; metadata?: Record<string, string> }) => Promise<void>
+  onAddColumn: (data: { name: string; type: FieldType; required: boolean; relatedTableId?: number; metadata?: Record<string, any> }) => Promise<void>
   availableTables?: TableDTO[]
 }
 
@@ -21,6 +22,11 @@ const FIELD_TYPES: Array<{ value: FieldType; label: string }> = [
   { value: "number", label: "Number" },
   { value: "boolean", label: "Boolean" },
   { value: "date", label: "Date" },
+  { value: "single-select", label: "Single Select" },
+  { value: "multi-select", label: "Multiple Select" },
+  { value: "autonumber", label: "Auto Number" },
+  { value: "last-updated", label: "Last Updated" },
+  { value: "created-at", label: "Created At" },
   { value: "relation", label: "Relation" },
   { value: "file", label: "File" },
   { value: "document", label: "Document" },
@@ -34,6 +40,9 @@ export function AddColumnButton({ onAddColumn, availableTables = [] }: AddColumn
   const [required, setRequired] = useState(false)
   const [relatedTableId, setRelatedTableId] = useState<number>()
   const [embeddingSize, setEmbeddingSize] = useState<number>()
+  const [selectOptions, setSelectOptions] = useState<SelectOption[]>([])
+  const [defaultSelectOption, setDefaultSelectOption] = useState<number | undefined>()
+  const [maxSelections, setMaxSelections] = useState<number | undefined>()
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async () => {
@@ -47,9 +56,15 @@ export function AddColumnButton({ onAddColumn, availableTables = [] }: AddColumn
 
     setLoading(true)
     try {
-      // Build metadata for embedding fields
+      // Build metadata for field-specific configurations
       const metadata = type === 'embedding' && embeddingSize ? {
         embeddingSize: embeddingSize.toString()
+      } : type === 'single-select' ? {
+        options: selectOptions,
+        defaultOption: defaultSelectOption
+      } : type === 'multi-select' ? {
+        options: selectOptions,
+        maxSelections: maxSelections
       } : undefined
 
       await onAddColumn({
@@ -66,6 +81,9 @@ export function AddColumnButton({ onAddColumn, availableTables = [] }: AddColumn
       setRequired(false)
       setRelatedTableId(undefined)
       setEmbeddingSize(undefined)
+      setSelectOptions([])
+      setDefaultSelectOption(undefined)
+      setMaxSelections(undefined)
       setOpen(false)
     } catch (error) {
       console.error("Failed to add column:", error)
@@ -150,6 +168,43 @@ export function AddColumnButton({ onAddColumn, availableTables = [] }: AddColumn
                   <SelectItem value="3072">3072 dimensions</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {type === 'single-select' && (
+            <div className="space-y-3 border rounded-lg p-3 bg-muted/30">
+              <Label>Options</Label>
+              <SelectOptionsManager
+                options={selectOptions}
+                onChange={setSelectOptions}
+                defaultOption={defaultSelectOption}
+                onDefaultChange={setDefaultSelectOption}
+                showDefaultSelector={true}
+              />
+            </div>
+          )}
+
+          {type === 'multi-select' && (
+            <div className="space-y-3 border rounded-lg p-3 bg-muted/30">
+              <Label>Options</Label>
+              <SelectOptionsManager
+                options={selectOptions}
+                onChange={setSelectOptions}
+              />
+              <div className="space-y-2 pt-2 border-t">
+                <Label htmlFor="add-maxSelections">Maximum Selections (optional)</Label>
+                <Input
+                  id="add-maxSelections"
+                  type="number"
+                  min="1"
+                  placeholder="Unlimited"
+                  value={maxSelections || ""}
+                  onChange={(e) => setMaxSelections(e.target.value ? parseInt(e.target.value) : undefined)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty for unlimited selections
+                </p>
+              </div>
             </div>
           )}
 
