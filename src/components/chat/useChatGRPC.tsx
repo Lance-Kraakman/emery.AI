@@ -468,6 +468,37 @@ export function useChatGRPC(
 
                 // Clear streaming steps now that metadata is persisted
                 setStreamingSteps([])
+
+              } else if (eventData.type === 'error') {
+                // Handle error event with user-friendly message + hint
+                // Log technical details to console ONLY
+                console.error('[Chat Error]', {
+                  code: eventData.errorCode,
+                  sessionReset: eventData.sessionReset,
+                  canRetry: eventData.canRetry,
+                  timestamp: new Date().toISOString()
+                });
+
+                // Build user-friendly error message with hint
+                let displayMessage = eventData.message || 'An error occurred';
+                if (eventData.hint) {
+                  displayMessage += `\n\n💡 ${eventData.hint}`;
+                }
+
+                // Add error message to chat
+                setMessages((prev) => [...prev, createTextMessage(displayMessage, 'assistant')]);
+
+                // Handle session reset (clear chatId to force new chat)
+                if (eventData.sessionReset) {
+                  logger.debug('Session was reset due to fatal error');
+                  // Optionally clear currentChatId to force new chat on next message
+                  // setCurrentChatId(undefined);
+                }
+
+                logger.summary('Error received', {
+                  code: eventData.errorCode,
+                  canRetry: eventData.canRetry
+                });
               }
             } catch (e) {
               logger.debug('Failed to parse SSE event', e)

@@ -27,6 +27,10 @@ class SessionMetadata:
     message_count: int = 0
     restored_from_history: bool = False
     history_message_count: int = 0
+    # Error tracking for recovery
+    consecutive_errors: int = 0
+    last_error_type: Optional[str] = None
+    last_error_timestamp: Optional[datetime] = None
 
 
 class SessionManager:
@@ -318,7 +322,10 @@ class SessionManager:
             "history_message_count": meta.history_message_count,
             "memory_steps": len(agent.memory.steps) if agent else 0,
             "idle_time_seconds": (datetime.now() - meta.last_activity).total_seconds(),
-            "lifetime_seconds": (datetime.now() - meta.created_at).total_seconds()
+            "lifetime_seconds": (datetime.now() - meta.created_at).total_seconds(),
+            "consecutive_errors": meta.consecutive_errors,
+            "last_error_type": meta.last_error_type,
+            "last_error_timestamp": meta.last_error_timestamp.isoformat() if meta.last_error_timestamp else None
         }
 
     def list_active_sessions(self) -> List[Dict[str, Any]]:
@@ -347,3 +354,116 @@ class SessionManager:
             "idle_timeout": self.idle_timeout,
             "max_lifetime": self.max_lifetime
         }
+
+    # ============================================================
+    # Error Management Methods
+    # ============================================================
+
+    def reset_agent_memory(self, session_id: str) -> bool:
+        """
+        Clear agent memory for soft reset after recoverable errors.
+
+        Used for RECOVERABLE errors where we want to keep the session
+        but clear the corrupted agent state.
+
+        Args:
+            session_id: Session to reset
+
+        Returns:
+            True if agent memory was reset, False if session not found
+        """
+        if session_id not in self.agents:
+            logger.warning(f"Cannot reset memory - session {session_id} not found")
+            return False
+
+        agent = self.agents[session_id]
+
+        # Clear agent memory steps (removes corrupted state)
+        agent.memory.steps.clear()
+
+        logger.info(f"🔄 Reset agent memory for session {session_id}")
+        return True
+
+    def increment_error_count(self, session_id: str, error_type: str) -> int:
+        """
+        Increment error count for session and track error type.
+
+        Args:
+            session_id: Session identifier
+            error_type: Type of error that occurred
+
+        Returns:
+            Current consecutive error count after increment
+        """
+        if session_id not in self.metadata:
+            logger.warning(f"Cannot increment error count - session {session_id} not found")
+            return 0
+
+        meta = self.metadata[session_id]
+        meta.consecutive_errors += 1
+        meta.last_error_type = error_type
+        meta.last_error_timestamp = datetime.now()
+
+        logger.warning(
+            f"⚠️  Session {session_id} error count: {meta.consecutive_errors} "
+            f"(last error: {error_type})"
+        )
+
+        return meta.consecutive_errors
+
+    def reset_error_count(self, session_id: str):
+        """
+        Reset error count after successful message processing.
+
+        Should be called after successful agent execution to clear error state.
+
+        Args:
+            session_id: Session identifier
+        """
+        if session_id not in self.metadata:
+            return
+
+        meta = self.metadata[session_id]
+        if meta.consecutive_errors > 0:
+            logger.info(f"✅ Clearing error count for session {session_id}")
+            meta.consecutive_errors = 0
+            meta.last_error_type = None
+            meta.last_error_timestamp = None
+
+    def should_remove_session_on_error(self, session_id: str, threshold: int = 3) -> bool:
+        """
+        Check if session should be removed due to excessive errors.
+
+        Args:
+            session_id: Session identifier
+            threshold: Maximum consecutive errors before removal (default: 3)
+
+        Returns:
+            True if session should be removed
+        """
+        if session_id not in self.metadata:
+            return False
+
+        meta = self.metadata[session_id]
+        should_remove = meta.consecutive_errors >= threshold
+
+        if should_remove:
+            logger.warning(
+                f"🚨 Session {session_id} exceeded error threshold "
+                f"({meta.consecutive_errors} >= {threshold})"
+            )
+
+        return should_remove
+
+    async def remove_session_on_error(self, session_id: str, error_type: str):
+        """
+        Remove session due to fatal error or error threshold.
+
+        Wrapper around remove_session() with error-specific logging.
+
+        Args:
+            session_id: Session to remove
+            error_type: Error type that triggered removal
+        """
+        reason = f"fatal_error:{error_type}"
+        await self.remove_session(session_id, reason)
