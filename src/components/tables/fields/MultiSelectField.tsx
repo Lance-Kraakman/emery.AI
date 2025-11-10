@@ -179,8 +179,8 @@ export function MultiSelectField({
   // Edit mode - show interactive badges and dropdown
   return (
     <div className="flex flex-col gap-2 w-full">
-      {/* Selected badges with remove buttons */}
-      {selectedOptions.length > 0 && (
+      {/* Selected badges with remove buttons - HIDE in compact mode for table cells */}
+      {selectedOptions.length > 0 && !compact && (
         <div className={`flex flex-wrap ${compact ? 'gap-1' : 'gap-1.5'}`}>
           {selectedOptions.map((option) => (
             <div key={option.id} className="group relative">
@@ -224,15 +224,40 @@ export function MultiSelectField({
           <Button
             variant="outline"
             size={compact ? 'sm' : 'default'}
-            className={`justify-between ${compact ? 'h-8 text-xs' : ''}`}
+            className={`justify-between ${compact ? 'h-7 text-xs' : ''} w-full`}
             disabled={disabled}
           >
-            <span className="text-muted-foreground">
-              {selectedOptions.length === 0
-                ? placeholder
-                : `${selectedOptions.length} selected${maxSelections ? ` (max ${maxSelections})` : ''}`}
-            </span>
-            <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+            {compact && selectedOptions.length > 0 ? (
+              // Compact mode: show badges inline
+              <div className="flex items-center gap-1 flex-1 min-w-0">
+                {selectedOptions.slice(0, 2).map((option) => (
+                  <Badge
+                    key={option.id}
+                    style={{
+                      backgroundColor: option.color,
+                      color: '#fff',
+                      borderColor: option.color
+                    }}
+                    className="font-normal text-[10px] px-1.5 py-0"
+                  >
+                    {option.value}
+                  </Badge>
+                ))}
+                {selectedOptions.length > 2 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    +{selectedOptions.length - 2}
+                  </span>
+                )}
+              </div>
+            ) : (
+              // Regular mode: show text count
+              <span className="text-muted-foreground">
+                {selectedOptions.length === 0
+                  ? placeholder
+                  : `${selectedOptions.length} selected${maxSelections ? ` (max ${maxSelections})` : ''}`}
+              </span>
+            )}
+            <ChevronDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[300px] p-2" align="start">

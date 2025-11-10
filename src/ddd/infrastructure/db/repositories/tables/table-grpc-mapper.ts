@@ -339,9 +339,6 @@ export class TableGrpcMapper {
       // AIDEV-NOTE: Empty protobuf oneof represents null value
       // Python/Polars will handle this as None/null for appropriate field types
       return {};
-    } else if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'number') {
-      // AIDEV-NOTE: Embedding vectors - arrays of numbers
-      return { embeddingValue: { values: value } };
     } else if (typeof value === 'number') {
       return { numberValue: value };
     } else if (typeof value === 'boolean') {
@@ -361,16 +358,21 @@ export class TableGrpcMapper {
       }
       return { textValue: value };
     } else if (typeof value === 'object') {
-      // AIDEV-NOTE: This should NEVER happen after fixing toPlainObject/fromPlainObject usage
-      // If you see this error, there's a bug in the serialization layer
-      console.error('[table-grpc-mapper] ❌ BUG: Received object instead of primitive for field value', {
+      // AIDEV-NOTE: Arrays (including multi-select) are objects in JavaScript
+      // This is expected for complex field types like multi-select, relation, document, file
+      const isArray = Array.isArray(value);
+      const stringified = JSON.stringify(value);
+
+      console.log('[table-grpc-mapper.toProtoRowDataValue] Encoding object/array as JSON', {
         value,
         valueType: typeof value,
-        valueKeys: Object.keys(value),
-        stringified: JSON.stringify(value),
-        hint: 'Check that toPlainObject (not toNamedObject) is used in auto-field processing'
+        isArray,
+        arrayLength: isArray ? value.length : undefined,
+        stringified,
+        stringifiedLength: stringified.length
       });
-      return { jsonValue: JSON.stringify(value) };
+
+      return { jsonValue: stringified };
     } else {
       return { textValue: String(value) };
     }
@@ -460,11 +462,22 @@ export class TableGrpcMapper {
     } else if (protoValue.dateValue !== undefined) {
       return new Date(protoValue.dateValue);
     } else if (protoValue.jsonValue !== undefined) {
-      return JSON.parse(protoValue.jsonValue);
+      const parsed = JSON.parse(protoValue.jsonValue);
+      console.log('[table-grpc-mapper.fromProtoRowDataValue] Decoding JSON value', {
+        jsonValue: protoValue.jsonValue,
+        parsed,
+        parsedType: typeof parsed,
+        isArray: Array.isArray(parsed)
+      });
+      return parsed;
     } else if (protoValue.embeddingValue !== undefined && protoValue.embeddingValue.values) {
       // AIDEV-NOTE: Embedding vectors - convert protobuf FloatArray to JavaScript array
       return Array.from(protoValue.embeddingValue.values);
     } else {
+      // AIDEV-NOTE: No value field set means null/undefined in storage
+      console.log('[table-grpc-mapper.fromProtoRowDataValue] No value field set, returning null', {
+        protoValue
+      });
       return null;
     }
   }
