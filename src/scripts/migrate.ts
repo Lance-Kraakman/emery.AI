@@ -87,6 +87,9 @@ async function runMigration() {
       console.log('ℹ️  Skipping seeds (set RUN_SEEDS=true to enable)');
     }
 
+    // Explicitly exit to close database connections and terminate container
+    process.exit(0);
+
   } catch (error) {
     console.error('❌ Migration failed:', (error as Error).message);
     process.exit(1);
