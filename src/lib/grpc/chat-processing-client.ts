@@ -208,15 +208,24 @@ export class ChatProcessingClient {
         }
         
         // Send error through callback before rejecting
+        // AIDEV-NOTE: This is a gRPC connection error (worker unavailable), classified as FATAL
         onStreamingResponse({
           type: 'error',
           error: {
             errorCode: 'GRPC_ERROR',
-            errorMessage: error.message,
+            errorMessage: error.code === grpc.status.UNAVAILABLE
+              ? 'AI service is temporarily unavailable.'
+              : 'An unexpected error occurred.',
             errorDetails: {
               'grpc_code': error.code.toString(),
               'grpc_details': error.details || 'No additional details'
-            }
+            },
+            hint: error.code === grpc.status.UNAVAILABLE
+              ? 'Please try again in a moment. If the issue persists, contact support.'
+              : 'Please try again or contact support if the problem continues.',
+            canRetry: true,
+            autoRetry: false,
+            sessionReset: error.code === grpc.status.UNAVAILABLE  // Fatal if service unavailable
           },
           timestamp: Date.now()
         });
