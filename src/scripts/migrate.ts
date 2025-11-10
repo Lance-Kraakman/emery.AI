@@ -32,6 +32,7 @@ async function runMigration() {
     
     try {
       await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
+      await sql`CREATE EXTENSION IF NOT EXISTS "vector"`;
       console.log('✅ Extensions created successfully!');
     } finally {
       await sql.end();
