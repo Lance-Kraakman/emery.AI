@@ -522,6 +522,11 @@ class InfraStack(Stack):
                 "GRPC_AGENT_URL",
                 f"http://{agent_service.load_balancer.load_balancer_dns_name}"
             )
+            # Add WORKER_ADDRESS for gRPC client discovery
+            frontend_service.task_definition.default_container.add_environment(
+                "WORKER_ADDRESS",
+                f"{agent_service.load_balancer.load_balancer_dns_name}:50051"
+            )
             # Also inject the frontend's own public URL for NextAuth (use CloudFront URL)
             frontend_service.task_definition.default_container.add_environment(
                 "NEXTAUTH_URL",
