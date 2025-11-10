@@ -69,6 +69,9 @@ COPY --from=builder /app/proto ./proto
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/src/drizzle ./src/drizzle
 
+# Copy unified metadata for tool seeding (needed by seeds)
+COPY src/lib/data/unified_metadata.json ./src/lib/data/unified_metadata.json
+
 # Copy the entrypoint script
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh

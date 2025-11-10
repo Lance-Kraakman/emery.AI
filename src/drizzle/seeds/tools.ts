@@ -54,7 +54,7 @@ interface ToolData {
 }
 
 async function loadUnifiedMetadata(): Promise<UnifiedMetadataFile> {
-  const jsonPath = path.join(process.cwd(), 'emery-agents', 'src', 'emery_agents', 'execution', 'tools', 'unified_metadata.json');
+  const jsonPath = path.join(process.cwd(), 'src', 'lib', 'data', 'unified_metadata.json');
 
   if (!fs.existsSync(jsonPath)) {
     throw new Error(
