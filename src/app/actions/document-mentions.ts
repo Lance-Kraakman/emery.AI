@@ -67,7 +67,7 @@ export async function getDocumentMentionsForTable(
       console.log(`[DEBUG] Row ${rowDTO.id}: Has ${rowDTO.fieldValues.length} field values`);
       
       for (const fieldValue of rowDTO.fieldValues) {
-        console.log(`[DEBUG] Field ${fieldValue.fieldSlug}: type=${fieldValue.fieldType}, hasValue=${!!fieldValue.value}`);
+        console.log(`[DEBUG] Field ${fieldValue.fieldId}: type=${fieldValue.fieldType}, hasValue=${!!fieldValue.value}`);
         
         if (fieldValue.fieldType === 'document' && fieldValue.value) {
           const docField = fieldValue.value as unknown as DocumentFieldValue;
@@ -87,7 +87,7 @@ export async function getDocumentMentionsForTable(
           const wordInfo = wordCount ? ` (${wordCount.toLocaleString()} words)` : '';
           
           mentions.push({
-            id: `doc_${tableId}_${fieldValue.fieldSlug}_${rowDTO.id}`,
+            id: `doc_${tableId}_${fieldValue.fieldId}_${rowDTO.id}`,
             name: title.toLowerCase().replace(/\s+/g, '-'),
             displayName: title,
             description: `Document in table${wordInfo}`,

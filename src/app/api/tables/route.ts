@@ -4,113 +4,108 @@ export const dynamic = 'force-dynamic';
 /**
  * Table management API endpoint using TableApplicationService
  * Migrated from legacy dynamic.ts to domain-driven architecture
+ *
+ * Uses standardized base utilities for consistent auth and error handling
  */
 
 import { NextRequest } from 'next/server';
-import { authenticateRequest } from '@/lib/auth/test-auth';
+import { withAuthenticatedRoute, parseJsonBody, requireParam } from '@/lib/api/base';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { CreateTableCommand } from '@/ddd/application/services/tables/table-application-service';
 
 /**
+ * POST /api/tables
  * Create a new table using TableApplicationService
+ *
+ * Request body:
+ * {
+ *   name: string (required),
+ *   databaseId: number (required),
+ *   organizationId?: number,
+ *   description?: string,
+ *   metadata?: Record<string, any>
+ * }
  */
 export async function POST(request: NextRequest): Promise<Response> {
-  try {
-    const authResult = await authenticateRequest(request);
-    
-    if (!authResult.success || !authResult.user) {
-      return Response.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
+  return withAuthenticatedRoute(request, async (user) => {
+    const body = await parseJsonBody(request);
+
+    if (!body) {
+      return {
+        success: false,
+        error: 'Invalid request body',
+        status: 400
+      };
     }
 
-    const userId = authResult.user.id;
-    const body = await request.json();
-    const { name, description, organizationId, databaseId } = body;
+    const { name, description, organizationId, databaseId, metadata } = body;
 
-    if (!name) {
-      return Response.json({ 
-        error: 'Missing required field: name' 
-      }, { status: 400 });
-    }
-
-    if (!databaseId) {
-      return Response.json({ 
-        error: 'Missing required field: databaseId' 
-      }, { status: 400 });
-    }
+    // Validate required fields
+    requireParam(name, 'name');
+    requireParam(databaseId, 'databaseId');
 
     // Use TableApplicationService for table creation
     const tableApplicationService = getTableApplicationService();
-    
+
     const command: CreateTableCommand = {
       name,
       databaseId: DatabaseId.fromNumber(databaseId),
-      organizationId: OrganizationId.fromNumber(organizationId ? parseInt(organizationId) : 1),
-      createdBy: UserId.fromString(userId),
+      organizationId: OrganizationId.fromNumber(
+        organizationId ? parseInt(organizationId) : user.organizationId || 1
+      ),
+      createdBy: UserId.fromString(user.id),
       description,
-      metadata: {}
+      metadata: metadata || {}
     };
 
     const result = await tableApplicationService.createTable(command);
 
     if (!result.success) {
-      return Response.json({ 
+      return {
         success: false,
-        error: result.error || 'Failed to create table'
-      }, { status: 400 });
+        error: result.error || 'Failed to create table',
+        status: 400
+      };
     }
 
     console.log(`[API-TABLES] Created table using TableApplicationService: ${result.data?.name}`);
 
-    return Response.json({
+    return {
       success: true,
-      message: 'Table created successfully',
-      table: result.data,
-      id: result.data?.id, // For compatibility with tests
-    });
-
-  } catch (error) {
-    console.error('Error creating table:', error);
-    return Response.json({ 
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error' 
-    }, { status: 500 });
-  }
+      data: {
+        ...result.data,
+        id: result.data?.id // For compatibility with tests
+      },
+      message: 'Table created successfully'
+    };
+  });
 }
 
 /**
- * Get tables list using TableApplicationService
+ * GET /api/tables
+ * Get tables list for user's organization using TableApplicationService
  */
 export async function GET(request: NextRequest): Promise<Response> {
-  try {
-    const authResult = await authenticateRequest(request);
-    
-    if (!authResult.success || !authResult.user) {
-      return Response.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
-    }
-
-    // Get tables for user's current organization
-    if (!authResult.user.organizationId) {
-      return Response.json({ 
-        success: false, 
-        error: 'User has no current organization' 
-      }, { status: 400 });
+  return withAuthenticatedRoute(request, async (user) => {
+    // Verify user has organization context
+    if (!user.organizationId) {
+      return {
+        success: false,
+        error: 'User has no current organization',
+        status: 400
+      };
     }
 
     // Use TableApplicationService for table listing
     const tableApplicationService = getTableApplicationService();
-    const userTables = await tableApplicationService.getTablesForOrganization(OrganizationId.fromNumber(authResult.user.organizationId));
+    const userTables = await tableApplicationService.getTablesForOrganization(
+      OrganizationId.fromNumber(user.organizationId)
+    );
 
-    return Response.json({
+    return {
       success: true,
-      tables: userTables,
-    });
-
-  } catch (error) {
-    console.error('Error fetching tables:', error);
-    return Response.json({ 
-      success: false,
-      error: 'Internal server error' 
-    }, { status: 500 });
-  }
+      data: userTables
+    };
+  });
 }

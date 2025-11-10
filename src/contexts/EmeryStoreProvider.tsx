@@ -17,6 +17,7 @@ import { useRouter } from 'next/navigation'
 import { 
   appStateStore, 
   appStateSelectors,
+  appStateActions,
   type DatabaseWithTables 
 } from '@/stores/app-state.store'
 import { storeActions } from '@/stores/actions'
@@ -81,9 +82,7 @@ export function EmeryStoreProvider({ children }: { children: ReactNode }) {
       }
       
       // Update app state with user data
-      import('@/stores/app-state.store').then(({ appStateActions }) => {
-        appStateActions.setUser(user)
-      })
+      appStateActions.setUser(user)
     }
   }, [session])
 

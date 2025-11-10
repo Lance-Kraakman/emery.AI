@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { getChatSessions, createNewChatSession, archiveChatSession } from '@/app/actions/chat-history'
 import type { ChatSessionDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
-import type { DomainType } from '@/ddd/domain/rag/value-objects'
+import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
 
 interface ChatHistoryDropdownProps {
   currentChatId?: string

@@ -1,41 +1,21 @@
 /**
  * Database Application Service
- * 
+ *
  * Orchestrates database lifecycle operations for logical data organization.
  * Handles database creation, updates, deletion, and business validation.
  * Databases serve as logical namespaces/workspaces for grouping related tables.
  */
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+
+const logger = createDebugLogger('DatabaseService');
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import { Database } from '@/ddd/domain/databases/entities/database';
 import type { Result } from '@/ddd/domain/shared/result';
 import { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
-
-export interface CreateDatabaseCommand {
-  name: string;
-  description?: string;
-  organizationId: OrganizationId;
-  createdBy: UserId;
-  metadata?: Record<string, any>;
-}
-
-export interface UpdateDatabaseCommand {
-  databaseId: DatabaseId;
-  name?: string;
-  description?: string;
-  metadata?: Record<string, any>;
-}
-
-export interface DatabaseFilters {
-  organizationId: OrganizationId;
-  searchQuery?: string;
-  hasTables?: boolean;
-}
-
-
-// Use unified Result interface from domain shared types
-export type DatabaseApplicationResult<T = any> = Result<T>;
+import type { CreateDatabaseDTO, UpdateDatabaseDTO, DatabaseFiltersDTO, DatabaseDTO } from '@/app/dtos/database.dto';
+import { DatabaseMapper } from '@/app/mappers/database-mapper';
 
 export class DatabaseApplicationService {
   constructor(
@@ -46,18 +26,22 @@ export class DatabaseApplicationService {
   /**
    * Create a new database with business validation
    */
-  async createDatabase(command: CreateDatabaseCommand): Promise<DatabaseApplicationResult<Database>> {
+  async createDatabase(dto: CreateDatabaseDTO): Promise<Result<DatabaseDTO>> {
     try {
       // Business validation
-      if (!command.name?.trim()) {
+      if (!dto.name?.trim()) {
         return {
           success: false,
           error: "Database name is required"
         };
       }
 
+      // Convert DTO to Value Objects
+      const organizationId = OrganizationId.fromNumber(dto.organizationId);
+      const createdBy = UserId.fromString(dto.createdBy);
+
       // Create URL-safe slug
-      const baseSlug = command.name
+      const baseSlug = dto.name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
@@ -65,23 +49,23 @@ export class DatabaseApplicationService {
       // Ensure unique slug within organization
       let slug = baseSlug;
       let counter = 1;
-      while (!(await this.databaseRepository.isSlugUnique(command.organizationId, slug))) {
+      while (!(await this.databaseRepository.isSlugUnique(organizationId, slug))) {
         slug = `${baseSlug}-${counter}`;
         counter++;
       }
 
       // Prepare metadata
-      const metadata = command.description 
-        ? { description: command.description, ...command.metadata }
-        : command.metadata || null;
+      const metadata = dto.description
+        ? { description: dto.description, ...dto.metadata }
+        : dto.metadata || null;
 
       // Create database using domain entity
       const database = Database.create({
-        name: command.name.trim(),
+        name: dto.name.trim(),
         slug,
         metadata,
-        organizationId: command.organizationId,
-        createdBy: command.createdBy
+        organizationId,
+        createdBy
       });
 
       // Create database using repository
@@ -96,10 +80,10 @@ export class DatabaseApplicationService {
 
       return {
         success: true,
-        data: savedDatabase
+        data: DatabaseMapper.toDTO(savedDatabase)
       };
     } catch (error) {
-      console.error("Error creating database:", error);
+      logger.error('Error creating database', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to create database"
@@ -110,27 +94,30 @@ export class DatabaseApplicationService {
   /**
    * Update an existing database
    */
-  async updateDatabase(command: UpdateDatabaseCommand): Promise<DatabaseApplicationResult<Database>> {
+  async updateDatabase(dto: UpdateDatabaseDTO): Promise<Result<DatabaseDTO>> {
     try {
+      // Convert DTO to Value Objects
+      const databaseId = DatabaseId.fromNumber(dto.databaseId);
+
       // Load existing database
-      const existingDatabase = await this.databaseRepository.findById(command.databaseId as any);
+      const existingDatabase = await this.databaseRepository.findById(databaseId as any);
       if (!existingDatabase) {
         return {
           success: false,
-          error: `Database with ID ${command.databaseId} not found`
+          error: `Database with ID ${dto.databaseId} not found`
         };
       }
 
       // Prepare updated metadata
       let metadata = existingDatabase.metadata;
-      if (command.description !== undefined || command.metadata !== undefined) {
+      if (dto.description !== undefined || dto.metadata !== undefined) {
         metadata = {
           ...metadata,
-          ...command.metadata
+          ...dto.metadata
         };
-        if (command.description !== undefined) {
-          if (command.description) {
-            metadata = { ...metadata, description: command.description };
+        if (dto.description !== undefined) {
+          if (dto.description) {
+            metadata = { ...metadata, description: dto.description };
           } else {
             // Remove description if explicitly set to empty
             const { description, ...rest } = metadata || {};
@@ -142,7 +129,7 @@ export class DatabaseApplicationService {
       // Create updated database
       const updatedDatabase = Database.fromPersistence({
         id: existingDatabase.id.value,
-        name: command.name !== undefined ? command.name : existingDatabase.name,
+        name: dto.name !== undefined ? dto.name : existingDatabase.name,
         slug: existingDatabase.slug, // Slug doesn't change on update
         metadata: metadata || null,
         organizationId: existingDatabase.organizationId.value,
@@ -153,17 +140,17 @@ export class DatabaseApplicationService {
 
       // Update database using repository
       const updateData = {
-        name: command.name,
+        name: dto.name,
         metadata: metadata
       };
-      const savedDatabase = await this.databaseRepository.update(command.databaseId as any, updateData);
+      const savedDatabase = await this.databaseRepository.update(databaseId as any, updateData);
 
       return {
         success: true,
-        data: savedDatabase
+        data: DatabaseMapper.toDTO(savedDatabase)
       };
     } catch (error) {
-      console.error("Error updating database:", error);
+      logger.error('Error updating database', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to update database"
@@ -174,7 +161,7 @@ export class DatabaseApplicationService {
   /**
    * Delete a database with safety checks
    */
-  async deleteDatabase(databaseId: DatabaseId, organizationId: OrganizationId): Promise<DatabaseApplicationResult<void>> {
+  async deleteDatabase(databaseId: DatabaseId, organizationId: OrganizationId): Promise<Result<void>> {
     try {
       // Verify database exists and belongs to organization
       const database = await this.databaseRepository.findById(databaseId);
@@ -210,7 +197,7 @@ export class DatabaseApplicationService {
         data: undefined
       };
     } catch (error) {
-      console.error("Error deleting database:", error);
+      logger.error('Error deleting database', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to delete database"
@@ -228,14 +215,17 @@ export class DatabaseApplicationService {
   /**
    * Get databases with filtering and organization scoping
    */
-  async getDatabases(filters: DatabaseFilters): Promise<Database[]> {
+  async getDatabases(filters: DatabaseFiltersDTO): Promise<DatabaseDTO[]> {
     try {
-      let databases = await this.databaseRepository.findByOrganization(filters.organizationId);
+      // Convert DTO to Value Objects
+      const organizationId = OrganizationId.fromNumber(filters.organizationId);
+
+      let databases = await this.databaseRepository.findByOrganization(organizationId);
 
       // Apply search filter
       if (filters.searchQuery) {
         const searchLower = filters.searchQuery.toLowerCase();
-        databases = databases.filter(database => 
+        databases = databases.filter(database =>
           database.name.toLowerCase().includes(searchLower) ||
           database.description?.toLowerCase().includes(searchLower) ||
           database.metadataText.toLowerCase().includes(searchLower)
@@ -252,7 +242,7 @@ export class DatabaseApplicationService {
         );
 
         databases = databasesWithTableCounts
-          .filter(({ tableCount }) => 
+          .filter(({ tableCount }) =>
             filters.hasTables ? tableCount > 0 : tableCount === 0
           )
           .map(({ database }) => database);
@@ -265,9 +255,10 @@ export class DatabaseApplicationService {
         return bTime - aTime;
       });
 
-      return databases;
+      // Convert to DTOs
+      return databases.map(DatabaseMapper.toDTO);
     } catch (error) {
-      console.error("Error fetching databases:", error);
+      logger.error('Error fetching databases', error);
       throw new Error("Failed to fetch databases");
     }
   }

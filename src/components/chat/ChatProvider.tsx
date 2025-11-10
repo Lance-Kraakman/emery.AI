@@ -4,7 +4,7 @@ import React, { createContext, useContext } from 'react'
 import { useChatGRPC } from './useChatGRPC'
 import type { ChatHandler } from '@llamaindex/chat-ui'
 import type { ChatContextConfig } from '@/components/layout/types'
-import type { ToolDTO } from '@/app/mappers/tool-mapper'
+import type { ExtendedChatHandler } from './types/extended-chat-handler'
 
 /**
  * ChatProvider - Isolates chat state management to prevent unnecessary re-renders
@@ -19,23 +19,6 @@ import type { ToolDTO } from '@/app/mappers/tool-mapper'
  * inside this provider, we prevent the handler object from being recreated in the
  * parent layout component, which was causing cascade re-renders.
  */
-
-// Extended handler interface that includes our custom methods
-interface ExtendedChatHandler extends ChatHandler {
-  append: (message: any) => Promise<string>
-  scrollRef?: React.RefObject<HTMLDivElement>
-  scrollToBottom?: () => void
-  clearMessages?: () => void
-  currentChatId?: string
-  switchToChat?: (chatId: string) => Promise<void>
-  createNewChat?: () => Promise<void>
-  onChatCreated?: (chatId: string) => void
-  // Tool management
-  selectedTools: ToolDTO[]
-  availableTools: ToolDTO[]
-  addTool: (tool: ToolDTO) => void
-  removeTool: (tool: ToolDTO) => void
-}
 
 // Context for chat handler
 const ChatHandlerContext = createContext<ExtendedChatHandler | null>(null)

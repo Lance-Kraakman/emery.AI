@@ -1,17 +1,17 @@
 /**
  * gRPC-based Chat Streaming API Route
- * 
+ *
  * Architecture:
  * - Next.js: Handles authentication, database operations, session management
- * - gRPC Service: Handles AI processing, RAG context, LLM streaming
- * 
+ * - gRPC Service: Handles AI processing, LLM streaming
+ *
  * Flow:
  * 1. Next.js: Authenticate user, create/get chat session, save user message
  * 2. Next.js: Get conversation history from database
  * 3. Next.js: Call gRPC service for AI processing with message + history
- * 4. gRPC: Process RAG context, generate AI response, stream back
+ * 4. gRPC: Generate AI response, stream back
  * 5. Next.js: Stream response to frontend, save assistant message
- * 
+ *
  * AIDEV-NOTE: Clean separation - database stays in Next.js, AI processing in gRPC
  */
 
@@ -23,19 +23,26 @@ import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
-import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository } from '@/ddd/application/di/container';
-import type { CreateChatCommand, SendMessageCommand } from '@/ddd/application/services/chat/chat-application-service';
+import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository } from '@/ddd/application/di/container';
+import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
+import { getTokenUsageRepository } from '@/ddd/application/di/getters';
+import type { CreateChatDTO, SendMessageDTO, ExecutionStep, ExecutionStepMetadata } from '@/app/dtos/chat.dto';
 import type { EnrichToolsWithUserApiKeyCommand } from '@/ddd/application/services/tools/tool-configuration-application-service';
 
 // Import user API key utilities
 import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
 
-// Import RAG services
-import { DualContextRagService, type DomainContextOptions } from '@/ddd/application/services/chat/dual-context-rag-service';
+// Import shared chat utilities
+import { getMessageContent } from '@/lib/chat/message-helpers';
+import { processStepProgress, processContentChunk, processCompletion, encodeSSEEvent } from '@/lib/chat/event-processors';
 
 // Import gRPC client
 import { getChatProcessingClient, type StreamingChatResponse, type ChatProcessingOptions } from '@/lib/grpc/chat-processing-client';
 import type { HistoryMessage } from '@/lib/grpc/generated/agent_worker';
+import type { MessagePart } from '@llamaindex/chat-ui';
+import { s3ChatAttachmentService } from '@/ddd/infrastructure/multimodal/s3-chat-attachment-service';
+import type { AnyAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
+import { messageWithAttachmentsToProtoParts } from '@/lib/grpc/mappers/message-part-mapper';
 
 export async function POST(req: NextRequest) {
   try {
@@ -83,9 +90,61 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Parse request and get user's agent API key for tools
-    const { messages, chatId, domainType, domainId, tools = [] } = await req.json();
-    const latestMessage = messages[messages.length - 1]?.content;
+    // 2. Parse request (handle both JSON and FormData with file uploads)
+    const contentType = req.headers.get('content-type') || '';
+    let messages: any[];
+    let chatId: string | undefined;
+    let messageId: string;
+    let domainType: string | undefined;
+    let domainId: number | undefined;
+    let tools: any[] = [];
+    let uploadedFiles: File[] = [];
+
+    if (contentType.includes('multipart/form-data')) {
+      // Handle FormData with file uploads
+      console.log('[CHAT-GRPC-API] Parsing FormData request with attachments');
+      const formData = await req.formData();
+
+      // Parse JSON data field
+      const dataField = formData.get('data');
+      if (!dataField || typeof dataField !== 'string') {
+        return new Response(
+          JSON.stringify({ error: 'Missing or invalid data field in FormData' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const parsedData = JSON.parse(dataField);
+      messages = parsedData.messages;
+      chatId = parsedData.chatId;
+      messageId = parsedData.messageId;
+      domainType = parsedData.domainType;
+      domainId = parsedData.domainId;
+      tools = parsedData.tools || [];
+
+      // Extract uploaded files
+      for (const [key, value] of formData.entries()) {
+        if (key.startsWith('file_') && value instanceof File) {
+          uploadedFiles.push(value);
+        }
+      }
+
+      console.log('[CHAT-GRPC-API] Extracted attachments:', {
+        count: uploadedFiles.length,
+        files: uploadedFiles.map(f => ({ name: f.name, type: f.type, size: f.size }))
+      });
+    } else {
+      // Handle standard JSON request
+      const body = await req.json();
+      messages = body.messages;
+      chatId = body.chatId;
+      messageId = body.messageId;
+      domainType = body.domainType;
+      domainId = body.domainId;
+      tools = body.tools || [];
+    }
+
+    const latestMessage = getMessageContent(messages[messages.length - 1]);
 
     console.log('[CHAT-GRPC-API] Request includes tools:', {
       toolCount: tools.length,
@@ -111,14 +170,59 @@ export async function POST(req: NextRequest) {
     if (!organizationId) {
       console.error('[CHAT-GRPC-API] No current organization found for user:', userId);
       return new Response(
-        JSON.stringify({ 
-          error: 'No current organization found. Please select an organization and try again.' 
+        JSON.stringify({
+          error: 'No current organization found. Please select an organization and try again.'
         }),
-        { 
+        {
           status: 400,
           headers: { 'Content-Type': 'application/json' }
         }
       );
+    }
+
+    // 2.5 Check token quota before processing
+    console.log('[CHAT-GRPC-API] Checking token quota for organization:', organizationId);
+    const tokenUsageRepo = getTokenUsageRepository();
+    const orgRepo = getOrganizationRepository();
+    const tokenUsageService = new TokenUsageApplicationService(tokenUsageRepo, orgRepo);
+    const quotaCheck = await tokenUsageService.checkQuota(organizationId);
+
+    console.log('[CHAT-GRPC-API] Quota check result:', {
+      allowed: quotaCheck.allowed,
+      currentUsage: quotaCheck.currentUsage,
+      quotaExceeded: quotaCheck.quotaExceeded,
+      percentageUsed: quotaCheck.percentageUsed
+    });
+
+    if (quotaCheck.quotaExceeded) {
+      console.error('[CHAT-GRPC-API] Monthly token quota exceeded for organization:', organizationId);
+      return new Response(
+        JSON.stringify({
+          error: 'Monthly token quota exceeded',
+          message: 'Your organization has exceeded its monthly token quota. Please upgrade your plan or wait until the quota resets.',
+          currentUsage: quotaCheck.currentUsage,
+          monthlyQuota: quotaCheck.monthlyQuota,
+          percentageUsed: quotaCheck.percentageUsed
+        }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': quotaCheck.monthlyQuota?.toString() || 'unlimited',
+            'X-RateLimit-Remaining': Math.max(0, (quotaCheck.monthlyQuota || 0) - quotaCheck.currentUsage).toString(),
+            'X-RateLimit-Reset': new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // Approximation
+          }
+        }
+      );
+    }
+
+    // AIDEV-NOTE: Add warning headers if approaching quota limit (80% or 95%)
+    const quotaWarningHeaders: Record<string, string> = {};
+    if (quotaCheck.percentageUsed && quotaCheck.percentageUsed >= 80) {
+      const warningLevel = quotaCheck.percentageUsed >= 95 ? 'critical' : 'warning';
+      quotaWarningHeaders['X-Quota-Warning'] = warningLevel;
+      quotaWarningHeaders['X-Quota-Usage'] = quotaCheck.percentageUsed.toFixed(1);
+      console.log(`[CHAT-GRPC-API] Quota ${warningLevel}: ${quotaCheck.percentageUsed.toFixed(1)}% used`);
     }
 
     // 3. Database Operations (Next.js responsibility)
@@ -129,25 +233,25 @@ export async function POST(req: NextRequest) {
     // Create or retrieve chat session
     if (!currentChatId && latestMessage) {
       console.log('[CHAT-GRPC-API] Creating new chat session');
-      const createChatCommand: CreateChatCommand = {
-        organizationId: OrganizationId.fromNumber(organizationId),
-        createdBy: UserId.fromString(userId),
+      const createChatDTO: CreateChatDTO = {
+        organizationId: organizationId,
+        createdBy: userId,
         domainType: domainType as any,
-        domainId: domainId ? parseInt(domainId) : undefined
+        domainId: domainId ? domainId : undefined
       };
 
-      const chatResult = await chatApplicationService.createChat(createChatCommand);
+      const chatResult = await chatApplicationService.createChat(createChatDTO);
       if (!chatResult.success) {
         return new Response(
           JSON.stringify({ error: chatResult.error || 'Failed to create chat' }),
           { status: 500, headers: { 'Content-Type': 'application/json' } }
         );
       }
-      
+
       currentChatId = chatResult.data!.id;
       currentChat = chatResult.data;
       console.log(`[CHAT-GRPC-API] Created new chat session: ${currentChatId}`);
-      
+
     } else if (currentChatId) {
       console.log('[CHAT-GRPC-API] Retrieving existing chat session');
       const chatHistory = await chatApplicationService.getChatHistory({
@@ -156,24 +260,66 @@ export async function POST(req: NextRequest) {
         organizationId,
         limit: 1
       });
-      
+
       if (chatHistory.success) {
-        currentChat = chatHistory.data?.chat;
+        currentChat = chatHistory.data;
+      }
+    }
+
+    // Upload attachments to S3 if present
+    const attachmentMetadata: AnyAttachmentMetadata[] = [];
+    if (uploadedFiles.length > 0 && currentChatId) {
+      console.log('[CHAT-GRPC-API] Uploading attachments to S3');
+
+      for (const file of uploadedFiles) {
+        try {
+          // Determine attachment type from MIME type
+          let attachmentType: 'image' | 'audio' | 'document' | 'file' = 'file';
+          if (file.type.startsWith('image/')) {
+            attachmentType = 'image';
+          } else if (file.type.startsWith('audio/')) {
+            attachmentType = 'audio';
+          } else if (file.type === 'application/pdf' || file.type.includes('document')) {
+            attachmentType = 'document';
+          }
+
+          const result = await s3ChatAttachmentService.uploadAttachment({
+            file,
+            organizationId,
+            chatId: currentChatId,
+            messageId: messageId || `msg_${Date.now()}`,
+            type: attachmentType
+          });
+
+          attachmentMetadata.push(result.metadata);
+
+          console.log('[CHAT-GRPC-API] Uploaded attachment:', {
+            filename: file.name,
+            type: attachmentType,
+            s3Key: result.s3Key
+          });
+        } catch (error) {
+          console.error('[CHAT-GRPC-API] Failed to upload attachment:', file.name, error);
+          // Continue with other files even if one fails
+        }
       }
     }
 
     // Save user message
     if (currentChatId && latestMessage) {
       console.log('[CHAT-GRPC-API] Saving user message to database');
-      const userMessageCommand: SendMessageCommand = {
+      const userMessageDTO: SendMessageDTO = {
         chatId: currentChatId,
-        userId: UserId.fromString(userId),
-        organizationId: OrganizationId.fromNumber(organizationId),
+        userId: userId,
+        organizationId: organizationId,
         content: latestMessage,
-        role: 'user'
+        role: 'user',
+        metadata: attachmentMetadata.length > 0
+          ? { attachments: attachmentMetadata }
+          : undefined
       };
 
-      const messageResult = await chatApplicationService.sendMessage(userMessageCommand);
+      const messageResult = await chatApplicationService.sendMessage(userMessageDTO);
       if (!messageResult.success) {
         console.warn('[CHAT-GRPC-API] Failed to save user message:', messageResult.error);
       }
@@ -185,17 +331,30 @@ export async function POST(req: NextRequest) {
       console.log('[CHAT-GRPC-API] Retrieving conversation history from database');
       const historyResult = await chatApplicationService.getChatHistory({
         chatId: currentChatId,
-        userId: UserId.fromString(userId),
-        organizationId: OrganizationId.fromNumber(organizationId),
+        userId: userId,
+        organizationId: organizationId,
         limit: 10 // Last 10 messages for context
       });
-      
+
       if (historyResult.success && historyResult.data?.messages) {
-        conversationHistory = historyResult.data.messages.map(msg => ({
-          role: msg.role,
-          content: msg.content,
-          timestamp: new Date(msg.createdAt).getTime()
-        }));
+        conversationHistory = historyResult.data.messages.map(msg => {
+          // Convert message with attachments to protobuf MessagePart format
+          const attachments = msg.metadata?.attachments || [];
+          const contentParts = messageWithAttachmentsToProtoParts(
+            msg.content,
+            attachments.map((att: any) => ({
+              type: att.type,
+              url: att.url,
+              mimeType: att.mimeType
+            }))
+          );
+
+          return {
+            role: msg.role,
+            contentParts: contentParts,
+            timestamp: new Date(msg.createdAt).getTime()
+          };
+        });
         console.log(`[CHAT-GRPC-API] Retrieved ${conversationHistory.length} historical messages`);
       }
     }
@@ -209,6 +368,13 @@ export async function POST(req: NextRequest) {
       resolvedDomainType = null;
       resolvedDomainId = null;
     }
+
+    // 5.5 Get organization's default AI model
+    console.log('[CHAT-GRPC-API] Fetching organization default model');
+    const orgRepository = getOrganizationRepository();
+    const organization = await orgRepository.findById(OrganizationId.fromNumber(organizationId));
+    const defaultModel = organization?.defaultModel || null;
+    console.log('[CHAT-GRPC-API] Organization default model:', defaultModel || 'not set (will use system default)');
 
     // 5.1 Enrich tools with user API key for chat-based tool execution
     let enrichedTools: any[] = tools;
@@ -279,11 +445,8 @@ export async function POST(req: NextRequest) {
     const processingOptions: ChatProcessingOptions = {
       domainType: resolvedDomainType,
       domainId: resolvedDomainId,
-      enableRag: true, // Enable RAG by default
-      ragThreshold: 0.3,
-      maxRagDocs: 5,
-      primaryRagWeight: 0.7,
-      tools: enrichedTools // DDD-enriched tools with user API key authentication
+      tools: enrichedTools, // DDD-enriched tools with user API key authentication
+      defaultModel: defaultModel // Organization's default AI model
     };
 
     console.log('[CHAT-GRPC-API] Chat processing options:', processingOptions);
@@ -291,6 +454,7 @@ export async function POST(req: NextRequest) {
     // 6. Set up streaming response
     let fullAssistantResponse = '';
     let ragSources: any[] = [];
+    let collectedSteps: ExecutionStep[] = [];
 
     const responseStream = new TransformStream({
       start() {
@@ -309,86 +473,67 @@ export async function POST(req: NextRequest) {
         if (currentChatId && fullAssistantResponse.trim()) {
           const saveAssistantMessage = async () => {
             try {
-              const assistantMessageCommand: SendMessageCommand = {
+              const assistantMessageDTO: SendMessageDTO = {
                 chatId: currentChatId,
-                userId: UserId.fromString(userId),
-                organizationId: OrganizationId.fromNumber(organizationId),
+                userId: userId,
+                organizationId: organizationId,
                 content: fullAssistantResponse.trim(),
                 role: 'assistant',
                 metadata: {
                   ragSources: ragSources,
                   processingTime: Date.now() - startTime,
-                  modelUsed: 'qwen-coder' // This will come from gRPC response
+                  modelUsed: 'qwen-coder', // This will come from gRPC response
+                  executionSteps: collectedSteps // Persist execution steps
                 }
               };
-              
-              await chatApplicationService.sendMessage(assistantMessageCommand);
-              console.log(`[CHAT-GRPC-API] Saved assistant response to chat ${currentChatId}`);
+
+              await chatApplicationService.sendMessage(assistantMessageDTO);
+              console.log(`[CHAT-GRPC-API] Saved assistant response to chat ${currentChatId} with ${collectedSteps.length} execution steps`);
             } catch (error) {
               console.error('[CHAT-GRPC-API] Failed to save assistant response:', error);
             }
           };
-          
+
           saveAssistantMessage();
         }
       }
     });
 
-    // 6. Get RAG context using DualContextRagService
-    console.log('[CHAT-GRPC-API] Gathering RAG context using DualContextRagService');
-    let ragContextForGrpc = '';
-    try {
-      // Initialize dual-context RAG service
-      const tableRepository = getDynamicTableRepository();
-      const agentRepository = getAgentRepository();
-      const dualContextRagService = new DualContextRagService(tableRepository, agentRepository);
+    // 7. Prepare current user message with attachments as MessagePart[]
+    const currentMessageParts: MessagePart[] = messages[messages.length - 1].parts || [
+      { type: 'text' as const, text: latestMessage }
+    ];
 
-      // Build context options
-      const contextOptions: DomainContextOptions = {
-        domainType: resolvedDomainType,
-        domainId: resolvedDomainId,
-        organizationId,
-        query: latestMessage,
-        primaryWeight: processingOptions.primaryRagWeight || 0.7,
-        maxPrimaryDocs: 10,
-        maxSecondaryDocs: 20,
-        similarityThreshold: processingOptions.ragThreshold || 0.3
-      };
-
-      // Get dual-context RAG results
-      const dualContextResult = await dualContextRagService.getDualContext(contextOptions);
-
-      if (dualContextResult.totalDocuments > 0) {
-        ragContextForGrpc = dualContextRagService.formatContextForSystemMessage(dualContextResult);
-        ragSources = dualContextRagService.getRagSourceSummary(dualContextResult);
-
-        // Add assembled RAG context to processing options
-        processingOptions.assembledRagContext = ragContextForGrpc;
-        processingOptions.ragSources = ragSources;
-
-        console.log(`[CHAT-GRPC-API] Generated RAG context with ${dualContextResult.primaryContext.length} primary + ${dualContextResult.secondaryContext.length} secondary docs`);
-        console.log(`[CHAT-GRPC-API] Context type: ${resolvedDomainType || 'organization'} chat`);
-        console.log(`[CHAT-GRPC-API] RAG context size: ${ragContextForGrpc.length} chars`);
-      } else {
-        console.log('[CHAT-GRPC-API] No relevant RAG context found');
+    // Add uploaded attachment URLs to message parts
+    if (attachmentMetadata.length > 0) {
+      console.log('[CHAT-GRPC-API] Adding attachment URLs to current message parts');
+      for (const attachment of attachmentMetadata) {
+        if (attachment.type === 'image' && attachment.url) {
+          currentMessageParts.push({
+            type: 'data-file' as const,
+            data: {
+              url: attachment.url,
+              mediaType: attachment.mimeType || 'image/png'
+            }
+          } as MessagePart);
+        }
       }
-    } catch (ragError) {
-      console.error('[CHAT-GRPC-API] RAG context generation failed:', ragError);
-      // Continue without RAG context
     }
 
-    // 7. Call gRPC service for AI processing
+    console.log('[CHAT-GRPC-API] Current message has', currentMessageParts.length, 'parts');
+
+    // 8. Call gRPC service for AI processing
     console.log('[CHAT-GRPC-API] Calling gRPC ChatProcessingService for AI processing');
     const startTime = Date.now();
-    
+
     // Create readable stream for frontend
     const readableStream = new ReadableStream({
       start(controller) {
         const grpcClient = getChatProcessingClient(organizationId.toString());
-        
-        // Process message with gRPC service
+
+        // Process message with gRPC service (now accepts MessagePart[])
         grpcClient.processMessage(
-          latestMessage,
+          currentMessageParts,
           userId,
           organizationId,
           conversationHistory,
@@ -401,11 +546,48 @@ export async function POST(req: NextRequest) {
             });
 
             try {
-              if (response.type === 'content' && response.content) {
-                // Stream content chunk to frontend
-                fullAssistantResponse += response.content;
-                const chunk = new TextEncoder().encode(response.content);
-                controller.enqueue(chunk);
+              if (response.type === 'step_progress' && response.stepProgress) {
+                // Real-time step execution progress
+                const step = response.stepProgress;
+
+                // Convert metadata to plain object if it's a Map
+                const plainMetadata = step.metadata ? { ...step.metadata } : {};
+
+                // Process step progress and update collection
+                const { event: stepEvent, updatedSteps } = processStepProgress(
+                  step.stepType,
+                  step.stepName,
+                  step.stepIndex,
+                  step.content,
+                  plainMetadata,
+                  collectedSteps
+                );
+                collectedSteps = updatedSteps;
+
+                console.log(`[CHAT-GRPC-API] Step progress [${step.stepIndex}]:`, {
+                  type: stepEvent.stepType,
+                  name: stepEvent.stepName,
+                  contentLength: stepEvent.content?.length || 0
+                });
+
+                // Send step progress event to frontend
+                try {
+                  controller.enqueue(encodeSSEEvent(stepEvent));
+                } catch (jsonError) {
+                  console.error('[CHAT-GRPC-API] Failed to serialize step event:', jsonError);
+                  console.error('[CHAT-GRPC-API] Problematic metadata:', step.metadata);
+                }
+
+              } else if (response.type === 'content' && response.content) {
+                // Process content chunk and update response
+                const { event: contentEvent, updatedResponse } = processContentChunk(
+                  response.content,
+                  fullAssistantResponse
+                );
+                fullAssistantResponse = updatedResponse;
+
+                // Send content event to frontend
+                controller.enqueue(encodeSSEEvent(contentEvent));
 
               } else if (response.type === 'rag_context' && response.ragContext) {
                 // Store RAG sources for later saving to database
@@ -415,16 +597,54 @@ export async function POST(req: NextRequest) {
               } else if (response.type === 'complete' && response.complete) {
                 // AI processing completed
                 console.log(`[CHAT-GRPC-API] AI processing completed:`, {
-                  model: response.complete.model_used,
-                  tokens: response.complete.total_tokens,
-                  processingTime: response.complete.processing_time_ms
+                  model: response.complete.modelUsed,
+                  tokens: response.complete.totalTokens,
+                  processingTime: response.complete.processingTimeMs,
+                  tokenUsage: response.complete.tokenUsage
                 });
+
+                // Record token usage for billing
+                if (response.complete.tokenUsage) {
+                  const tokenUsage = response.complete.tokenUsage;
+                  tokenUsageService.recordTokenUsage({
+                    organizationId: organizationId,
+                    userId: userId,
+                    entityType: 'chat' as const,
+                    entityId: currentChatId,
+                    modelName: tokenUsage.modelName,
+                    inputTokens: tokenUsage.inputTokens,
+                    outputTokens: tokenUsage.outputTokens,
+                    processingTimeMs: response.complete.processingTimeMs,
+                    metadata: {
+                      chatContext: 'streaming'
+                    }
+                  }).catch((error) => {
+                    console.error('[CHAT-GRPC-API] Failed to record token usage:', error);
+                    // Don't fail the request if token recording fails
+                  });
+                }
+
+                // Send completion event with execution steps metadata to frontend
+                const completionEvent = processCompletion(
+                  response.complete.modelUsed,
+                  response.complete.totalTokens,
+                  collectedSteps,
+                  ragSources
+                );
+
+                try {
+                  controller.enqueue(encodeSSEEvent(completionEvent));
+                  console.log(`[CHAT-GRPC-API] Sent completion event with ${collectedSteps.length} execution steps`);
+                } catch (jsonError) {
+                  console.error('[CHAT-GRPC-API] Failed to send completion event:', jsonError);
+                }
+
                 controller.close();
                 
               } else if (response.type === 'error' && response.error) {
                 // AI processing error
                 console.error('[CHAT-GRPC-API] AI processing error:', response.error);
-                const errorMessage = `AI processing error: ${response.error.error_message}`;
+                const errorMessage = `AI processing error: ${response.error.errorMessage}`;
                 const chunk = new TextEncoder().encode(errorMessage);
                 controller.enqueue(chunk);
                 controller.close();
@@ -434,7 +654,8 @@ export async function POST(req: NextRequest) {
               console.error('[CHAT-GRPC-API] Stream processing error:', streamError);
               controller.error(streamError);
             }
-          }
+          },
+          messageId // Pass messageId for cancellation tracking
         ).then(() => {
           console.log('[CHAT-GRPC-API] gRPC processing completed successfully');
         }).catch((error) => {
@@ -452,13 +673,14 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // Return streaming response
+    // Return streaming response with quota warning headers if applicable
     return new Response(readableStream.pipeThrough(responseStream), {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
         'Transfer-Encoding': 'chunked',
+        ...quotaWarningHeaders, // Include quota warning headers if approaching limit
       },
     });
     

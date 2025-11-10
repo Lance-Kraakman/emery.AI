@@ -1,5 +1,5 @@
 import type { Row, FieldValue } from '@/ddd/domain/tables/value-objects/row';
-import type { 
+import type {
   FieldValue as DomainFieldValue,
   FileFieldValue,
   DocumentFieldValue,
@@ -12,6 +12,9 @@ import type {
   BooleanFieldValue,
   DateFieldValue
 } from '@/ddd/domain/tables/value-objects/field-values';
+import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
+import { getFieldDefaultValue } from './dsg-mapper';
+import { FieldMapper } from './field-mapper';
 
 // ========================================
 // Use Domain Value Objects Directly - No DTO Layer Needed
@@ -35,7 +38,7 @@ export type {
 export type FieldValueDTO = DomainFieldValue;
 
 export interface TypedFieldValueDTO {
-  fieldSlug: string;
+  fieldId: string;  // AIDEV-NOTE: Numeric field ID (e.g., "1", "10"), not field name
   value: FieldValueDTO;
   fieldType: 'text' | 'number' | 'boolean' | 'date' | 'file' | 'relation' | 'document';
 }
@@ -52,7 +55,7 @@ export class RowMapper {
       id: row.id.value,
       tableId: row.tableId,
       fieldValues: row.fieldValues.map(fv => ({
-        fieldSlug: fv.fieldSlug,
+        fieldId: fv.fieldId,  // AIDEV-NOTE: Now uses numeric field ID instead of field name
         value: RowMapper.domainToDTO(fv.value, fv.fieldType),
         fieldType: fv.fieldType as TypedFieldValueDTO['fieldType']
       }))
@@ -110,9 +113,50 @@ export class RowMapper {
   // Keep for backwards compatibility
   static fieldValueToDTO(fieldValue: FieldValue): TypedFieldValueDTO {
     return {
-      fieldSlug: fieldValue.fieldSlug,
+      fieldId: fieldValue.fieldId,  // AIDEV-NOTE: Now uses numeric field ID instead of field name
       value: RowMapper.domainToDTO(fieldValue.value, fieldValue.fieldType),
       fieldType: fieldValue.fieldType as TypedFieldValueDTO['fieldType']
     };
+  }
+
+  /**
+   * Apply default values for missing/invalid fields (data migration)
+   *
+   * ARCHITECTURE NOTE: This belongs in the application layer (mapper), NOT infrastructure.
+   * Infrastructure (ArrowDataStorageService) should only handle storage - it returns raw data.
+   * Application layer (RowMapper) handles data transformation and migration.
+   *
+   * Handles legacy data with:
+   * - Missing columns (field added after data was stored)
+   * - Empty strings in old data for required fields
+   * - Null/undefined values
+   *
+   * @param data - Raw row data from storage
+   * @param fields - Table field definitions (domain objects)
+   * @returns Data with valid defaults applied
+   */
+  static applyDefaults(
+    data: Record<string, any>,
+    fields: TableField[]
+  ): Record<string, any> {
+    const result = { ...data };
+
+    for (const field of fields) {
+      const value = result[field.name];
+
+      // Only apply defaults for primitive field types with empty strings
+      // Complex fields (file, document, relation) with empty arrays are valid
+      const isPrimitiveField = ['text', 'number', 'boolean', 'date'].includes(field.type);
+      const needsDefault = isPrimitiveField && (value === '' || value === null || value === undefined);
+
+      if (needsDefault) {
+        // Convert TableField (domain) to FieldDTO using FieldMapper
+        const fieldDTO = FieldMapper.toDTO(field);
+
+        result[field.name] = getFieldDefaultValue(fieldDTO);
+      }
+    }
+
+    return result;
   }
 }

@@ -87,7 +87,7 @@ export class IntegrationTestClient {
   
   async verifyDatabaseSchema(): Promise<void> {
     // Check that essential tables exist (migrations have been applied)
-    const tables = ['organizations', 'users', 'agents', 'tasks', 'rag_indexes'];
+    const tables = ['organizations', 'users', 'agents', 'tasks'];
     
     for (const table of tables) {
       const result = await this.query(`
@@ -167,13 +167,8 @@ export class IntegrationTestClient {
       
       // 5. Delete agents (may be referenced by tasks, but tasks are already deleted)
       await this.safeDelete(db, schema.agents, inArray(schema.agents.organizationId, testOrgIds), 'agents');
-      
-      // 6. Delete RAG-related data (documents, indexes, query logs)
-      await this.safeDelete(db, schema.ragQueryLogs, inArray(schema.ragQueryLogs.organizationId, testOrgIds), 'rag_query_logs');
-      await this.safeDelete(db, schema.ragDocuments, inArray(schema.ragDocuments.organizationId, testOrgIds), 'rag_documents');
-      await this.safeDelete(db, schema.ragIndexes, inArray(schema.ragIndexes.organizationId, testOrgIds), 'rag_indexes');
-      
-      // 7. Delete teams (they reference organizations)
+
+      // 6. Delete teams (they reference organizations)
       await this.safeDelete(db, schema.teams, inArray(schema.teams.organizationId, testOrgIds), 'teams');
       
       // 8. Delete invitations (they reference organizations)

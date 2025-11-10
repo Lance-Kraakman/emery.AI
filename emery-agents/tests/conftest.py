@@ -152,17 +152,6 @@ def mock_model_provider():
     provider.get_model_for_step_type = Mock(return_value=mock_model)
     provider.get_model_by_type = Mock(return_value=mock_model)
     provider.get_default_model_for_capability = Mock(return_value=mock_model)
-    provider.list_available_models = Mock(return_value=[
-        'Qwen/Qwen2.5-Coder-7B-Instruct',
-        'Qwen/Qwen2.5-14B-Instruct',
-        'Qwen/Qwen2.5-Coder-7B-Instruct'
-    ])
-    provider.is_model_available = Mock(return_value=True)
-    provider.get_model_info = Mock(return_value={
-        'name': 'test-model',
-        'model_id': 'Qwen/Qwen2.5-14B-Instruct',
-        'available': True
-    })
     
     return provider
 

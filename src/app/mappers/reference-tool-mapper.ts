@@ -11,6 +11,7 @@
 import type { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool'
 import type { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
 import type { ToolDTO } from './tool-mapper'
+import type { ToolDefinitionData } from '@/lib/db/schema'
 
 /**
  * Reference Tool DTO for frontend consumption
@@ -76,6 +77,54 @@ export interface ReferenceToolDTO {
  */
 export function mapReferenceToolToDTO(referenceTool: ReferenceTool): ToolDTO {
   const displayInfo = referenceTool.getChatDisplayInfo()
+  const runtimeConfig = referenceTool.toolConfig.config
+
+  // Extract runtime values based on tool type
+  let runtimeValues: Partial<ToolDTO> = {}
+
+  if (referenceTool.toolConfig.isAgentTool()) {
+    const agentConfig = referenceTool.toolConfig.getAgentConfig()!
+    runtimeValues = {
+      agentId: agentConfig.agentId,
+      ownerId: agentConfig.ownerId,
+      organizationId: agentConfig.organizationId
+    }
+  } else if (referenceTool.toolConfig.isDocumentTool()) {
+    const docConfig = referenceTool.toolConfig.getDocumentConfig()!
+    runtimeValues = {
+      documentId: docConfig.documentId,
+      filename: docConfig.filename,
+      mimeType: docConfig.mimeType,
+      organizationId: docConfig.organizationId,
+      tableId: docConfig.tableId,
+      fieldId: docConfig.fieldId,
+      rowId: docConfig.rowId
+    }
+  } else if (referenceTool.toolConfig.isFileTool()) {
+    const fileConfig = referenceTool.toolConfig.getFileConfig()!
+    runtimeValues = {
+      fileId: fileConfig.fileId,
+      filename: fileConfig.filename,
+      mimeType: fileConfig.mimeType,
+      organizationId: fileConfig.organizationId,
+      tableId: fileConfig.tableId,
+      fieldId: fileConfig.fieldId,
+      rowId: fileConfig.rowId
+    }
+  } else if (referenceTool.toolConfig.isTableTool()) {
+    const tableConfig = referenceTool.toolConfig.getTableConfig()!
+    runtimeValues = {
+      tableId: tableConfig.tableId,
+      tableName: tableConfig.tableName,
+      organizationId: tableConfig.organizationId
+    }
+  } else if (referenceTool.toolConfig.isDatabaseTool()) {
+    const dbConfig = referenceTool.toolConfig.getDatabaseConfig()!
+    runtimeValues = {
+      databaseId: dbConfig.databaseId,
+      organizationId: dbConfig.organizationId
+    }
+  }
 
   return {
     name: referenceTool.toolConfig.name,
@@ -89,10 +138,24 @@ export function mapReferenceToolToDTO(referenceTool: ReferenceTool): ToolDTO {
     connectionType: referenceTool.toolMetadata.connectionType,
     supportsArtifacts: referenceTool.supportsArtifacts(),
     type: 'reference',
-    config: referenceTool.toolConfig.config,
+    // Construct ToolDefinitionData for reference tools
+    // Reference tools are data pointers, not executable tools, so they have no parameters
+    config: {
+      type: 'reference',
+      parameters: {},  // No parameters - reference tools are data pointers
+      implementation: {
+        type: 'reference',
+        backend_class: 'ReferencePointer',
+        requires_auth: false
+      },
+      ui_config: {
+        insert_text: displayInfo.insertText
+      }
+    },
     id: referenceTool.reference.id,
     insertText: displayInfo.insertText,
-    organizationId: referenceTool.getOrganizationId()
+    // Spread runtime values which include organizationId and other type-specific fields
+    ...runtimeValues
   }
 }
 

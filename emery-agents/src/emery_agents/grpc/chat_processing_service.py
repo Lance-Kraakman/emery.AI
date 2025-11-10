@@ -1,0 +1,1065 @@
+"""
+ChatProcessingService Implementation
+
+Stateless gRPC service for AI chat processing operations only.
+Database operations (sessions, message persistence, history) are handled by Next.js.
+
+AIDEV-NOTE: Clean separation - this service only handles AI processing:
+- RAG context retrieval
+- LLM response generation  
+- Tool execution
+- OAuth proxy operations
+
+All database operations remain in Next.js ChatApplicationService.
+"""
+
+import logging
+import time
+import asyncio
+from typing import AsyncIterator, Optional, List, Dict, Any, TypedDict, Literal
+
+import grpc
+from grpc import aio
+from PIL import Image
+
+from smolagents import ToolCallingAgent, AgentText
+from smolagents.models import ChatMessage, MessageRole
+from smolagents.memory import ActionStep, PlanningStep, FinalAnswerStep
+from .generated import agent_worker_pb2, agent_worker_pb2_grpc
+from .mappers import ProtoMapper
+from .mappers.message_mapper import (
+    build_conversation_messages,
+    has_images,
+    extract_text_from_parts
+)
+from .mappers.message_types import MessageContentList
+from ..services.model_provider import SmolagentsModelProvider
+from ..services.tool_loader import UnifiedToolLoader
+from ..rag.rag_processor import RagProcessor
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+
+# Type definitions for step progress
+StepType = Literal["PLANNING", "ACTION", "REASONING", "FINAL"]
+
+class StepMetadata(TypedDict, total=False):
+    """Metadata for execution steps."""
+    tool: str
+    arguments: str
+    observations: str
+    error: str
+
+class StepProgressDict(TypedDict):
+    """Typed structure for step progress events."""
+    type: Literal["step_progress"]
+    step_type: StepType
+    step_name: str
+    content: str
+    metadata: StepMetadata
+    step_index: int
+
+
+def _populate_protobuf_map(proto_map, data: Dict[str, str]) -> None:
+    """
+    Explicitly populate a protobuf ScalarMap field.
+
+    Protobuf map fields require field-by-field assignment, not dict assignment.
+    This ensures proper serialization to the wire format.
+
+    Args:
+        proto_map: The protobuf ScalarMap field to populate
+        data: Dictionary of string key-value pairs
+    """
+    for key, value in data.items():
+        proto_map[key] = str(value)
+
+
+class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingServiceServicer):
+    """
+    gRPC service implementation for ChatProcessingService.
+    
+    Handles AI-only operations:
+    - RAG context retrieval using existing DualContextRagService patterns
+    - LLM response streaming using existing HuggingFace integration
+    - Tool execution for agent-based responses
+    
+    Does NOT handle:
+    - Chat session management (Next.js)
+    - Message persistence (Next.js) 
+    - User authentication (Next.js)
+    """
+    
+    def __init__(self, organization_id: str):
+        self.organization_id = organization_id
+        self.proto_mapper = ProtoMapper()
+        self.last_token_usage = None  # Store token usage from last agent execution
+        self.active_streams: Dict[str, bool] = {}  # Track active message streams for cancellation
+
+        # Initialize AI processing services - no database dependencies
+        logger.info("Initializing ChatProcessingService for AI operations only")
+
+        # Import services at runtime to avoid circular dependencies
+        try:
+            # RAG processing (always available - no external dependencies)
+            # RagProcessor already imported at top
+            self.rag_processor = RagProcessor()
+            logger.info("✅ RagProcessor initialized successfully")
+
+            # Tool loader for converting ToolConfig to smolagents tools
+            try:
+                # UnifiedToolLoader already imported at top
+                self.tool_registry = UnifiedToolLoader()
+                logger.info("✅ UnifiedToolLoader initialized successfully")
+            except ImportError as tool_error:
+                logger.warning(f"⚠️ ToolRegistryRepository not available: {tool_error}")
+                self.tool_registry = None
+
+            logger.info("✅ ChatProcessingService initialized successfully")
+
+        except ImportError as e:
+            logger.error(f"❌ Failed to import core services: {e}")
+            self.rag_processor = None
+            self.tool_registry = None
+
+    async def ProcessMessage(
+        self,
+        request: agent_worker_pb2.ProcessMessageRequest,
+        context: grpc.aio.ServicerContext
+    ) -> AsyncIterator[agent_worker_pb2.ProcessMessageResponse]:
+        """
+        Process a chat message and stream AI response.
+        
+        This is the core stateless operation:
+        1. Extract RAG context based on domain/organization
+        2. Build conversation context from provided history
+        3. Stream LLM response using existing AI infrastructure
+        4. Return processing metadata
+        
+        All session/persistence logic is handled by Next.js caller.
+        """
+        
+        start_time = time.time()
+        message_parts = request.message_parts
+        user_id = request.user_id
+        org_id = request.organization_id
+        message_id = request.message_id if request.message_id else f"msg_{int(time.time() * 1000)}"
+
+        # Register message stream for cancellation tracking
+        self.active_streams[message_id] = False  # False = not cancelled
+        logger.info(f"🚀 Processing message {message_id} for user {user_id} in org {org_id}")
+
+        # Extract text preview for logging
+        text_preview = extract_text_from_parts(message_parts)
+        has_image_content = has_images(message_parts)
+        logger.info(f"📝 Message preview: {text_preview[:100]}...")
+        if has_image_content:
+            logger.info(f"🖼️ Message contains images")
+
+        # Always use ToolCallingAgent - handles empty tools gracefully
+        tools_count = len(request.tools) if hasattr(request, 'tools') and request.tools else 0
+        logger.info(f"🔧 Tools provided: {tools_count}, always using ToolCallingAgent")
+
+        try:
+            # RAG context has been removed - chat is now simpler without automatic RAG
+            # Tools can still be provided for specific data access if needed
+            logger.debug("🔧 Processing without RAG context (RAG system removed)")
+
+            # 2. Build Conversation Context using mapper
+            # Converts protobuf MessageParts to HuggingFace format
+            # AIDEV-NOTE: Now async to support file processing (PDFs, audio, documents)
+            conversation_messages = await build_conversation_messages(
+                request.conversation_history,
+                message_parts
+            )
+
+            logger.info(f"💬 Built conversation with {len(conversation_messages)} messages (HF format)")
+
+            # 3. Generate AI Response using ToolCallingAgent (always)
+            sequence = 0
+            total_content = ""
+
+            # Always use ToolCallingAgent - handles RAG context and tools
+            tools_to_use = request.tools if hasattr(request, 'tools') and request.tools else []
+            logger.info(f"📨 Request tools received: {len(tools_to_use)} tools")
+            if tools_to_use:
+                for i, tool in enumerate(tools_to_use):
+                    logger.info(f"  Tool {i}: name={tool.name}, config_keys={list(tool.config.keys()) if tool.config else 'none'}")
+            else:
+                logger.info("  No tools received from frontend")
+
+            # Extract organization model from request (if provided)
+            org_model = request.model if request.model else None
+            if org_model:
+                logger.info(f"🔧 Using organization model override: {org_model}")
+            else:
+                logger.info("🔧 No organization model specified, will use system default")
+
+            async for response_dict in self._stream_tool_calling_agent_response(
+                conversation_messages,
+                tools_to_use,
+                None,  # RAG context removed
+                domain_context=request.context,
+                org_model=org_model,
+                has_images=has_image_content
+            ):
+                # Check for cancellation
+                if self.active_streams.get(message_id, False):
+                    logger.info(f"⚠️ Message {message_id} was cancelled, stopping stream")
+                    # Send cancellation error
+                    cancel_response = agent_worker_pb2.ProcessMessageResponse(
+                        error=agent_worker_pb2.ProcessingError(
+                            error_code='CANCELLED',
+                            error_message='Message processing was cancelled by user',
+                            error_details={}
+                        ),
+                        timestamp=int(time.time() * 1000)
+                    )
+                    yield cancel_response
+                    break
+
+                # Handle different response types from streaming
+                if isinstance(response_dict, dict):
+                    response_type = response_dict.get("type")
+
+                    if response_type == "step_progress":
+                        # Send step progress update
+                        step_type_map = {
+                            "PLANNING": agent_worker_pb2.STEP_PLANNING,
+                            "ACTION": agent_worker_pb2.STEP_ACTION,
+                            "REASONING": agent_worker_pb2.STEP_REASONING,
+                            "FINAL": agent_worker_pb2.STEP_FINAL
+                        }
+
+                        logger.debug(f"📤 Creating StepProgress protobuf message: type={response_dict.get('step_type')}, name={response_dict.get('step_name')}")
+
+                        # Create StepProgress message without metadata
+                        step_progress_msg = agent_worker_pb2.StepProgress(
+                            step_type=step_type_map.get(response_dict.get("step_type"), agent_worker_pb2.STEP_PLANNING),
+                            step_name=response_dict.get("step_name", ""),
+                            content=response_dict.get("content", ""),
+                            step_index=response_dict.get("step_index", 0)
+                        )
+
+                        # Explicitly populate metadata map field (protobuf requires field-by-field assignment)
+                        metadata = response_dict.get("metadata", {})
+                        if metadata:
+                            logger.debug(f"📦 Populating metadata with {len(metadata)} fields: {list(metadata.keys())}")
+                            _populate_protobuf_map(step_progress_msg.metadata, metadata)
+                        else:
+                            logger.debug("📦 No metadata to populate")
+
+                        # Create response with properly populated step_progress
+                        step_response = agent_worker_pb2.ProcessMessageResponse(
+                            step_progress=step_progress_msg,
+                            timestamp=int(time.time() * 1000)
+                        )
+                        logger.debug(f"✅ Yielding StepProgress message to gRPC client")
+                        yield step_response
+
+                    elif response_type == "content_chunk":
+                        # Send content chunk (final answer text)
+                        chunk = response_dict.get("content", "")
+                        total_content += chunk
+
+                        chunk_response = agent_worker_pb2.ProcessMessageResponse(
+                            content_chunk=agent_worker_pb2.ContentChunk(
+                                content=chunk,
+                                sequence=sequence
+                            ),
+                            timestamp=int(time.time() * 1000)
+                        )
+                        yield chunk_response
+                        sequence += 1
+
+                else:
+                    # Legacy fallback for string responses (error messages)
+                    total_content += str(response_dict)
+                    chunk_response = agent_worker_pb2.ProcessMessageResponse(
+                        content_chunk=agent_worker_pb2.ContentChunk(
+                            content=str(response_dict),
+                            sequence=sequence
+                        ),
+                        timestamp=int(time.time() * 1000)
+                    )
+                    yield chunk_response
+                    sequence += 1
+
+            # 4. Send completion marker
+            processing_time = int((time.time() - start_time) * 1000)
+
+            # Convert stored token usage to protobuf
+            token_usage_proto = self._convert_token_usage_to_proto(self.last_token_usage)
+
+            complete_response = agent_worker_pb2.ProcessMessageResponse(
+                complete=agent_worker_pb2.ProcessingComplete(
+                    model_used=self._get_model_name(),
+                    total_tokens=sequence,
+                    processing_time_ms=processing_time,
+                    token_usage=token_usage_proto,
+                    metadata={
+                        'content_length': str(len(total_content)),
+                        'rag_sources': '0',  # RAG context removed
+                        'domain_type': request.context.domain_type if request.context else 'none'
+                    }
+                ),
+                timestamp=int(time.time() * 1000)
+            )
+            yield complete_response
+
+            logger.info(f"✅ Message processing completed in {processing_time}ms")
+
+        except Exception as e:
+            logger.exception(f"❌ Message processing failed: {e}")
+            
+            # Send error response
+            error_response = agent_worker_pb2.ProcessMessageResponse(
+                error=agent_worker_pb2.ProcessingError(
+                    error_code='PROCESSING_FAILED',
+                    error_message=str(e),
+                    error_details={
+                        'user_id': user_id,
+                        'organization_id': str(org_id),
+                        'processing_time_ms': str(int((time.time() - start_time) * 1000))
+                    }
+                ),
+                timestamp=int(time.time() * 1000)
+            )
+            yield error_response
+
+        finally:
+            # Cleanup: Remove message from active streams
+            if message_id in self.active_streams:
+                del self.active_streams[message_id]
+                logger.info(f"🧹 Cleaned up message {message_id} from active streams")
+
+    async def CancelMessage(
+        self,
+        request: agent_worker_pb2.CancelMessageRequest,
+        context: grpc.aio.ServicerContext
+    ) -> agent_worker_pb2.CancelMessageResponse:
+        """
+        Cancel an in-progress message processing.
+
+        Marks the message as cancelled so the streaming loop will stop gracefully.
+        """
+        message_id = request.message_id
+
+        logger.info(f"🚫 Cancellation requested for message {message_id}")
+
+        if message_id in self.active_streams:
+            # Mark as cancelled
+            self.active_streams[message_id] = True
+            logger.info(f"✅ Message {message_id} marked for cancellation")
+
+            return agent_worker_pb2.CancelMessageResponse(
+                success=True,
+                message=f"Message {message_id} cancellation requested"
+            )
+        else:
+            logger.warning(f"⚠️ Message {message_id} not found in active streams")
+
+            return agent_worker_pb2.CancelMessageResponse(
+                success=False,
+                message=f"Message {message_id} not found or already completed"
+            )
+
+    async def _get_rag_context(
+        self, 
+        query: str, 
+        domain_type: str, 
+        domain_id: int, 
+        organization_id: int,
+        threshold: float = 0.3,
+        max_docs: int = 5,
+        primary_weight: float = 0.7
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve RAG context using existing dual-context patterns.
+        
+        This should integrate with the same RAG service used by:
+        - /api/chat/stream-grpc/route.ts (DualContextRagService)
+        - Agent execution pipeline
+        
+        AIDEV-TODO: Implement using actual DualContextRagService patterns
+        """
+        
+        if not self.rag_processor:
+            logger.warning("⚠️ RAG processor not available - returning empty context")
+            return {'sources': [], 'context_summary': 'RAG not available'}
+        
+        try:
+            # This should mirror the logic in ddd/application/services/chat/dual-context-rag-service.ts
+            # For now, return mock data that matches the expected structure
+            
+            logger.info(f"🔍 RAG query: {query[:50]}... for {domain_type}:{domain_id}")
+            
+            # AIDEV-TODO: Replace with actual RAG integration
+            mock_sources = [
+                {
+                    'document_id': f'doc_{domain_type}_{domain_id}_1',
+                    'title': f'{domain_type.title()} Documentation',
+                    'similarity': 0.85,
+                    'domain_type': domain_type,
+                    'excerpt': f'Relevant information about {domain_type} operations...'
+                }
+            ]
+            
+            return {
+                'sources': mock_sources,
+                'context_summary': f'Found {len(mock_sources)} relevant {domain_type} documents',
+                'total_sources': len(mock_sources)
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ RAG context retrieval failed: {e}")
+            return {'sources': [], 'context_summary': f'RAG failed: {str(e)}'}
+
+
+    async def _stream_tool_calling_agent_response(
+        self,
+        conversation_messages: List[ChatMessage],
+        tools: List['agent_worker_pb2.ToolConfig'],
+        rag_context_data: Optional['RagContextData'],
+        domain_context: Optional['agent_worker_pb2.ChatContext'] = None,
+        org_model: Optional[str] = None,
+        has_images: bool = False
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Stream AI response using ToolCallingAgent with proper streaming support.
+        Always uses ToolCallingAgent approach whether tools are provided or not.
+
+        AIDEV-NOTE: Accepts smolagents ChatMessage objects with PIL Image support.
+        Smolagents handles conversion to HuggingFace API format internally.
+        """
+
+        try:
+            # Import here to avoid circular dependencies
+            # RagContextData imported from rag_processor (already imported)
+
+            # 1. Build system prompt using RAG processor if available
+            system_prompt = self._build_system_prompt_with_rag(rag_context_data, domain_context)
+            logger.info(f"📝 Built system prompt: {len(system_prompt)} chars")
+
+            # 2. Convert protobuf tools to smolagents tools
+            smolagents_tools = self._convert_tools_to_smolagents(tools)
+            logger.info(f"🔧 Converted {len(smolagents_tools)} tools for ToolCallingAgent")
+
+            # 3. Create ToolCallingAgent with model provider and smart model selection
+            agent = self._create_agent_with_model_provider(
+                smolagents_tools,
+                org_model=org_model,
+                has_images=has_images
+            )
+            logger.info(f"🤖 Created ToolCallingAgent with {len(smolagents_tools)} tools")
+
+            # 4. Build conversation with system message
+            # Prepend system message to conversation
+            system_message = ChatMessage(
+                role=MessageRole.SYSTEM,
+                content=system_prompt
+            )
+            all_messages = [system_message] + conversation_messages
+            logger.info(f"💬 Built conversation: {len(all_messages)} messages (including system)")
+
+            # 5. Build task with full conversation context
+            # AIDEV-NOTE: Since we create a NEW agent per request, agent.memory won't persist
+            # between requests. Instead, we include full conversation history in the task prompt.
+            last_message = conversation_messages[-1] if conversation_messages else None
+
+            # Extract images from last message (smolagents limitation - only last message images)
+            images = self._extract_images_from_message(last_message) if last_message else []
+
+            # Build task with conversation history instead of just last message
+            task_with_context = self._build_task_with_conversation_context(
+                conversation_messages,
+                system_prompt
+            )
+
+            logger.info(f"🖼️ Extracted {len(images)} images from last message")
+            logger.info(f"💬 Task with context: {len(task_with_context)} chars, {len(conversation_messages)} messages")
+
+            # 6. Execute with ToolCallingAgent with real streaming
+            logger.info("🚀 Executing ToolCallingAgent with stream=True...")
+
+            # Import smolagents step types for proper type checking
+            from smolagents.memory import ActionStep, PlanningStep, FinalAnswerStep
+            from smolagents import AgentText
+
+            step_index = 0
+            final_answer_text = ""
+
+            # Use stream=True for real-time step-by-step progress
+            # Pass images via official smolagents API (images parameter)
+            # AIDEV-NOTE: smolagents only supports images from the last message, not conversation history
+            # AIDEV-NOTE: reset=True is explicit - we manage conversation history ourselves in task prompt
+            for step in agent.run(
+                task=task_with_context,  # Task includes full conversation history
+                stream=True,
+                images=images if images else None,  # Official API for passing PIL Images
+                reset=True  # Reset agent memory since we manage history in task prompt
+            ):
+                logger.info(f"📊 Step {step_index}: {type(step).__name__}")
+
+                # Use typed extraction helpers (no hasattr checks)
+                step_data: StepProgressDict | None = None
+
+                if isinstance(step, PlanningStep):
+                    step_data = self._extract_planning_step(step, step_index)
+                    logger.info(f"🧠 Planning: {step_data['content'][:100]}...")
+
+                elif isinstance(step, ActionStep):
+                    step_data = self._extract_action_step(step, step_index)
+                    logger.info(f"🔧 Action: {step_data['step_name']}")
+
+                elif isinstance(step, (FinalAnswerStep, AgentText)):
+                    # Extract final step indicator
+                    step_data = self._extract_final_step(step_index)
+
+                    # Extract final answer text
+                    if isinstance(step, FinalAnswerStep):
+                        logger.debug(f"FinalAnswerStep attributes: {dir(step)}")
+                        final_answer_text = str(step.output)  # Fixed: use 'output' not 'answer'
+                    else:
+                        final_answer_text = str(step)
+
+                    logger.info(f"✅ Final answer: {len(final_answer_text)} chars")
+
+                    # Yield step indicator
+                    yield step_data
+
+                    # Stream final answer as content chunks
+                    async for chunk in self._stream_text_chunks(final_answer_text):
+                        yield {
+                            "type": "content_chunk",
+                            "content": chunk
+                        }
+
+                    step_index += 1
+                    continue
+
+                # Yield step progress for non-final steps
+                if step_data:
+                    logger.debug(f"Yielding step {step_index}: type={step_data['step_type']}, name={step_data['step_name']}")
+                    yield step_data
+
+                step_index += 1
+
+            # Log summary of collected steps
+            logger.info(f"✅ Completed streaming with {step_index} steps")
+
+            # Extract token usage after execution completes
+            self.last_token_usage = self._extract_token_usage_from_agent(agent)
+            if self.last_token_usage:
+                logger.info(f"💰 Token usage captured: {self.last_token_usage.total_tokens} tokens, ${self.last_token_usage.cost_usd:.6f}")
+            else:
+                logger.warning("⚠️ No token usage found in agent memory")
+
+            logger.info(f"✅ Completed streaming with {step_index} steps")
+
+        except Exception as e:
+            logger.error(f"❌ ToolCallingAgent execution failed: {e}")
+            # Yield error as content chunk
+            yield {
+                "type": "content_chunk",
+                "content": f"I apologize, but I encountered an error processing your request: {str(e)}"
+            }
+
+    def _build_system_prompt_with_rag(
+        self,
+        rag_context_data: Optional['RagContextData'],
+        domain_context: Optional['agent_worker_pb2.ChatContext']
+    ) -> str:
+        """Build system prompt with RAG context integration."""
+        if self.rag_processor and rag_context_data:
+            # RagContextData imported from rag_processor (already imported)
+
+            if isinstance(rag_context_data, RagContextData):
+                domain_context_dict = {
+                    'domain_type': domain_context.domain_type if domain_context else None,
+                    'domain_id': domain_context.domain_id if domain_context else None
+                } if domain_context else None
+
+                return self.rag_processor.format_context_for_llm(
+                    rag_context_data=rag_context_data,
+                    user_query='',  # Will be added in conversation prompt
+                    domain_context=domain_context_dict
+                )
+
+        return self._build_basic_system_prompt(domain_context)
+
+    def _convert_tools_to_smolagents(self, tools: List['agent_worker_pb2.ToolConfig']) -> List[Any]:
+        """Convert protobuf ToolConfig objects to smolagents tools."""
+        if not tools:
+            logger.info("No tools provided to convert")
+            return []
+
+        if not self.tool_registry:
+            logger.error("❌ Tool registry not available - tools cannot be loaded")
+            return []
+
+        try:
+            core_tool_configs = []
+            logger.info(f"🔧 Converting {len(tools)} tools to smolagents format...")
+
+            for tool_config in tools:
+                logger.info(f"Converting tool: {tool_config.name}")
+                logger.info(f"  Config keys: {list(tool_config.config.keys()) if tool_config.config else 'none'}")
+                logger.info(f"  Config values: {dict(tool_config.config) if tool_config.config else {}}")
+
+                # Keep original tool name - let UnifiedToolLoader handle name resolution
+                tool_name = tool_config.name
+
+                core_config = agent_worker_pb2.ToolConfig(
+                    name=tool_name,
+                    version=tool_config.version or '',
+                    config=dict(tool_config.config) if tool_config.config else {}
+                )
+                core_tool_configs.append(core_config)
+                logger.info(f"  Created ToolConfig: name={core_config.name}, config={core_config.config}")
+
+            logger.info(f"🚀 Calling tool_registry.load_tools with {len(core_tool_configs)} configs...")
+            smolagents_tools = []
+
+            for core_config in core_tool_configs:
+                try:
+                    logger.info(f"🔧 Loading individual tool: {core_config.name}")
+                    # For chat system, use user API key mode - extract API key from enriched config
+                    api_key = core_config.config.get('api_key', '')
+                    logger.info(f"  Extracted API key from config: present={bool(api_key)}")
+                    tool_instance = self.tool_registry.load_tool(core_config, api_key=api_key, api_key_mode="user")
+                    smolagents_tools.append(tool_instance)
+                    logger.info(f"✅ Successfully loaded tool: {core_config.name}")
+                except Exception as tool_error:
+                    logger.error(f"❌ Failed to load tool {core_config.name}: {tool_error}")
+                    logger.error(f"❌ Tool config was: {core_config.config}")
+                    import traceback
+                    logger.error(f"❌ Tool loading traceback: {traceback.format_exc()}")
+
+            logger.info(f"✅ Successfully converted {len(smolagents_tools)} out of {len(tools)} tools")
+            return smolagents_tools
+
+        except Exception as tool_error:
+            logger.error(f"❌ Failed to convert tools: {tool_error}")
+            import traceback
+            logger.error(f"❌ Tool conversion traceback: {traceback.format_exc()}")
+            return []
+
+    def _create_agent_with_model_provider(
+        self,
+        smolagents_tools: List[Any],
+        org_model: Optional[str] = None,
+        has_images: bool = False
+    ) -> ToolCallingAgent:
+        """
+        Create ToolCallingAgent using model provider with smart vision model selection.
+
+        If images are present and no explicit model is specified, uses vision model.
+        Otherwise uses organization model or default text model.
+        """
+        model_provider = SmolagentsModelProvider()
+
+        # Smart model selection:
+        # 1. If org_model specified: use that (explicit override)
+        # 2. If images present: use vision model
+        # 3. Otherwise: use default text model
+        if org_model:
+            logger.info(f"🔧 Using explicit organization model: {org_model}")
+            model = model_provider.get_model(model_id=org_model)
+            model_id = org_model
+        else:
+            # Use smart model selection based on content
+            model = model_provider.get_model_for_message(has_images=has_images)
+            model_id = model.model_name
+
+        logger.info(f"🤖 Creating ToolCallingAgent with model: {model_id}")
+
+        agent = ToolCallingAgent(
+            tools=smolagents_tools,  # Can be empty list
+            model=model,
+            max_steps=10,
+        )
+        agent.name = "chat_tool_calling"
+        agent.description = f"Chat agent with {len(smolagents_tools)} tools available ({model_id})"
+
+        return agent
+
+    def _extract_images_from_message(self, message: ChatMessage) -> list[Image.Image]:
+        """
+        Extract PIL Image objects from ChatMessage content.
+
+        Args:
+            message: ChatMessage object with content as MessageContentList
+
+        Returns:
+            List of PIL.Image objects (empty if no images)
+
+        AIDEV-NOTE: Used to pass images to agent.run() via the official images parameter.
+        Smolagents expects list[PIL.Image], not URLs or base64 strings.
+        Content is always MessageContentList (list of content parts).
+        """
+        if not message or not message.content:
+            return []
+
+        content: MessageContentList = message.content
+
+        # Extract all images from content parts
+        images: list[Image.Image] = []
+        for part in content:
+            if part.get("type") == "image":
+                images.append(part["image"])
+
+        return images
+
+    def _extract_text_from_message(self, message: ChatMessage) -> str:
+        """
+        Extract text content from ChatMessage.
+
+        Args:
+            message: ChatMessage object with content as MessageContentList
+
+        Returns:
+            Combined text string (empty string if no text content)
+
+        AIDEV-NOTE: Used to extract text for agent.run() task parameter.
+        Content is always MessageContentList (list of content parts).
+        """
+        if not message or not message.content:
+            return ""
+
+        content: MessageContentList = message.content
+
+        # Extract all text from content parts
+        text_parts: list[str] = []
+        for part in content:
+            if part.get("type") == "text":
+                text_parts.append(part["text"])
+
+        return " ".join(text_parts).strip()
+
+    def _build_task_with_conversation_context(
+        self,
+        conversation_messages: List[ChatMessage],
+        system_prompt: str
+    ) -> str:
+        """
+        Build task prompt with full conversation history.
+
+        Since we create a NEW agent per request, agent.memory doesn't persist
+        between requests. Instead, we include the full conversation history
+        in the task prompt itself.
+
+        Args:
+            conversation_messages: List of ChatMessage objects (user and assistant)
+            system_prompt: System prompt to include as context
+
+        Returns:
+            Formatted task string with conversation history
+
+        AIDEV-NOTE: This is the key to context persistence - we manually format
+        conversation history into the task prompt instead of relying on agent.memory
+        which doesn't persist across agent instances.
+        """
+        if not conversation_messages:
+            return "Continue the conversation"
+
+        # Build conversation history as text
+        history_parts = []
+
+        # Add system context at the beginning
+        if system_prompt:
+            history_parts.append(f"SYSTEM CONTEXT:\n{system_prompt}\n")
+
+        # Add previous conversation (all but last message)
+        if len(conversation_messages) > 1:
+            history_parts.append("CONVERSATION HISTORY:")
+            for msg in conversation_messages[:-1]:
+                role = msg.role.value.upper()
+                text = self._extract_text_from_message(msg)
+                if text:
+                    history_parts.append(f"{role}: {text}")
+
+        # Add current message as the task
+        last_message = conversation_messages[-1]
+        current_text = self._extract_text_from_message(last_message)
+
+        if history_parts:
+            # If we have history, format with clear separation
+            history_str = "\n".join(history_parts)
+            return f"{history_str}\n\nCURRENT USER MESSAGE:\n{current_text}"
+        else:
+            # First message in conversation
+            return current_text
+
+    def _extract_planning_step(self, step: PlanningStep, index: int) -> StepProgressDict:
+        """
+        Extract typed data from PlanningStep.
+
+        PlanningStep has 'plan' attribute containing the planning text.
+        No hasattr checks needed - smolagents guarantees this structure.
+        """
+        return StepProgressDict(
+            type="step_progress",
+            step_type="PLANNING",
+            step_name="Planning",
+            content=step.plan,
+            metadata=StepMetadata(),
+            step_index=index
+        )
+
+    def _extract_action_step(self, step: ActionStep, index: int) -> StepProgressDict:
+        """
+        Extract typed data from ActionStep.
+
+        ActionStep has 'tool_calls' (list of ToolCall objects) and 'observations'.
+        When tool_calls is empty/None, uses model_output for raw LLM response.
+        Uses proper type access instead of hasattr checks.
+        """
+        # Extract tool info from tool_calls
+        tool_name = "unknown"
+        tool_args = "{}"
+        step_type = "ACTION"
+        step_name = "Tool: unknown"
+        content = ""
+
+        if step.tool_calls and len(step.tool_calls) > 0:
+            # Has valid tool calls
+            tool_call = step.tool_calls[0]
+            tool_name = tool_call.name
+            tool_args = str(tool_call.arguments)
+            step_name = f"Tool: {tool_name}"
+
+            # Format observations (truncate if too long)
+            if step.observations:
+                obs = str(step.observations)
+                MAX_LENGTH = 500
+                content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
+        else:
+            # No tool calls - check for raw model output
+            logger.debug(f"ActionStep without tool_calls: model_output={'exists' if step.model_output else 'None'}")
+
+            if step.model_output:
+                # Use model's raw output as reasoning step
+                step_type = "REASONING"
+                step_name = "Model Reasoning (No Tool Call)"
+                raw_output = str(step.model_output)
+                MAX_LENGTH = 500
+                content = raw_output[:MAX_LENGTH] + "..." if len(raw_output) > MAX_LENGTH else raw_output
+            else:
+                # Fallback: use observations if available
+                step_name = "Agent Step"
+                if step.observations:
+                    obs = str(step.observations)
+                    MAX_LENGTH = 500
+                    content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
+
+        # Build metadata dict with only non-None string values (protobuf requires map<string, string>)
+        metadata_dict: Dict[str, str] = {}
+        if tool_name != "unknown":
+            metadata_dict["tool"] = tool_name
+        if tool_args != "{}":
+            metadata_dict["arguments"] = tool_args
+        if content:
+            metadata_dict["observations"] = content
+
+        return StepProgressDict(
+            type="step_progress",
+            step_type=step_type,
+            step_name=step_name,
+            content=content,
+            metadata=metadata_dict,
+            step_index=index
+        )
+
+    def _extract_final_step(self, index: int) -> StepProgressDict:
+        """
+        Extract typed data for final step.
+
+        Final step is just a marker indicating response generation.
+        """
+        return StepProgressDict(
+            type="step_progress",
+            step_type="FINAL",
+            step_name="Final Answer",
+            content="Generating final response...",
+            metadata=StepMetadata(),
+            step_index=index
+        )
+
+    async def _stream_text_chunks(self, text: str, chunk_size: int = 5) -> AsyncIterator[str]:
+        """Stream text by word chunks to simulate streaming."""
+        words = text.split()
+        for i in range(0, len(words), chunk_size):
+            chunk = ' '.join(words[i:i + chunk_size]) + ' '
+            yield chunk
+            await asyncio.sleep(0.05)  # Small delay for realistic streaming feel
+
+    def _build_basic_system_prompt(self, domain_context: Optional[Any] = None) -> str:
+        """Build basic system prompt without RAG context."""
+        
+        base_prompt = 'You are an AI assistant for Emery, a dynamic database and workflow platform. You help users understand their organizational data, create workflows, and manage their systems.'
+        
+        if domain_context and hasattr(domain_context, 'domain_type'):
+            domain_type = domain_context.domain_type
+            if domain_type == 'table':
+                base_prompt += ' You are currently assisting with a specific table and its data.'
+            elif domain_type == 'agent':
+                base_prompt += ' You are currently assisting with a specific agent.'
+            elif domain_type == 'file':
+                base_prompt += ' You are currently assisting with a specific file.'
+        
+        base_prompt += ' Always be helpful, accurate, and professional.'
+        return base_prompt
+
+    def _build_rag_context_proto_from_data(self, rag_context_data) -> agent_worker_pb2.RagContext:
+        """Build RagContext protobuf from RagContextData."""
+        
+        # Create mock sources for the protobuf response
+        sources = []
+        for i, source_summary in enumerate(rag_context_data.sources[:5]):  # Limit to 5 sources
+            proto_source = agent_worker_pb2.RagSource(
+                document_id=f'source_{i}',
+                title=f'Source {i+1}',
+                similarity=0.8,  # Mock similarity
+                domain_type=rag_context_data.domain_type or 'organization',
+                excerpt=source_summary[:100] + '...' if len(source_summary) > 100 else source_summary
+            )
+            sources.append(proto_source)
+        
+        return agent_worker_pb2.RagContext(
+            sources=sources,
+            context_summary=f'Found {len(rag_context_data.sources)} relevant sources from {rag_context_data.domain_type or "organization"} data',
+            total_sources=len(rag_context_data.sources)
+        )
+
+    def _convert_token_usage_to_proto(self, token_usage) -> Optional[agent_worker_pb2.TokenUsage]:
+        """Convert token usage object to protobuf TokenUsage message."""
+        if not token_usage:
+            return None
+
+        return agent_worker_pb2.TokenUsage(
+            model_name=getattr(token_usage, 'model_name', ''),
+            input_tokens=getattr(token_usage, 'input_tokens', 0),
+            output_tokens=getattr(token_usage, 'output_tokens', 0),
+            total_tokens=getattr(token_usage, 'total_tokens', 0),
+            cost_usd=getattr(token_usage, 'cost_usd', 0.0)
+        )
+
+    def _extract_token_usage_from_agent(self, agent) -> Optional[Any]:
+        """Extract accumulated token usage from agent's memory steps."""
+        try:
+            # Use agent.memory.steps instead of deprecated agent.logs
+            if not hasattr(agent, 'memory') or not agent.memory.steps:
+                logger.warning("No memory steps found in agent")
+                return None
+
+            logger.info(f"📊 Agent has {len(agent.memory.steps)} memory steps")
+
+            # Import step types from smolagents
+            from smolagents.memory import ActionStep, PlanningStep
+
+            # Aggregate token usage from all steps
+            total_input = 0
+            total_output = 0
+            model_name = ""
+
+            for i, step in enumerate(agent.memory.steps):
+                # Only ActionStep and PlanningStep have token_usage
+                if isinstance(step, (ActionStep, PlanningStep)):
+                    if step.token_usage:
+                        total_input += step.token_usage.input_tokens
+                        total_output += step.token_usage.output_tokens
+                        if not model_name:
+                            model_name = getattr(step.token_usage, 'model_name', '')
+                        logger.info(f"✅ Step {i} ({type(step).__name__}): input={step.token_usage.input_tokens}, output={step.token_usage.output_tokens}")
+                    else:
+                        logger.info(f"⚠️ Step {i} ({type(step).__name__}) has no token usage")
+                else:
+                    logger.info(f"ℹ️ Step {i}: {type(step).__name__} (no token tracking)")
+
+            if total_input == 0 and total_output == 0:
+                logger.warning(f"⚠️ Total token usage is zero after checking {len(agent.memory.steps)} steps")
+                return None
+
+            # Import TokenUsage from model_provider
+            from ..services.model_provider import TokenUsage, calculate_token_cost
+
+            # Calculate cost using model registry
+            cost = calculate_token_cost(model_name or self._get_model_name(), total_input, total_output)
+
+            return TokenUsage(
+                input_tokens=total_input,
+                output_tokens=total_output,
+                total_tokens=total_input + total_output,
+                cost_usd=cost,
+                model_name=model_name or self._get_model_name()
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to extract token usage from agent logs: {e}")
+            return None
+
+    def _build_system_prompt(
+        self, 
+        rag_context: Optional[Dict[str, Any]], 
+        domain_context: Optional[Any]
+    ) -> str:
+        """Build system prompt with RAG context, matching existing chat API patterns."""
+        
+        base_prompt = 'You are an AI assistant for Emery, a dynamic database and workflow platform. You help users understand their organizational data, create workflows, and manage their systems.'
+        
+        # Add domain-specific context
+        if domain_context:
+            domain_type = domain_context.domain_type
+            if domain_type == 'table':
+                base_prompt += ' You are currently assisting with a specific table and its data. Focus on table structure, data analysis, and table-specific operations.'
+            elif domain_type == 'agent':
+                base_prompt += ' You are currently assisting with a specific agent. Focus on agent capabilities, execution history, and configuration.'
+            elif domain_type == 'file':
+                base_prompt += ' You are currently assisting with a specific file. Focus on file content, analysis, and document-related tasks.'
+            elif domain_type == 'team':
+                base_prompt += ' You are currently assisting with a specific team. Focus on team dynamics, member coordination, and collaborative activities.'
+            elif domain_type == 'workflow':
+                base_prompt += ' You are currently assisting with a specific workflow. Focus on process optimization, execution analysis, and workflow management.'
+        
+        # Add RAG context if available
+        if rag_context and rag_context.get('sources'):
+            base_prompt += f"""
+
+You have access to relevant context information:
+
+{rag_context['context_summary']}
+
+Use this context to provide accurate, specific answers. When referencing information from the context, cite the specific sources."""
+        else:
+            base_prompt += ' No specific context is available. Provide general guidance about database management and workflows.'
+        
+        base_prompt += '\n\nAlways be helpful, accurate, and professional.'
+        
+        return base_prompt
+
+    def _get_model_name(self) -> str:
+        """Get the AI model name being used (should match existing setup)."""
+        # This should match the model used in lib/ai/models.ts
+        return 'Qwen/Qwen2.5-Coder-7B-Instruct'
+
+    def _convert_to_rag_context_proto(self, rag_data: Dict[str, Any]) -> agent_worker_pb2.RagContext:
+        """Convert RAG context data to protobuf format."""
+        
+        sources = []
+        for source in rag_data.get('sources', []):
+            proto_source = agent_worker_pb2.RagSource(
+                document_id=source.get('document_id', ''),
+                title=source.get('title', ''),
+                similarity=source.get('similarity', 0.0),
+                domain_type=source.get('domain_type', ''),
+                excerpt=source.get('excerpt', '')
+            )
+            sources.append(proto_source)
+        
+        return agent_worker_pb2.RagContext(
+            sources=sources,
+            context_summary=rag_data.get('context_summary', ''),
+            total_sources=rag_data.get('total_sources', len(sources))
+        )

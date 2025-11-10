@@ -7,6 +7,9 @@ elif [ "$1" = "migrate" ]; then
   # Run database migrations with AWS Secrets Manager support
   echo "Running database migrations..."
   exec npx tsx src/scripts/migrate.ts
+elif [ "$1" = "dev" ]; then
+  # AIDEV-NOTE: Run in development mode with hot reloading
+  exec pnpm dev
 else
   # AIDEV-NOTE: Use regular Next.js start command
   exec pnpm start

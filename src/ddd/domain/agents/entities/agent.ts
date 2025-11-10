@@ -3,6 +3,7 @@
 // Uses DDD Value Objects for type-safe identity management
 
 import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import {
   AgentId,
@@ -11,65 +12,99 @@ import {
   AgentStatus,
   ApiKey
 } from '@/ddd/domain/shared/value-objects';
-
-
-// Agent specialization types for organizational analysis
-export type AgentType = 
-  | 'general'              // Default multipurpose agent
-  | 'data-collector'       // Collects raw data from sources
-  | 'kpi-calculator'       // Calculates KPIs from raw data
-  | 'process-analyst'      // Analyzes processes and workflows
-  | 'reporter'             // Generates reports and insights  
-  | 'coordinator'          // Coordinates between other agents
-  | 'monitor';             // Real-time monitoring and alerting
-
-// Agent specialization configuration
-export interface AgentSpecialization {
-  measurementCategories?: string[]; // Which categories this agent handles
-  calculationTypes?: string[];      // Which KPIs this agent can calculate
-  analysisCapabilities?: string[];  // What analysis this agent can perform
-  domainExpertise?: string[];       // Areas of domain knowledge
-}
+import type { AvatarConfig } from '@/lib/avatars';
 
 // Domain-specific configuration types for Agent
 
-export interface ServerConfig {
-  name: string;
-  endpoint?: string;
-  config?: Record<string, any>;
+/**
+ * Task instructions that define WHAT a schedule should do when triggered
+ *
+ * AIDEV-NOTE: Aligned with smolagents API format (2025-01)
+ * - task: Main instruction text → agent.run(task=...)
+ * - images: Image URLs for vision models
+ * - attachments: File metadata (preprocessed to text)
+ */
+export interface TaskInstructions {
+  task: string;                     // Main instruction text (required)
+  images?: Array<{ url: string; s3Key?: string }>;       // Image attachments
+  attachments?: Array<{                                  // File attachments (preprocessed)
+    type: 'pdf' | 'audio' | 'document' | 'text';
+    url: string;
+    filename: string;
+    mimeType: string;
+    preprocessed: true;              // Flag indicating text already extracted
+  }>;
+  tools?: ToolConfig[];             // Tools to use for this specific task
+  metadata?: Record<string, any>;   // Additional task metadata
 }
 
-export interface StepConfig {
-  type: 'CODE_STEP' | 'TOOL_STEP';
-  instructions: string;
-  model?: string; // Per-step model specification
-  tools?: ToolConfig[];
-  servers?: ServerConfig[];
+/**
+ * Complete schedule configuration
+ * Combines trigger (WHEN) with task instructions (WHAT)
+ */
+export interface ScheduleConfiguration {
+  trigger: TriggerConfig;          // WHEN to execute
+  taskInstructions: TaskInstructions; // WHAT to execute
+  enabled: boolean;
+  name?: string;                   // Descriptive name (e.g., "Daily Sales Report")
+  description?: string;            // Optional description
 }
 
-export interface CapabilityConfig {
-  name: string;
-  description: string;
-  steps: StepConfig[];
+/**
+ * JSON representation of ScheduleConfiguration for database persistence
+ * Plain JSON structure with all Value Objects converted to primitives
+ */
+export interface ScheduleConfigurationJSON {
+  trigger: {
+    type: string;
+    enabled: boolean;
+    description?: string;
+    // Calendar trigger fields
+    rrule?: string;
+    timezone?: string;
+    startDate?: string;
+    endDate?: string;
+    // Database event trigger fields
+    operations?: string[];
+    tableId?: string;
+    conditions?: Record<string, any>;
+    // Webhook trigger fields
+    webhookSecret?: string;
+    allowedOrigins?: string[];
+    requiresSignature?: boolean;
+  };
+  taskInstructions: {
+    task: string;
+    images?: Array<{ url: string; s3Key?: string }>;
+    attachments?: Array<{
+      type: 'pdf' | 'audio' | 'document' | 'text';
+      url: string;
+      filename: string;
+      mimeType: string;
+      preprocessed: true;
+    }>;
+    tools?: Array<{ name: string; config: Record<string, any> }>;
+    metadata?: Record<string, any>;
+  };
+  enabled: boolean;
+  name?: string;
+  description?: string;
 }
 
 export interface Agent {
-  id: AgentId;                             // DDD Value Object for type safety
+  id: AgentId;                                // DDD Value Object for type safety
   name: string;
-  role: string;                            // required with default 'assistant'
-  description: string;                     // required with default ''  
-  persona: string;                         // required with default ''
-  tools: ToolConfig[];                     // required with default []
-  servers: ServerConfig[];                 // required with default []
-  trigger?: TriggerConfig;              // optional trigger configuration
-  capabilities: CapabilityConfig[];        // required with default []
-  databaseId?: string | null;              // optional - can be null
-  status: AgentStatus;                     // required with default 'active'
-  organizationId: OrganizationId;          // DDD Value Object for type safety
-  ownerId: UserId;                         // DDD Value Object for type safety
-  apiKey?: ApiKey | null;                  // optional - generated by repository
-  agentType?: AgentType;                   // optional - defaults to 'general'
-  specialization?: AgentSpecialization;    // optional - specialization configuration
+  role: string;                               // required with default 'assistant'
+  description: string;                        // required with default ''
+  persona: string;                            // required with default ''
+  schedules: ScheduleConfiguration[];         // array of schedule configurations with task instructions (0 to many)
+  databaseId?: string | null;                 // optional - can be null
+  status: AgentStatus;                        // required with default 'active'
+  organizationId: OrganizationId;             // DDD Value Object for type safety
+  ownerId: UserId;                            // DDD Value Object for type safety - used for OAuth resolution via proxy
+  apiKey?: ApiKey | null;                     // optional - generated by repository
+  defaultModel?: string | null;               // AI model override for this agent
+  avatarConfig?: AvatarConfig | null;         // Avatar configuration with icon + color (versioned JSON)
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -81,17 +116,14 @@ export interface AgentPersistenceRecord {
   role: string;
   description: string;
   persona: string;
-  tools: any;
-  servers: any;
-  trigger?: any;
-  capabilities: any;
+  schedules: ScheduleConfigurationJSON[];
   databaseId?: string | null;
   status: string;
   organizationId: number;
   ownerId: string;
   apiKey?: string | null;
-  agentType?: string;
-  specialization?: any;
+  defaultModel?: string | null;
+  avatarConfig?: AvatarConfig | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -105,19 +137,28 @@ export class AgentFactory {
       role: record.role,
       description: record.description,
       persona: record.persona,
-      tools: (record.tools || []).map((tool: any) =>
-        tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
-      ),
-      servers: record.servers || [],
-      trigger: record.trigger,
-      capabilities: record.capabilities || [],
+      schedules: (record.schedules || []).map((s: any) => ({
+        trigger: TriggerConfigFromJSON(s.trigger),
+        taskInstructions: {
+          task: s.taskInstructions.task || s.taskInstructions.instructions || '', // Support both old and new format
+          images: s.taskInstructions.images || [],
+          attachments: s.taskInstructions.attachments || [],
+          tools: (s.taskInstructions.tools || []).map((t: any) =>
+            t instanceof ToolConfig ? t : ToolConfig.fromPlain(t)
+          ),
+          metadata: s.taskInstructions.metadata
+        },
+        enabled: s.enabled !== false,
+        name: s.name,
+        description: s.description
+      })),
       databaseId: record.databaseId,
       status: AgentStatus.fromString(record.status),
       organizationId: OrganizationId.fromNumber(record.organizationId),
       ownerId: UserId.fromString(record.ownerId),
       apiKey: record.apiKey ? ApiKey.fromString(record.apiKey) : null,
-      agentType: record.agentType as AgentType | undefined,
-      specialization: record.specialization,
+      defaultModel: record.defaultModel || null,
+      avatarConfig: record.avatarConfig || null,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     };
@@ -130,17 +171,26 @@ export class AgentFactory {
       role: agent.role,
       description: agent.description,
       persona: agent.persona,
-      tools: agent.tools.map(tool => tool.toPlain()),
-      servers: agent.servers,
-      trigger: agent.trigger,
-      capabilities: agent.capabilities,
+      schedules: agent.schedules.map(schedule => ({
+        trigger: schedule.trigger.toJSON() as ScheduleConfigurationJSON['trigger'],
+        taskInstructions: {
+          task: schedule.taskInstructions.task,
+          images: schedule.taskInstructions.images,
+          attachments: schedule.taskInstructions.attachments,
+          tools: (schedule.taskInstructions.tools || []).map(t => t.toPlain()),
+          metadata: schedule.taskInstructions.metadata
+        },
+        enabled: schedule.enabled,
+        name: schedule.name,
+        description: schedule.description
+      })),
       databaseId: agent.databaseId,
       status: agent.status.value,
       organizationId: agent.organizationId.value,
       ownerId: agent.ownerId.value,
       apiKey: agent.apiKey?.value || null,
-      agentType: agent.agentType,
-      specialization: agent.specialization,
+      defaultModel: agent.defaultModel || null,
+      avatarConfig: agent.avatarConfig || null,
       createdAt: agent.createdAt,
       updatedAt: agent.updatedAt
     };
@@ -149,19 +199,15 @@ export class AgentFactory {
 
 export interface CreateAgentData {
   name: string;
-  role?: string;                           // defaults to 'assistant'
-  description?: string;                    // defaults to ''
-  persona?: string;                        // defaults to ''
-  tools?: ToolConfig[];                    // defaults to []
-  servers?: ServerConfig[];                // defaults to []
-  trigger?: TriggerConfig;             // optional trigger configuration
-  capabilities?: CapabilityConfig[];       // defaults to []
+  role?: string;                              // defaults to 'assistant'
+  description?: string;                       // defaults to ''
+  persona?: string;                           // defaults to ''
+  schedules?: ScheduleConfiguration[];        // array of schedules with task instructions (defaults to [])
   databaseId?: string;
-  status?: AgentStatus;                    // defaults to 'active'
-  organizationId?: OrganizationId;         // Set by application layer from session
-  ownerId?: UserId;                        // Set by application layer from session
-  agentType?: AgentType;                   // defaults to 'general'
-  specialization?: AgentSpecialization;    // optional specialization
+  status?: AgentStatus;                       // defaults to 'active'
+  organizationId?: OrganizationId;            // Set by application layer from session
+  ownerId?: UserId;                           // Set by application layer from session - used for OAuth resolution
+  avatarConfig?: AvatarConfig | null;         // Avatar configuration with icon + color (versioned JSON)
 }
 
 export interface UpdateAgentData {
@@ -170,16 +216,12 @@ export interface UpdateAgentData {
   description?: string;
   persona?: string;
   ownerId?: UserId;
-  tools?: ToolConfig[];
-  servers?: ServerConfig[];
-  trigger?: TriggerConfig;
-  capabilities?: CapabilityConfig[];
+  schedules?: ScheduleConfiguration[];  // Schedules with task instructions
   databaseId?: string;
   status?: AgentStatus;
-  agentType?: AgentType;
-  specialization?: AgentSpecialization;
+  apiKey?: string;  // API key updates for regeneration
+  avatarConfig?: AvatarConfig | null;  // Avatar configuration with icon + color (versioned JSON)
   // Note: organizationId typically not changed after creation
-  // apiKey updates handled through separate methods for security
 }
 
 // AIDEV-NOTE: Agent status constants moved to Value Object
@@ -205,18 +247,16 @@ export const getAgentDisplayName = (agent: Agent): string => {
   return agent.role !== 'assistant' ? `${agent.name} (${agent.role})` : agent.name;
 };
 
-export const getCapabilitiesCount = (agent: Agent): number => {
-  return agent.capabilities?.length || 0;
+export const getSchedulesCount = (agent: Agent): number => {
+  return agent.schedules?.length || 0;
 };
 
 // Default values for agent creation - ensures all required fields have defaults
-export const createAgentDefaults = (data: CreateAgentData): Omit<CreateAgentData, 'organizationId' | 'ownerId'> & { 
+export const createAgentDefaults = (data: CreateAgentData): Omit<CreateAgentData, 'organizationId' | 'ownerId'> & {
   role: string;
   description: string;
   persona: string;
-  tools: ToolConfig[];
-  servers: ServerConfig[];
-  capabilities: CapabilityConfig[];
+  schedules: ScheduleConfiguration[];
   status: AgentStatus;
   organizationId?: OrganizationId;
   ownerId?: UserId;
@@ -224,21 +264,16 @@ export const createAgentDefaults = (data: CreateAgentData): Omit<CreateAgentData
   const role: string = data.role || AGENT_ROLES.ASSISTANT;
   const description: string = data.description || '';
   const persona: string = data.persona || '';
-  
+
   return {
     name: data.name,
     role,
     description,
     persona,
-    agentType: data.agentType || 'general',
-    specialization: data.specialization || {},
-    tools: data.tools || [],
-    servers: data.servers || [],
-    trigger: data.trigger,
-    capabilities: data.capabilities || [],
+    schedules: data.schedules || [],
     status: data.status || AgentStatus.active(),
     organizationId: data.organizationId, // Should be provided by application layer
-    ownerId: data.ownerId, // Should be provided by application layer  
+    ownerId: data.ownerId, // Should be provided by application layer - used for OAuth resolution
     databaseId: data.databaseId,
   };
 };

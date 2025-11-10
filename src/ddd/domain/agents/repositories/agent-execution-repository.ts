@@ -16,6 +16,8 @@ export interface AgentExecutionRequest {
   executionId: string;
   organizationId?: number;
   ownerId?: string;
+  agentModel?: string; // Optional - agent's default model (overrides org model)
+  organizationModel?: string; // Optional - organization's default model
   timeoutSeconds?: number;
   onProgress?: (logMessage: string) => void; // Callback for real-time log messages
 }

@@ -2,6 +2,7 @@
 
 import { useForm } from '@tanstack/react-form'
 import React, { useState } from "react"
+import { useRouter } from 'next/navigation'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createTable } from "@/app/actions/tables"
 import { useEmery } from "@/contexts/EmeryStoreProvider"
+import { appStateActions } from "@/stores/app-state.store"
 
 interface CreateTableDialogProps {
   isOpen: boolean
@@ -20,6 +22,7 @@ interface CreateTableDialogProps {
 
 export function CreateTableDialog({ isOpen, onClose, onTableCreated, selectedDatabaseId }: CreateTableDialogProps) {
   const { data } = useEmery()
+  const router = useRouter()
   const [error, setError] = useState("")
 
   const form = useForm({
@@ -38,10 +41,22 @@ export function CreateTableDialog({ isOpen, onClose, onTableCreated, selectedDat
           description: value.description.trim() || undefined
         })
         
-        if (result.success) {
+        if (result.success && result.data) {
+          // AIDEV-NOTE: Add table optimistically to store before navigation
+          // This prevents the race condition where URL changes but table isn't in cache yet
+          appStateActions.addTable(result.data)
+
+          // Navigate to the new table page
+          router.push(`/data/${result.data.id}`)
+
+          // Reset form and close dialog
           form.reset()
-          onTableCreated()
           onClose()
+
+          // AIDEV-NOTE: Trigger refetch after navigation completes
+          // The 100ms delay ensures navigation finishes and component tree stabilizes
+          // before refetching, allowing store updates to propagate to the new route
+          setTimeout(() => onTableCreated(), 100)
         } else {
           setError(result.error || "Failed to create table")
         }

@@ -4,8 +4,9 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
-import type { CreateTaskRequest } from '@/ddd/application/services/agents/agent-task-application-service';
-import { AgentId, UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
+import { getTokenUsageRepository, getOrganizationRepository } from '@/ddd/application/di/getters';
+import type { CreateTaskDTO } from '@/app/dtos/task.dto';
 
 /**
  * Get tasks list using AgentTaskApplicationService
@@ -18,14 +19,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
     }
 
-    // Use AgentTaskApplicationService for task listing (RLS policies handle isolation automatically)
+    // Use AgentTaskApplicationService for task listing (service returns DTOs)
     const agentTaskApplicationService = getAgentTaskApplicationService();
     const organizationId = authResult.user.organizationId || 1;
-    const allTasks = await agentTaskApplicationService.getTasksForOrganization(organizationId);
+    const tasks = await agentTaskApplicationService.getTasksForOrganization(organizationId);
 
     return NextResponse.json({
       success: true,
-      tasks: allTasks,
+      tasks,
     });
 
   } catch (error) {
@@ -46,33 +47,64 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { agentId, name, capabilityName, instructions } = body;
+    const { agentId, name, instructions } = body;
 
     // Validate required fields
-    if (!agentId || !name || !capabilityName) {
+    if (!agentId || !name || !instructions) {
       return NextResponse.json({
         success: false,
-        error: 'Missing required fields: agentId, name, capabilityName'
+        error: 'Missing required fields: agentId, name, instructions'
       }, { status: 400 });
     }
 
-    // Use AgentTaskApplicationService for task creation (RLS policies handle isolation automatically)
+    // Check token quota before creating task
+    const organizationId = authResult.user.organizationId!;
+    const tokenUsageRepo = getTokenUsageRepository();
+    const orgRepo = getOrganizationRepository();
+    const tokenUsageService = new TokenUsageApplicationService(tokenUsageRepo, orgRepo);
+    const quotaCheck = await tokenUsageService.checkQuota(organizationId);
+
+    if (quotaCheck.quotaExceeded) {
+      return NextResponse.json({
+        success: false,
+        error: 'Monthly token quota exceeded',
+        message: 'Your organization has exceeded its monthly token quota. Please upgrade your plan or wait until the quota resets.',
+        currentUsage: quotaCheck.currentUsage,
+        monthlyQuota: quotaCheck.monthlyQuota,
+        percentageUsed: quotaCheck.percentageUsed
+      }, {
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': quotaCheck.monthlyQuota?.toString() || 'unlimited',
+          'X-RateLimit-Remaining': Math.max(0, (quotaCheck.monthlyQuota || 0) - quotaCheck.currentUsage).toString(),
+          'X-RateLimit-Reset': new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        }
+      });
+    }
+
+    // Use AgentTaskApplicationService for task creation (service accepts primitives)
     const agentTaskApplicationService = getAgentTaskApplicationService();
 
-    const command: CreateTaskRequest = {
-      agentId: AgentId.fromNumber(parseInt(agentId)),
+    const dto: CreateTaskDTO = {
+      agentId: parseInt(agentId),
       name,
-      capabilityName,
       instructions: instructions || {},
-      organizationId: OrganizationId.fromNumber(authResult.user.organizationId!),
-      createdBy: UserId.fromString(authResult.user.id)
+      organizationId: authResult.user.organizationId!,
+      createdBy: authResult.user.id
     };
 
-    const task = await agentTaskApplicationService.createTask(command);
-    
+    const result = await agentTaskApplicationService.createTask(dto);
+
+    if (!result.success) {
+      return NextResponse.json({
+        success: false,
+        error: result.error
+      }, { status: 400 });
+    }
+
     return NextResponse.json({
       success: true,
-      task
+      task: result.data
     }, { status: 201 });
 
   } catch (error) {

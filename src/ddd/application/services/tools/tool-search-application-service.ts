@@ -9,7 +9,10 @@
  * Now searches both reference data AND hardcoded tools for @ mentions.
  */
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+
+const logger = createDebugLogger('ToolSearch');
 import { Reference } from '@/ddd/domain/chat/value-objects/reference';
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool';
@@ -28,9 +31,10 @@ export interface SearchReferencesOptions {
   query: string;
   categories?: ReferenceCategory[];
   toolCategories?: ToolCategory[]; // Use existing ToolCategory enum for filtering
-  appId?: string; // Simple string for app filtering
+  appIds?: string[]; // Multi-select app filtering
   connectedOnly?: boolean; // Only show tools with active connections
   requiresConnection?: boolean; // Only show tools that require connections
+  showReferenceTools?: boolean; // Include reference tools (agents, tables, databases) in results (default: true)
   limit?: number;
   offset?: number;
   organizationId: OrganizationId;
@@ -69,18 +73,41 @@ export class ToolSearchApplicationService {
    * This is the new recommended method for tool search
    */
   async searchAllTools(options: SearchReferencesOptions): Promise<SearchToolsResult> {
-    const { query, categories, toolCategories, appId, connectedOnly, requiresConnection, limit = 20, offset = 0, organizationId, userId } = options;
+    const { query, categories, toolCategories, appIds, connectedOnly, requiresConnection, showReferenceTools = true, limit = 20, offset = 0, organizationId, userId } = options;
 
-    console.log(`[ToolSearchService] Searching for query: "${query}", categories:`, categories, 'toolCategories:', toolCategories, 'appId:', appId, 'connectedOnly:', connectedOnly, 'requiresConnection:', requiresConnection);
+    logger.debug('Searching tools', {
+      query,
+      categories: categories?.join(', '),
+      toolCategories: toolCategories?.join(', '),
+      appIds: appIds?.join(', '),
+      connectedOnly,
+      requiresConnection,
+      showReferenceTools
+    });
+
+    // Only search system tools when NO reference category filter is active
+    // Reference categories (documents, files, agents, tables, databases) are mutually exclusive with system tools
+    const shouldSearchSystemTools = !categories || categories.length === 0;
+
+    logger.debug(`Should search system tools: ${shouldSearchSystemTools} (categories: ${categories?.length || 0})`);
+    logger.debug(`Should search reference tools: ${showReferenceTools}`);
 
     // Search both reference tools and system tools in parallel
     // Get ALL results first, then apply unified pagination
+    const systemToolsPromise = shouldSearchSystemTools
+      ? this.searchSystemTools(query, toolCategories, appIds, connectedOnly, requiresConnection, 1000, organizationId, userId)
+      : Promise.resolve([]);
+
+    const referenceToolsPromise = showReferenceTools
+      ? this.searchOnlyReferenceTools({ ...options, limit: 1000, offset: 0 })
+      : Promise.resolve({ referenceTools: [], hasMore: false, totalCount: 0 });
+
     const [referenceToolsResult, systemTools] = await Promise.all([
-      this.searchOnlyReferenceTools({ ...options, limit: 1000, offset: 0 }),
-      this.searchSystemTools(query, toolCategories, appId, connectedOnly, requiresConnection, 1000, organizationId, userId)
+      referenceToolsPromise,
+      systemToolsPromise
     ]);
 
-    console.log(`[ToolSearchService] Found ${referenceToolsResult.referenceTools.length} reference tools, ${systemTools.length} system tools`);
+    logger.debug(`Found ${referenceToolsResult.referenceTools.length} reference tools, ${systemTools.length} system tools`);
 
     // Sort by relevance
     const sortedReferenceTools = this.sortReferenceToolsByRelevance(referenceToolsResult.referenceTools, query);
@@ -155,22 +182,30 @@ export class ToolSearchApplicationService {
   private async searchSystemTools(
     query: string,
     toolCategories: ToolCategory[] | undefined,
-    appId: string | undefined,
+    appIds: string[] | undefined,
     connectedOnly: boolean | undefined,
     requiresConnection: boolean | undefined,
     limit: number = 20,
     organizationId?: OrganizationId,
     userId?: UserId
   ): Promise<Tool[]> {
-    console.log(`[ToolSearchService] === STARTING SYSTEM TOOLS SEARCH ===`);
-    console.log(`[ToolSearchService] Query: "${query}"`);
-    console.log(`[ToolSearchService] ToolCategories:`, toolCategories);
-    console.log(`[ToolSearchService] AppId:`, appId);
-    console.log(`[ToolSearchService] ConnectedOnly:`, connectedOnly);
-    console.log(`[ToolSearchService] RequiresConnection:`, requiresConnection);
-    console.log(`[ToolSearchService] Tool registry service:`, !!this.toolRegistryService);
+    logger.debug(`=== STARTING SYSTEM TOOLS SEARCH ===`);
+    logger.debug(`Query: "${query}"`);
+    logger.debug(`ToolCategories:`, toolCategories);
+    logger.debug(`AppIds:`, appIds);
+    logger.debug(`ConnectedOnly:`, connectedOnly);
+    logger.debug(`RequiresConnection:`, requiresConnection);
+    logger.debug(`Tool registry service:`, !!this.toolRegistryService);
 
     try {
+      // AIDEV-NOTE: For now, use first appId if provided (database registry supports single app filter)
+      // Future enhancement: update database-tool-registry to support multi-app OR filtering
+      const appId = appIds?.[0];
+
+      if (appIds && appIds.length > 0) {
+        logger.debug(`[ToolSearch] Using first appId from array: "${appId}" (total: ${appIds.length})`);
+      }
+
       // Use the tool registry service with enhanced filtering options
       const toolDiscoveryOptions = {
         searchQuery: query,
@@ -183,23 +218,23 @@ export class ToolSearchApplicationService {
         limit
       };
 
-      console.log(`[ToolSearchService] Calling toolRegistryService.discoverTools with options:`, toolDiscoveryOptions);
+      logger.debug(`Calling toolRegistryService.discoverTools with options:`, toolDiscoveryOptions);
       const discoveryResult = await this.toolRegistryService.discoverTools(toolDiscoveryOptions);
-      console.log(`[ToolSearchService] Found ${discoveryResult.tools.length} tool metadata entries`);
+      logger.debug(`Found ${discoveryResult.tools.length} tool metadata entries`);
 
       // Convert ToolMetadata to Tool instances
       const tools = discoveryResult.tools.map((metadata, index) => {
-        console.log(`[ToolSearchService] Creating tool ${index + 1}:`, metadata.name);
+        logger.debug(`Creating tool ${index + 1}:`, metadata.name);
         return this.toolRegistryService.createTool(metadata);
       });
 
-      console.log(`[ToolSearchService] Created ${tools.length} system tools`);
-      console.log(`[ToolSearchService] === SYSTEM TOOLS SEARCH COMPLETE ===`);
+      logger.debug(`Created ${tools.length} system tools`);
+      logger.debug(`=== SYSTEM TOOLS SEARCH COMPLETE ===`);
 
       return tools;
     } catch (error) {
-      console.error(`[ToolSearchService] === SYSTEM TOOLS SEARCH FAILED ===`);
-      console.error(`[ToolSearchService] Error searching system tools:`, error);
+      logger.error(`=== SYSTEM TOOLS SEARCH FAILED ===`);
+      logger.error(`Error searching system tools:`, error);
       return [];
     }
   }
@@ -251,7 +286,7 @@ export class ToolSearchApplicationService {
           return [];
       }
     } catch (error) {
-      console.error(`Error searching ${category} tools (handler: ${toolResolverService.getCategorySearchHandler(category)}):`, error);
+      logger.error(`Error searching ${category} tools (handler: ${toolResolverService.getCategorySearchHandler(category)}):`, error);
       return [];
     }
   }
@@ -266,20 +301,30 @@ export class ToolSearchApplicationService {
     limit: number,
     offset: number
   ): Promise<ReferenceTool[]> {
-    const agents = await this.agentApplicationService.getAgents({
-      organizationId,
-      searchQuery: searchText,
+    // Get all agents for the organization
+    const allAgents = await this.agentApplicationService.getAgents({
+      organizationId: organizationId.value,
+      searchQuery: undefined, // Get all agents, we'll filter manually
       status: 'active'
     });
 
-    // Apply pagination manually since AgentApplicationService doesn't support offset
-    const paginatedAgents = agents.slice(offset, offset + limit);
+    // Filter by searchText if provided
+    const filteredAgents = !searchText
+      ? allAgents
+      : allAgents.filter(agent =>
+          agent.name.toLowerCase().includes(searchText.toLowerCase()) ||
+          agent.role?.toLowerCase().includes(searchText.toLowerCase()) ||
+          agent.description?.toLowerCase().includes(searchText.toLowerCase())
+        );
+
+    // Apply pagination
+    const paginatedAgents = filteredAgents.slice(offset, offset + limit);
 
     return paginatedAgents.map(agent => {
       return ReferenceTool.fromAgent(
-        agent.id.value,
+        agent.id,
         organizationId.value,
-        agent.ownerId.value,
+        agent.ownerId || '',
         agent.name,
         `${agent.role || 'Agent'} - ${agent.description || 'No description'}`
       );
@@ -296,14 +341,14 @@ export class ToolSearchApplicationService {
     limit: number,
     offset: number
   ): Promise<ReferenceTool[]> {
-    const databases = await this.databaseApplicationService.getDatabases({ organizationId });
+    const databases = await this.databaseApplicationService.getDatabases({ organizationId: organizationId.value });
     const allTableTools: ReferenceTool[] = [];
 
     // Search through all tables in all databases
     const allOrgTables = await this.tableApplicationService.getTablesForOrganization(organizationId);
 
     for (const database of databases) {
-      const tables = allOrgTables.filter(table => table.databaseId.equals(database.id));
+      const tables = allOrgTables.filter(table => table.databaseId.value === database.id);
 
       const matchingTables = tables
         .filter(table =>
@@ -338,7 +383,7 @@ export class ToolSearchApplicationService {
     limit: number,
     offset: number
   ): Promise<ReferenceTool[]> {
-    const databases = await this.databaseApplicationService.getDatabases({ organizationId });
+    const databases = await this.databaseApplicationService.getDatabases({ organizationId: organizationId.value });
 
     const matchingDatabases = databases
       .filter(database =>
@@ -349,7 +394,7 @@ export class ToolSearchApplicationService {
       .slice(offset, offset + limit)
       .map(database => {
         return ReferenceTool.fromDatabase(
-          database.id.value.toString(),
+          database.id.toString(),
           organizationId.value,
           database.name,
           `Database - ${database.description || 'No description'}`
@@ -369,23 +414,36 @@ export class ToolSearchApplicationService {
     limit: number,
     offset: number
   ): Promise<ReferenceTool[]> {
-    const databases = await this.databaseApplicationService.getDatabases({ organizationId });
+    logger.debug(`Starting search. SearchText: "${searchText}", OrgId: ${organizationId.value}, Limit: ${limit}, Offset: ${offset}`);
+
+    const databases = await this.databaseApplicationService.getDatabases({ organizationId: organizationId.value });
     const allDocumentTools: ReferenceTool[] = [];
+
+    logger.debug(`Found ${databases.length} databases`);
 
     // Search through all tables for document-like content
     const allOrgTables = await this.tableApplicationService.getTablesForOrganization(organizationId);
+    logger.debug(`Found ${allOrgTables.length} tables for organization`);
 
     for (const database of databases) {
-      const tables = allOrgTables.filter(table => table.databaseId.equals(database.id));
+      const tables = allOrgTables.filter(table => table.databaseId.value === database.id);
+      logger.debug(`Database "${database.name}" has ${tables.length} tables`);
 
       for (const table of tables) {
         try {
+          logger.debug(`Processing table "${table.name}" (id: ${table.id.value})`);
+
           // Get table fields to map fieldSlug to fieldId
           const tableFields = await this.tableApplicationService.getFieldsForTable(table.id);
+          logger.debug(`Table "${table.name}" has ${tableFields.length} fields:`, tableFields.map(f => ({ name: f.name, type: f.type })));
 
           // Skip tables without document or file fields
           const documentFields = tableFields.filter(field => field.type === 'document' || field.type === 'file');
-          if (documentFields.length === 0) continue;
+          logger.debug(`Table "${table.name}" has ${documentFields.length} document/file fields`);
+          if (documentFields.length === 0) {
+            logger.debug(`Skipping table "${table.name}" - no document/file fields`);
+            continue;
+          }
 
           // Map field name (slug) to fieldId - the FieldValue.fieldSlug is the field name, not column name
           const fieldSlugToIdMap = new Map(
@@ -393,33 +451,52 @@ export class ToolSearchApplicationService {
           );
 
           // Use TableApplicationService.getRows with proper pagination
+          // AIDEV-NOTE: Don't sort by created_at as it may not exist in all Delta Lake tables
+          // System 'id' column is guaranteed to exist in all tables
           const queryOptions: RowQueryOptions = {
             limit: limit * 2, // Get more rows since we'll filter by document/file names
-            offset,
-            orderBy: 'created_at',
-            orderDirection: 'DESC'
+            offset
           };
 
+          logger.debug(`Getting rows for table "${table.name}" with options:`, queryOptions);
           const rows = await this.tableApplicationService.getRows(table.id, queryOptions);
+          logger.debug(`Table "${table.name}" returned ${rows ? rows.length : 0} rows`);
 
           if (rows && rows.length > 0) {
             // Process each row using RowMapper to get properly typed field values
             for (const row of rows) {
               const rowDTO = RowMapper.toDTO(row);
+              logger.debug(`Processing row ${rowDTO.id} with ${rowDTO.fieldValues.length} field values`);
 
               // Look through all field values to find document and file fields
               for (const fieldValue of rowDTO.fieldValues) {
-                const fieldId = fieldSlugToIdMap.get(fieldValue.fieldSlug);
-                if (!fieldId) continue; // Skip if we can't find the fieldId
+                // AIDEV-NOTE: fieldValue.fieldId now contains the numeric field ID directly
+                const fieldId = fieldValue.fieldId;
+                if (!fieldId) {
+                  logger.debug(`Field has no fieldId`);
+                  continue;
+                }
+
+                logger.debug(`Checking field "${fieldValue.fieldId}" (type: ${fieldValue.fieldType}), value:`, fieldValue.value);
 
                 if (fieldValue.fieldType === 'document' && fieldValue.value && isDocumentArray(fieldValue.value)) {
                   // Handle DocumentArrayFieldValue - iterate through each document
                   const docArray = fieldValue.value as DocumentFieldValue[];
+                  logger.debug(`Found ${docArray.length} documents in field "${fieldValue.fieldId}"`);
+
                   for (const docField of docArray) {
                     const title = docField.documentMetadata?.title || docField.name || 'Untitled Document';
+                    logger.debug(`Document: name="${docField.name}", title="${title}", searchText="${searchText}"`);
 
-                    // Filter by search text if provided
-                    if (!searchText || title.toLowerCase().includes(searchText.toLowerCase())) {
+                    // AIDEV-NOTE: Search both title AND name fields since documents can have different titles than filenames
+                    // Filter by search text if provided - check both title and name
+                    const matchesSearch = !searchText ||
+                      title.toLowerCase().includes(searchText.toLowerCase()) ||
+                      (docField.name && docField.name.toLowerCase().includes(searchText.toLowerCase()));
+
+                    logger.debug(`Document "${title}" matches search: ${matchesSearch}`);
+
+                    if (matchesSearch) {
                       allDocumentTools.push(
                         ReferenceTool.fromDocument(
                           docField.id,
@@ -428,7 +505,7 @@ export class ToolSearchApplicationService {
                           docField.mimeType || 'application/octet-stream',
                           table.name,
                           table.id.value,
-                          fieldId,
+                          Number(fieldId),  // Convert string field ID to number
                           rowDTO.id,
                           database.name
                         )
@@ -451,7 +528,7 @@ export class ToolSearchApplicationService {
                           fileField.mimeType || 'application/octet-stream',
                           table.name,
                           table.id.value,
-                          fieldId,
+                          Number(fieldId),  // Convert string field ID to number
                           rowDTO.id,
                           database.name
                         )
@@ -463,13 +540,13 @@ export class ToolSearchApplicationService {
             }
           }
         } catch (error) {
-          console.error(`Error searching documents in table ${table.name}:`, error);
+          logger.error(`Error searching documents in table ${table.name}:`, error);
           continue;
         }
       }
     }
 
-    console.log(`[searchDocumentTools] Search completed. Found ${allDocumentTools.length} total documents`);
+    logger.debug(`Search completed. Found ${allDocumentTools.length} total documents`);
     return allDocumentTools.slice(0, limit);
   }
 

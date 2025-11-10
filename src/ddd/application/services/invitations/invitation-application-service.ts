@@ -1,11 +1,14 @@
 /**
  * Invitation Application Service
- * 
+ *
  * Orchestrates user invitation operations including sending, accepting, and managing invitations.
  * Handles business logic for invitation workflow, validation, and email notifications.
  */
 
+import { createDebugLogger } from '@/lib/utils/debug-logger';
 import type { IInvitationRepository } from '@/ddd/domain/invitations/repositories/invitation-repository';
+
+const logger = createDebugLogger('InvitationService');
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';

@@ -2,8 +2,7 @@
 
 import React from 'react'
 import { useSearchParams } from 'next/navigation'
-import DashboardMainContent from '@/app/components/DashboardMainContent'
-import { MissionControlPage } from '@/components/canvas'
+import { MissionControlPage } from './MissionControlPageClient'
 
 /**
  * MissionControlClient - Mission Control page with canvas structure
@@ -22,7 +21,6 @@ function PageContent(): JSX.Element {
   if (tableId) {
     return (
       <MissionControlPage>
-        <DashboardMainContent />
       </MissionControlPage>
     )
   }

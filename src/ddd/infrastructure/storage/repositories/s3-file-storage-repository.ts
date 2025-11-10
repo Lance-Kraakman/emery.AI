@@ -9,7 +9,6 @@ import crypto from 'crypto';
 import { FileUploadRequest, StoredFile, FileStorageError, FileKey, FileUrlOptions, FileValidationRule, FileValidationResult } from '@/ddd/domain/tables/entities/file-storage';
 import { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
-import { FieldId } from '@/ddd/domain/shared/value-objects';
 
 export class S3FileStorageRepository implements IFileStorageRepository {
   private readonly bucketName: string;

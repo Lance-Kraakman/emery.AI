@@ -9,7 +9,7 @@
  */
 
 import { ChatId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
-import type { DomainType } from '@/ddd/domain/rag/value-objects';
+import type { DomainType } from '@/ddd/domain/shared/types/domain-type';
 
 export interface ChatContextMetadata {
   ragIndexId?: string;

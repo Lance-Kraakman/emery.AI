@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Clock, User, Calendar } from 'lucide-react';
+import { Clock, Calendar, Zap, Webhook, MousePointer } from 'lucide-react';
 import { TaskLogsPanel } from './TaskLogsPanel';
 import { TaskResultDisplay } from './TaskResultDisplay';
 
@@ -10,7 +10,11 @@ interface TaskCardProps {
     id: string;
     name: string;
     status: string;
-    capabilityName?: string;
+    triggerContext?: {
+      type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL';
+      scheduleName?: string;
+      tableChange?: any;
+    } | null;
     result?: any;
     error?: string;
     logs?: string[];
@@ -20,7 +24,7 @@ interface TaskCardProps {
   };
   className?: string;
   hasMounted?: boolean;
-  variant?: 'full' | 'compact'; // Add variant prop
+  variant?: 'full' | 'compact';
 }
 
 export function TaskCard({ task, className, hasMounted = true, variant = 'full' }: TaskCardProps) {
@@ -39,15 +43,63 @@ export function TaskCard({ task, className, hasMounted = true, variant = 'full' 
     }
   };
 
+  const getTriggerIcon = (type?: string) => {
+    switch (type) {
+      case 'DATABASE_EVENT':
+        return <Zap className="h-3 w-3" />;
+      case 'CALENDAR':
+        return <Calendar className="h-3 w-3" />;
+      case 'WEBHOOK':
+        return <Webhook className="h-3 w-3" />;
+      default:
+        return <MousePointer className="h-3 w-3" />;
+    }
+  };
+
+  const getTriggerLabel = (type?: string) => {
+    switch (type) {
+      case 'DATABASE_EVENT':
+        return 'Database Event';
+      case 'CALENDAR':
+        return 'Scheduled';
+      case 'WEBHOOK':
+        return 'Webhook';
+      default:
+        return 'Manual';
+    }
+  };
+
+  const getTriggerColor = (type?: string) => {
+    switch (type) {
+      case 'DATABASE_EVENT':
+        return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+      case 'CALENDAR':
+        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'WEBHOOK':
+        return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+      default:
+        return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    }
+  };
+
   if (variant === 'compact') {
     return (
       <div className={`p-3 border rounded-lg bg-card ${className}`}>
         <div className="flex justify-between items-start mb-2">
           <div className="flex-1 min-w-0 pr-2">
             <h4 className="font-medium text-sm truncate">{task.name}</h4>
-            <p className="text-xs text-muted-foreground truncate">
-              {task.capabilityName}
-            </p>
+            {/* Trigger information */}
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${getTriggerColor(task.triggerContext?.type)}`}>
+                {getTriggerIcon(task.triggerContext?.type)}
+                {getTriggerLabel(task.triggerContext?.type)}
+              </span>
+              {task.triggerContext?.scheduleName && (
+                <span className="text-xs text-muted-foreground truncate">
+                  {task.triggerContext.scheduleName}
+                </span>
+              )}
+            </div>
           </div>
           <span
             className={`px-2 py-1 text-xs font-medium rounded-full border ${getStatusColor(task.status)}`}
@@ -57,11 +109,25 @@ export function TaskCard({ task, className, hasMounted = true, variant = 'full' 
         </div>
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Calendar className="h-3 w-3" />
+          <Clock className="h-3 w-3" />
           <span>
             {hasMounted ? new Date(task.createdAt).toLocaleString() : ''}
           </span>
         </div>
+
+        {/* Database event details for compact */}
+        {task.triggerContext?.type === 'DATABASE_EVENT' && task.triggerContext?.tableChange && (
+          <div className="mt-2 p-2 bg-purple-500/10 border border-purple-500/20 rounded text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">
+                {task.triggerContext.tableChange.operation || 'CHANGE'}
+              </span>
+              <span className="text-muted-foreground">
+                on {task.triggerContext.tableChange.tableName || 'table'}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Error Display for compact */}
         {task.error && (
@@ -97,15 +163,43 @@ export function TaskCard({ task, className, hasMounted = true, variant = 'full' 
         </span>
       </div>
 
-      {/* Task Details */}
-      <div className="space-y-2 text-sm text-muted-foreground">
-        {task.capabilityName && (
-          <div className="flex items-center gap-2">
-            <User className="h-4 w-4" />
-            <span>Capability: {task.capabilityName}</span>
+      {/* Trigger Information */}
+      <div className="mb-3 space-y-2">
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border ${getTriggerColor(task.triggerContext?.type)}`}>
+            {getTriggerIcon(task.triggerContext?.type)}
+            {getTriggerLabel(task.triggerContext?.type)}
+          </span>
+          {task.triggerContext?.scheduleName && (
+            <span className="text-sm text-muted-foreground">
+              Schedule: <span className="font-medium">{task.triggerContext.scheduleName}</span>
+            </span>
+          )}
+        </div>
+
+        {/* Database event details */}
+        {task.triggerContext?.type === 'DATABASE_EVENT' && task.triggerContext?.tableChange && (
+          <div className="p-2 bg-purple-500/10 border border-purple-500/20 rounded text-sm">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-purple-400" />
+              <span className="font-medium text-purple-400">
+                {task.triggerContext.tableChange.operation || 'CHANGE'}
+              </span>
+              <span className="text-muted-foreground">
+                on table <span className="font-medium">{task.triggerContext.tableChange.tableName || 'unknown'}</span>
+              </span>
+            </div>
+            {task.triggerContext.tableChange.rowId && (
+              <div className="mt-1 text-xs text-muted-foreground">
+                Row ID: {task.triggerContext.tableChange.rowId}
+              </div>
+            )}
           </div>
         )}
+      </div>
 
+      {/* Task Details */}
+      <div className="space-y-2 text-sm text-muted-foreground">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4" />
           <span>Created: {hasMounted ? new Date(task.createdAt).toLocaleString() : ''}</span>

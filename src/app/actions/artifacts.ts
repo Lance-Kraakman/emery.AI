@@ -156,6 +156,48 @@ export async function getFileDownloadUrl(
 }
 
 /**
+ * Get document download URL for artifacts
+ * Uses DocumentApplicationService to generate signed S3 URLs
+ */
+export async function getDocumentDownloadUrl(
+  documentId: string,
+  organizationId: number,
+  tableId: number,
+  fieldId: number
+): Promise<Result<string>> {
+  try {
+    const session = await requirePermission("data:view");
+
+    const documentService = getDocumentApplicationService();
+    const result = await documentService.getDocumentFileUrl({
+      documentId,
+      organizationId: OrganizationId.fromNumber(organizationId),
+      tableId: TableId.fromNumber(tableId),
+      fieldId: FieldId.fromNumber(fieldId),
+      requestedBy: UserId.fromString(session.user.id)
+    });
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to get document URL"
+      };
+    }
+
+    return {
+      success: true,
+      data: result.data!.url
+    };
+  } catch (error) {
+    console.error("Error getting document download URL:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to get download URL"
+    };
+  }
+}
+
+/**
  * Update TipTap document content
  */
 export async function updateTiptapDocumentContent(

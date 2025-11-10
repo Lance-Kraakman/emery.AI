@@ -71,7 +71,7 @@ export async function getFileMentionsForTable(
           const fileSize = fileField.size ? ` (${(fileField.size / 1024).toFixed(1)} KB)` : '';
           
           mentions.push({
-            id: `file_${tableId}_${fieldValue.fieldSlug}_${rowDTO.id}`,
+            id: `file_${tableId}_${fieldValue.fieldId}_${rowDTO.id}`,
             name: fileName.toLowerCase().replace(/\s+/g, '-'),
             displayName: fileName,
             description: `File in table${fileSize}`,

@@ -15,8 +15,8 @@
 import { describe, test, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { getAgentTaskApplicationService, getAgentApplicationService, getTeamApplicationService, initializeDI } from '@/ddd/application/di/container';
 import { AgentId, OrganizationId, UserId, TeamId } from '@/ddd/domain/shared/value-objects';
-import type { CreateTaskRequest } from '@/ddd/application/services/agents/agent-task-application-service';
-import type { CreateAgentCommand } from '@/ddd/application/services/agents/agent-application-service';
+import type { CreateTaskDTO } from '@/app/dtos/task.dto';
+import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 import { testClient } from '../shared/integration-helpers';
 import { createTestOrganization, createTestAgent, createTestTeam, createTestUser, initializeTestDI } from '../shared/test-setup';
 import type { TestContext } from '../shared/test-setup';
@@ -119,19 +119,20 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Set context as agent owner
       contextManager.setContext(OrganizationId.fromNumber(organizationId), ownerId);
 
-      const createRequest: CreateTaskRequest = {
-        agentId: AgentId.fromNumber(ownerAgentId),
+      const createRequest: CreateTaskDTO = {
+        agentId: ownerAgentId,
         name: 'Test Task',
-        instructions: { instructions: 'Test instructions' },
-        createdBy: ownerId,
-        organizationId: OrganizationId.fromNumber(organizationId)
+        instructions: { task: 'Test instructions' },
+        createdBy: ownerId.value,
+        organizationId
       };
 
       const result = await agentTaskService.createTask(createRequest);
-      
-      expect(result).toBeDefined();
-      expect(result.agentId.value).toBe(ownerAgentId);
-      expect(result.status.value).toBe('pending');
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(result.data!.agentId).toBe(ownerAgentId);
+      expect(result.data!.status).toBe('pending');
     }, TEST_TIMEOUT);
 
     test('non-owner cannot assign tasks to agent by default', async () => {
@@ -155,12 +156,12 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Set context as other user (not agent owner)
       contextManager.setContext(OrganizationId.fromNumber(organizationId), UserId.fromString(otherUserId));
 
-      const createRequest: CreateTaskRequest = {
-        agentId: AgentId.fromNumber(ownerAgentId), // Trying to assign to someone else's agent
+      const createRequest: CreateTaskDTO = {
+        agentId: ownerAgentId, // Trying to assign to someone else's agent
         name: 'Unauthorized Task',
-        instructions: { instructions: 'Should fail' },
-        createdBy: UserId.fromString(otherUserId),
-        organizationId: OrganizationId.fromNumber(organizationId)
+        instructions: { task: 'Should fail' },
+        createdBy: otherUserId,
+        organizationId
       };
 
       await expect(
@@ -175,18 +176,19 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Set context as admin user
       contextManager.setContext(OrganizationId.fromNumber(organizationId), UserId.fromString(otherUserId));
 
-      const createRequest: CreateTaskRequest = {
-        agentId: AgentId.fromNumber(ownerAgentId), // Admin assigning to someone else's agent
+      const createRequest: CreateTaskDTO = {
+        agentId: ownerAgentId, // Admin assigning to someone else's agent
         name: 'Admin Task',
-        instructions: { instructions: 'Admin can assign' },
-        createdBy: UserId.fromString(otherUserId),
-        organizationId: OrganizationId.fromNumber(organizationId)
+        instructions: { task: 'Admin can assign' },
+        createdBy: otherUserId,
+        organizationId
       };
 
       const result = await agentTaskService.createTask(createRequest);
       
-      expect(result).toBeDefined();
-      expect(result.agentId.value).toBe(ownerAgentId);
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(result.data!.agentId).toBe(ownerAgentId);
     }, TEST_TIMEOUT);
   });
 
@@ -206,18 +208,19 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Set context as the allowed user
       contextManager.setContext(OrganizationId.fromNumber(organizationId), UserId.fromString(otherUserId));
 
-      const createRequest: CreateTaskRequest = {
-        agentId: AgentId.fromNumber(ownerAgentId),
+      const createRequest: CreateTaskDTO = {
+        agentId: ownerAgentId,
         name: 'Allowed User Task',
-        instructions: { instructions: 'Specific user allowed' },
-        createdBy: UserId.fromString(otherUserId),
-        organizationId: OrganizationId.fromNumber(organizationId)
+        instructions: { task: 'Specific user allowed' },
+        createdBy: otherUserId,
+        organizationId
       };
 
       const result = await agentTaskService.createTask(createRequest);
       
-      expect(result).toBeDefined();
-      expect(result.agentId.value).toBe(ownerAgentId);
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(result.data!.agentId).toBe(ownerAgentId);
     }, TEST_TIMEOUT);
 
     test('team members can assign when allowTeamMembers is true', async () => {
@@ -238,18 +241,19 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Set context as team member (other user)
       contextManager.setContext(OrganizationId.fromNumber(organizationId), UserId.fromString(otherUserId));
 
-      const createRequest: CreateTaskRequest = {
-        agentId: AgentId.fromNumber(ownerAgentId),
+      const createRequest: CreateTaskDTO = {
+        agentId: ownerAgentId,
         name: 'Team Member Task',
-        instructions: { instructions: 'Team member assigning' },
-        createdBy: UserId.fromString(otherUserId),
-        organizationId: OrganizationId.fromNumber(organizationId)
+        instructions: { task: 'Team member assigning' },
+        createdBy: otherUserId,
+        organizationId
       };
 
       const result = await agentTaskService.createTask(createRequest);
       
-      expect(result).toBeDefined();
-      expect(result.agentId.value).toBe(ownerAgentId);
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(result.data!.agentId).toBe(ownerAgentId);
     }, TEST_TIMEOUT);
 
     test('can disable org admin access by setting allowOrgAdmins=false', async () => {
@@ -275,12 +279,12 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Set context as admin user
       contextManager.setContext(OrganizationId.fromNumber(organizationId), UserId.fromString(otherUserId));
 
-      const createRequest: CreateTaskRequest = {
-        agentId: AgentId.fromNumber(ownerAgentId),
+      const createRequest: CreateTaskDTO = {
+        agentId: ownerAgentId,
         name: 'Blocked Admin Task',
-        instructions: { instructions: 'Admin should be blocked' },
-        createdBy: UserId.fromString(otherUserId),
-        organizationId: OrganizationId.fromNumber(organizationId)
+        instructions: { task: 'Admin should be blocked' },
+        createdBy: otherUserId,
+        organizationId
       };
 
       await expect(
@@ -294,12 +298,12 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Set context as team member
       contextManager.setContext(OrganizationId.fromNumber(organizationId), ownerId);
 
-      const createRequest: CreateTaskRequest = {
-        teamId: TeamId.fromNumber(teamId),
+      const createRequest: CreateTaskDTO = {
+        teamId,
         name: 'Team Task',
-        instructions: { instructions: 'Task for team' },
-        createdBy: ownerId,
-        organizationId: OrganizationId.fromNumber(organizationId)
+        instructions: { task: 'Task for team' },
+        createdBy: ownerId.value,
+        organizationId
       };
 
       // Team assignment is not yet implemented
@@ -319,12 +323,12 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Set context as non-team member
       contextManager.setContext(OrganizationId.fromNumber(organizationId), UserId.fromString(outsiderUser.id));
 
-      const createRequest: CreateTaskRequest = {
-        teamId: TeamId.fromNumber(teamId),
+      const createRequest: CreateTaskDTO = {
+        teamId,
         name: 'Outsider Task',
-        instructions: { instructions: 'Should fail' },
-        createdBy: UserId.fromString(outsiderUser.id),
-        organizationId: OrganizationId.fromNumber(organizationId)
+        instructions: { task: 'Should fail' },
+        createdBy: outsiderUser.id,
+        organizationId
       };
 
       // Team assignment is not yet implemented, so it fails before permission checks
@@ -355,12 +359,12 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Set context as allowed user
       contextManager.setContext(OrganizationId.fromNumber(organizationId), UserId.fromString(outsiderUser.id));
 
-      const createRequest: CreateTaskRequest = {
-        teamId: TeamId.fromNumber(teamId),
+      const createRequest: CreateTaskDTO = {
+        teamId,
         name: 'Special User Team Task',
-        instructions: { instructions: 'Allowed user assigning to team' },
-        createdBy: UserId.fromString(outsiderUser.id),
-        organizationId: OrganizationId.fromNumber(organizationId)
+        instructions: { task: 'Allowed user assigning to team' },
+        createdBy: outsiderUser.id,
+        organizationId
       };
 
       // Team assignment is not yet implemented
@@ -386,18 +390,19 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       contextManager.setContext(OrganizationId.fromNumber(organizationId), UserId.fromString(otherUserId));
 
       // This simulates agent-to-agent task routing
-      const createRequest: CreateTaskRequest = {
-        agentId: AgentId.fromNumber(ownerAgentId), // Target agent
+      const createRequest: CreateTaskDTO = {
+        agentId: ownerAgentId, // Target agent
         name: 'Agent to Agent Task',
-        instructions: { instructions: 'Agent routing task' },
-        createdBy: UserId.fromString(otherUserId), // Owner of source agent
-        organizationId: OrganizationId.fromNumber(organizationId)
+        instructions: { task: 'Agent routing task' },
+        createdBy: otherUserId, // Owner of source agent
+        organizationId
       };
 
       const result = await agentTaskService.createTask(createRequest);
       
-      expect(result).toBeDefined();
-      expect(result.agentId.value).toBe(ownerAgentId);
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(result.data!.agentId).toBe(ownerAgentId);
     }, TEST_TIMEOUT);
   });
 
@@ -406,11 +411,11 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // First create a task for the source agent
       contextManager.setContext(OrganizationId.fromNumber(organizationId), ownerId);
       const initialTask = await agentTaskService.createTask({
-        agentId: AgentId.fromNumber(ownerAgentId),
+        agentId: ownerAgentId,
         name: 'Initial Task',
-        instructions: { instructions: 'To be routed' },
-        createdBy: ownerId,
-        organizationId: OrganizationId.fromNumber(organizationId)
+        instructions: { task: 'To be routed' },
+        createdBy: ownerId.value,
+        organizationId
       });
 
       // Update source agent's routing permissions
@@ -426,6 +431,9 @@ describe('Resource Permissions RBAC Integration Tests', () => {
         })
         .where(eq(agents.id, ownerAgentId));
 
+      expect(initialTask.success).toBe(true);
+      expect(initialTask.data).toBeDefined();
+
       // Simulate routing by updating the task
       // (In real app this would be done through a routing service)
       await testClient.db.update(tasks)
@@ -435,12 +443,12 @@ describe('Resource Permissions RBAC Integration Tests', () => {
           routedAt: new Date(),
           routingReason: 'Test routing'
         })
-        .where(eq(tasks.id, initialTask.id.value));
+        .where(eq(tasks.id, initialTask.data!.id));
 
       // Verify the task was routed
       const routedTask = await testClient.db.select()
         .from(tasks)
-        .where(eq(tasks.id, initialTask.id.value))
+        .where(eq(tasks.id, initialTask.data!.id))
         .limit(1);
 
       expect(routedTask[0].agentId).toBe(otherUserAgentId);
@@ -464,12 +472,12 @@ describe('Resource Permissions RBAC Integration Tests', () => {
       // Try to assign task from first org user to other org agent
       contextManager.setContext(OrganizationId.fromNumber(organizationId), ownerId);
       
-      const createRequest: CreateTaskRequest = {
-        agentId: otherOrgAgent.id,
+      const createRequest: CreateTaskDTO = {
+        agentId: otherOrgAgent.id.value,
         name: 'Cross-Org Task',
-        instructions: { instructions: 'Should fail' },
-        createdBy: ownerId,
-        organizationId: OrganizationId.fromNumber(organizationId) // Different from agent's org
+        instructions: { task: 'Should fail' },
+        createdBy: ownerId.value,
+        organizationId // Different from agent's org
       };
 
       await expect(

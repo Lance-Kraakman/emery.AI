@@ -156,14 +156,14 @@ export function AppConnectionCard({
   };
 
   return (
-    <Card className={`transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${isConnected ? 'ring-1 ring-green-200 bg-green-50/30' : ''} ${className}`}>
-      <CardContent className="p-4">
-        <div className="space-y-3">
+    <Card className={`transition-all duration-200 hover:shadow-md hover:scale-[1.01] ${isConnected ? 'ring-1 ring-green-200 bg-green-50/30' : ''} ${className}`}>
+      <CardContent className="p-3">
+        <div className="space-y-2">
           {/* Top Row: Icon + Menu */}
           <div className="flex items-center justify-between">
             <div className="flex-shrink-0">
               <img
-                className="w-10 h-10 rounded-lg ring-1 ring-border"
+                className="w-8 h-8 rounded-lg ring-1 ring-border"
                 src={app.icon}
                 alt={app.name}
                 onError={(e) => {
@@ -173,7 +173,7 @@ export function AppConnectionCard({
                   target.nextElementSibling?.classList.remove('hidden');
                 }}
               />
-              <div className="hidden w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
+              <div className="hidden w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
                 {app.name.charAt(0)}
               </div>
             </div>
@@ -231,7 +231,7 @@ export function AppConnectionCard({
           </Badge>
 
           {/* Status Description */}
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <p className="text-xs text-muted-foreground truncate">
               {isConnected && connection?.account_name
                 ? connection.account_name
@@ -248,7 +248,7 @@ export function AppConnectionCard({
 
             {/* Expanded Details */}
             {showDetails && (
-              <div className="text-xs space-y-1 bg-muted/50 rounded p-2">
+              <div className="text-xs space-y-0.5 bg-muted/50 rounded p-2">
                 {connection ? (
                   <>
                     <div><strong>Status:</strong> {connection.raw_status || connection.status}</div>

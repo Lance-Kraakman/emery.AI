@@ -21,12 +21,12 @@ export interface IDynamicTableRepository {
   delete(id: TableId): Promise<void>;
   existsByStorageLocation(organizationId: OrganizationId, storageLocation: string): Promise<boolean>;
   
-  // Row CRUD - works with Row entities directly
-  insertRow(tableId: TableId, row: Row): Promise<Row>;
-  findRows(tableId: TableId, options?: RowQueryOptions): Promise<Row[]>;
+  // Row CRUD - works with Row entities directly (batch operations)
+  insertRows(tableId: TableId, rows: Row[]): Promise<Row[]>;
+  getRows(tableId: TableId, options: RowQueryOptions): Promise<Row[]>;
   getRow(tableId: TableId, rowId: string): Promise<Row | null>;
-  updateRow(tableId: TableId, rowId: string, row: Row): Promise<Row>;
-  deleteRow(tableId: TableId, rowId: string): Promise<void>;
+  updateRows(tableId: TableId, updates: Array<{rowId: string, row: Row}>): Promise<Row[]>;
+  deleteRows(tableId: TableId, rowIds: string[]): Promise<void>;
   
   // Generic table operations for any storage backend
   tableExists(tableId: TableId): Promise<boolean>;

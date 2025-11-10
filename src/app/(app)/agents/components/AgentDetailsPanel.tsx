@@ -1,21 +1,23 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   User,
   Settings,
   Calendar,
   Database,
-  Wrench,
   Activity,
   Zap,
-  Globe
+  Globe,
+  Shield
 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfigurationCard } from './ConfigurationCard';
 import { useModal } from './modals/ModalContext';
+import { ScheduleManagerModal } from './modals/ScheduleManagerModal';
 import { getOrganizationMembers } from '@/app/actions/invitations';
 import {
   isCalendarTrigger,
@@ -23,6 +25,8 @@ import {
   isWebhookTrigger,
   getTriggerTypeLabel
 } from './trigger-utils';
+import { getDelegationStatus } from '../lib/delegation-helpers';
+import { getAgentDelegationCount } from '@/app/actions/delegations';
 
 interface AgentDetailsPanelProps {
   agent: AgentDTO;
@@ -37,14 +41,22 @@ interface User {
 }
 
 export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
+  const router = useRouter();
   const { openModal } = useModal();
   const [ownerName, setOwnerName] = useState<string>('Loading...');
   const [users, setUsers] = useState<User[]>([]);
+  const [isScheduleManagerOpen, setIsScheduleManagerOpen] = useState(false);
+  const [delegationCount, setDelegationCount] = useState<number>(0);
 
   // Load organization members to get owner name
   useEffect(() => {
     loadOwnerName();
   }, [agent.ownerId]);
+
+  // Load delegation count
+  useEffect(() => {
+    loadDelegationCount();
+  }, [agent.id]);
 
   const loadOwnerName = async () => {
     try {
@@ -55,6 +67,16 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
     } catch (error) {
       console.error('Error loading owner name:', error);
       setOwnerName('Unknown User');
+    }
+  };
+
+  const loadDelegationCount = async () => {
+    try {
+      const count = await getAgentDelegationCount(agent.id);
+      setDelegationCount(count);
+    } catch (error) {
+      console.error('Error loading delegation count:', error);
+      setDelegationCount(0);
     }
   };
 
@@ -77,70 +99,49 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   };
 
   const getTriggerStatus = () => {
-    if (!agent.trigger || agent.trigger.type === 'MANUAL') return 'partial';
+    if (!agent.schedules || agent.schedules.length === 0) return 'partial';
+    const firstSchedule = agent.schedules[0];
+    if (!firstSchedule) return 'partial';
     return 'configured';
   };
 
-  const getCapabilitiesStatus = () => {
-    const count = agent.capabilities?.length || 0;
-    if (count === 0) return 'empty';
-    if (count < 3) return 'partial';
-    return 'configured';
-  };
-
-  const getToolsStatus = () => {
-    const toolCount = agent.tools?.length || 0;
-    const serverCount = agent.servers?.length || 0;
-    if (toolCount === 0 && serverCount === 0) return 'empty';
-    if (toolCount > 0 && serverCount > 0) return 'configured';
-    return 'partial';
-  };
 
   // Generate summaries for each configuration area
   const getTriggerSummary = () => {
-    if (!agent.trigger || agent.trigger.type === 'MANUAL') {
+    if (!agent.schedules || agent.schedules.length === 0) {
       return 'Manual execution only';
     }
 
-    if (isCalendarTrigger(agent.trigger)) {
-      const timezone = agent.trigger.timezone || 'UTC';
-      return `Scheduled execution • ${timezone}`;
+    const scheduleCount = agent.schedules.length;
+    const firstSchedule = agent.schedules[0];
+
+    if (!firstSchedule) {
+      return 'Manual execution only';
     }
 
-    if (isDatabaseEventTrigger(agent.trigger)) {
-      const ops = agent.trigger.operations.join(', ');
-      const table = agent.trigger.tableId ? ` on ${agent.trigger.tableId}` : ' on all tables';
-      return `${ops}${table}`;
+    let summary = '';
+    const trigger = firstSchedule.trigger;
+
+    if (trigger.type === 'CALENDAR') {
+      const timezone = trigger.timezone || 'UTC';
+      summary = `Scheduled execution • ${timezone}`;
+    } else if (trigger.type === 'DATABASE_EVENT') {
+      const ops = trigger.operations?.join(', ') || 'No operations';
+      const table = trigger.tableId ? ` on ${trigger.tableId}` : ' on all tables';
+      summary = `${ops}${table}`;
+    } else if (trigger.type === 'WEBHOOK') {
+      const security = trigger.requiresSignature ? 'Secured' : 'Open';
+      summary = `Webhook trigger • ${security}`;
+    }
+    // MANUAL type is already handled above, no else needed
+
+    if (scheduleCount > 1) {
+      summary += ` (+${scheduleCount - 1} more)`;
     }
 
-    if (isWebhookTrigger(agent.trigger)) {
-      const security = agent.trigger.requiresSignature ? 'Secured' : 'Open';
-      return `Webhook trigger • ${security}`;
-    }
-
-    return getTriggerTypeLabel(agent.trigger.type);
+    return summary;
   };
 
-  const getCapabilitiesSummary = () => {
-    const count = agent.capabilities?.length || 0;
-    if (count === 0) return 'No capabilities defined';
-
-    const totalSteps = agent.capabilities?.reduce((sum, cap) => sum + (cap.steps?.length || 0), 0) || 0;
-    return `${count} capability${count !== 1 ? 'ies' : ''} • ${totalSteps} total steps`;
-  };
-
-  const getToolsSummary = () => {
-    const toolCount = agent.tools?.length || 0;
-    const serverCount = agent.servers?.length || 0;
-
-    if (toolCount === 0 && serverCount === 0) return 'No tools or servers configured';
-
-    const parts = [];
-    if (toolCount > 0) parts.push(`${toolCount} tool${toolCount !== 1 ? 's' : ''}`);
-    if (serverCount > 0) parts.push(`${serverCount} server${serverCount !== 1 ? 's' : ''}`);
-
-    return parts.join(' • ');
-  };
 
   return (
     <div className="space-y-3">
@@ -165,33 +166,30 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
           actionText="Edit Details"
         />
 
-        {/* Trigger Configuration */}
+        {/* Schedule Configuration */}
         <ConfigurationCard
-          title="Trigger Configuration"
-          description="Execution timing and conditions"
-          icon={agent.trigger?.type === 'CALENDAR' ? Calendar :
-                agent.trigger?.type === 'DATABASE_EVENT' ? Database :
-                agent.trigger?.type === 'WEBHOOK' ? Globe : Zap}
+          title="Schedule Configuration"
+          description="Manage multiple execution triggers"
+          icon={agent.schedules?.[0]?.trigger.type === 'CALENDAR' ? Calendar :
+                agent.schedules?.[0]?.trigger.type === 'DATABASE_EVENT' ? Database :
+                agent.schedules?.[0]?.trigger.type === 'WEBHOOK' ? Globe : Zap}
           status={getTriggerStatus()}
           statusText={getTriggerStatus() === 'configured' ? 'Configured' : 'Default'}
           summary={getTriggerSummary()}
-          onClick={() => openModal('trigger-config', { agent })}
-          actionText="Configure Trigger"
+          onClick={() => setIsScheduleManagerOpen(true)}
+          actionText="Manage Schedules"
         />
 
-        {/* Tools & Servers */}
+        {/* Authorized Connections */}
         <ConfigurationCard
-          title="Tools & Servers"
-          description="External integrations"
-          icon={Wrench}
-          status={getToolsStatus()}
-          statusText={
-            getToolsStatus() === 'configured' ? 'Configured' :
-            getToolsStatus() === 'partial' ? 'Partial' : 'None'
-          }
-          summary={getToolsSummary()}
-          onClick={() => openModal('tools-servers', { agent })}
-          actionText="Manage Tools"
+          title="Authorized Connections"
+          description="OAuth credentials for external services"
+          icon={Shield}
+          status={getDelegationStatus(delegationCount).status}
+          statusText={getDelegationStatus(delegationCount).statusText}
+          summary={delegationCount === 0 ? 'No services authorized' : `Agent can access ${delegationCount} service${delegationCount === 1 ? '' : 's'}`}
+          onClick={() => openModal('authorized-connections', { agent })}
+          actionText="Manage Connections"
         />
 
         {/* Activity */}
@@ -205,22 +203,26 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
           onClick={() => openModal('activity-details', { agent })}
           actionText="View Activity"
         />
+
+        {/* Skills - Linked to separate page */}
+        <ConfigurationCard
+          title="Skills"
+          description="Multi-step workflows and tasks"
+          icon={Settings}
+          status="partial"
+          statusText="View Skills"
+          summary="Skills are managed separately per agent"
+          onClick={() => router.push(`/agents/${agent.id}/skills`)}
+          actionText="Manage Skills"
+        />
       </div>
 
-      {/* Capabilities - Full Width */}
-      <ConfigurationCard
-        title="Capabilities"
-        description="Multi-step workflows and tasks"
-        icon={Settings}
-        status={getCapabilitiesStatus()}
-        statusText={
-          getCapabilitiesStatus() === 'configured' ? 'Well Configured' :
-          getCapabilitiesStatus() === 'partial' ? 'Basic Setup' : 'Not Configured'
-        }
-        summary={getCapabilitiesSummary()}
-        onClick={() => openModal('capabilities', { agent })}
-        actionText="Manage Capabilities"
-        className="md:col-span-2"
+      {/* Schedule Manager Modal */}
+      <ScheduleManagerModal
+        isOpen={isScheduleManagerOpen}
+        onClose={() => setIsScheduleManagerOpen(false)}
+        agent={agent}
+        onUpdate={onUpdate}
       />
     </div>
   );

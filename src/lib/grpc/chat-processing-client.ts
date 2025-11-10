@@ -12,6 +12,7 @@ import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import path from 'path';
 import type { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import type { MessagePart as LlamaIndexMessagePart } from '@llamaindex/chat-ui';
 import type {
   ProcessMessageRequest,
   ProcessMessageResponse,
@@ -20,13 +21,16 @@ import type {
   ContentChunk,
   RagContext,
   ProcessingComplete,
-  ProcessingError
+  ProcessingError,
+  StepProgress,
+  MessagePart
 } from './generated/agent_worker';
+import { toProtoMessageParts } from './mappers/message-part-mapper';
 
-// Load protobuf definition  
+// Load protobuf definition
 const PROTO_PATH = path.join(process.cwd(), 'proto', 'agent_worker.proto');
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
-  keepCase: true,
+  keepCase: false, // Convert snake_case to camelCase to match TypeScript generated types
   longs: String,
   enums: String,
   defaults: true,
@@ -39,22 +43,18 @@ const ChatProcessingService = protoDescriptor.emery.agents.ChatProcessingService
 export interface ChatProcessingOptions {
   domainType?: string;
   domainId?: number;
-  enableRag?: boolean;
-  ragThreshold?: number;
-  maxRagDocs?: number;
-  primaryRagWeight?: number;
-  assembledRagContext?: string;  // Pre-assembled RAG context from DualContextRagService
-  ragSources?: string[];         // RAG source summary
   tools?: ToolConfig[];          // Available tools for the chat
+  defaultModel?: string | null;  // Organization's default AI model
 }
 
 export interface StreamingChatResponse {
-  type: 'content' | 'rag_context' | 'complete' | 'error';
+  type: 'content' | 'rag_context' | 'complete' | 'error' | 'step_progress';
   content?: string;
   sequence?: number;
   ragContext?: RagContext;
   complete?: ProcessingComplete;
   error?: ProcessingError;
+  stepProgress?: StepProgress;
   timestamp: number;
 }
 
@@ -78,29 +78,42 @@ export class ChatProcessingClient {
 
   /**
    * Process a message and stream AI response
-   * 
+   *
    * This is a server-side method called by Next.js API routes.
    * The actual streaming to browser happens at the API route level.
+   *
+   * Accepts multimodal message parts (text + images) via LlamaIndex format.
    */
   async processMessage(
-    messageContent: string,
+    messageParts: LlamaIndexMessagePart[],
     userId: string,
     organizationId: number,
     conversationHistory: HistoryMessage[] = [],
     options: ChatProcessingOptions = {},
-    onStreamingResponse: (response: StreamingChatResponse) => void
+    onStreamingResponse: (response: StreamingChatResponse) => void,
+    messageId?: string
   ): Promise<void> {
-    
-    console.log(`[CHAT-GRPC-CLIENT] Processing message for user ${userId} in org ${organizationId}`);
-    console.log(`[CHAT-GRPC-CLIENT] Message preview: ${messageContent.substring(0, 100)}...`);
+
+    // Generate message ID if not provided
+    const actualMessageId = messageId || `msg_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    console.log(`[CHAT-GRPC-CLIENT] Processing message ${actualMessageId} for user ${userId} in org ${organizationId}`);
+    console.log(`[CHAT-GRPC-CLIENT] Message parts: ${messageParts.length}`);
     console.log(`[CHAT-GRPC-CLIENT] History messages: ${conversationHistory.length}`);
+
+    // Convert LlamaIndex MessageParts to Protocol Buffer format
+    const protoMessageParts = toProtoMessageParts(messageParts);
+    console.log(`[CHAT-GRPC-CLIENT] Converted to ${protoMessageParts.length} proto message parts`);
 
     // Build request
     const request: ProcessMessageRequest = {
-      message_content: messageContent,
-      user_id: userId,
-      organization_id: organizationId,
-      conversation_history: conversationHistory,
+      context: undefined, // Will set below if needed
+      messageParts: protoMessageParts,
+      userId: userId,
+      organizationId: organizationId,
+      conversationHistory: conversationHistory,
+      model: options.defaultModel || '', // Pass organization's default model or empty string for system default
+      messageId: actualMessageId, // Add message ID for cancellation tracking
       tools: (options.tools || []).map(tool => ({
         name: tool.name,
         version: '', // Empty version since ToolConfig no longer has version
@@ -109,16 +122,10 @@ export class ChatProcessingClient {
     };
 
     // Add context if provided
-    if (options.domainType || options.enableRag || options.assembledRagContext) {
+    if (options.domainType) {
       const context: ChatContext = {
-        domain_type: options.domainType || '',
-        domain_id: options.domainId || 0,
-        enable_rag: options.enableRag || false,
-        rag_threshold: options.ragThreshold || 0.3,
-        max_rag_docs: options.maxRagDocs || 5,
-        primary_rag_weight: options.primaryRagWeight || 0.7,
-        assembled_rag_context: options.assembledRagContext || '',
-        rag_sources: options.ragSources || []
+        domainType: options.domainType || '',
+        domainId: options.domainId || 0
       };
       request.context = context;
     }
@@ -128,28 +135,37 @@ export class ChatProcessingClient {
       const call = this.client.ProcessMessage(request);
 
       call.on('data', (response: ProcessMessageResponse) => {
-        // console.log(`[CHAT-GRPC-CLIENT] Received streaming response:`, {
-        //   hasContentChunk: !!response.content_chunk,
-        //   hasRagContext: !!response.rag_context,
-        //   hasComplete: !!response.complete,
-        //   hasError: !!response.error,
-        //   timestamp: response.timestamp
-        // });
+        console.log(`[CHAT-GRPC-CLIENT] Received streaming response:`, {
+          hasContentChunk: !!response.contentChunk,
+          hasRagContext: !!response.ragContext,
+          hasComplete: !!response.complete,
+          hasError: !!response.error,
+          hasStepProgress: !!response.stepProgress,
+          timestamp: response.timestamp
+        });
 
         // Convert gRPC response to standardized streaming response
+        // AIDEV-NOTE: keepCase:false converts snake_case proto fields to camelCase at runtime
         let streamingResponse: StreamingChatResponse;
 
-        if (response.content_chunk) {
+        if (response.stepProgress) {
+          // Real-time step execution progress
           streamingResponse = {
-            type: 'content',
-            content: response.content_chunk.content,
-            sequence: response.content_chunk.sequence,
+            type: 'step_progress',
+            stepProgress: response.stepProgress,
             timestamp: response.timestamp
           };
-        } else if (response.rag_context) {
+        } else if (response.contentChunk) {
+          streamingResponse = {
+            type: 'content',
+            content: response.contentChunk.content,
+            sequence: response.contentChunk.sequence,
+            timestamp: response.timestamp
+          };
+        } else if (response.ragContext) {
           streamingResponse = {
             type: 'rag_context',
-            ragContext: response.rag_context,
+            ragContext: response.ragContext,
             timestamp: response.timestamp
           };
         } else if (response.complete) {
@@ -189,9 +205,9 @@ export class ChatProcessingClient {
         onStreamingResponse({
           type: 'error',
           error: {
-            error_code: 'GRPC_ERROR',
-            error_message: error.message,
-            error_details: {
+            errorCode: 'GRPC_ERROR',
+            errorMessage: error.message,
+            errorDetails: {
               'grpc_code': error.code.toString(),
               'grpc_details': error.details || 'No additional details'
             }
@@ -200,6 +216,42 @@ export class ChatProcessingClient {
         });
         
         reject(error);
+      });
+    });
+  }
+
+  /**
+   * Cancel an in-progress message processing
+   *
+   * @param messageId - The message ID to cancel
+   * @param userId - User requesting cancellation
+   * @param organizationId - Organization context
+   */
+  async cancelMessage(
+    messageId: string,
+    userId: string,
+    organizationId: number
+  ): Promise<{ success: boolean; message: string }> {
+    console.log(`[CHAT-GRPC-CLIENT] Cancelling message ${messageId}`);
+
+    return new Promise((resolve, reject) => {
+      const request = {
+        messageId: messageId,
+        userId: userId,
+        organizationId: organizationId
+      };
+
+      this.client.CancelMessage(request, (error: any, response: any) => {
+        if (error) {
+          console.error(`[CHAT-GRPC-CLIENT] Cancel failed:`, error);
+          reject(error);
+        } else {
+          console.log(`[CHAT-GRPC-CLIENT] Cancel response:`, response);
+          resolve({
+            success: response.success,
+            message: response.message
+          });
+        }
       });
     });
   }

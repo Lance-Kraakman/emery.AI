@@ -10,14 +10,22 @@
 
 import { FieldId, TableId } from '@/ddd/domain/shared/value-objects';
 
-export type FieldType = 
-  | 'text' 
-  | 'number' 
-  | 'boolean' 
-  | 'date' 
-  | 'relation' 
+export type FieldType =
+  | 'text'
+  | 'number'
+  | 'boolean'
+  | 'date'
+  | 'relation'
   | 'file'
-  | 'document';
+  | 'document'
+  | 'embedding';
+
+export interface EmbeddingFieldMetadata {
+  embeddingSize: 384 | 768 | 1536 | 3072;
+  sourceFieldId?: number;
+  model?: string;
+  normalize?: boolean;
+}
 
 export interface CreateTableFieldData {
   name: string;
@@ -153,9 +161,10 @@ export class TableField {
       'date': 'TIMESTAMP WITH TIME ZONE',
       'relation': 'JSONB',
       'file': 'JSONB',
-      'document': 'JSONB'
+      'document': 'JSONB',
+      'embedding': 'JSONB'  // Metadata stored in PostgreSQL, vectors in Delta Lake
     };
-    
+
     return typeMapping[this._type];
   }
 
@@ -256,61 +265,31 @@ export class TableField {
     return { valid: true };
   }
 
-  validateValue(value: unknown): { valid: boolean; error?: string } {
-    // Handle null/undefined
-    if (value === null || value === undefined || value === '') {
-      if (this._required) {
-        return { valid: false, error: `${this._name} is required` };
-      }
-      return { valid: true };
+  private validateEmbeddingArray(value: unknown): { valid: boolean; error?: string } {
+    if (!Array.isArray(value)) {
+      return { valid: false, error: `${this._name} must be an array of numbers` };
     }
 
-    // Type-specific validation
-    switch (this._type) {
-      case 'text':
-        if (typeof value !== 'string') {
-          return { valid: false, error: `${this._name} must be text` };
-        }
-        if (value.length > 1000) {
-          return { valid: false, error: `${this._name} cannot exceed 1000 characters` };
-        }
-        break;
+    if (value.length === 0) {
+      return { valid: true }; // Empty array is valid (no embedding yet)
+    }
 
-      case 'number':
-        if (typeof value !== 'number' || isNaN(value)) {
-          return { valid: false, error: `${this._name} must be a number` };
-        }
-        break;
+    // All elements must be numbers
+    for (let i = 0; i < value.length; i++) {
+      if (typeof value[i] !== 'number') {
+        return { valid: false, error: `${this._name}[${i}] must be a number` };
+      }
+    }
 
-      case 'boolean':
-        if (typeof value !== 'boolean') {
-          return { valid: false, error: `${this._name} must be true or false` };
-        }
-        break;
-
-      case 'date':
-        if (!(value instanceof Date) && typeof value !== 'string') {
-          return { valid: false, error: `${this._name} must be a valid date` };
-        }
-        if (typeof value === 'string') {
-          const parsed = new Date(value);
-          if (isNaN(parsed.getTime())) {
-            return { valid: false, error: `${this._name} must be a valid date` };
-          }
-        }
-        break;
-
-      case 'file':
-        return this.validateFileArray(value);
-
-      case 'document':
-        return this.validateFileArray(value); // Documents use same validation as files
-
-      case 'relation':
-        return this.validateRelationArray(value);
-
-      default:
-        return { valid: false, error: `Unknown field type: ${this._type}` };
+    // Validate dimension matches field metadata
+    const metadata = this._metadata as EmbeddingFieldMetadata | undefined;
+    if (metadata && metadata.embeddingSize) {
+      if (value.length !== metadata.embeddingSize) {
+        return {
+          valid: false,
+          error: `${this._name} must have ${metadata.embeddingSize} dimensions, got ${value.length}`
+        };
+      }
     }
 
     return { valid: true };
