@@ -529,6 +529,17 @@ export async function POST(req: NextRequest) {
     // Create readable stream for frontend
     const readableStream = new ReadableStream({
       start(controller) {
+        // AIDEV-NOTE: Send chat_created event immediately to notify frontend of chatId
+        // This ensures frontend tracks the same chat session from the first message
+        if (currentChatId) {
+          console.log(`[CHAT-GRPC-API] Sending chat_created event with chatId: ${currentChatId}`);
+          const chatCreatedEvent = {
+            type: 'chat_created',
+            chatId: currentChatId
+          };
+          controller.enqueue(encodeSSEEvent(chatCreatedEvent));
+        }
+
         const grpcClient = getChatProcessingClient(organizationId.toString());
 
         // Process message with gRPC service (now accepts MessagePart[])
@@ -655,7 +666,8 @@ export async function POST(req: NextRequest) {
               controller.error(streamError);
             }
           },
-          messageId // Pass messageId for cancellation tracking
+          messageId, // Pass messageId for cancellation tracking
+          currentChatId // Pass chatId as sessionId for stateful agent persistence
         ).then(() => {
           console.log('[CHAT-GRPC-API] gRPC processing completed successfully');
         }).catch((error) => {

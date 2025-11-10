@@ -19,21 +19,6 @@ export const anonymousRole = pgRole('anon', {
   inherit: false
 });
 
-// Custom vector type for pgvector
-const vector = customType<{ data: number[]; notNull: false; default: false }>({
-  dataType() {
-    return 'vector(768)'; // sentence-transformers/all-mpnet-base-v2 (768 dimensions)
-  },
-  toDriver(value: number[]): string {
-    return JSON.stringify(value);
-  },
-  fromDriver(value: unknown): number[] {
-    if (typeof value === 'string') {
-      return JSON.parse(value);
-    }
-    return value as number[];
-  },
-});
 
 
 export const databases = pgTable("databases", {
@@ -83,7 +68,7 @@ export const fields = pgTable("fields", {
   orderIndex: integer("order_index").default(0),
   required: boolean("required").default(false),
 
-  // Configuration for complex field types (file, relation)
+  // Configuration for complex field types (file, relation, select, autonumber, timestamp)
   fieldConfig: jsonb("field_config").$type<{
     // File field config
     allowedTypes?: string[]; // ['image/*', '.pdf', etc.]
@@ -94,6 +79,27 @@ export const fields = pgTable("fields", {
     targetTableId?: number;
     relationshipType?: 'one-to-one' | 'one-to-many' | 'many-to-many';
     displayField?: string;
+
+    // Single/Multi-select config
+    options?: Array<{
+      id: number;
+      value: string;
+      color: string;
+    }>;
+    defaultOption?: number;     // Single-select: default option ID
+    maxSelections?: number;     // Multi-select: maximum selections allowed
+
+    // Autonumber config
+    startingNumber?: number;    // Default: 1
+    prefix?: string;            // Optional: "INV-"
+    suffix?: string;            // Optional: "-2025"
+    digits?: number;            // Zero-padding: 5 → "00001"
+    currentValue?: number;      // Track highest value (persisted for durability)
+
+    // Timestamp config (last-updated, created-at)
+    timezone?: string;          // Default: UTC
+    includeTime?: boolean;      // Default: true
+    watchFields?: string[];     // last-updated: only update when specific fields change
 
     // Generic extension metadata
     [key: string]: any;

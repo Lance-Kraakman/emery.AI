@@ -28,6 +28,11 @@ export const FIELD_TYPES = {
   RELATION: 'relation',
   FILE: 'file',
   DOCUMENT: 'document',
+  SINGLE_SELECT: 'single-select',
+  MULTI_SELECT: 'multi-select',
+  AUTONUMBER: 'autonumber',
+  LAST_UPDATED: 'last-updated',
+  CREATED_AT: 'created-at',
 } as const
 
 /**

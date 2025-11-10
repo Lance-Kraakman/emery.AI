@@ -49,6 +49,16 @@ class InfraStack(Stack):
         
         return hashlib.md5(hash_input.encode()).hexdigest()[:8]
 
+    def _get_frontend_image(self) -> ecs.ContainerImage:
+        """Get frontend container image from ECR or build from source"""
+        frontend_image_uri = os.environ.get('FRONTEND_IMAGE_URI')
+        if frontend_image_uri:
+            print(f"Using pre-built frontend image from ECR: {frontend_image_uri}")
+            return ecs.ContainerImage.from_registry(frontend_image_uri)
+        else:
+            print("Building frontend image from source (for local development/bootstrap)")
+            return ecs.ContainerImage.from_asset("..")
+
     def _get_agent_image(self) -> ecs.ContainerImage:
         """Get agent container image from ECR or build from source"""
         agent_image_uri = os.environ.get('AGENT_IMAGE_URI')
@@ -143,7 +153,7 @@ class InfraStack(Stack):
             "Allow SSH access"
         )
 
-        # Create bastion host for secure database access  
+        # Create bastion host for secure database access
         bastion_host = ec2.Instance(
             self, f"{prefix}DatabaseBastion",
             vpc=vpc,
@@ -151,7 +161,10 @@ class InfraStack(Stack):
             machine_image=ec2.MachineImage.latest_amazon_linux2(),
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
             security_group=bastion_sg,
-            key_name=f"{env_name}-bastion-machine",  # Environment-specific key pair
+            key_pair=ec2.KeyPair.from_key_pair_name(
+                self, f"{prefix}BastionKeyPair",
+                f"{env_name}-bastion-machine"  # Environment-specific key pair
+            ),
             user_data=ec2.UserData.for_linux()
         )
         
@@ -186,10 +199,8 @@ class InfraStack(Stack):
         )
 
         # Define the Docker image for the frontend, scheduler, and migration
-        # AIDEV-NOTE: Use ECR image as expected by CI/CD workflow
-        frontend_image_uri = os.environ.get('FRONTEND_IMAGE_URI')
-        app_image = ecs.ContainerImage.from_registry(frontend_image_uri)
-        print(f"Using pre-built frontend image from ECR: {frontend_image_uri}")
+        # AIDEV-NOTE: Use ECR image from CI/CD workflow, or build from source locally
+        app_image = self._get_frontend_image()
 
         # AIDEV-NOTE: Migration now handled by init containers in each service
         # No separate migration task needed - migrations run before each service starts
@@ -228,8 +239,13 @@ class InfraStack(Stack):
             f"{prefix}MigrationInitContainer",
             image=app_image,
             command=["migrate"],
+            environment={
+                "RUN_SEEDS": "true",  # Enable database seeding
+                "NODE_ENV": "production",
+            },
             secrets={
                 "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
+                **app_secrets_map  # Seeds need access to Pipedream, OpenAI, etc.
             },
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix=f"{prefix}-Migration-Init",
@@ -352,29 +368,15 @@ class InfraStack(Stack):
             description="Database endpoint for SSH tunnel connection"
         )
 
-        # AIDEV-NOTE: Migration logs now available in init container log streams:
-        # /aws/ecs/{prefix}-Migration-Init (frontend)
-        # /aws/ecs/{prefix}-Scheduler-Migration (scheduler)
+        # AIDEV-NOTE: Migration logs available in frontend init container log stream:
+        # /aws/ecs/{prefix}-Migration-Init (frontend only - scheduler does not run migrations)
 
-        # Create a new Task Definition for the scheduler with migration init container
+        # AIDEV-NOTE: Scheduler task definition without migration init container
+        # Migrations are handled exclusively by the frontend service to prevent race conditions
         scheduler_task_definition = ecs.FargateTaskDefinition(
             self, f"{prefix}SchedulerTaskDef",
             cpu=512,
             memory_limit_mib=1024,
-        )
-
-        # Add migration init container for scheduler
-        scheduler_migration_init = scheduler_task_definition.add_container(
-            f"{prefix}SchedulerMigrationInit",
-            image=app_image,
-            command=["migrate"],
-            secrets={
-                "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
-            },
-            logging=ecs.LogDrivers.aws_logs(
-                stream_prefix=f"{prefix}-Scheduler-Migration",
-            ),
-            essential=False
         )
 
         scheduler_container = scheduler_task_definition.add_container(
@@ -389,14 +391,6 @@ class InfraStack(Stack):
                 stream_prefix=f"{prefix}-Scheduler",
             ),
             essential=True
-        )
-
-        # Scheduler waits for migration (FIXED SYNTAX)
-        scheduler_container.add_container_dependencies(
-            ecs.ContainerDependency(
-                container=scheduler_migration_init,
-                condition=ecs.ContainerDependencyCondition.SUCCESS
-            )
         )
         
         # AIDEV-NOTE: ECS health checks should be configured in container definition, not added afterwards
@@ -536,4 +530,9 @@ class InfraStack(Stack):
             agent_service.task_definition.default_container.add_environment(
                 "S3_BUCKET_NAME",
                 storage_bucket.bucket_name
+            )
+            # Add NextJS base URL for agent callbacks to API routes
+            agent_service.task_definition.default_container.add_environment(
+                "NEXTJS_BASE_URL",
+                f"https://{cloudfront_distribution.distribution_domain_name}"
             )

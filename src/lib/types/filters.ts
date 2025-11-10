@@ -80,6 +80,17 @@ export const DATE_OPERATORS: readonly FilterOperatorDef[] = [
 ] as const
 
 /**
+ * Operators available for select fields (single and multi)
+ */
+export const SELECT_OPERATORS: readonly FilterOperatorDef[] = [
+  { value: 'eq', label: 'Equals' },
+  { value: 'ne', label: 'Not equals' },
+  { value: 'ilike', label: 'Contains' },  // Multi-select: contains this option
+  { value: 'is_null', label: 'Is empty' },
+  { value: 'is_not_null', label: 'Is not empty' },
+] as const
+
+/**
  * Map of field types to their available operators
  */
 export const OPERATORS_BY_FIELD_TYPE = {
@@ -90,6 +101,11 @@ export const OPERATORS_BY_FIELD_TYPE = {
   relation: TEXT_OPERATORS,  // Relations use text-like filtering
   file: TEXT_OPERATORS,
   document: TEXT_OPERATORS,
+  'single-select': SELECT_OPERATORS,
+  'multi-select': SELECT_OPERATORS,
+  autonumber: NUMBER_OPERATORS,  // Autonumbers are numeric
+  'last-updated': DATE_OPERATORS,  // Timestamps are dates
+  'created-at': DATE_OPERATORS,    // Timestamps are dates
 } as const
 
 /**

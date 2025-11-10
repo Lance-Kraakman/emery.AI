@@ -338,14 +338,8 @@ export class TableGrpcMapper {
     if (value === null || value === undefined) {
       // AIDEV-NOTE: Empty protobuf oneof represents null value
       // Python/Polars will handle this as None/null for appropriate field types
-      // This prevents "Cannot cast string '' to Float64" errors
       return {};
-    } else if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'number') {
-      // AIDEV-NOTE: Embedding vectors - arrays of numbers
-      // Convert to protobuf FloatArray for efficient wire format
-      return { embeddingValue: { values: value } };
     } else if (typeof value === 'number') {
-      // Numbers go to numberValue
       return { numberValue: value };
     } else if (typeof value === 'boolean') {
       return { booleanValue: value };
@@ -353,7 +347,6 @@ export class TableGrpcMapper {
       return { dateValue: value.getTime() };
     } else if (typeof value === 'string') {
       // AIDEV-NOTE: Check if string is actually a number to prevent type confusion
-      // This handles cases where grid sends '234.0' instead of 234.0
       const numericValue = Number(value);
       if (!isNaN(numericValue) && value.trim() !== '' && /^-?\d+\.?\d*$/.test(value.trim())) {
         return { numberValue: numericValue };
@@ -365,11 +358,22 @@ export class TableGrpcMapper {
       }
       return { textValue: value };
     } else if (typeof value === 'object') {
-      // Objects/arrays that weren't serialized by RowSerializer (shouldn't happen normally)
-      // Stringify them for storage
-      return { jsonValue: JSON.stringify(value) };
+      // AIDEV-NOTE: Arrays (including multi-select) are objects in JavaScript
+      // This is expected for complex field types like multi-select, relation, document, file
+      const isArray = Array.isArray(value);
+      const stringified = JSON.stringify(value);
+
+      console.log('[table-grpc-mapper.toProtoRowDataValue] Encoding object/array as JSON', {
+        value,
+        valueType: typeof value,
+        isArray,
+        arrayLength: isArray ? value.length : undefined,
+        stringified,
+        stringifiedLength: stringified.length
+      });
+
+      return { jsonValue: stringified };
     } else {
-      // Fallback to string
       return { textValue: String(value) };
     }
   }
@@ -458,11 +462,22 @@ export class TableGrpcMapper {
     } else if (protoValue.dateValue !== undefined) {
       return new Date(protoValue.dateValue);
     } else if (protoValue.jsonValue !== undefined) {
-      return JSON.parse(protoValue.jsonValue);
+      const parsed = JSON.parse(protoValue.jsonValue);
+      console.log('[table-grpc-mapper.fromProtoRowDataValue] Decoding JSON value', {
+        jsonValue: protoValue.jsonValue,
+        parsed,
+        parsedType: typeof parsed,
+        isArray: Array.isArray(parsed)
+      });
+      return parsed;
     } else if (protoValue.embeddingValue !== undefined && protoValue.embeddingValue.values) {
       // AIDEV-NOTE: Embedding vectors - convert protobuf FloatArray to JavaScript array
       return Array.from(protoValue.embeddingValue.values);
     } else {
+      // AIDEV-NOTE: No value field set means null/undefined in storage
+      console.log('[table-grpc-mapper.fromProtoRowDataValue] No value field set, returning null', {
+        protoValue
+      });
       return null;
     }
   }
@@ -488,6 +503,16 @@ export class TableGrpcMapper {
         return FieldType.FIELD_TYPE_DOCUMENT;
       case 'embedding':
         return FieldType.FIELD_TYPE_EMBEDDING;
+      case 'single-select':
+        return FieldType.FIELD_TYPE_SINGLE_SELECT;
+      case 'multi-select':
+        return FieldType.FIELD_TYPE_MULTI_SELECT;
+      case 'autonumber':
+        return FieldType.FIELD_TYPE_AUTONUMBER;
+      case 'last-updated':
+        return FieldType.FIELD_TYPE_LAST_UPDATED;
+      case 'created-at':
+        return FieldType.FIELD_TYPE_CREATED_AT;
       default:
         return FieldType.FIELD_TYPE_UNSPECIFIED;
     }
@@ -514,6 +539,16 @@ export class TableGrpcMapper {
         return 'document';
       case FieldType.FIELD_TYPE_EMBEDDING:
         return 'embedding';
+      case FieldType.FIELD_TYPE_SINGLE_SELECT:
+        return 'single-select';
+      case FieldType.FIELD_TYPE_MULTI_SELECT:
+        return 'multi-select';
+      case FieldType.FIELD_TYPE_AUTONUMBER:
+        return 'autonumber';
+      case FieldType.FIELD_TYPE_LAST_UPDATED:
+        return 'last-updated';
+      case FieldType.FIELD_TYPE_CREATED_AT:
+        return 'created-at';
       default:
         return 'text';
     }

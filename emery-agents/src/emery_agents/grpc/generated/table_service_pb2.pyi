@@ -18,6 +18,11 @@ class FieldType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     FIELD_TYPE_RELATION: _ClassVar[FieldType]
     FIELD_TYPE_DOCUMENT: _ClassVar[FieldType]
     FIELD_TYPE_EMBEDDING: _ClassVar[FieldType]
+    FIELD_TYPE_SINGLE_SELECT: _ClassVar[FieldType]
+    FIELD_TYPE_MULTI_SELECT: _ClassVar[FieldType]
+    FIELD_TYPE_AUTONUMBER: _ClassVar[FieldType]
+    FIELD_TYPE_LAST_UPDATED: _ClassVar[FieldType]
+    FIELD_TYPE_CREATED_AT: _ClassVar[FieldType]
 
 class FilterOperator(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -58,6 +63,11 @@ FIELD_TYPE_FILE: FieldType
 FIELD_TYPE_RELATION: FieldType
 FIELD_TYPE_DOCUMENT: FieldType
 FIELD_TYPE_EMBEDDING: FieldType
+FIELD_TYPE_SINGLE_SELECT: FieldType
+FIELD_TYPE_MULTI_SELECT: FieldType
+FIELD_TYPE_AUTONUMBER: FieldType
+FIELD_TYPE_LAST_UPDATED: FieldType
+FIELD_TYPE_CREATED_AT: FieldType
 FILTER_OP_UNSPECIFIED: FilterOperator
 FILTER_OP_EQ: FilterOperator
 FILTER_OP_NE: FilterOperator

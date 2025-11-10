@@ -91,13 +91,18 @@ export class ChatProcessingClient {
     conversationHistory: HistoryMessage[] = [],
     options: ChatProcessingOptions = {},
     onStreamingResponse: (response: StreamingChatResponse) => void,
-    messageId?: string
+    messageId?: string,
+    sessionId?: string
   ): Promise<void> {
 
     // Generate message ID if not provided
     const actualMessageId = messageId || `msg_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
+    // Use sessionId if provided, otherwise generate from organizationId and userId
+    const actualSessionId = sessionId || `${organizationId}_${userId}`;
+
     console.log(`[CHAT-GRPC-CLIENT] Processing message ${actualMessageId} for user ${userId} in org ${organizationId}`);
+    console.log(`[CHAT-GRPC-CLIENT] Session ID: ${actualSessionId}`);
     console.log(`[CHAT-GRPC-CLIENT] Message parts: ${messageParts.length}`);
     console.log(`[CHAT-GRPC-CLIENT] History messages: ${conversationHistory.length}`);
 
@@ -114,6 +119,7 @@ export class ChatProcessingClient {
       conversationHistory: conversationHistory,
       model: options.defaultModel || '', // Pass organization's default model or empty string for system default
       messageId: actualMessageId, // Add message ID for cancellation tracking
+      sessionId: actualSessionId, // Session ID for stateful agent persistence
       tools: (options.tools || []).map(tool => ({
         name: tool.name,
         version: '', // Empty version since ToolConfig no longer has version

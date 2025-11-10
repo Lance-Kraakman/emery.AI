@@ -208,7 +208,7 @@ message ProcessMessageRequest {
   // Context for RAG and domain-specific processing
   ChatContext context = 4;
 
-  // Conversation history (passed from Next.js database)
+  // Conversation history (only used if session not in memory - for restoration after restart/timeout)
   repeated HistoryMessage conversation_history = 5;
 
   // Tools for ToolCallingAgent execution (can be empty)
@@ -217,6 +217,8 @@ message ProcessMessageRequest {
   string model = 7;                  // Optional: model override for this chat message
 
   string message_id = 8;             // Unique message identifier for cancellation
+
+  string session_id = 9;             // Required: session identifier (chat_id from database)
 }
 
 // Streaming response from AI processing

@@ -32,7 +32,6 @@ async function runMigration() {
     
     try {
       await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
-      await sql`CREATE EXTENSION IF NOT EXISTS "vector"`;
       console.log('✅ Extensions created successfully!');
     } finally {
       await sql.end();
@@ -40,13 +39,53 @@ async function runMigration() {
     
     // Run the actual migration
     console.log('🚀 Running Drizzle migrations...');
-    execSync('pnpm db:migrate', { 
+    execSync('pnpm db:migrate', {
       stdio: 'inherit',
       env: { ...process.env, DATABASE_URL: connectionString }
     });
-    
+
     console.log('✅ Migration completed successfully!');
-    
+
+    // Run seed scripts if RUN_SEEDS environment variable is set
+    const runSeeds = process.env.RUN_SEEDS?.toLowerCase() === 'true';
+
+    if (runSeeds) {
+      console.log('\n🌱 Running database seed scripts...');
+
+      try {
+        // Import and run seeds in order
+        const { seedPermissions, seedSystemRoles } = await import('../drizzle/seeds/rbac.js');
+        const { seedSystemUsers } = await import('../drizzle/seeds/system-users.js');
+        const { seedSystemRoleAssignments } = await import('../drizzle/seeds/system-role-assignments.js');
+        const { seedAppTypes } = await import('../drizzle/seeds/app-types.js');
+        const { seedTools } = await import('../drizzle/seeds/tools.js');
+
+        console.log('  📋 Seeding RBAC (permissions and roles)...');
+        await seedPermissions();
+        await seedSystemRoles();
+
+        console.log('  👤 Seeding system users...');
+        await seedSystemUsers();
+
+        console.log('  🔐 Seeding system role assignments...');
+        await seedSystemRoleAssignments();
+
+        console.log('  📦 Seeding app types...');
+        await seedAppTypes();
+
+        console.log('  🛠️  Seeding tools...');
+        await seedTools();
+
+        console.log('✅ Database seeding completed successfully!');
+      } catch (seedError) {
+        console.error('❌ Seeding failed:', (seedError as Error).message);
+        console.error('Note: Migration succeeded, but seeding failed');
+        // Don't exit with error - migration succeeded
+      }
+    } else {
+      console.log('ℹ️  Skipping seeds (set RUN_SEEDS=true to enable)');
+    }
+
   } catch (error) {
     console.error('❌ Migration failed:', (error as Error).message);
     process.exit(1);

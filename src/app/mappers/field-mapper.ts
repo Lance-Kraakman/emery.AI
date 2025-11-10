@@ -1,4 +1,4 @@
-import type { TableField, FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import type { TableField, FieldType, FieldMetadata } from '@/ddd/domain/tables/value-objects/table-field';
 
 export interface FieldDTO {
   id: number;
@@ -7,7 +7,7 @@ export interface FieldDTO {
   orderIndex: number | null;
   relatedTableId?: number | null;
   required: boolean | null;
-  metadata?: Record<string, unknown> | null;
+  metadata?: FieldMetadata | null;
   createdAt: Date | null;
 }
 

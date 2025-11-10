@@ -19,7 +19,7 @@ const logger = createDebugLogger('Fields');
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("data:create");
-    const { tableId, name, type, required = false, relatedTableId } = data;
+    const { tableId, name, type, required = false, relatedTableId, metadata } = data;
 
     if (!tableId || !name || !type) {
       return {
@@ -36,8 +36,18 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
       type: type as FieldType,
       required,
       relatedTableId: relatedTableId ? TableId.fromNumber(relatedTableId) : undefined,
-      metadata: {}
+      metadata: metadata || {}
     };
+
+    // Log select field creation with options
+    if (type === 'single-select' || type === 'multi-select') {
+      logger.debug('Creating select field', {
+        name,
+        type,
+        optionCount: metadata?.options?.length || 0,
+        hasMetadata: !!metadata
+      });
+    }
 
     const result = await tableApplicationService.createField(command);
 
@@ -48,6 +58,51 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
       };
     }
 
+    // Log successful creation with metadata
+    if (type === 'single-select' || type === 'multi-select') {
+      logger.debug('Select field created successfully', {
+        name,
+        type,
+        savedOptions: result.data?.metadata?.options?.length || 0
+      });
+    }
+
+    // Initialize autonumber field with currentValue based on existing rows
+    if (type === 'autonumber' && result.data) {
+      try {
+        // Get count of existing rows to set appropriate starting value
+        const rows = await tableApplicationService.getRows(
+          TableId.fromNumber(tableId),
+          {
+            limit: 1000, // Get reasonable sample
+            offset: 0
+          }
+        );
+
+        const rowCount = rows.length || 0;
+        const startingNumber = (typeof data.metadata?.startingNumber === 'number' ? data.metadata.startingNumber : 1);
+
+        // Set currentValue to max(rowCount, startingNumber) so next value starts after existing rows
+        const currentValue = Math.max(rowCount, startingNumber);
+
+        // Update field metadata with currentValue
+        await tableApplicationService.updateField({
+          tableId: TableId.fromNumber(tableId),
+          fieldName: name,
+          metadata: {
+            ...data.metadata,
+            startingNumber,
+            currentValue
+          }
+        });
+
+        logger.debug(`Initialized autonumber field "${name}" with currentValue=${currentValue} (${rowCount} existing rows)`);
+      } catch (error) {
+        logger.error('Failed to initialize autonumber currentValue:', error);
+        // Don't fail the whole operation, field is still created
+      }
+    }
+
     // Note: RAG reindexing is now handled automatically by database triggers
 
     // Revalidate the appropriate path
@@ -56,7 +111,7 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
     } else {
       revalidatePath('/data'); // Default path for field operations
     }
-    
+
     return {
       success: true,
       data: result.data ? FieldMapper.toDTO(result.data) : null,
@@ -97,6 +152,20 @@ export async function getFields(tableId: number): Promise<FieldDTO[]> {
     const fieldList = await tableApplicationService.getFieldsForTable(TableId.fromNumber(tableId));
     const dtoFields = fieldList.map(FieldMapper.toDTO);
 
+    // Log select fields with their options
+    const selectFields = dtoFields.filter(f => f.type === 'single-select' || f.type === 'multi-select');
+    if (selectFields.length > 0) {
+      logger.debug('Loaded select fields', {
+        tableId,
+        selectFieldCount: selectFields.length,
+        fields: selectFields.map(f => ({
+          name: f.name,
+          type: f.type,
+          optionCount: Array.isArray(f.metadata?.options) ? f.metadata.options.length : 0
+        }))
+      });
+    }
+
     logger.summary('Loaded fields', { tableId, count: dtoFields.length });
 
     return dtoFields;
@@ -114,6 +183,7 @@ export async function updateField(data: {
     type?: FieldType
     required?: boolean
     relatedTableId?: number
+    metadata?: Record<string, any>
   }
 }, revalidateUrl?: string): Promise<Result> {
   try {
@@ -129,20 +199,38 @@ export async function updateField(data: {
 
     const tableApplicationService = getTableApplicationService();
 
+    // Log metadata updates for select fields
+    if (updates.metadata?.options) {
+      logger.debug('Updating field metadata (options)', {
+        fieldName,
+        tableId,
+        optionCount: updates.metadata.options.length
+      });
+    }
+
     const result = await tableApplicationService.updateField({
       tableId: TableId.fromNumber(tableId),
       fieldName,
       name: updates.name,
       type: updates.type,
       required: updates.required,
-      metadata: updates.relatedTableId ? { relatedTableId: updates.relatedTableId } : undefined
+      metadata: updates.metadata || (updates.relatedTableId ? { relatedTableId: updates.relatedTableId } : undefined)
     });
 
     if (!result.success) {
+      logger.error('Field update failed', { fieldName, error: result.error });
       return {
         success: false,
         error: result.error || "Failed to update field"
       };
+    }
+
+    // Log successful update
+    if (updates.metadata?.options) {
+      logger.debug('Field metadata updated successfully', {
+        fieldName,
+        savedOptions: result.data?.metadata?.options?.length || 0
+      });
     }
 
     // Revalidate the appropriate path
