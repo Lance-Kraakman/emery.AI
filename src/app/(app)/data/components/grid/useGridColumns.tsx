@@ -22,7 +22,7 @@ interface UseGridColumnsParams {
   onUpdateRow: (rowId: string, fieldId: number, value: DomainFieldValue) => Promise<any>
   onEditField: (field: FieldDTO) => void
   onDeleteField: (fieldName: string) => void
-  onAddColumn: (data: { name: string; type: FieldType; required: boolean; relatedTableId?: number }) => Promise<void>
+  onAddColumn: (data: { name: string; type: FieldType; required: boolean; relatedTableId?: number; metadata?: Record<string, any> }) => Promise<void>
   onFieldUpdate: (field: FieldDTO, updates: Partial<FieldDTO>) => Promise<void>
   onSort?: (field: string, direction: 'asc' | 'desc') => void
   onClearSort?: () => void
@@ -114,6 +114,7 @@ export function useGridColumns({
           // Custom component for complex relation selection
           if (RelationCell) {
             columnConfig = {
+              ...textColumn,  // ✅ CRITICAL: Extend base column type for proper data binding
               component: RelationCell,
               disableKeys: true,
               columnData: { field, onUpdateRow }
@@ -130,6 +131,7 @@ export function useGridColumns({
           // Custom component for file upload/preview
           if (FileCell) {
             columnConfig = {
+              ...textColumn,  // ✅ CRITICAL: Extend base column type for proper data binding
               component: FileCell,
               disableKeys: true,
               columnData: { field, organizationId, tableId, onUpdateRow }
@@ -146,6 +148,7 @@ export function useGridColumns({
           // Custom component for document management
           if (DocumentCell) {
             columnConfig = {
+              ...textColumn,  // ✅ CRITICAL: Extend base column type for proper data binding
               component: DocumentCell,
               disableKeys: true,
               columnData: { field, organizationId, tableId, onUpdateRow }
@@ -162,6 +165,7 @@ export function useGridColumns({
           // Custom component for embedding vector display
           if (EmbeddingCell) {
             columnConfig = {
+              ...textColumn,  // ✅ CRITICAL: Extend base column type for proper data binding
               component: EmbeddingCell,
               disableKeys: true,
               columnData: { field }
@@ -178,6 +182,7 @@ export function useGridColumns({
           // Custom component for single select dropdown
           if (SingleSelectCell) {
             columnConfig = {
+              ...textColumn,  // ✅ CRITICAL: Extend base column type for proper data binding
               component: SingleSelectCell,
               disableKeys: true,
               columnData: {
@@ -197,6 +202,7 @@ export function useGridColumns({
           // Custom component for multi select
           if (MultiSelectCell) {
             columnConfig = {
+              ...textColumn,  // ✅ CRITICAL: Extend base column type for proper data binding
               component: MultiSelectCell,
               disableKeys: true,
               columnData: {

@@ -630,7 +630,17 @@ export async function searchRowsDSG(
       for (const fieldValue of row.fieldValues) {
         const field = table.fields.find(f => f.id.value.toString() === fieldValue.fieldId);
         if (field) {
-          dsgRow[field.name] = fieldValue.value;
+          // Convert ISO string dates to Date objects for dateColumn compatibility
+          if ((field.type === 'date' || field.type === 'last-updated' || field.type === 'created-at')
+              && typeof fieldValue.value === 'string' && fieldValue.value) {
+            try {
+              dsgRow[field.name] = new Date(fieldValue.value);
+            } catch {
+              dsgRow[field.name] = fieldValue.value; // Fallback to original value if parsing fails
+            }
+          } else {
+            dsgRow[field.name] = fieldValue.value;
+          }
         }
       }
 

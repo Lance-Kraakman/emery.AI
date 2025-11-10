@@ -30,10 +30,15 @@ enum FieldType {
   FIELD_TYPE_NUMBER = 2;
   FIELD_TYPE_BOOLEAN = 3;
   FIELD_TYPE_DATE = 4;
-  FIELD_TYPE_FILE = 5;        // Stored as JSON string
-  FIELD_TYPE_RELATION = 6;    // Stored as JSON string
-  FIELD_TYPE_DOCUMENT = 7;    // Stored as JSON string
-  FIELD_TYPE_EMBEDDING = 8;   // Fixed-size float32 list in Delta Lake
+  FIELD_TYPE_FILE = 5;          // Stored as JSON string
+  FIELD_TYPE_RELATION = 6;      // Stored as JSON string
+  FIELD_TYPE_DOCUMENT = 7;      // Stored as JSON string
+  FIELD_TYPE_EMBEDDING = 8;     // Fixed-size float32 list in Delta Lake
+  FIELD_TYPE_SINGLE_SELECT = 9; // Store option ID as text/number
+  FIELD_TYPE_MULTI_SELECT = 10; // Store array of option IDs as JSON
+  FIELD_TYPE_AUTONUMBER = 11;   // Auto-increment with formatting (e.g., "INV-00001")
+  FIELD_TYPE_LAST_UPDATED = 12; // Auto-updated timestamp
+  FIELD_TYPE_CREATED_AT = 13;   // Auto-set timestamp on creation
 }
 
 // Filter operators matching the TypeScript FilterOperator type

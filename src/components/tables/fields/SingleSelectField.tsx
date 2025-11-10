@@ -83,12 +83,24 @@ export function SingleSelectField({
         color: DEFAULT_COLORS[colorIndex]
       };
 
+      console.log('[SingleSelectField] Creating new option', {
+        fieldName: field.name,
+        newOption,
+        currentOptions: options.length,
+        totalAfter: options.length + 1
+      });
+
       // Update field metadata
       await onFieldUpdate({
         metadata: {
           ...field.metadata,
           options: [...options, newOption]
         }
+      });
+
+      console.log('[SingleSelectField] Option created successfully', {
+        fieldName: field.name,
+        optionValue: newOption.value
       });
 
       // Select the new option
@@ -98,7 +110,10 @@ export function SingleSelectField({
 
       setNewOptionLabel('');
     } catch (error) {
-      console.error('Failed to create option:', error);
+      console.error('[SingleSelectField] Failed to create option', {
+        fieldName: field?.name,
+        error
+      });
     } finally {
       setIsCreating(false);
     }
@@ -140,22 +155,12 @@ export function SingleSelectField({
       disabled={disabled}
     >
       <SelectTrigger className={compact ? 'h-8 text-xs' : ''}>
-        <SelectValue placeholder={placeholder}>
-          {selectedOption && (
-            <div className="flex items-center gap-2">
-              <div
-                className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: selectedOption.color }}
-              />
-              <span>{selectedOption.value}</span>
-            </div>
-          )}
-        </SelectValue>
+        <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
         {/* Option to clear selection */}
         <SelectItem value="__CLEAR__">
-          <span className="text-muted-foreground text-xs">Clear selection</span>
+          <span className="text-muted-foreground text-xs">None</span>
         </SelectItem>
 
         {/* All available options */}

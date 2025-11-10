@@ -19,21 +19,6 @@ export const anonymousRole = pgRole('anon', {
   inherit: false
 });
 
-// Custom vector type for pgvector
-const vector = customType<{ data: number[]; notNull: false; default: false }>({
-  dataType() {
-    return 'vector(768)'; // sentence-transformers/all-mpnet-base-v2 (768 dimensions)
-  },
-  toDriver(value: number[]): string {
-    return JSON.stringify(value);
-  },
-  fromDriver(value: unknown): number[] {
-    if (typeof value === 'string') {
-      return JSON.parse(value);
-    }
-    return value as number[];
-  },
-});
 
 
 export const databases = pgTable("databases", {

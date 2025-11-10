@@ -29,6 +29,59 @@ import { createDebugLogger } from '@/lib/utils/debug-logger'
 
 const logger = createDebugLogger('DataViewsClient')
 
+/**
+ * Convert date strings back to Date objects after React Query deserialization
+ * React Query serializes Date objects to strings when caching, so we need to
+ * convert them back after retrieval from cache
+ */
+function convertDateStringsInRows(rows: DSGRow[], fields: FieldDTO[]): DSGRow[] {
+  const dateFields = fields.filter(f =>
+    f.type === 'date' || f.type === 'last-updated' || f.type === 'created-at'
+  );
+
+  console.log('[DATE CONVERSION] Starting', {
+    rowCount: rows.length,
+    fieldCount: fields.length,
+    dateFieldCount: dateFields.length,
+    dateFields: dateFields.map(f => ({ name: f.name, type: f.type }))
+  });
+
+  return rows.map((row, rowIndex) => {
+    const convertedRow = { ...row };
+
+    // Convert string values back to Date objects
+    for (const field of dateFields) {
+      const value = convertedRow[field.name];
+
+      console.log(`[DATE CONVERSION] Row ${rowIndex}, field "${field.name}":`, {
+        value,
+        valueType: typeof value,
+        isDate: value instanceof Date,
+        isString: typeof value === 'string',
+        isEmpty: value === '',
+        willConvert: typeof value === 'string' && value !== ''
+      });
+
+      if (typeof value === 'string') {
+        // Convert empty strings to null for date fields (dateColumn expects null, not "")
+        if (value === '') {
+          convertedRow[field.name] = null;
+          console.log(`[DATE CONVERSION] ✅ Converted empty string to null for "${field.name}"`);
+        } else {
+          // Convert non-empty strings to Date objects
+          try {
+            convertedRow[field.name] = new Date(value);
+            console.log(`[DATE CONVERSION] ✅ Converted "${field.name}" from string to Date`, new Date(value));
+          } catch (e) {
+            console.error(`[DATE CONVERSION] ❌ Failed to convert "${field.name}":`, e);
+          }
+        }
+      }
+    }
+    return convertedRow;
+  });
+}
+
 interface DataViewsClientSimplifiedProps {
   tableId?: number
 }
@@ -103,7 +156,7 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
       if (!lastPage.hasMore) return undefined
       return allPages.length * GRID_CONFIG.PAGE_SIZE // Offset for next page
     },
-    enabled: !!selectedTableId && !searchTerm, // Disable when searching
+    enabled: !!selectedTableId && !searchTerm && fieldsQuery.isSuccess, // Wait for field metadata
     staleTime: GRID_CONFIG.ROW_STALE_TIME,
   })
 
@@ -116,19 +169,48 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
       selectedTableId && searchTerm
         ? searchRowsDSG(selectedTableId, searchTerm, 1000) // Higher limit for search results
         : Promise.resolve({ rows: [], total: 0 }),
-    enabled: !!selectedTableId && !!searchTerm && searchTerm.trim().length > 0,
+    enabled: !!selectedTableId && !!searchTerm && searchTerm.trim().length > 0 && fieldsQuery.isSuccess, // Wait for field metadata
     staleTime: GRID_CONFIG.SEARCH_STALE_TIME,
   })
 
   const fields: FieldDTO[] = fieldsQuery.data || []
 
   // Use search results when searching, otherwise use paginated rows
+  // Convert date strings to Date objects after queries resolve
   const rows: DSGRow[] = useMemo(() => {
-    if (searchTerm && searchQuery.data?.rows) {
-      return searchQuery.data.rows
+    console.log('[ROWS USEMEMO] Running', {
+      hasFieldsData: !!fieldsQuery.data,
+      fieldsLength: fieldsQuery.data?.length || 0,
+      searchTerm,
+      hasSearchData: !!searchQuery.data,
+      hasInfiniteData: !!infiniteRowsQuery.data
+    });
+
+    // Don't process if fields aren't loaded yet
+    if (!fieldsQuery.data || fieldsQuery.data.length === 0) {
+      console.log('[ROWS USEMEMO] ⚠️ Early return - no fields data');
+      return []
     }
-    return infiniteRowsQuery.data?.pages.flatMap((page: { rows: DSGRow[], hasMore: boolean, total: number }) => page.rows) ?? []
-  }, [searchTerm, searchQuery.data, infiniteRowsQuery.data])
+
+    let rawRows: DSGRow[] = []
+
+    if (searchTerm && searchQuery.data?.rows) {
+      rawRows = searchQuery.data.rows
+      console.log('[ROWS USEMEMO] Using search results:', rawRows.length, 'rows');
+    } else if (infiniteRowsQuery.data?.pages) {
+      rawRows = infiniteRowsQuery.data.pages.flatMap((page: { rows: DSGRow[], hasMore: boolean, total: number }) => page.rows)
+      console.log('[ROWS USEMEMO] Using infinite query results:', rawRows.length, 'rows');
+    }
+
+    console.log('[ROWS USEMEMO] Raw rows sample (first row):', rawRows[0]);
+
+    // Convert date strings to Date objects for dateColumn compatibility
+    const converted = convertDateStringsInRows(rawRows, fieldsQuery.data);
+
+    console.log('[ROWS USEMEMO] ✅ Conversion complete. Converted rows sample (first row):', converted[0]);
+
+    return converted;
+  }, [searchTerm, searchQuery.data, infiniteRowsQuery.data, fieldsQuery.data])
 
   // Get total count - from search results or from first page of infinite query
   const totalCount = useMemo(() => {
@@ -202,9 +284,37 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
     },
     onSuccess: (data, variables) => {
       logger.summary('Bulk update completed', { rows: variables.length })
+
+      // AIDEV-NOTE: Merge server response into cache to show auto-field values immediately
+      // Server generates auto-fields (last-updated, created-at) that aren't in optimistic update
+      // Without this merge, users must refresh to see last-updated timestamps
+      if (data?.success && data?.data && selectedTableId) {
+        const queryKey = rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
+
+        // Create map of updated rows by ID for quick lookup
+        const updatedRowsMap = new Map(
+          data.data.map((row: any) => [row.id, row])
+        )
+
+        queryClient.setQueryData(queryKey, (old: any) => {
+          if (!old?.pages) return old
+
+          return {
+            ...old,
+            pages: old.pages.map((page: any) => ({
+              ...page,
+              rows: page.rows.map((row: DSGRow) => {
+                const updatedRow = updatedRowsMap.get(row.id)
+                // If this row was updated, merge server data to get auto-fields
+                return updatedRow ? { ...row, ...updatedRow } : row
+              })
+            }))
+          }
+        })
+      }
     },
     onSettled: () => {
-      // Don't invalidate - let optimistic updates persist
+      // Don't invalidate - optimistic + server merge provides best UX
     },
   })
 

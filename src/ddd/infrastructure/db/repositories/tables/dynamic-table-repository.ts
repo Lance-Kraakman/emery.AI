@@ -117,8 +117,21 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       });
 
       // Convert field persistence records to domain TableField objects
-      const tableFields = fieldRecords.map((fieldRecord: FieldRow) =>
-        TableField.fromPersistence({
+      const tableFields = fieldRecords.map((fieldRecord: FieldRow) => {
+        // Debug logging for select fields
+        if (fieldRecord.type === 'single-select' || fieldRecord.type === 'multi-select') {
+          console.log('[dynamic-table-repository.findById] Reading select field from DB:', {
+            fieldName: fieldRecord.name,
+            fieldType: fieldRecord.type,
+            hasFieldConfig: !!fieldRecord.fieldConfig,
+            fieldConfigKeys: fieldRecord.fieldConfig ? Object.keys(fieldRecord.fieldConfig) : [],
+            hasOptions: fieldRecord.fieldConfig?.options ? true : false,
+            optionsCount: Array.isArray(fieldRecord.fieldConfig?.options) ? fieldRecord.fieldConfig.options.length : 0,
+            options: fieldRecord.fieldConfig?.options
+          });
+        }
+
+        return TableField.fromPersistence({
           id: fieldRecord.id,
           tableId: fieldRecord.tableId,
           name: fieldRecord.name,
@@ -128,8 +141,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           required: fieldRecord.required,
           metadata: fieldRecord.fieldConfig || undefined,
           createdAt: fieldRecord.createdAt
-        })
-      );
+        });
+      });
 
       // Convert to domain entity with fields included
       const dynamicTable = DynamicTable.fromPersistence({
@@ -171,8 +184,21 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         });
 
         // Convert field persistence records to domain TableField objects
-        const tableFields = fieldRecords.map((fieldRecord: FieldRow) =>
-          TableField.fromPersistence({
+        const tableFields = fieldRecords.map((fieldRecord: FieldRow) => {
+          // Debug logging for select fields
+          if (fieldRecord.type === 'single-select' || fieldRecord.type === 'multi-select') {
+            console.log('[dynamic-table-repository] Reading select field from DB:', {
+              fieldName: fieldRecord.name,
+              fieldType: fieldRecord.type,
+              hasFieldConfig: !!fieldRecord.fieldConfig,
+              fieldConfigKeys: fieldRecord.fieldConfig ? Object.keys(fieldRecord.fieldConfig) : [],
+              hasOptions: fieldRecord.fieldConfig?.options ? true : false,
+              optionsCount: Array.isArray(fieldRecord.fieldConfig?.options) ? fieldRecord.fieldConfig.options.length : 0,
+              options: fieldRecord.fieldConfig?.options
+            });
+          }
+
+          return TableField.fromPersistence({
             id: fieldRecord.id,
             tableId: fieldRecord.tableId,
             name: fieldRecord.name,
@@ -182,8 +208,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
             required: fieldRecord.required,
             metadata: fieldRecord.fieldConfig || undefined,
             createdAt: fieldRecord.createdAt
-          })
-        );
+          });
+        });
 
         const dynamicTable = DynamicTable.fromPersistence({
           id: tableRecord.id,
@@ -274,7 +300,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   /**
    * Sync table fields to the database
-   * Handles adding new fields that were created via table.addField()
+   * Handles adding new fields and updating existing fields (metadata, type, etc.)
    */
   private async syncTableFields(tableId: TableId, tableFields: TableField[]): Promise<void> {
     try {
@@ -283,17 +309,26 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         .from(fields)
         .where(eq(fields.tableId, tableId.value));
 
-      // Find fields that need to be added (exist in memory but not in DB)
-      const existingFieldNames = new Set(existingFields.map((f: FieldRow) => f.name));
-      const fieldsToAdd = tableFields.filter(f => !existingFieldNames.has(f.name));
+      // Create map for quick lookup
+      const existingFieldMap = new Map<string, FieldRow>(existingFields.map((f: FieldRow) => [f.name, f]));
 
-      // If no new fields, skip
-      if (fieldsToAdd.length === 0) {
-        return;
-      }
+      // Separate fields into new vs existing
+      const fieldsToAdd = tableFields.filter(f => !existingFieldMap.has(f.name));
+      const fieldsToUpdate = tableFields.filter(f => existingFieldMap.has(f.name));
 
       // Insert new fields into PostgreSQL
       for (const field of fieldsToAdd) {
+        // Build fieldConfig - only if there's ACTUAL content (not empty object)
+        let fieldConfig: Record<string, any> | null = null;
+        const hasMetadataContent = field.metadata && Object.keys(field.metadata).length > 0;
+
+        if (hasMetadataContent || field.relatedTableId) {
+          fieldConfig = {
+            ...(hasMetadataContent ? field.metadata : {}),
+            ...(field.relatedTableId ? { targetTableId: field.relatedTableId.value } : {})
+          };
+        }
+
         await this.db.insert(fields).values({
           tableId: tableId.value,
           name: field.name,
@@ -301,33 +336,75 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           type: field.type,
           orderIndex: field.orderIndex,
           required: field.required,
-          fieldConfig: field.relatedTableId || field.metadata ? {
-            ...(field.metadata || {}),
-            ...(field.relatedTableId ? { targetTableId: field.relatedTableId.value } : {})
-          } : null
+          fieldConfig
         });
       }
 
-      console.log(`[TableService] Synced ${fieldsToAdd.length} new fields to PostgreSQL for table ${tableId.value}`);
+      // CRITICAL FIX: Update existing fields with new metadata/config
+      // This ensures select field options and other metadata changes are persisted
+      for (const field of fieldsToUpdate) {
+        const existingField = existingFieldMap.get(field.name)!;
+
+        // Build fieldConfig - only if there's ACTUAL content (not empty object)
+        let fieldConfig: Record<string, any> | null = null;
+
+        // Check if metadata has any keys
+        const hasMetadataContent = field.metadata && Object.keys(field.metadata).length > 0;
+
+        if (hasMetadataContent || field.relatedTableId) {
+          fieldConfig = {
+            ...(hasMetadataContent ? field.metadata : {}),
+            ...(field.relatedTableId ? { targetTableId: field.relatedTableId.value } : {})
+          };
+        }
+
+        console.log('[syncTableFields] Updating field:', {
+          fieldName: field.name,
+          fieldType: field.type,
+          hasMetadata: !!field.metadata,
+          metadataKeys: field.metadata ? Object.keys(field.metadata) : [],
+          hasMetadataContent,
+          hasOptions: field.metadata?.options ? true : false,
+          optionsCount: Array.isArray(field.metadata?.options) ? field.metadata.options.length : 0,
+          fieldConfigIsNull: fieldConfig === null,
+          fieldConfig
+        });
+
+        await this.db.update(fields)
+          .set({
+            type: field.type,
+            orderIndex: field.orderIndex,
+            required: field.required,
+            fieldConfig
+          })
+          .where(eq(fields.id, existingField.id));
+      }
+
+      if (fieldsToAdd.length > 0) {
+        console.log(`[TableService] Inserted ${fieldsToAdd.length} new fields to PostgreSQL for table ${tableId.value}`);
+      }
+      if (fieldsToUpdate.length > 0) {
+        console.log(`[TableService] Updated ${fieldsToUpdate.length} existing fields in PostgreSQL for table ${tableId.value}`);
+      }
 
       // CRITICAL FIX: Sync schema changes to Delta Lake storage
       // This ensures fields are immediately available for sorting/filtering
-      console.log(`[TableService] Now syncing ${fieldsToAdd.length} fields to Delta Lake...`);
+      const totalChanges = fieldsToAdd.length + fieldsToUpdate.length;
+      if (totalChanges > 0) {
+        console.log(`[TableService] Now syncing ${totalChanges} field changes to Delta Lake...`);
 
-      const fullTable = await this.findById(tableId);
-      if (fullTable && this.datalake) {
-        const deltaLakeResult = await this.datalake.updateTable(fullTable);
-        if (!deltaLakeResult.success) {
-          console.warn(`[TableService] Warning: Failed to sync fields to Delta Lake: ${deltaLakeResult.error}`);
+        const fullTable = await this.findById(tableId);
+        if (fullTable && this.datalake) {
+          const deltaLakeResult = await this.datalake.updateTable(fullTable);
+          if (!deltaLakeResult.success) {
+            console.warn(`[TableService] Warning: Failed to sync fields to Delta Lake: ${deltaLakeResult.error}`);
+          } else {
+            console.log(`[TableService] Successfully synced ${totalChanges} field changes to Delta Lake`);
+          }
         } else {
-          console.log(`[TableService] Successfully synced ${fieldsToAdd.length} fields to Delta Lake`);
+          console.warn(`[TableService] Could not sync to Delta Lake - table or datalake repository unavailable`);
         }
-      } else {
-        console.warn(`[TableService] Could not sync to Delta Lake - table or datalake repository unavailable`);
       }
-
-      // Note: We're not handling field updates or deletions here
-      // This is specifically for the addField use case
     } catch (error) {
       console.error('[TableService] Error syncing table fields:', error);
       throw error;
