@@ -1,8 +1,12 @@
 /**
  * Table gRPC Mapper
- * 
+ *
  * Converts between domain entities and protobuf messages for the gRPC table service.
  * Handles field type mapping and data serialization/deserialization.
+ *
+ * AIDEV-NOTE: This mapper is intentionally type-agnostic for conversion methods.
+ * It performs JS types ↔ Protobuf conversion without understanding field semantics.
+ * Field-aware logic lives in RowSerializer, not here.
  */
 
 import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
@@ -10,6 +14,15 @@ import { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import { Row } from '@/ddd/domain/tables/value-objects/row';
 import { TableId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { RowFilter, FilterOperator } from '@/ddd/infrastructure/db/types/table-persistence';
+
+/**
+ * Type for serialized row data passed through gRPC
+ * AIDEV-NOTE: Intentionally uses `any` for values since this layer doesn't interpret field semantics
+ */
+type GrpcRowData = {
+  id: string;
+  data: Record<string, any>;  // Intentionally flexible - field-agnostic
+};
 import {
   FieldType,
   FilterOperator as ProtoFilterOperator,
@@ -158,7 +171,7 @@ export class TableGrpcMapper {
    */
   static toCreateRowsRequestFromData(
     tableId: TableId,
-    serializedRows: Array<{ id: string; data: Record<string, any> }>,
+    serializedRows: GrpcRowData[],
     organizationId: OrganizationId,
     fields: readonly TableField[],
     s3Path?: string,
@@ -183,7 +196,7 @@ export class TableGrpcMapper {
    */
   static toUpdateRowsRequestFromData(
     tableId: TableId,
-    serializedRows: Array<{ id: string; data: Record<string, any> }>,
+    serializedRows: GrpcRowData[],
     organizationId: OrganizationId,
     fields: readonly TableField[],
     s3Path?: string
@@ -332,7 +345,8 @@ export class TableGrpcMapper {
 
   /**
    * Convert JavaScript value to protobuf RowDataValue interface
-   * AIDEV-NOTE: Handles type normalization including numeric strings to prevent type confusion
+   * AIDEV-NOTE: Handles type normalization including numeric strings to prevent type confusion.
+   * Uses `any` intentionally - this is a type-agnostic conversion layer that doesn't understand field semantics.
    */
   static toProtoRowDataValue(value: any): IRowDataValue {
     if (value === null || value === undefined) {
@@ -450,6 +464,8 @@ export class TableGrpcMapper {
 
   /**
    * Convert protobuf RowDataValue message to JavaScript value
+   * AIDEV-NOTE: Returns `any` intentionally - actual type depends on which protobuf oneof field is set.
+   * This is a type-agnostic conversion layer; field semantics are handled by RowSerializer.
    */
   static fromProtoRowDataValue(protoValue: IRowDataValue): any {
     // Check which property is set (oneof pattern)

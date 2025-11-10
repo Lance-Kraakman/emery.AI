@@ -33,13 +33,13 @@ import React, { useMemo, useCallback, useState } from 'react'
 import {
   DataSheetGrid,
 } from 'react-datasheet-grid'
-import type { CellProps } from 'react-datasheet-grid'
 import 'react-datasheet-grid/dist/style.css' // Base DSG styles
 import './datasheet-grid.css' // Custom overrides
 
 import type { FieldDTO } from '@/app/mappers/field-mapper'
 import type { FieldValue as DomainFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 import type { DSGRow } from '@/app/mappers/dsg-mapper'
+import type { SelectOption } from '@/ddd/domain/tables/value-objects/table-field'
 import { createEmptyDSGRow, dsgRowToPlainObject } from '@/app/mappers/dsg-mapper'
 import { RelationField } from '@/components/tables/fields/RelationField'
 import { FileField } from '@/components/tables/fields/FileField'
@@ -57,6 +57,14 @@ import type { FilterConfig } from '@/lib/types/filters'
 import { createField, updateField, deleteField } from '@/app/actions/fields'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { GridContext, GridHeaderBar, type GridContextValue } from './grid'
+import type {
+  RelationCellProps,
+  FileCellProps,
+  DocumentCellProps,
+  EmbeddingCellProps,
+  SingleSelectCellProps,
+  MultiSelectCellProps
+} from './grid/cell-types'
 
 interface DynamicDataSheetGridProps {
   fields: FieldDTO[];
@@ -95,7 +103,7 @@ const RowNumberCell = ({ rowIndex }: { rowIndex: number }) => {
 }
 
 // Direct field components for DataSheetGrid
-const RelationCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO; onUpdateRow: Function } }) => {
+const RelationCell = ({ rowData, setRowData, columnData }: RelationCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
   const { field } = columnData
 
@@ -107,14 +115,14 @@ const RelationCell = ({ rowData, setRowData, columnData }: CellProps<any, any> &
       }}
       isEditMode={true}
       compact={true}
-      relatedTableId={field.relatedTableId}
+      relatedTableId={field.relatedTableId ?? undefined}  // Convert null to undefined
       multiple={false}
       required={field.required || false}
     />
   )
 }
 
-const FileCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO; organizationId: number; tableId: number; onUpdateRow: Function } }) => {
+const FileCell = ({ rowData, setRowData, columnData }: FileCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
   const { field, organizationId, tableId } = columnData
 
@@ -186,7 +194,7 @@ const FileCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { c
   )
 }
 
-const DocumentCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO; organizationId: number; tableId: number; onUpdateRow: Function } }) => {
+const DocumentCell = ({ rowData, setRowData, columnData }: DocumentCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
   const { field, organizationId, tableId } = columnData
 
@@ -260,7 +268,7 @@ const DocumentCell = ({ rowData, setRowData, columnData }: CellProps<any, any> &
   )
 }
 
-const EmbeddingCell = ({ rowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO } }) => {
+const EmbeddingCell = ({ rowData, columnData }: EmbeddingCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
 
   return (
@@ -272,12 +280,12 @@ const EmbeddingCell = ({ rowData, columnData }: CellProps<any, any> & { columnDa
   )
 }
 
-const SingleSelectCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO; onUpdateRow: Function; onFieldUpdate: (updates: Partial<FieldDTO>) => Promise<void> } }) => {
+const SingleSelectCell = ({ rowData, setRowData, columnData }: SingleSelectCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
   // rowData = field value (e.g., 1, null, "")
   // setRowData(newValue) = updates the field value
   const { field, onFieldUpdate } = columnData
-  const options = field.metadata?.options || []
+  const options = (field.metadata?.options as SelectOption[] | undefined) || []
 
   return (
     <SingleSelectField
@@ -300,13 +308,13 @@ const SingleSelectCell = ({ rowData, setRowData, columnData }: CellProps<any, an
   )
 }
 
-const MultiSelectCell = ({ rowData, setRowData, columnData }: CellProps<any, any> & { columnData: { field: FieldDTO; onUpdateRow: Function; onFieldUpdate: (updates: Partial<FieldDTO>) => Promise<void> } }) => {
+const MultiSelectCell = ({ rowData, setRowData, columnData }: MultiSelectCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
   // rowData = field value (e.g., [1, 2], [], null)
   // setRowData(newValue) = updates the field value
   const { field, onFieldUpdate } = columnData
-  const options = field.metadata?.options || []
-  const maxSelections = field.metadata?.maxSelections
+  const options = (field.metadata?.options as SelectOption[] | undefined) || []
+  const maxSelections = field.metadata?.maxSelections as number | undefined
 
   return (
     <MultiSelectField
