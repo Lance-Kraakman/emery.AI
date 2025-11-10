@@ -8118,7 +8118,11 @@ proto.emery.agents.ProcessingError.toObject = function(includeInstance, msg) {
   var f, obj = {
     errorCode: jspb.Message.getFieldWithDefault(msg, 1, ""),
     errorMessage: jspb.Message.getFieldWithDefault(msg, 2, ""),
-    errorDetailsMap: (f = msg.getErrorDetailsMap()) ? f.toObject(includeInstance, undefined) : []
+    errorDetailsMap: (f = msg.getErrorDetailsMap()) ? f.toObject(includeInstance, undefined) : [],
+    hint: jspb.Message.getFieldWithDefault(msg, 4, ""),
+    canRetry: jspb.Message.getBooleanFieldWithDefault(msg, 5, false),
+    autoRetry: jspb.Message.getBooleanFieldWithDefault(msg, 6, false),
+    sessionReset: jspb.Message.getBooleanFieldWithDefault(msg, 7, false)
   };
 
   if (includeInstance) {
@@ -8169,6 +8173,22 @@ proto.emery.agents.ProcessingError.deserializeBinaryFromReader = function(msg, r
         jspb.Map.deserializeBinary(message, reader, jspb.BinaryReader.prototype.readString, jspb.BinaryReader.prototype.readString, null, "", "");
          });
       break;
+    case 4:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setHint(value);
+      break;
+    case 5:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setCanRetry(value);
+      break;
+    case 6:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAutoRetry(value);
+      break;
+    case 7:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setSessionReset(value);
+      break;
     default:
       reader.skipField();
       break;
@@ -8215,6 +8235,34 @@ proto.emery.agents.ProcessingError.serializeBinaryToWriter = function(message, w
   f = message.getErrorDetailsMap(true);
   if (f && f.getLength() > 0) {
     f.serializeBinary(3, writer, jspb.BinaryWriter.prototype.writeString, jspb.BinaryWriter.prototype.writeString);
+  }
+  f = message.getHint();
+  if (f.length > 0) {
+    writer.writeString(
+      4,
+      f
+    );
+  }
+  f = message.getCanRetry();
+  if (f) {
+    writer.writeBool(
+      5,
+      f
+    );
+  }
+  f = message.getAutoRetry();
+  if (f) {
+    writer.writeBool(
+      6,
+      f
+    );
+  }
+  f = message.getSessionReset();
+  if (f) {
+    writer.writeBool(
+      7,
+      f
+    );
   }
 };
 
@@ -8275,6 +8323,78 @@ proto.emery.agents.ProcessingError.prototype.getErrorDetailsMap = function(opt_n
 proto.emery.agents.ProcessingError.prototype.clearErrorDetailsMap = function() {
   this.getErrorDetailsMap().clear();
   return this;};
+
+
+/**
+ * optional string hint = 4;
+ * @return {string}
+ */
+proto.emery.agents.ProcessingError.prototype.getHint = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 4, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.agents.ProcessingError} returns this
+ */
+proto.emery.agents.ProcessingError.prototype.setHint = function(value) {
+  return jspb.Message.setProto3StringField(this, 4, value);
+};
+
+
+/**
+ * optional bool can_retry = 5;
+ * @return {boolean}
+ */
+proto.emery.agents.ProcessingError.prototype.getCanRetry = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 5, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.emery.agents.ProcessingError} returns this
+ */
+proto.emery.agents.ProcessingError.prototype.setCanRetry = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 5, value);
+};
+
+
+/**
+ * optional bool auto_retry = 6;
+ * @return {boolean}
+ */
+proto.emery.agents.ProcessingError.prototype.getAutoRetry = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 6, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.emery.agents.ProcessingError} returns this
+ */
+proto.emery.agents.ProcessingError.prototype.setAutoRetry = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 6, value);
+};
+
+
+/**
+ * optional bool session_reset = 7;
+ * @return {boolean}
+ */
+proto.emery.agents.ProcessingError.prototype.getSessionReset = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 7, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.emery.agents.ProcessingError} returns this
+ */
+proto.emery.agents.ProcessingError.prototype.setSessionReset = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 7, value);
+};
 
 
 

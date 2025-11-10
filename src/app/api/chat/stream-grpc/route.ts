@@ -653,12 +653,27 @@ export async function POST(req: NextRequest) {
                 controller.close();
                 
               } else if (response.type === 'error' && response.error) {
-                // AI processing error
-                console.error('[CHAT-GRPC-API] AI processing error:', response.error);
-                const errorMessage = `AI processing error: ${response.error.errorMessage}`;
-                const chunk = new TextEncoder().encode(errorMessage);
-                controller.enqueue(chunk);
-                controller.close();
+                // AI processing error with user-friendly message
+                // Log technical details to console ONLY (never show to user)
+                console.error('[CHAT-GRPC-API] AI processing error:', {
+                  code: response.error.errorCode,
+                  severity: response.error.errorDetails?.severity,
+                  sessionReset: response.error.sessionReset,
+                  timestamp: new Date().toISOString()
+                });
+
+                // Send error as SSE event with user-friendly message + hint
+                const errorEvent = {
+                  type: 'error',
+                  errorCode: response.error.errorCode,
+                  message: response.error.errorMessage,
+                  hint: response.error.hint || null,
+                  canRetry: response.error.canRetry,
+                  sessionReset: response.error.sessionReset
+                };
+
+                controller.enqueue(encodeSSEEvent(errorEvent));
+                console.log(`[CHAT-GRPC-API] Sent error event (code=${response.error.errorCode})`);
               }
               
             } catch (streamError) {
