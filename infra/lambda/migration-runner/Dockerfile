@@ -9,6 +9,9 @@ COPY drizzle.config.ts ./
 COPY lib/ ./lib/
 COPY drizzle/ ./drizzle/
 
+# Copy unified metadata for tool seeding
+COPY src/lib/data/unified_metadata.json ./src/lib/data/unified_metadata.json
+
 # Copy Lambda files
 COPY package.json ./
 RUN pnpm install
