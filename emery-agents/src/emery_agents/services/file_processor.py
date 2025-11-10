@@ -99,7 +99,8 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
 
         # Extract text from all pages
         text_parts = []
-        for page_num in range(pdf_document.page_count):
+        page_count = pdf_document.page_count  # Store before closing
+        for page_num in range(page_count):
             page = pdf_document[page_num]
             text = page.get_text()
             if text.strip():
@@ -108,7 +109,7 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
         pdf_document.close()
 
         full_text = "\n\n".join(text_parts)
-        logger.info(f"✅ Extracted {len(full_text)} characters from {pdf_document.page_count} pages")
+        logger.info(f"✅ Extracted {len(full_text)} characters from {page_count} pages")
 
         return full_text
 
