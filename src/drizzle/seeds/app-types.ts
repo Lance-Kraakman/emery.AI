@@ -13,13 +13,16 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { appTypes } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { parseConnectionString } from '@/lib/db/client-parser';
 
 // Database connection
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
+const rawConnectionString = process.env.DATABASE_URL;
+if (!rawConnectionString) {
   throw new Error('DATABASE_URL environment variable is required');
 }
 
+// Parse AWS RDS secret JSON into connection string if needed
+const connectionString = parseConnectionString(rawConnectionString);
 const client = postgres(connectionString, { max: 1 });
 const db = drizzle(client);
 
