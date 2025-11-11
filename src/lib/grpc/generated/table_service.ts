@@ -715,6 +715,64 @@ export interface GetTableStatsResponse {
   message: string;
 }
 
+/** Field management request messages */
+export interface AddFieldRequest {
+  tableId: string;
+  field: TableField | undefined;
+  organizationId: string;
+  /** S3 path for Delta Lake table data */
+  s3Path: string;
+}
+
+export interface UpdateFieldRequest {
+  tableId: string;
+  /** Current field name for lookup */
+  fieldName: string;
+  /** New field definition */
+  updatedField: TableField | undefined;
+  organizationId: string;
+  /** S3 path for Delta Lake table data */
+  s3Path: string;
+  /** Whether to migrate existing data (default: true) */
+  migrateData: boolean;
+}
+
+export interface DeleteFieldRequest {
+  tableId: string;
+  /** Field name to delete */
+  fieldName: string;
+  organizationId: string;
+  /** S3 path for Delta Lake table data */
+  s3Path: string;
+  /** Whether to backup deleted data (default: true) */
+  backupData: boolean;
+}
+
+export interface GetFieldsRequest {
+  tableId: string;
+  organizationId: string;
+}
+
+/** Field management response messages */
+export interface FieldResponse {
+  success: boolean;
+  field: TableField | undefined;
+  message: string;
+}
+
+export interface DeleteFieldResponse {
+  success: boolean;
+  message: string;
+  /** S3 path of backed up data (if backup_data=true) */
+  backupLocation: string;
+}
+
+export interface GetFieldsResponse {
+  success: boolean;
+  fields: TableField[];
+  message: string;
+}
+
 function createBaseTableField(): TableField {
   return { name: "", type: 0, required: false, metadata: {}, fieldId: 0 };
 }
@@ -4967,6 +5025,736 @@ export const GetTableStatsResponse: MessageFns<GetTableStatsResponse> = {
   },
 };
 
+function createBaseAddFieldRequest(): AddFieldRequest {
+  return { tableId: "", field: undefined, organizationId: "", s3Path: "" };
+}
+
+export const AddFieldRequest: MessageFns<AddFieldRequest> = {
+  encode(message: AddFieldRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.tableId !== "") {
+      writer.uint32(10).string(message.tableId);
+    }
+    if (message.field !== undefined) {
+      TableField.encode(message.field, writer.uint32(18).fork()).join();
+    }
+    if (message.organizationId !== "") {
+      writer.uint32(26).string(message.organizationId);
+    }
+    if (message.s3Path !== "") {
+      writer.uint32(34).string(message.s3Path);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AddFieldRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAddFieldRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.tableId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.field = TableField.decode(reader, reader.uint32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.organizationId = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.s3Path = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AddFieldRequest {
+    return {
+      tableId: isSet(object.tableId) ? globalThis.String(object.tableId) : "",
+      field: isSet(object.field) ? TableField.fromJSON(object.field) : undefined,
+      organizationId: isSet(object.organizationId) ? globalThis.String(object.organizationId) : "",
+      s3Path: isSet(object.s3Path) ? globalThis.String(object.s3Path) : "",
+    };
+  },
+
+  toJSON(message: AddFieldRequest): unknown {
+    const obj: any = {};
+    if (message.tableId !== "") {
+      obj.tableId = message.tableId;
+    }
+    if (message.field !== undefined) {
+      obj.field = TableField.toJSON(message.field);
+    }
+    if (message.organizationId !== "") {
+      obj.organizationId = message.organizationId;
+    }
+    if (message.s3Path !== "") {
+      obj.s3Path = message.s3Path;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AddFieldRequest>, I>>(base?: I): AddFieldRequest {
+    return AddFieldRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AddFieldRequest>, I>>(object: I): AddFieldRequest {
+    const message = createBaseAddFieldRequest();
+    message.tableId = object.tableId ?? "";
+    message.field = (object.field !== undefined && object.field !== null)
+      ? TableField.fromPartial(object.field)
+      : undefined;
+    message.organizationId = object.organizationId ?? "";
+    message.s3Path = object.s3Path ?? "";
+    return message;
+  },
+};
+
+function createBaseUpdateFieldRequest(): UpdateFieldRequest {
+  return { tableId: "", fieldName: "", updatedField: undefined, organizationId: "", s3Path: "", migrateData: false };
+}
+
+export const UpdateFieldRequest: MessageFns<UpdateFieldRequest> = {
+  encode(message: UpdateFieldRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.tableId !== "") {
+      writer.uint32(10).string(message.tableId);
+    }
+    if (message.fieldName !== "") {
+      writer.uint32(18).string(message.fieldName);
+    }
+    if (message.updatedField !== undefined) {
+      TableField.encode(message.updatedField, writer.uint32(26).fork()).join();
+    }
+    if (message.organizationId !== "") {
+      writer.uint32(34).string(message.organizationId);
+    }
+    if (message.s3Path !== "") {
+      writer.uint32(42).string(message.s3Path);
+    }
+    if (message.migrateData !== false) {
+      writer.uint32(48).bool(message.migrateData);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateFieldRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateFieldRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.tableId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.fieldName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.updatedField = TableField.decode(reader, reader.uint32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.organizationId = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.s3Path = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.migrateData = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateFieldRequest {
+    return {
+      tableId: isSet(object.tableId) ? globalThis.String(object.tableId) : "",
+      fieldName: isSet(object.fieldName) ? globalThis.String(object.fieldName) : "",
+      updatedField: isSet(object.updatedField) ? TableField.fromJSON(object.updatedField) : undefined,
+      organizationId: isSet(object.organizationId) ? globalThis.String(object.organizationId) : "",
+      s3Path: isSet(object.s3Path) ? globalThis.String(object.s3Path) : "",
+      migrateData: isSet(object.migrateData) ? globalThis.Boolean(object.migrateData) : false,
+    };
+  },
+
+  toJSON(message: UpdateFieldRequest): unknown {
+    const obj: any = {};
+    if (message.tableId !== "") {
+      obj.tableId = message.tableId;
+    }
+    if (message.fieldName !== "") {
+      obj.fieldName = message.fieldName;
+    }
+    if (message.updatedField !== undefined) {
+      obj.updatedField = TableField.toJSON(message.updatedField);
+    }
+    if (message.organizationId !== "") {
+      obj.organizationId = message.organizationId;
+    }
+    if (message.s3Path !== "") {
+      obj.s3Path = message.s3Path;
+    }
+    if (message.migrateData !== false) {
+      obj.migrateData = message.migrateData;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateFieldRequest>, I>>(base?: I): UpdateFieldRequest {
+    return UpdateFieldRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateFieldRequest>, I>>(object: I): UpdateFieldRequest {
+    const message = createBaseUpdateFieldRequest();
+    message.tableId = object.tableId ?? "";
+    message.fieldName = object.fieldName ?? "";
+    message.updatedField = (object.updatedField !== undefined && object.updatedField !== null)
+      ? TableField.fromPartial(object.updatedField)
+      : undefined;
+    message.organizationId = object.organizationId ?? "";
+    message.s3Path = object.s3Path ?? "";
+    message.migrateData = object.migrateData ?? false;
+    return message;
+  },
+};
+
+function createBaseDeleteFieldRequest(): DeleteFieldRequest {
+  return { tableId: "", fieldName: "", organizationId: "", s3Path: "", backupData: false };
+}
+
+export const DeleteFieldRequest: MessageFns<DeleteFieldRequest> = {
+  encode(message: DeleteFieldRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.tableId !== "") {
+      writer.uint32(10).string(message.tableId);
+    }
+    if (message.fieldName !== "") {
+      writer.uint32(18).string(message.fieldName);
+    }
+    if (message.organizationId !== "") {
+      writer.uint32(26).string(message.organizationId);
+    }
+    if (message.s3Path !== "") {
+      writer.uint32(34).string(message.s3Path);
+    }
+    if (message.backupData !== false) {
+      writer.uint32(40).bool(message.backupData);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteFieldRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDeleteFieldRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.tableId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.fieldName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.organizationId = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.s3Path = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.backupData = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DeleteFieldRequest {
+    return {
+      tableId: isSet(object.tableId) ? globalThis.String(object.tableId) : "",
+      fieldName: isSet(object.fieldName) ? globalThis.String(object.fieldName) : "",
+      organizationId: isSet(object.organizationId) ? globalThis.String(object.organizationId) : "",
+      s3Path: isSet(object.s3Path) ? globalThis.String(object.s3Path) : "",
+      backupData: isSet(object.backupData) ? globalThis.Boolean(object.backupData) : false,
+    };
+  },
+
+  toJSON(message: DeleteFieldRequest): unknown {
+    const obj: any = {};
+    if (message.tableId !== "") {
+      obj.tableId = message.tableId;
+    }
+    if (message.fieldName !== "") {
+      obj.fieldName = message.fieldName;
+    }
+    if (message.organizationId !== "") {
+      obj.organizationId = message.organizationId;
+    }
+    if (message.s3Path !== "") {
+      obj.s3Path = message.s3Path;
+    }
+    if (message.backupData !== false) {
+      obj.backupData = message.backupData;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DeleteFieldRequest>, I>>(base?: I): DeleteFieldRequest {
+    return DeleteFieldRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteFieldRequest>, I>>(object: I): DeleteFieldRequest {
+    const message = createBaseDeleteFieldRequest();
+    message.tableId = object.tableId ?? "";
+    message.fieldName = object.fieldName ?? "";
+    message.organizationId = object.organizationId ?? "";
+    message.s3Path = object.s3Path ?? "";
+    message.backupData = object.backupData ?? false;
+    return message;
+  },
+};
+
+function createBaseGetFieldsRequest(): GetFieldsRequest {
+  return { tableId: "", organizationId: "" };
+}
+
+export const GetFieldsRequest: MessageFns<GetFieldsRequest> = {
+  encode(message: GetFieldsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.tableId !== "") {
+      writer.uint32(10).string(message.tableId);
+    }
+    if (message.organizationId !== "") {
+      writer.uint32(18).string(message.organizationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetFieldsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetFieldsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.tableId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.organizationId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetFieldsRequest {
+    return {
+      tableId: isSet(object.tableId) ? globalThis.String(object.tableId) : "",
+      organizationId: isSet(object.organizationId) ? globalThis.String(object.organizationId) : "",
+    };
+  },
+
+  toJSON(message: GetFieldsRequest): unknown {
+    const obj: any = {};
+    if (message.tableId !== "") {
+      obj.tableId = message.tableId;
+    }
+    if (message.organizationId !== "") {
+      obj.organizationId = message.organizationId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetFieldsRequest>, I>>(base?: I): GetFieldsRequest {
+    return GetFieldsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetFieldsRequest>, I>>(object: I): GetFieldsRequest {
+    const message = createBaseGetFieldsRequest();
+    message.tableId = object.tableId ?? "";
+    message.organizationId = object.organizationId ?? "";
+    return message;
+  },
+};
+
+function createBaseFieldResponse(): FieldResponse {
+  return { success: false, field: undefined, message: "" };
+}
+
+export const FieldResponse: MessageFns<FieldResponse> = {
+  encode(message: FieldResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.success !== false) {
+      writer.uint32(8).bool(message.success);
+    }
+    if (message.field !== undefined) {
+      TableField.encode(message.field, writer.uint32(18).fork()).join();
+    }
+    if (message.message !== "") {
+      writer.uint32(26).string(message.message);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FieldResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFieldResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.success = reader.bool();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.field = TableField.decode(reader, reader.uint32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.message = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FieldResponse {
+    return {
+      success: isSet(object.success) ? globalThis.Boolean(object.success) : false,
+      field: isSet(object.field) ? TableField.fromJSON(object.field) : undefined,
+      message: isSet(object.message) ? globalThis.String(object.message) : "",
+    };
+  },
+
+  toJSON(message: FieldResponse): unknown {
+    const obj: any = {};
+    if (message.success !== false) {
+      obj.success = message.success;
+    }
+    if (message.field !== undefined) {
+      obj.field = TableField.toJSON(message.field);
+    }
+    if (message.message !== "") {
+      obj.message = message.message;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FieldResponse>, I>>(base?: I): FieldResponse {
+    return FieldResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FieldResponse>, I>>(object: I): FieldResponse {
+    const message = createBaseFieldResponse();
+    message.success = object.success ?? false;
+    message.field = (object.field !== undefined && object.field !== null)
+      ? TableField.fromPartial(object.field)
+      : undefined;
+    message.message = object.message ?? "";
+    return message;
+  },
+};
+
+function createBaseDeleteFieldResponse(): DeleteFieldResponse {
+  return { success: false, message: "", backupLocation: "" };
+}
+
+export const DeleteFieldResponse: MessageFns<DeleteFieldResponse> = {
+  encode(message: DeleteFieldResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.success !== false) {
+      writer.uint32(8).bool(message.success);
+    }
+    if (message.message !== "") {
+      writer.uint32(18).string(message.message);
+    }
+    if (message.backupLocation !== "") {
+      writer.uint32(26).string(message.backupLocation);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteFieldResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDeleteFieldResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.success = reader.bool();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.message = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.backupLocation = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DeleteFieldResponse {
+    return {
+      success: isSet(object.success) ? globalThis.Boolean(object.success) : false,
+      message: isSet(object.message) ? globalThis.String(object.message) : "",
+      backupLocation: isSet(object.backupLocation) ? globalThis.String(object.backupLocation) : "",
+    };
+  },
+
+  toJSON(message: DeleteFieldResponse): unknown {
+    const obj: any = {};
+    if (message.success !== false) {
+      obj.success = message.success;
+    }
+    if (message.message !== "") {
+      obj.message = message.message;
+    }
+    if (message.backupLocation !== "") {
+      obj.backupLocation = message.backupLocation;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DeleteFieldResponse>, I>>(base?: I): DeleteFieldResponse {
+    return DeleteFieldResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteFieldResponse>, I>>(object: I): DeleteFieldResponse {
+    const message = createBaseDeleteFieldResponse();
+    message.success = object.success ?? false;
+    message.message = object.message ?? "";
+    message.backupLocation = object.backupLocation ?? "";
+    return message;
+  },
+};
+
+function createBaseGetFieldsResponse(): GetFieldsResponse {
+  return { success: false, fields: [], message: "" };
+}
+
+export const GetFieldsResponse: MessageFns<GetFieldsResponse> = {
+  encode(message: GetFieldsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.success !== false) {
+      writer.uint32(8).bool(message.success);
+    }
+    for (const v of message.fields) {
+      TableField.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.message !== "") {
+      writer.uint32(26).string(message.message);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetFieldsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetFieldsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.success = reader.bool();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.fields.push(TableField.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.message = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetFieldsResponse {
+    return {
+      success: isSet(object.success) ? globalThis.Boolean(object.success) : false,
+      fields: globalThis.Array.isArray(object?.fields) ? object.fields.map((e: any) => TableField.fromJSON(e)) : [],
+      message: isSet(object.message) ? globalThis.String(object.message) : "",
+    };
+  },
+
+  toJSON(message: GetFieldsResponse): unknown {
+    const obj: any = {};
+    if (message.success !== false) {
+      obj.success = message.success;
+    }
+    if (message.fields?.length) {
+      obj.fields = message.fields.map((e) => TableField.toJSON(e));
+    }
+    if (message.message !== "") {
+      obj.message = message.message;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetFieldsResponse>, I>>(base?: I): GetFieldsResponse {
+    return GetFieldsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetFieldsResponse>, I>>(object: I): GetFieldsResponse {
+    const message = createBaseGetFieldsResponse();
+    message.success = object.success ?? false;
+    message.fields = object.fields?.map((e) => TableField.fromPartial(e)) || [];
+    message.message = object.message ?? "";
+    return message;
+  },
+};
+
 /** Delta Lake Table Service - Handles table and row operations using Delta Lake */
 export type TableServiceService = typeof TableServiceService;
 export const TableServiceService = {
@@ -5073,6 +5861,43 @@ export const TableServiceService = {
       Buffer.from(GetTableStatsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetTableStatsResponse => GetTableStatsResponse.decode(value),
   },
+  /** Field management operations for dynamic table schema evolution */
+  addField: {
+    path: "/emery.tables.TableService/AddField",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: AddFieldRequest): Buffer => Buffer.from(AddFieldRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AddFieldRequest => AddFieldRequest.decode(value),
+    responseSerialize: (value: FieldResponse): Buffer => Buffer.from(FieldResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): FieldResponse => FieldResponse.decode(value),
+  },
+  updateField: {
+    path: "/emery.tables.TableService/UpdateField",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: UpdateFieldRequest): Buffer => Buffer.from(UpdateFieldRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateFieldRequest => UpdateFieldRequest.decode(value),
+    responseSerialize: (value: FieldResponse): Buffer => Buffer.from(FieldResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): FieldResponse => FieldResponse.decode(value),
+  },
+  deleteField: {
+    path: "/emery.tables.TableService/DeleteField",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: DeleteFieldRequest): Buffer => Buffer.from(DeleteFieldRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DeleteFieldRequest => DeleteFieldRequest.decode(value),
+    responseSerialize: (value: DeleteFieldResponse): Buffer => Buffer.from(DeleteFieldResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DeleteFieldResponse => DeleteFieldResponse.decode(value),
+  },
+  getFields: {
+    path: "/emery.tables.TableService/GetFields",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: GetFieldsRequest): Buffer => Buffer.from(GetFieldsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetFieldsRequest => GetFieldsRequest.decode(value),
+    responseSerialize: (value: GetFieldsResponse): Buffer => Buffer.from(GetFieldsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetFieldsResponse => GetFieldsResponse.decode(value),
+  },
 } as const;
 
 export interface TableServiceServer extends UntypedServiceImplementation {
@@ -5090,6 +5915,11 @@ export interface TableServiceServer extends UntypedServiceImplementation {
   queryRows: handleUnaryCall<QueryRowsRequest, QueryRowsResponse>;
   /** Get table statistics from Delta Lake metadata (no data loading) */
   getTableStats: handleUnaryCall<GetTableStatsRequest, GetTableStatsResponse>;
+  /** Field management operations for dynamic table schema evolution */
+  addField: handleUnaryCall<AddFieldRequest, FieldResponse>;
+  updateField: handleUnaryCall<UpdateFieldRequest, FieldResponse>;
+  deleteField: handleUnaryCall<DeleteFieldRequest, DeleteFieldResponse>;
+  getFields: handleUnaryCall<GetFieldsRequest, GetFieldsResponse>;
 }
 
 export interface TableServiceClient extends Client {
@@ -5260,6 +6090,67 @@ export interface TableServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetTableStatsResponse) => void,
+  ): ClientUnaryCall;
+  /** Field management operations for dynamic table schema evolution */
+  addField(
+    request: AddFieldRequest,
+    callback: (error: ServiceError | null, response: FieldResponse) => void,
+  ): ClientUnaryCall;
+  addField(
+    request: AddFieldRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: FieldResponse) => void,
+  ): ClientUnaryCall;
+  addField(
+    request: AddFieldRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: FieldResponse) => void,
+  ): ClientUnaryCall;
+  updateField(
+    request: UpdateFieldRequest,
+    callback: (error: ServiceError | null, response: FieldResponse) => void,
+  ): ClientUnaryCall;
+  updateField(
+    request: UpdateFieldRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: FieldResponse) => void,
+  ): ClientUnaryCall;
+  updateField(
+    request: UpdateFieldRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: FieldResponse) => void,
+  ): ClientUnaryCall;
+  deleteField(
+    request: DeleteFieldRequest,
+    callback: (error: ServiceError | null, response: DeleteFieldResponse) => void,
+  ): ClientUnaryCall;
+  deleteField(
+    request: DeleteFieldRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DeleteFieldResponse) => void,
+  ): ClientUnaryCall;
+  deleteField(
+    request: DeleteFieldRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DeleteFieldResponse) => void,
+  ): ClientUnaryCall;
+  getFields(
+    request: GetFieldsRequest,
+    callback: (error: ServiceError | null, response: GetFieldsResponse) => void,
+  ): ClientUnaryCall;
+  getFields(
+    request: GetFieldsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetFieldsResponse) => void,
+  ): ClientUnaryCall;
+  getFields(
+    request: GetFieldsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetFieldsResponse) => void,
   ): ClientUnaryCall;
 }
 

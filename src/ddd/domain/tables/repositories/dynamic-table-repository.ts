@@ -39,5 +39,8 @@ export interface IDynamicTableRepository {
   // Table analysis methods needed by application services
   hasRows(tableId: TableId): Promise<boolean>;
   findAll(): Promise<DynamicTable[]>;
+  
+  // Field operations
+  updateFieldOrders(tableId: TableId, fieldOrders: Array<{ fieldName: string; orderIndex: number }>): Promise<void>;
 }
 
