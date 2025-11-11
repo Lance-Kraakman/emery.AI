@@ -548,13 +548,7 @@ class InfraStack(Stack):
         # AIDEV-NOTE: ECS health checks should be configured in container definition, not added afterwards
         # For agent gRPC service, we rely on ECS service health monitoring
 
-        # Register agent service with Cloud Map for service discovery using existing namespace
-        agent_service.service.enable_cloud_map(
-            name="agent-service",
-            cloud_map_namespace=namespace,
-            dns_record_type=servicediscovery.DnsRecordType.A,
-            dns_ttl=Duration.seconds(60)
-        )
+
 
         # Update environment variables to use Cloud Map DNS instead of NLB DNS
         # This provides reliable internal service-to-service communication
