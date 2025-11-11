@@ -12,6 +12,7 @@ from aws_cdk import (
     aws_iam as iam,
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as origins,
+    aws_servicediscovery as servicediscovery,
     custom_resources,
     Aws,
     Duration,
@@ -459,6 +460,14 @@ class InfraStack(Stack):
         # AIDEV-NOTE: Add WORKER_ADDRESS to scheduler after agent service is created
         # This will be done after agent_service definition below
 
+        # Create Cloud Map namespace for service discovery
+        namespace = servicediscovery.PrivateDnsNamespace(
+            self, f"{prefix}ServiceNamespace",
+            vpc=vpc,
+            name="emery.local",
+            description="Internal service discovery for Emery application"
+        )
+
         # Create the Fargate service for the Python gRPC backend
         # AIDEV-NOTE: Changed construct ID to AgentServiceV2 to force CloudFormation replacement
         # when switching from public to internal NLB (old resources manually deleted)
@@ -487,6 +496,13 @@ class InfraStack(Stack):
             # AIDEV-NOTE: Critical fix for ECS service stability
             # Increased grace period to allow for gRPC service startup and target registration
             health_check_grace_period=Duration.seconds(300),  # 5 minutes
+            # AIDEV-NOTE: Add Cloud Map service discovery for reliable internal communication
+            cloud_map_options=ecs.CloudMapOptions(
+                name="agent-service",
+                cloud_map_namespace=namespace,
+                dns_record_type=servicediscovery.DnsRecordType.A,
+                dns_ttl=Duration.seconds(60)
+            ),
         )
 
         # AIDEV-NOTE: Agent service doesn't need database migrations
@@ -532,16 +548,43 @@ class InfraStack(Stack):
         # AIDEV-NOTE: ECS health checks should be configured in container definition, not added afterwards
         # For agent gRPC service, we rely on ECS service health monitoring
 
-        # Pass the public DNS of the agent service's NLB to the frontend service
+        # Create Cloud Map namespace for service discovery
+        namespace = servicediscovery.PrivateDnsNamespace(
+            self, f"{prefix}ServiceNamespace",
+            vpc=vpc,
+            name="emery.local",
+            description="Internal service discovery for Emery application"
+        )
+
+        # Register agent service with Cloud Map for service discovery
+        agent_service.service.enable_cloud_map(
+            name="agent-service",
+            cloud_map_namespace=namespace,
+            dns_record_type=servicediscovery.DnsRecordType.A,
+            dns_ttl=Duration.seconds(60)
+        )
+
+        # Update environment variables to use Cloud Map DNS instead of NLB DNS
+        # This provides reliable internal service-to-service communication
         if frontend_service.task_definition.default_container:
             frontend_service.task_definition.default_container.add_environment(
                 "GRPC_AGENT_URL",
-                f"http://{agent_service.load_balancer.load_balancer_dns_name}"
+                f"http://agent-service.emery.local"
             )
-            # Add WORKER_ADDRESS for gRPC client discovery
+            # Add WORKER_ADDRESS for gRPC client discovery using Cloud Map
             frontend_service.task_definition.default_container.add_environment(
                 "WORKER_ADDRESS",
-                f"{agent_service.load_balancer.load_balancer_dns_name}:50051"
+                "agent-service.emery.local:50051"
+            )
+            # Also inject the frontend's own public URL for NextAuth (use CloudFront URL)
+            frontend_service.task_definition.default_container.add_environment(
+                "NEXTAUTH_URL",
+                f"https://{cloudfront_distribution.distribution_domain_name}"
+            )
+            # Add WORKER_ADDRESS for gRPC client discovery using Cloud Map
+            frontend_service.task_definition.default_container.add_environment(
+                "WORKER_ADDRESS",
+                "agent-service.emery.local:50051"
             )
             # Also inject the frontend's own public URL for NextAuth (use CloudFront URL)
             frontend_service.task_definition.default_container.add_environment(
@@ -549,10 +592,34 @@ class InfraStack(Stack):
                 f"https://{cloudfront_distribution.distribution_domain_name}"
             )
 
-        # Add WORKER_ADDRESS for scheduler container (gRPC client discovery)
+        # Create Cloud Map namespace for service discovery
+        namespace = servicediscovery.PrivateDnsNamespace(
+            self, f"{prefix}ServiceNamespace",
+            vpc=vpc,
+            name="emery.local",
+            description="Internal service discovery for Emery application"
+        )
+
+        # Register agent service with Cloud Map for service discovery
+        agent_service.service.enable_cloud_map(
+            name="agent-service",
+            cloud_map_namespace=namespace,
+            dns_record_type=servicediscovery.DnsRecordType.A,
+            dns_ttl=Duration.seconds(60)
+        )
+
+        # Update environment variables to use Cloud Map DNS instead of NLB DNS
+        # This provides reliable internal service-to-service communication
+        if frontend_service.task_definition.default_container:
+            frontend_service.task_definition.default_container.add_environment(
+                "WORKER_ADDRESS",
+                "agent-service.emery.local:50051"
+            )
+
+        # Update scheduler environment variable to use Cloud Map DNS
         scheduler_container.add_environment(
             "WORKER_ADDRESS",
-            f"{agent_service.load_balancer.load_balancer_dns_name}:50051"
+            "agent-service.emery.local:50051"
         )
 
         # Create an S3 bucket for file storage

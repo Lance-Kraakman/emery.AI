@@ -66,7 +66,7 @@ export class ChatProcessingClient {
   private address: string;
 
   constructor(serviceAddress?: string) {
-    // Default to localhost for development, can be overridden
+    // Default to Cloud Map service discovery for production, localhost for development
     this.address = serviceAddress || process.env.WORKER_ADDRESS || 'localhost:50051';
     console.log(`[CHAT-GRPC-CLIENT] Creating ChatProcessingClient for address: ${this.address}`);
     

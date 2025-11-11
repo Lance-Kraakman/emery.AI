@@ -194,14 +194,19 @@ export class WorkerRegistry {
       return orgSpecificAddress;
     }
     
-    // Strategy 2: Single worker address for all organizations (development)
+    // Strategy 2: Single worker address for all organizations (Cloud Map DNS)
     const singleWorkerAddress = process.env.WORKER_ADDRESS;
     if (singleWorkerAddress) {
-      console.log(`[WORKER-DISCOVERY] Using single worker address: ${singleWorkerAddress}`);
+      console.log(`[WORKER-DISCOVERY] Using Cloud Map service discovery: ${singleWorkerAddress}`);
       return singleWorkerAddress;
     }
     
-    // Strategy 3: Port-based distribution (fallback)
+    // Strategy 3: Cloud Map DNS (production default)
+    const cloudMapAddress = "agent-service.emery.local:50051";
+    console.log(`[WORKER-DISCOVERY] Using Cloud Map DNS: ${cloudMapAddress}`);
+    return cloudMapAddress;
+    
+    // Strategy 4: Port-based distribution (fallback for local development)
     const basePort = parseInt(process.env.WORKER_BASE_PORT || '50051');
     const workerHost = process.env.WORKER_HOST || 'localhost';
     
