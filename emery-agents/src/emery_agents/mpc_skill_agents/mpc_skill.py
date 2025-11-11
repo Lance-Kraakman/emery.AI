@@ -4,7 +4,7 @@ MPC skill for smolagents integration.
 
 from typing import Dict, List, Any, Optional
 from smolagents import Tool
-from .core import SystemDescription, Variable, Goal, GoalType, Constraint, MPCPlanner
+from .core import SystemDescription, Variable, Goal, GoalType, Constraint, MPCPlanner, PlanningHorizon
 from .solver import MPCSolver
 
 
@@ -13,6 +13,18 @@ class MPCSkill(Tool):
     
     name = "mpc_control"
     description = "Model Predictive Control skill for optimization and control tasks"
+    inputs = {
+        "action": {
+            "type": "string", 
+            "description": "MPC action to execute"
+        },
+        "parameters": {
+            "type": "string", 
+            "description": "Parameters for the MPC action (JSON string)",
+            "nullable": True
+        }
+    }
+    output_type = "string"
     
     def __init__(self):
         super().__init__()
@@ -59,7 +71,6 @@ class MPCSkill(Tool):
     def set_planning_horizon(self, horizon: str = "medium") -> str:
         """Set planning horizon."""
         try:
-            from .core import PlanningHorizon
             self.planner = MPCPlanner(horizon=PlanningHorizon(horizon))
             return f"Set planning horizon to {horizon}"
         except ValueError:
@@ -84,20 +95,20 @@ class MPCSkill(Tool):
         except Exception as e:
             return {"error": str(e), "status": "failed"}
     
-    def __call__(self, input_text: str) -> str:
+    def forward(self, action: str, parameters: str = "{}") -> str:
         """Main entry point for smolagents."""
         # Parse natural language input and route to appropriate method
         # This is a simplified version - in practice would use LLM parsing
         
-        if "setup" in input_text.lower() and "system" in input_text.lower():
+        if "setup" in action.lower() and "system" in action.lower():
             # Extract system name and description from input
-            return self.setup_system("MPC System", input_text)
+            return self.setup_system("MPC System", action)
         
-        elif "add" in input_text.lower() and "variable" in input_text.lower():
+        elif "add" in action.lower() and "variable" in action.lower():
             # Parse variable addition
             return "Use add_variable() method with specific parameters"
         
-        elif "solve" in input_text.lower() or "optimize" in input_text.lower():
+        elif "solve" in action.lower() or "optimize" in action.lower():
             # Parse current state and solve
             current_state = {}  # Would parse from input
             result = self.solve_mpc(current_state)
