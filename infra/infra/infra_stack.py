@@ -237,6 +237,9 @@ class InfraStack(Stack):
             "OPENAI_API_KEY": ecs.Secret.from_secrets_manager(app_secrets_object, "OPENAI_API_KEY"),
             "HF_TOKEN": ecs.Secret.from_secrets_manager(app_secrets_object, "HF_TOKEN"),
             "RESEND_API_KEY": ecs.Secret.from_secrets_manager(app_secrets_object, "RESEND_API_KEY"),
+            # AWS S3 credentials for cloud deployment
+            "AWS_ACCESS_KEY_ID": ecs.Secret.from_secrets_manager(app_secrets_object, "AWS_ACCESS_KEY_ID"),
+            "AWS_SECRET_ACCESS_KEY": ecs.Secret.from_secrets_manager(app_secrets_object, "AWS_SECRET_ACCESS_KEY"),
         }
 
 
