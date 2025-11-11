@@ -4,7 +4,7 @@ Core SkillSchema data structures.
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
-from .types import (
+from .mpc_types import (
     VariableType, ObjectiveType, PlanningHorizon,
     VariableConfig, ObjectiveConfig, ConstraintConfig, PlanningConfig
 )
