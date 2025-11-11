@@ -539,3 +539,83 @@ class GetTableStatsResponse(_message.Message):
     size_bytes: int
     message: str
     def __init__(self, success: bool = ..., row_count: _Optional[int] = ..., size_bytes: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
+
+class AddFieldRequest(_message.Message):
+    __slots__ = ("table_id", "field", "organization_id", "s3_path")
+    TABLE_ID_FIELD_NUMBER: _ClassVar[int]
+    FIELD_FIELD_NUMBER: _ClassVar[int]
+    ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
+    S3_PATH_FIELD_NUMBER: _ClassVar[int]
+    table_id: str
+    field: TableField
+    organization_id: str
+    s3_path: str
+    def __init__(self, table_id: _Optional[str] = ..., field: _Optional[_Union[TableField, _Mapping]] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ...) -> None: ...
+
+class UpdateFieldRequest(_message.Message):
+    __slots__ = ("table_id", "field_name", "updated_field", "organization_id", "s3_path", "migrate_data")
+    TABLE_ID_FIELD_NUMBER: _ClassVar[int]
+    FIELD_NAME_FIELD_NUMBER: _ClassVar[int]
+    UPDATED_FIELD_FIELD_NUMBER: _ClassVar[int]
+    ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
+    S3_PATH_FIELD_NUMBER: _ClassVar[int]
+    MIGRATE_DATA_FIELD_NUMBER: _ClassVar[int]
+    table_id: str
+    field_name: str
+    updated_field: TableField
+    organization_id: str
+    s3_path: str
+    migrate_data: bool
+    def __init__(self, table_id: _Optional[str] = ..., field_name: _Optional[str] = ..., updated_field: _Optional[_Union[TableField, _Mapping]] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., migrate_data: bool = ...) -> None: ...
+
+class DeleteFieldRequest(_message.Message):
+    __slots__ = ("table_id", "field_name", "organization_id", "s3_path", "backup_data")
+    TABLE_ID_FIELD_NUMBER: _ClassVar[int]
+    FIELD_NAME_FIELD_NUMBER: _ClassVar[int]
+    ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
+    S3_PATH_FIELD_NUMBER: _ClassVar[int]
+    BACKUP_DATA_FIELD_NUMBER: _ClassVar[int]
+    table_id: str
+    field_name: str
+    organization_id: str
+    s3_path: str
+    backup_data: bool
+    def __init__(self, table_id: _Optional[str] = ..., field_name: _Optional[str] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., backup_data: bool = ...) -> None: ...
+
+class GetFieldsRequest(_message.Message):
+    __slots__ = ("table_id", "organization_id")
+    TABLE_ID_FIELD_NUMBER: _ClassVar[int]
+    ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
+    table_id: str
+    organization_id: str
+    def __init__(self, table_id: _Optional[str] = ..., organization_id: _Optional[str] = ...) -> None: ...
+
+class FieldResponse(_message.Message):
+    __slots__ = ("success", "field", "message")
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    FIELD_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    field: TableField
+    message: str
+    def __init__(self, success: bool = ..., field: _Optional[_Union[TableField, _Mapping]] = ..., message: _Optional[str] = ...) -> None: ...
+
+class DeleteFieldResponse(_message.Message):
+    __slots__ = ("success", "message", "backup_location")
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    BACKUP_LOCATION_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    message: str
+    backup_location: str
+    def __init__(self, success: bool = ..., message: _Optional[str] = ..., backup_location: _Optional[str] = ...) -> None: ...
+
+class GetFieldsResponse(_message.Message):
+    __slots__ = ("success", "fields", "message")
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    FIELDS_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    fields: _containers.RepeatedCompositeFieldContainer[TableField]
+    message: str
+    def __init__(self, success: bool = ..., fields: _Optional[_Iterable[_Union[TableField, _Mapping]]] = ..., message: _Optional[str] = ...) -> None: ...

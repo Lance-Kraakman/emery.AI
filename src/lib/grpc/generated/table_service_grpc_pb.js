@@ -4,6 +4,17 @@
 var grpc = require('@grpc/grpc-js');
 var table_service_pb = require('./table_service_pb.js');
 
+function serialize_emery_tables_AddFieldRequest(arg) {
+  if (!(arg instanceof table_service_pb.AddFieldRequest)) {
+    throw new Error('Expected argument of type emery.tables.AddFieldRequest');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_emery_tables_AddFieldRequest(buffer_arg) {
+  return table_service_pb.AddFieldRequest.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
 function serialize_emery_tables_CreateRowsRequest(arg) {
   if (!(arg instanceof table_service_pb.CreateRowsRequest)) {
     throw new Error('Expected argument of type emery.tables.CreateRowsRequest');
@@ -35,6 +46,28 @@ function serialize_emery_tables_CreateTableRequest(arg) {
 
 function deserialize_emery_tables_CreateTableRequest(buffer_arg) {
   return table_service_pb.CreateTableRequest.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_emery_tables_DeleteFieldRequest(arg) {
+  if (!(arg instanceof table_service_pb.DeleteFieldRequest)) {
+    throw new Error('Expected argument of type emery.tables.DeleteFieldRequest');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_emery_tables_DeleteFieldRequest(buffer_arg) {
+  return table_service_pb.DeleteFieldRequest.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_emery_tables_DeleteFieldResponse(arg) {
+  if (!(arg instanceof table_service_pb.DeleteFieldResponse)) {
+    throw new Error('Expected argument of type emery.tables.DeleteFieldResponse');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_emery_tables_DeleteFieldResponse(buffer_arg) {
+  return table_service_pb.DeleteFieldResponse.deserializeBinary(new Uint8Array(buffer_arg));
 }
 
 function serialize_emery_tables_DeleteRowsRequest(arg) {
@@ -79,6 +112,39 @@ function serialize_emery_tables_DeleteTableResponse(arg) {
 
 function deserialize_emery_tables_DeleteTableResponse(buffer_arg) {
   return table_service_pb.DeleteTableResponse.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_emery_tables_FieldResponse(arg) {
+  if (!(arg instanceof table_service_pb.FieldResponse)) {
+    throw new Error('Expected argument of type emery.tables.FieldResponse');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_emery_tables_FieldResponse(buffer_arg) {
+  return table_service_pb.FieldResponse.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_emery_tables_GetFieldsRequest(arg) {
+  if (!(arg instanceof table_service_pb.GetFieldsRequest)) {
+    throw new Error('Expected argument of type emery.tables.GetFieldsRequest');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_emery_tables_GetFieldsRequest(buffer_arg) {
+  return table_service_pb.GetFieldsRequest.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_emery_tables_GetFieldsResponse(arg) {
+  if (!(arg instanceof table_service_pb.GetFieldsResponse)) {
+    throw new Error('Expected argument of type emery.tables.GetFieldsResponse');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_emery_tables_GetFieldsResponse(buffer_arg) {
+  return table_service_pb.GetFieldsResponse.deserializeBinary(new Uint8Array(buffer_arg));
 }
 
 function serialize_emery_tables_GetRowsRequest(arg) {
@@ -189,6 +255,17 @@ function serialize_emery_tables_TableResponse(arg) {
 
 function deserialize_emery_tables_TableResponse(buffer_arg) {
   return table_service_pb.TableResponse.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_emery_tables_UpdateFieldRequest(arg) {
+  if (!(arg instanceof table_service_pb.UpdateFieldRequest)) {
+    throw new Error('Expected argument of type emery.tables.UpdateFieldRequest');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_emery_tables_UpdateFieldRequest(buffer_arg) {
+  return table_service_pb.UpdateFieldRequest.deserializeBinary(new Uint8Array(buffer_arg));
 }
 
 function serialize_emery_tables_UpdateRowsRequest(arg) {
@@ -350,6 +427,51 @@ getTableStats: {
     requestDeserialize: deserialize_emery_tables_GetTableStatsRequest,
     responseSerialize: serialize_emery_tables_GetTableStatsResponse,
     responseDeserialize: deserialize_emery_tables_GetTableStatsResponse,
+  },
+  // Field management operations for dynamic table schema evolution
+addField: {
+    path: '/emery.tables.TableService/AddField',
+    requestStream: false,
+    responseStream: false,
+    requestType: table_service_pb.AddFieldRequest,
+    responseType: table_service_pb.FieldResponse,
+    requestSerialize: serialize_emery_tables_AddFieldRequest,
+    requestDeserialize: deserialize_emery_tables_AddFieldRequest,
+    responseSerialize: serialize_emery_tables_FieldResponse,
+    responseDeserialize: deserialize_emery_tables_FieldResponse,
+  },
+  updateField: {
+    path: '/emery.tables.TableService/UpdateField',
+    requestStream: false,
+    responseStream: false,
+    requestType: table_service_pb.UpdateFieldRequest,
+    responseType: table_service_pb.FieldResponse,
+    requestSerialize: serialize_emery_tables_UpdateFieldRequest,
+    requestDeserialize: deserialize_emery_tables_UpdateFieldRequest,
+    responseSerialize: serialize_emery_tables_FieldResponse,
+    responseDeserialize: deserialize_emery_tables_FieldResponse,
+  },
+  deleteField: {
+    path: '/emery.tables.TableService/DeleteField',
+    requestStream: false,
+    responseStream: false,
+    requestType: table_service_pb.DeleteFieldRequest,
+    responseType: table_service_pb.DeleteFieldResponse,
+    requestSerialize: serialize_emery_tables_DeleteFieldRequest,
+    requestDeserialize: deserialize_emery_tables_DeleteFieldRequest,
+    responseSerialize: serialize_emery_tables_DeleteFieldResponse,
+    responseDeserialize: deserialize_emery_tables_DeleteFieldResponse,
+  },
+  getFields: {
+    path: '/emery.tables.TableService/GetFields',
+    requestStream: false,
+    responseStream: false,
+    requestType: table_service_pb.GetFieldsRequest,
+    responseType: table_service_pb.GetFieldsResponse,
+    requestSerialize: serialize_emery_tables_GetFieldsRequest,
+    requestDeserialize: deserialize_emery_tables_GetFieldsRequest,
+    responseSerialize: serialize_emery_tables_GetFieldsResponse,
+    responseDeserialize: deserialize_emery_tables_GetFieldsResponse,
   },
 };
 

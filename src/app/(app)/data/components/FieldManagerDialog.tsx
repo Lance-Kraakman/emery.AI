@@ -17,7 +17,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table as UITable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react"
+import { Plus, Trash2, GripVertical } from "lucide-react"
+import { 
+  DndContext, 
+  DragEndEvent, 
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import {
+  useSortable,
+} from '@dnd-kit/sortable'
 import { createField, deleteField, reorderFields } from "@/app/actions/fields"
 import { getTables } from "@/app/actions/tables"
 import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
@@ -30,6 +48,79 @@ interface FieldManagerDialogProps {
   tableId: number
   fields: FieldDTO[]
   onFieldsUpdated: () => void
+}
+
+// Sortable row component for drag-and-drop
+function SortableFieldRow({ field, index, onDelete }: { 
+  field: FieldDTO
+  index: number
+  onDelete: (fieldName: string) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: field.name })
+
+  const style = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style}
+      className={`flex items-center gap-3 p-3 border-b hover:bg-gray-50 ${isDragging ? 'bg-blue-50' : ''}`}
+    >
+      {/* Drag handle */}
+      <div 
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
+      >
+        <GripVertical className="w-4 h-4" />
+      </div>
+
+      {/* Field info */}
+      <div className="flex-1 grid grid-cols-4 gap-4 items-center">
+        <div className="font-medium">{field.name}</div>
+        
+        <div>
+          <Badge variant="outline" className="capitalize">
+            {field.type}
+          </Badge>
+        </div>
+        
+        <div>
+          {field.required ? (
+            <Badge variant="destructive" className="text-xs">Required</Badge>
+          ) : (
+            <span className="text-sm text-muted-foreground">Optional</span>
+          )}
+        </div>
+        
+        <div className="text-sm text-muted-foreground">
+          Order: {field.orderIndex}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => onDelete(field.name)}
+        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+        title="Delete field"
+      >
+        <Trash2 className="w-4 h-4" />
+      </Button>
+    </div>
+  )
 }
 
 const FIELD_TYPES = [
@@ -57,45 +148,69 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   const [embeddingSize, setEmbeddingSize] = useState<number | undefined>()
   const [loading, setLoading] = useState(false)
   const [availableTables, setAvailableTables] = useState<TableDTO[]>([])
+  
+  // Optimistic state for field reordering
+  const [optimisticFields, setOptimisticFields] = useState<FieldDTO[] | null>(null)
+  const [reorderError, setReorderError] = useState<string | null>(null)
 
-  const handleMoveField = async (fieldName: string, direction: 'up' | 'down') => {
-    try {
-      setLoading(true)
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (!over) return
+
+    if (active.id !== over.id) {
+      const oldIndex = sortedFields.findIndex((field) => field.name === active.id)
+      const newIndex = sortedFields.findIndex((field) => field.name === over.id)
+
+      if (oldIndex === -1 || newIndex === -1) return
+
+      // Create new field order with arrayMove
+      const newFields = arrayMove(sortedFields, oldIndex, newIndex)
       
-      const currentOrder = sortedFields.map((field, index) => ({
+      // Generate field orders for the new arrangement
+      const fieldOrders = newFields.map((field, index) => ({
         fieldName: field.name,
         orderIndex: index
       }))
-      
-      const fieldIndex = currentOrder.findIndex(fo => fo.fieldName === fieldName)
-      if (fieldIndex === -1) return
-      
-      const newIndex = direction === 'up' ? fieldIndex - 1 : fieldIndex + 1
-      if (newIndex < 0 || newIndex >= currentOrder.length) return
-      
-      // Swap the order indices
-      const newOrder = [...currentOrder]
-      const temp = newOrder[fieldIndex].orderIndex
-      newOrder[fieldIndex].orderIndex = newOrder[newIndex].orderIndex
-      newOrder[newIndex].orderIndex = temp
-      
-      const result = await reorderFields({
-        tableId,
-        fieldOrders: newOrder
-      })
-      
-      if (result.success) {
-        onFieldsUpdated()
-      } else {
-        alert(result.error || "Failed to reorder fields")
+
+      // Optimistic update: update UI immediately
+      setOptimisticFields(newFields)
+      setReorderError(null)
+
+      try {
+        setLoading(true)
+        
+        const result = await reorderFields({
+          tableId,
+          fieldOrders
+        })
+        
+        if (result.success) {
+          onFieldsUpdated()
+          setOptimisticFields(null) // Clear optimistic state on success
+        } else {
+          // Rollback on error
+          setOptimisticFields(null)
+          setReorderError(result.error || "Failed to reorder fields")
+        }
+      } catch (error) {
+        console.error("Failed to reorder fields:", error)
+        // Rollback on error
+        setOptimisticFields(null)
+        setReorderError("Failed to reorder fields")
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error("Failed to reorder fields:", error)
-      alert("Failed to reorder fields")
-    } finally {
-      setLoading(false)
     }
   }
+
+  // Setup DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   const handleAddField = async () => {
     if (!newFieldName || !newFieldType) return
@@ -196,11 +311,11 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
     onClose()
   }
 
-  // Sort fields by orderIndex
-  const sortedFields = useMemo(() => 
-    [...fields].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0)), 
-    [fields]
-  );
+  // Sort fields by orderIndex, with optimistic updates
+  const sortedFields = useMemo(() => {
+    const baseFields = [...fields].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0))
+    return optimisticFields || baseFields
+  }, [fields, optimisticFields]);
 
   const columnHelper = createColumnHelper<FieldDTO>();
 
@@ -231,46 +346,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
         <span className="text-sm text-muted-foreground">{getValue()}</span>
       ),
     }),
-    columnHelper.display({
-      id: 'actions',
-      header: 'Actions',
-      cell: ({ row }) => (
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleMoveField(row.original.name, 'up')}
-            disabled={loading || row.index === 0}
-            className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
-            title="Move up"
-          >
-            <ChevronUp className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleMoveField(row.original.name, 'down')}
-            disabled={loading || row.index === sortedFields.length - 1}
-            className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
-            title="Move down"
-          >
-            <ChevronDown className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleDeleteField(row.original.name)}
-            disabled={loading}
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-            title="Delete field"
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
-      ),
-      maxSize: 120,
-    }),
-  ], [handleDeleteField, loading]);
+  ], []);
 
   const table = useReactTable({
     data: sortedFields,
@@ -293,44 +369,42 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
           {/* Existing Fields */}
           <div>
             <h3 className="text-sm font-medium mb-2">Current Fields</h3>
+            <div className="text-xs text-muted-foreground mb-2">
+              Drag and drop fields to reorder them
+            </div>
+            {reorderError && (
+              <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {reorderError}
+              </div>
+            )}
             <div className="border rounded-md">
-              <UITable>
-                <TableHeader>
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <TableHead key={header.id} className={header.id === 'actions' ? "w-20" : ""}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
-                        </TableHead>
+              {sortedFields.length > 0 ? (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={sortedFields.map(field => field.name)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="divide-y">
+                      {sortedFields.map((field, index) => (
+                        <SortableFieldRow
+                          key={field.name}
+                          field={field}
+                          index={index}
+                          onDelete={handleDeleteField}
+                        />
                       ))}
-                    </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {table.getRowModel().rows?.length ? (
-                    table.getRowModel().rows.map((row) => (
-                      <TableRow key={row.id}>
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={columns.length} className="text-center text-muted-foreground py-6">
-                        No fields created yet. Add your first field below.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </UITable>
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              ) : (
+                <div className="text-center text-muted-foreground py-6">
+                  No fields created yet. Add your first field below.
+                </div>
+              )}
             </div>
           </div>
 

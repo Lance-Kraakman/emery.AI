@@ -90,6 +90,26 @@ class TableServiceStub(object):
                 request_serializer=table__service__pb2.GetTableStatsRequest.SerializeToString,
                 response_deserializer=table__service__pb2.GetTableStatsResponse.FromString,
                 _registered_method=True)
+        self.AddField = channel.unary_unary(
+                '/emery.tables.TableService/AddField',
+                request_serializer=table__service__pb2.AddFieldRequest.SerializeToString,
+                response_deserializer=table__service__pb2.FieldResponse.FromString,
+                _registered_method=True)
+        self.UpdateField = channel.unary_unary(
+                '/emery.tables.TableService/UpdateField',
+                request_serializer=table__service__pb2.UpdateFieldRequest.SerializeToString,
+                response_deserializer=table__service__pb2.FieldResponse.FromString,
+                _registered_method=True)
+        self.DeleteField = channel.unary_unary(
+                '/emery.tables.TableService/DeleteField',
+                request_serializer=table__service__pb2.DeleteFieldRequest.SerializeToString,
+                response_deserializer=table__service__pb2.DeleteFieldResponse.FromString,
+                _registered_method=True)
+        self.GetFields = channel.unary_unary(
+                '/emery.tables.TableService/GetFields',
+                request_serializer=table__service__pb2.GetFieldsRequest.SerializeToString,
+                response_deserializer=table__service__pb2.GetFieldsResponse.FromString,
+                _registered_method=True)
 
 
 class TableServiceServicer(object):
@@ -165,6 +185,31 @@ class TableServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def AddField(self, request, context):
+        """Field management operations for dynamic table schema evolution
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateField(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteField(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetFields(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_TableServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -222,6 +267,26 @@ def add_TableServiceServicer_to_server(servicer, server):
                     servicer.GetTableStats,
                     request_deserializer=table__service__pb2.GetTableStatsRequest.FromString,
                     response_serializer=table__service__pb2.GetTableStatsResponse.SerializeToString,
+            ),
+            'AddField': grpc.unary_unary_rpc_method_handler(
+                    servicer.AddField,
+                    request_deserializer=table__service__pb2.AddFieldRequest.FromString,
+                    response_serializer=table__service__pb2.FieldResponse.SerializeToString,
+            ),
+            'UpdateField': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateField,
+                    request_deserializer=table__service__pb2.UpdateFieldRequest.FromString,
+                    response_serializer=table__service__pb2.FieldResponse.SerializeToString,
+            ),
+            'DeleteField': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteField,
+                    request_deserializer=table__service__pb2.DeleteFieldRequest.FromString,
+                    response_serializer=table__service__pb2.DeleteFieldResponse.SerializeToString,
+            ),
+            'GetFields': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetFields,
+                    request_deserializer=table__service__pb2.GetFieldsRequest.FromString,
+                    response_serializer=table__service__pb2.GetFieldsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -522,6 +587,114 @@ class TableService(object):
             '/emery.tables.TableService/GetTableStats',
             table__service__pb2.GetTableStatsRequest.SerializeToString,
             table__service__pb2.GetTableStatsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AddField(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/emery.tables.TableService/AddField',
+            table__service__pb2.AddFieldRequest.SerializeToString,
+            table__service__pb2.FieldResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateField(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/emery.tables.TableService/UpdateField',
+            table__service__pb2.UpdateFieldRequest.SerializeToString,
+            table__service__pb2.FieldResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteField(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/emery.tables.TableService/DeleteField',
+            table__service__pb2.DeleteFieldRequest.SerializeToString,
+            table__service__pb2.DeleteFieldResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetFields(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/emery.tables.TableService/GetFields',
+            table__service__pb2.GetFieldsRequest.SerializeToString,
+            table__service__pb2.GetFieldsResponse.FromString,
             options,
             channel_credentials,
             insecure,
