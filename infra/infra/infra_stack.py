@@ -478,7 +478,9 @@ class InfraStack(Stack):
                 cpu_architecture=ecs.CpuArchitecture.X86_64,
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
-            public_load_balancer=True,
+            # AIDEV-NOTE: Internal NLB for VPC-only access from frontend/scheduler
+            # Frontend and scheduler are in private subnets and cannot reach public IPs within same VPC
+            public_load_balancer=False,
             security_groups=[db_client_sg, agent_grpc_sg],
             # AIDEV-NOTE: Critical fix for ECS service stability
             # Increased grace period to allow for gRPC service startup and target registration
