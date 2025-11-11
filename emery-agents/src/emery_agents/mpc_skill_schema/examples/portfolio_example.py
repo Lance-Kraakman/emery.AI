@@ -25,7 +25,7 @@ def portfolio_skill_example():
     print(f"📋 Template: {template}")
     
     # Generate skill schema
-    schema = generate_skill_f   om_user_input_simple(user_description, template)
+    schema = generate_skill_from_user_input_simple(user_description, template)
     
     # Display results
     print("\n" + "="*60)
