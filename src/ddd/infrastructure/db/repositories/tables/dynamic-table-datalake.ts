@@ -621,8 +621,205 @@ export class DynamicTableDataLake {
   }
 
   /**
-   * Delete the entire table storage using gRPC service
-   */
+    * Add a field to the table using gRPC service
+    */
+  async addField(table: DynamicTable, field: TableField): Promise<Result<void>> {
+    try {
+      logger.debug('Adding field', { 
+        tableId: table.id.value, 
+        fieldName: field.name, 
+        fieldType: field.type 
+      });
+
+      // Convert domain field to protobuf format
+      const protoField = {
+        name: field.name,
+        type: TableGrpcMapper.mapFieldTypeToProto(field.type) as any,
+        required: field.required || false,
+        metadata: field.metadata || {}
+      };
+
+      // Create add field request
+      const addRequest = TableGrpcMapper.toAddFieldRequest(
+        table.id,
+        protoField,
+        table.organizationId,
+        table.storageLocation || `s3://emery-tables/${table.id.value}`
+      );
+
+      // Send to gRPC service
+      const response = await this.grpcClient.addField(addRequest);
+
+      if (response && response.success) {
+        logger.summary('Added field', { 
+          tableId: table.id.value, 
+          fieldName: field.name 
+        });
+        return { success: true, data: undefined };
+      } else {
+        const message = response?.message || 'Unknown response error';
+        logger.error('Failed to add field', message);
+        return {
+          success: false,
+          error: message || 'Failed to add field via gRPC'
+        };
+      }
+    } catch (error) {
+      logger.error('Error adding field', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to add field via gRPC'
+      };
+    }
+  }
+
+  /**
+    * Update a field in the table using gRPC service
+    */
+  async updateField(table: DynamicTable, field: TableField): Promise<Result<void>> {
+    try {
+      logger.debug('Updating field', { 
+        tableId: table.id.value, 
+        fieldName: field.name, 
+        fieldType: field.type 
+      });
+
+      // Convert domain field to protobuf format
+      const protoField = {
+        name: field.name,
+        type: TableGrpcMapper.mapFieldTypeToProto(field.type) as any,
+        required: field.required || false,
+        metadata: field.metadata || {}
+      };
+
+      // Create update field request
+      const updateRequest = TableGrpcMapper.toUpdateFieldRequest(
+        table.id,
+        protoField,
+        table.organizationId,
+        table.storageLocation || `s3://emery-tables/${table.id.value}`
+      );
+
+      // Send to gRPC service
+      const response = await this.grpcClient.updateField(updateRequest);
+
+      if (response && response.success) {
+        logger.summary('Updated field', { 
+          tableId: table.id.value, 
+          fieldName: field.name 
+        });
+        return { success: true, data: undefined };
+      } else {
+        const message = response?.message || 'Unknown response error';
+        logger.error('Failed to update field', message);
+        return {
+          success: false,
+          error: message || 'Failed to update field via gRPC'
+        };
+      }
+    } catch (error) {
+      logger.error('Error updating field', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update field via gRPC'
+      };
+    }
+  }
+
+  /**
+    * Delete a field from the table using gRPC service
+    */
+  async deleteField(table: DynamicTable, fieldName: string): Promise<Result<void>> {
+    try {
+      logger.debug('Deleting field', { 
+        tableId: table.id.value, 
+        fieldName 
+      });
+
+      // Create delete field request
+      const deleteRequest = TableGrpcMapper.toDeleteFieldRequest(
+        table.id,
+        fieldName,
+        table.organizationId,
+        table.storageLocation || `s3://emery-tables/${table.id.value}`
+      );
+
+      // Send to gRPC service
+      const response = await this.grpcClient.deleteField(deleteRequest);
+
+      if (response && response.success) {
+        logger.summary('Deleted field', { 
+          tableId: table.id.value, 
+          fieldName 
+        });
+        return { success: true, data: undefined };
+      } else {
+        const message = response?.message || 'Unknown response error';
+        logger.error('Failed to delete field', message);
+        return {
+          success: false,
+          error: message || 'Failed to delete field via gRPC'
+        };
+      }
+    } catch (error) {
+      logger.error('Error deleting field', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete field via gRPC'
+      };
+    }
+  }
+
+  /**
+    * Get fields from the table using gRPC service
+    */
+  async getFields(table: DynamicTable): Promise<Result<TableField[]>> {
+    try {
+      logger.debug('Getting fields', { tableId: table.id.value });
+
+      // Create get fields request
+      const getFieldsRequest = TableGrpcMapper.toGetFieldsRequest(
+        table.id,
+        table.organizationId,
+        table.storageLocation || `s3://emery-tables/${table.id.value}`
+      );
+
+      // Send to gRPC service
+      const response = await this.grpcClient.getFields(getFieldsRequest);
+
+      if (response && response.success) {
+        const fields = response.fields || [];
+        logger.summary('Retrieved fields', { 
+          tableId: table.id.value, 
+          fieldCount: fields.length 
+        });
+        
+        // Convert protobuf fields back to domain TableField objects
+        const domainFields = fields.map(protoField => 
+          TableGrpcMapper.fromProtoField(protoField)
+        );
+
+        return { success: true, data: domainFields };
+      } else {
+        const message = response?.message || 'Unknown response error';
+        logger.error('Failed to get fields', message);
+        return {
+          success: false,
+          error: message || 'Failed to get fields via gRPC'
+        };
+      }
+    } catch (error) {
+      logger.error('Error getting fields', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get fields via gRPC'
+      };
+    }
+  }
+
+  /**
+    * Delete the entire table storage using gRPC service
+    */
   async deleteTable(table: DynamicTable): Promise<Result<void>> {
     try {
       const s3Path = table.storageLocation || `s3://emery-tables/${table.id.value}`;

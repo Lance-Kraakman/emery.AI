@@ -74,6 +74,9 @@ class InfraStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         prefix = env_name.capitalize()
+        
+        # Default AWS region - can be overridden by CDK context
+        aws_region = 'ap-southeast-2'
 
         # Create a new VPC for our application
         # This will create public and private subnets across 2 Availability Zones by default
@@ -571,11 +574,11 @@ class InfraStack(Stack):
             "WORKER_ADDRESS",
             "agent-service.emery.local:50051"
         )
-        # Add AWS S3 configuration to override MinIO defaults
-        scheduler_container.add_environment(
-            "AWS_ENDPOINT_URL",
-            ""  # Empty for AWS S3 (overrides MinIO default)
-        )
+            # Add AWS S3 configuration to override MinIO defaults
+            scheduler_container.add_environment(
+                "AWS_ENDPOINT_URL",
+                f"https://s3.{aws_region}.amazonaws.com"  # Dynamic AWS S3 endpoint
+            )
         scheduler_container.add_environment(
             "AWS_REGION",
             "ap-southeast-2"  # AWS region for deployment
@@ -605,7 +608,7 @@ class InfraStack(Stack):
             # Add AWS S3 configuration to override MinIO defaults
             frontend_service.task_definition.default_container.add_environment(
                 "AWS_ENDPOINT_URL",
-                ""  # Empty for AWS S3 (overrides MinIO default)
+                f"https://s3.{aws_region}.amazonaws.com"  # Dynamic AWS S3 endpoint
             )
             frontend_service.task_definition.default_container.add_environment(
                 "AWS_REGION",
@@ -617,15 +620,15 @@ class InfraStack(Stack):
                 "S3_BUCKET_NAME",
                 storage_bucket.bucket_name
             )
-            # Add AWS S3 configuration to override MinIO defaults
-            agent_service.task_definition.default_container.add_environment(
-                "AWS_ENDPOINT_URL",
-                ""  # Empty for AWS S3 (overrides MinIO default)
-            )
-            agent_service.task_definition.default_container.add_environment(
-                "AWS_REGION",
-                "ap-southeast-2"  # AWS region for deployment
-            )
+        # Add AWS S3 configuration to override MinIO defaults
+        agent_service.task_definition.default_container.add_environment(
+            "AWS_ENDPOINT_URL",
+            f"https://s3.{aws_region}.amazonaws.com"  # Dynamic AWS S3 endpoint
+        )
+        agent_service.task_definition.default_container.add_environment(
+            "AWS_REGION",
+            "ap-southeast-2"  # AWS region for deployment
+        )
             # AWS credentials will be automatically provided by the task execution role
             # No need to hardcode AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
             # Add NextJS base URL for agent callbacks to API routes

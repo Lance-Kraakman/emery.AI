@@ -11,11 +11,10 @@
  */
 import type { DbClient } from '@/lib/db/client';
 import { tables, fields } from '@/lib/db/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import { nanoid } from 'nanoid';
 import { s3Client, BUCKET_NAME, ensureBucketExists } from '@/lib/s3/client';
-import { GetObjectCommand, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { TableId, DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { 
   IDynamicTableRepository
@@ -29,15 +28,6 @@ import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persis
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
-import { GrpcTableClient } from './table-grpc-client';
-import {
-  AddFieldRequest,
-  UpdateFieldRequest,
-  DeleteFieldRequest,
-  FieldType as ProtoFieldType,
-  TableField as ProtoTableField
-} from '@/lib/grpc/generated/table_service';
-import { ResultHelpers } from '@/ddd/domain/shared/result';
 import { DynamicTableDataLake } from './dynamic-table-datalake';
 
 type TableRow = InferSelectModel<typeof tables>;
@@ -308,38 +298,37 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   /**
    * Batch update field order indices - optimized for reordering operations
-   * Updates multiple fields in a single SQL operation instead of N+1 updates
+   * Updates multiple field orders using individual updates
+   * Following the existing Drizzle patterns used throughout the codebase
    */
   async updateFieldOrders(tableId: TableId, fieldOrders: Array<{ fieldName: string; orderIndex: number }>): Promise<void> {
     try {
-      // Build CASE statement for batch update
-      const caseStatements = fieldOrders.map(({ fieldName, orderIndex }) => 
-        `WHEN '${fieldName}' THEN ${orderIndex}`
-      ).join(' ');
+      // Update each field individually using Drizzle query builder
+      // This follows the existing patterns in the codebase and ensures type safety
+      for (const { fieldName, orderIndex } of fieldOrders) {
+        await this.db.update(fields)
+          .set({ 
+            orderIndex,
+            updatedAt: new Date()
+          })
+          .where(and(
+            eq(fields.tableId, tableId.value),
+            eq(fields.name, fieldName)
+          ));
+      }
 
-      const fieldNames = fieldOrders.map(fo => `'${fo.fieldName}'`).join(', ');
-
-      // Single SQL update with CASE statement - much more efficient than N+1 updates
-      await this.db.execute(sql`
-        UPDATE ${fields} 
-        SET "orderIndex" = CASE name ${caseStatements} END,
-            "updatedAt" = NOW()
-        WHERE "tableId" = ${tableId.value} 
-        AND name IN (${fieldNames})
-      `);
-
-      console.log(`[TableService] Batch updated ${fieldOrders.length} field orders for table ${tableId.value}`);
+      console.log(`[TableService] Updated ${fieldOrders.length} field orders for table ${tableId.value}`);
 
     } catch (error) {
-      console.error('[TableService] Error batch updating field orders:', error);
+      console.error('[TableService] Error updating field orders:', error);
       throw error;
     }
   }
 
   /**
-   * Sync table fields to database
-   * Handles adding new fields and updating existing fields (metadata, type, etc.)
-   */
+    * Sync table fields to database
+    * Handles adding new fields, updating existing fields, and deleting removed fields
+    */
   private async syncTableFields(tableId: TableId, tableFields: TableField[]): Promise<void> {
     try {
       // Get existing fields from database
@@ -350,9 +339,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       // Create map for quick lookup
       const existingFieldMap = new Map<string, FieldRow>(existingFields.map((f: FieldRow) => [f.name, f]));
 
-      // Separate fields into new vs existing
+      // Separate fields into new vs existing vs deleted
       const fieldsToAdd = tableFields.filter(f => !existingFieldMap.has(f.name));
       const fieldsToUpdate = tableFields.filter(f => existingFieldMap.has(f.name));
+      const fieldsToDelete = existingFields.filter((f: FieldRow) => !tableFields.some(tf => tf.name === f.name));
 
       // Insert new fields into PostgreSQL
       for (const field of fieldsToAdd) {
@@ -425,23 +415,51 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         console.log(`[TableService] Updated ${fieldsToUpdate.length} existing fields in PostgreSQL for table ${tableId.value}`);
       }
 
-      // CRITICAL FIX: Sync schema changes to Delta Lake storage
-      // This ensures fields are immediately available for sorting/filtering
-      const totalChanges = fieldsToAdd.length + fieldsToUpdate.length;
-      if (totalChanges > 0) {
-        console.log(`[TableService] Now syncing ${totalChanges} field changes to Delta Lake...`);
+      // Delete removed fields from PostgreSQL
+      for (const fieldToDelete of fieldsToDelete) {
+        await this.db.delete(fields)
+          .where(eq(fields.id, fieldToDelete.id));
+        console.log(`[TableService] Deleted field ${fieldToDelete.name} from PostgreSQL`);
+      }
 
-        const fullTable = await this.findById(tableId);
-        if (fullTable && this.datalake) {
-          const deltaLakeResult = await this.datalake.updateTable(fullTable);
-          if (!deltaLakeResult.success) {
-            console.warn(`[TableService] Warning: Failed to sync fields to Delta Lake: ${deltaLakeResult.error}`);
+      // CRITICAL FIX: Sync schema changes to Delta Lake storage using specific field operations
+      // This ensures fields are immediately available for sorting/filtering
+      const fullTable = await this.findById(tableId);
+      if (fullTable && this.datalake) {
+        // Add new fields to Delta Lake
+        for (const field of fieldsToAdd) {
+          const addResult = await this.datalake.addField(fullTable, field);
+          if (!addResult.success) {
+            console.warn(`[TableService] Warning: Failed to add field ${field.name} to Delta Lake: ${addResult.error}`);
           } else {
-            console.log(`[TableService] Successfully synced ${totalChanges} field changes to Delta Lake`);
+            console.log(`[TableService] Successfully added field ${field.name} to Delta Lake`);
           }
-        } else {
-          console.warn(`[TableService] Could not sync to Delta Lake - table or datalake repository unavailable`);
         }
+
+        // Update existing fields in Delta Lake
+        for (const field of fieldsToUpdate) {
+          const updateResult = await this.datalake.updateField(fullTable, field);
+          if (!updateResult.success) {
+            console.warn(`[TableService] Warning: Failed to update field ${field.name} in Delta Lake: ${updateResult.error}`);
+          } else {
+            console.log(`[TableService] Successfully updated field ${field.name} in Delta Lake`);
+          }
+        }
+
+        // Delete removed fields from Delta Lake
+        for (const fieldToDelete of fieldsToDelete) {
+          const deleteResult = await this.datalake.deleteField(fullTable, fieldToDelete.name);
+          if (!deleteResult.success) {
+            console.warn(`[TableService] Warning: Failed to delete field ${fieldToDelete.name} from Delta Lake: ${deleteResult.error}`);
+          } else {
+            console.log(`[TableService] Successfully deleted field ${fieldToDelete.name} from Delta Lake`);
+          }
+        }
+
+        const totalChanges = fieldsToAdd.length + fieldsToUpdate.length + fieldsToDelete.length;
+        console.log(`[TableService] Successfully synced ${totalChanges} field changes to Delta Lake`);
+      } else {
+        console.warn(`[TableService] Could not sync to Delta Lake - table or datalake repository unavailable`);
       }
     } catch (error) {
       console.error('[TableService] Error syncing table fields:', error);
@@ -710,152 +728,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
     }
   }
 
-  /**
-   * Apply query options to resolved data (filters, sorting, pagination)
-   */
-  private applyQueryOptions(data: Row[], options?: RowQueryOptions): Row[] {
-    let result = [...data];
-    
-    // TODO: Apply filters when implemented
-    // if (options?.filters) {
-    //   result = this.applyFilters(result, options.filters);
-    // }
-    
-    // Apply sorting
-    if (options?.orderBy) {
-      const field = options.orderBy;
-      const direction = options.orderDirection || 'ASC';
-      
-      result.sort((a, b) => {
-        const aVal = a.getFieldValue(field)?.value;
-        const bVal = b.getFieldValue(field)?.value;
-        
-        if (aVal === bVal) return 0;
-        if (aVal == null) return 1;
-        if (bVal == null) return -1;
-        
-        let comparison = 0;
-        if (typeof aVal === 'string' && typeof bVal === 'string') {
-          comparison = aVal.localeCompare(bVal);
-        } else if (typeof aVal === 'number' && typeof bVal === 'number') {
-          comparison = aVal - bVal;
-        } else if (aVal instanceof Date && bVal instanceof Date) {
-          comparison = aVal.getTime() - bVal.getTime();
-        } else {
-          comparison = String(aVal).localeCompare(String(bVal));
-        }
-        
-        return direction === 'ASC' ? comparison : -comparison;
-      });
-    }
-    
-    // Apply pagination
-    const offset = options?.offset || 0;
-    const limit = options?.limit;
-    
-    if (offset > 0 || limit !== undefined) {
-      const endIndex = limit !== undefined ? offset + limit : undefined;
-      result = result.slice(offset, endIndex);
-    }
-    
-    return result;
-  }
+
 
 
   // Private helper methods
-
-  private async initializeEmptyTable(
-    s3Path: S3TablePath, 
-    organizationId: OrganizationId, 
-    databaseId: DatabaseId, 
-    tableId: TableId, 
-    tableName: string,
-    createdBy: UserId
-  ): Promise<void> {
-    // Create empty Arrow file with no rows
-    const emptyRows: Row[] = [];
-    
-    // Create proper DynamicTable entity with real values
-    const emptyTable = DynamicTable.fromPersistence({
-      id: tableId.value,
-      databaseId: databaseId.value,
-      organizationId: organizationId.value,
-      name: tableName,
-      storageLocation: s3Path.path,
-      description: undefined,
-      metadata: undefined,
-      fields: [], // Empty table has no fields initially
-      createdBy: createdBy.value,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
-
-    // Create the table via gRPC service instead of storing empty data
-    const result = await this.datalake.createTable(emptyTable);
-    if (!result.success) {
-      throw new Error(`Failed to initialize empty table: ${result.error}`);
-    }
-    
-    // Ensure S3 bucket exists before storing data
-    await ensureBucketExists();
-    
-    // Store Arrow file directly to S3 (consistent with other table data operations)
-    await s3Client.send(new PutObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: s3Path.getDataPath(),
-      Body: result.data,
-      ContentType: 'application/vnd.apache.arrow.file'
-    }));
-  }
-
-  // AIDEV-NOTE: initializeEmptyTableWithSchema removed - was unused
-  // Empty table initialization is handled by initializeEmptyTable instead
-  private async loadTableData(s3Path: S3TablePath): Promise<Row[]> {
-    try {
-      console.log('[DynamicTableRepository.loadTableData] === ENTRY ===');
-      console.log(`[DynamicTableRepository.loadTableData] S3 path: ${s3Path.path}`);
-
-      // Get table entity and fields for data storage service
-      const tableId = this.extractTableIdFromPath(s3Path);
-      console.log(`[DynamicTableRepository.loadTableData] Extracted table ID: ${tableId}`);
-
-      const table = await this.findById(TableId.fromNumber(tableId));
-      if (!table) {
-        throw new Error(`Table not found: ${tableId}`);
-      }
-
-      console.log(`[DynamicTableRepository.loadTableData] Found table: ${table.name} (ID: ${table.id.value})`);
-      console.log(`[DynamicTableRepository.loadTableData] Storage location: ${table.storageLocation}`);
-      console.log(`[DynamicTableRepository.loadTableData] Field count: ${table.fields.length}`);
-
-      // Query rows from Delta Lake via gRPC service (NEW implementation)
-      // AIDEV-NOTE: Removed old S3 Arrow file read logic - now using Delta Lake
-      console.log(`[DynamicTableRepository.loadTableData] Calling datalake.retrieveRows...`);
-      const result = await this.datalake.retrieveRows(table);
-
-      if (!result.success) {
-        console.error(`[DynamicTableRepository.loadTableData] retrieveRows failed: ${result.error}`);
-        throw new Error(`Failed to retrieve data: ${result.error}`);
-      }
-
-      console.log(`[DynamicTableRepository.loadTableData] Successfully retrieved ${result.data?.rows.length || 0} rows (total: ${result.data?.totalCount || 0})`);
-      console.log(`[DynamicTableRepository.loadTableData] === EXIT ===`);
-
-      return result.data?.rows || [];
-
-    } catch (error) {
-      console.error(`[DynamicTableRepository.loadTableData] === ERROR ===`);
-      console.error(`[DynamicTableRepository.loadTableData] Error loading table data:`, error);
-      console.error(`[DynamicTableRepository.loadTableData] Error type:`, error instanceof Error ? error.constructor.name : typeof error);
-
-      // Return empty array for missing table data (not an error - table might be new)
-      if (error instanceof Error && error.message.includes('Table not found')) {
-        return [];
-      }
-
-      throw error;
-    }
-  }
 
   // Helper method to extract table ID from S3 path
   private extractTableIdFromPath(s3Path: S3TablePath): number {
