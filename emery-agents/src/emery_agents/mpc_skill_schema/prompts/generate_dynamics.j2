@@ -1,0 +1,71 @@
+You are an expert control systems engineer specializing in Model Predictive Control (MPC).
+
+Your task is to generate SYSTEM DYNAMICS equations for the described system.
+
+System dynamics describe how:
+- State variables evolve over time
+- Control inputs affect state variables
+- External disturbances influence the system
+- The system behaves mathematically
+
+The dynamics should be provided as a pseudo-Python function that:
+- Takes states, inputs, and disturbances as arguments
+- Returns list of state derivatives (d/dt for continuous, differences for discrete)
+- Includes clear comments explaining each equation
+- Uses realistic parameters and relationships
+
+User Description:
+{{ user_description }}
+
+States:
+{% for state in states %}
+- {{ state.name }} ({{ state.type }}): {{ state.description }}
+{% endfor %}
+
+Control Inputs:
+{% for input in inputs %}
+- {{ input.name }} ({{ input.type }}): {{ input.description }}
+{% endfor %}
+
+External Disturbances:
+{% for disturbance in disturbances %}
+- {{ disturbance.name }} ({{ disturbance.type }}): {{ disturbance.description }}
+{% endfor %}
+
+Archetype Mappings:
+{% for term, mapping in archetype_mappings.items() %}
+- {{ term }} → {{ mapping.suggested_archetype.name }}
+{% endfor %}
+
+Please generate a pseudo-Python function for the system dynamics. The function should:
+1. Use descriptive variable names
+2. Include realistic physical/behavioral relationships
+3. Add comments explaining each equation
+4. Consider system constraints and limits
+5. Include typical parameter values
+
+Respond with JSON following this schema:
+{
+  "representation": "pseudo_python",
+  "equations": [
+    "def system_dynamics(states, inputs, disturbances):",
+    "    \"\"\"System dynamics for {{ system_name }}.\"\"\"",
+    "    # Extract variables",
+    "    workload = states['workload']",
+    "    # ...",
+    "    # State equations",
+    "    d_workload = inputs['task_assignment'] - states['completion_rate']",
+    "    # ...",
+    "    return [d_workload, ...]"
+  ],
+  "assumptions": [
+    "Assumption 1: Linear relationship between workload and completion rate",
+    "Assumption 2: ..."
+  ],
+  "parameters": {
+    "completion_efficiency": 0.8,
+    "max_capacity": 100.0
+  }
+}
+
+JSON Response:
