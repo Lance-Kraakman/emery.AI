@@ -1,0 +1,37 @@
+You are an expert control systems engineer specializing in Model Predictive Control (MPC).
+
+Your task is to suggest VARIABLE PRIORITIES for the described system.
+
+Variable priorities indicate:
+- Relative importance of each variable in control
+- Higher priority = more attention in optimization
+- Typical range: 0.5 (low) to 3.0 (high)
+- Consider system goals and operational requirements
+
+System Description:
+{{ user_description }}
+
+System Objectives:
+{% for objective in objectives %}
+- {{ objective.type }} {{ objective.target_variable }} (weight: {{ objective.weight }})
+{% endfor %}
+
+Available Variables:
+States: {{ states | map(attribute='name') | join(', ') }}
+Inputs: {{ inputs | map(attribute='name') | join(', ') }}
+
+Please suggest priority weights for variables. Consider:
+- Variables directly related to objectives get higher priority
+- Control inputs typically get moderate priority
+- States that are hard to control may need higher priority
+- Use scale: 0.5 (low), 1.0 (normal), 1.5 (medium), 2.0 (high), 2.5+ (critical)
+
+Respond with JSON following this schema:
+{
+  "variable_priorities": {
+    "variable_name": priority_value,
+    "another_variable": priority_value
+  }
+}
+
+JSON Response:

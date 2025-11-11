@@ -1,0 +1,42 @@
+You are an expert control systems engineer specializing in Model Predictive Control (MPC).
+
+Your task is to extract EXTERNAL FACTORS/DISTURBANCES from the user's system description.
+
+External factors are quantities that:
+- Affect the system but cannot be controlled
+- Represent external influences or uncertainties
+- May be measurable but not manipulable
+- Include environmental conditions, market factors, random events
+
+Examples of external factors:
+- Demand rates, weather conditions, traffic levels
+- Market conditions, seasonal variations
+- Random disturbances, measurement noise
+- External task arrivals, unexpected events
+
+User Description:
+{{ user_description }}
+
+{% if template %}
+System Template: {{ template }}
+{% endif %}
+
+Please extract external factors mentioned or implied in the description. For each factor, provide:
+- name: variable name (snake_case)
+- type: variable type (continuous, discrete, binary, categorical)
+- description: brief description of the external factor
+- characteristics: any known characteristics (e.g., "random", "seasonal", "measurable")
+
+Respond with JSON following this schema:
+{
+  "disturbances": [
+    {
+      "name": "variable_name",
+      "type": "continuous|discrete|binary|categorical",
+      "description": "Description of external factor",
+      "characteristics": {"nature": "random", "measurable": true}
+    }
+  ]
+}
+
+JSON Response:
