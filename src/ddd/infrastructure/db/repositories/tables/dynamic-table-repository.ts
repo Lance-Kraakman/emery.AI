@@ -11,7 +11,7 @@
  */
 import type { DbClient } from '@/lib/db/client';
 import { tables, fields } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { s3Client, BUCKET_NAME, ensureBucketExists } from '@/lib/s3/client';
@@ -29,6 +29,14 @@ import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persis
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import { S3TablePath } from '@/ddd/domain/tables/value-objects/s3-table-path';
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
+import { GrpcTableClient } from './table-grpc-client';
+import {
+  AddFieldRequest,
+  UpdateFieldRequest,
+  DeleteFieldRequest,
+  FieldType as ProtoFieldType,
+  TableField as ProtoTableField
+} from '@/lib/grpc/generated/table_service';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
 import { DynamicTableDataLake } from './dynamic-table-datalake';
 
@@ -299,7 +307,37 @@ export class DynamicTableRepository implements IDynamicTableRepository {
   }
 
   /**
-   * Sync table fields to the database
+   * Batch update field order indices - optimized for reordering operations
+   * Updates multiple fields in a single SQL operation instead of N+1 updates
+   */
+  async updateFieldOrders(tableId: TableId, fieldOrders: Array<{ fieldName: string; orderIndex: number }>): Promise<void> {
+    try {
+      // Build CASE statement for batch update
+      const caseStatements = fieldOrders.map(({ fieldName, orderIndex }) => 
+        `WHEN '${fieldName}' THEN ${orderIndex}`
+      ).join(' ');
+
+      const fieldNames = fieldOrders.map(fo => `'${fo.fieldName}'`).join(', ');
+
+      // Single SQL update with CASE statement - much more efficient than N+1 updates
+      await this.db.execute(sql`
+        UPDATE ${fields} 
+        SET "orderIndex" = CASE name ${caseStatements} END,
+            "updatedAt" = NOW()
+        WHERE "tableId" = ${tableId.value} 
+        AND name IN (${fieldNames})
+      `);
+
+      console.log(`[TableService] Batch updated ${fieldOrders.length} field orders for table ${tableId.value}`);
+
+    } catch (error) {
+      console.error('[TableService] Error batch updating field orders:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sync table fields to database
    * Handles adding new fields and updating existing fields (metadata, type, etc.)
    */
   private async syncTableFields(tableId: TableId, tableFields: TableField[]): Promise<void> {
