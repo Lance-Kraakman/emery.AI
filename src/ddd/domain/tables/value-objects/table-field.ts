@@ -240,6 +240,19 @@ export class TableField {
     );
   }
 
+  updateOrderIndex(newOrderIndex: number): TableField {
+    return new TableField(
+      this._id,
+      this._name,
+      this._type,
+      newOrderIndex,
+      this._relatedTableId,
+      this._required,
+      this._metadata,
+      this._createdAt
+    );
+  }
+
   // Database mapping methods (consolidated from FieldMapper)
   getColumnName(): string {
     return `field_${this._id}`;

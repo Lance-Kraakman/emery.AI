@@ -17,8 +17,8 @@ System Objectives:
 {% endfor %}
 
 Available Variables:
-States: {{ states | map(attribute='name') | join(', ') }}
-Inputs: {{ inputs | map(attribute='name') | join(', ') }}
+States: {% for state in states %}{{ state.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+Inputs: {% for input in inputs %}{{ input.name }}{% if not loop.last %}, {% endif %}{% endfor %}
 
 Please suggest priority weights for variables. Consider:
 - Variables directly related to objectives get higher priority

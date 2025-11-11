@@ -17,8 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table as UITable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2 } from "lucide-react"
-import { createField, deleteField } from "@/app/actions/fields"
+import { Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react"
+import { createField, deleteField, reorderFields } from "@/app/actions/fields"
 import { getTables } from "@/app/actions/tables"
 import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
 import type { TableDTO } from "@/app/mappers/table-mapper"
@@ -57,6 +57,45 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   const [embeddingSize, setEmbeddingSize] = useState<number | undefined>()
   const [loading, setLoading] = useState(false)
   const [availableTables, setAvailableTables] = useState<TableDTO[]>([])
+
+  const handleMoveField = async (fieldName: string, direction: 'up' | 'down') => {
+    try {
+      setLoading(true)
+      
+      const currentOrder = sortedFields.map((field, index) => ({
+        fieldName: field.name,
+        orderIndex: index
+      }))
+      
+      const fieldIndex = currentOrder.findIndex(fo => fo.fieldName === fieldName)
+      if (fieldIndex === -1) return
+      
+      const newIndex = direction === 'up' ? fieldIndex - 1 : fieldIndex + 1
+      if (newIndex < 0 || newIndex >= currentOrder.length) return
+      
+      // Swap the order indices
+      const newOrder = [...currentOrder]
+      const temp = newOrder[fieldIndex].orderIndex
+      newOrder[fieldIndex].orderIndex = newOrder[newIndex].orderIndex
+      newOrder[newIndex].orderIndex = temp
+      
+      const result = await reorderFields({
+        tableId,
+        fieldOrders: newOrder
+      })
+      
+      if (result.success) {
+        onFieldsUpdated()
+      } else {
+        alert(result.error || "Failed to reorder fields")
+      }
+    } catch (error) {
+      console.error("Failed to reorder fields:", error)
+      alert("Failed to reorder fields")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleAddField = async () => {
     if (!newFieldName || !newFieldType) return
@@ -196,17 +235,40 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
       id: 'actions',
       header: 'Actions',
       cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handleDeleteField(row.original.name)}
-          disabled={loading}
-          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-        >
-          <Trash2 className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleMoveField(row.original.name, 'up')}
+            disabled={loading || row.index === 0}
+            className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+            title="Move up"
+          >
+            <ChevronUp className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleMoveField(row.original.name, 'down')}
+            disabled={loading || row.index === sortedFields.length - 1}
+            className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+            title="Move down"
+          >
+            <ChevronDown className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleDeleteField(row.original.name)}
+            disabled={loading}
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            title="Delete field"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
       ),
-      maxSize: 80,
+      maxSize: 120,
     }),
   ], [handleDeleteField, loading]);
 

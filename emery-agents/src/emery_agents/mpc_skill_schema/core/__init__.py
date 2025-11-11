@@ -6,7 +6,7 @@ MPC skill schemas from user descriptions.
 """
 
 from .schema import SkillSchema, StateVariable, ControlVariable, OutputVariable
-from .types import VariableType, ObjectiveType, PlanningHorizon
+from .mpc_types import VariableType, ObjectiveType, PlanningHorizon
 from .archetypes import ArchetypeMapper, ARCHETYPE_MAPPINGS
 
 __all__ = [

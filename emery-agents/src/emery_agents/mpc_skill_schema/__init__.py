@@ -18,7 +18,7 @@ from .builder.skill_builder import (
     generate_skill_from_user_input_simple
 )
 from .core.schema import SkillSchema
-from .core.types import VariableType, ObjectiveType, PlanningHorizon
+from .core.mpc_types import VariableType, ObjectiveType, PlanningHorizon
 from .core.archetypes import ArchetypeMapper
 
 __version__ = "1.0.0"
