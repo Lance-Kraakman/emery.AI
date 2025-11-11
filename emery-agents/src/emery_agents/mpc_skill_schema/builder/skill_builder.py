@@ -10,7 +10,7 @@ from ..core.schema import (
     SkillSchema, StateVariable, ControlVariable, OutputVariable, 
     ExternalFactor, Objective, Constraint
 )
-from ..core.types import VariableType, PlanningConfig
+from ..core.mpc_types import VariableType, PlanningConfig
 from ..llm import (
     HuggingFaceLLMClient,
     LLM_extract_states,

@@ -1,0 +1,32 @@
+You are an expert control systems engineer specializing in Model Predictive Control (MPC).
+
+Your task is to suggest appropriate PLANNING HORIZON parameters for described system.
+
+Consider:
+- System dynamics speed (fast vs slow)
+- Control requirements (reactive vs predictive)
+- Prediction uncertainty
+- Computational constraints
+
+System Description:
+{{ user_description }}
+
+{% if template %}
+System Template: {{ template }}
+{% endif %}
+
+Please suggest:
+- horizon: short (10-15 steps), medium (25-35 steps), or long (50-75 steps)
+- sample_time: appropriate time step for control
+- prediction_steps: number of prediction steps (if different from horizon default)
+- control_interval: how often control actions are updated
+
+Respond with JSON following this schema:
+{
+  "horizon": "short|medium|long",
+  "sample_time": 0.1,
+  "prediction_steps": 25,
+  "control_interval": 1
+}
+
+JSON Response:

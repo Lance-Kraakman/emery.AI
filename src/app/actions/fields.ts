@@ -359,3 +359,57 @@ export async function deleteFieldAction(formData: FormData): Promise<Result> {
     };
   }
 }
+
+export async function reorderFields(data: {
+  tableId: number
+  fieldOrders: Array<{ fieldName: string; orderIndex: number }>
+}, revalidateUrl?: string): Promise<Result> {
+  try {
+    const session = await requirePermission("data:manage");
+    const { tableId, fieldOrders } = data;
+
+    if (!tableId || !fieldOrders || fieldOrders.length === 0) {
+      return {
+        success: false,
+        error: "tableId and fieldOrders are required",
+      };
+    }
+
+    const tableApplicationService = getTableApplicationService();
+
+    logger.debug('Reordering fields', { tableId, fieldCount: fieldOrders.length });
+
+    const result = await tableApplicationService.reorderFields({
+      tableId: TableId.fromNumber(tableId),
+      fieldOrders
+    });
+
+    if (!result.success) {
+      logger.error('Field reordering failed', { tableId, error: result.error });
+      return {
+        success: false,
+        error: result.error || "Failed to reorder fields"
+      };
+    }
+
+    logger.summary('Fields reordered successfully', { tableId, fieldCount: fieldOrders.length });
+
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    } else {
+      revalidatePath('/data'); // Default path for field operations
+    }
+    
+    return {
+      success: true,
+      data: { message: "Fields reordered successfully" },
+    };
+  } catch (error) {
+    console.error("Error reordering fields:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to reorder fields",
+    };
+  }
+}
