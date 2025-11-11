@@ -548,15 +548,7 @@ class InfraStack(Stack):
         # AIDEV-NOTE: ECS health checks should be configured in container definition, not added afterwards
         # For agent gRPC service, we rely on ECS service health monitoring
 
-        # Create Cloud Map namespace for service discovery
-        namespace = servicediscovery.PrivateDnsNamespace(
-            self, f"{prefix}ServiceNamespace",
-            vpc=vpc,
-            name="emery.local",
-            description="Internal service discovery for Emery application"
-        )
-
-        # Register agent service with Cloud Map for service discovery
+        # Register agent service with Cloud Map for service discovery using existing namespace
         agent_service.service.enable_cloud_map(
             name="agent-service",
             cloud_map_namespace=namespace,
@@ -581,32 +573,6 @@ class InfraStack(Stack):
                 "NEXTAUTH_URL",
                 f"https://{cloudfront_distribution.distribution_domain_name}"
             )
-            # Add WORKER_ADDRESS for gRPC client discovery using Cloud Map
-            frontend_service.task_definition.default_container.add_environment(
-                "WORKER_ADDRESS",
-                "agent-service.emery.local:50051"
-            )
-            # Also inject the frontend's own public URL for NextAuth (use CloudFront URL)
-            frontend_service.task_definition.default_container.add_environment(
-                "NEXTAUTH_URL",
-                f"https://{cloudfront_distribution.distribution_domain_name}"
-            )
-
-        # Create Cloud Map namespace for service discovery
-        namespace = servicediscovery.PrivateDnsNamespace(
-            self, f"{prefix}ServiceNamespace",
-            vpc=vpc,
-            name="emery.local",
-            description="Internal service discovery for Emery application"
-        )
-
-        # Register agent service with Cloud Map for service discovery
-        agent_service.service.enable_cloud_map(
-            name="agent-service",
-            cloud_map_namespace=namespace,
-            dns_record_type=servicediscovery.DnsRecordType.A,
-            dns_ttl=Duration.seconds(60)
-        )
 
         # Update environment variables to use Cloud Map DNS instead of NLB DNS
         # This provides reliable internal service-to-service communication
