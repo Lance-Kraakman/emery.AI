@@ -308,30 +308,29 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   /**
    * Batch update field order indices - optimized for reordering operations
-   * Updates multiple fields in a single SQL operation instead of N+1 updates
+   * Updates multiple field orders using individual updates
+   * Following the existing Drizzle patterns used throughout the codebase
    */
   async updateFieldOrders(tableId: TableId, fieldOrders: Array<{ fieldName: string; orderIndex: number }>): Promise<void> {
     try {
-      // Build CASE statement for batch update
-      const caseStatements = fieldOrders.map(({ fieldName, orderIndex }) => 
-        `WHEN '${fieldName}' THEN ${orderIndex}`
-      ).join(' ');
+      // Update each field individually using Drizzle query builder
+      // This follows the existing patterns in the codebase and ensures type safety
+      for (const { fieldName, orderIndex } of fieldOrders) {
+        await this.db.update(fields)
+          .set({ 
+            orderIndex,
+            updatedAt: new Date()
+          })
+          .where(and(
+            eq(fields.tableId, tableId.value),
+            eq(fields.name, fieldName)
+          ));
+      }
 
-      const fieldNames = fieldOrders.map(fo => `'${fo.fieldName}'`).join(', ');
-
-      // Single SQL update with CASE statement - much more efficient than N+1 updates
-      await this.db.execute(sql`
-        UPDATE ${fields} 
-        SET "orderIndex" = CASE name ${caseStatements} END,
-            "updatedAt" = NOW()
-        WHERE "tableId" = ${tableId.value} 
-        AND name IN (${fieldNames})
-      `);
-
-      console.log(`[TableService] Batch updated ${fieldOrders.length} field orders for table ${tableId.value}`);
+      console.log(`[TableService] Updated ${fieldOrders.length} field orders for table ${tableId.value}`);
 
     } catch (error) {
-      console.error('[TableService] Error batch updating field orders:', error);
+      console.error('[TableService] Error updating field orders:', error);
       throw error;
     }
   }
