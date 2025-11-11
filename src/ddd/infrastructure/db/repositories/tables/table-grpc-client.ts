@@ -20,6 +20,10 @@ import {
   DeleteRowsRequest,
   QueryRowsRequest,
   GetTableStatsRequest,
+  AddFieldRequest,
+  UpdateFieldRequest,
+  DeleteFieldRequest,
+  GetFieldsRequest,
   TableResponse,
   DeleteTableResponse,
   ListTablesResponse,
@@ -29,6 +33,9 @@ import {
   DeleteRowsResponse,
   QueryRowsResponse,
   GetTableStatsResponse,
+  FieldResponse,
+  DeleteFieldResponse,
+  GetFieldsResponse,
 } from '@/lib/grpc/generated/table_service';
 
 export interface GrpcClientConfig {
@@ -207,15 +214,75 @@ export class GrpcTableClient {
   }
 
   /**
-   * Get table statistics from Delta Lake metadata
-   *
-   * This method reads only the transaction log (_delta_log/*.json) to get
-   * row count and file sizes without loading actual data files.
-   * Much faster than loading all rows, especially for large tables.
-   */
+    * Get table statistics from Delta Lake metadata
+    *
+    * This method reads only the transaction log (_delta_log/*.json) to get
+    * row count and file sizes without loading actual data files.
+    * Much faster than loading all rows, especially for large tables.
+    */
   async getTableStats(request: GetTableStatsRequest): Promise<GetTableStatsResponse> {
     return new Promise((resolve, reject) => {
       this.client.getTableStats(request, (error, response) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(response!);
+        }
+      });
+    });
+  }
+
+  /**
+   * Add a new field to an existing table
+   */
+  async addField(request: AddFieldRequest): Promise<FieldResponse> {
+    return new Promise((resolve, reject) => {
+      this.client.addField(request, (error, response) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(response!);
+        }
+      });
+    });
+  }
+
+  /**
+   * Update an existing field in a table
+   */
+  async updateField(request: UpdateFieldRequest): Promise<FieldResponse> {
+    return new Promise((resolve, reject) => {
+      this.client.updateField(request, (error, response) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(response!);
+        }
+      });
+    });
+  }
+
+  /**
+   * Delete a field from a table
+   */
+  async deleteField(request: DeleteFieldRequest): Promise<DeleteFieldResponse> {
+    return new Promise((resolve, reject) => {
+      this.client.deleteField(request, (error, response) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(response!);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get all fields for a table
+   */
+  async getFields(request: GetFieldsRequest): Promise<GetFieldsResponse> {
+    return new Promise((resolve, reject) => {
+      this.client.getFields(request, (error, response) => {
         if (error) {
           reject(error);
         } else {

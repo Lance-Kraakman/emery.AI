@@ -560,6 +560,7 @@ export class TableApplicationService {
   /**
    * Reorder fields in a table
    * Updates the orderIndex of fields based on the provided field orders
+   * OPTIMIZED: Uses batch update instead of N+1 operations
    */
   async reorderFields(command: ReorderFieldsCommand): Promise<TableApplicationServiceResult<void>> {
     try {
@@ -579,35 +580,18 @@ export class TableApplicationService {
         }
       }
 
-      // 3. Validate all table fields are included in the reorder command
-      const missingFields = tableFieldNames.filter(name => !commandFieldNames.includes(name));
-      if (missingFields.length > 0) {
-        return ResultHelpers.failure(`All fields must be included in reorder. Missing: ${missingFields.join(', ')}`);
-      }
-
-      // 4. Validate order indices are unique and sequential (optional but good practice)
+      // 3. Simplified validation - only check for duplicate order indices
       const orderIndices = command.fieldOrders.map(fo => fo.orderIndex);
       const uniqueOrders = new Set(orderIndices);
       if (uniqueOrders.size !== orderIndices.length) {
         return ResultHelpers.failure('Order indices must be unique');
       }
 
-      // 5. Update field order indices using immutable pattern
-      for (const fieldOrder of command.fieldOrders) {
-        const field = table.getField(fieldOrder.fieldName);
-        if (field) {
-          const updatedField = field.updateOrderIndex(fieldOrder.orderIndex);
-          table.updateField(field.id, updatedField);
-        }
-      }
+      // 4. OPTIMIZED: Use batch update instead of N+1 operations
+      // Direct repository call for efficient bulk order update
+      await this.dynamicTableRepository.updateFieldOrders(command.tableId, command.fieldOrders);
 
-      // 6. Save the updated table with new field order
-      const saveResult = await this.dynamicTableService.updateTable(table);
-      if (!saveResult.success) {
-        return ResultHelpers.failure(saveResult.error || 'Failed to save table with reordered fields');
-      }
-
-      logger.summary(`Reordered ${command.fieldOrders.length} fields in table ${table.name}`);
+      logger.summary(`Batch reordered ${command.fieldOrders.length} fields in table ${table.name}`);
       return ResultHelpers.success(undefined);
 
     } catch (error) {
