@@ -4,8 +4,12 @@ Integration example for MPC skill with emery-agents system.
 This shows how to use the MPC library within your existing agent framework.
 """
 
-from smolagents import CodeAgent
-from mpc_skill_agents import MPCSkill
+import sys
+import os
+
+from emery_agents.mpc_skill_agents.mpc_skill import MPCSkill
+sys.path.append(os.path.dirname(__file__))
+
 
 def main():
     """Example of using MPC skill with emery-agents."""
@@ -54,24 +58,6 @@ def main():
         print("✅ MPC solution found!")
         print(f"📊 Control actions: {result.get('control_actions', {})}")
         print(f"📈 Predictions available: {len(result.get('predictions', {}))}")
-    
-    # Example of using with smolagents agent
-    print("\n🤖 Testing with smolagents agent...")
-    
-    agent = CodeAgent(
-        tools=[mpc_skill],
-        model="gpt-4o-mini"  # Or your preferred model
-    )
-    
-    # Simple agent task
-    try:
-        response = agent.run(
-            "Use the MPC skill to optimize the temperature control system for current conditions"
-        )
-        print(f"Agent response: {response}")
-    except Exception as e:
-        print(f"Agent test failed: {e}")
-        print("Note: Full agent testing requires API key configuration")
     
     print("\n🎉 MPC skill integration ready!")
     print("📋 Next steps:")
