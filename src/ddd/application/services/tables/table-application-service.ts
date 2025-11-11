@@ -558,6 +558,65 @@ export class TableApplicationService {
   }
 
   /**
+   * Reorder fields in a table
+   * Updates the orderIndex of fields based on the provided field orders
+   */
+  async reorderFields(command: ReorderFieldsCommand): Promise<TableApplicationServiceResult<void>> {
+    try {
+      // 1. Get table and verify it exists
+      const table = await this.dynamicTableService.getTable(command.tableId);
+      if (!table) {
+        return ResultHelpers.failure(`Table ${command.tableId.value} not found`);
+      }
+
+      // 2. Validate all field names exist in the table
+      const tableFieldNames = table.fields.map(f => f.name);
+      const commandFieldNames = command.fieldOrders.map(fo => fo.fieldName);
+      
+      for (const fieldName of commandFieldNames) {
+        if (!tableFieldNames.includes(fieldName)) {
+          return ResultHelpers.failure(`Field '${fieldName}' not found in table`);
+        }
+      }
+
+      // 3. Validate all table fields are included in the reorder command
+      const missingFields = tableFieldNames.filter(name => !commandFieldNames.includes(name));
+      if (missingFields.length > 0) {
+        return ResultHelpers.failure(`All fields must be included in reorder. Missing: ${missingFields.join(', ')}`);
+      }
+
+      // 4. Validate order indices are unique and sequential (optional but good practice)
+      const orderIndices = command.fieldOrders.map(fo => fo.orderIndex);
+      const uniqueOrders = new Set(orderIndices);
+      if (uniqueOrders.size !== orderIndices.length) {
+        return ResultHelpers.failure('Order indices must be unique');
+      }
+
+      // 5. Update field order indices using immutable pattern
+      for (const fieldOrder of command.fieldOrders) {
+        const field = table.getField(fieldOrder.fieldName);
+        if (field) {
+          const updatedField = field.updateOrderIndex(fieldOrder.orderIndex);
+          table.updateField(field.id, updatedField);
+        }
+      }
+
+      // 6. Save the updated table with new field order
+      const saveResult = await this.dynamicTableService.updateTable(table);
+      if (!saveResult.success) {
+        return ResultHelpers.failure(saveResult.error || 'Failed to save table with reordered fields');
+      }
+
+      logger.summary(`Reordered ${command.fieldOrders.length} fields in table ${table.name}`);
+      return ResultHelpers.success(undefined);
+
+    } catch (error) {
+      logger.error('Error reordering fields:', error);
+      return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to reorder fields');
+    }
+  }
+
+  /**
    * Get fields for a table using table aggregate
    */
   async getFieldsForTable(tableId: TableId): Promise<TableField[]> {
