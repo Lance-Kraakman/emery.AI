@@ -563,10 +563,6 @@ class InfraStack(Stack):
                 "WORKER_ADDRESS",
                 "agent-service.emery.local:50051"
             )
-            frontend_service.task_definition.default_container.add_environment(
-                "GRPC_AGENT_URL",
-                f"http://agent-service.emery.local"
-            )
 
             # Also inject the frontend's own public URL for NextAuth (use CloudFront URL)
             frontend_service.task_definition.default_container.add_environment(

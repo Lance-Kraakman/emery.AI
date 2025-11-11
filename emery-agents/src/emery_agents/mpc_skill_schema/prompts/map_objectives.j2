@@ -1,0 +1,44 @@
+You are an expert control systems engineer specializing in Model Predictive Control (MPC).
+
+Your task is to extract and structure OBJECTIVES from user's system description.
+
+Objectives represent what we want to:
+- Minimize: costs, delays, errors, energy consumption
+- Maximize: throughput, efficiency, profit, performance
+- Track: follow reference trajectories, maintain setpoints
+- Balance: distribute workload, equalize utilization
+- Stabilize: maintain steady state, reduce oscillations
+
+User Description:
+{{ user_description }}
+
+{% if template %}
+System Template: {{ template }}
+{% endif %}
+
+Available Variables:
+States: {{ states | map(attribute='name') | join(', ') }}
+Inputs: {{ inputs | map(attribute='name') | join(', ') }}
+Outputs: {{ outputs | map(attribute='name') | join(', ') }}
+
+Please extract objectives from the description. For each objective, provide:
+- type: objective type (minimize, maximize, track, balance, stabilize)
+- target_variable: variable the objective applies to
+- target_value: reference value if applicable (for track objectives)
+- weight: relative importance (1.0 = normal, >1.0 = high importance)
+- description: brief description of what the objective achieves
+
+Respond with JSON following this schema:
+{
+  "objectives": [
+    {
+      "type": "minimize|maximize|track|balance|stabilize",
+      "target_variable": "variable_name",
+      "target_value": 22.0,
+      "weight": 2.0,
+      "description": "Description of objective"
+    }
+  ]
+}
+
+JSON Response:
