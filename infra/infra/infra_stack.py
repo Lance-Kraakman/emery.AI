@@ -460,10 +460,12 @@ class InfraStack(Stack):
         # This will be done after agent_service definition below
 
         # Create the Fargate service for the Python gRPC backend
+        # AIDEV-NOTE: Changed construct ID to AgentServiceV2 to force CloudFormation replacement
+        # when switching from public to internal NLB (old resources manually deleted)
         agent_service = ecs_patterns.NetworkLoadBalancedFargateService(
-            self, f"{prefix}AgentService",
+            self, f"{prefix}AgentServiceV2",
             cluster=cluster,
-            service_name=f"{prefix}-Agent",
+            service_name=f"{prefix}-Agent-Internal",
             cpu=512,  # AIDEV-NOTE: Increased CPU for better startup performance
             memory_limit_mib=1024,  # AIDEV-NOTE: Increased memory for smolagents dependencies
             desired_count=1,
