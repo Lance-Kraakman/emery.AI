@@ -25,6 +25,24 @@ class Variable:
 
 
 @dataclass
+class VariableConfig:
+    """Configuration for adding variables."""
+    name: str
+    var_type: str = "output"
+    min_val: Optional[float] = None
+    max_val: Optional[float] = None
+
+
+@dataclass
+class GoalConfig:
+    """Configuration for setting goals."""
+    goal_type: GoalType
+    target_var: str
+    target_val: Optional[float] = None
+    cost_weight: float = 1.0
+
+
+@dataclass
 class SystemDescription:
     name: str
     description: str
