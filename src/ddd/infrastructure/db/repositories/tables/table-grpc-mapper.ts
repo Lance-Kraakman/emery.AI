@@ -571,8 +571,121 @@ export class TableGrpcMapper {
   }
 
   /**
-   * Convert protobuf Map to JavaScript object
-   */
+    * Convert field parameters to protobuf AddFieldRequest interface
+    */
+  static toAddFieldRequest(
+    tableId: TableId,
+    field: { name: string; type: FieldType; required: boolean; metadata: Record<string, any> },
+    organizationId: OrganizationId,
+    s3Path: string
+  ): any {
+    // Import the request type dynamically to avoid circular dependencies
+    const { AddFieldRequest } = require('@/lib/grpc/generated/table_service');
+    
+    const request = {
+      tableId: tableId.value.toString(),
+      organizationId: organizationId.value.toString(),
+      s3Path: s3Path,
+      field: {
+        name: field.name,
+        type: field.type,
+        required: field.required,
+        metadata: field.metadata || {}
+      }
+    };
+
+    return request;
+  }
+
+  /**
+    * Convert field parameters to protobuf UpdateFieldRequest interface
+    */
+  static toUpdateFieldRequest(
+    tableId: TableId,
+    field: { name: string; type: FieldType; required: boolean; metadata: Record<string, any> },
+    organizationId: OrganizationId,
+    s3Path: string
+  ): any {
+    // Import the request type dynamically to avoid circular dependencies
+    const { UpdateFieldRequest } = require('@/lib/grpc/generated/table_service');
+    
+    const request = {
+      tableId: tableId.value.toString(),
+      organizationId: organizationId.value.toString(),
+      s3Path: s3Path,
+      field: {
+        name: field.name,
+        type: field.type,
+        required: field.required,
+        metadata: field.metadata || {}
+      }
+    };
+
+    return request;
+  }
+
+  /**
+    * Convert field parameters to protobuf DeleteFieldRequest interface
+    */
+  static toDeleteFieldRequest(
+    tableId: TableId,
+    fieldName: string,
+    organizationId: OrganizationId,
+    s3Path: string
+  ): any {
+    // Import the request type dynamically to avoid circular dependencies
+    const { DeleteFieldRequest } = require('@/lib/grpc/generated/table_service');
+    
+    const request = {
+      tableId: tableId.value.toString(),
+      organizationId: organizationId.value.toString(),
+      s3Path: s3Path,
+      fieldName: fieldName
+    };
+
+    return request;
+  }
+
+  /**
+    * Convert field parameters to protobuf GetFieldsRequest interface
+    */
+  static toGetFieldsRequest(
+    tableId: TableId,
+    organizationId: OrganizationId,
+    s3Path: string
+  ): any {
+    // Import the request type dynamically to avoid circular dependencies
+    const { GetFieldsRequest } = require('@/lib/grpc/generated/table_service');
+    
+    const request = {
+      tableId: tableId.value.toString(),
+      organizationId: organizationId.value.toString(),
+      s3Path: s3Path
+    };
+
+    return request;
+  }
+
+  /**
+    * Convert protobuf TableField to domain TableField
+    */
+  static fromProtoField(protoField: any): TableField {
+    return TableField.fromPersistence({
+      id: protoField.fieldId || Date.now(), // Use fieldId if available, fallback to timestamp
+      tableId: 0, // Will be set by repository
+      name: protoField.name,
+      type: this.mapFieldTypeFromProto(protoField.type) as any, // Type assertion to handle string to enum conversion
+      orderIndex: 0, // Will be set by repository
+      relatedTableId: null,
+      required: protoField.required || false,
+      metadata: protoField.metadata || {},
+      createdAt: new Date()
+    });
+  }
+
+  /**
+    * Convert protobuf Map to JavaScript object
+    */
   static protoMapToObject(protoMap: any): Record<string, string> {
     const obj: Record<string, string> = {};
     if (protoMap && typeof protoMap.forEach === 'function') {
