@@ -7,7 +7,7 @@ from typing import List, Dict, Optional
 from jinja2 import Template
 from .client import HuggingFaceLLMClient
 from ..core.schema import Objective
-from ..core.types import ObjectiveType
+from ..core.mpc_types import ObjectiveType
 
 
 def LLM_map_text_to_objectives(

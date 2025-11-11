@@ -4,7 +4,7 @@ User confirmation and editing interface for MPC Skill Schema Builder.
 
 from typing import List, Dict, Any, Optional
 from ..core.schema import Objective, Constraint, SystemDynamics
-from ..core.types import VariableType
+from ..core.mpc_types import VariableType
 
 
 class UserConfirmationInterface:

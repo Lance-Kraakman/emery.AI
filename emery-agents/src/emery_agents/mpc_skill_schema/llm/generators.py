@@ -7,7 +7,7 @@ from typing import List, Dict, Optional
 from jinja2 import Template
 from .client import HuggingFaceLLMClient
 from ..core.schema import SystemDynamics
-from ..core.types import PlanningConfig, PlanningHorizon
+from ..core.mpc_types import PlanningConfig, PlanningHorizon
 
 
 def LLM_generate_dynamics(
@@ -77,48 +77,16 @@ def LLM_suggest_constraints(
     if llm_client is None:
         llm_client = HuggingFaceLLMClient()
     
-    # Create prompt for constraint suggestion
-    prompt = f"""You are an expert control systems engineer specializing in Model Predictive Control (MPC).
-
-Your task is to suggest realistic CONSTRAINTS for the described system.
-
-Constraints represent:
-- Physical limits (e.g., capacity, maximum values)
-- Operational constraints (e.g., minimum levels, safety limits)
-- Logical constraints (e.g., dependencies, precedence)
-- Rate constraints (e.g., maximum rate of change)
-
-System Variables:
-
-States:
-{chr(10).join([f"- {s['name']} ({s['type']}): {s['description']}" for s in states])}
-
-Inputs:
-{chr(10).join([f"- {i['name']} ({i['type']}): {i['description']}" for i in inputs])}
-
-{% if template %}
-System Template: {{ template }}
-{% endif %}
-
-Please suggest realistic constraints for this system. For each constraint, provide:
-- variable: the variable being constrained
-- constraint_type: type of constraint (bounds, rate, logical, precedence)
-- value: constraint value or description
-- description: explanation of the constraint
-
-Respond with JSON following this schema:
-{{
-  "constraints": [
-    {{
-      "variable": "variable_name",
-      "constraint_type": "bounds|rate|logical|precedence",
-      "value": {{"min": 0.0, "max": 100.0}} or "description",
-      "description": "Explanation of constraint"
-    }}
-  ]
-}}
-
-JSON Response:"""
+    # Load prompt template
+    with open('/Users/lancekraakman/orchastrate/emery-agents/src/emery_agents/mpc_skill_schema/prompts/suggest_constraints.j2', 'r') as f:
+        template_str = f.read()
+    
+    prompt_template = Template(template_str)
+    prompt = prompt_template.render(
+        states=states,
+        inputs=inputs,
+        template=template
+    )
     
     # Define output schema
     output_schema = {
@@ -155,38 +123,15 @@ def LLM_suggest_horizons(
     if llm_client is None:
         llm_client = HuggingFaceLLMClient()
     
-    prompt = f"""You are an expert control systems engineer specializing in Model Predictive Control (MPC).
-
-Your task is to suggest appropriate PLANNING HORIZON parameters for the described system.
-
-Consider:
-- System dynamics speed (fast vs slow)
-- Control requirements (reactive vs predictive)
-- Prediction uncertainty
-- Computational constraints
-
-System Description:
-{user_text}
-
-{% if template %}
-System Template: {{ template }}
-{% endif %}
-
-Please suggest:
-- horizon: short (10-15 steps), medium (25-35 steps), or long (50-75 steps)
-- sample_time: appropriate time step for control
-- prediction_steps: number of prediction steps (if different from horizon default)
-- control_interval: how often control actions are updated
-
-Respond with JSON following this schema:
-{{
-  "horizon": "short|medium|long",
-  "sample_time": 0.1,
-  "prediction_steps": 25,
-  "control_interval": 1
-}}
-
-JSON Response:"""
+    # Load prompt template
+    with open('/Users/lancekraakman/orchastrate/emery-agents/src/emery_agents/mpc_skill_schema/prompts/suggest_horizons.j2', 'r') as f:
+        template_str = f.read()
+    
+    prompt_template = Template(template_str)
+    prompt = prompt_template.render(
+        user_description=user_text,
+        template=template
+    )
     
     # Define output schema
     output_schema = {

@@ -1076,6 +1076,7 @@ dependencies = [
     { name = "grpcio" },
     { name = "grpcio-tools" },
     { name = "httpx" },
+    { name = "huggingface-hub" },
     { name = "jinja2" },
     { name = "numpy" },
     { name = "pillow" },
@@ -1089,6 +1090,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "schedule" },
+    { name = "sentence-transformers" },
     { name = "smolagents" },
     { name = "sqlalchemy" },
     { name = "torch" },
@@ -1146,6 +1148,7 @@ requires-dist = [
     { name = "grpcio", specifier = ">=1.60.0" },
     { name = "grpcio-tools", specifier = ">=1.60.0" },
     { name = "httpx", specifier = ">=0.25.0" },
+    { name = "huggingface-hub", specifier = ">=0.34.3" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "mlx", marker = "sys_platform == 'darwin' and extra == 'full'", specifier = ">=0.28.0" },
@@ -1165,6 +1168,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.1.1" },
     { name = "requests", specifier = ">=2.30.0" },
     { name = "schedule", specifier = ">=1.2.0" },
+    { name = "sentence-transformers", specifier = ">=5.1.2" },
     { name = "smolagents", specifier = ">=1.20.0" },
     { name = "smolagents", extras = ["dev"], marker = "extra == 'full'", specifier = ">=1.20.0" },
     { name = "smolagents", extras = ["dev"], marker = "extra == 'macos'", specifier = ">=1.20.0" },
@@ -4228,6 +4232,25 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7d/31/f2289ce78b9b473d582568c234e104d2a342fd658cc288a7553d83bb8595/semantic_version-2.10.0.tar.gz", hash = "sha256:bdabb6d336998cbb378d4b9db3a4b56a1e3235701dc05ea2690d9a997ed5041c", size = 52289 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6a/23/8146aad7d88f4fcb3a6218f41a60f6c2d4e3a72de72da1825dc7c8f7877c/semantic_version-2.10.0-py2.py3-none-any.whl", hash = "sha256:de78a3b8e0feda74cabc54aab2da702113e33ac9d9eb9d2389bcf1f58b7d9177", size = 15552 },
+]
+
+[[package]]
+name = "sentence-transformers"
+version = "5.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "pillow" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
+    { name = "torch" },
+    { name = "tqdm" },
+    { name = "transformers" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0f/96/f3f3409179d14dbfdbea8622e2e9eaa3c8836ddcaecd2cd5ff0a11731d20/sentence_transformers-5.1.2.tar.gz", hash = "sha256:0f6c8bd916a78dc65b366feb8d22fd885efdb37432e7630020d113233af2b856", size = 375185 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bb/a6/a607a737dc1a00b7afe267b9bfde101b8cee2529e197e57471d23137d4e5/sentence_transformers-5.1.2-py3-none-any.whl", hash = "sha256:724ce0ea62200f413f1a5059712aff66495bc4e815a1493f7f9bca242414c333", size = 488009 },
 ]
 
 [[package]]
