@@ -68,13 +68,10 @@ class MPCSkill(Tool):
         except ValueError:
             return f"Invalid goal type: {goal_type}. Use tracking, optimization, or stabilization"
     
-    def set_planning_horizon(self, horizon: str = "medium") -> str:
+    def set_planning_horizon(self, horizon: PlanningHorizon) -> str:
         """Set planning horizon."""
-        try:
-            self.planner = MPCPlanner(horizon=PlanningHorizon(horizon))
-            return f"Set planning horizon to {horizon}"
-        except ValueError:
-            return f"Invalid horizon: {horizon}. Use short, medium, or long"
+        self.planner = MPCPlanner(horizon=horizon)
+        return f"Set planning horizon to {horizon.name}"
     
     def solve_mpc(self, current_state: Dict[str, float]) -> Dict[str, Any]:
         """Solve MPC problem and return control actions."""
@@ -97,22 +94,13 @@ class MPCSkill(Tool):
     
     def forward(self, action: str, parameters: str = "{}") -> str:
         """Main entry point for smolagents."""
-        # Parse natural language input and route to appropriate method
-        # This is a simplified version - in practice would use LLM parsing
-        
         if "setup" in action.lower() and "system" in action.lower():
-            # Extract system name and description from input
             return self.setup_system("MPC System", action)
-        
         elif "add" in action.lower() and "variable" in action.lower():
-            # Parse variable addition
             return "Use add_variable() method with specific parameters"
-        
         elif "solve" in action.lower() or "optimize" in action.lower():
-            # Parse current state and solve
-            current_state = {}  # Would parse from input
+            current_state = {}
             result = self.solve_mpc(current_state)
             return f"MPC Solution: {result}"
-        
         else:
             return "MPC Skill ready. Use commands: setup system, add variable, set goal, solve mpc"

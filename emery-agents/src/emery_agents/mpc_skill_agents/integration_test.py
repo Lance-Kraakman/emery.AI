@@ -8,6 +8,7 @@ import sys
 import os
 
 from emery_agents.mpc_skill_agents.mpc_skill import MPCSkill
+from emery_agents.mpc_skill_agents.core import PlanningHorizon
 sys.path.append(os.path.dirname(__file__))
 
 
@@ -33,10 +34,18 @@ def main():
     
     # Set control goals
     mpc_skill.set_goal("tracking", "room_temp", 22.0)
-    mpc_skill.set_goal("optimization", "heater_power")  # Minimize energy
+    mpc_skill.set_goal("optimization", "heater_power", 0.0)  # Minimize energy (target = 0)
     
     # Set planning parameters
-    mpc_skill.set_planning_horizon("medium")
+    result = mpc_skill.set_planning_horizon(PlanningHorizon.MEDIUM)
+    print(f"📅 Planner setup result: {result}")
+    
+    print(f"🎯 Goals set: {len(mpc_skill.goals)} goals")
+    print(f"📋 System variables: {len(mpc_skill.system.variables)} variables")
+    if mpc_skill.planner:
+        print(f"⏰ Planner: {mpc_skill.planner.horizon.name} horizon")
+    else:
+        print("❌ Planner is None")
     
     print("✅ MPC system configured!")
     
