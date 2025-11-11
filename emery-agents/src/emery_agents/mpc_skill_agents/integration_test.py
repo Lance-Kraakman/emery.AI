@@ -1,0 +1,84 @@
+"""
+Integration example for MPC skill with emery-agents system.
+
+This shows how to use the MPC library within your existing agent framework.
+"""
+
+from smolagents import CodeAgent
+from mpc_skill_agents import MPCSkill
+
+def main():
+    """Example of using MPC skill with emery-agents."""
+    
+    print("🤖 Testing MPC Skill Integration...")
+    
+    # Create MPC skill
+    mpc_skill = MPCSkill()
+    
+    # Setup a simple temperature control system
+    print("🔧 Setting up MPC system...")
+    mpc_skill.setup_system(
+        name="Room Temperature Control",
+        description="Maintain comfortable room temperature using heater control"
+    )
+    
+    # Add system variables
+    mpc_skill.add_variable("room_temp", "output", 15.0, 35.0)
+    mpc_skill.add_variable("heater_power", "input", 0.0, 100.0)
+    mpc_skill.add_variable("outside_temp", "output", -10.0, 45.0)
+    
+    # Set control goals
+    mpc_skill.set_goal("tracking", "room_temp", 22.0)
+    mpc_skill.set_goal("optimization", "heater_power")  # Minimize energy
+    
+    # Set planning parameters
+    mpc_skill.set_planning_horizon("medium")
+    
+    print("✅ MPC system configured!")
+    
+    # Test with sample data
+    current_state = {
+        "room_temp": 20.0,
+        "outside_temp": 15.0,
+        "heater_power": 50.0
+    }
+    
+    print(f"🌡️ Current state: {current_state}")
+    
+    # Solve MPC problem
+    result = mpc_skill.solve_mpc(current_state)
+    
+    if "error" in result:
+        print(f"❌ Error: {result['error']}")
+    else:
+        print("✅ MPC solution found!")
+        print(f"📊 Control actions: {result.get('control_actions', {})}")
+        print(f"📈 Predictions available: {len(result.get('predictions', {}))}")
+    
+    # Example of using with smolagents agent
+    print("\n🤖 Testing with smolagents agent...")
+    
+    agent = CodeAgent(
+        tools=[mpc_skill],
+        model="gpt-4o-mini"  # Or your preferred model
+    )
+    
+    # Simple agent task
+    try:
+        response = agent.run(
+            "Use the MPC skill to optimize the temperature control system for current conditions"
+        )
+        print(f"Agent response: {response}")
+    except Exception as e:
+        print(f"Agent test failed: {e}")
+        print("Note: Full agent testing requires API key configuration")
+    
+    print("\n🎉 MPC skill integration ready!")
+    print("📋 Next steps:")
+    print("   1. Add to your emery-agents skill registry")
+    print("   2. Configure with your LLM API")
+    print("   3. Integrate with your gRPC services")
+    print("   4. Connect to UX frontend")
+
+if __name__ == "__main__":
+    main()
