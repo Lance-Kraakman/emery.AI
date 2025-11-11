@@ -560,27 +560,17 @@ class InfraStack(Stack):
         # This provides reliable internal service-to-service communication
         if frontend_service.task_definition.default_container:
             frontend_service.task_definition.default_container.add_environment(
-                "GRPC_AGENT_URL",
-                f"http://agent-service.emery.local"
-            )
-            # Add WORKER_ADDRESS for gRPC client discovery using Cloud Map
-            frontend_service.task_definition.default_container.add_environment(
                 "WORKER_ADDRESS",
                 "agent-service.emery.local:50051"
             )
+
             # Also inject the frontend's own public URL for NextAuth (use CloudFront URL)
             frontend_service.task_definition.default_container.add_environment(
                 "NEXTAUTH_URL",
                 f"https://{cloudfront_distribution.distribution_domain_name}"
             )
 
-        # Update environment variables to use Cloud Map DNS instead of NLB DNS
-        # This provides reliable internal service-to-service communication
-        if frontend_service.task_definition.default_container:
-            frontend_service.task_definition.default_container.add_environment(
-                "WORKER_ADDRESS",
-                "agent-service.emery.local:50051"
-            )
+
 
         # Update scheduler environment variable to use Cloud Map DNS
         scheduler_container.add_environment(
