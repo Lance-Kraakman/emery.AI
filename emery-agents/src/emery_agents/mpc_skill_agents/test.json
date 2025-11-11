@@ -1,0 +1,29 @@
+{
+  "system_description": "Manage multiple tasks across teams and minimize delays.",
+  "states": ["queue_sizes", "team_loads"],
+  "inputs": ["task_allocation"],
+  "outputs": ["tasks_completed"],
+  "dynamics": null,  
+  "objectives": {
+    "minimize_delay": 1.0,
+    "balance_workload": 0.5
+  },
+  "constraints": {
+    "inputs": {
+      "task_allocation": { "min": 0, "max": 5 }
+    },
+    "states": {
+      "queue_sizes": { "min": 0, "max": 50 },
+      "team_loads": { "min": 0, "max": 20 }
+    }
+  },
+  "planning": {
+    "prediction_horizon": 5,
+    "control_horizon": 2
+  },
+  "external_factors": ["new_tasks", "staff_availability"],
+  "variable_priorities": {
+    "queue_sizes": 1.0,
+    "team_loads": 0.5
+  }
+}
