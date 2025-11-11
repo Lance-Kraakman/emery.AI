@@ -74,6 +74,9 @@ class InfraStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         prefix = env_name.capitalize()
+        
+        # Default AWS region - can be overridden by CDK context
+        aws_region = 'ap-southeast-2'
 
         # Create a new VPC for our application
         # This will create public and private subnets across 2 Availability Zones by default
@@ -571,11 +574,11 @@ class InfraStack(Stack):
             "WORKER_ADDRESS",
             "agent-service.emery.local:50051"
         )
-        # Add AWS S3 configuration to override MinIO defaults
-        scheduler_container.add_environment(
-            "AWS_ENDPOINT_URL",
-            "https://s3.ap-southeast-2.amazonaws.com"  # Proper AWS S3 endpoint
-        )
+            # Add AWS S3 configuration to override MinIO defaults
+            scheduler_container.add_environment(
+                "AWS_ENDPOINT_URL",
+                f"https://s3.{aws_region}.amazonaws.com"  # Dynamic AWS S3 endpoint
+            )
         scheduler_container.add_environment(
             "AWS_REGION",
             "ap-southeast-2"  # AWS region for deployment
@@ -605,7 +608,7 @@ class InfraStack(Stack):
             # Add AWS S3 configuration to override MinIO defaults
             frontend_service.task_definition.default_container.add_environment(
                 "AWS_ENDPOINT_URL",
-                "https://s3.ap-southeast-2.amazonaws.com"  # Proper AWS S3 endpoint
+                f"https://s3.{aws_region}.amazonaws.com"  # Dynamic AWS S3 endpoint
             )
             frontend_service.task_definition.default_container.add_environment(
                 "AWS_REGION",
@@ -620,7 +623,7 @@ class InfraStack(Stack):
         # Add AWS S3 configuration to override MinIO defaults
         agent_service.task_definition.default_container.add_environment(
             "AWS_ENDPOINT_URL",
-            "https://s3.ap-southeast-2.amazonaws.com"  # Proper AWS S3 endpoint
+            f"https://s3.{aws_region}.amazonaws.com"  # Dynamic AWS S3 endpoint
         )
         agent_service.task_definition.default_container.add_environment(
             "AWS_REGION",
