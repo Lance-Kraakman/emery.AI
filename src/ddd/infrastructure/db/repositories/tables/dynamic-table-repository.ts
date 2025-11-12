@@ -473,7 +473,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
         // Delete removed fields from Delta Lake
         for (const fieldToDelete of fieldsToDelete) {
-          const deleteResult = await this.datalake.deleteField(fullTable, fieldToDelete.name);
+          const deleteResult = await this.datalake.deleteField(fullTable, fieldToDelete.id.value);
           if (!deleteResult.success) {
             console.warn(`[TableService] Warning: Failed to delete field ${fieldToDelete.name} from Delta Lake: ${deleteResult.error}`);
           } else {

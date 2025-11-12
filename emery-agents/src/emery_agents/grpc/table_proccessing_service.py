@@ -18,13 +18,19 @@ import pandas as pd
 from deltalake import write_deltalake, DeltaTable
 from google.protobuf.json_format import Parse, MessageToJson
 from google.protobuf.struct_pb2 import ListValue
+from grpc import ServicerContext
 from .generated import table_service_pb2, table_service_pb2_grpc
 from .table.transform import normalize_arrow_table_to_large_string
 from .table.schema import get_delta_schema_as_pyarrow, convert_protobuf_field_to_arrow, migrate_column_type
 from .table.validate import validate_s3_path
-from .table.operations import prepare_create_rows, prepare_query_rows, prepare_table_stats, prepare_update_rows, write_with_schema_evolution
+from .table.operations import (
+    prepare_create_rows, 
+    prepare_query_rows, 
+    prepare_table_stats, 
+    prepare_update_rows, 
+    write_with_schema_evolution
+)
 from .table.schema import build_schema_from_table_fields
-from .table.operations import prepare_create_rows, write_with_schema_evolution
 
 
 logger = logging.getLogger(__name__)
@@ -213,7 +219,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 message=f"Failed to create table: {str(e)}"
             )
 
-    def CreateRows(self, request: table_service_pb2.CreateRowsRequest, context) -> table_service_pb2.CreateRowsResponse:
+    def CreateRows(self, request: table_service_pb2.CreateRowsRequest, context: ServicerContext) -> table_service_pb2.CreateRowsResponse:
         """Efficiently create multiple rows in a Delta table."""
         try:
             # Compact logging
@@ -415,7 +421,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             message="GetRows not yet implemented"
         )
 
-    def UpdateRows(self, request: table_service_pb2.UpdateRowsRequest, context) -> table_service_pb2.UpdateRowsResponse:
+    def UpdateRows(self, request: table_service_pb2.UpdateRowsRequest, context: ServicerContext) -> table_service_pb2.UpdateRowsResponse:
         """Update multiple rows using Delta Lake merge operation."""
         try:
             # Compact logging
@@ -510,7 +516,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
     
 
-    def QueryRows(self, request: table_service_pb2.QueryRowsRequest, context) -> table_service_pb2.QueryRowsResponse:
+    def QueryRows(self, request: table_service_pb2.QueryRowsRequest, context: ServicerContext) -> table_service_pb2.QueryRowsResponse:
         """Query rows with filters and pagination - returns Arrow IPC for zero-copy transfer."""
         try:
             # Compact logging
