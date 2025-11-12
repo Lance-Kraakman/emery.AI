@@ -95,11 +95,8 @@ def prepare_create_rows(
     """
     logger.info(f"[prepare_create_rows] Preparing {len(rows_data)} rows for mode={mode}")
 
-    # Validate row data against schema
+    # Get schema for data processing
     schema = get_delta_schema_as_pyarrow(delta_table)
-    is_valid, error_msg = validate_row_data(rows_data, schema, "CreateRows")
-    if not is_valid:
-        raise ValueError(f"Row data validation failed: {error_msg}")
 
     # Create DataFrame with schema-aware conversion
     df = create_dataframe_with_schema(rows_data, delta_table)
@@ -132,11 +129,8 @@ def prepare_update_rows(
     """
     logger.info(f"[prepare_update_rows] Preparing {len(rows_data)} rows for update")
 
-    # Validate row data against schema
+    # Get schema for data processing
     schema = get_delta_schema_as_pyarrow(delta_table)
-    is_valid, error_msg = validate_row_data(rows_data, schema, "UpdateRows")
-    if not is_valid:
-        raise ValueError(f"Row data validation failed: {error_msg}")
 
     # Create DataFrame with schema-aware conversion
     df = create_dataframe_with_schema(rows_data, delta_table)

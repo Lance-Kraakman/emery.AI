@@ -89,9 +89,9 @@ class MPCSkillBuilder:
         """Generate system dynamics equations."""
         prompt = self._load_template("generate_dynamics.j2").render(
             user_description=description,
-            states=[vars(s) for s in components.states],
-            inputs=[vars(i) for i in components.inputs],
-            disturbances=[vars(d) for d in components.disturbances],
+            states=[s.__dict__ for s in components.states],
+            inputs=[i.__dict__ for i in components.inputs],
+            disturbances=[d.__dict__ for d in components.disturbances],
             system_name="MPC System"
         )
         
@@ -102,9 +102,9 @@ class MPCSkillBuilder:
         """Map objectives, constraints, and planning configuration."""
         prompt = self._load_template("map_objectives.j2").render(
             user_description=description,
-            states=[vars(s) for s in components.states],
-            inputs=[vars(i) for i in components.inputs],
-            outputs=[vars(o) for o in components.outputs]
+            states=[s.__dict__ for s in components.states],
+            inputs=[i.__dict__ for i in components.inputs],
+            outputs=[o.__dict__ for o in components.outputs]
         )
         
         messages = [{"role": "user", "content": prompt}]
