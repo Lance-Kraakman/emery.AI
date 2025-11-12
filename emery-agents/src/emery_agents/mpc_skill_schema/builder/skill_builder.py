@@ -29,7 +29,6 @@ from ..builder.user_interface import UserConfirmationInterface
 
 def generate_skill_from_user_input(
     user_text: str, 
-    template: Optional[str] = None,
     interactive: bool = True,
     llm_client: Optional[HuggingFaceLLMClient] = None
 ) -> Dict[str, Any]:
@@ -38,7 +37,6 @@ def generate_skill_from_user_input(
     
     Args:
         user_text: Natural language system description.
-        template: Optional system template (workflow, robotics, finance).
         interactive: Whether to prompt for user confirmation.
         llm_client: Optional LLM client instance.
         
@@ -55,8 +53,6 @@ def generate_skill_from_user_input(
     
     print("🔧 Starting MPC Skill Schema Generation...")
     print(f"📝 Input: {user_text}")
-    if template:
-        print(f"📋 Template: {template}")
     
     # =======================================================
     # 1) Initial Parsing & Variable Suggestion
@@ -64,10 +60,10 @@ def generate_skill_from_user_input(
     print("\n🧠 Extracting system components...")
     
     # Extract components using LLM
-    candidate_states = LLM_extract_states(user_text, template, llm_client)
-    candidate_inputs = LLM_extract_inputs(user_text, template, llm_client)
-    candidate_outputs = LLM_extract_outputs(user_text, template, llm_client)
-    candidate_disturbances = LLM_extract_disturbances(user_text, template, llm_client)
+    candidate_states = LLM_extract_states(user_text, llm_client=llm_client)
+    candidate_inputs = LLM_extract_inputs(user_text, llm_client=llm_client)
+    candidate_outputs = LLM_extract_outputs(user_text, llm_client=llm_client)
+    candidate_disturbances = LLM_extract_disturbances(user_text, llm_client=llm_client)
     
     print(f"✅ Found {len(candidate_states)} states, {len(candidate_inputs)} inputs, "
           f"{len(candidate_outputs)} outputs, {len(candidate_disturbances)} disturbances")
@@ -94,7 +90,7 @@ def generate_skill_from_user_input(
     # =======================================================
     print("\n🎯 Mapping objectives...")
     objectives = LLM_map_text_to_objectives(
-        user_text, template, candidate_states, candidate_inputs, candidate_outputs, llm_client
+        user_text, states=candidate_states, inputs=candidate_inputs, outputs=candidate_outputs, llm_client=llm_client
     )
     print(f"✅ Extracted {len(objectives)} objectives")
     
@@ -102,8 +98,8 @@ def generate_skill_from_user_input(
     # 3) Default Constraints & Planning
     # =======================================================
     print("\n🔧 Suggesting constraints and planning...")
-    constraints = LLM_suggest_constraints(candidate_states, candidate_inputs, template, llm_client)
-    planning = LLM_suggest_horizons(user_text, template, llm_client)
+    constraints = LLM_suggest_constraints(candidate_states, candidate_inputs, llm_client=llm_client)
+    planning = LLM_suggest_horizons(user_text, llm_client=llm_client)
     print(f"✅ Suggested {len(constraints)} constraints")
     print(f"✅ Suggested {planning.horizon.value} planning horizon")
     
@@ -198,7 +194,7 @@ def generate_skill_from_user_input(
         planning=planning,
         external_factors=external_factors,
         variable_priorities=variable_priorities,
-        template=template,
+
         confidence_score=0.8,  # Could be calculated based on LLM confidence
         extraction_method="llm",
         user_edits=[]  # Could track user edits
@@ -211,21 +207,18 @@ def generate_skill_from_user_input(
 
 
 def generate_skill_from_user_input_simple(
-    user_text: str, 
-    template: Optional[str] = None
+    user_text: str
 ) -> Dict[str, Any]:
     """
-    Simplified version that auto-accepts all suggestions.
+    Simplified wrapper for non-interactive skill generation.
     
     Args:
         user_text: Natural language system description.
-        template: Optional system template.
         
     Returns:
         skill_schema: Fully populated SkillSchema JSON.
     """
     return generate_skill_from_user_input(
         user_text=user_text,
-        template=template,
         interactive=False
     )
