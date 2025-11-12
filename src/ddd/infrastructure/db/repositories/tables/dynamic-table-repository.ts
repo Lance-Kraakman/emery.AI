@@ -116,19 +116,6 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
       // Convert field persistence records to domain TableField objects
       const tableFields = fieldRecords.map((fieldRecord: FieldRow) => {
-        // Debug logging for select fields
-        if (fieldRecord.type === 'single-select' || fieldRecord.type === 'multi-select') {
-          console.log('[dynamic-table-repository.findById] Reading select field from DB:', {
-            fieldName: fieldRecord.name,
-            fieldType: fieldRecord.type,
-            hasFieldConfig: !!fieldRecord.fieldConfig,
-            fieldConfigKeys: fieldRecord.fieldConfig ? Object.keys(fieldRecord.fieldConfig) : [],
-            hasOptions: fieldRecord.fieldConfig?.options ? true : false,
-            optionsCount: Array.isArray(fieldRecord.fieldConfig?.options) ? fieldRecord.fieldConfig.options.length : 0,
-            options: fieldRecord.fieldConfig?.options
-          });
-        }
-
         return TableField.fromPersistence({
           id: fieldRecord.id,
           tableId: fieldRecord.tableId,
@@ -336,16 +323,28 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         .from(fields)
         .where(eq(fields.tableId, tableId.value));
 
-      // Create map for quick lookup
-      const existingFieldMap = new Map<string, FieldRow>(existingFields.map((f: FieldRow) => [f.name, f]));
+      // Create map for quick lookup by ID (not name) for stable matching
+      const existingFieldMap = new Map<number, FieldRow>(
+        existingFields.map((f: FieldRow) => [f.id, f])
+      );
 
-      // Separate fields into new vs existing vs deleted
-      const fieldsToAdd = tableFields.filter(f => !existingFieldMap.has(f.name));
-      const fieldsToUpdate = tableFields.filter(f => existingFieldMap.has(f.name));
-      const fieldsToDelete = existingFields.filter((f: FieldRow) => !tableFields.some(tf => tf.name === f.name));
+      // Create name map for display/validation purposes
+      const existingFieldNameMap = new Map<string, FieldRow>(
+        existingFields.map((f: FieldRow) => [f.name, f])
+      );
+      
+      // Separate fields by ID for stable matching
+      const fieldsToAdd = tableFields.filter(f => !existingFieldMap.has(f.id.value));
+      const fieldsToUpdate = tableFields.filter(f => existingFieldMap.has(f.id.value));
+      const fieldsToDelete = existingFields.filter((f: FieldRow) => 
+        !tableFields.some(tf => tf.id.value === f.id)
+      );
 
-      // Insert new fields into PostgreSQL
-      for (const field of fieldsToAdd) {
+      // Insert new fields into PostgreSQL and get real IDs
+      const insertedFields: Array<{id: number}> = [];
+      for (let i = 0; i < fieldsToAdd.length; i++) {
+        const field = fieldsToAdd[i];
+        
         // Build fieldConfig - only if there's ACTUAL content (not empty object)
         let fieldConfig: Record<string, any> | null = null;
         const hasMetadataContent = field.metadata && Object.keys(field.metadata).length > 0;
@@ -357,7 +356,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           };
         }
 
-        await this.db.insert(fields).values({
+        // CRITICAL FIX: Use .returning() to get PostgreSQL auto-increment ID
+        const insertedField = await this.db.insert(fields).values({
           tableId: tableId.value,
           name: field.name,
           slug: field.name.toLowerCase().replace(/\s+/g, '_'), // Generate slug from name
@@ -365,13 +365,38 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           orderIndex: field.orderIndex,
           required: field.required,
           fieldConfig
+        }).returning({ id: fields.id });
+
+        insertedFields.push(insertedField[0]);
+        
+        // CRITICAL FIX: Create new TableField with real PostgreSQL ID
+        // This ensures domain ID = PostgreSQL ID = Delta Lake column name
+        const updatedField = TableField.fromPersistence({
+          id: insertedField[0].id, // Real PostgreSQL ID
+          tableId: tableId.value,
+          name: field.name,
+          type: field.type,
+          orderIndex: field.orderIndex,
+          relatedTableId: field.relatedTableId?.value || null,
+          required: field.required,
+          metadata: field.metadata || null,
+          createdAt: new Date()
+        });
+        
+        // Replace the field in the original array with updated field containing real ID
+        fieldsToAdd[i] = updatedField;
+        
+        console.log('[syncTableFields] Created field with PostgreSQL ID:', {
+          fieldName: field.name,
+          postgresId: insertedField[0].id,
+          domainId: updatedField.id.value
         });
       }
 
       // CRITICAL FIX: Update existing fields with new metadata/config
       // This ensures select field options and other metadata changes are persisted
       for (const field of fieldsToUpdate) {
-        const existingField = existingFieldMap.get(field.name)!;
+        const existingField = existingFieldMap.get(field.id.value)!;
 
         // Build fieldConfig - only if there's ACTUAL content (not empty object)
         let fieldConfig: Record<string, any> | null = null;
