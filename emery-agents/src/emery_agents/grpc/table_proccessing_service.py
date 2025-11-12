@@ -10,6 +10,7 @@ import logging
 import os
 from typing import List, Dict, Any, Optional, Tuple, Union
 from datetime import datetime, timezone
+from .table.operations import apply_field_additions
 
 import polars as pl
 import pyarrow as pa
@@ -640,7 +641,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             
             # Apply field additions to Delta Lake schema if table exists
             if delta_table and s3_uri:
-                from .table.operations import apply_field_additions
                 apply_field_additions(delta_table, [request.field], s3_uri, storage_options)
                 logger.info(f"[AddField] ✅ Added field '{request.field.name}' to table '{request.table_id}' (schema evolved)")
             else:
