@@ -49,6 +49,8 @@ from .operations import (
     apply_field_additions,
     apply_field_updates,
     apply_filters_in_memory,
+    apply_like_ilike_filters,
+    apply_aggregations,
     write_with_schema_evolution,
     prepare_table_stats,
 )
@@ -95,6 +97,8 @@ __all__ = [
     'apply_field_additions',
     'apply_field_updates',
     'apply_filters_in_memory',
+    'apply_like_ilike_filters',
+    'apply_aggregations',
     'write_with_schema_evolution',
     'prepare_table_stats',
 ]
