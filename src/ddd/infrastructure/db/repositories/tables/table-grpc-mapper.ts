@@ -39,6 +39,7 @@ import {
   DeleteRowsRequest as IDeleteRowsRequest,
   QueryRowsRequest as IQueryRowsRequest,
   GetTableStatsRequest as IGetTableStatsRequest,
+  AddFieldRequest,
 } from '@/lib/grpc/generated/table_service';
 
 /**
@@ -579,8 +580,6 @@ export class TableGrpcMapper {
     organizationId: OrganizationId,
     s3Path: string
   ): any {
-    // Import the request type dynamically to avoid circular dependencies
-    const { AddFieldRequest } = require('@/lib/grpc/generated/table_service');
     
     const request = {
       tableId: tableId.value.toString(),
@@ -589,11 +588,11 @@ export class TableGrpcMapper {
       field: {
         name: field.name,
         type: this.mapFieldTypeToProto(field.type),  // Convert string to enum number
-        required: field.required,
+        required: field.required ?? false,
         metadata: field.metadata || {},
-        fieldId: field.id.value  // Include required field ID from domain object
+        fieldId: field.id.value  // Required field ID, no fallback
       }
-    };
+    } as AddFieldRequest;
 
     return request;
   }
@@ -613,15 +612,15 @@ export class TableGrpcMapper {
     
     const request = {
       tableId: tableId.value.toString(),
+      fieldId: updatedField.id.value,  // Required field ID for lookup
       organizationId: organizationId.value.toString(),
       s3Path: s3Path,
-      fieldName: currentFieldName,  // Current field name for lookup
       updatedField: {
         name: updatedField.name,
         type: this.mapFieldTypeToProto(updatedField.type),  // Convert string to enum number
-        required: updatedField.required,
+        required: updatedField.required ?? false,
         metadata: updatedField.metadata || {},
-        fieldId: updatedField.id.value  // Include required field ID
+        fieldId: updatedField.id.value  // Required field ID in TableField
       },
       migrateData: true  // Default to migrating existing data
     };
@@ -634,7 +633,7 @@ export class TableGrpcMapper {
     */
   static toDeleteFieldRequest(
     tableId: TableId,
-    fieldName: string,
+    fieldId: number,
     organizationId: OrganizationId,
     s3Path: string
   ): any {
@@ -643,9 +642,9 @@ export class TableGrpcMapper {
     
     const request = {
       tableId: tableId.value.toString(),
+      fieldId: fieldId,  // Required int32 field ID
       organizationId: organizationId.value.toString(),
       s3Path: s3Path,
-      fieldName: fieldName,
       backupData: true  // Default to backing up deleted data
     };
 

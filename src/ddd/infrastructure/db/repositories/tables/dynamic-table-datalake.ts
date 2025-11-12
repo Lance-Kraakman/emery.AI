@@ -712,19 +712,19 @@ export class DynamicTableDataLake {
   }
 
   /**
-    * Delete a field from the table using gRPC service
-    */
-  async deleteField(table: DynamicTable, fieldName: string): Promise<Result<void>> {
+     * Delete a field from table using gRPC service
+     */
+  async deleteField(table: DynamicTable, fieldId: number): Promise<Result<void>> {
     try {
       logger.debug('Deleting field', { 
         tableId: table.id.value, 
-        fieldName 
+        fieldId 
       });
 
       // Create delete field request
       const deleteRequest = TableGrpcMapper.toDeleteFieldRequest(
         table.id,
-        fieldName,
+        fieldId,
         table.organizationId,
         table.storageLocation || `s3://emery-tables/${table.id.value}`
       );
@@ -735,7 +735,7 @@ export class DynamicTableDataLake {
       if (response && response.success) {
         logger.summary('Deleted field', { 
           tableId: table.id.value, 
-          fieldName 
+          fieldId 
         });
         return { success: true, data: undefined };
       } else {

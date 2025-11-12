@@ -9,6 +9,7 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 import pyarrow as pa
 import polars as pl
+import pandas as pd
 from deltalake import write_deltalake, DeltaTable
 
 from .schema import (
@@ -435,11 +436,23 @@ def write_with_merge_operation(
     # Perform merge: update rows where id matches, keep others unchanged
     # This is a simplified merge - for production, use Delta Lake's native merge when available
     if 'id' in update_df.columns and 'id' in current_data.columns:
+        # Debug logging
+        logger.info(f"[write_with_merge_operation] Before merge: current_rows={len(current_data)}, update_rows={len(update_df)}")
+        
         # Remove rows that will be updated from current data
-        current_data = current_data[~current_data['id'].isin(update_df['id'])]
+        current_ids = set(current_data['id'].astype(str))
+        update_ids = set(update_df['id'].astype(str))
+        rows_to_remove = current_ids.intersection(update_ids)
+        
+        logger.info(f"[write_with_merge_operation] ID analysis: current_ids={current_ids}, update_ids={update_ids}, rows_to_remove={rows_to_remove}")
+        
+        # Filter out rows that will be updated
+        current_data = current_data[~current_data['id'].astype(str).isin(list(rows_to_remove))]
         
         # Append updated rows
         merged_data = pd.concat([current_data, update_df], ignore_index=True)
+        
+        logger.info(f"[write_with_merge_operation] After merge: final_rows={len(merged_data)}")
     else:
         # Fallback: just append if no id column
         logger.warning("[write_with_merge_operation] No 'id' column found, falling back to append")
