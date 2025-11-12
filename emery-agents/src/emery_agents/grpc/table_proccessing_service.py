@@ -22,7 +22,7 @@ from .generated import table_service_pb2, table_service_pb2_grpc
 from .table.transform import normalize_arrow_table_to_large_string
 from .table.schema import get_delta_schema_as_pyarrow, convert_protobuf_field_to_arrow, migrate_column_type
 from .table.validate import validate_s3_path
-from .table.operations import prepare_create_table, prepare_query_rows, prepare_table_stats, prepare_update_rows, write_with_schema_evolution
+from .table.operations import prepare_create_rows, prepare_query_rows, prepare_table_stats, prepare_update_rows, write_with_schema_evolution
 from .table.schema import build_schema_from_table_fields
 from .table.operations import prepare_create_rows, write_with_schema_evolution
 
@@ -134,31 +134,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             log_func(f"[{method}] Delta table not found at {s3_uri}: {e}")
             return None, str(e)
 
-    def _extract_protobuf_values(self, values: List[table_service_pb2.RowDataValue]) -> List[Any]:
-        """Extract Python values from list of RowDataValue protobuf objects.
-
-        Args:
-            values: List of RowDataValue protobuf objects
-
-        Returns:
-            List of extracted Python values
-        """
-        result = []
-        for val in values:
-            if val.HasField('text_value'):
-                result.append(val.text_value)
-            elif val.HasField('number_value'):
-                result.append(val.number_value)
-            elif val.HasField('boolean_value'):
-                result.append(val.boolean_value)
-            elif val.HasField('date_value'):
-                result.append(val.date_value)
-            elif val.HasField('json_value'):
-                result.append(val.json_value)
-            else:
-                result.append(None)
-        return result
-
     def _verify_write_operation(self, s3_uri: str, storage_options: dict, method: str, expected_min_rows: int = 0) -> bool:
         """Verify write operation succeeded by checking Delta table state.
 
@@ -189,14 +164,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             logger.error(f"[{method}] Verification error: {e}")
             return False
 
-    def _json_to_row_data(self, row_json: str) -> Dict[str, Any]:
-        """Convert JSON string to row data dictionary."""
-        try:
-            return json.loads(row_json)
-        except Exception as e:
-            logger.error(f"Error parsing row JSON: {e}")
-            raise ValueError(f"Invalid row JSON: {e}")
-
     def CreateTable(self, request: table_service_pb2.CreateTableRequest, context) -> table_service_pb2.TableResponse:
         """Create a new Delta table with the specified schema."""
         try:
@@ -210,8 +177,12 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 return error_response
 
             # Use table library operations
-            empty_table = prepare_create_table(request.schema.fields)
-            write_with_schema_evolution(s3_uri, empty_table, "overwrite", self._get_storage_options())
+            from .table.operations import prepare_create_table
+            if s3_uri is None:
+                return table_service_pb2.TableResponse(
+                    success=False, message="Invalid S3 path"
+                )
+            prepare_create_table(list(request.schema.fields), s3_uri, self._get_storage_options())
             
             # Create table response
             table = table_service_pb2.Table(
@@ -468,8 +439,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             df, arrow_table = prepare_update_rows(request.rows_data, delta_table)
             self._log_dataframe(df, "UpdateRows", show_sample=True)
             
-            # Use library write function with overwrite mode
-            write_with_schema_evolution(s3_uri, arrow_table, "overwrite", storage_options)
+            # Use proper merge operation to update only specific rows, not overwrite entire table
+            from .table.operations import write_with_merge_operation
+            write_with_merge_operation(s3_uri or "", arrow_table, storage_options)
 
             # Log post-merge state
             self._log_delta_state(DeltaTable(s3_uri, storage_options=storage_options), "UpdateRows AFTER merge")
@@ -604,6 +576,10 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 return table_service_pb2.GetTableStatsResponse(success=False, message=error_response.message)
 
             # Use table library operations
+            if s3_uri is None:
+                return table_service_pb2.GetTableStatsResponse(
+                    success=False, message="Invalid S3 path"
+                )
             stats = prepare_table_stats(s3_uri, self._get_storage_options())
 
             logger.info(f"[GetTableStats] ✅ Stats: {stats['row_count']} rows, {stats['size_bytes']} bytes")
@@ -611,7 +587,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 success=True,
                 row_count=stats['row_count'],
                 size_bytes=stats['size_bytes'],
-                message=stats['message']
+                message=stats.get('message', 'Success')
             )
 
         except Exception as e:
@@ -641,7 +617,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             delta_table, error_msg = self._get_delta_table_safe(s3_uri, storage_options, "AddField", must_exist=False)
             
             # Check if table exists and field already exists
-            field_column_name = str(request.field.field_id)
+            field_column_name = request.field.name  # Use field name as column name, not field_id
             if delta_table:
                 current_schema = get_delta_schema_as_pyarrow(delta_table)
                 current_columns = [field.name for field in current_schema]
@@ -649,19 +625,21 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 if field_column_name in current_columns:
                     return table_service_pb2.FieldResponse(
                         success=False,
-                        message=f"Field with ID {request.field.field_id} already exists in table"
+                        message=f"Field '{request.field.name}' already exists in table"
                     )
 
             # Validate field conversion works
             new_field_type = convert_protobuf_field_to_arrow(request.field)
             _ = pa.field(field_column_name, new_field_type, nullable=not request.field.required)
             
-            # Skip Delta table operations - field metadata is the source of truth
-            # Schema evolution will happen automatically when data is actually inserted
-
-            # Skip Delta table verification - field metadata is the source of truth
-            # Schema evolution will happen automatically when data is actually inserted
-            logger.info(f"[AddField] ✅ Added field '{request.field.name}' to table '{request.table_id}' (metadata only)")
+            # Apply field additions to Delta Lake schema if table exists
+            if delta_table and s3_uri:
+                from .table.operations import apply_field_additions
+                apply_field_additions(delta_table, [request.field], s3_uri, storage_options)
+                logger.info(f"[AddField] ✅ Added field '{request.field.name}' to table '{request.table_id}' (schema evolved)")
+            else:
+                logger.info(f"[AddField] ✅ Added field '{request.field.name}' to table '{request.table_id}' (metadata only)")
+            
             return table_service_pb2.FieldResponse(
                 success=True,
                 field=request.field,
@@ -710,8 +688,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # No separate field rename logic needed since we use field_id for identification
 
             # Handle field type change
-            # Find current field by field_id in schema
-            field_column_name = str(request.field_id)  # "123"
+            # Find current field by field_id in schema - need to map field_id to actual column name
+            # For now, assume field_id corresponds to column name (this may need metadata lookup)
+            field_column_name = str(request.field_id)  # This should be looked up from metadata
             current_field = next((f for f in current_schema if f.name == field_column_name), None)
             
             if not current_field:
@@ -746,7 +725,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     df = migrate_column_type(df, field_column_name, old_field_type, new_field_type)
                 
                 # Write back with new schema
-                from .table.transform import normalize_arrow_table_to_large_string
                 normalized_arrow = normalize_arrow_table_to_large_string(df.to_arrow())
                 write_deltalake(s3_uri, normalized_arrow, mode="overwrite", storage_options=storage_options)
                 

@@ -32,6 +32,51 @@ from ..generated import table_service_pb2
 logger = logging.getLogger(__name__)
 
 
+def prepare_create_table(
+    fields: List[table_service_pb2.TableField],
+    s3_uri: str,
+    storage_options: Dict[str, str]
+) -> None:
+    """Create new Delta table with specified schema.
+
+    Args:
+        fields: List of TableField objects defining the schema
+        s3_uri: S3 URI where to create the table
+        storage_options: S3 storage options
+    """
+    logger.info(f"[prepare_create_table] Creating table with {len(fields)} fields at {s3_uri}")
+
+    # Build PyArrow schema from protobuf fields
+    from .schema import build_schema_from_table_fields
+    schema = build_schema_from_table_fields(fields)
+    
+    # Convert PyArrow schema to Polars schema format
+    polars_schema = {}
+    for field in schema:
+        if field.type == pa.large_string():
+            polars_schema[field.name] = pl.Utf8()
+        elif field.type == pa.float64():
+            polars_schema[field.name] = pl.Float64()
+        elif field.type == pa.bool_():
+            polars_schema[field.name] = pl.Boolean()
+        elif field.type == pa.timestamp('us'):
+            polars_schema[field.name] = pl.Datetime()
+        elif pa.types.is_list(field.type):
+            polars_schema[field.name] = pl.List(pl.Float32())
+        else:
+            polars_schema[field.name] = pl.Utf8()
+    
+    # Create empty DataFrame with the schema
+    empty_df = pl.DataFrame(schema=polars_schema)
+    
+    # Convert to Arrow and write with schema evolution
+    from .transform import convert_dataframe_to_arrow
+    empty_table = convert_dataframe_to_arrow(empty_df)
+    write_with_schema_evolution(s3_uri, empty_table, "overwrite", storage_options)  # type: ignore
+
+    logger.info(f"[prepare_create_table] Successfully created table with schema: {[f.name for f in fields]}")
+
+
 def prepare_create_rows(
     rows_data: List[table_service_pb2.RowData],
     delta_table: DeltaTable,
@@ -112,7 +157,7 @@ def prepare_query_rows(
     delta_table: DeltaTable,
     filters: List[table_service_pb2.RowFilter],
     order_by: List[str],
-    limit: int = None,
+    limit: Optional[int] = None,
     offset: int = 0
 ) -> Tuple[pl.DataFrame, Dict[str, Any]]:
     """Prepare data for QueryRows operation.
@@ -140,6 +185,10 @@ def prepare_query_rows(
     # Load data from Delta table
     arrow_table = delta_table.to_pyarrow_table()
     df = pl.from_arrow(arrow_table)
+
+    # Ensure we have a DataFrame, not a Series
+    if isinstance(df, pl.Series):
+        df = df.to_frame()
 
     # Apply filters (simplified - in-memory filtering)
     if filters:
@@ -171,13 +220,17 @@ def prepare_query_rows(
 
 def apply_field_additions(
     delta_table: DeltaTable,
-    new_fields: List[table_service_pb2.TableField]
+    new_fields: List[table_service_pb2.TableField],
+    s3_uri: str,
+    storage_options: Dict[str, str]
 ) -> pa.Schema:
-    """Apply field additions to existing table schema.
+    """Apply field additions to existing table schema and Delta Lake.
 
     Args:
         delta_table: DeltaTable instance with current schema
         new_fields: List of new TableField objects to add
+        s3_uri: S3 URI of the Delta table
+        storage_options: S3 storage options
 
     Returns:
         Updated PyArrow schema
@@ -189,6 +242,34 @@ def apply_field_additions(
     
     # Evolve schema to include new fields
     new_schema = evolve_schema(current_schema, new_fields)
+
+    # Create empty data with new schema to trigger schema evolution in Delta Lake
+    import polars as pl
+    from .transform import convert_dataframe_to_arrow
+    
+    # Build Polars schema for new fields only - create EMPTY DataFrames to avoid unwanted row creation
+    new_field_data = {}
+    for field in new_fields:
+        if field.type == table_service_pb2.FIELD_TYPE_TEXT:
+            new_field_data[field.name] = pl.Series([], dtype=pl.Utf8)
+        elif field.type == table_service_pb2.FIELD_TYPE_NUMBER:
+            new_field_data[field.name] = pl.Series([], dtype=pl.Float64)
+        elif field.type == table_service_pb2.FIELD_TYPE_BOOLEAN:
+            new_field_data[field.name] = pl.Series([], dtype=pl.Boolean)
+        elif field.type == table_service_pb2.FIELD_TYPE_DATE:
+            new_field_data[field.name] = pl.Series([], dtype=pl.Datetime)
+        elif field.type == table_service_pb2.FIELD_TYPE_EMBEDDING:
+            new_field_data[field.name] = pl.Series([], dtype=pl.List(pl.Float32))
+        else:
+            new_field_data[field.name] = pl.Series([], dtype=pl.Utf8)
+    
+    # Create DataFrame with just new fields and convert to Arrow
+    if new_field_data:
+        new_df = pl.DataFrame(new_field_data)
+        new_arrow_table = convert_dataframe_to_arrow(new_df)
+        
+        # Write with schema evolution to add new columns to Delta Lake
+        write_with_schema_evolution(s3_uri, new_arrow_table, "append", storage_options)
 
     logger.info(f"[apply_field_additions] Schema evolved from {len(current_schema)} to {len(new_schema)} fields")
     return new_schema
@@ -320,7 +401,7 @@ def write_with_schema_evolution(
     write_deltalake(
         s3_uri, 
         normalized_data, 
-        mode=mode, 
+        mode=mode,  # type: ignore
         schema_mode="merge", 
         storage_options=storage_options
     )
@@ -328,19 +409,78 @@ def write_with_schema_evolution(
     logger.info(f"[write_with_schema_evolution] Successfully wrote {len(data)} rows to {s3_uri}")
 
 
-def prepare_table_stats(delta_table: DeltaTable) -> Dict[str, Any]:
+def write_with_merge_operation(
+    s3_uri: str,
+    update_data: pa.Table,
+    storage_options: Dict[str, str]
+) -> None:
+    """Write data using Delta Lake merge operation to update specific rows only.
+
+    Args:
+        s3_uri: S3 URI of the Delta table
+        update_data: Arrow table with rows to update (must include 'id' column)
+        storage_options: S3 storage options
+    """
+    logger.info(f"[write_with_merge_operation] Merging {len(update_data)} rows to {s3_uri}")
+    
+    # Load existing Delta table
+    delta_table = DeltaTable(s3_uri, storage_options=storage_options)
+    
+    # Convert update data to pandas for merge operation
+    update_df = update_data.to_pandas()
+    
+    # Get current data
+    current_data = delta_table.to_pyarrow_table().to_pandas()
+    
+    # Perform merge: update rows where id matches, keep others unchanged
+    # This is a simplified merge - for production, use Delta Lake's native merge when available
+    if 'id' in update_df.columns and 'id' in current_data.columns:
+        # Remove rows that will be updated from current data
+        current_data = current_data[~current_data['id'].isin(update_df['id'])]
+        
+        # Append updated rows
+        merged_data = pd.concat([current_data, update_df], ignore_index=True)
+    else:
+        # Fallback: just append if no id column
+        logger.warning("[write_with_merge_operation] No 'id' column found, falling back to append")
+        merged_data = pd.concat([current_data, update_df], ignore_index=True)
+    
+    # Convert back to Arrow and write with overwrite
+    merged_arrow = pa.Table.from_pandas(merged_data)
+    normalized_data = normalize_arrow_table_to_large_string(merged_arrow)
+    
+    # Write merged data
+    write_deltalake(
+        s3_uri,
+        normalized_data,
+        mode="overwrite",  # type: ignore
+        storage_options=storage_options
+    )
+    
+    logger.info(f"[write_with_merge_operation] Successfully merged {len(update_data)} rows")
+
+
+def prepare_table_stats(s3_uri: str, storage_options: Dict[str, str]) -> Dict[str, Any]:
     """Prepare table statistics.
 
     Args:
-        delta_table: DeltaTable instance
+        s3_uri: S3 URI of the Delta table
+        storage_options: S3 storage options
 
     Returns:
         Dictionary with table statistics
     """
     try:
+        # Load DeltaTable from S3 URI
+        delta_table = DeltaTable(s3_uri, storage_options=storage_options)
+        
         # Read table data
         arrow_table = delta_table.to_pyarrow_table()
         df = pl.from_arrow(arrow_table)
+
+        # Ensure we have a DataFrame, not a Series
+        if isinstance(df, pl.Series):
+            df = df.to_frame()
 
         # Calculate statistics
         stats = {
