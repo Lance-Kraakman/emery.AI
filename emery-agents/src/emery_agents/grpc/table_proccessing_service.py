@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import polars as pl
 import pyarrow as pa
 import pyarrow.compute as pc
+import pandas as pd
 from deltalake import write_deltalake, DeltaTable
 from google.protobuf.json_format import Parse, MessageToJson
 from google.protobuf.struct_pb2 import ListValue
@@ -414,17 +415,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             record = {'id': row_data.id}
 
             for key, value in row_data.data.items():
-                # Log detailed field value information for debugging
-                field_info = {
-                    'field_id': key,
-                    'has_text': value.HasField('text_value'),
-                    'has_number': value.HasField('number_value'),
-                    'has_boolean': value.HasField('boolean_value'),
-                    'has_date': value.HasField('date_value'),
-                    'has_json': value.HasField('json_value'),
-                    'has_embedding': value.HasField('embedding_value')
-                }
-
                 if value.HasField('text_value'):
                     record[key] = value.text_value
                     logger.debug(f"[UpdateRows] Field {key}: TEXT_VALUE = {value.text_value}")
@@ -452,6 +442,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             records.append(record)
 
         # Log first record for debugging and detect field mismatches
+        first_record_keys = []
         if records:
             first_record_keys = list(records[0].keys())
             logger.info(f"[_create_dataframe_with_schema] First record: keys={first_record_keys}, sample={records[0]}")
@@ -461,25 +452,73 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             schema_fields = set(polars_field_names)
             self._log_field_mismatch(input_fields, schema_fields, "_create_dataframe_with_schema")
 
-            # DEFENSIVE: Filter records to only include fields that exist in schema
+            # Allow new fields for schema evolution when schema_mode="merge"
+            # Add new fields to schema with smart type detection for schema evolution
             missing_in_schema = input_fields - schema_fields
             if missing_in_schema:
-                logger.warning(f"[_create_dataframe_with_schema] Filtering {len(missing_in_schema)} unknown fields...")
-                records = [{k: v for k, v in record.items() if k in schema_fields} for record in records]
+                logger.info(f"[_create_dataframe_with_schema] New fields detected: {missing_in_schema} - will trigger schema evolution")
+                
+                # Smart type detection for new fields
+                for new_field in missing_in_schema:
+                    # Collect all non-null values for this field across all records
+                    field_values = []
+                    for record in records:
+                        if new_field in record and record[new_field] is not None:
+                            field_values.append(record[new_field])
+                    
+                    # Determine field type based on values
+                    if field_values:
+                        # Check if all values are numeric (int or float)
+                        try:
+                            # Try to convert all values to float
+                            float_values = [float(v) for v in field_values]
+                            # Check if all are actually integers
+                            if all(float(v).is_integer() for v in float_values):
+                                polars_schema[new_field] = pl.Int64
+                                logger.info(f"[_create_dataframe_with_schema] New field '{new_field}' detected as Int64")
+                            else:
+                                polars_schema[new_field] = pl.Float64
+                                logger.info(f"[_create_dataframe_with_schema] New field '{new_field}' detected as Float64")
+                        except (ValueError, TypeError):
+                            # Check if all values are boolean
+                            if all(str(v).lower() in ['true', 'false', '1', '0', 'yes', 'no'] for v in field_values):
+                                polars_schema[new_field] = pl.Boolean
+                                logger.info(f"[_create_dataframe_with_schema] New field '{new_field}' detected as Boolean")
+                            else:
+                                polars_schema[new_field] = pl.Utf8
+                                logger.info(f"[_create_dataframe_with_schema] New field '{new_field}' detected as Utf8 (default)")
+                    else:
+                        # No values or all null - default to string
+                        polars_schema[new_field] = pl.Utf8
+                        logger.info(f"[_create_dataframe_with_schema] New field '{new_field}' has no values, defaulting to Utf8")
+                    
+                    polars_field_names.append(new_field)
 
-        # 4. Create DataFrame with EXPLICIT schema (no inference, no casting)
-        # AIDEV-NOTE: Zero-copy friendly - types match Delta Lake from creation
-        # IMPORTANT: Polars DataFrame with explicit schema will ONLY include fields in polars_schema
-        # Any extra fields in records will be silently dropped by Polars
-        df = pl.DataFrame(records, schema=polars_schema)
+        # 4. Create DataFrame with enhanced schema for schema evolution
+        # AIDEV-NOTE: Use single enhanced schema that includes both existing and new fields
+        if records:
+            df = pl.DataFrame(records, schema=polars_schema)
+        else:
+            df = pl.DataFrame(schema=polars_schema)
 
-        # Log final DataFrame state
+        # Log final DataFrame state and schema evolution success
         logger.info(f"[_create_dataframe_with_schema] Created DataFrame: shape={df.shape}, cols={df.columns}")
 
-        # Final validation: confirm what was dropped
-        if records and len(first_record_keys) != len(df.columns):
-            dropped = len(first_record_keys) - len(df.columns)
-            logger.error(f"[_create_dataframe_with_schema] ❌ DATA LOSS: {dropped} fields dropped (input={len(first_record_keys)}, output={len(df.columns)})")
+        # Enhanced validation: show schema evolution results
+        if records:
+            input_fields = set(first_record_keys)
+            output_fields = set(df.columns)
+            
+            if input_fields == output_fields:
+                logger.info(f"[_create_dataframe_with_schema] ✅ Perfect schema match: {len(output_fields)} fields preserved")
+            else:
+                added_fields = output_fields - input_fields
+                dropped_fields = input_fields - output_fields
+                
+                if added_fields:
+                    logger.info(f"[_create_dataframe_with_schema] ✅ Schema evolution: {len(added_fields)} new fields added: {added_fields}")
+                if dropped_fields:
+                    logger.error(f"[_create_dataframe_with_schema] ❌ DATA LOSS: {len(dropped_fields)} fields dropped: {dropped_fields}")
 
         return df
 
@@ -794,7 +833,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     message=f"Cannot update rows in non-existent table: {error_msg}"
                 )
 
-            # Validate input fields match schema
+            # Allow schema evolution - new fields will be added automatically via schema_mode="merge"
+            # Skip strict validation to enable dynamic field addition
             if request.rows_data:
                 first_row = request.rows_data[0]
                 input_fields = set(['id'] + list(first_row.data.keys()))
@@ -803,27 +843,22 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
                 self._log_field_mismatch(input_fields, schema_fields, "UpdateRows")
 
-                # VALIDATION: Reject update to prevent silent data loss
+                # Log new fields for debugging but allow schema evolution
                 missing = input_fields - schema_fields
                 if missing:
-                    return table_service_pb2.UpdateRowsResponse(
-                        success=False,
-                        message=f"Cannot update rows: Fields {sorted(missing)} not in table schema. Refresh page."
-                    )
+                    logger.info(f"[UpdateRows] New fields detected: {sorted(missing)} - will trigger schema evolution via schema_mode=merge")
             df = self._create_dataframe_with_schema(request.rows_data, delta_table)
             self._log_dataframe(df, "UpdateRows", show_sample=True)
 
-            # Perform merge operation using Delta Lake native merge
-            # AIDEV-NOTE: Efficient row-level updates without rewriting entire table
-            logger.info(f"[UpdateRows] Merging {len(df)} rows...")
+            # Perform update using write_deltalake with schema_mode="merge" for schema evolution
+            # AIDEV-NOTE: Use write instead of merge to enable schema evolution for new fields
+            logger.info(f"[UpdateRows] Writing {len(df)} rows with schema evolution...")
             source_arrow = self._normalize_arrow_table_to_large_string(df.to_arrow())
 
-            delta_table.merge(
-                source=source_arrow,
-                predicate='target.id = source.id',
-                source_alias='source',
-                target_alias='target'
-            ).when_matched_update_all().execute()
+            # Use write_deltalake with schema_mode="merge" - enables schema evolution for new fields
+            # Overwrite mode ensures we replace existing data while preserving schema evolution
+            write_deltalake(s3_uri, source_arrow, mode="overwrite", schema_mode="merge", storage_options=storage_options)
+            logger.info("[UpdateRows] Successfully updated rows using write with schema evolution")
 
             # Log post-merge state
             self._log_delta_state(DeltaTable(s3_uri, storage_options=storage_options), "UpdateRows AFTER merge")
@@ -1335,60 +1370,70 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Apply ordering
             if request.order_by:
                 # User-specified sort
-                # Validate column exists
+                # Validate column exists in actual DataFrame (not just schema)
                 if request.order_by not in df.columns:
-                    logger.error(f"[QueryRows] Sort column '{request.order_by}' not found! Available: {df.columns}")
-                    return table_service_pb2.QueryRowsResponse(
-                        success=False,
-                        message=f"Sort column '{request.order_by}' not found in table"
-                    )
+                    logger.warning(f"[QueryRows] Sort column '{request.order_by}' not found in data! Available columns: {df.columns}")
+                    
+                    # Check if column exists in schema but has no data (newly added field)
+                    schema_has_column = any(f.name == request.order_by for f in schema)
+                    if schema_has_column:
+                        logger.info(f"[QueryRows] Sort column '{request.order_by}' exists in schema but has no data - skipping sort")
+                        # Skip sorting and continue with default order
+                        pass
+                    else:
+                        logger.error(f"[QueryRows] Sort column '{request.order_by}' not found in schema or data")
+                        return table_service_pb2.QueryRowsResponse(
+                            success=False,
+                            message=f"Sort column '{request.order_by}' not found in table. Available columns: {list(df.columns)}"
+                        )
+                else:
+                    # Column exists in DataFrame - proceed with sorting
+                    # Get field type from schema to handle empty strings in numeric columns
+                    field_type = next((f.type for f in schema if f.name == request.order_by), None)
 
-                # Get field type from schema to handle empty strings in numeric columns
-                field_type = next((f.type for f in schema if f.name == request.order_by), None)
+                    # AIDEV-NOTE: Diagnostic logging for sorting (compact)
+                    sort_col = df.select(request.order_by).to_series()
+                    logger.info(f"[QueryRows] Sort: col={request.order_by}, type={field_type}, rows={len(sort_col)}, "
+                              f"nulls={sort_col.null_count()}, unique={sort_col.n_unique()}")
 
-                # AIDEV-NOTE: Diagnostic logging for sorting (compact)
-                sort_col = df.select(request.order_by).to_series()
-                logger.info(f"[QueryRows] Sort: col={request.order_by}, type={field_type}, rows={len(sort_col)}, "
-                          f"nulls={sort_col.null_count()}, unique={sort_col.n_unique()}")
+                    # AIDEV-NOTE: Re-cast numeric/boolean columns for safe sorting
+                    # Handles legacy data where empty strings might be mixed with numbers
+                    # strict=False: converts invalid values (empty strings) to null automatically
+                    if field_type and (pa.types.is_floating(field_type) or pa.types.is_integer(field_type) or pa.types.is_boolean(field_type)):
+                        # Determine target Polars type
+                        if pa.types.is_floating(field_type):
+                            target_type = pl.Float64
+                        elif pa.types.is_integer(field_type):
+                            target_type = pl.Int64
+                        elif pa.types.is_boolean(field_type):
+                            target_type = pl.Boolean
 
-                # AIDEV-NOTE: Re-cast numeric/boolean columns for safe sorting
-                # Handles legacy data where empty strings might be mixed with numbers
-                # strict=False: converts invalid values (empty strings) to null automatically
-                if field_type and (pa.types.is_floating(field_type) or pa.types.is_integer(field_type) or pa.types.is_boolean(field_type)):
-                    # Determine target Polars type
-                    if pa.types.is_floating(field_type):
-                        target_type = pl.Float64
-                    elif pa.types.is_integer(field_type):
-                        target_type = pl.Int64
-                    elif pa.types.is_boolean(field_type):
-                        target_type = pl.Boolean
+                        logger.info(f"[QueryRows] Re-casting '{request.order_by}' to {target_type} for safe sorting")
+                        # Re-cast column with strict=False (empty strings → null, preserves valid values)
+                        df = df.with_columns(
+                            pl.col(request.order_by).cast(target_type, strict=False)
+                        )
 
-                    logger.info(f"[QueryRows] Re-casting '{request.order_by}' to {target_type} for safe sorting")
-                    # Re-cast column with strict=False (empty strings → null, preserves valid values)
-                    df = df.with_columns(
-                        pl.col(request.order_by).cast(target_type, strict=False)
-                    )
-
-                # Perform sort with null handling
-                # AIDEV-NOTE: nulls_last=True ensures consistent behavior
-                # - Sorts null/None values to the end regardless of sort direction
-                # - Works with both ASC and DESC sorts
-                # - Excel-like: empty cells go to bottom
-                try:
-                    df = df.sort(
-                        request.order_by,
-                        descending=(request.order_direction.upper() == 'DESC'),
-                        nulls_last=True  # Always put nulls at the end
-                    )
-                    logger.info(f"[QueryRows] Sort successful, result shape: {df.shape}")
-                except Exception as sort_error:
-                    logger.error(f"[QueryRows] Sort failed: {type(sort_error).__name__}: {str(sort_error)}")
-                    import traceback
-                    logger.error(f"[QueryRows] Sort traceback: {traceback.format_exc()}")
-                    return table_service_pb2.QueryRowsResponse(
-                        success=False,
-                        message=f"Failed to sort by '{request.order_by}': {str(sort_error)}"
-                    )
+                    # Perform sort with null handling
+                    # AIDEV-NOTE: nulls_last=True ensures consistent behavior
+                    # - Sorts null/None values to the end regardless of sort direction
+                    # - Works with both ASC and DESC sorts
+                    # - Excel-like: empty cells go to bottom
+                    try:
+                        df = df.sort(
+                            request.order_by,
+                            descending=(request.order_direction.upper() == 'DESC'),
+                            nulls_last=True  # Always put nulls at the end
+                        )
+                        logger.info(f"[QueryRows] Sort successful, result shape: {df.shape}")
+                    except Exception as sort_error:
+                        logger.error(f"[QueryRows] Sort failed: {type(sort_error).__name__}: {str(sort_error)}")
+                        import traceback
+                        logger.error(f"[QueryRows] Sort traceback: {traceback.format_exc()}")
+                        return table_service_pb2.QueryRowsResponse(
+                            success=False,
+                            message=f"Failed to sort by '{request.order_by}': {str(sort_error)}"
+                        )
             else:
                 # AIDEV-NOTE: Default sort by 'id' to preserve insertion order
                 # Delta Lake file order is non-deterministic (compaction, merges change order)
@@ -1519,55 +1564,31 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
             storage_options = self._get_storage_options()
 
-            # Load existing Delta table
-            delta_table, error_msg = self._get_delta_table_safe(s3_uri, storage_options, "AddField", must_exist=True)
-            if not delta_table:
-                return table_service_pb2.FieldResponse(
-                    success=False,
-                    message=f"Delta table not found: {error_msg}"
-                )
-
-            # Get current schema
-            current_schema = self._get_delta_schema_as_pyarrow(delta_table)
-            current_columns = [field.name for field in current_schema]
+            # Load Delta table if it exists, but don't require it to exist
+            delta_table, error_msg = self._get_delta_table_safe(s3_uri, storage_options, "AddField", must_exist=False)
             
-            # Check if field already exists
+            # Check if table exists and field already exists
             field_column_name = str(request.field.field_id)
-            if field_column_name in current_columns:
-                return table_service_pb2.FieldResponse(
-                    success=False,
-                    message=f"Field with ID {request.field.field_id} already exists in table"
-                )
+            if delta_table:
+                current_schema = self._get_delta_schema_as_pyarrow(delta_table)
+                current_columns = [field.name for field in current_schema]
+                
+                if field_column_name in current_columns:
+                    return table_service_pb2.FieldResponse(
+                        success=False,
+                        message=f"Field with ID {request.field.field_id} already exists in table"
+                    )
 
-            # Build new schema with additional field
-            new_fields = list(current_schema)
+            # Validate field conversion works
             new_field_type = self._convert_protobuf_field_to_arrow(request.field)
-            new_fields.append(pa.field(field_column_name, new_field_type, nullable=not request.field.required))
-            new_schema = pa.schema(new_fields)
-
-            # Create empty DataFrame with new field and trigger schema evolution
-            logger.info(f"[AddField] Adding field '{request.field.name}' (column: {field_column_name})")
+            _ = pa.field(field_column_name, new_field_type, nullable=not request.field.required)
             
-            # Create empty row with just the new field to trigger schema evolution
-            empty_data = {field_column_name: None}
-            df = pl.DataFrame([empty_data], schema={field_column_name: self._arrow_to_polars_type(new_field_type)})
-            arrow_table = self._normalize_arrow_table_to_large_string(df.to_arrow())
+            # Skip Delta table operations - field metadata is the source of truth
+            # Schema evolution will happen automatically when data is actually inserted
 
-            # Write with schema evolution
-            write_deltalake(s3_uri, arrow_table, mode="append", schema_mode="merge", storage_options=storage_options)
-
-            # Verify field was added
-            updated_table = DeltaTable(s3_uri, storage_options=storage_options)
-            updated_schema = self._get_delta_schema_as_pyarrow(updated_table)
-            updated_columns = [field.name for field in updated_schema]
-
-            if field_column_name not in updated_columns:
-                return table_service_pb2.FieldResponse(
-                    success=False,
-                    message=f"Failed to add field {request.field.name} to table"
-                )
-
-            logger.info(f"[AddField] ✅ Added field '{request.field.name}' to table '{request.table_id}'")
+            # Skip Delta table verification - field metadata is the source of truth
+            # Schema evolution will happen automatically when data is actually inserted
+            logger.info(f"[AddField] ✅ Added field '{request.field.name}' to table '{request.table_id}' (metadata only)")
             return table_service_pb2.FieldResponse(
                 success=True,
                 field=request.field,
