@@ -124,16 +124,16 @@
   --sidebar-backdrop: blur(12px);
 }
 
-/* Sidebar transparency and blur */
+/* Sidebar transparency - no blur */
 .puck-themed-wrapper [class*="Sidebar"] {
-  backdrop-filter: var(--sidebar-backdrop);
-  -webkit-backdrop-filter: var(--sidebar-backdrop);
+  /* backdrop-filter: var(--sidebar-backdrop); */
+  /* -webkit-backdrop-filter: var(--sidebar-backdrop); */
 }
 
-/* Header transparency and blur */
+/* Header transparency - no blur */
 .puck-themed-wrapper [class*="Header"] {
-  backdrop-filter: var(--sidebar-backdrop);
-  -webkit-backdrop-filter: var(--sidebar-backdrop);
+  /* backdrop-filter: var(--sidebar-backdrop); */
+  /* -webkit-backdrop-filter: var(--sidebar-backdrop); */
 }
 
 /* Component drawer items - semi-transparent with shadows */
@@ -144,30 +144,31 @@
   background: transparent !important;
 }
 
+/* Component drawer items - no backgrounds */
 [class*="DrawerItem-draggable"] {
-  background-color: hsl(var(--muted) / 0.15) !important;
-  backdrop-filter: blur(8px) !important;
-  -webkit-backdrop-filter: blur(8px) !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+  background-color: transparent !important;
+  /* backdrop-filter: blur(8px) !important; */
+  /* -webkit-backdrop-filter: blur(8px) !important; */
+  /* box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important; */
   transition: all 0.2s ease-in-out !important;
-  border: 1px solid hsl(var(--border) / 0.3) !important;
+  /* border: 1px solid hsl(var(--border) / 0.3) !important; */
 }
 
 [class*="DrawerItem-draggable"]:hover {
-  background-color: hsl(var(--muted) / 0.25) !important;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
-  transform: translateY(-1px);
+  background-color: hsl(var(--muted) / 0.1) !important;
+  /* box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important; */
+  /* transform: translateY(-1px); */
 }
 
-/* Buttons - add shadows for visibility */
+/* Buttons - minimal styling */
 .puck-themed-wrapper button {
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  /* box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); */
   transition: all 0.2s ease-in-out;
 }
 
 .puck-themed-wrapper button:hover {
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-  transform: translateY(-1px);
+  /* box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15); */
+  /* transform: translateY(-1px); */
 }
 
 /* Canvas dropzone - light gray background for dark mode visibility */

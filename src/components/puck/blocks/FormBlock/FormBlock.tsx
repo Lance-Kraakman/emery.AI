@@ -10,6 +10,10 @@
 import { MultiPageForm, type FormViewConfig, type TableField } from '@/components/forms/MultiPageForm';
 import { submitFormView } from '@/app/actions/views';
 import { useCallback } from 'react';
+import { Section } from '@/components/puck/components/Section';
+import styles from './styles.module.css';
+import { Button } from './Button';
+import { Progress } from './Progress';
 
 export interface FormBlockProps {
   viewId: number;
@@ -46,28 +50,49 @@ export default function FormBlock({
   // If no form configuration is available, show placeholder
   if (!_formConfig || _tableFields.length === 0) {
     return (
-      <div className="p-8 border border-dashed rounded-lg text-center">
-        <p className="text-muted-foreground">
-          {viewId
-            ? 'Loading form configuration...'
-            : 'Please select a form view in the editor'}
-        </p>
-      </div>
+      <Section>
+        <div className={styles.placeholder}>
+          <p className={styles.placeholderText}>
+            {viewId
+              ? 'Loading form configuration...'
+              : 'Please select a form view in the editor'}
+          </p>
+        </div>
+      </Section>
     );
   }
 
   return (
-    <div className="w-full max-w-3xl mx-auto p-6">
-      <MultiPageForm
-        viewName={_viewName}
-        viewDescription={_viewDescription}
-        formConfig={_formConfig}
-        tableFields={_tableFields}
-        onSubmit={handleSubmit}
-        onSuccess={(result) => {
-          console.log('Form submitted successfully:', result);
-        }}
-      />
-    </div>
+    <Section>
+      <div className={styles.formBlockContainer}>
+        <MultiPageForm
+          viewName={_viewName}
+          viewDescription={_viewDescription}
+          formConfig={_formConfig}
+          tableFields={_tableFields}
+          onSubmit={handleSubmit}
+          onSuccess={(result) => {
+            console.log('Form submitted successfully:', result);
+          }}
+          customButton={Button}
+          customProgress={Progress}
+          customStyles={{
+            container: styles.formWrapper,
+            header: styles.formHeader,
+            title: styles.formTitle,
+            description: styles.formDescription,
+            error: styles.errorMessage,
+            errorText: styles.errorText,
+            buttonGroup: styles.buttonGroup,
+            successContainer: styles.successContainer,
+            successIcon: styles.successIcon,
+            successIconCircle: styles.successIconCircle,
+            successContent: styles.successContent,
+            successTitle: styles.successTitle,
+            successMessage: styles.successMessage,
+          }}
+        />
+      </div>
+    </Section>
   );
 }
