@@ -16,7 +16,8 @@ from .schema import (
     create_enhanced_schema,
     evolve_schema,
     create_dataframe_with_schema,
-    get_delta_schema_as_pyarrow
+    get_delta_schema_as_pyarrow,
+    get_field_type_from_metadata
 )
 from .transform import (
     convert_dataframe_to_arrow,
@@ -214,18 +215,29 @@ def prepare_query_rows(
             if len(order_by) == 1:
                 sort_column = order_by[0]
 
-                # Get field type from schema to handle type-aware sorting
-                field_type = next((f.type for f in schema if f.name == sort_column), None)
+                # Get field from schema (includes type and metadata)
+                field = next((f for f in schema if f.name == sort_column), None)
+                field_type = field.type if field else None
+
+                # Check if this is an autonumber field via metadata
+                field_type_enum = get_field_type_from_metadata(field.metadata) if field else None
+                is_autonumber = field_type_enum == table_service_pb2.FIELD_TYPE_AUTONUMBER
 
                 # Diagnostic logging for sorting
                 sort_col = df.select(sort_column).to_series()
-                logger.info(f"[prepare_query_rows] Sort: col={sort_column}, type={field_type}, rows={len(sort_col)}, "
-                          f"nulls={sort_col.null_count()}, unique={sort_col.n_unique()}")
+                logger.info(f"[prepare_query_rows] Sort: col={sort_column}, type={field_type}, is_autonumber={is_autonumber}, "
+                          f"rows={len(sort_col)}, nulls={sort_col.null_count()}, unique={sort_col.n_unique()}")
 
-                # Re-cast numeric/boolean columns for safe sorting
-                # Handles legacy data where empty strings might be mixed with numbers
+                # Re-cast numeric/boolean/autonumber columns for safe sorting
                 # strict=False: converts invalid values (empty strings) to null automatically
-                if field_type and (pa.types.is_floating(field_type) or pa.types.is_integer(field_type) or pa.types.is_boolean(field_type)):
+                should_cast = field_type and (
+                    pa.types.is_floating(field_type) or
+                    pa.types.is_integer(field_type) or
+                    pa.types.is_boolean(field_type) or
+                    is_autonumber
+                )
+
+                if should_cast:
                     # Determine target Polars type
                     if pa.types.is_floating(field_type):
                         target_type = pl.Float64
@@ -233,6 +245,8 @@ def prepare_query_rows(
                         target_type = pl.Int64
                     elif pa.types.is_boolean(field_type):
                         target_type = pl.Boolean
+                    elif is_autonumber:
+                        target_type = pl.Int64
 
                     logger.info(f"[prepare_query_rows] Re-casting '{sort_column}' to {target_type} for safe sorting")
                     # Re-cast column with strict=False (empty strings → null, preserves valid values)
