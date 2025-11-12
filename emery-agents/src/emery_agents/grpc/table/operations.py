@@ -251,18 +251,19 @@ def apply_field_additions(
     # Build Polars schema for new fields only - create EMPTY DataFrames to avoid unwanted row creation
     new_field_data = {}
     for field in new_fields:
+        field_column_name = str(field.field_id)  # Use field ID as column name
         if field.type == table_service_pb2.FIELD_TYPE_TEXT:
-            new_field_data[field.name] = pl.Series([], dtype=pl.Utf8)
+            new_field_data[field_column_name] = pl.Series([], dtype=pl.Utf8)
         elif field.type == table_service_pb2.FIELD_TYPE_NUMBER:
-            new_field_data[field.name] = pl.Series([], dtype=pl.Float64)
+            new_field_data[field_column_name] = pl.Series([], dtype=pl.Float64)
         elif field.type == table_service_pb2.FIELD_TYPE_BOOLEAN:
-            new_field_data[field.name] = pl.Series([], dtype=pl.Boolean)
+            new_field_data[field_column_name] = pl.Series([], dtype=pl.Boolean)
         elif field.type == table_service_pb2.FIELD_TYPE_DATE:
-            new_field_data[field.name] = pl.Series([], dtype=pl.Datetime)
+            new_field_data[field_column_name] = pl.Series([], dtype=pl.Datetime)
         elif field.type == table_service_pb2.FIELD_TYPE_EMBEDDING:
-            new_field_data[field.name] = pl.Series([], dtype=pl.List(pl.Float32))
+            new_field_data[field_column_name] = pl.Series([], dtype=pl.List(pl.Float32))
         else:
-            new_field_data[field.name] = pl.Series([], dtype=pl.Utf8)
+            new_field_data[field_column_name] = pl.Series([], dtype=pl.Utf8)
     
     # Create DataFrame with just new fields and convert to Arrow
     if new_field_data:

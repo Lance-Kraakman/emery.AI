@@ -516,7 +516,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
     
 
-    def QueryRows(self, request: table_service_pb2.QueryRowsRequest, context: ServicerContext) -> table_service_pb2.QueryRowsResponse:
+    def QueryRows(self, request: table_service_pb2.QueryRowsRequest, context) -> table_service_pb2.QueryRowsResponse:
         """Query rows with filters and pagination - returns Arrow IPC for zero-copy transfer."""
         try:
             # Compact logging
@@ -623,7 +623,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             delta_table, error_msg = self._get_delta_table_safe(s3_uri, storage_options, "AddField", must_exist=False)
             
             # Check if table exists and field already exists
-            field_column_name = request.field.name  # Use field name as column name, not field_id
+            field_column_name = str(request.field.field_id)  # Use field ID as column name
             if delta_table:
                 current_schema = get_delta_schema_as_pyarrow(delta_table)
                 current_columns = [field.name for field in current_schema]
@@ -631,7 +631,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 if field_column_name in current_columns:
                     return table_service_pb2.FieldResponse(
                         success=False,
-                        message=f"Field '{request.field.name}' already exists in table"
+                        message=f"Field ID '{request.field.field_id}' already exists in table"
                     )
 
             # Validate field conversion works
