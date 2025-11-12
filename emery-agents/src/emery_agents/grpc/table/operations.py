@@ -152,6 +152,7 @@ def prepare_query_rows(
     delta_table: DeltaTable,
     filters: List[table_service_pb2.RowFilter],
     order_by: List[str],
+    order_direction: str = 'ASC',
     limit: Optional[int] = None,
     offset: int = 0,
     aggregation: Optional[table_service_pb2.AggregationConfig] = None
@@ -162,6 +163,7 @@ def prepare_query_rows(
         delta_table: DeltaTable instance with schema
         filters: List of RowFilter objects
         order_by: List of column names to sort by
+        order_direction: Sort direction ('ASC' or 'DESC')
         limit: Maximum number of rows to return
         offset: Number of rows to skip
         aggregation: Optional aggregation configuration
@@ -208,7 +210,46 @@ def prepare_query_rows(
     else:
         # Apply sorting (only for non-aggregated queries)
         if order_by:
-            df = df.sort(order_by)
+            # For single column sorting, apply type-aware sorting
+            if len(order_by) == 1:
+                sort_column = order_by[0]
+
+                # Get field type from schema to handle type-aware sorting
+                field_type = next((f.type for f in schema if f.name == sort_column), None)
+
+                # Diagnostic logging for sorting
+                sort_col = df.select(sort_column).to_series()
+                logger.info(f"[prepare_query_rows] Sort: col={sort_column}, type={field_type}, rows={len(sort_col)}, "
+                          f"nulls={sort_col.null_count()}, unique={sort_col.n_unique()}")
+
+                # Re-cast numeric/boolean columns for safe sorting
+                # Handles legacy data where empty strings might be mixed with numbers
+                # strict=False: converts invalid values (empty strings) to null automatically
+                if field_type and (pa.types.is_floating(field_type) or pa.types.is_integer(field_type) or pa.types.is_boolean(field_type)):
+                    # Determine target Polars type
+                    if pa.types.is_floating(field_type):
+                        target_type = pl.Float64
+                    elif pa.types.is_integer(field_type):
+                        target_type = pl.Int64
+                    elif pa.types.is_boolean(field_type):
+                        target_type = pl.Boolean
+
+                    logger.info(f"[prepare_query_rows] Re-casting '{sort_column}' to {target_type} for safe sorting")
+                    # Re-cast column with strict=False (empty strings → null, preserves valid values)
+                    df = df.with_columns(
+                        pl.col(sort_column).cast(target_type, strict=False)
+                    )
+
+                # Perform sort with null handling
+                df = df.sort(
+                    sort_column,
+                    descending=(order_direction.upper() == 'DESC'),
+                    nulls_last=True  # Always put nulls at the end
+                )
+                logger.info(f"[prepare_query_rows] Sort successful, result shape: {df.shape}")
+            else:
+                # Multi-column sorting (fallback to simple sort)
+                df = df.sort(order_by)
 
         # Apply pagination (only for non-aggregated queries)
         if offset > 0:

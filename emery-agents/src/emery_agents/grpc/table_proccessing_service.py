@@ -536,18 +536,14 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
             # Use table library operations
             df, metadata = prepare_query_rows(
-                delta_table, 
-                list(request.filters), 
-                [request.order_by] if request.order_by else [], 
-                request.limit, 
+                delta_table,
+                list(request.filters),
+                [request.order_by] if request.order_by else [],
+                request.order_direction if hasattr(request, 'order_direction') and request.order_direction else 'ASC',
+                request.limit,
                 request.offset,
                 request.aggregation if request.HasField('aggregation') else None
             )
-
-            # Apply sorting direction (only for non-aggregated queries)
-            if not metadata.get('aggregation_applied', False):
-                if request.order_by and hasattr(request, 'order_direction') and request.order_direction == 'DESC':
-                    df = df.sort(request.order_by, descending=True)
 
             # Convert to Arrow for response
             arrow_table = df.to_arrow()
