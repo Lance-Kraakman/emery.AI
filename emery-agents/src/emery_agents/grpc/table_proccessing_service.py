@@ -11,6 +11,7 @@ import os
 from typing import List, Dict, Any, Optional, Tuple, Union
 from datetime import datetime, timezone
 from .table.operations import apply_field_additions
+from .table.field_utils import field_to_column_name
 
 import polars as pl
 import pyarrow as pa
@@ -624,7 +625,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             delta_table, error_msg = self._get_delta_table_safe(s3_uri, storage_options, "AddField", must_exist=False)
             
             # Check if table exists and field already exists
-            field_column_name = str(request.field.field_id)  # Use field ID as column name
+            field_column_name = field_to_column_name(request.field)  # Use centralized utility
             if delta_table:
                 current_schema = get_delta_schema_as_pyarrow(delta_table)
                 current_columns = [field.name for field in current_schema]
@@ -695,8 +696,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
             # Handle field type change
             # Find current field by field_id in schema - need to map field_id to actual column name
-            # For now, assume field_id corresponds to column name (this may need metadata lookup)
-            field_column_name = str(request.field_id)  # This should be looked up from metadata
+            from .table.field_utils import field_id_to_column_name
+            field_column_name = field_id_to_column_name(request.field_id)  # Use centralized utility
             current_field = next((f for f in current_schema if f.name == field_column_name), None)
             
             if not current_field:
@@ -726,7 +727,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 df = pl.from_arrow(arrow_table)
                 
                 # Apply type migration
-                field_column_name = str(request.updated_field.field_id)
+                from .table.field_utils import field_to_column_name
+                field_column_name = field_to_column_name(request.updated_field)
                 if field_column_name in df.columns:
                     df = migrate_column_type(df, field_column_name, old_field_type, new_field_type)
                 
@@ -795,7 +797,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             df = pl.from_arrow(arrow_table)
             
             # Find field column by field_id
-            field_column_name = str(request.field_id)  # "123"
+            from .table.field_utils import field_id_to_column_name
+            field_column_name = field_id_to_column_name(request.field_id)  # Use centralized utility
             if field_column_name not in df.columns:
                 return table_service_pb2.DeleteFieldResponse(
                     success=False,
@@ -861,7 +864,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             df = pl.from_arrow(arrow_table)
             
             # Find the column by field_id
-            field_column_name = str(field_id)  # Convert field_id to column name "123"
+            from .table.field_utils import field_id_to_column_name
+            field_column_name = field_id_to_column_name(field_id)  # Use centralized utility
             backup_columns = ['id']  # Always include row ID
             if field_column_name in df.columns:
                 backup_columns.append(field_column_name)
