@@ -109,7 +109,8 @@ def build_schema_from_table_fields(table_fields: List[table_service_pb2.TableFie
             arrow_type = convert_protobuf_field_to_arrow(field)
         
         # Use field ID as column name (string representation)
-        column_name = str(field.field_id)
+        from .field_utils import field_to_column_name
+        column_name = field_to_column_name(field)
         pyarrow_fields.append(pa.field(column_name, arrow_type, nullable=True))
     
     return pa.schema(pyarrow_fields)
@@ -155,8 +156,9 @@ def evolve_schema(
     new_schema_fields = list(current_schema)
     
     # Add new fields that don't exist
+    from .field_utils import field_to_column_name
     for field in new_fields:
-        field_name = str(field.field_id)
+        field_name = field_to_column_name(field)
         if field_name not in existing_field_names:
             arrow_type = convert_protobuf_field_to_arrow(field)
             new_schema_fields.append(pa.field(field_name, arrow_type, nullable=True))

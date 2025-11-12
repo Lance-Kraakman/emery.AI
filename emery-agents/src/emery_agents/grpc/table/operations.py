@@ -249,9 +249,10 @@ def apply_field_additions(
     from .transform import convert_dataframe_to_arrow
     
     # Build Polars schema for new fields only - create EMPTY DataFrames to avoid unwanted row creation
+    from .field_utils import field_to_column_name
     new_field_data = {}
     for field in new_fields:
-        field_column_name = str(field.field_id)  # Use field ID as column name
+        field_column_name = field_to_column_name(field)  # Use centralized utility
         if field.type == table_service_pb2.FIELD_TYPE_TEXT:
             new_field_data[field_column_name] = pl.Series([], dtype=pl.Utf8)
         elif field.type == table_service_pb2.FIELD_TYPE_NUMBER:
