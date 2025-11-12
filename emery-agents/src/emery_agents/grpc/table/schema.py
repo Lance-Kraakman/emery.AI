@@ -14,6 +14,28 @@ from ..generated import table_service_pb2
 logger = logging.getLogger(__name__)
 
 
+# Metadata keys for PyArrow field metadata (must be bytes)
+METADATA_KEY_FIELD_TYPE = b"field_type"
+
+
+def build_field_metadata(field_type: int) -> Dict[bytes, bytes]:
+    """Build metadata dict for PyArrow field with field type."""
+    return {METADATA_KEY_FIELD_TYPE: str(field_type).encode('utf-8')}
+
+
+def get_field_type_from_metadata(metadata: Optional[Dict[bytes, bytes]]) -> Optional[int]:
+    """Extract field type from PyArrow field metadata."""
+    if not metadata:
+        return None
+    field_type_bytes = metadata.get(METADATA_KEY_FIELD_TYPE)
+    if not field_type_bytes:
+        return None
+    try:
+        return int(field_type_bytes.decode('utf-8'))
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
 def convert_protobuf_field_to_arrow(field: table_service_pb2.TableField) -> pa.DataType:
     """Convert protobuf field type to PyArrow data type."""
     type_mapping = {
@@ -111,7 +133,10 @@ def build_schema_from_table_fields(table_fields: List[table_service_pb2.TableFie
         # Use field ID as column name (string representation)
         from .field_utils import field_to_column_name
         column_name = field_to_column_name(field)
-        pyarrow_fields.append(pa.field(column_name, arrow_type, nullable=True))
+
+        # Attach field type metadata for type-aware operations (e.g., autonumber sorting)
+        field_metadata = build_field_metadata(field.type)
+        pyarrow_fields.append(pa.field(column_name, arrow_type, nullable=True, metadata=field_metadata))
     
     return pa.schema(pyarrow_fields)
 
@@ -161,7 +186,8 @@ def evolve_schema(
         field_name = field_to_column_name(field)
         if field_name not in existing_field_names:
             arrow_type = convert_protobuf_field_to_arrow(field)
-            new_schema_fields.append(pa.field(field_name, arrow_type, nullable=True))
+            field_metadata = build_field_metadata(field.type)
+            new_schema_fields.append(pa.field(field_name, arrow_type, nullable=True, metadata=field_metadata))
             logger.info(f"[evolve_schema] Added new field '{field_name}' ({arrow_type})")
     
     return pa.schema(new_schema_fields)
