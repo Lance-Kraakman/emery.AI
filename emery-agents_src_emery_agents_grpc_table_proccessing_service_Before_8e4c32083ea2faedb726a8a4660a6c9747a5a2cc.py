@@ -1221,7 +1221,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
             # Read Delta table from S3/MinIO
             delta_table = DeltaTable(s3_uri, storage_options=storage_options)
-
+auto
             # Get schema for type-safe filter casting
             # AIDEV-NOTE: Use helper method to convert Delta Lake schema to PyArrow for filtering
             schema = self._get_delta_schema_as_pyarrow(delta_table)
