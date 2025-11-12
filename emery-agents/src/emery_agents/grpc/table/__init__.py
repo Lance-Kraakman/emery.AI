@@ -4,11 +4,7 @@ Table Package
 Data-centric library for table schema management, transformations, and validation.
 """
 
-from .field_utils import (
-    field_id_to_column_name,
-    field_to_column_name,
-)
-
+# Schema functions
 from .schema import (
     convert_protobuf_field_to_arrow,
     arrow_to_polars_type,
@@ -21,6 +17,7 @@ from .schema import (
     create_dataframe_with_schema,
 )
 
+# Transform functions
 from .transform import (
     normalize_arrow_table_to_large_string,
     cast_value_to_column_type,
@@ -29,6 +26,7 @@ from .transform import (
     convert_dataframe_to_arrow,
 )
 
+# Validate functions
 from .validate import (
     validate_s3_path,
     validate_field_mappings,
@@ -37,24 +35,42 @@ from .validate import (
     detect_data_anomalies,
 )
 
-from .operations import (
-    prepare_create_rows,
-    prepare_update_rows,
+# Query operations
+from .query_operations import (
     prepare_query_rows,
-    apply_field_additions,
-    apply_field_updates,
     apply_filters_in_memory,
     apply_like_ilike_filters,
     apply_aggregations,
-    write_with_schema_evolution,
+)
+
+# Mutation operations
+from .mutation_operations import (
+    prepare_create_rows,
+    prepare_update_rows,
+)
+
+# Field operations
+from .field_operations import (
+    prepare_add_fields,
+    prepare_delete_fields,
+    prepare_update_fields,
+)
+
+# Statistics operations
+from .stats_operations import (
     prepare_table_stats,
+    prepare_field_stats,
+    prepare_query_stats,
+)
+
+# Legacy operations (for backward compatibility)
+from .operations import (
+    apply_field_additions,
+    apply_field_updates,
+    write_with_schema_evolution,
 )
 
 __all__ = [
-    # Field utilities
-    'field_id_to_column_name',
-    'field_to_column_name',
-    
     # Schema functions
     'convert_protobuf_field_to_arrow',
     'arrow_to_polars_type',
@@ -80,15 +96,28 @@ __all__ = [
     'validate_sort_columns',
     'detect_data_anomalies',
     
-    # Operations functions
-    'prepare_create_rows',
-    'prepare_update_rows',
+    # Query operations
     'prepare_query_rows',
-    'apply_field_additions',
-    'apply_field_updates',
     'apply_filters_in_memory',
     'apply_like_ilike_filters',
     'apply_aggregations',
-    'write_with_schema_evolution',
+    
+    # Mutation operations
+    'prepare_create_rows',
+    'prepare_update_rows',
+    
+    # Field operations
+    'prepare_add_fields',
+    'prepare_delete_fields',
+    'prepare_update_fields',
+    
+    # Statistics operations
     'prepare_table_stats',
+    'prepare_field_stats',
+    'prepare_query_stats',
+    
+    # Legacy operations (for backward compatibility)
+    'apply_field_additions',
+    'apply_field_updates',
+    'write_with_schema_evolution',
 ]
