@@ -21,7 +21,6 @@ from .schema import (
 from .transform import (
     convert_dataframe_to_arrow,
     normalize_arrow_table_to_large_string,
-    convert_protobuf_to_dataframe
 )
 from .validate import (
     validate_row_data,

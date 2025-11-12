@@ -7,11 +7,6 @@ Data-centric library for table schema management, transformations, and validatio
 from .field_utils import (
     field_id_to_column_name,
     field_to_column_name,
-    create_column_name_from_field_id,
-    validate_field_column_name,
-    extract_field_id_from_column_name,
-    is_field_column_name,
-    ROW_ID_COLUMN_NAME,
 )
 
 from .schema import (
@@ -59,11 +54,6 @@ __all__ = [
     # Field utilities
     'field_id_to_column_name',
     'field_to_column_name',
-    'create_column_name_from_field_id',
-    'validate_field_column_name',
-    'extract_field_id_from_column_name',
-    'is_field_column_name',
-    'ROW_ID_COLUMN_NAME',
     
     # Schema functions
     'convert_protobuf_field_to_arrow',
