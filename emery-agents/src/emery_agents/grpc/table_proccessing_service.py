@@ -20,6 +20,11 @@ from google.protobuf.json_format import Parse, MessageToJson
 from google.protobuf.struct_pb2 import ListValue
 from .generated import table_service_pb2, table_service_pb2_grpc
 from .table.transform import normalize_arrow_table_to_large_string
+from .table.schema import get_delta_schema_as_pyarrow, convert_protobuf_field_to_arrow, migrate_column_type
+from .table.validate import validate_s3_path
+from .table.operations import prepare_create_table, prepare_query_rows, prepare_table_stats, prepare_update_rows, write_with_schema_evolution
+from .table.schema import build_schema_from_table_fields
+from .table.operations import prepare_create_rows, write_with_schema_evolution
 
 
 logger = logging.getLogger(__name__)
@@ -184,27 +189,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             logger.error(f"[{method}] Verification error: {e}")
             return False
 
-    def _get_delta_schema_as_pyarrow(self, delta_table: DeltaTable) -> pa.Schema:
-        """Convert Delta Lake schema to PyArrow schema.
-
-        Reads schema from Delta Lake transaction log (metadata only, no data files).
-        Delta Lake's schema() returns deltalake._internal.Schema which has to_arrow()
-        that returns arro3.core.Schema. PyArrow consumes it via C Data Interface.
-
-        Args:
-            delta_table: DeltaTable instance
-
-        Returns:
-            PyArrow Schema object
-        """
-        return pa.schema(delta_table.schema().to_arrow())
-
-    
-
-    
-
-    
-
     def _json_to_row_data(self, row_json: str) -> Dict[str, Any]:
         """Convert JSON string to row data dictionary."""
         try:
@@ -221,13 +205,11 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                             user_id=request.user_id, s3_path=request.s3_path)
 
             # Use table library validation
-            from .table.validate import validate_s3_path
             valid, s3_uri, error_response = validate_s3_path(request, "CreateTable", self._to_s3_uri)
             if not valid:
                 return error_response
 
             # Use table library operations
-            from .table.operations import prepare_create_table, write_with_schema_evolution
             empty_table = prepare_create_table(request.schema.fields)
             write_with_schema_evolution(s3_uri, empty_table, "overwrite", self._get_storage_options())
             
@@ -268,7 +250,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                             rows_count=len(request.rows_data), s3_path=request.s3_path)
 
             # Use table library validation
-            from .table.validate import validate_s3_path
             valid, s3_uri, error_response = validate_s3_path(request, "CreateRows", self._to_s3_uri)
             if not valid:
                 return table_service_pb2.CreateRowsResponse(success=False, message=error_response.message)
@@ -282,7 +263,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 )
 
             # Use table library operations
-            from .table.operations import prepare_create_rows, write_with_schema_evolution
             write_mode = request.mode if request.mode else "append"
             df, arrow_table = prepare_create_rows(request.rows_data, delta_table, write_mode)
             
@@ -351,7 +331,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                             s3_path=request.s3_path, field_count=field_count)
 
             # Use table library validation
-            from .table.validate import validate_s3_path
             valid, s3_uri, error_response = validate_s3_path(request, "UpdateTable", self._to_s3_uri)
             if not valid:
                 return table_service_pb2.TableResponse(success=False, message=error_response.message)
@@ -373,7 +352,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             logger.info(f"[UpdateTable] Current columns: {current_columns}")
 
             # Use table library to build new schema from request and find columns to add
-            from .table.schema import build_schema_from_table_fields
             new_schema = build_schema_from_table_fields(request.schema.fields)
             new_columns = [field.name for field in new_schema]
             columns_to_add = [col for col in new_columns if col not in current_columns]
@@ -401,7 +379,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Create empty DataFrame and trigger schema evolution
             logger.info(f"[UpdateTable] Adding columns: {list(schema_dict.keys())}")
             df_schema = pl.DataFrame(schema=schema_dict)
-            from .table.transform import normalize_arrow_table_to_large_string
             arrow_table = normalize_arrow_table_to_large_string(df_schema.to_arrow())
 
             # AIDEV-NOTE: Passing PyArrow table directly preserves large_string type
@@ -475,7 +452,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                             rows_count=len(request.rows_data), s3_path=request.s3_path)
 
             # Use table library validation
-            from .table.validate import validate_s3_path
             valid, s3_uri, error_response = validate_s3_path(request, "UpdateRows", self._to_s3_uri)
             if not valid:
                 return table_service_pb2.UpdateRowsResponse(success=False, message=error_response.message)
@@ -489,7 +465,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 )
 
             # Use table library operations (always overwrite for updates)
-            from .table.operations import prepare_update_rows, write_with_schema_evolution
             df, arrow_table = prepare_update_rows(request.rows_data, delta_table)
             self._log_dataframe(df, "UpdateRows", show_sample=True)
             
@@ -520,7 +495,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 return table_service_pb2.DeleteRowsResponse(success=True, rows_deleted=0)
 
             # Use table library validation
-            from .table.validate import validate_s3_path
             valid, s3_uri, error_response = validate_s3_path(request, "DeleteRows", self._to_s3_uri)
             if not valid:
                 return table_service_pb2.DeleteRowsResponse(success=False, message=error_response.message)
@@ -560,65 +534,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
     # AIDEV-NOTE: Removed duplicate GetTableStats - using the better implementation below at line ~1204
 
-    def _cast_value_to_column_type(self, value: Any, column_type: pa.DataType) -> Any:
-        """
-        Cast Python value to match PyArrow column type.
 
-        This ensures filter values are compatible with actual column types,
-        preventing PyArrow kernel errors like string_view comparison issues.
-
-        Args:
-            value: Python value from protobuf (str, int, float, bool, etc.)
-            column_type: PyArrow DataType from schema
-
-        Returns:
-            Python value cast to appropriate type for column
-
-        Raises:
-            ValueError: If value cannot be cast to target type
-        """
-        import pyarrow.types as pat
-
-        if value is None:
-            return None
-
-        try:
-            # String types (including string_view)
-            if pat.is_string(column_type) or pat.is_large_string(column_type):
-                return str(value)
-
-            # Integer types
-            elif pat.is_integer(column_type):
-                return int(value)
-
-            # Floating point types
-            elif pat.is_floating(column_type):
-                return float(value)
-
-            # Boolean type
-            elif pat.is_boolean(column_type):
-                if isinstance(value, bool):
-                    return value
-                return str(value).lower() in ('true', '1', 'yes')
-
-            # Date types
-            elif pat.is_date(column_type):
-                # Keep as string, will be parsed by PyArrow
-                return str(value)
-
-            # Timestamp types
-            elif pat.is_timestamp(column_type):
-                # Keep as string, will be parsed by PyArrow
-                return str(value)
-
-            # Default: return as-is
-            else:
-                logger.warning(f"Unsupported column type for casting: {column_type}, using value as-is")
-                return value
-
-        except (ValueError, TypeError) as e:
-            logger.error(f"Failed to cast value {value} to type {column_type}: {e}")
-            raise ValueError(f"Cannot cast filter value '{value}' to column type {column_type}")
 
     
 
@@ -631,7 +547,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                             limit=request.limit, offset=request.offset, filters=len(request.filters))
 
             # Use table library validation
-            from .table.validate import validate_s3_path
             valid, s3_uri, error_response = validate_s3_path(request, "QueryRows", self._to_s3_uri)
             if not valid:
                 return table_service_pb2.QueryRowsResponse(success=False, message=error_response.message)
@@ -640,7 +555,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             delta_table = DeltaTable(s3_uri, storage_options=storage_options)
 
             # Use table library operations
-            from .table.operations import prepare_query_rows
             df, metadata = prepare_query_rows(
                 delta_table, 
                 list(request.filters), 
@@ -685,13 +599,11 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                             organization_id=request.organization_id)
 
             # Use table library validation
-            from .table.validate import validate_s3_path
             valid, s3_uri, error_response = validate_s3_path(request, "GetTableStats", self._to_s3_uri)
             if not valid:
                 return table_service_pb2.GetTableStatsResponse(success=False, message=error_response.message)
 
             # Use table library operations
-            from .table.operations import prepare_table_stats
             stats = prepare_table_stats(s3_uri, self._get_storage_options())
 
             logger.info(f"[GetTableStats] ✅ Stats: {stats['row_count']} rows, {stats['size_bytes']} bytes")
@@ -719,7 +631,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                             organization_id=request.organization_id, s3_path=request.s3_path)
 
             # Use table library validation
-            from .table.validate import validate_s3_path
             valid, s3_uri, error_response = validate_s3_path(request, "AddField", self._to_s3_uri)
             if not valid:
                 return table_service_pb2.FieldResponse(success=False, message=error_response.message)
@@ -732,7 +643,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Check if table exists and field already exists
             field_column_name = str(request.field.field_id)
             if delta_table:
-                current_schema = self._get_delta_schema_as_pyarrow(delta_table)
+                current_schema = get_delta_schema_as_pyarrow(delta_table)
                 current_columns = [field.name for field in current_schema]
                 
                 if field_column_name in current_columns:
@@ -742,7 +653,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     )
 
             # Validate field conversion works
-            new_field_type = self._convert_protobuf_field_to_arrow(request.field)
+            new_field_type = convert_protobuf_field_to_arrow(request.field)
             _ = pa.field(field_column_name, new_field_type, nullable=not request.field.required)
             
             # Skip Delta table operations - field metadata is the source of truth
@@ -772,7 +683,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                             organization_id=request.organization_id, s3_path=request.s3_path)
 
             # Use table library validation
-            from .table.validate import validate_s3_path
             valid, s3_uri, error_response = validate_s3_path(request, "UpdateField", self._to_s3_uri)
             if not valid:
                 return table_service_pb2.FieldResponse(success=False, message=error_response.message)
@@ -786,9 +696,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     success=False,
                     message=f"Delta table not found: {error_msg}"
                 )
-
+            
             # Get current schema and find the field
-            current_schema = self._get_delta_schema_as_pyarrow(delta_table)
+            current_schema = get_delta_schema_as_pyarrow(delta_table)
             current_field_column = None
             
             # Find field by name (need to map field name to column ID)
@@ -796,30 +706,33 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # For now, we'll handle type changes and name changes separately
             logger.info(f"[UpdateField] Current schema has {len(current_schema)} columns")
             
-            # Handle field rename (complex - requires table rewrite)
-            if request.field_name != request.updated_field.name:
-                logger.warning(f"[UpdateField] Field rename from '{request.field_name}' to '{request.updated_field.name}' requires table rewrite")
-                # For now, return success but note limitation
-                return table_service_pb2.FieldResponse(
-                    success=True,
-                    field=request.updated_field,
-                    message="Field name updated (note: full table rewrite may be needed for data consistency)"
-                )
+            # Field name changes are handled by the updated_field.name property
+            # No separate field rename logic needed since we use field_id for identification
 
             # Handle field type change
-            old_field_type = self._convert_protobuf_field_to_arrow(request.field)
-            new_field_type = self._convert_protobuf_field_to_arrow(request.updated_field)
+            # Find current field by field_id in schema
+            field_column_name = str(request.field_id)  # "123"
+            current_field = next((f for f in current_schema if f.name == field_column_name), None)
+            
+            if not current_field:
+                return table_service_pb2.FieldResponse(
+                    success=False,
+                    message=f"Field with ID {request.field_id} not found in table"
+                )
+            
+            old_field_type = current_field.type
+            new_field_type = convert_protobuf_field_to_arrow(request.updated_field)
             
             if old_field_type == new_field_type:
                 # No type change, just metadata update
-                logger.info(f"[UpdateField] No type change for field '{request.field_name}'")
+                logger.info(f"[UpdateField] No type change for field ID {request.field_id}")
                 return table_service_pb2.FieldResponse(
                     success=True,
                     field=request.updated_field,
-                    message=f"Field '{request.field_name}' metadata updated"
+                    message=f"Field ID {request.field_id} metadata updated"
                 )
 
-            logger.info(f"[UpdateField] Converting field '{request.field_name}' from {old_field_type} to {new_field_type}")
+            logger.info(f"[UpdateField] Converting field ID {request.field_id} from {old_field_type} to {new_field_type}")
 
             if request.migrate_data:
                 # Read existing data and migrate types
@@ -830,14 +743,14 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 # Apply type migration
                 field_column_name = str(request.updated_field.field_id)
                 if field_column_name in df.columns:
-                    df = self._migrate_column_type(df, field_column_name, old_field_type, new_field_type)
+                    df = migrate_column_type(df, field_column_name, old_field_type, new_field_type)
                 
                 # Write back with new schema
                 from .table.transform import normalize_arrow_table_to_large_string
                 normalized_arrow = normalize_arrow_table_to_large_string(df.to_arrow())
                 write_deltalake(s3_uri, normalized_arrow, mode="overwrite", storage_options=storage_options)
                 
-                logger.info(f"[UpdateField] ✅ Migrated {len(df)} rows for field '{request.field_name}'")
+                logger.info(f"[UpdateField] ✅ Migrated {len(df)} rows for field ID {request.field_id}")
             else:
                 # Just update schema without data migration
                 logger.warning(f"[UpdateField] Schema update without data migration - existing data may be lost")
@@ -846,7 +759,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             return table_service_pb2.FieldResponse(
                 success=True,
                 field=request.updated_field,
-                message=f"Field '{request.field_name}' updated successfully"
+                message=f"Field ID {request.field_id} updated successfully"
             )
 
         except Exception as e:
@@ -864,7 +777,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                             s3_path=request.s3_path)
 
             # Use table library validation
-            from .table.validate import validate_s3_path
             valid, s3_uri, error_response = validate_s3_path(request, "DeleteField", self._to_s3_uri)
             if not valid:
                 return table_service_pb2.DeleteFieldResponse(
@@ -885,32 +797,38 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Backup data if requested
             backup_location = None
             if request.backup_data:
-                backup_location = self._backup_field_data(delta_table, request.field_name, s3_uri, storage_options)
-
+                backup_location = self._backup_field_data(delta_table, request.field_id, s3_uri, storage_options)
+            
             # Get current schema
-            current_schema = self._get_delta_schema_as_pyarrow(delta_table)
+            current_schema = get_delta_schema_as_pyarrow(delta_table)
             
             # Find field column to delete (this is complex without field ID mapping)
             # For now, we'll need to implement a more sophisticated approach
             logger.warning(f"[DeleteField] Field deletion requires table rewrite - current schema has {len(current_schema)} columns")
 
-            # Read all data and rewrite table without the field
+# Read all data and rewrite table without the field
             arrow_table = delta_table.to_pyarrow_table()
             df = pl.from_arrow(arrow_table)
             
-            # For now, we'll implement a simple approach that removes columns by name pattern
-            # This is a limitation that needs to be addressed with proper field ID mapping
-            logger.info(f"[DeleteField] Removing field '{request.field_name}' from table")
+            # Find field column by field_id
+            field_column_name = str(request.field_id)  # "123"
+            if field_column_name not in df.columns:
+                return table_service_pb2.DeleteFieldResponse(
+                    success=False,
+                    message=f"Field ID {request.field_id} not found in table"
+                )
             
-            # Write table without the field (simplified approach)
-            # In a full implementation, we'd need proper field ID to column name mapping
+            # Remove the column by field_id
+            df = df.drop([field_column_name])
+            
+            # Write table without the field
             normalized_arrow = normalize_arrow_table_to_large_string(df.to_arrow())
             write_deltalake(s3_uri, normalized_arrow, mode="overwrite", storage_options=storage_options)
 
-            logger.info(f"[DeleteField] ✅ Deleted field '{request.field_name}' from table '{request.table_id}'")
+            logger.info(f"[DeleteField] ✅ Deleted field ID {request.field_id} from table '{request.table_id}'")
             return table_service_pb2.DeleteFieldResponse(
                 success=True,
-                message=f"Field '{request.field_name}' deleted successfully",
+                message=f"Field ID {request.field_id} deleted successfully",
                 backup_location=backup_location or ""
             )
 
@@ -945,122 +863,27 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
     # ===== HELPER METHODS FOR FIELD OPERATIONS =====
 
-    def _convert_protobuf_field_to_arrow(self, field: table_service_pb2.TableField) -> pa.DataType:
-        """Convert protobuf field type to PyArrow data type."""
-        type_mapping = {
-            table_service_pb2.FIELD_TYPE_TEXT: pa.large_string(),
-            table_service_pb2.FIELD_TYPE_NUMBER: pa.float64(),
-            table_service_pb2.FIELD_TYPE_BOOLEAN: pa.bool_(),
-            table_service_pb2.FIELD_TYPE_DATE: pa.timestamp('us'),
-            table_service_pb2.FIELD_TYPE_FILE: pa.large_string(),
-            table_service_pb2.FIELD_TYPE_RELATION: pa.large_string(),
-            table_service_pb2.FIELD_TYPE_DOCUMENT: pa.large_string(),
-            table_service_pb2.FIELD_TYPE_SINGLE_SELECT: pa.large_string(),
-            table_service_pb2.FIELD_TYPE_MULTI_SELECT: pa.large_string(),
-            table_service_pb2.FIELD_TYPE_AUTONUMBER: pa.large_string(),
-            table_service_pb2.FIELD_TYPE_LAST_UPDATED: pa.timestamp('us'),
-            table_service_pb2.FIELD_TYPE_CREATED_AT: pa.timestamp('us'),
-        }
 
-        # Handle embedding fields with dynamic sizing
-        if field.type == table_service_pb2.FIELD_TYPE_EMBEDDING:
-            metadata = dict(field.metadata) if field.metadata else {}
-            embedding_size_str = metadata.get('embeddingSize', '768')
-            try:
-                embedding_size = int(embedding_size_str)
-                return pa.list_(pa.float32(), list_size=embedding_size)
-            except (ValueError, TypeError):
-                logger.warning(f"Invalid embeddingSize '{embedding_size_str}', defaulting to 768")
-                return pa.list_(pa.float32(), list_size=768)
 
-        return type_mapping.get(field.type, pa.large_string())
 
-    def _arrow_to_polars_type(self, arrow_type: pa.DataType) -> pl.DataType:
-        """Convert PyArrow data type to Polars data type."""
-        import pyarrow.types as pat
-        
-        if pat.is_string(arrow_type) or pat.is_large_string(arrow_type):
-            return pl.Utf8
-        elif pat.is_floating(arrow_type):
-            return pl.Float64
-        elif pat.is_integer(arrow_type):
-            return pl.Int64
-        elif pat.is_boolean(arrow_type):
-            return pl.Boolean
-        elif pat.is_timestamp(arrow_type):
-            return pl.Datetime
-        elif pat.is_list(arrow_type) or pat.is_fixed_size_list(arrow_type):
-            return pl.List(pl.Float32)
-        else:
-            return pl.Utf8  # Default
 
-    def _migrate_column_type(self, df: pl.DataFrame, column_name: str, old_type: pa.DataType, new_type: pa.DataType) -> pl.DataFrame:
-        """Migrate data from old type to new type."""
-        import pyarrow.types as pat
-        
-        logger.info(f"[_migrate_column_type] Migrating column '{column_name}' from {old_type} to {new_type}")
-        
-        if column_name not in df.columns:
-            logger.warning(f"[_migrate_column_type] Column '{column_name}' not found in DataFrame")
-            return df
 
-        # Handle common type conversions
-        if pat.is_string(old_type) and pat.is_floating(new_type):
-            # String to Number
-            df = df.with_columns(
-                pl.col(column_name).cast(pl.Float64, strict=False).alias(column_name)
-            )
-        elif pat.is_floating(old_type) and pat.is_string(new_type):
-            # Number to String
-            df = df.with_columns(
-                pl.col(column_name).cast(pl.Utf8).alias(column_name)
-            )
-        elif pat.is_boolean(old_type) and pat.is_string(new_type):
-            # Boolean to String
-            df = df.with_columns(
-                pl.when(pl.col(column_name).is_true())
-                .then("true")
-                .when(pl.col(column_name).is_false())
-                .then("false")
-                .otherwise(None)
-                .alias(column_name)
-            )
-        elif pat.is_string(old_type) and pat.is_boolean(new_type):
-            # String to Boolean
-            df = df.with_columns(
-                pl.when(pl.col(column_name).str.to_lowercase().is_in(["true", "1", "yes"]))
-                .then(True)
-                .when(pl.col(column_name).str.to_lowercase().is_in(["false", "0", "no"]))
-                .then(False)
-                .otherwise(None)
-                .alias(column_name)
-            )
-        else:
-            # Default: try direct cast
-            try:
-                polars_new_type = self._arrow_to_polars_type(new_type)
-                df = df.with_columns(
-                    pl.col(column_name).cast(polars_new_type, strict=False).alias(column_name)
-                )
-            except Exception as e:
-                logger.error(f"[_migrate_column_type] Failed to cast column '{column_name}': {e}")
-        
-        return df
 
-    async def _backup_field_data(self, delta_table: DeltaTable, field_name: str, s3_uri: str, storage_options: dict) -> str:
+    def _backup_field_data(self, delta_table: DeltaTable, field_id: int, s3_uri: str, storage_options: dict) -> str:
         """Backup field data before deletion."""
         try:
             # Read current data
             arrow_table = delta_table.to_pyarrow_table()
             df = pl.from_arrow(arrow_table)
             
-            # Find the column (simplified - would need proper field ID mapping)
+            # Find the column by field_id
+            field_column_name = str(field_id)  # Convert field_id to column name "123"
             backup_columns = ['id']  # Always include row ID
-            if field_name in df.columns:
-                backup_columns.append(field_name)
+            if field_column_name in df.columns:
+                backup_columns.append(field_column_name)
             
             if len(backup_columns) <= 1:
-                logger.warning(f"[_backup_field_data] Field '{field_name}' not found for backup")
+                logger.warning(f"[_backup_field_data] Field ID {field_id} not found for backup")
                 return ""
 
             # Create backup DataFrame
@@ -1069,16 +892,15 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Generate backup location
             import datetime
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = f"{s3_uri}_backup_{field_name}_{timestamp}"
+            backup_path = f"{s3_uri}_backup_field_{field_id}_{timestamp}"
             
             # Write backup
-            from .table.transform import normalize_arrow_table_to_large_string
             backup_arrow = normalize_arrow_table_to_large_string(backup_df.to_arrow())
             write_deltalake(backup_path, backup_arrow, mode="overwrite", storage_options=storage_options)
             
-            logger.info(f"[_backup_field_data] ✅ Backed up field '{field_name}' to {backup_path}")
+            logger.info(f"[_backup_field_data] ✅ Backed up field ID {field_id} to {backup_path}")
             return backup_path
             
         except Exception as e:
-            logger.error(f"[_backup_field_data] Failed to backup field '{field_name}': {e}")
+            logger.error(f"[_backup_field_data] Failed to backup field ID {field_id}: {e}")
             return ""

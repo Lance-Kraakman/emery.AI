@@ -553,34 +553,34 @@ class AddFieldRequest(_message.Message):
     def __init__(self, table_id: _Optional[str] = ..., field: _Optional[_Union[TableField, _Mapping]] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ...) -> None: ...
 
 class UpdateFieldRequest(_message.Message):
-    __slots__ = ("table_id", "field_name", "updated_field", "organization_id", "s3_path", "migrate_data")
+    __slots__ = ("table_id", "field_id", "updated_field", "organization_id", "s3_path", "migrate_data")
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
-    FIELD_NAME_FIELD_NUMBER: _ClassVar[int]
+    FIELD_ID_FIELD_NUMBER: _ClassVar[int]
     UPDATED_FIELD_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
     S3_PATH_FIELD_NUMBER: _ClassVar[int]
     MIGRATE_DATA_FIELD_NUMBER: _ClassVar[int]
     table_id: str
-    field_name: str
+    field_id: int
     updated_field: TableField
     organization_id: str
     s3_path: str
     migrate_data: bool
-    def __init__(self, table_id: _Optional[str] = ..., field_name: _Optional[str] = ..., updated_field: _Optional[_Union[TableField, _Mapping]] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., migrate_data: bool = ...) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., field_id: _Optional[int] = ..., updated_field: _Optional[_Union[TableField, _Mapping]] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., migrate_data: bool = ...) -> None: ...
 
 class DeleteFieldRequest(_message.Message):
-    __slots__ = ("table_id", "field_name", "organization_id", "s3_path", "backup_data")
+    __slots__ = ("table_id", "field_id", "organization_id", "s3_path", "backup_data")
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
-    FIELD_NAME_FIELD_NUMBER: _ClassVar[int]
+    FIELD_ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
     S3_PATH_FIELD_NUMBER: _ClassVar[int]
     BACKUP_DATA_FIELD_NUMBER: _ClassVar[int]
     table_id: str
-    field_name: str
+    field_id: int
     organization_id: str
     s3_path: str
     backup_data: bool
-    def __init__(self, table_id: _Optional[str] = ..., field_name: _Optional[str] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., backup_data: bool = ...) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., field_id: _Optional[int] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., backup_data: bool = ...) -> None: ...
 
 class GetFieldsRequest(_message.Message):
     __slots__ = ("table_id", "organization_id")
