@@ -575,7 +575,7 @@ export class TableGrpcMapper {
     */
   static toAddFieldRequest(
     tableId: TableId,
-    field: { name: string; type: FieldType; required: boolean; metadata: Record<string, any> },
+    field: TableField,
     organizationId: OrganizationId,
     s3Path: string
   ): any {
@@ -588,9 +588,10 @@ export class TableGrpcMapper {
       s3Path: s3Path,
       field: {
         name: field.name,
-        type: field.type,
+        type: this.mapFieldTypeToProto(field.type),  // Convert string to enum number
         required: field.required,
-        metadata: field.metadata || {}
+        metadata: field.metadata || {},
+        fieldId: field.id.value  // Include required field ID from domain object
       }
     };
 
@@ -602,7 +603,8 @@ export class TableGrpcMapper {
     */
   static toUpdateFieldRequest(
     tableId: TableId,
-    field: { name: string; type: FieldType; required: boolean; metadata: Record<string, any> },
+    currentFieldName: string,
+    updatedField: TableField,
     organizationId: OrganizationId,
     s3Path: string
   ): any {
@@ -613,12 +615,15 @@ export class TableGrpcMapper {
       tableId: tableId.value.toString(),
       organizationId: organizationId.value.toString(),
       s3Path: s3Path,
-      field: {
-        name: field.name,
-        type: field.type,
-        required: field.required,
-        metadata: field.metadata || {}
-      }
+      fieldName: currentFieldName,  // Current field name for lookup
+      updatedField: {
+        name: updatedField.name,
+        type: this.mapFieldTypeToProto(updatedField.type),  // Convert string to enum number
+        required: updatedField.required,
+        metadata: updatedField.metadata || {},
+        fieldId: updatedField.id.value  // Include required field ID
+      },
+      migrateData: true  // Default to migrating existing data
     };
 
     return request;
@@ -640,7 +645,8 @@ export class TableGrpcMapper {
       tableId: tableId.value.toString(),
       organizationId: organizationId.value.toString(),
       s3Path: s3Path,
-      fieldName: fieldName
+      fieldName: fieldName,
+      backupData: true  // Default to backing up deleted data
     };
 
     return request;
@@ -652,15 +658,15 @@ export class TableGrpcMapper {
   static toGetFieldsRequest(
     tableId: TableId,
     organizationId: OrganizationId,
-    s3Path: string
+    s3Path?: string  // Optional for compatibility
   ): any {
     // Import the request type dynamically to avoid circular dependencies
     const { GetFieldsRequest } = require('@/lib/grpc/generated/table_service');
     
     const request = {
       tableId: tableId.value.toString(),
-      organizationId: organizationId.value.toString(),
-      s3Path: s3Path
+      organizationId: organizationId.value.toString()
+      // Note: GetFieldsRequest doesn't have s3Path in protobuf definition
     };
 
     return request;

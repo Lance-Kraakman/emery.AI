@@ -631,18 +631,10 @@ export class DynamicTableDataLake {
         fieldType: field.type 
       });
 
-      // Convert domain field to protobuf format
-      const protoField = {
-        name: field.name,
-        type: TableGrpcMapper.mapFieldTypeToProto(field.type) as any,
-        required: field.required || false,
-        metadata: field.metadata || {}
-      };
-
-      // Create add field request
+      // Create add field request - pass the domain field directly
       const addRequest = TableGrpcMapper.toAddFieldRequest(
         table.id,
-        protoField,
+        field,
         table.organizationId,
         table.storageLocation || `s3://emery-tables/${table.id.value}`
       );
@@ -684,18 +676,11 @@ export class DynamicTableDataLake {
         fieldType: field.type 
       });
 
-      // Convert domain field to protobuf format
-      const protoField = {
-        name: field.name,
-        type: TableGrpcMapper.mapFieldTypeToProto(field.type) as any,
-        required: field.required || false,
-        metadata: field.metadata || {}
-      };
-
-      // Create update field request
+      // Create update field request - pass the domain field directly
       const updateRequest = TableGrpcMapper.toUpdateFieldRequest(
         table.id,
-        protoField,
+        field.name,  // Current field name for lookup
+        field,       // Updated field definition
         table.organizationId,
         table.storageLocation || `s3://emery-tables/${table.id.value}`
       );
