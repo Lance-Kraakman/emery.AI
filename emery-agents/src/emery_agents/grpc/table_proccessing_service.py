@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional, Tuple, Union
 from datetime import datetime, timezone
 from .table.operations import apply_field_additions
 from .table.field_utils import field_to_column_name
-
+from .table.operations import write_with_merge_operation
 import polars as pl
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -325,8 +325,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     message="Table schema update queued (table will be created on first data insert)"
                 )
 
-            # AIDEV-NOTE: Use helper method to convert Delta Lake schema to PyArrow
-            current_schema = self._get_delta_schema_as_pyarrow(delta_table)
+            # Convert Delta Lake schema to PyArrow
+            current_schema = get_delta_schema_as_pyarrow(delta_table)
             current_columns = [field.name for field in current_schema]
             logger.info(f"[UpdateTable] Current columns: {current_columns}")
 
@@ -448,7 +448,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             self._log_dataframe(df, "UpdateRows", show_sample=True)
             
             # Use proper merge operation to update only specific rows, not overwrite entire table
-            from .table.operations import write_with_merge_operation
             write_with_merge_operation(s3_uri or "", arrow_table, storage_options)
 
             # Log post-merge state
