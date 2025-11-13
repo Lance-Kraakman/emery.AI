@@ -183,17 +183,48 @@ def convert_protobuf_to_dataframe(rows_data: List[table_service_pb2.RowData]) ->
 
 def convert_dataframe_to_arrow(df, normalize_strings: bool = True) -> pa.Table:
     """Convert Polars DataFrame to Arrow table with optional string normalization.
-    
+
     Args:
         df: Polars DataFrame
         normalize_strings: Whether to normalize strings to large_string
-        
+
     Returns:
         PyArrow Table
     """
     arrow_table = df.to_arrow()
-    
+
     if normalize_strings:
         arrow_table = normalize_arrow_table_to_large_string(arrow_table)
-    
+
     return arrow_table
+
+
+def create_empty_arrow_table(schema: pa.Schema) -> pa.Table:
+    """Create an empty PyArrow table from a schema, preserving field metadata.
+
+    This is the standard pattern for creating empty tables for schema operations
+    like table creation, field additions, and schema evolution. Using empty tables
+    allows Delta Lake to register schema changes without adding data rows.
+
+    IMPORTANT: This preserves field metadata (e.g., field_type for autonumber sorting),
+    which is critical for type-aware operations like sorting and filtering.
+
+    Args:
+        schema: PyArrow schema with field definitions and metadata
+
+    Returns:
+        Empty PyArrow table with schema metadata preserved
+
+    Example:
+        >>> schema = pa.schema([
+        ...     pa.field('id', pa.large_string()),
+        ...     pa.field('name', pa.large_string())
+        ... ])
+        >>> empty_table = create_empty_arrow_table(schema)
+        >>> len(empty_table)
+        0
+        >>> empty_table.schema == schema
+        True
+    """
+    empty_arrays = {field.name: pa.array([], type=field.type) for field in schema}
+    return pa.Table.from_pydict(empty_arrays, schema=schema)

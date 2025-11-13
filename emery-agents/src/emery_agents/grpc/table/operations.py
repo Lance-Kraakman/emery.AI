@@ -9,7 +9,6 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 import pyarrow as pa
 import polars as pl
-import pandas as pd
 from deltalake import write_deltalake, DeltaTable
 
 from .schema import (
@@ -22,6 +21,7 @@ from .schema import (
 from .transform import (
     convert_dataframe_to_arrow,
     normalize_arrow_table_to_large_string,
+    create_empty_arrow_table,
 )
 from .validate import (
     validate_row_data,
@@ -58,11 +58,9 @@ def prepare_create_table(
     from .schema import build_schema_from_table_fields
     schema = build_schema_from_table_fields(fields)
 
-    # Create empty PyArrow table directly with the schema
+    # Create empty PyArrow table with metadata-preserving utility
     # This preserves field metadata (e.g., field_type for autonumber sorting)
-    # and avoids unnecessary Polars conversion
-    empty_arrays = {field.name: pa.array([], type=field.type) for field in schema}
-    empty_table = pa.Table.from_pydict(empty_arrays, schema=schema)
+    empty_table = create_empty_arrow_table(schema)
 
     # Write with schema evolution
     write_with_schema_evolution(s3_uri, empty_table, "overwrite", storage_options)  # type: ignore
@@ -227,36 +225,20 @@ def apply_field_additions(
 
     # Get current schema
     current_schema = get_delta_schema_as_pyarrow(delta_table)
-    
-    # Evolve schema to include new fields
+
+    # Evolve schema to include new fields (includes field metadata)
     new_schema = evolve_schema(current_schema, new_fields)
 
-    # Create empty data with new schema to trigger schema evolution in Delta Lake
-    import polars as pl
-    from .transform import convert_dataframe_to_arrow
-    
-    # Build Polars schema for new fields only - create EMPTY DataFrames to avoid unwanted row creation
-    new_field_data = {}
-    for field in new_fields:
-        field_column_name = str(field.field_id)  # Use field ID as column name (temporary fix)
-        if field.type == table_service_pb2.FIELD_TYPE_TEXT:
-            new_field_data[field_column_name] = pl.Series([], dtype=pl.Utf8)
-        elif field.type == table_service_pb2.FIELD_TYPE_NUMBER:
-            new_field_data[field_column_name] = pl.Series([], dtype=pl.Float64)
-        elif field.type == table_service_pb2.FIELD_TYPE_BOOLEAN:
-            new_field_data[field_column_name] = pl.Series([], dtype=pl.Boolean)
-        elif field.type == table_service_pb2.FIELD_TYPE_DATE:
-            new_field_data[field_column_name] = pl.Series([], dtype=pl.Datetime)
-        elif field.type == table_service_pb2.FIELD_TYPE_EMBEDDING:
-            new_field_data[field_column_name] = pl.Series([], dtype=pl.List(pl.Float32))
-        else:
-            new_field_data[field_column_name] = pl.Series([], dtype=pl.Utf8)
-    
-    # Create DataFrame with just new fields and convert to Arrow
-    if new_field_data:
-        new_df = pl.DataFrame(new_field_data)
-        new_arrow_table = convert_dataframe_to_arrow(new_df)
-        
+    # Extract just the NEW fields from the evolved schema
+    # This preserves field metadata (e.g., field_type for autonumber sorting)
+    current_field_names = set(current_schema.names)
+    new_field_schemas = [f for f in new_schema if f.name not in current_field_names]
+
+    # Create empty PyArrow table for new fields using metadata-preserving utility
+    if new_field_schemas:
+        new_fields_schema = pa.schema(new_field_schemas)
+        new_arrow_table = create_empty_arrow_table(new_fields_schema)
+
         # Write with schema evolution to add new columns to Delta Lake
         write_with_schema_evolution(s3_uri, new_arrow_table, "append", storage_options)
 
@@ -526,7 +508,10 @@ def write_with_merge_operation(
     update_data: pa.Table,
     storage_options: Dict[str, str]
 ) -> None:
-    """Write data using Delta Lake merge operation to update specific rows only.
+    """Write data using Delta Lake native merge operation to update specific rows.
+
+    Uses Delta Lake's built-in MERGE functionality which preserves field metadata
+    and is more efficient than loading all data into memory.
 
     Args:
         s3_uri: S3 URI of the Delta table
@@ -534,53 +519,32 @@ def write_with_merge_operation(
         storage_options: S3 storage options
     """
     logger.info(f"[write_with_merge_operation] Merging {len(update_data)} rows to {s3_uri}")
-    
+
+    # Verify 'id' column exists
+    if 'id' not in update_data.schema.names:
+        logger.error("[write_with_merge_operation] No 'id' column in update data, cannot merge")
+        raise ValueError("Update data must contain 'id' column for merge operation")
+
+    # Normalize strings before merge to ensure compatibility
+    normalized_update = normalize_arrow_table_to_large_string(update_data)
+
     # Load existing Delta table
     delta_table = DeltaTable(s3_uri, storage_options=storage_options)
-    
-    # Convert update data to pandas for merge operation
-    update_df = update_data.to_pandas()
-    
-    # Get current data
-    current_data = delta_table.to_pyarrow_table().to_pandas()
-    
-    # Perform merge: update rows where id matches, keep others unchanged
-    # This is a simplified merge - for production, use Delta Lake's native merge when available
-    if 'id' in update_df.columns and 'id' in current_data.columns:
-        # Debug logging
-        logger.info(f"[write_with_merge_operation] Before merge: current_rows={len(current_data)}, update_rows={len(update_df)}")
-        
-        # Remove rows that will be updated from current data
-        current_ids = set(current_data['id'].astype(str))
-        update_ids = set(update_df['id'].astype(str))
-        rows_to_remove = current_ids.intersection(update_ids)
-        
-        logger.info(f"[write_with_merge_operation] ID analysis: current_ids={current_ids}, update_ids={update_ids}, rows_to_remove={rows_to_remove}")
-        
-        # Filter out rows that will be updated
-        current_data = current_data[~current_data['id'].astype(str).isin(list(rows_to_remove))]
-        
-        # Append updated rows
-        merged_data = pd.concat([current_data, update_df], ignore_index=True)
-        
-        logger.info(f"[write_with_merge_operation] After merge: final_rows={len(merged_data)}")
-    else:
-        # Fallback: just append if no id column
-        logger.warning("[write_with_merge_operation] No 'id' column found, falling back to append")
-        merged_data = pd.concat([current_data, update_df], ignore_index=True)
-    
-    # Convert back to Arrow and write with overwrite
-    merged_arrow = pa.Table.from_pandas(merged_data)
-    normalized_data = normalize_arrow_table_to_large_string(merged_arrow)
-    
-    # Write merged data
-    write_deltalake(
-        s3_uri,
-        normalized_data,
-        mode="overwrite",  # type: ignore
-        storage_options=storage_options
+
+    # Use Delta Lake's native merge operation (preserves metadata)
+    # This is more efficient than Pandas and preserves PyArrow field metadata
+    (
+        delta_table.merge(
+            source=normalized_update,
+            predicate="target.id = source.id",
+            source_alias="source",
+            target_alias="target"
+        )
+        .when_matched_update_all()  # Update all columns where id matches
+        .when_not_matched_insert_all()  # Insert rows with new ids
+        .execute()
     )
-    
+
     logger.info(f"[write_with_merge_operation] Successfully merged {len(update_data)} rows")
 
 
