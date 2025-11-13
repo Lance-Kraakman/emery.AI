@@ -171,7 +171,6 @@ class AgentExecutor:
         logger.info(f"Executing task with context: {context.mode.value}")
 
         start_time = time.time()
-        context_id = self._generate_context_id(context)
 
         try:
             # Yield initial progress
@@ -247,7 +246,7 @@ class AgentExecutor:
                 }
 
                 # Create smolagents agent for this skill
-                agent = await self._create_skill_agent(skill, context, context_id)
+                agent = await self._create_skill_agent(skill, context)
 
                 # Download images if any (multimodal support)
                 pil_images = await self._download_images(context.images)
@@ -296,11 +295,6 @@ class AgentExecutor:
                 "progress_percent": 0.0
             }
 
-        finally:
-            # Clean up cached agent
-            if context_id in self.agent_cache:
-                del self.agent_cache[context_id]
-
     async def _create_direct_execution_agent(
         self,
         context: ExecutionContext
@@ -331,11 +325,9 @@ class AgentExecutor:
     async def _create_skill_agent(
         self,
         skill: SkillConfig,
-        context: ExecutionContext,
-        context_id: str
+        context: ExecutionContext
     ) -> Union[CodeAgent, ToolCallingAgent]:
         """Create smolagents agent from skill configuration using AgentFactory."""
-        # Note: AgentFactory handles its own caching if enable_caching=True
 
         # Load tools for this skill
         tools = []
@@ -349,7 +341,7 @@ class AgentExecutor:
         # Extract skill model if present
         skill_model = skill.model if hasattr(skill, 'model') and skill.model else None
 
-        # Create agent using AgentFactory (handles caching internally)
+        # Create agent using AgentFactory
         agent_config = AgentConfig(
             tools=tools,
             skill_model=skill_model,
@@ -358,7 +350,7 @@ class AgentExecutor:
             max_steps=context.max_steps,
             agent_name=skill.name,
             agent_description=skill.description,
-            enable_caching=True  # Enable caching for skill agents
+            enable_caching=False  # Tasks are stateless - no caching
         )
 
         # Create ToolCallingAgent (AgentFactory always creates ToolCallingAgent)
@@ -370,10 +362,6 @@ class AgentExecutor:
     # =========================================================================
     # Utility Methods
     # =========================================================================
-
-    def _generate_context_id(self, context: ExecutionContext) -> str:
-        """Generate unique ID for execution context."""
-        return f"ctx_{hash(context.task + str(context.available_tools)) % 10000}"
 
     async def validate_execution_context(self, context: ExecutionContext) -> bool:
         """Validate that execution context is valid."""
@@ -415,4 +403,4 @@ class AgentExecutor:
 
     def clear_cache(self):
         """Clear cached agents (useful for testing)."""
-        self.agent_cache.clear()
+        self.agent_factory.clear_cache()
