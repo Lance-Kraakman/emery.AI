@@ -12,6 +12,15 @@ import pyarrow.compute as pc
 import pyarrow.types as pat
 import polars as pl
 from ..generated import table_service_pb2
+from .filter_operations import (
+    extract_filter_value,
+    extract_filter_values_list,
+    cast_and_normalize_value,
+    build_comparison_predicate,
+    build_in_predicate,
+    build_null_predicate,
+    combine_predicates
+)
 
 logger = logging.getLogger(__name__)
 
@@ -152,173 +161,51 @@ def build_pyarrow_predicate(filters: List[table_service_pb2.RowFilter], schema: 
 
         field_name = filter_obj.field
         operator = filter_obj.operator
-        filter_value = filter_obj.value
 
         # Skip if field not in schema
         if field_name not in schema.names:
             logger.warning(f"[build_pyarrow_predicate] Field '{field_name}' not in schema, skipping filter")
             continue
 
-        # Get field reference for filter
+        # Get field reference and column type
         try:
             field_ref = pc.field(field_name)
+            column_type = schema.field(field_name).type
         except KeyError:
             logger.warning(f"[build_pyarrow_predicate] Filter field '{field_name}' not found in schema")
             continue
 
-        # Extract value from the RowDataValue oneof
-        value = None
-        if filter_value.HasField('text_value'):
-            value = filter_value.text_value
-        elif filter_value.HasField('number_value'):
-            value = filter_value.number_value
-        elif filter_value.HasField('boolean_value'):
-            value = filter_value.boolean_value
-        elif filter_value.HasField('date_value'):
-            value = filter_value.date_value
-        elif filter_value.HasField('json_value'):
-            value = filter_value.json_value
+        # Build predicate based on operator type
+        pred = None
 
-        # Cast value to match column type from schema
-        if value is not None:
-            try:
-                # Look up column type in schema
-                column_type = schema.field(field_name).type
+        if operator in (table_service_pb2.FILTER_OP_EQ, table_service_pb2.FILTER_OP_NE,
+                       table_service_pb2.FILTER_OP_GT, table_service_pb2.FILTER_OP_GTE,
+                       table_service_pb2.FILTER_OP_LT, table_service_pb2.FILTER_OP_LTE):
+            # Comparison operators
+            value = extract_filter_value(filter_obj.value)
+            if value is not None:
+                scalar_value = cast_and_normalize_value(value, column_type, field_name)
+                if scalar_value is not None:
+                    pred = build_comparison_predicate(field_ref, operator, scalar_value)
 
-                # Cast Python value to match column type
-                casted_value = cast_value_to_column_type(value, column_type)
+        elif operator in (table_service_pb2.FILTER_OP_IN, table_service_pb2.FILTER_OP_NOT_IN):
+            # IN/NOT_IN operators
+            values_list = extract_filter_values_list(filter_obj.values)
+            if values_list:
+                is_not_in = (operator == table_service_pb2.FILTER_OP_NOT_IN)
+                pred = build_in_predicate(field_ref, values_list, column_type, field_name, not_in=is_not_in)
 
-                # Normalize ALL string types to large_string for filter compatibility
-                # PyArrow's filter kernels don't support string_view comparison
-                if pat.is_string(column_type) or pat.is_large_string(column_type) or pat.is_string_view(column_type):
-                    filter_type = pa.large_string()
-                else:
-                    filter_type = column_type
+        elif operator in (table_service_pb2.FILTER_OP_IS_NULL, table_service_pb2.FILTER_OP_IS_NOT_NULL):
+            # NULL check operators
+            is_null_check = (operator == table_service_pb2.FILTER_OP_IS_NULL)
+            pred = build_null_predicate(field_ref, is_null=is_null_check)
 
-                # Create scalar with filter-compatible type
-                value = pa.scalar(casted_value, type=filter_type)
-
-            except KeyError:
-                logger.warning(f"[build_pyarrow_predicate] Filter field '{field_name}' not found in schema, skipping filter")
-                continue
-            except ValueError as e:
-                logger.error(f"[build_pyarrow_predicate] Type casting error for field '{field_name}': {e}")
-                continue
-
-        # Build predicate based on operator
-        if operator == table_service_pb2.FILTER_OP_EQ:
-            predicates.append(pc.equal(field_ref, value))
-
-        elif operator == table_service_pb2.FILTER_OP_NE:
-            predicates.append(pc.not_equal(field_ref, value))
-
-        elif operator == table_service_pb2.FILTER_OP_GT:
-            predicates.append(pc.greater(field_ref, value))
-
-        elif operator == table_service_pb2.FILTER_OP_GTE:
-            predicates.append(pc.greater_equal(field_ref, value))
-
-        elif operator == table_service_pb2.FILTER_OP_LT:
-            predicates.append(pc.less(field_ref, value))
-
-        elif operator == table_service_pb2.FILTER_OP_LTE:
-            predicates.append(pc.less_equal(field_ref, value))
-
-        elif operator == table_service_pb2.FILTER_OP_IN:
-            # Value in array - extract and cast values
-            try:
-                column_type = schema.field(field_name).type
-
-                values_list = []
-                for val in filter_obj.values:
-                    if val.HasField('text_value'):
-                        values_list.append(val.text_value)
-                    elif val.HasField('number_value'):
-                        values_list.append(val.number_value)
-                    elif val.HasField('boolean_value'):
-                        values_list.append(val.boolean_value)
-
-                # Cast each value to match column type
-                casted_values = [cast_value_to_column_type(v, column_type) for v in values_list]
-
-                # Normalize ALL string types to large_string for filter compatibility
-                if pat.is_string(column_type) or pat.is_large_string(column_type) or pat.is_string_view(column_type):
-                    filter_type = pa.large_string()
-                else:
-                    filter_type = column_type
-
-                # Convert Python list to PyArrow Array for is_in
-                value_set_array = pa.array(casted_values, type=filter_type)
-                predicates.append(pc.is_in(field_ref, value_set=value_set_array))
-
-            except KeyError:
-                logger.warning(f"[build_pyarrow_predicate] Filter field '{field_name}' not found in schema, skipping IN filter")
-                continue
-            except ValueError as e:
-                logger.error(f"[build_pyarrow_predicate] Type casting error for IN filter on field '{field_name}': {e}")
-                continue
-            except TypeError as e:
-                logger.error(f"[build_pyarrow_predicate] PyArrow type error for IN filter on field '{field_name}': {e}")
-                continue
-
-        elif operator == table_service_pb2.FILTER_OP_NOT_IN:
-            # Value not in array - extract and cast values
-            try:
-                column_type = schema.field(field_name).type
-
-                values_list = []
-                for val in filter_obj.values:
-                    if val.HasField('text_value'):
-                        values_list.append(val.text_value)
-                    elif val.HasField('number_value'):
-                        values_list.append(val.number_value)
-                    elif val.HasField('boolean_value'):
-                        values_list.append(val.boolean_value)
-
-                # Cast each value to match column type
-                casted_values = [cast_value_to_column_type(v, column_type) for v in values_list]
-
-                # Normalize ALL string types to large_string for filter compatibility
-                if pat.is_string(column_type) or pat.is_large_string(column_type) or pat.is_string_view(column_type):
-                    filter_type = pa.large_string()
-                else:
-                    filter_type = column_type
-
-                # Convert Python list to PyArrow Array for is_in
-                value_set_array = pa.array(casted_values, type=filter_type)
-                predicates.append(pc.invert(pc.is_in(field_ref, value_set=value_set_array)))
-
-            except KeyError:
-                logger.warning(f"[build_pyarrow_predicate] Filter field '{field_name}' not found in schema, skipping NOT_IN filter")
-                continue
-            except ValueError as e:
-                logger.error(f"[build_pyarrow_predicate] Type casting error for NOT_IN filter on field '{field_name}': {e}")
-                continue
-            except TypeError as e:
-                logger.error(f"[build_pyarrow_predicate] PyArrow type error for NOT_IN filter on field '{field_name}': {e}")
-                continue
-
-        elif operator == table_service_pb2.FILTER_OP_IS_NULL:
-            predicates.append(pc.is_null(field_ref))
-
-        elif operator == table_service_pb2.FILTER_OP_IS_NOT_NULL:
-            predicates.append(pc.is_valid(field_ref))
-
-        # Note: CONTAINS, CONTAINED_BY, HAS_KEY require JSON-specific operators
-        # These are more complex and may require custom handling
-        # For now, we skip them - they could be added in a future iteration
+        # Add predicate to list if successfully built
+        if pred is not None:
+            predicates.append(pred)
 
     # Combine all predicates with AND logic
-    # Use & operator (not pc.and_) for filter expressions
-    if len(predicates) == 0:
-        return None
-    elif len(predicates) == 1:
-        return predicates[0]
-    else:
-        result = predicates[0]
-        for pred in predicates[1:]:
-            result = result & pred
-        return result
+    return combine_predicates(predicates)
 
 
 def convert_protobuf_to_dataframe(rows_data: List[table_service_pb2.RowData]) -> List[Dict[str, Any]]:
