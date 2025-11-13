@@ -54,32 +54,17 @@ def prepare_create_table(
     """
     logger.info(f"[prepare_create_table] Creating table with {len(fields)} fields at {s3_uri}")
 
-    # Build PyArrow schema from protobuf fields
+    # Build PyArrow schema from protobuf fields (includes field metadata)
     from .schema import build_schema_from_table_fields
     schema = build_schema_from_table_fields(fields)
-    
-    # Convert PyArrow schema to Polars schema format
-    polars_schema = {}
-    for field in schema:
-        if field.type == pa.large_string():
-            polars_schema[field.name] = pl.Utf8()
-        elif field.type == pa.float64():
-            polars_schema[field.name] = pl.Float64()
-        elif field.type == pa.bool_():
-            polars_schema[field.name] = pl.Boolean()
-        elif field.type == pa.timestamp('us'):
-            polars_schema[field.name] = pl.Datetime()
-        elif pa.types.is_list(field.type):
-            polars_schema[field.name] = pl.List(pl.Float32())
-        else:
-            polars_schema[field.name] = pl.Utf8()
-    
-    # Create empty DataFrame with the schema
-    empty_df = pl.DataFrame(schema=polars_schema)
-    
-    # Convert to Arrow and write with schema evolution
-    from .transform import convert_dataframe_to_arrow
-    empty_table = convert_dataframe_to_arrow(empty_df)
+
+    # Create empty PyArrow table directly with the schema
+    # This preserves field metadata (e.g., field_type for autonumber sorting)
+    # and avoids unnecessary Polars conversion
+    empty_arrays = {field.name: pa.array([], type=field.type) for field in schema}
+    empty_table = pa.Table.from_pydict(empty_arrays, schema=schema)
+
+    # Write with schema evolution
     write_with_schema_evolution(s3_uri, empty_table, "overwrite", storage_options)  # type: ignore
 
     logger.info(f"[prepare_create_table] Successfully created table with schema: {[f.name for f in fields]}")

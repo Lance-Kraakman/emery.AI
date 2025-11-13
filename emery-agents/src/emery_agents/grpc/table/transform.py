@@ -39,13 +39,14 @@ def normalize_arrow_table_to_large_string(arrow_table: pa.Table) -> pa.Table:
     - Solution: Cast all strings to large_string before writing
     """
     # Build new schema with string columns normalized to large_string
+    # IMPORTANT: Preserve field metadata (e.g., field_type for autonumber sorting)
     new_fields = []
     for field in arrow_table.schema:
         if pat.is_string(field.type) or pat.is_string_view(field.type):
-            # Normalize to large_string
-            new_fields.append(pa.field(field.name, pa.large_string(), nullable=field.nullable))
+            # Normalize to large_string, preserve metadata
+            new_fields.append(pa.field(field.name, pa.large_string(), nullable=field.nullable, metadata=field.metadata))
         else:
-            # Keep original type
+            # Keep original field (including metadata)
             new_fields.append(field)
 
     target_schema = pa.schema(new_fields)
