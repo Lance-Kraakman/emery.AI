@@ -24,6 +24,13 @@ from grpc import ServicerContext
 from .generated import table_service_pb2, table_service_pb2_grpc
 from .table.transform import normalize_arrow_table_to_large_string
 from .table.schema import get_delta_schema_as_pyarrow, convert_protobuf_field_to_arrow, migrate_column_type
+from .table.schema_operations import (
+    detect_new_columns,
+    build_column_type_mappings,
+    evolve_table_schema,
+    verify_schema_update,
+    backfill_boolean_columns
+)
 from .table.validate import validate_s3_path
 from .table.operations import (
     prepare_create_rows, 
@@ -325,69 +332,29 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     message="Table schema update queued (table will be created on first data insert)"
                 )
 
-            # Convert Delta Lake schema to PyArrow
+            # Load current and new schemas
             current_schema = get_delta_schema_as_pyarrow(delta_table)
-            current_columns = [field.name for field in current_schema]
-            logger.info(f"[UpdateTable] Current columns: {current_columns}")
-
-            # Use table library to build new schema from request and find columns to add
             new_schema = build_schema_from_table_fields(request.schema.fields)
-            new_columns = [field.name for field in new_schema]
-            columns_to_add = [col for col in new_columns if col not in current_columns]
 
-            logger.info(f"[UpdateTable] Schema change: new={new_columns}, to_add={columns_to_add}")
+            # Detect which columns need to be added
+            columns_to_add = detect_new_columns(current_schema, new_schema)
 
             if not columns_to_add:
                 return table_service_pb2.TableResponse(success=True, message="Schema is already up to date")
 
-            # AIDEV-NOTE: Schema evolution via empty DataFrame write
-            # Delta Lake's schema_mode="merge" will add new columns automatically
-            # Map PyArrow types to Polars types for new columns only
-            schema_dict = {}
-            for field in new_schema:
-                if field.name in columns_to_add:
-                    if field.type == pa.float64():
-                        schema_dict[field.name] = pl.Float64
-                    elif field.type == pa.bool_():
-                        schema_dict[field.name] = pl.Boolean
-                    elif field.type == pa.timestamp('us'):
-                        schema_dict[field.name] = pl.Datetime('us')
-                    else:
-                        schema_dict[field.name] = pl.Utf8
+            # Build type mappings for new columns
+            type_mappings = build_column_type_mappings(new_schema, columns_to_add)
 
-            # Create empty DataFrame and trigger schema evolution
-            logger.info(f"[UpdateTable] Adding columns: {list(schema_dict.keys())}")
-            df_schema = pl.DataFrame(schema=schema_dict)
-            arrow_table = normalize_arrow_table_to_large_string(df_schema.to_arrow())
+            # Apply schema evolution
+            evolve_table_schema(s3_uri, type_mappings, storage_options)
 
-            # AIDEV-NOTE: Passing PyArrow table directly preserves large_string type
-            write_deltalake(s3_uri, arrow_table, mode="append", schema_mode="merge", storage_options=storage_options)
+            # Verify the schema was updated successfully
+            error_msg = verify_schema_update(s3_uri, columns_to_add, storage_options)
+            if error_msg:
+                return table_service_pb2.TableResponse(success=False, message=error_msg)
 
-            # Verify schema evolution succeeded
-            updated_table = DeltaTable(s3_uri, storage_options=storage_options)
-            updated_schema = self._get_delta_schema_as_pyarrow(updated_table)
-            updated_columns = [field.name for field in updated_schema]
-
-            self._log_delta_state(updated_table, "UpdateTable AFTER evolution")
-            logger.info(f"[UpdateTable] Updated columns: {updated_columns}")
-
-            # Verify all new columns were added
-            missing = [col for col in columns_to_add if col not in updated_columns]
-            if missing:
-                return table_service_pb2.TableResponse(success=False, message=f"Failed to add columns: {missing}")
-
-            # AIDEV-NOTE: Backfill boolean columns with false (not null)
-            # Matches user expectations: unchecked checkbox = false, not null
-            boolean_cols = [f.name for f in new_schema if f.name in columns_to_add and f.type == pa.bool_()]
-
-            if boolean_cols:
-                logger.info(f"[UpdateTable] Backfilling {len(boolean_cols)} boolean columns: {boolean_cols}")
-                try:
-                    for col_name in boolean_cols:
-                        updated_table.update(predicate=f"`{col_name}` IS NULL", updates={col_name: "false"})
-                    logger.info(f"[UpdateTable] ✅ Backfilled {len(boolean_cols)} boolean columns")
-                except Exception as e:
-                    logger.warning(f"[UpdateTable] Backfill failed (non-critical): {e}")
+            # Backfill boolean columns with false instead of null
+            backfill_boolean_columns(s3_uri, new_schema, columns_to_add, storage_options)
 
             logger.info(f"[UpdateTable] ✅ Added {len(columns_to_add)} columns: {columns_to_add}")
             return table_service_pb2.TableResponse(
