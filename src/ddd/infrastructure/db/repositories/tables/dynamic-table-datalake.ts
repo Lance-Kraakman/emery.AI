@@ -685,6 +685,14 @@ export class DynamicTableDataLake {
         table.storageLocation || `s3://emery-tables/${table.id.value}`
       );
 
+      logger.debug('Sending updateField gRPC request', {
+        fieldId: field.id.value,
+        fieldName: field.name,
+        fieldType: field.type,
+        hasMetadata: !!field.metadata,
+        metadataKeys: field.metadata ? Object.keys(field.metadata) : []
+      });
+
       // Send to gRPC service
       const response = await this.grpcClient.updateField(updateRequest);
 

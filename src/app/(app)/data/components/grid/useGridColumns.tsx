@@ -306,6 +306,14 @@ export function useGridColumns({
           columnConfig = textColumn
       }
 
+      // DIAGNOSTIC: Log before rendering ColumnHeader
+      console.log('[useGridColumns] Rendering ColumnHeader', {
+        fieldName: field.name,
+        fieldId: field.id,
+        hasOnEditField: typeof onEditField === 'function',
+        hasOnDeleteField: typeof onDeleteField === 'function'
+      })
+
       return {
         ...keyColumn(field.name, columnConfig),
         title: (

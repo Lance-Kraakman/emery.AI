@@ -249,6 +249,13 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   async update(id: TableId, data: Partial<DynamicTable>): Promise<DynamicTable> {
     try {
+      console.log(`[TableRepository.update] Called for table ${id.value}`, {
+        hasFields: !!data.fields,
+        fieldCount: data.fields?.length,
+        hasName: !!data.name,
+        hasMetadata: !!data.metadata
+      });
+
       // Update table metadata
       const [updatedRecord] = await this.db.update(tables)
         .set({
@@ -266,7 +273,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       // If fields are provided in the data, sync them to the database
       // This handles the case where table.addField() was called and fields need to be persisted
       if (data.fields) {
+        console.log(`[TableRepository.update] Syncing ${data.fields.length} fields`);
         await this.syncTableFields(id, data.fields);
+      } else {
+        console.log(`[TableRepository.update] ⚠️ NO FIELDS PROVIDED - skipping syncTableFields`);
       }
 
       // Reload the table with its fields to return the complete entity
@@ -336,9 +346,16 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       // Separate fields by ID for stable matching
       const fieldsToAdd = tableFields.filter(f => !existingFieldMap.has(f.id.value));
       const fieldsToUpdate = tableFields.filter(f => existingFieldMap.has(f.id.value));
-      const fieldsToDelete = existingFields.filter((f: FieldRow) => 
+      const fieldsToDelete = existingFields.filter((f: FieldRow) =>
         !tableFields.some(tf => tf.id.value === f.id)
       );
+
+      console.log('[syncTableFields] Field change summary', {
+        fieldsToAdd: fieldsToAdd.length,
+        fieldsToUpdate: fieldsToUpdate.length,
+        fieldsToDelete: fieldsToDelete.length,
+        updateFieldNames: fieldsToUpdate.map(f => f.name)
+      });
 
       // Insert new fields into PostgreSQL and get real IDs
       const insertedFields: Array<{id: number}> = [];
@@ -442,9 +459,16 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
       // Delete removed fields from PostgreSQL
       for (const fieldToDelete of fieldsToDelete) {
+        console.log(`[TableService] BEFORE PostgreSQL delete - Field ${fieldToDelete.name} (ID: ${fieldToDelete.id}) exists in DB`);
+
         await this.db.delete(fields)
           .where(eq(fields.id, fieldToDelete.id));
-        console.log(`[TableService] Deleted field ${fieldToDelete.name} from PostgreSQL`);
+
+        // Verify deletion
+        const verifyDeleted = await this.db.query.fields.findFirst({
+          where: eq(fields.id, fieldToDelete.id)
+        });
+        console.log(`[TableService] AFTER PostgreSQL delete - Field ${fieldToDelete.name} ${verifyDeleted ? '❌ STILL EXISTS' : '✅ successfully removed'}`);
       }
 
       // CRITICAL FIX: Sync schema changes to Delta Lake storage using specific field operations
@@ -462,7 +486,15 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         }
 
         // Update existing fields in Delta Lake
+        console.log(`[syncTableFields] Updating ${fieldsToUpdate.length} fields in Delta Lake`);
         for (const field of fieldsToUpdate) {
+          console.log('[syncTableFields] Calling datalake.updateField', {
+            fieldName: field.name,
+            fieldId: field.id.value,
+            fieldType: field.type,
+            hasMetadata: !!field.metadata
+          });
+
           const updateResult = await this.datalake.updateField(fullTable, field);
           if (!updateResult.success) {
             console.warn(`[TableService] Warning: Failed to update field ${field.name} in Delta Lake: ${updateResult.error}`);
@@ -477,7 +509,18 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           if (!deleteResult.success) {
             console.warn(`[TableService] Warning: Failed to delete field ${fieldToDelete.name} from Delta Lake: ${deleteResult.error}`);
           } else {
-            console.log(`[TableService] Successfully deleted field ${fieldToDelete.name} from Delta Lake`);
+            console.log(`[TableService] ✅ Delta Lake delete succeeded for field ${fieldToDelete.name} (ID: ${fieldToDelete.id.value})`);
+
+            // END-TO-END VERIFICATION: Re-fetch schema to confirm deletion persisted
+            const verifyResult = await this.datalake.getFields(fullTable);
+            if (verifyResult.success && verifyResult.data) {
+              const stillExists = verifyResult.data.some(f => f.id.value === fieldToDelete.id.value);
+              const fieldNames = verifyResult.data.map(f => f.name);
+              console.log(`[TableService] Delta Lake verification: Field ${fieldToDelete.name} ${stillExists ? '❌ STILL EXISTS' : '✅ confirmed deleted'}`);
+              console.log(`[TableService] Current Delta schema fields: [${fieldNames.join(', ')}]`);
+            } else {
+              console.warn(`[TableService] Could not verify deletion - getFields failed: ${verifyResult.error}`);
+            }
           }
         }
 

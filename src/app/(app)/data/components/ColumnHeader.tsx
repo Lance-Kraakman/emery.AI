@@ -18,6 +18,17 @@ interface ColumnHeaderProps {
 }
 
 export function ColumnHeader({ field, onEdit, onDelete, onSort, onClearSort }: ColumnHeaderProps) {
+  // DIAGNOSTIC: Log component mount and props
+  React.useEffect(() => {
+    console.log('[ColumnHeader] MOUNTED', {
+      fieldName: field.name,
+      fieldId: field.id,
+      hasOnEdit: typeof onEdit === 'function',
+      hasOnDelete: typeof onDelete === 'function',
+      hasOnSort: typeof onSort === 'function'
+    })
+  }, [field.name, field.id, onEdit, onDelete, onSort])
+
   // AIDEV-NOTE: Read sortState directly from grid context to avoid stale props
   const { sortState: globalSortState } = useGrid()
 
@@ -36,13 +47,22 @@ export function ColumnHeader({ field, onEdit, onDelete, onSort, onClearSort }: C
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation()
+    console.log('[ColumnHeader] DELETE CLICKED', { fieldName: field.name, fieldId: field.id })
+    logger.debug(`Delete clicked for field: ${field.name}`)
     if (confirm(`Delete field "${field.name}"? This will permanently delete all data in this column.`)) {
+      console.log('[ColumnHeader] DELETE CONFIRMED, calling onDelete')
+      logger.debug(`Delete confirmed for field: ${field.name}, calling onDelete()`)
       onDelete(field.name)
+    } else {
+      console.log('[ColumnHeader] DELETE CANCELLED')
+      logger.debug(`Delete cancelled for field: ${field.name}`)
     }
   }
 
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation()
+    console.log('[ColumnHeader] EDIT CLICKED', { fieldName: field.name, fieldId: field.id })
+    logger.debug(`Edit clicked for field: ${field.name}`, field)
     onEdit(field)
   }
 
@@ -115,13 +135,19 @@ export function ColumnHeader({ field, onEdit, onDelete, onSort, onClearSort }: C
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-48">
-          <DropdownMenuItem onClick={handleEdit}>
+          <DropdownMenuItem onClick={(e) => {
+            console.log('[ColumnHeader] Edit DropdownMenuItem CLICKED')
+            handleEdit(e)
+          }}>
             <Edit className="h-4 w-4 mr-2" />
             Edit Field
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={handleDelete}
+            onClick={(e) => {
+              console.log('[ColumnHeader] Delete DropdownMenuItem CLICKED')
+              handleDelete(e)
+            }}
             className="text-destructive focus:text-destructive"
           >
             <Trash2 className="h-4 w-4 mr-2" />
