@@ -535,11 +535,12 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
     dataActions.clearSorting()
   }, [])
 
-  // Refresh data using TanStack Query invalidation
+  // Refresh data using TanStack Query refetch (forces immediate refetch, bypassing staleTime)
   const refreshTableData = useCallback(() => {
     if (selectedTableId) {
-      queryClient.invalidateQueries({ queryKey: fieldQueryKeys.all(selectedTableId) })
-      queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
+      // Use refetchQueries to force immediate refetch (ignores staleTime)
+      queryClient.refetchQueries({ queryKey: fieldQueryKeys.all(selectedTableId) })
+      queryClient.refetchQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
     }
   }, [selectedTableId, queryClient])
 

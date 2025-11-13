@@ -58,6 +58,9 @@ import type { FilterConfig } from '@/lib/types/filters'
 import { createField, updateField, deleteField } from '@/app/actions/fields'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { GridContext, GridHeaderBar, type GridContextValue } from './grid'
+import { createDebugLogger } from '@/lib/utils/debug-logger'
+
+const logger = createDebugLogger('DynamicDataSheetGrid')
 import type {
   RelationCellProps,
   FileCellProps,
@@ -407,11 +410,16 @@ export function DynamicDataSheetGrid({
 
   // Handlers for field management
   const handleEditField = useCallback((field: FieldDTO) => {
+    console.log('[DynamicDataSheetGrid] handleEditField CALLED', { fieldName: field.name, fieldId: field.id })
+    logger.debug('handleEditField called', { fieldName: field.name, fieldId: field.id })
     setEditingField(field)
     setIsEditFieldOpen(true)
+    logger.debug('Edit field dialog opened', { isOpen: true })
   }, [])
 
   const handleSaveField = useCallback(async (field: FieldDTO, updates: Partial<FieldDTO>) => {
+    console.log('[DynamicDataSheetGrid] handleSaveField CALLED', { fieldName: field.name, updates })
+    logger.debug('handleSaveField called', { fieldName: field.name, updates })
     const result = await updateField({
       tableId,
       fieldName: field.name,
@@ -424,18 +432,30 @@ export function DynamicDataSheetGrid({
       }
     })
 
+    console.log('[DynamicDataSheetGrid] updateField RESULT', { success: result.success, error: result.error })
+    logger.debug('updateField result', { success: result.success, error: result.error })
     if (result.success) {
+      logger.debug('Field updated successfully, refreshing data')
       onRefresh()
     } else {
+      logger.error('Failed to update field', result.error)
       alert(result.error || "Failed to update field")
     }
   }, [tableId, onRefresh])
 
   const handleDeleteField = useCallback(async (fieldName: string) => {
+    console.log('[DynamicDataSheetGrid] handleDeleteField CALLED', { tableId, fieldName })
+    logger.debug('handleDeleteField called', { tableId, fieldName })
     const result = await deleteField(tableId, fieldName)
+    console.log('[DynamicDataSheetGrid] deleteField RESULT', { success: result.success, error: result.error })
+    logger.debug('deleteField result', { success: result.success, error: result.error })
     if (result.success) {
+      console.log('[DynamicDataSheetGrid] Delete successful, calling onRefresh')
+      logger.debug('Field deleted successfully, refreshing data')
       onRefresh()
     } else {
+      console.log('[DynamicDataSheetGrid] Delete FAILED', result.error)
+      logger.error('Failed to delete field', result.error)
       alert(result.error || "Failed to delete field")
     }
   }, [tableId, onRefresh])
@@ -492,6 +512,12 @@ export function DynamicDataSheetGrid({
   }, [tableId, onRefresh])
 
   // Use custom hook for column building
+  console.log('[DynamicDataSheetGrid] Calling useGridColumns with handlers', {
+    hasHandleEditField: typeof handleEditField === 'function',
+    hasHandleDeleteField: typeof handleDeleteField === 'function',
+    fieldCount: fields?.length
+  })
+
   const columns = useGridColumns({
     fields,
     fieldMappings: currentView?.fieldMappings,

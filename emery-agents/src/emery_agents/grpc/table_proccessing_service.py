@@ -624,7 +624,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             )
 
     def UpdateField(self, request: table_service_pb2.UpdateFieldRequest, context) -> table_service_pb2.FieldResponse:
-        """Update an existing field in a Delta table."""
+        """Update an existing field in a Delta table with validation and optimized paths."""
         try:
             self._log_request("UpdateField", table_id=request.table_id, field_name=request.field_name,
                             new_field_name=request.updated_field.name, migrate_data=request.migrate_data,
@@ -644,72 +644,138 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     success=False,
                     message=f"Delta table not found: {error_msg}"
                 )
-            
+
             # Get current schema and find the field
             current_schema = get_delta_schema_as_pyarrow(delta_table)
-            current_field_column = None
-            
-            # Find field by name (need to map field name to column ID)
-            # This is a limitation - we need the field ID to find the column
-            # For now, we'll handle type changes and name changes separately
-            logger.info(f"[UpdateField] Current schema has {len(current_schema)} columns")
-            
-            # Field name changes are handled by the updated_field.name property
-            # No separate field rename logic needed since we use field_id for identification
 
-            # Handle field type change
-            # Find current field by field_id in schema - need to map field_id to actual column name
+            # Find current field by field_id in schema
             from .table.field_utils import field_id_to_column_name
-            field_column_name = field_id_to_column_name(request.field_id)  # Use centralized utility
+            field_column_name = field_id_to_column_name(request.field_id)
             current_field = next((f for f in current_schema if f.name == field_column_name), None)
-            
+
             if not current_field:
                 return table_service_pb2.FieldResponse(
                     success=False,
                     message=f"Field with ID {request.field_id} not found in table"
                 )
-            
-            old_field_type = current_field.type
-            new_field_type = convert_protobuf_field_to_arrow(request.updated_field)
-            
-            if old_field_type == new_field_type:
-                # No type change, just metadata update
-                logger.info(f"[UpdateField] No type change for field ID {request.field_id}")
+
+            # Get current and new field types
+            old_field_type_arrow = current_field.type
+            new_field_type_arrow = convert_protobuf_field_to_arrow(request.updated_field)
+
+            # Get current field type enum from metadata
+            from .table.schema import get_field_type_from_metadata
+            current_field_type_enum = get_field_type_from_metadata(current_field.metadata)
+            if current_field_type_enum is None:
+                logger.warning(f"[UpdateField] No field type metadata found for field ID {request.field_id}, assuming TEXT")
+                current_field_type_enum = table_service_pb2.FIELD_TYPE_TEXT
+
+            # Import validation functions
+            from .table.field_validation import (
+                validate_field_type_change,
+                is_metadata_only_change,
+                get_field_operation_description
+            )
+
+            # Log operation description
+            operation_desc = get_field_operation_description(
+                current_field_type_enum,
+                request.updated_field.type,
+                request.migrate_data
+            )
+            logger.info(f"[UpdateField] Field ID {request.field_id}: {operation_desc}")
+
+            # METADATA-ONLY UPDATE PATH (Fast path)
+            if old_field_type_arrow == new_field_type_arrow:
+                # No type change - this is metadata-only (name, required, fieldConfig, etc.)
+                # We don't need to load data, just update the schema metadata
+                logger.info(f"[UpdateField] METADATA-ONLY update path for field {field_column_name}")
+
+                # Log old vs new metadata for comparison
+                field_idx = next(i for i, f in enumerate(current_schema) if f.name == field_column_name)
+                old_metadata = current_schema[field_idx].metadata
+                logger.info(f"[UpdateField] Old metadata: {old_metadata}")
+                logger.info(f"[UpdateField] Field type: {old_field_type_arrow} (no change)")
+
+                # Update schema metadata using evolve_schema
+                from .table.schema import evolve_schema
+                updated_schema = evolve_schema(current_schema, [request.updated_field])
+
+                # Log new metadata
+                new_field_idx = next(i for i, f in enumerate(updated_schema) if f.name == field_column_name)
+                new_metadata = updated_schema[new_field_idx].metadata
+                logger.info(f"[UpdateField] New metadata: {new_metadata}")
+
+                # Write empty table with updated schema to trigger metadata evolution
+                # This is FAST - no data loading, Delta Lake handles schema evolution
+                from .table.transform import create_empty_arrow_table, normalize_arrow_table_to_large_string
+                empty_table = create_empty_arrow_table(pa.schema([f for f in updated_schema if f.name == field_column_name]))
+                normalized_empty = normalize_arrow_table_to_large_string(empty_table)
+
+                # Write to Delta Lake (schema evolution will update metadata)
+                from .table.operations import write_with_schema_evolution
+                logger.info(f"[UpdateField] Writing empty table for metadata evolution (append mode)")
+                write_with_schema_evolution(s3_uri, normalized_empty, "append", storage_options)
+
+                # Verify the metadata update persisted
+                delta_table_verify = DeltaTable(s3_uri, storage_options=storage_options)
+                schema_verify = get_delta_schema_as_pyarrow(delta_table_verify)
+                verify_field = next((f for f in schema_verify if f.name == field_column_name), None)
+                if verify_field:
+                    logger.info(f"[UpdateField] ✅ Verified metadata persisted: {verify_field.metadata}")
+                else:
+                    logger.warning(f"[UpdateField] ⚠️ Could not find field {field_column_name} after update")
+
+                logger.info(f"[UpdateField] ✅ Metadata updated for field ID {request.field_id}")
                 return table_service_pb2.FieldResponse(
                     success=True,
                     field=request.updated_field,
-                    message=f"Field ID {request.field_id} metadata updated"
+                    message=f"Field '{request.updated_field.name}' metadata updated successfully"
                 )
 
-            logger.info(f"[UpdateField] Converting field ID {request.field_id} from {old_field_type} to {new_field_type}")
+            # TYPE CHANGE PATH (Requires validation and possibly data migration)
+            logger.info(f"[UpdateField] Type change: {old_field_type_arrow} → {new_field_type_arrow}")
 
+            # Validate type change is allowed
+            is_valid, error_message = validate_field_type_change(current_field_type_enum, request.updated_field.type)
+            if not is_valid:
+                logger.error(f"[UpdateField] Type change validation failed: {error_message}")
+                return table_service_pb2.FieldResponse(
+                    success=False,
+                    message=error_message
+                )
+
+            # Type change is valid - proceed with data migration if requested
             if request.migrate_data:
-                # Read existing data and migrate types
-                logger.info(f"[UpdateField] Reading existing data for migration...")
+                logger.info(f"[UpdateField] Starting data migration for field ID {request.field_id}")
+
+                # Read existing data
                 arrow_table = delta_table.to_pyarrow_table()
                 df = pl.from_arrow(arrow_table)
-                
+
                 # Apply type migration
                 from .table.field_utils import field_to_column_name
                 field_column_name = field_to_column_name(request.updated_field)
                 if field_column_name in df.columns:
-                    df = migrate_column_type(df, field_column_name, old_field_type, new_field_type)
-                
+                    df = migrate_column_type(df, field_column_name, old_field_type_arrow, new_field_type_arrow)
+
                 # Write back with new schema
                 normalized_arrow = normalize_arrow_table_to_large_string(df.to_arrow())
                 write_deltalake(s3_uri, normalized_arrow, mode="overwrite", storage_options=storage_options)
-                
-                logger.info(f"[UpdateField] ✅ Migrated {len(df)} rows for field ID {request.field_id}")
-            else:
-                # Just update schema without data migration
-                logger.warning(f"[UpdateField] Schema update without data migration - existing data may be lost")
-                # This would require more complex schema evolution logic
 
-            return table_service_pb2.FieldResponse(
-                success=True,
-                field=request.updated_field,
-                message=f"Field ID {request.field_id} updated successfully"
-            )
+                logger.info(f"[UpdateField] ✅ Migrated {len(df)} rows for field ID {request.field_id}")
+                return table_service_pb2.FieldResponse(
+                    success=True,
+                    field=request.updated_field,
+                    message=f"Field '{request.updated_field.name}' type changed and {len(df)} rows migrated successfully"
+                )
+            else:
+                # Type change without data migration - warn user
+                logger.warning(f"[UpdateField] Type change WITHOUT data migration for field ID {request.field_id} - data may be incompatible")
+                return table_service_pb2.FieldResponse(
+                    success=False,
+                    message=f"Type change requires data migration. Set migrate_data=true to proceed. Existing data may be incompatible with new type."
+                )
 
         except Exception as e:
             logger.error(f"[UpdateField] Error: {type(e).__name__}: {e}", exc_info=True)
@@ -721,7 +787,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
     def DeleteField(self, request: table_service_pb2.DeleteFieldRequest, context) -> table_service_pb2.DeleteFieldResponse:
         """Delete a field from a Delta table."""
         try:
-            self._log_request("DeleteField", table_id=request.table_id, field_name=request.field_name,
+            self._log_request("DeleteField", table_id=request.table_id, field_id=request.field_id,
                             backup_data=request.backup_data, organization_id=request.organization_id,
                             s3_path=request.s3_path)
 
@@ -743,39 +809,55 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     message=f"Delta table not found: {error_msg}"
                 )
 
-            # Backup data if requested
-            backup_location = None
-            if request.backup_data:
-                backup_location = self._backup_field_data(delta_table, request.field_id, s3_uri, storage_options)
-            
             # Get current schema
             current_schema = get_delta_schema_as_pyarrow(delta_table)
-            
-            # Find field column to delete (this is complex without field ID mapping)
-            # For now, we'll need to implement a more sophisticated approach
-            logger.warning(f"[DeleteField] Field deletion requires table rewrite - current schema has {len(current_schema)} columns")
 
-# Read all data and rewrite table without the field
-            arrow_table = delta_table.to_pyarrow_table()
-            df = pl.from_arrow(arrow_table)
-            
             # Find field column by field_id
             from .table.field_utils import field_id_to_column_name
-            field_column_name = field_id_to_column_name(request.field_id)  # Use centralized utility
-            if field_column_name not in df.columns:
+            field_column_name = field_id_to_column_name(request.field_id)
+
+            # Check if field exists in schema
+            field_exists = any(f.name == field_column_name for f in current_schema)
+            if not field_exists:
                 return table_service_pb2.DeleteFieldResponse(
                     success=False,
                     message=f"Field ID {request.field_id} not found in table"
                 )
-            
-            # Remove the column by field_id
+
+            logger.info(f"[DeleteField] Deleting field ID {request.field_id} (column: {field_column_name})")
+
+            # Backup data if requested
+            backup_location = None
+            if request.backup_data:
+                try:
+                    backup_location = self._backup_field_data(delta_table, request.field_id, s3_uri, storage_options)
+                    logger.info(f"[DeleteField] Backed up field data to {backup_location}")
+                except Exception as backup_error:
+                    logger.warning(f"[DeleteField] Backup failed: {backup_error}, continuing with deletion")
+
+            # Delete field using simple read-modify-write pattern
+            # Log BEFORE deletion
+            current_columns = [f.name for f in current_schema]
+            logger.info(f"[DeleteField] BEFORE: Delta schema has {len(current_columns)} columns: {current_columns}")
+
+            arrow_table = delta_table.to_pyarrow_table()
+            df = pl.from_arrow(arrow_table)
             df = df.drop([field_column_name])
-            
-            # Write table without the field
+
             normalized_arrow = normalize_arrow_table_to_large_string(df.to_arrow())
             write_deltalake(s3_uri, normalized_arrow, mode="overwrite", storage_options=storage_options)
 
-            logger.info(f"[DeleteField] ✅ Deleted field ID {request.field_id} from table '{request.table_id}'")
+            # Verify deletion by reloading Delta table
+            delta_table_after = DeltaTable(s3_uri, storage_options=storage_options)
+            schema_after = get_delta_schema_as_pyarrow(delta_table_after)
+            columns_after = [f.name for f in schema_after]
+            still_exists = field_column_name in columns_after
+            final_row_count = len(delta_table_after.to_pyarrow_table())
+
+            logger.info(f"[DeleteField] AFTER: Delta schema has {len(columns_after)} columns: {columns_after}")
+            logger.info(f"[DeleteField] Field {field_column_name} {'❌ STILL EXISTS' if still_exists else '✅ confirmed deleted'}")
+            logger.info(f"[DeleteField] Verification: Table has {final_row_count} rows after deletion")
+            logger.info(f"[DeleteField] ✅ Deleted field ID {request.field_id}")
             return table_service_pb2.DeleteFieldResponse(
                 success=True,
                 message=f"Field ID {request.field_id} deleted successfully",
