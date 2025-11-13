@@ -26,7 +26,6 @@ from .table.transform import normalize_arrow_table_to_large_string
 from .table.schema import get_delta_schema_as_pyarrow, convert_protobuf_field_to_arrow, migrate_column_type
 from .table.schema_operations import (
     detect_new_columns,
-    build_column_type_mappings,
     evolve_table_schema,
     verify_schema_update,
     backfill_boolean_columns
@@ -342,11 +341,11 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             if not columns_to_add:
                 return table_service_pb2.TableResponse(success=True, message="Schema is already up to date")
 
-            # Build type mappings for new columns
-            type_mappings = build_column_type_mappings(new_schema, columns_to_add)
+            # Extract just the new fields from new_schema (preserves metadata)
+            new_fields_schema = pa.schema([f for f in new_schema if f.name in columns_to_add])
 
-            # Apply schema evolution
-            evolve_table_schema(s3_uri, type_mappings, storage_options)
+            # Apply schema evolution with metadata-rich schema
+            evolve_table_schema(s3_uri, new_fields_schema, storage_options)
 
             # Verify the schema was updated successfully
             error_msg = verify_schema_update(s3_uri, columns_to_add, storage_options)

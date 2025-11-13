@@ -30,6 +30,7 @@ from .transform import (
     build_pyarrow_predicate,
     convert_protobuf_to_dataframe,
     convert_dataframe_to_arrow,
+    create_empty_arrow_table,
 )
 
 from .validate import (
@@ -75,6 +76,7 @@ __all__ = [
     'build_pyarrow_predicate',
     'convert_protobuf_to_dataframe',
     'convert_dataframe_to_arrow',
+    'create_empty_arrow_table',
     
     # Validate functions
     'validate_s3_path',

@@ -12,7 +12,7 @@ import polars as pl
 from deltalake import write_deltalake, DeltaTable
 
 from .schema import get_delta_schema_as_pyarrow, build_schema_from_table_fields
-from .transform import normalize_arrow_table_to_large_string
+from .transform import normalize_arrow_table_to_large_string, create_empty_arrow_table
 
 logger = logging.getLogger(__name__)
 
@@ -36,57 +36,31 @@ def detect_new_columns(current_schema: pa.Schema, new_schema: pa.Schema) -> List
     return columns_to_add
 
 
-def build_column_type_mappings(new_schema: pa.Schema, columns_to_add: List[str]) -> Dict[str, pl.DataType]:
-    """
-    Build Polars type mappings for new columns being added.
-
-    Maps PyArrow types to Polars types for schema evolution. Only includes
-    columns that are being added (not existing columns).
-
-    Args:
-        new_schema: PyArrow schema containing field definitions
-        columns_to_add: List of column names to create type mappings for
-
-    Returns:
-        Dictionary mapping column names to Polars data types
-    """
-    schema_dict = {}
-    for field in new_schema:
-        if field.name in columns_to_add:
-            if field.type == pa.float64():
-                schema_dict[field.name] = pl.Float64
-            elif field.type == pa.bool_():
-                schema_dict[field.name] = pl.Boolean
-            elif field.type == pa.timestamp('us'):
-                schema_dict[field.name] = pl.Datetime('us')
-            else:
-                schema_dict[field.name] = pl.Utf8
-
-    logger.info(f"[build_column_type_mappings] Type mappings for {len(schema_dict)} columns")
-    return schema_dict
-
-
 def evolve_table_schema(
     s3_uri: str,
-    schema_dict: Dict[str, pl.DataType],
+    new_fields_schema: pa.Schema,
     storage_options: Dict[str, str]
 ) -> None:
     """
-    Evolve Delta Lake table schema by adding new columns.
+    Evolve Delta Lake table schema by adding new columns with metadata.
 
     Uses Delta Lake's schema_mode="merge" to add new columns. Creates an empty
-    DataFrame with the new columns and writes it to trigger schema evolution.
+    PyArrow table with the new columns (preserving metadata) and writes it to
+    trigger schema evolution.
 
     Args:
         s3_uri: S3 URI of the Delta table
-        schema_dict: Dictionary mapping new column names to Polars types
+        new_fields_schema: PyArrow schema containing new fields with metadata
         storage_options: S3 storage configuration (credentials, region, etc.)
     """
-    logger.info(f"[evolve_table_schema] Adding {len(schema_dict)} columns: {list(schema_dict.keys())}")
+    logger.info(f"[evolve_table_schema] Adding {len(new_fields_schema)} columns: {list(new_fields_schema.names)}")
 
-    # Create empty DataFrame with new column schema
-    df_schema = pl.DataFrame(schema=schema_dict)
-    arrow_table = normalize_arrow_table_to_large_string(df_schema.to_arrow())
+    # Create empty PyArrow table using metadata-preserving utility
+    # This preserves field metadata (e.g., field_type for autonumber sorting)
+    arrow_table = create_empty_arrow_table(new_fields_schema)
+
+    # Normalize strings to large_string for filter compatibility
+    arrow_table = normalize_arrow_table_to_large_string(arrow_table)
 
     # Write empty table to trigger schema evolution
     write_deltalake(
