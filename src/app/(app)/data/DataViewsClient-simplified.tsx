@@ -16,8 +16,10 @@ import { useEmery } from "@/contexts/EmeryStoreProvider"
 import { dataStore, dataSelectors } from '@/stores/data-management.store'
 import { storeActions, dataActions } from '@/stores/actions'
 import type { TableDTO } from "@/app/mappers/table-mapper"
+import type { ViewDTO } from "@/app/mappers/view-mapper"
 import { getFields } from "@/app/actions/fields"
 import { getRowsDSG, searchRowsDSG, createRow, createRows, updateRowData, updateRowsData, deleteRowData } from "@/app/actions/rows"
+import { getView, getViewsForTable } from "@/app/actions/views"
 import { useBulkRowUpdate } from "@/hooks/use-bulk-row-update"
 import { GRID_CONFIG } from "@/lib/constants/grid"
 import { rowQueryKeys, fieldQueryKeys } from "@/lib/query-keys/rows"
@@ -101,6 +103,7 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
 
   // Use TanStack Store for data management state
   const selectedTableId = useStore(dataStore, dataSelectors.selectedTableId)
+  const selectedViewId = useStore(dataStore, dataSelectors.selectedViewId)
   const isFieldManagerOpen = useStore(dataStore, dataSelectors.isFieldManagerOpen)
   const searchTerm = useStore(dataStore, dataSelectors.searchTerm)
   const sortBy = useStore(dataStore, dataSelectors.sortBy)
@@ -134,6 +137,40 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
     enabled: !!selectedTableId,
     staleTime: GRID_CONFIG.FIELD_STALE_TIME,
   })
+
+  // TanStack Query for views list (for table)
+  const viewsQuery = useQuery({
+    queryKey: ['views', 'table', selectedTableId],
+    queryFn: () => selectedTableId ? getViewsForTable(selectedTableId) : Promise.resolve([]),
+    enabled: !!selectedTableId,
+    staleTime: 5 * 60 * 1000, // 5 minutes - views change less frequently than data
+  })
+
+  const availableViews = viewsQuery.data || []
+
+  // TanStack Query for selected view (if any)
+  const viewQuery = useQuery({
+    queryKey: ['view', selectedViewId],
+    queryFn: () => {
+      console.log('[VIEW QUERY] Fetching view:', selectedViewId)
+      return selectedViewId ? getView(selectedViewId) : Promise.resolve(null)
+    },
+    enabled: !!selectedViewId,
+    staleTime: 5 * 60 * 1000, // 5 minutes - views change less frequently than data
+  })
+
+  const currentView = viewQuery.data
+
+  // Debug logging for view state
+  useEffect(() => {
+    console.log('[VIEW STATE]', {
+      selectedViewId,
+      currentView: currentView?.id,
+      currentViewName: currentView?.name,
+      isLoading: viewQuery.isLoading,
+      availableViews: availableViews.length
+    })
+  }, [selectedViewId, currentView, viewQuery.isLoading, availableViews.length])
 
   // TanStack Infinite Query for rows (supports pagination)
   const infiniteRowsQuery = useInfiniteQuery({
@@ -174,6 +211,73 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
   })
 
   const fields: FieldDTO[] = fieldsQuery.data || []
+
+  // Apply view configuration when view changes (must be after fields are loaded)
+  useEffect(() => {
+    console.log('[APPLY VIEW CONFIG] Effect triggered', {
+      hasFieldsSuccess: fieldsQuery.isSuccess,
+      fieldsLength: fields.length,
+      hasCurrentView: !!currentView,
+      currentViewId: currentView?.id,
+      currentViewData: currentView
+    })
+
+    // Wait for fields to be loaded before applying view configuration
+    if (!fieldsQuery.isSuccess || fields.length === 0) {
+      console.log('[APPLY VIEW CONFIG] Skipping - fields not ready')
+      return
+    }
+
+    if (currentView) {
+      console.log('[APPLY VIEW CONFIG] Applying view configuration', {
+        viewId: currentView.id,
+        viewName: currentView.name,
+        filters: currentView.filters?.length || 0,
+        sorting: currentView.sorting?.length || 0,
+        fieldMappings: currentView.fieldMappings?.length || 0
+      })
+      logger.debug('Applying view configuration', {
+        viewId: currentView.id,
+        viewName: currentView.name,
+        filters: currentView.filters?.length || 0,
+        sorting: currentView.sorting?.length || 0
+      })
+
+      // Apply view's filters
+      if (currentView.filters && currentView.filters.length > 0) {
+        // Convert view filters to FilterConfig format (map fieldId to field name)
+        const viewFilters: FilterConfig[] = currentView.filters
+          .map(f => {
+            const field = fields.find(field => field.id === f.fieldId)
+            if (!field) return null // Skip if field not found (deleted)
+            return {
+              field: field.name, // FilterConfig uses field name, not ID
+              operator: f.operator as any,
+              value: f.value
+            } as FilterConfig
+          })
+          .filter((f): f is FilterConfig => f !== null)
+        dataActions.setActiveFilters(viewFilters)
+      } else {
+        dataActions.clearActiveFilters()
+      }
+
+      // Apply view's sorting (use first sort if multiple)
+      if (currentView.sorting && currentView.sorting.length > 0) {
+        const primarySort = currentView.sorting.sort((a, b) => a.priority - b.priority)[0]
+        // Find field name from fieldId
+        const sortField = fields.find(f => f.id === primarySort.fieldId)
+        if (sortField) {
+          dataActions.setSorting(sortField.name, primarySort.direction)
+        }
+      } else {
+        dataActions.clearSorting()
+      }
+    } else {
+      // No view selected - clear view-specific configuration
+      // Note: We don't clear here to preserve user's manual filters/sorting
+    }
+  }, [currentView, fields, fieldsQuery.isSuccess])
 
   // Use search results when searching, otherwise use paginated rows
   // Convert date strings to Date objects after queries resolve
@@ -505,6 +609,12 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
               organizationId={selectedTable.organizationId!}
               tableId={selectedTable.id}
               tableName={selectedTable.name}
+              currentView={currentView || undefined}
+              availableViews={availableViews}
+              onSelectView={(viewId) => {
+                console.log('[ONSELECT VIEW] View selected:', viewId)
+                dataActions.setSelectedView(viewId)
+              }}
               searchTerm={searchTerm}
               onSearchChange={(value) => dataActions.setSearchTerm(value)}
               onManageFields={() => dataActions.setFieldManagerOpen(true)}

@@ -6,18 +6,18 @@ import { Puck, Data, usePuck, resolveAllData } from "@measured/puck";
 import "@measured/puck/puck.css";
 import "@/styles/puck-theme.css";
 import { config } from "@/components/puck/config";
-import { getPage, updatePageContent, publishPage, unpublishPage } from "@/app/actions/puck-pages";
+import { getPage, updatePage, updatePageContent, publishPage, unpublishPage } from "@/app/actions/puck-pages";
 import { getApp } from "@/app/actions/puck-apps";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Globe, Eye, Palette } from "lucide-react";
+import { ArrowLeft, Globe, Eye } from "lucide-react";
 import { Loading } from "@/components/ui/loading";
 import { toast } from "sonner";
 import { ThemeConfig, type ThemeConfigProps } from "@/ddd/domain/puck/value-objects/theme-config";
 import { ThemeProvider } from "@/components/puck/theme-context";
-import { ThemeEditorSheet } from "@/app/(app)/apps/components/ThemeEditorSheet";
 import { updatePageTheme } from "@/app/actions/puck-pages";
+import { createPuckUIOverrides } from "@/components/puck/overrides";
 
 // Sidebar state persistence component
 // AIDEV-NOTE: This component handles saving/restoring Puck's sidebar state to sessionStorage
@@ -78,7 +78,6 @@ function CustomHeaderActions({
   appId,
   page,
   onPublish,
-  onThemeClick,
   loadedFromSessionStorage,
   setLoadedFromSessionStorage,
 }: {
@@ -87,7 +86,6 @@ function CustomHeaderActions({
   appId: number;
   page: PageDTO;
   onPublish: () => void;
-  onThemeClick: () => void;
   loadedFromSessionStorage: boolean;
   setLoadedFromSessionStorage: (value: boolean) => void;
 }) {
@@ -146,27 +144,20 @@ function CustomHeaderActions({
     router.push(`/apps/${appId}/pages/${pageId}/preview`);
   };
 
-  const handleThemeClick = () => {
-    // Get current data from Puck's state (no re-render!)
-    const currentData = appState.data;
-
-    // Save current data to sessionStorage so it persists through theme reload
-    // AIDEV-NOTE: Theme changes trigger a page reload, so we save Puck state
-    // to sessionStorage just like we do for preview. On reload, the page will
-    // restore from sessionStorage, preserving unsaved edits.
-    sessionStorage.setItem(`puck-data-${pageId}`, JSON.stringify(currentData));
-
-    // Open theme editor
-    onThemeClick();
-  };
-
   return (
     <div className="flex items-center gap-2 w-full">
-      {/* Spacer to push actions to the right */}
+      {/* Left spacer */}
       <div className="flex-1" />
 
-      {/* Custom Action Buttons */}
-      <div className="flex gap-2 items-center">
+      {/* Center: Page Slug */}
+      <div className="flex-1 flex justify-center">
+        <div className="text-sm font-medium text-muted-foreground font-mono">
+          {page.slug}
+        </div>
+      </div>
+
+      {/* Right: Custom Action Buttons */}
+      <div className="flex-1 flex gap-2 items-center justify-end">
         <Button
           onClick={handleSave}
           disabled={saving || !hasUnsavedChanges}
@@ -179,14 +170,6 @@ function CustomHeaderActions({
         >
           <Eye size={16} className="mr-1" />
           Preview
-        </Button>
-
-        <Button
-          onClick={handleThemeClick}
-          variant="outline"
-        >
-          <Palette size={16} className="mr-1" />
-          Theme
         </Button>
 
         <Button
@@ -211,7 +194,6 @@ export default function PageEditPage() {
   const [initialData, setInitialData] = useState<Data>({ content: [], root: {}, zones: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [themeSheetOpen, setThemeSheetOpen] = useState(false);
   const [loadedFromSessionStorage, setLoadedFromSessionStorage] = useState(false);
 
   useEffect(() => {
@@ -316,11 +298,32 @@ export default function PageEditPage() {
       }
 
       toast.success("Page theme updated successfully");
-      setThemeSheetOpen(false);
       router.refresh();
     } catch (error) {
       console.error('Error updating page theme:', error);
       toast.error("Failed to update page theme");
+    }
+  };
+
+  const handleSavePageSettings = async (data: { name: string; slug: string }) => {
+    try {
+      const result = await updatePage(
+        { id: pageId, name: data.name, slug: data.slug },
+        `/apps/${appId}/pages/${pageId}/edit`
+      );
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update page settings");
+        return;
+      }
+
+      toast.success("Page settings updated successfully");
+      // Update local state to reflect changes
+      setPage(prev => prev ? { ...prev, name: data.name, slug: data.slug } : null);
+      router.refresh();
+    } catch (error) {
+      console.error('Error updating page settings:', error);
+      toast.error("Failed to update page settings");
     }
   };
 
@@ -358,14 +361,9 @@ export default function PageEditPage() {
   return (
     <ThemeProvider value={effectiveTheme}>
       <div className="h-screen">
-        {/* AIDEV-NOTE: Puck is used as an UNCONTROLLED component (no onChange prop).
-            This prevents iframe reloads on every edit. CustomHeaderActions uses
-            usePuck() hook to access current data when saving/previewing.
-            Theme is provided via ThemeContext to avoid mutating Puck's config. */}
         <Puck
           config={config}
           data={initialData}
-          headerTitle={page.name}
           viewports={[
             { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
             { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },
@@ -374,24 +372,33 @@ export default function PageEditPage() {
           iframe={{
             enabled: true,
             waitForStyles: true,
-            // htmlAttributes: {
-            //   className: "puck-canvas-light-mode",
-            // },
           }}
           overrides={{
+            // Spread UI overrides with page settings and theme panel in sidebar
+            ...createPuckUIOverrides({
+              pageId: pageId,
+              pageName: page.name,
+              pageSlug: page.slug,
+              onSavePageSettings: handleSavePageSettings,
+              themeConfig: page.themeConfig,
+              onSaveTheme: handleSavePageTheme,
+              themeMode: "page",
+            }),
+
+            // Custom puck wrapper with state persistence
             puck: ({ children }) => (
               <div className="puck-themed-wrapper">
                 <SidebarStatePersistence pageId={pageId} />
                 {children}
               </div>
             ),
+            // Custom header actions with save/publish buttons
             headerActions: ({ children }) => (
               <CustomHeaderActions
                 pageId={pageId}
                 appId={appId}
                 page={page}
                 onPublish={handlePublish}
-                onThemeClick={() => setThemeSheetOpen(true)}
                 loadedFromSessionStorage={loadedFromSessionStorage}
                 setLoadedFromSessionStorage={setLoadedFromSessionStorage}
               >
@@ -401,15 +408,6 @@ export default function PageEditPage() {
           }}
         />
       </div>
-
-      {/* Theme Editor Sheet */}
-      <ThemeEditorSheet
-        open={themeSheetOpen}
-        onOpenChange={setThemeSheetOpen}
-        initialTheme={page.themeConfig}
-        onSave={handleSavePageTheme}
-        mode="page"
-      />
     </ThemeProvider>
   );
 }
