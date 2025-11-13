@@ -30,6 +30,12 @@ from .validate import (
 )
 from ..generated import table_service_pb2
 from .transform import build_pyarrow_predicate
+from .query_operations import (
+    load_filtered_data,
+    apply_type_aware_sorting,
+    apply_pagination,
+    build_query_metadata
+)
 
 logger = logging.getLogger(__name__)
 
@@ -182,18 +188,8 @@ def prepare_query_rows(
     if not is_valid:
         raise ValueError(f"Sort column validation failed: {error_msg}")
 
-    # Build PyArrow predicate for efficient filtering with predicate pushdown
-    # This applies filters BEFORE loading data into memory (10-100x faster for large tables)
-    predicate = build_pyarrow_predicate(filters, schema)
-
-    # Load data from Delta table with predicate pushdown
-    # Delta Lake only loads filtered rows, not entire table
-    arrow_table = delta_table.to_pyarrow_table(filters=predicate)
-    df = pl.from_arrow(arrow_table)
-
-    # Ensure we have a DataFrame, not a Series
-    if isinstance(df, pl.Series):
-        df = df.to_frame()
+    # Load data with predicate pushdown
+    df = load_filtered_data(delta_table, filters, schema)
 
     # Apply LIKE/ILIKE filters in-memory (these cannot be pushed down)
     if filters:
@@ -202,88 +198,24 @@ def prepare_query_rows(
     # Apply aggregation if requested
     if aggregation:
         df = apply_aggregations(df, aggregation)
-        
-        # For aggregated results, total_count is the number of aggregated rows
-        total_count = len(df)
-        
         # Skip sorting and pagination for aggregated results
-        # Aggregated data is already in final form
     else:
-        # Apply sorting (only for non-aggregated queries)
+        # Apply sorting for non-aggregated queries
         if order_by:
-            # For single column sorting, apply type-aware sorting
             if len(order_by) == 1:
+                # Single column: use type-aware sorting
                 sort_column = order_by[0]
-
-                # Get field from schema (includes type and metadata)
                 field = next((f for f in schema if f.name == sort_column), None)
-                field_type = field.type if field else None
-
-                # Check if this is an autonumber field via metadata
-                field_type_enum = get_field_type_from_metadata(field.metadata) if field else None
-                is_autonumber = field_type_enum == table_service_pb2.FIELD_TYPE_AUTONUMBER
-
-                # Diagnostic logging for sorting
-                sort_col = df.select(sort_column).to_series()
-                logger.info(f"[prepare_query_rows] Sort: col={sort_column}, type={field_type}, is_autonumber={is_autonumber}, "
-                          f"rows={len(sort_col)}, nulls={sort_col.null_count()}, unique={sort_col.n_unique()}")
-
-                # Re-cast numeric/boolean/autonumber columns for safe sorting
-                # strict=False: converts invalid values (empty strings) to null automatically
-                should_cast = field_type and (
-                    pa.types.is_floating(field_type) or
-                    pa.types.is_integer(field_type) or
-                    pa.types.is_boolean(field_type) or
-                    is_autonumber
-                )
-
-                if should_cast:
-                    # Determine target Polars type
-                    if pa.types.is_floating(field_type):
-                        target_type = pl.Float64
-                    elif pa.types.is_integer(field_type):
-                        target_type = pl.Int64
-                    elif pa.types.is_boolean(field_type):
-                        target_type = pl.Boolean
-                    elif is_autonumber:
-                        target_type = pl.Int64
-
-                    logger.info(f"[prepare_query_rows] Re-casting '{sort_column}' to {target_type} for safe sorting")
-                    # Re-cast column with strict=False (empty strings → null, preserves valid values)
-                    df = df.with_columns(
-                        pl.col(sort_column).cast(target_type, strict=False)
-                    )
-
-                # Perform sort with null handling
-                df = df.sort(
-                    sort_column,
-                    descending=(order_direction.upper() == 'DESC'),
-                    nulls_last=True  # Always put nulls at the end
-                )
-                logger.info(f"[prepare_query_rows] Sort successful, result shape: {df.shape}")
+                df = apply_type_aware_sorting(df, sort_column, field, order_direction)
             else:
-                # Multi-column sorting (fallback to simple sort)
+                # Multi-column: simple sort
                 df = df.sort(order_by)
 
-        # Apply pagination (only for non-aggregated queries)
-        if offset > 0:
-            df = df.slice(offset, len(df))
-        
-        if limit is not None and limit > 0:
-            df = df.slice(0, min(limit, len(df)))
+        # Apply pagination for non-aggregated queries
+        df = apply_pagination(df, offset, limit)
 
-        # Get total count for non-aggregated queries
-        total_count = len(df)
-
-    # Prepare metadata
-    metadata = {
-        'total_count': total_count,
-        'filters_applied': len(filters),
-        'sort_columns': order_by if not aggregation else [],  # No sorting for aggregated results
-        'limit': limit if not aggregation else None,
-        'offset': offset if not aggregation else None,
-        'aggregation_applied': aggregation is not None
-    }
+    # Build and return metadata
+    metadata = build_query_metadata(df, filters, order_by, limit, offset, aggregation)
 
     logger.info(f"[prepare_query_rows] Query result: {df.shape} rows")
     return df, metadata
