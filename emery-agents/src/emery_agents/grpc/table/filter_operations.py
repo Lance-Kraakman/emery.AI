@@ -12,7 +12,7 @@ import pyarrow.types as pat
 import pyarrow.compute as pc
 
 from ..generated import table_service_pb2
-from .transform import cast_value_to_column_type
+from .type_conversion import cast_value_to_column_type
 
 logger = logging.getLogger(__name__)
 

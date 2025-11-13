@@ -21,9 +21,12 @@ from .schema import (
     create_dataframe_with_schema,
 )
 
+from .type_conversion import (
+    cast_value_to_column_type,
+)
+
 from .transform import (
     normalize_arrow_table_to_large_string,
-    cast_value_to_column_type,
     build_pyarrow_predicate,
     convert_protobuf_to_dataframe,
     convert_dataframe_to_arrow,

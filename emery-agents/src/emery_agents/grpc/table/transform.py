@@ -12,6 +12,7 @@ import pyarrow.compute as pc
 import pyarrow.types as pat
 import polars as pl
 from ..generated import table_service_pb2
+from .type_conversion import cast_value_to_column_type
 from .filter_operations import (
     extract_filter_value,
     extract_filter_values_list,
@@ -54,71 +55,6 @@ def normalize_arrow_table_to_large_string(arrow_table: pa.Table) -> pa.Table:
 
     logger.debug(f"[normalize_arrow_table_to_large_string] Normalized {len(arrow_table.schema)} columns")
     return normalized_table
-
-
-def cast_value_to_column_type(value: Any, column_type: pa.DataType) -> Any:
-    """Cast Python value to match PyArrow column type.
-
-    This ensures filter values are compatible with actual column types,
-    preventing PyArrow kernel errors like string_view comparison issues.
-
-    Args:
-        value: Python value from protobuf (str, int, float, bool, etc.)
-        column_type: PyArrow DataType from schema
-
-    Returns:
-        Python value cast to appropriate type for column
-
-    Raises:
-        ValueError: If value cannot be cast to target type
-    """
-    if value is None:
-        return None
-
-    try:
-        # String types (including string_view)
-        if pat.is_string(column_type) or pat.is_large_string(column_type):
-            return str(value)
-
-        # Integer types
-        elif pat.is_integer(column_type):
-            return int(value)
-
-        # Floating point types
-        elif pat.is_floating(column_type):
-            return float(value)
-
-        # Boolean types
-        elif pat.is_boolean(column_type):
-            if isinstance(value, str):
-                return value.lower() in ('true', '1', 'yes', 'on')
-            return bool(value)
-
-        # Timestamp types
-        elif pat.is_timestamp(column_type):
-            if isinstance(value, (int, float)):
-                return value  # Assume Unix timestamp
-            return str(value)  # Convert to string for parsing
-
-        # List types (embeddings)
-        elif pat.is_list(column_type) or pat.is_fixed_size_list(column_type):
-            if isinstance(value, str):
-                # Try to parse as JSON list
-                import json
-                return json.loads(value)
-            elif isinstance(value, (list, tuple)):
-                return list(value)
-            else:
-                return [value]
-
-        # Default: convert to string
-        else:
-            return str(value)
-
-    except (ValueError, TypeError) as e:
-        logger.warning(f"[cast_value_to_column_type] Cannot cast {value} to {column_type}: {e}")
-        # Return original value and let operation handle the error
-        return value
 
 
 def build_pyarrow_predicate(filters: List[table_service_pb2.RowFilter], schema: pa.Schema) -> Optional[Any]:
