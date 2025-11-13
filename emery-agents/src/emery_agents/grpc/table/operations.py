@@ -85,6 +85,42 @@ def prepare_create_table(
     logger.info(f"[prepare_create_table] Successfully created table with schema: {[f.name for f in fields]}")
 
 
+def prepare_rows_common(
+    rows_data: List[table_service_pb2.RowData],
+    delta_table: DeltaTable,
+    operation_name: str
+) -> Tuple[pl.DataFrame, pa.Table]:
+    """Prepare row data for create or update operations.
+
+    Args:
+        rows_data: List of RowData protobuf messages
+        delta_table: DeltaTable instance with existing schema
+        operation_name: Operation name for logging (e.g., "CreateRows", "UpdateRows")
+
+    Returns:
+        Tuple of (polars_df, arrow_table) ready for writing
+    """
+    logger.info(f"[{operation_name}] Preparing {len(rows_data)} rows")
+
+    # Get schema for data processing
+    schema = get_delta_schema_as_pyarrow(delta_table)
+
+    # Create DataFrame with schema-aware conversion
+    df = create_dataframe_with_schema(rows_data, delta_table)
+
+    # Detect any data anomalies
+    anomalies = detect_data_anomalies(df, operation_name)
+    if anomalies:
+        for anomaly in anomalies:
+            logger.warning(anomaly)
+
+    # Convert to Arrow with string normalization
+    arrow_table = convert_dataframe_to_arrow(df, normalize_strings=True)
+
+    logger.info(f"[{operation_name}] Prepared DataFrame: {df.shape}, Arrow: {arrow_table.shape}")
+    return df, arrow_table
+
+
 def prepare_create_rows(
     rows_data: List[table_service_pb2.RowData],
     delta_table: DeltaTable,
@@ -100,25 +136,7 @@ def prepare_create_rows(
     Returns:
         Tuple of (polars_df, arrow_table) ready for writing
     """
-    logger.info(f"[prepare_create_rows] Preparing {len(rows_data)} rows for mode={mode}")
-
-    # Get schema for data processing
-    schema = get_delta_schema_as_pyarrow(delta_table)
-
-    # Create DataFrame with schema-aware conversion
-    df = create_dataframe_with_schema(rows_data, delta_table)
-    
-    # Detect any data anomalies
-    anomalies = detect_data_anomalies(df, "CreateRows")
-    if anomalies:
-        for anomaly in anomalies:
-            logger.warning(anomaly)
-
-    # Convert to Arrow with string normalization
-    arrow_table = convert_dataframe_to_arrow(df, normalize_strings=True)
-
-    logger.info(f"[prepare_create_rows] Prepared DataFrame: {df.shape}, Arrow: {arrow_table.shape}")
-    return df, arrow_table
+    return prepare_rows_common(rows_data, delta_table, "CreateRows")
 
 
 def prepare_update_rows(
@@ -134,25 +152,7 @@ def prepare_update_rows(
     Returns:
         Tuple of (polars_df, arrow_table) ready for writing
     """
-    logger.info(f"[prepare_update_rows] Preparing {len(rows_data)} rows for update")
-
-    # Get schema for data processing
-    schema = get_delta_schema_as_pyarrow(delta_table)
-
-    # Create DataFrame with schema-aware conversion
-    df = create_dataframe_with_schema(rows_data, delta_table)
-    
-    # Detect any data anomalies
-    anomalies = detect_data_anomalies(df, "UpdateRows")
-    if anomalies:
-        for anomaly in anomalies:
-            logger.warning(anomaly)
-
-    # Convert to Arrow with string normalization
-    arrow_table = convert_dataframe_to_arrow(df, normalize_strings=True)
-
-    logger.info(f"[prepare_update_rows] Prepared DataFrame: {df.shape}, Arrow: {arrow_table.shape}")
-    return df, arrow_table
+    return prepare_rows_common(rows_data, delta_table, "UpdateRows")
 
 
 def prepare_query_rows(
