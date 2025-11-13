@@ -2,13 +2,11 @@ import { DefaultRootProps } from "@measured/puck";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import { useTheme } from "./theme-context";
+import { title } from "process";
 
 export type RootProps = DefaultRootProps;
 
 export const Root = {
-  defaultProps: {
-    title: "My Page",
-  },
   render: ({ puck: { isEditing, renderDropZone: DropZone } }: DefaultRootProps) => {
     // Get theme from context (will use default if not provided)
     const theme = useTheme();

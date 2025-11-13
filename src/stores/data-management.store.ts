@@ -355,6 +355,14 @@ export const dataActions = {
     }))
   },
 
+  setActiveFilters: (filters: FilterConfig[]) => {
+    dataStore.setState((state) => ({
+      ...state,
+      activeFilters: filters,
+      currentPage: 1
+    }))
+  },
+
   clearFilters: () => {
     dataStore.setState((state) => ({
       ...state,

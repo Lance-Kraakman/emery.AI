@@ -37,6 +37,7 @@ import 'react-datasheet-grid/dist/style.css' // Base DSG styles
 import './datasheet-grid.css' // Custom overrides
 
 import type { FieldDTO } from '@/app/mappers/field-mapper'
+import type { ViewDTO } from '@/app/mappers/view-mapper'
 import type { FieldValue as DomainFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 import type { DSGRow } from '@/app/mappers/dsg-mapper'
 import type { SelectOption } from '@/ddd/domain/tables/value-objects/table-field'
@@ -73,6 +74,10 @@ interface DynamicDataSheetGridProps {
   organizationId: number;
   tableId: number;
   tableName: string;
+  // View props
+  currentView?: ViewDTO;
+  availableViews?: ViewDTO[];
+  onSelectView?: (viewId: number | undefined) => void;
   searchTerm: string;
   onSearchChange: (value: string) => void;
   onManageFields: () => void;
@@ -368,6 +373,9 @@ export function DynamicDataSheetGrid({
   organizationId,
   tableId,
   tableName,
+  currentView,
+  availableViews = [],
+  onSelectView,
   searchTerm,
   onSearchChange,
   onManageFields,
@@ -486,6 +494,8 @@ export function DynamicDataSheetGrid({
   // Use custom hook for column building
   const columns = useGridColumns({
     fields,
+    fieldMappings: currentView?.fieldMappings,
+    currentView,
     organizationId,
     tableId,
     availableTables,
@@ -631,6 +641,11 @@ export function DynamicDataSheetGrid({
     totalCount: totalCount ?? 0,
     isLoading,
     error,
+    currentView,
+    availableViews,
+    onSelectView: onSelectView ?? (() => {}),
+    fieldMappings: currentView?.fieldMappings,
+    // onFieldMappingsChange will be added when we create the update hook
     searchTerm,
     onSearchChange,
     activeFilters: activeFilters ?? [],
@@ -666,7 +681,7 @@ export function DynamicDataSheetGrid({
           </div>
         ) : (
           <DataSheetGrid
-            key={`grid-${tableId}-${fields.length}`}  // CRITICAL: Remount on column count change, but stable during data updates to preserve scroll position
+            key={`grid-${tableId}-${columns.length}-${currentView?.id || 'no-view'}`}  // CRITICAL: Remount on visible column count change or view change, but stable during data updates to preserve scroll position
             value={state.data}
             onChange={handleChange}
             columns={columns}

@@ -21,6 +21,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { Search, Settings, RefreshCw, Filter, X } from 'lucide-react'
 import { FilterPopover } from '../FilterPopover'
 import { FilterChip } from '../FilterChip'
+import { ViewSelector } from '../ViewSelector'
 import { useGrid } from './GridContext'
 
 export const GridHeaderBar = () => {
@@ -29,6 +30,9 @@ export const GridHeaderBar = () => {
     tableName,
     rows,
     totalCount,
+    currentView,
+    availableViews,
+    onSelectView,
     searchTerm,
     onSearchChange,
     onManageFields,
@@ -100,8 +104,15 @@ export const GridHeaderBar = () => {
         </div>
       </div>
 
-    {/* Right: Actions */}
+    {/* Right: View selector and Actions */}
     <div className="flex items-center gap-2 flex-wrap">
+      {/* View Selector - compact, fixed width */}
+      <ViewSelector
+        views={availableViews.filter(v => v.viewType === 'grid')}
+        selectedViewId={currentView?.id}
+        onSelectView={onSelectView}
+        className="shrink-0 w-[120px]"
+      />
       {/* Filter Popover + Active Filter Chips */}
       {onAddFilter && (
         <FilterPopover

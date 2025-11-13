@@ -9,7 +9,9 @@ import {
 } from 'react-datasheet-grid'
 import { ColumnHeader } from '../ColumnHeader'
 import { AddColumnButton } from '../AddColumnButton'
+import { getVisibleFields } from '@/components/puck/lib/field-visibility-utils'
 import type { FieldDTO } from '@/app/mappers/field-mapper'
+import type { ViewDTO } from '@/app/mappers/view-mapper'
 import type { TableDTO } from '@/app/mappers/table-mapper'
 import type { FieldValue as DomainFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field'
@@ -48,6 +50,8 @@ import {
 
 interface UseGridColumnsParams {
   fields: FieldDTO[]
+  fieldMappings?: ViewDTO['fieldMappings']
+  currentView?: ViewDTO  // For conditional ID column visibility
   organizationId: number
   tableId: number
   availableTables: TableDTO[]
@@ -78,6 +82,8 @@ interface UseGridColumnsParams {
  */
 export function useGridColumns({
   fields,
+  fieldMappings,
+  currentView,
   organizationId,
   tableId,
   availableTables,
@@ -95,7 +101,14 @@ export function useGridColumns({
   SingleSelectCell,
   MultiSelectCell,
 }: UseGridColumnsParams) {
+  console.log('[USE GRID COLUMNS] Hook called', {
+    fieldsCount: fields.length,
+    fieldMappingsCount: fieldMappings?.length || 0,
+    fieldMappings
+  })
+
   return useMemo(() => {
+    console.log('[USE GRID COLUMNS] useMemo executing')
     // AIDEV-NOTE: Using react-datasheet-grid built-in column types for standard fields
     // Built-in columns handle rendering, editing, formatting, and keyboard navigation automatically
 
@@ -111,8 +124,25 @@ export function useGridColumns({
       headerClassName: 'id-column-header'
     }
 
+    // AIDEV-NOTE: Calculate visible fields using shared utility
+    // Logic: mapped visible fields (sorted by order) + unmapped fields (shown by default)
+    console.log('[USE GRID COLUMNS] Processing columns', {
+      totalFields: fields.length,
+      fieldNames: fields.map(f => f.name),
+      hasFieldMappings: !!fieldMappings,
+      fieldMappingsCount: fieldMappings?.length || 0,
+      fieldMappings: fieldMappings
+    })
+
+    const visibleFields = getVisibleFields(fields, fieldMappings)
+
+    console.log('[USE GRID COLUMNS] Visible fields calculated', {
+      visibleFieldsCount: visibleFields.length,
+      visibleFieldNames: visibleFields.map(f => f.name)
+    })
+
     // AIDEV-NOTE: Filter out 'id' field to prevent duplicate with built-in ID column
-    const fieldColumns = fields.filter(field => field.name !== 'id').map(field => {
+    const fieldColumns = visibleFields.filter(field => field.name !== 'id').map(field => {
       let columnConfig
       let basis = DEFAULT_COLUMN_BASIS
       let minWidth = DEFAULT_COLUMN_MIN_WIDTH
@@ -306,7 +336,18 @@ export function useGridColumns({
       minWidth: ADD_COLUMN_BUTTON_WIDTH
     }
 
-    // Return ID column first, then field columns, then add column button
-    return [idColumn, ...fieldColumns, addColumnCol]
-  }, [fields, organizationId, tableId, onUpdateRow, onEditField, onDeleteField, onAddColumn, onFieldUpdate, availableTables, onSort, onClearSort, RelationCell, FileCell, DocumentCell, EmbeddingCell, SingleSelectCell, MultiSelectCell])
+    // AIDEV-NOTE: Conditionally include ID column
+    // Show ID only in "All Data" view (when no view is selected)
+    // Custom views hide ID for a cleaner, curated display
+    const columns = []
+
+    if (!currentView) {
+      columns.push(idColumn)
+    }
+
+    columns.push(...fieldColumns)
+    columns.push(addColumnCol)
+
+    return columns
+  }, [fields, fieldMappings, currentView, organizationId, tableId, onUpdateRow, onEditField, onDeleteField, onAddColumn, onFieldUpdate, availableTables, onSort, onClearSort, RelationCell, FileCell, DocumentCell, EmbeddingCell, SingleSelectCell, MultiSelectCell])
 }

@@ -14,13 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import type { ViewDTO } from "@/app/mappers/view-mapper"
 
 interface ViewSelectorProps {
-  views: Array<{
-    id: number
-    name: string
-    viewType: 'grid' | 'metric' | 'dashboard' | 'recent-entries'
-    filters?: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>
-    sorting?: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>
-  }>
+  views: ViewDTO[]
   selectedViewId?: number
   onSelectView: (viewId: number | undefined) => void
   onCreateView?: () => void
@@ -43,10 +37,10 @@ export function ViewSelector({
         <Button
           variant="outline"
           size="sm"
-          className={className}
+          className={`${className} h-8`}
         >
-          <span className="font-medium">{displayName}</span>
-          <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+          <span className="text-xs font-normal truncate">{displayName}</span>
+          <ChevronDown className="ml-1.5 h-3.5 w-3.5 opacity-50 shrink-0" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[280px]">
