@@ -7,8 +7,7 @@ import { z } from "zod"
 import { revalidatePath } from "next/cache"
 import { requirePermission } from "./permissions"
 import { getPuckPageApplicationService } from "@/ddd/application/di/container"
-import type { Result } from "./types"
-import { ActionError } from "@/lib/puck/errors"
+import { ActionError, type Result } from "@/lib/puck/errors"
 
 import { UserId } from "@/ddd/domain/shared/value-objects"
 import { PageId } from "@/ddd/domain/puck/value-objects/page-id"
@@ -647,7 +646,7 @@ export async function generatePageSlug(appId: number, name: string): Promise<Res
     const pageService = getPuckPageApplicationService();
     const result = await pageService.generateSlugFromName(AppId.fromNumber(appId), name);
 
-    if (!result.success) {
+    if (!result.success || !result.data) {
       return {
         success: false,
         error: result.error || ActionError.database('generate slug'),

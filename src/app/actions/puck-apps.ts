@@ -9,8 +9,7 @@ import { auth } from "@/lib/auth"
 import { requirePermission } from "./permissions"
 import { requireCurrentOrganization } from "./user-organizations"
 import { getAppApplicationService } from "@/ddd/application/di/container"
-import type { Result } from "./types"
-import { ActionError, type ErrorCode } from "@/lib/puck/errors"
+import { ActionError, type Result, type ErrorCode } from "@/lib/puck/errors"
 
 import { OrganizationId, UserId } from "@/ddd/domain/shared/value-objects"
 import { AppId } from "@/ddd/domain/puck/value-objects/app-id"
@@ -404,7 +403,7 @@ export async function generateAppSlug(name: string): Promise<Result<{ slug: stri
     const appService = getAppApplicationService();
     const result = await appService.generateSlugFromName(OrganizationId.fromNumber(currentOrg.id), name);
 
-    if (!result.success) {
+    if (!result.success || !result.data) {
       return {
         success: false,
         error: result.error || ActionError.database('generate slug'),
