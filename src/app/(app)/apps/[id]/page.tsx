@@ -25,16 +25,16 @@ export default async function AppPage({ params }: AppPageProps) {
     redirect("/mission-control");
   }
 
-  const app = await getApp(appId);
+  const result = await getApp(appId);
 
-  if (!app) {
+  if (!result.success || !result.data) {
     redirect("/mission-control");
   }
 
   return (
     <CenteredCanvasLayout>
       <Suspense fallback={<Loading text="Loading app..." />}>
-        <AppDetailsView app={app} />
+        <AppDetailsView app={result.data} />
       </Suspense>
     </CenteredCanvasLayout>
   );
