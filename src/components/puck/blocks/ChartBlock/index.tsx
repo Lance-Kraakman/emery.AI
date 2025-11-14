@@ -18,6 +18,16 @@ import ChartBlock, { type ChartBlockProps } from "./ChartBlock";
 import { getView, executeChartView, getViewsForOrganization } from "@/app/actions/views";
 import { getTables } from "@/app/actions/tables";
 
+// Type for chart view list items
+interface ChartViewListItem {
+  id: number;
+  name: string;
+  tableId: number;
+  tableName: string;
+  title: string;
+  description: string;
+}
+
 export const ChartBlockConfig: ComponentConfig<ChartBlockProps> = {
   label: "Chart",
 
@@ -57,9 +67,9 @@ export const ChartBlockConfig: ComponentConfig<ChartBlockProps> = {
 
         const result = filteredViews.map((v) => {
           // Extract chart info from viewConfig for better display
-          const config = v.viewConfig as any;
-          const chartType = config?.chartType || 'unknown';
-          const dataMode = config?.dataMode || 'unknown';
+          const config = v.viewConfig as Record<string, unknown> | undefined;
+          const chartType = (config?.chartType as string) || 'unknown';
+          const dataMode = (config?.dataMode as string) || 'unknown';
 
           return {
             id: v.id,
@@ -74,8 +84,8 @@ export const ChartBlockConfig: ComponentConfig<ChartBlockProps> = {
         console.log('[ChartBlock viewId fetchList] Returning options:', result.length);
         return result;
       },
-      mapProp: (item: any) => item?.id || null,
-      getItemSummary: (item: any, context: any) => {
+      mapProp: (item: ChartViewListItem | null) => item?.id || null,
+      getItemSummary: (item: number | ChartViewListItem, context: { props?: ChartBlockProps }) => {
         const viewId = typeof item === 'number' ? item : item?.id;
         const viewName = context?.props?._viewName;
         const chartType = context?.props?._chartType;

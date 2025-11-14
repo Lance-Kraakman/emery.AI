@@ -20,6 +20,7 @@ import { ThemeConfig } from "@/ddd/domain/puck/value-objects/theme-config";
 import { ThemeProvider } from "@/components/puck/theme-context";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
+import { PuckSession } from "@/lib/puck/session-storage";
 
 export default function PreviewPage() {
   const params = useParams();
@@ -44,13 +45,13 @@ export default function PreviewPage() {
         const app = appResult.data;
 
         // 2. Check sessionStorage first (unsaved changes from editor)
-        const savedData = sessionStorage.getItem(`puck-data-${pageId}`);
+        const savedData = PuckSession.getData(pageId);
         let rawData: Data;
         let page: PageDTO;
 
         if (savedData) {
           console.log('[PreviewPage] Loading unsaved data from sessionStorage');
-          rawData = JSON.parse(savedData);
+          rawData = savedData;
           // Still need page for name and theme
           const pageResult = await getPage(pageId);
           if (!pageResult.success || !pageResult.data) {

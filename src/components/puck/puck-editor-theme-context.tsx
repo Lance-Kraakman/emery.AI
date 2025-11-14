@@ -18,6 +18,7 @@ import { updatePageTheme } from "@/app/actions/puck-pages";
 import { toast } from "sonner";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
+import { PuckSession } from "@/lib/puck/session-storage";
 
 interface PuckEditorThemeContextValue {
   // Current theme being displayed (effective theme: app + page override)
@@ -59,23 +60,21 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
   // Initialize theme on mount
   useEffect(() => {
     // Check sessionStorage first for unsaved changes
-    const sessionKey = `page-theme-${pageId}`;
-    const savedTheme = sessionStorage.getItem(sessionKey);
+    const savedTheme = PuckSession.getTheme(pageId);
 
     if (savedTheme) {
       try {
-        const parsedTheme = JSON.parse(savedTheme);
         const appTheme = app.themeConfig
           ? ThemeConfig.create(app.themeConfig)
           : ThemeConfig.default();
 
-        const effectiveTheme = ThemeConfig.merge(appTheme, ThemeConfig.create(parsedTheme));
+        const effectiveTheme = ThemeConfig.merge(appTheme, ThemeConfig.create(savedTheme));
         setCurrentTheme(effectiveTheme);
         setHasUnsavedChanges(true);
         return;
       } catch (err) {
         console.error('[PuckEditorTheme] Error parsing sessionStorage theme:', err);
-        sessionStorage.removeItem(sessionKey);
+        PuckSession.clearTheme(pageId);
       }
     }
 
@@ -103,8 +102,7 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
     setHasUnsavedChanges(true);
 
     // Save to sessionStorage for persistence
-    const sessionKey = `page-theme-${pageId}`;
-    sessionStorage.setItem(sessionKey, JSON.stringify(newTheme));
+    PuckSession.setTheme(pageId, newTheme);
   }, [app, pageId]);
 
   // Save theme to database (silent background save - no re-renders)
@@ -121,8 +119,7 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
       setHasUnsavedChanges(false);
 
       // Clear sessionStorage
-      const sessionKey = `page-theme-${pageId}`;
-      sessionStorage.removeItem(sessionKey);
+      PuckSession.clearTheme(pageId);
     } catch (error) {
       console.error('[PuckEditorTheme] Error saving theme:', error);
       toast.error("Failed to save theme");
