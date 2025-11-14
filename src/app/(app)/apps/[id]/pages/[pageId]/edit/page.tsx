@@ -16,8 +16,8 @@ import { Loading } from "@/components/ui/loading";
 import { toast } from "sonner";
 import { ThemeConfig, type ThemeConfigProps } from "@/ddd/domain/puck/value-objects/theme-config";
 import { ThemeProvider } from "@/components/puck/theme-context";
-import { updatePageTheme } from "@/app/actions/puck-pages";
 import { createPuckUIOverrides } from "@/components/puck/overrides";
+import { usePageTheme } from "@/hooks/usePageTheme";
 
 // Sidebar state persistence component
 // AIDEV-NOTE: This component handles saving/restoring Puck's sidebar state to sessionStorage
@@ -146,18 +146,11 @@ function CustomHeaderActions({
 
   return (
     <div className="flex items-center gap-2 w-full">
-      {/* Left spacer */}
+      {/* Spacer to push actions to the right */}
       <div className="flex-1" />
 
-      {/* Center: Page Slug */}
-      <div className="flex-1 flex justify-center">
-        <div className="text-sm font-medium text-muted-foreground font-mono">
-          {page.slug}
-        </div>
-      </div>
-
-      {/* Right: Custom Action Buttons */}
-      <div className="flex-1 flex gap-2 items-center justify-end">
+      {/* Custom Action Buttons */}
+      <div className="flex gap-2 items-center">
         <Button
           onClick={handleSave}
           disabled={saving || !hasUnsavedChanges}
@@ -196,6 +189,17 @@ export default function PageEditPage() {
   const [error, setError] = useState<string | null>(null);
   const [loadedFromSessionStorage, setLoadedFromSessionStorage] = useState(false);
 
+  // Use custom hook for theme management
+  const {
+    currentTheme,
+    formTheme,
+    handleThemeChange,
+    handleSave: handleSaveTheme,
+    handleRemove: handleRemoveTheme,
+    isSaving: isThemeSaving,
+    hasUnsavedChanges: hasUnsavedThemeChanges,
+  } = usePageTheme(pageId, page, app);
+
   useEffect(() => {
     async function loadPage() {
       try {
@@ -219,9 +223,7 @@ export default function PageEditPage() {
 
             // AIDEV-NOTE: Resolve data even from sessionStorage to ensure
             // components like MetricBlock have their resolveData executed
-            console.log('[EditPage] Resolving data from sessionStorage...');
             const resolvedData = await resolveAllData(rawData, config, {});
-            console.log('[EditPage] Data resolved, initializing editor...');
 
             setInitialData(resolvedData);
             setLoadedFromSessionStorage(true);
@@ -244,12 +246,7 @@ export default function PageEditPage() {
           zones: {}
         };
 
-        // CRITICAL: Resolve all component data before initializing Puck editor
-        // This ensures MetricBlock and other components with resolveData functions
-        // have their data pre-fetched and available on first render
-        console.log('[EditPage] Resolving component data...');
         const resolvedData = await resolveAllData(rawData, config, {});
-        console.log('[EditPage] Data resolved, initializing editor...');
 
         setInitialData(resolvedData);
       } catch (err) {
@@ -288,23 +285,6 @@ export default function PageEditPage() {
     }
   };
 
-  const handleSavePageTheme = async (theme: ThemeConfigProps | undefined) => {
-    try {
-      const result = await updatePageTheme(pageId, theme);
-
-      if (!result.success) {
-        toast.error(result.error || "Failed to update page theme");
-        return;
-      }
-
-      toast.success("Page theme updated successfully");
-      router.refresh();
-    } catch (error) {
-      console.error('Error updating page theme:', error);
-      toast.error("Failed to update page theme");
-    }
-  };
-
   const handleSavePageSettings = async (data: { name: string; slug: string }) => {
     try {
       const result = await updatePage(
@@ -320,7 +300,6 @@ export default function PageEditPage() {
       toast.success("Page settings updated successfully");
       // Update local state to reflect changes
       setPage(prev => prev ? { ...prev, name: data.name, slug: data.slug } : null);
-      router.refresh();
     } catch (error) {
       console.error('Error updating page settings:', error);
       toast.error("Failed to update page settings");
@@ -348,22 +327,13 @@ export default function PageEditPage() {
     );
   }
 
-  // AIDEV-NOTE: Compute effective theme using cascade: Page theme overrides App theme
-  // If page has no theme override, use app theme. If app has no theme, use default.
-  const appTheme = app.themeConfig
-    ? ThemeConfig.create(app.themeConfig)
-    : ThemeConfig.default();
-
-  const effectiveTheme = page.themeConfig
-    ? ThemeConfig.merge(appTheme, ThemeConfig.create(page.themeConfig))
-    : appTheme;
-
   return (
-    <ThemeProvider value={effectiveTheme}>
+    <ThemeProvider value={currentTheme || ThemeConfig.default()}>
       <div className="h-screen">
         <Puck
           config={config}
           data={initialData}
+          headerTitle={page.slug}
           viewports={[
             { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
             { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },
@@ -380,8 +350,8 @@ export default function PageEditPage() {
               pageName: page.name,
               pageSlug: page.slug,
               onSavePageSettings: handleSavePageSettings,
-              themeConfig: page.themeConfig,
-              onSaveTheme: handleSavePageTheme,
+              themeConfig: formTheme, // Theme to display in form
+              onSaveTheme: handleSaveTheme, // Just save, don't update state
               themeMode: "page",
             }),
 

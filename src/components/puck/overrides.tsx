@@ -60,7 +60,6 @@ export const createPuckUIOverrides = (
         {isRootLevel && options?.onSaveTheme && options?.themeMode && (
           <div className="border-b border-border">
             <ThemeSidebarPanel
-              key={JSON.stringify(options.themeConfig)}
               initialTheme={options.themeConfig}
               onSave={options.onSaveTheme}
               mode={options.themeMode}

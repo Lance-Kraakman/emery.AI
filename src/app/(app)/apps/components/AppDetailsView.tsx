@@ -6,28 +6,18 @@ import type { PageDTO } from '@/app/mappers/puck-page-mapper';
 import type { ViewDTO } from '@/app/mappers/view-mapper';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Edit, Trash2, Palette } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Palette } from 'lucide-react';
 import { appsActions } from '@/stores/apps.store';
-import { deleteApp, updateAppTheme } from '@/app/actions/puck-apps';
+import { updateApp, updateAppTheme } from '@/app/actions/puck-apps';
 import { getPages } from '@/app/actions/puck-pages';
 import { getViewsForOrganization } from '@/app/actions/views';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
 import { PagesSection } from './PagesSection';
 import { ViewsSection } from './ViewsSection';
 import { ThemeEditorSheet } from './ThemeEditorSheet';
 import { useRouter } from 'next/navigation';
 import type { ThemeConfigProps } from '@/ddd/domain/puck/value-objects/theme-config';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 interface AppDetailsViewProps {
   app: AppDTO;
@@ -35,13 +25,18 @@ interface AppDetailsViewProps {
 
 export function AppDetailsView({ app }: AppDetailsViewProps) {
   const router = useRouter();
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [themeSheetOpen, setThemeSheetOpen] = useState(false);
   const [pages, setPages] = useState<PageDTO[]>([]);
   const [loadingPages, setLoadingPages] = useState(true);
   const [dataSources, setDataSources] = useState<ViewDTO[]>([]);
   const [loadingDataSources, setLoadingDataSources] = useState(true);
+
+  // Inline editing state
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [isEditingSlug, setIsEditingSlug] = useState(false);
+  const [editedName, setEditedName] = useState(app.name);
+  const [editedSlug, setEditedSlug] = useState(app.slug);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Load pages for this app
   const loadPages = async () => {
@@ -77,30 +72,67 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
     loadDataSources();
   }, [app.id]);
 
-  const handleEdit = () => {
-    appsActions.setEditMode(true, app.id);
-  };
+  const handleSaveName = async () => {
+    if (editedName === app.name || !editedName.trim()) {
+      setIsEditingName(false);
+      setEditedName(app.name);
+      return;
+    }
 
-  const handleDelete = async () => {
     try {
-      setIsDeleting(true);
-      const result = await deleteApp(app.id);
+      setIsSaving(true);
+      const result = await updateApp(
+        { id: app.id, name: editedName },
+        `/apps/${app.id}`
+      );
 
       if (!result.success) {
-        toast.error(result.error || "Failed to delete app");
+        toast.error(result.error || "Failed to update app name");
+        setEditedName(app.name);
         return;
       }
 
-      toast.success("App deleted successfully");
-
-      appsActions.removeApp(app.id);
-      appsActions.setSelectedApp(null);
-      setShowDeleteDialog(false);
+      toast.success("App name updated");
+      router.refresh();
     } catch (error) {
-      console.error('Error deleting app:', error);
-      toast.error("Failed to delete app");
+      console.error('Error updating app name:', error);
+      toast.error("Failed to update app name");
+      setEditedName(app.name);
     } finally {
-      setIsDeleting(false);
+      setIsSaving(false);
+      setIsEditingName(false);
+    }
+  };
+
+  const handleSaveSlug = async () => {
+    if (editedSlug === app.slug || !editedSlug.trim()) {
+      setIsEditingSlug(false);
+      setEditedSlug(app.slug);
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const result = await updateApp(
+        { id: app.id, slug: editedSlug },
+        `/apps/${app.id}`
+      );
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update app slug");
+        setEditedSlug(app.slug);
+        return;
+      }
+
+      toast.success("App slug updated");
+      router.refresh();
+    } catch (error) {
+      console.error('Error updating app slug:', error);
+      toast.error("Failed to update app slug");
+      setEditedSlug(app.slug);
+    } finally {
+      setIsSaving(false);
+      setIsEditingSlug(false);
     }
   };
 
@@ -123,81 +155,105 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">{app.name}</h2>
-          <p className="text-sm text-muted-foreground">/{app.slug}</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleEdit}>
-            <Edit className="h-4 w-4 mr-2" />
-            Edit
-          </Button>
-          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
+    <div className="space-y-4">
+      {/* Header with inline editing */}
+      <div className="space-y-1">
+        {isEditingName ? (
+          <Input
+            autoFocus
+            value={editedName}
+            onChange={(e) => setEditedName(e.target.value)}
+            onBlur={handleSaveName}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSaveName();
+              if (e.key === 'Escape') {
+                setEditedName(app.name);
+                setIsEditingName(false);
+              }
+            }}
+            disabled={isSaving}
+            className="text-2xl font-bold h-auto py-1 px-2"
+          />
+        ) : (
+          <h2
+            className="text-2xl font-bold cursor-pointer hover:text-primary transition-colors"
+            onClick={() => setIsEditingName(true)}
+            title="Click to edit name"
+          >
+            {app.name}
+          </h2>
+        )}
+
+        <div className="flex items-center gap-1">
+          <span className="text-sm text-muted-foreground">/</span>
+          {isEditingSlug ? (
+            <Input
+              autoFocus
+              value={editedSlug}
+              onChange={(e) => setEditedSlug(e.target.value)}
+              onBlur={handleSaveSlug}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveSlug();
+                if (e.key === 'Escape') {
+                  setEditedSlug(app.slug);
+                  setIsEditingSlug(false);
+                }
+              }}
+              disabled={isSaving}
+              className="text-sm h-6 py-0 px-2 w-48"
+            />
+          ) : (
+            <span
+              className="text-sm text-muted-foreground cursor-pointer hover:text-primary transition-colors"
+              onClick={() => setIsEditingSlug(true)}
+              title="Click to edit slug"
+            >
+              {app.slug}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* App Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle>App Information</CardTitle>
-          <CardDescription>Basic details about this app</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {app.description && (
-            <div>
-              <label className="text-sm font-medium">Description</label>
-              <p className="text-sm text-muted-foreground mt-1">{app.description}</p>
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium">Created</label>
-              <p className="text-sm text-muted-foreground mt-1">
-                {app.createdAt ? format(new Date(app.createdAt), 'PPp') : 'Unknown'}
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Last Updated</label>
-              <p className="text-sm text-muted-foreground mt-1">
-                {app.updatedAt ? format(new Date(app.updatedAt), 'PPp') : 'Unknown'}
-              </p>
-            </div>
+      {/* Compact Theme Display */}
+      <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-secondary/50 transition-colors">
+        <div className="flex items-center gap-3">
+          <Palette className="h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">
+              {app.themeConfig ? "Custom Theme" : "Default Theme"}
+            </span>
+            {app.themeConfig && (
+              <div className="flex items-center gap-1">
+                {app.themeConfig.colors?.primary && (
+                  <div
+                    className="w-5 h-5 rounded border border-border"
+                    style={{ backgroundColor: app.themeConfig.colors.primary }}
+                    title={`Primary: ${app.themeConfig.colors.primary}`}
+                  />
+                )}
+                {app.themeConfig.colors?.secondary && (
+                  <div
+                    className="w-5 h-5 rounded border border-border"
+                    style={{ backgroundColor: app.themeConfig.colors.secondary }}
+                    title={`Secondary: ${app.themeConfig.colors.secondary}`}
+                  />
+                )}
+                {app.themeConfig.colors?.accent && (
+                  <div
+                    className="w-5 h-5 rounded border border-border"
+                    style={{ backgroundColor: app.themeConfig.colors.accent }}
+                    title={`Accent: ${app.themeConfig.colors.accent}`}
+                  />
+                )}
+              </div>
+            )}
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Theme Settings Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Theme Settings</CardTitle>
-          <CardDescription>Customize colors, typography, and layout for this app</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div>
-              {app.themeConfig ? (
-                <p className="text-sm text-muted-foreground">
-                  Custom theme configured
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Using default theme
-                </p>
-              )}
-            </div>
-            <Button onClick={() => setThemeSheetOpen(true)}>
-              <Palette className="h-4 w-4 mr-2" />
-              Edit Theme
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setThemeSheetOpen(true)}>
+          <Palette className="h-3 w-3 mr-1" />
+          Edit
+        </Button>
+      </div>
 
       {/* Pages Section */}
       <PagesSection appId={app.id} pages={pages} loading={loadingPages} onPagesChange={loadPages} />
@@ -208,29 +264,6 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
         loading={loadingDataSources}
         onViewsChange={loadDataSources}
       />
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete the app "{app.name}" and all its pages.
-              This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isDeleting ? 'Deleting...' : 'Delete'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Theme Editor Sheet */}
       <ThemeEditorSheet
