@@ -159,7 +159,8 @@ export class ReferenceMapper {
       file: [],
       agent: [],
       table: [],
-      database: []
+      database: [],
+      skill: []
     };
 
     // Group references by category
@@ -263,7 +264,8 @@ export class ReferenceMapper {
       file: 'Files',
       agent: 'Agents',
       table: 'Tables',
-      database: 'Databases'
+      database: 'Databases',
+      skill: 'Skills'
     };
     return labels[category];
   }
@@ -277,7 +279,8 @@ export class ReferenceMapper {
       file: 'File',
       agent: 'Users',
       table: 'Database',
-      database: 'Server'
+      database: 'Server',
+      skill: 'Sparkles'
     };
     return icons[category];
   }
@@ -291,7 +294,8 @@ export class ReferenceMapper {
       file: 'Files and attachments',
       agent: 'AI agents and assistants',
       table: 'Data tables and records',
-      database: 'Database collections'
+      database: 'Database collections',
+      skill: 'Reusable AI skills'
     };
     return descriptions[category];
   }
@@ -305,7 +309,8 @@ export class ReferenceMapper {
       file: 'green',
       agent: 'orange',
       table: 'purple',
-      database: 'gray'
+      database: 'gray',
+      skill: 'pink'
     };
     return colors[category];
   }

@@ -16,7 +16,8 @@ export enum ReferenceCategory {
   FILE = 'file',             // Files from tables
   AGENT = 'agent',           // AI agents
   TABLE = 'table',           // Database tables
-  DATABASE = 'database'      // Databases
+  DATABASE = 'database',     // Databases
+  SKILL = 'skill'            // Reusable AI skills
 }
 
 /**
@@ -68,6 +69,13 @@ export const REFERENCE_CATEGORY_INFO: Record<ReferenceCategory, ReferenceCategor
     description: 'Databases in your organization',
     icon: 'database',
     prefix: '@database:'
+  },
+  [ReferenceCategory.SKILL]: {
+    category: ReferenceCategory.SKILL,
+    label: 'Skills',
+    description: 'Reusable AI skills in your organization',
+    icon: 'sparkles',
+    prefix: '@skill:'
   }
 } as const
 
@@ -107,7 +115,7 @@ export function isValidReferenceText(text: string): boolean {
 /**
  * Legacy type aliases for backward compatibility
  */
-export type ReferenceCategoryLegacy = 'doc' | 'file' | 'agent' | 'table' | 'database'
+export type ReferenceCategoryLegacy = 'doc' | 'file' | 'agent' | 'table' | 'database' | 'skill'
 
 /**
  * Convert legacy category to enum

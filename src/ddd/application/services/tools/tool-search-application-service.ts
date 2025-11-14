@@ -21,6 +21,7 @@ import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
 import type { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
+import type { SkillApplicationService } from '@/ddd/application/services/skills/skill-application-service';
 import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
 import { RowMapper, type DocumentFieldValue, type FileFieldValue } from '@/app/mappers/row-mapper';
 import { isDocumentArray, isFileArray } from '@/ddd/domain/tables/value-objects/field-values';
@@ -65,6 +66,7 @@ export class ToolSearchApplicationService {
     private readonly tableApplicationService: TableApplicationService,
     private readonly agentApplicationService: AgentApplicationService,
     private readonly databaseApplicationService: DatabaseApplicationService,
+    private readonly skillApplicationService: SkillApplicationService,
     private readonly toolRegistryService: IToolRegistryService
   ) {}
 
@@ -282,6 +284,9 @@ export class ToolSearchApplicationService {
         case 'document':
           return await this.searchDocumentTools(searchText, organizationId, limit, offset);
 
+        case 'skill':
+          return await this.searchSkillTools(searchText, organizationId, limit, offset);
+
         default:
           return [];
       }
@@ -402,6 +407,47 @@ export class ToolSearchApplicationService {
       });
 
     return matchingDatabases;
+  }
+
+
+  /**
+   * Search skills returning ReferenceTool objects
+   */
+  private async searchSkillTools(
+    searchText: string,
+    organizationId: OrganizationId,
+    limit: number,
+    offset: number
+  ): Promise<ReferenceTool[]> {
+    // Get all skills for the organization
+    const result = await this.skillApplicationService.getSkillsByOrganization(organizationId.value);
+
+    if (!result.success || !result.data) {
+      logger.error('Failed to get skills for organization:', result.error);
+      return [];
+    }
+
+    const allSkills = result.data;
+
+    // Filter by searchText if provided
+    const filteredSkills = !searchText
+      ? allSkills
+      : allSkills.filter((skill) =>
+          skill.name.toLowerCase().includes(searchText.toLowerCase()) ||
+          skill.description?.toLowerCase().includes(searchText.toLowerCase())
+        );
+
+    // Apply pagination
+    const paginatedSkills = filteredSkills.slice(offset, offset + limit);
+
+    return paginatedSkills.map((skill) => {
+      return ReferenceTool.fromSkill(
+        skill.id.toString(),
+        organizationId.value,
+        skill.name,
+        `Skill - ${skill.description || 'No description'}`
+      );
+    });
   }
 
 
