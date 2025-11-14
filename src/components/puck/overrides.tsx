@@ -24,6 +24,7 @@ interface PuckUIOverridesOptions {
   // Theme settings
   themeConfig?: any; // ThemeConfigProps from DTO
   onSaveTheme?: (theme: ThemeConfigProps | undefined) => Promise<void>;
+  onThemeChange?: (theme: ThemeConfigProps) => void; // Live preview
   themeMode?: "app" | "page";
 }
 
@@ -62,6 +63,7 @@ export const createPuckUIOverrides = (
             <ThemeSidebarPanel
               initialTheme={options.themeConfig}
               onSave={options.onSaveTheme}
+              onThemeChange={options.onThemeChange}
               mode={options.themeMode}
             />
           </div>
@@ -70,6 +72,9 @@ export const createPuckUIOverrides = (
       </div>
     );
   },
+  components: ({ children }) => {
+    return <div className="bg-transparent">{children}</div>;
+  }
 });
 
 // Backward compatibility export with no theme options
