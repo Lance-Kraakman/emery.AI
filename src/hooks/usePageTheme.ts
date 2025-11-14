@@ -72,7 +72,7 @@ export function usePageTheme(pageId: number | null, page: PageDTO | null, app: A
 
   // Handle live theme changes during editing
   const handleThemeChange = useCallback((newTheme: ThemeConfigProps) => {
-    if (!app) return;
+    if (!app || !newTheme) return;
 
     console.log('[usePageTheme] Theme changed (live preview):', newTheme);
 

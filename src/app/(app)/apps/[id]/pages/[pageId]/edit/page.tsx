@@ -80,6 +80,8 @@ function CustomHeaderActions({
   onPublish,
   loadedFromSessionStorage,
   setLoadedFromSessionStorage,
+  hasUnsavedThemeChanges,
+  onSaveTheme,
 }: {
   children: ReactNode;
   pageId: number;
@@ -88,6 +90,8 @@ function CustomHeaderActions({
   onPublish: () => void;
   loadedFromSessionStorage: boolean;
   setLoadedFromSessionStorage: (value: boolean) => void;
+  hasUnsavedThemeChanges: boolean;
+  onSaveTheme: () => Promise<void>;
 }) {
   // AIDEV-NOTE: The `children` prop only contains Puck's default Publish button.
   // We don't render it because we provide our own custom Publish/Unpublish button.
@@ -98,13 +102,18 @@ function CustomHeaderActions({
   const { appState, history } = usePuck();
   const [saving, setSaving] = useState(false);
 
-  // Detect unsaved changes using Puck's history OR sessionStorage presence
+  // Detect unsaved changes using Puck's history OR sessionStorage presence OR theme changes
   // AIDEV-NOTE: After theme reload, history.hasPast is false but data may be unsaved draft in sessionStorage
-  const hasUnsavedChanges = history.hasPast || loadedFromSessionStorage;
+  const hasUnsavedChanges = history.hasPast || loadedFromSessionStorage || hasUnsavedThemeChanges;
 
   const handleSave = async () => {
     try {
       setSaving(true);
+
+      // Save theme first if there are unsaved changes
+      if (hasUnsavedThemeChanges) {
+        await onSaveTheme();
+      }
 
       // Get current data from Puck's state (no re-render!)
       const currentData = appState.data;
@@ -351,7 +360,8 @@ export default function PageEditPage() {
               pageSlug: page.slug,
               onSavePageSettings: handleSavePageSettings,
               themeConfig: formTheme, // Theme to display in form
-              onSaveTheme: handleSaveTheme, // Just save, don't update state
+              onSaveTheme: handleSaveTheme, // Save handler
+              onThemeChange: handleThemeChange, // Live preview handler
               themeMode: "page",
             }),
 
@@ -371,6 +381,16 @@ export default function PageEditPage() {
                 onPublish={handlePublish}
                 loadedFromSessionStorage={loadedFromSessionStorage}
                 setLoadedFromSessionStorage={setLoadedFromSessionStorage}
+                hasUnsavedThemeChanges={hasUnsavedThemeChanges}
+                onSaveTheme={async () => {
+                  // Get theme from sessionStorage and save it
+                  const sessionKey = `page-theme-${pageId}`;
+                  const savedTheme = sessionStorage.getItem(sessionKey);
+                  if (savedTheme) {
+                    const themeData = JSON.parse(savedTheme);
+                    await handleSaveTheme(themeData);
+                  }
+                }}
               >
                 {children}
               </CustomHeaderActions>

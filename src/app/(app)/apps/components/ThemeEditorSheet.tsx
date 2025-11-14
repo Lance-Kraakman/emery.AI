@@ -10,6 +10,7 @@
 
 import * as React from "react";
 import { useForm } from "@tanstack/react-form";
+import { useStore } from "@tanstack/react-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,18 +47,23 @@ import { THEME_PRESETS, matchesPreset } from "@/components/puck/theme-presets";
 export interface ThemeSidebarPanelProps {
   initialTheme: any | undefined; // ThemeConfigProps from DTO
   onSave: (theme: ThemeConfigProps | undefined) => Promise<void>;
+  onThemeChange?: (theme: ThemeConfigProps) => void; // Live preview callback
   mode: "app" | "page";
 }
 
 export function ThemeSidebarPanel({
   initialTheme,
   onSave,
+  onThemeChange,
   mode,
 }: ThemeSidebarPanelProps) {
   console.log('[ThemeSidebarPanel] Component render. initialTheme:', initialTheme, 'mode:', mode);
 
   const [isSaving, setIsSaving] = React.useState(false);
   const [selectedPreset, setSelectedPreset] = React.useState<string>("custom");
+
+  // Ref to track if we're currently resetting (prevents live preview loop)
+  const isResettingRef = React.useRef(false);
 
   // Initialize form with current theme or default
   const currentTheme = initialTheme || DEFAULT_THEME;
@@ -80,36 +86,50 @@ export function ThemeSidebarPanel({
     },
   });
 
-  // Reset form when initialTheme prop changes (e.g., after save completes and page state updates)
+  // Reset form when initialTheme prop changes (e.g., after save completes)
   React.useEffect(() => {
-    console.log('[ThemeSidebarPanel] initialTheme changed, resetting form. New theme:', initialTheme);
     const newTheme = initialTheme || DEFAULT_THEME;
+
+    console.log('[ThemeSidebarPanel] initialTheme changed, resetting form. New theme:', initialTheme);
+    isResettingRef.current = true; // Set flag before reset
     form.reset(newTheme);
     console.log('[ThemeSidebarPanel] Form reset complete');
+
+    // Clear flag after React finishes updating
+    setTimeout(() => {
+      isResettingRef.current = false;
+    }, 0);
   }, [initialTheme]);
 
-  // Check if current colors match a preset whenever form values change
-  React.useEffect(() => {
-    console.log('[ThemeSidebarPanel] Setting up preset matching subscription');
-    // Subscribe to form store changes
-    const subscription = form.store.subscribe(() => {
-      const currentColors = form.getFieldValue("colors");
-      const matchedPresetId = matchesPreset(currentColors);
-      console.log('[ThemeSidebarPanel.presetMatcher] Colors changed, matched preset:', matchedPresetId || 'custom');
-      setSelectedPreset(matchedPresetId || "custom");
-    });
+  // Watch form values using useStore hook (proper React pattern)
+  const formValues = useStore(form.store, (state) => state.values) as ThemeConfigProps;
 
-    // Run once on mount to set initial preset
-    const currentColors = form.getFieldValue("colors");
-    const matchedPresetId = matchesPreset(currentColors);
-    console.log('[ThemeSidebarPanel.presetMatcher] Initial mount, matched preset:', matchedPresetId || 'custom');
+  // Trigger live preview and update preset when form values change
+  React.useEffect(() => {
+    // Skip if form is being reset (prevents infinite loop)
+    if (isResettingRef.current) {
+      console.log('[ThemeSidebarPanel] Skipping live preview - form is resetting');
+      return;
+    }
+
+    if (!formValues || !formValues.colors) {
+      console.log('[ThemeSidebarPanel] Form values not ready yet');
+      return;
+    }
+
+    console.log('[ThemeSidebarPanel] Form values changed:', formValues);
+
+    // Update preset matching
+    const matchedPresetId = matchesPreset(formValues.colors);
+    console.log('[ThemeSidebarPanel] Matched preset:', matchedPresetId || 'custom');
     setSelectedPreset(matchedPresetId || "custom");
 
-    return () => {
-      console.log('[ThemeSidebarPanel] Cleaning up preset matching subscription');
-      subscription();
-    };
-  }, []);
+    // Trigger live preview
+    if (onThemeChange) {
+      console.log('[ThemeSidebarPanel] Triggering live preview');
+      onThemeChange(formValues);
+    }
+  }, [formValues, onThemeChange]);
 
   // Handle preset selection
   const handlePresetChange = (presetId: string) => {
@@ -353,7 +373,7 @@ export function ThemeSidebarPanel({
             <ChevronDown className="h-3 w-3 transition-transform duration-200 data-[state=open]:rotate-180" />
           </CollapsibleTrigger>
           <CollapsibleContent className="px-2 pb-1.5 pt-1 max-h-[400px] overflow-y-auto">
-            <div className="space-y-1">
+            <div className="space-y-0.5">
                   <form.Field name="typography.fontFamily">
                     {(field) => (
                       <FontSelect
@@ -366,13 +386,13 @@ export function ThemeSidebarPanel({
 
                   <form.Field name="typography.fontSize">
                     {(field) => (
-                      <div className="space-y-1">
+                      <div className="space-y-0.5">
                         <Label className="text-xs">Base Font Size</Label>
                         <Select
                           value={field.state.value}
                           onValueChange={(value) => field.handleChange(value)}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs">
                             <SelectValue placeholder="Select size..." />
                           </SelectTrigger>
                           <SelectContent>
@@ -390,13 +410,13 @@ export function ThemeSidebarPanel({
 
                   <form.Field name="typography.headingFontWeight">
                     {(field) => (
-                      <div className="space-y-1">
+                      <div className="space-y-0.5">
                         <Label className="text-xs">Heading Font Weight</Label>
                         <Select
                           value={String(field.state.value)}
                           onValueChange={(value) => field.handleChange(Number(value))}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs">
                             <SelectValue placeholder="Select weight..." />
                           </SelectTrigger>
                           <SelectContent>
@@ -435,16 +455,16 @@ export function ThemeSidebarPanel({
             <ChevronDown className="h-3 w-3 transition-transform duration-200 data-[state=open]:rotate-180" />
           </CollapsibleTrigger>
           <CollapsibleContent className="px-2 pb-1.5 pt-1 max-h-[400px] overflow-y-auto">
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               <form.Field name="spacing.unit">
                 {(field) => (
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     <Label className="text-xs">Spacing Unit</Label>
                     <Input
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       placeholder="0.25rem"
-                      className="h-8"
+                      className="h-8 text-xs"
                     />
                   </div>
                 )}
@@ -452,7 +472,7 @@ export function ThemeSidebarPanel({
 
               <form.Field name="spacing.scale">
                 {(field) => (
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     <Label className="text-xs">Spacing Scale</Label>
                     <Input
                       type="number"
@@ -462,7 +482,7 @@ export function ThemeSidebarPanel({
                       value={field.state.value}
                       onChange={(e) => field.handleChange(Number(e.target.value))}
                       placeholder="1.5"
-                      className="h-8"
+                      className="h-8 text-xs"
                     />
                   </div>
                 )}
@@ -470,13 +490,13 @@ export function ThemeSidebarPanel({
 
               <form.Field name="borders.radius">
                 {(field) => (
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     <Label className="text-xs">Border Radius</Label>
                     <Input
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       placeholder="0.5rem"
-                      className="h-8"
+                      className="h-8 text-xs"
                     />
                   </div>
                 )}
@@ -484,13 +504,13 @@ export function ThemeSidebarPanel({
 
               <form.Field name="borders.width">
                 {(field) => (
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     <Label className="text-xs">Border Width</Label>
                     <Input
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       placeholder="1px"
-                      className="h-8"
+                      className="h-8 text-xs"
                     />
                   </div>
                 )}
@@ -499,31 +519,34 @@ export function ThemeSidebarPanel({
           </CollapsibleContent>
         </Collapsible>
 
-        <div className="flex gap-1 pt-1">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleReset}
-            disabled={isSaving}
-            size="sm"
-            className="flex-1 h-6 text-xs px-2"
-          >
-            {mode === "page" ? "Remove" : "Reset"}
-          </Button>
-          <Button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              form.handleSubmit();
-            }}
-            disabled={isSaving}
-            size="sm"
-            className="flex-1 h-6 text-xs px-2"
-          >
-            {isSaving ? "Saving..." : "Save"}
-          </Button>
-        </div>
+        {/* Only show Save/Remove buttons in app mode - page mode uses header Save button */}
+        {mode === "app" && (
+          <div className="flex gap-1 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleReset}
+              disabled={isSaving}
+              size="sm"
+              className="flex-1 h-6 text-xs px-2"
+            >
+              Reset
+            </Button>
+            <Button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                form.handleSubmit();
+              }}
+              disabled={isSaving}
+              size="sm"
+              className="flex-1 h-6 text-xs px-2"
+            >
+              {isSaving ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        )}
       </form>
     </div>
   );

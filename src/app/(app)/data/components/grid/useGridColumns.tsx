@@ -344,12 +344,15 @@ export function useGridColumns({
       minWidth: ADD_COLUMN_BUTTON_WIDTH
     }
 
-    // AIDEV-NOTE: Conditionally include ID column
-    // Show ID only in "All Data" view (when no view is selected)
-    // Custom views hide ID for a cleaner, curated display
+    // AIDEV-NOTE: ID column visibility controlled by user preference
+    // Stored in localStorage per table, toggle in Settings menu
+    const showIdColumn = typeof window !== 'undefined' && tableId
+      ? localStorage.getItem(`showIdColumn_${tableId}`) === 'true'
+      : false
+
     const columns = []
 
-    if (!currentView) {
+    if (showIdColumn) {
       columns.push(idColumn)
     }
 
