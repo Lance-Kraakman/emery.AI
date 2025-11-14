@@ -37,7 +37,6 @@ export function detectCategoryFromQuery(query: string): ReferenceCategory | null
   if (trimmed === '@agent') return ReferenceCategory.AGENT;
   if (trimmed === '@table') return ReferenceCategory.TABLE;
   if (trimmed === '@database') return ReferenceCategory.DATABASE;
-  if (trimmed === '@skill') return ReferenceCategory.SKILL;
   return null;
 }
 
