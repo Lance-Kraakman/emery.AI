@@ -39,7 +39,9 @@ export function isPageDTO(value: unknown): value is PageDTO {
     typeof obj.templateData === 'object' &&
     obj.templateData !== null &&
     (obj.themeConfig === undefined || typeof obj.themeConfig === 'object') &&
-    typeof obj.isPublished === 'boolean' &&
+    typeof obj.isPublic === 'boolean' &&
+    typeof obj.requiresAuth === 'boolean' &&
+    (obj.allowedRoles === undefined || Array.isArray(obj.allowedRoles)) &&
     typeof obj.createdBy === 'string' &&
     typeof obj.createdAt === 'string' &&
     typeof obj.updatedAt === 'string'

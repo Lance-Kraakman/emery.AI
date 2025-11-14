@@ -1,6 +1,21 @@
 import { SkillId } from '../value-objects/skill-id';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
+import { MessagePart } from '@/lib/grpc/generated/agent_worker';
+
+/**
+ * Skill Input/Output Types
+ */
+export type SkillParameterType = 'text' | 'image' | 'file' | 'audio' | 'video' | 'document';
+
+/**
+ * File Configuration for file-type inputs
+ */
+export interface SkillInputFileConfig {
+  allowedMimeTypes?: string[];
+  maxSizeBytes?: number;
+  multiple?: boolean;
+}
 
 /**
  * Skill Input Definition
@@ -8,6 +23,8 @@ import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-i
 export interface SkillInput {
   name: string;
   required: boolean;
+  type?: SkillParameterType;
+  fileConfig?: SkillInputFileConfig;
   default?: any; // Default value for @-mention insertion
 }
 
@@ -16,6 +33,7 @@ export interface SkillInput {
  */
 export interface SkillOutput {
   name: string;
+  type?: SkillParameterType;
 }
 
 /**
@@ -33,6 +51,7 @@ export interface ToolConfig {
  * Removed: multi-step workflow (steps array)
  * Added: inputs, outputs, instructions (single text block), tools
  * Added: Global skills support (organizationId + optional agentId)
+ * Added: content field for definition-level attachments (images, files)
  *
  * Represents a reusable skill with natural language instructions.
  * Skills have explicit inputs/outputs and can reference tools via @ mentions.
@@ -51,6 +70,7 @@ export interface Skill {
   readonly outputs: SkillOutput[];
   readonly instructions: string;
   readonly tools: ToolConfig[];
+  readonly content?: MessagePart[]; // Skill-level attachments (images, files, text)
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -67,6 +87,7 @@ export interface CreateSkillProps {
   outputs?: SkillOutput[];
   instructions: string;
   tools?: ToolConfig[];
+  content?: MessagePart[];
 }
 
 /**
@@ -79,6 +100,7 @@ export interface UpdateSkillProps {
   outputs?: SkillOutput[];
   instructions?: string;
   tools?: ToolConfig[];
+  content?: MessagePart[];
 }
 
 /**
@@ -131,7 +153,8 @@ export class SkillEntity {
       inputs: inputs,
       outputs: outputs,
       instructions: props.instructions.trim(),
-      tools: props.tools || []
+      tools: props.tools || [],
+      content: props.content
     };
   }
 
@@ -185,6 +208,7 @@ export class SkillEntity {
       outputs: updates.outputs !== undefined ? updates.outputs : skill.outputs,
       instructions: updates.instructions !== undefined ? updates.instructions.trim() : skill.instructions,
       tools: updates.tools !== undefined ? updates.tools : skill.tools,
+      content: updates.content !== undefined ? updates.content : skill.content,
       updatedAt: new Date()
     };
   }

@@ -131,18 +131,18 @@ export function PagesSection({ appId, pages, loading, onPagesChange }: PagesSect
                     <span className="text-sm font-medium truncate">{page.name}</span>
                     <span className="text-xs text-muted-foreground truncate">/{page.slug}</span>
                     <Badge
-                      variant={page.isPublished ? "default" : "secondary"}
+                      variant={page.isPublic ? "default" : "secondary"}
                       className="flex-shrink-0 text-xs h-5"
                     >
-                      {page.isPublished ? (
+                      {page.isPublic ? (
                         <>
                           <Eye className="h-2.5 w-2.5 mr-1" />
-                          Published
+                          Public
                         </>
                       ) : (
                         <>
                           <EyeOff className="h-2.5 w-2.5 mr-1" />
-                          Draft
+                          Private
                         </>
                       )}
                     </Badge>

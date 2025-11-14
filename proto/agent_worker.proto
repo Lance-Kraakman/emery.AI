@@ -30,6 +30,7 @@ message TaskRequest {
   string name = 10;
   string agent_model = 11;         // Agent default model (overrides organization model in hierarchy)
   string organization_model = 12;  // Organization default model (fallback for agent model)
+  repeated MessagePart input_content = 13; // Runtime input attachments for skill execution
 }
 
 // AIDEV-NOTE: Simplified for single-instruction execution (removed step_id and step_type)
@@ -128,17 +129,28 @@ message SkillConfig {
   string instructions = 5;
   repeated ToolConfig tools = 6;
   string model = 7;                    // Optional: model override for this skill
+  repeated MessagePart content = 8;    // Skill-level attachments (images, files, text)
 }
 
 // Skill input parameter
 message SkillInput {
   string name = 1;
   bool required = 2;
+  string type = 3;                     // text, image, file, audio, video, document
+  SkillInputFileConfig file_config = 4; // File configuration (for file-type inputs)
+}
+
+// File configuration for skill inputs
+message SkillInputFileConfig {
+  repeated string allowed_mime_types = 1;  // Allowed MIME types (e.g., ["image/*", "application/pdf"])
+  int64 max_size_bytes = 2;                // Maximum file size in bytes
+  bool multiple = 3;                        // Allow multiple files
 }
 
 // Skill output value
 message SkillOutput {
   string name = 1;
+  string type = 2;                     // text, image, file, audio, video, document
 }
 
 

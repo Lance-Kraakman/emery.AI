@@ -9,6 +9,8 @@ import { authOptions } from '@/lib/auth';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { SkillInput, SkillOutput, ToolConfigDTO } from '@/app/mappers/skill-mapper';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
+import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
+import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
 
 /**
  * Server Actions for Skill Management
@@ -564,6 +566,125 @@ export async function createDefaultAgentSkill(agentId: number): Promise<Result<S
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create default agent skill'
+    };
+  }
+}
+
+/**
+ * Upload attachment for a skill
+ */
+export async function uploadSkillAttachment(
+  skillId: number,
+  formData: FormData
+): Promise<Result<AttachmentMetadata>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const file = formData.get('file') as File;
+    if (!file) {
+      return { success: false, error: 'No file provided' };
+    }
+
+    const attachmentType = formData.get('type') as AttachmentType || 'file';
+
+    // Get skill to retrieve organizationId
+    const service = getSkillApplicationService();
+    const skillResult = await service.getSkill(skillId);
+
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    const skill = skillResult.data;
+
+    // Upload to S3
+    const uploadResult = await s3SkillAttachmentService.uploadAttachment({
+      file,
+      organizationId: skill.organizationId.value,
+      skillId,
+      type: attachmentType
+    });
+
+    return {
+      success: true,
+      data: uploadResult.metadata
+    };
+  } catch (error) {
+    console.error('[uploadSkillAttachment] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to upload skill attachment'
+    };
+  }
+}
+
+/**
+ * Delete attachment from a skill
+ */
+export async function deleteSkillAttachment(
+  skillId: number,
+  s3Key: string
+): Promise<Result<void>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Verify skill access
+    const service = getSkillApplicationService();
+    const skillResult = await service.getSkill(skillId);
+
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    // Delete from S3
+    await s3SkillAttachmentService.deleteAttachment(s3Key);
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error('[deleteSkillAttachment] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete skill attachment'
+    };
+  }
+}
+
+/**
+ * Generate fresh pre-signed URL for skill attachment
+ */
+export async function generateSkillAttachmentUrl(
+  skillId: number,
+  s3Key: string
+): Promise<Result<string>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Verify skill access
+    const service = getSkillApplicationService();
+    const skillResult = await service.getSkill(skillId);
+
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    // Generate URL
+    const url = await s3SkillAttachmentService.generateAttachmentUrl(s3Key);
+
+    return { success: true, data: url };
+  } catch (error) {
+    console.error('[generateSkillAttachmentUrl] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to generate attachment URL'
     };
   }
 }

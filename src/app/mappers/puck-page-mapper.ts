@@ -14,7 +14,9 @@ export interface PageDTO {
   order: number;
   templateData: PuckDataStructure;
   themeConfig?: ThemeConfigProps | null;
-  isPublished: boolean;
+  isPublic: boolean;
+  requiresAuth: boolean;
+  allowedRoles?: string[];
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -34,7 +36,9 @@ export class PuckPageMapper {
       order: page.order.value,
       templateData: page.templateData.data,
       themeConfig: page.themeConfig ? page.themeConfig.toJSON() : undefined,
-      isPublished: page.isPublished,
+      isPublic: page.isPublic,
+      requiresAuth: page.requiresAuth,
+      allowedRoles: page.allowedRoles,
       createdBy: page.createdBy.value,
       createdAt: page.createdAt.toISOString(),
       updatedAt: page.updatedAt.toISOString()

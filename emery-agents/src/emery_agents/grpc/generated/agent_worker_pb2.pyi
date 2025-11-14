@@ -47,7 +47,7 @@ STEP_REASONING: StepType
 STEP_FINAL: StepType
 
 class TaskRequest(_message.Message):
-    __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name", "agent_model", "organization_model")
+    __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name", "agent_model", "organization_model", "input_content")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     AGENT_ID_FIELD_NUMBER: _ClassVar[int]
     SKILL_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -60,6 +60,7 @@ class TaskRequest(_message.Message):
     NAME_FIELD_NUMBER: _ClassVar[int]
     AGENT_MODEL_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_MODEL_FIELD_NUMBER: _ClassVar[int]
+    INPUT_CONTENT_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     agent_id: int
     skill_name: str
@@ -72,7 +73,8 @@ class TaskRequest(_message.Message):
     name: str
     agent_model: str
     organization_model: str
-    def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ..., agent_model: _Optional[str] = ..., organization_model: _Optional[str] = ...) -> None: ...
+    input_content: _containers.RepeatedCompositeFieldContainer[MessagePart]
+    def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ..., agent_model: _Optional[str] = ..., organization_model: _Optional[str] = ..., input_content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ...) -> None: ...
 
 class TaskProgress(_message.Message):
     __slots__ = ("task_id", "status", "output_json", "error_message", "timestamp_ms", "progress_percent", "token_usage")
@@ -179,7 +181,7 @@ class AgentConfig(_message.Message):
     def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., skills: _Optional[_Iterable[_Union[SkillConfig, _Mapping]]] = ..., default_model: _Optional[str] = ...) -> None: ...
 
 class SkillConfig(_message.Message):
-    __slots__ = ("name", "description", "inputs", "outputs", "instructions", "tools", "model")
+    __slots__ = ("name", "description", "inputs", "outputs", "instructions", "tools", "model", "content")
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     INPUTS_FIELD_NUMBER: _ClassVar[int]
@@ -187,6 +189,7 @@ class SkillConfig(_message.Message):
     INSTRUCTIONS_FIELD_NUMBER: _ClassVar[int]
     TOOLS_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
+    CONTENT_FIELD_NUMBER: _ClassVar[int]
     name: str
     description: str
     inputs: _containers.RepeatedCompositeFieldContainer[SkillInput]
@@ -194,21 +197,38 @@ class SkillConfig(_message.Message):
     instructions: str
     tools: _containers.RepeatedCompositeFieldContainer[ToolConfig]
     model: str
-    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., inputs: _Optional[_Iterable[_Union[SkillInput, _Mapping]]] = ..., outputs: _Optional[_Iterable[_Union[SkillOutput, _Mapping]]] = ..., instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ...) -> None: ...
+    content: _containers.RepeatedCompositeFieldContainer[MessagePart]
+    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., inputs: _Optional[_Iterable[_Union[SkillInput, _Mapping]]] = ..., outputs: _Optional[_Iterable[_Union[SkillOutput, _Mapping]]] = ..., instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ..., content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ...) -> None: ...
 
 class SkillInput(_message.Message):
-    __slots__ = ("name", "required")
+    __slots__ = ("name", "required", "type", "file_config")
     NAME_FIELD_NUMBER: _ClassVar[int]
     REQUIRED_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    FILE_CONFIG_FIELD_NUMBER: _ClassVar[int]
     name: str
     required: bool
-    def __init__(self, name: _Optional[str] = ..., required: bool = ...) -> None: ...
+    type: str
+    file_config: SkillInputFileConfig
+    def __init__(self, name: _Optional[str] = ..., required: bool = ..., type: _Optional[str] = ..., file_config: _Optional[_Union[SkillInputFileConfig, _Mapping]] = ...) -> None: ...
+
+class SkillInputFileConfig(_message.Message):
+    __slots__ = ("allowed_mime_types", "max_size_bytes", "multiple")
+    ALLOWED_MIME_TYPES_FIELD_NUMBER: _ClassVar[int]
+    MAX_SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    MULTIPLE_FIELD_NUMBER: _ClassVar[int]
+    allowed_mime_types: _containers.RepeatedScalarFieldContainer[str]
+    max_size_bytes: int
+    multiple: bool
+    def __init__(self, allowed_mime_types: _Optional[_Iterable[str]] = ..., max_size_bytes: _Optional[int] = ..., multiple: bool = ...) -> None: ...
 
 class SkillOutput(_message.Message):
-    __slots__ = ("name",)
+    __slots__ = ("name", "type")
     NAME_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
     name: str
-    def __init__(self, name: _Optional[str] = ...) -> None: ...
+    type: str
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ...) -> None: ...
 
 class ToolConfig(_message.Message):
     __slots__ = ("name", "version", "config")

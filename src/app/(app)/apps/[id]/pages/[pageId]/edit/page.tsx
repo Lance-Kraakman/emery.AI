@@ -162,7 +162,7 @@ function CustomHeaderActions({
           onClick={onPublish}
         >
           <Globe size={16} className="mr-1" />
-          {page.isPublished ? "Unpublish" : "Publish"}
+          {page.isPublic ? "Make Private" : "Make Public"}
         </Button>
       </div>
     </div>
@@ -238,22 +238,22 @@ export default function PageEditPage() {
     if (!page) return;
 
     try {
-      const result = page.isPublished
+      const result = page.isPublic
         ? await unpublishPage(pageId, `/apps/${appId}/pages/${pageId}/edit`)
         : await publishPage(pageId, `/apps/${appId}/pages/${pageId}/edit`);
 
       if (!result.success) {
-        toast.error(result.error || `Failed to ${page.isPublished ? 'unpublish' : 'publish'} page`);
+        toast.error(result.error || `Failed to make page ${page.isPublic ? 'private' : 'public'}`);
         return;
       }
 
-      toast.success(`Page ${page.isPublished ? 'unpublished' : 'published'} successfully!`);
+      toast.success(`Page is now ${page.isPublic ? 'private' : 'public'}!`);
 
       // Update local state
-      setPage(prev => prev ? { ...prev, isPublished: !prev.isPublished } : null);
+      setPage(prev => prev ? { ...prev, isPublic: !prev.isPublic } : null);
     } catch (err) {
       console.error('Error publishing page:', err);
-      toast.error(`Failed to ${page.isPublished ? 'unpublish' : 'publish'} page`);
+      toast.error(`Failed to make page ${page.isPublic ? 'private' : 'public'}`);
     }
   };
 
