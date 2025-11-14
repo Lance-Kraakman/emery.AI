@@ -12,7 +12,11 @@ import { InstructionsInput } from './editor/InstructionsInput';
 import { ToolsSection } from './editor/ToolsSection';
 import { SkillInputsSection } from './editor/SkillInputsSection';
 import { SkillOutputsSection } from './editor/SkillOutputsSection';
+import { AttachmentInput, AttachmentList } from '@/components/shared/attachments';
+import { useAttachments } from '@/hooks/useAttachments';
+import { uploadSkillAttachment, deleteSkillAttachment } from '@/app/actions/skills';
 import type { ToolConfigDTO, SkillInput, SkillOutput } from '@/app/mappers/skill-mapper';
+import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 
 export interface SkillFormData {
   name: string;
@@ -22,6 +26,7 @@ export interface SkillFormData {
   instructions: string;
   tools: ToolConfigDTO[];
   model?: string | null; // Optional model override for this skill
+  content?: MessagePart[]; // Skill-level attachments
 }
 
 interface SkillEditorProps {
@@ -191,6 +196,93 @@ export function SkillEditor({
           Define what data this skill returns
         </p>
       </div>
+
+      {/* Attachments Section (only for existing skills) */}
+      {skillId && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm text-muted-foreground">Attachments</Label>
+            <span className="text-xs text-muted-foreground">
+              {(localValue.content?.filter(p => p.imageUrl || p.file)?.length || 0)} file{((localValue.content?.filter(p => p.imageUrl || p.file)?.length || 0) !== 1) ? 's' : ''}
+            </span>
+          </div>
+          <div className="border rounded-md p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <AttachmentInput
+                onFileSelect={async (file) => {
+                  const formData = new FormData();
+                  formData.append('file', file);
+                  formData.append('type', file.type.startsWith('image/') ? 'image' : 'file');
+
+                  const result = await uploadSkillAttachment(skillId, formData);
+                  if (result.success && result.data) {
+                    // Convert attachment metadata to MessagePart
+                    const newPart: MessagePart = file.type.startsWith('image/')
+                      ? { imageUrl: { url: result.data.url } }
+                      : { file: {
+                          url: result.data.url,
+                          mimeType: result.data.mimeType,
+                          filename: result.data.filename,
+                          size: result.data.sizeBytes
+                        }};
+
+                    const newContent = [...(localValue.content || []), newPart];
+                    handleChange({ content: newContent });
+                  } else {
+                    alert('Failed to upload attachment: ' + (result.error || 'Unknown error'));
+                  }
+                }}
+                buttonTitle="Upload reference files (images, documents)"
+              />
+              <span className="text-xs text-muted-foreground">
+                Upload images or files to include as reference material for this skill
+              </span>
+            </div>
+
+            {localValue.content && localValue.content.length > 0 && (
+              <div className="space-y-2">
+                {localValue.content.map((part, index) => {
+                  const isImage = part.imageUrl;
+                  const isFile = part.file;
+                  if (!isImage && !isFile) return null;
+
+                  const filename = isFile ? part.file!.filename : 'Image';
+                  const size = isFile ? part.file!.size : 0;
+
+                  return (
+                    <div key={index} className="flex items-center justify-between bg-muted/30 rounded px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        {isImage && <span className="text-xs">🖼️</span>}
+                        {isFile && <span className="text-xs">📄</span>}
+                        <span className="text-xs truncate max-w-[200px]">{filename}</span>
+                        {size > 0 && <span className="text-xs text-muted-foreground">({(size / 1024).toFixed(1)} KB)</span>}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={async () => {
+                          const s3Key = isImage ? part.imageUrl?.url.split('/').pop() : part.file?.url.split('/').pop();
+                          if (s3Key) {
+                            await deleteSkillAttachment(skillId, s3Key);
+                          }
+                          const newContent = localValue.content?.filter((_, i) => i !== index) || [];
+                          handleChange({ content: newContent });
+                        }}
+                        className="h-6 w-6 p-0"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Reference files are available to the AI when executing this skill
+          </p>
+        </div>
+      )}
 
       {/* Tools Section - Display Only */}
       {localValue.tools.length > 0 && (
