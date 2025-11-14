@@ -126,12 +126,13 @@ export class DIContainer {
     this.registerServices('chat', chatServices);
 
     // Phase 6: Register tools services
-    // Depends on: agent repository, table/agent/database application services
+    // Depends on: agent repository, table/agent/database/skill application services
     const toolsServices = registerToolsServices({
       agentRepository: agentServices.agentRepository,
       tableApplicationService: databaseServices.tableApplicationService,
       agentApplicationService: agentServices.agentApplicationService,
-      databaseApplicationService: databaseServices.databaseApplicationService
+      databaseApplicationService: databaseServices.databaseApplicationService,
+      skillApplicationService: skillServices.skillApplicationService
     });
     this.registerServices('tools', toolsServices);
 

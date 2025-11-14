@@ -80,6 +80,15 @@ export interface DatabaseToolConfig extends BaseToolConfig {
 }
 
 /**
+ * Skill tool configuration - references a reusable AI skill
+ */
+export interface SkillToolConfig extends BaseToolConfig {
+  skillId: number
+  organizationId: number
+  agentId?: number // Optional: null for org skills, number for agent-scoped skills
+}
+
+/**
  * OAuth tool configuration - for external app integrations
  */
 export interface OAuthToolConfig extends BaseToolConfig {
@@ -110,6 +119,7 @@ export type ToolConfigData =
   | DocumentToolConfig
   | FileToolConfig
   | DatabaseToolConfig
+  | SkillToolConfig
   | OAuthToolConfig
   | ApiKeyToolConfig
   | BaseToolConfig
@@ -246,6 +256,24 @@ export class ToolConfig {
   }
 
   /**
+   * Create a skill tool configuration
+   */
+  static skill(
+    name: string,
+    skillId: number,
+    organizationId: number,
+    agentId?: number,
+    version: string = '1.0'
+  ): ToolConfig {
+    const config: SkillToolConfig = {
+      skillId,
+      organizationId,
+      agentId
+    }
+    return new ToolConfig(name, config)
+  }
+
+  /**
    * Create an OAuth tool configuration
    */
   static oauth(
@@ -322,6 +350,10 @@ export class ToolConfig {
     return 'databaseId' in this.config && typeof this.config.databaseId === 'string'
   }
 
+  isSkillTool(): this is ToolConfig & { config: SkillToolConfig } {
+    return 'skillId' in this.config && typeof this.config.skillId === 'number'
+  }
+
   isOAuthTool(): this is ToolConfig & { config: OAuthToolConfig } {
     return 'oauth_token' in this.config && typeof this.config.oauth_token === 'string'
   }
@@ -351,6 +383,10 @@ export class ToolConfig {
 
   getDatabaseConfig(): DatabaseToolConfig | null {
     return this.isDatabaseTool() ? this.config : null
+  }
+
+  getSkillConfig(): SkillToolConfig | null {
+    return this.isSkillTool() ? this.config : null
   }
 
   getOAuthConfig(): OAuthToolConfig | null {

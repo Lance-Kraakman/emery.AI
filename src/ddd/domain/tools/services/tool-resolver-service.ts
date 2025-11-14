@@ -19,7 +19,8 @@ export const SEARCH_CATEGORIES = {
   TABLE: 'table' as const,
   DATABASE: 'database' as const,
   DOC: 'doc' as const,
-  FILE: 'file' as const
+  FILE: 'file' as const,
+  SKILL: 'skill' as const
 } as const
 
 /**
@@ -30,7 +31,7 @@ export type SearchCategoryType = typeof SEARCH_CATEGORIES[keyof typeof SEARCH_CA
 /**
  * Search handler types for internal routing
  */
-export type SearchHandlerType = 'agent' | 'table' | 'database' | 'document'
+export type SearchHandlerType = 'agent' | 'table' | 'database' | 'document' | 'skill'
 
 /**
  * Reference mapping configuration for @-patterns to CRUD tools
@@ -140,7 +141,8 @@ export class ToolResolverService {
       [SEARCH_CATEGORIES.TABLE]: 'table',
       [SEARCH_CATEGORIES.DATABASE]: 'database',
       [SEARCH_CATEGORIES.DOC]: 'document',
-      [SEARCH_CATEGORIES.FILE]: 'document'
+      [SEARCH_CATEGORIES.FILE]: 'document',
+      [SEARCH_CATEGORIES.SKILL]: 'skill'
     }
     return mapping[category]
   }
@@ -180,6 +182,8 @@ export class ToolResolverService {
       return [SEARCH_CATEGORIES.TABLE]
     } else if (cleanQuery.startsWith('@database:')) {
       return [SEARCH_CATEGORIES.DATABASE]
+    } else if (cleanQuery.startsWith('@skill:')) {
+      return [SEARCH_CATEGORIES.SKILL]
     } else if (cleanQuery === '@' || cleanQuery === '') {
       // Show all categories when just @ or empty
       return this.getAllSearchCategories()

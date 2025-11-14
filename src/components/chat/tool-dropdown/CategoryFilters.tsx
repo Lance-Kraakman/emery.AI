@@ -45,7 +45,8 @@ export function CategoryFilters({
                       category === ReferenceCategory.FILE && 'ring-green-400',
                       category === ReferenceCategory.AGENT && 'ring-purple-400',
                       category === ReferenceCategory.TABLE && 'ring-orange-400',
-                      category === ReferenceCategory.DATABASE && 'ring-gray-400'
+                      category === ReferenceCategory.DATABASE && 'ring-gray-400',
+                      category === ReferenceCategory.SKILL && 'ring-pink-400'
                     )
                   : 'text-gray-500 bg-gray-50 hover:bg-gray-100 hover:text-gray-700',
                 isFocused && 'ring-2 ring-blue-500 ring-offset-1'
