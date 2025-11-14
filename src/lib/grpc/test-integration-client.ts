@@ -118,7 +118,8 @@ export class AgentWorkerTestClient {
         triggerData: {
           // Add trigger data fields as needed
         } as TriggerData,
-        
+        inputContent: [], // Runtime input attachments (empty for test client)
+
         // Set execution mode
         ...(request.instructions
           ? {
