@@ -3,7 +3,7 @@
  *
  * AIDEV-NOTE: Used in Puck editor sidebar (right panel).
  * Provides accordion interface for editing theme configuration (colors, typography, layout).
- * Supports both app-level themes and page-level overrides.
+ * Supports both app-level themes (via props) and page-level overrides (via context).
  */
 
 "use client";
@@ -43,93 +43,55 @@ import {
   DEFAULT_THEME,
 } from "@/ddd/domain/puck/value-objects/theme-config";
 import { THEME_PRESETS, matchesPreset } from "@/components/puck/theme-presets";
+import { usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 
 export interface ThemeSidebarPanelProps {
-  initialTheme: any | undefined; // ThemeConfigProps from DTO
-  onSave: (theme: ThemeConfigProps | undefined) => Promise<void>;
-  onThemeChange?: (theme: ThemeConfigProps) => void; // Live preview callback
+  initialTheme?: any | undefined; // ThemeConfigProps from DTO (app mode only)
+  onSave?: (theme: ThemeConfigProps | undefined) => Promise<void>; // App mode only
   mode: "app" | "page";
 }
 
 export function ThemeSidebarPanel({
   initialTheme,
   onSave,
-  onThemeChange,
   mode,
 }: ThemeSidebarPanelProps) {
-  console.log('[ThemeSidebarPanel] Component render. initialTheme:', initialTheme, 'mode:', mode);
+  // For page mode, use context. For app mode, use props.
+  const themeContext = mode === "page" ? usePuckEditorTheme() : null;
 
-  const [isSaving, setIsSaving] = React.useState(false);
   const [selectedPreset, setSelectedPreset] = React.useState<string>("custom");
 
-  // Ref to track if we're currently resetting (prevents live preview loop)
-  const isResettingRef = React.useRef(false);
+  // Get theme and handlers based on mode
+  const currentTheme = themeContext?.formTheme || initialTheme || DEFAULT_THEME;
+  const isSaving = themeContext?.isSaving || false;
+  const handleSave = themeContext?.saveTheme || onSave;
+  const handleLivePreview = themeContext?.updateLiveTheme;
 
-  // Initialize form with current theme or default
-  const currentTheme = initialTheme || DEFAULT_THEME;
-  console.log('[ThemeSidebarPanel] currentTheme calculated:', currentTheme);
-
+  // Initialize form with current theme
   const form = useForm({
     defaultValues: currentTheme,
     onSubmit: async ({ value }) => {
-      console.log('[ThemeSidebarPanel.onSubmit] Starting save with value:', value);
-      try {
-        setIsSaving(true);
-        console.log('[ThemeSidebarPanel.onSubmit] Calling onSave callback');
-        await onSave(value as ThemeConfigProps);
-        console.log('[ThemeSidebarPanel.onSubmit] onSave completed successfully');
-      } catch (error) {
-        console.error("[ThemeSidebarPanel.onSubmit] Error saving theme:", error);
-      } finally {
-        setIsSaving(false);
+      if (handleSave) {
+        await handleSave(value as ThemeConfigProps);
       }
     },
   });
 
-  // Reset form when initialTheme prop changes (e.g., after save completes)
-  React.useEffect(() => {
-    const newTheme = initialTheme || DEFAULT_THEME;
-
-    console.log('[ThemeSidebarPanel] initialTheme changed, resetting form. New theme:', initialTheme);
-    isResettingRef.current = true; // Set flag before reset
-    form.reset(newTheme);
-    console.log('[ThemeSidebarPanel] Form reset complete');
-
-    // Clear flag after React finishes updating
-    setTimeout(() => {
-      isResettingRef.current = false;
-    }, 0);
-  }, [initialTheme]);
-
-  // Watch form values using useStore hook (proper React pattern)
+  // Watch form values for live preview and preset matching
   const formValues = useStore(form.store, (state) => state.values) as ThemeConfigProps;
 
-  // Trigger live preview and update preset when form values change
   React.useEffect(() => {
-    // Skip if form is being reset (prevents infinite loop)
-    if (isResettingRef.current) {
-      console.log('[ThemeSidebarPanel] Skipping live preview - form is resetting');
-      return;
-    }
-
-    if (!formValues || !formValues.colors) {
-      console.log('[ThemeSidebarPanel] Form values not ready yet');
-      return;
-    }
-
-    console.log('[ThemeSidebarPanel] Form values changed:', formValues);
+    if (!formValues?.colors) return;
 
     // Update preset matching
     const matchedPresetId = matchesPreset(formValues.colors);
-    console.log('[ThemeSidebarPanel] Matched preset:', matchedPresetId || 'custom');
     setSelectedPreset(matchedPresetId || "custom");
 
-    // Trigger live preview
-    if (onThemeChange) {
-      console.log('[ThemeSidebarPanel] Triggering live preview');
-      onThemeChange(formValues);
+    // Trigger live preview (page mode only via context)
+    if (handleLivePreview) {
+      handleLivePreview(formValues);
     }
-  }, [formValues, onThemeChange]);
+  }, [formValues, handleLivePreview]);
 
   // Handle preset selection
   const handlePresetChange = (presetId: string) => {
@@ -144,9 +106,9 @@ export function ThemeSidebarPanel({
 
   // Reset to default theme
   const handleReset = () => {
-    if (mode === "page") {
-      // For page mode, reset means clear overrides (save undefined)
-      onSave(undefined);
+    if (mode === "page" && themeContext) {
+      // For page mode, reset means clear overrides
+      themeContext.removeTheme();
     } else {
       // For app mode, reset to default theme
       form.setFieldValue("colors", DEFAULT_THEME.colors);
