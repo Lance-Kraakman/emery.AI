@@ -40,14 +40,14 @@ const logger = createDebugLogger('EmeryChat')
 
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
- * 
+ *
  * Features:
  * - "Emery" branding at the top
  * - LlamaIndex ChatSection with ChatMessages and ChatInput
  * - Canvas expand/collapse controls
  * - Context-aware suggestions based on page/domain
  * - Responsive behavior for mobile
- * 
+ *
  * AIDEV-NOTE: This replaces the placeholder chat component with full
  * LlamaIndex integration and domain-aware functionality.
  */
@@ -130,7 +130,7 @@ function EmeryChatHeader({
             <ChevronRight className="h-4 w-4" />
           </Button>
         )}
-        
+
         {/* Chat collapse button (only show when expanded) - points right > */}
         {chatState === 'expanded' && (
           <Button
@@ -143,7 +143,7 @@ function EmeryChatHeader({
             <ChevronRight className="h-4 w-4" />
           </Button>
         )}
-        
+
         {/* Chat expand button (only show when collapsed) - points left < */}
         {chatState === 'collapsed' && (
           <Button

@@ -25,6 +25,13 @@ from .type_conversion import (
     cast_value_to_column_type,
 )
 
+from .field_validation import (
+    validate_field_type_change,
+    is_metadata_only_change,
+    get_type_change_error_message,
+    get_field_operation_description,
+)
+
 from .transform import (
     normalize_arrow_table_to_large_string,
     build_pyarrow_predicate,
@@ -77,7 +84,13 @@ __all__ = [
     'convert_protobuf_to_dataframe',
     'convert_dataframe_to_arrow',
     'create_empty_arrow_table',
-    
+
+    # Field validation functions
+    'validate_field_type_change',
+    'is_metadata_only_change',
+    'get_type_change_error_message',
+    'get_field_operation_description',
+
     # Validate functions
     'validate_s3_path',
     'validate_field_mappings',
