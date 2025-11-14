@@ -7,18 +7,20 @@ import { notFound } from "next/navigation"
 
 interface PublicAppLayoutProps {
   children: React.ReactNode
-  params: {
+  params: Promise<{
     orgSlug: string
     appSlug: string
-  }
+  }>
 }
 
 export async function generateMetadata({
   params
 }: {
-  params: { orgSlug: string; appSlug: string }
+  params: Promise<{ orgSlug: string; appSlug: string }>
 }): Promise<Metadata> {
-  const result = await getPublicApp(params.orgSlug, params.appSlug)
+  const { orgSlug, appSlug } = await params
+
+  const result = await getPublicApp(orgSlug, appSlug)
 
   if (!result.success || !result.data) {
     return {
@@ -38,7 +40,9 @@ export default async function PublicAppLayout({
   children,
   params
 }: PublicAppLayoutProps) {
-  const result = await getPublicApp(params.orgSlug, params.appSlug)
+  const { orgSlug, appSlug } = await params
+
+  const result = await getPublicApp(orgSlug, appSlug)
 
   if (!result.success || !result.data) {
     notFound()

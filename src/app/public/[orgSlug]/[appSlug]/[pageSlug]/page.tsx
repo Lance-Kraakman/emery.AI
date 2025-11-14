@@ -7,20 +7,22 @@ import { getPublicApp, getPublicPage } from "@/app/actions/public-pages"
 import { PublicPageRenderer } from "./PublicPageRenderer"
 
 interface PublicPageProps {
-  params: {
+  params: Promise<{
     orgSlug: string
     appSlug: string
     pageSlug: string
-  }
+  }>
 }
 
 export async function generateMetadata({
   params
 }: PublicPageProps): Promise<Metadata> {
+  const { orgSlug, appSlug, pageSlug } = await params
+
   const pageResult = await getPublicPage(
-    params.orgSlug,
-    params.appSlug,
-    params.pageSlug
+    orgSlug,
+    appSlug,
+    pageSlug
   )
 
   if (!pageResult.success || !pageResult.data) {
@@ -38,10 +40,12 @@ export async function generateMetadata({
 }
 
 export default async function PublicPage({ params }: PublicPageProps) {
+  const { orgSlug, appSlug, pageSlug } = await params
+
   // Fetch app and page data
   const [appResult, pageResult] = await Promise.all([
-    getPublicApp(params.orgSlug, params.appSlug),
-    getPublicPage(params.orgSlug, params.appSlug, params.pageSlug)
+    getPublicApp(orgSlug, appSlug),
+    getPublicPage(orgSlug, appSlug, pageSlug)
   ])
 
   if (!appResult.success || !appResult.data || !pageResult.success || !pageResult.data) {
