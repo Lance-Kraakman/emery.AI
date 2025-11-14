@@ -152,7 +152,8 @@ export function createTaskRequest(params: {
     ownerId: params.ownerId,
     timeoutSeconds: params.timeoutSeconds || 300,
     agentModel: params.agentModel || '', // Agent default model (overrides org model in hierarchy)
-    organizationModel: params.organizationModel || '' // Organization default model for fallback
+    organizationModel: params.organizationModel || '', // Organization default model for fallback
+    inputContent: [] // Runtime input attachments (empty for now, can be extended later)
   };
 
   // Debug logging for model selection
