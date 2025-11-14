@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { ThemeProvider } from "@/components/puck/theme-context";
 import { PuckEditorThemeProvider, usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 import { createPuckUIOverrides } from "@/components/puck/overrides";
+import { PuckSession } from "@/lib/puck/session-storage";
 
 // Sidebar state persistence component
 // AIDEV-NOTE: This component handles saving/restoring Puck's sidebar state to sessionStorage
@@ -29,18 +30,18 @@ function SidebarStatePersistence({ pageId }: { pageId: number }) {
   useEffect(() => {
     if (isInitialized) return;
 
-    const savedLeftState = sessionStorage.getItem(`puck-sidebar-left-${pageId}`);
-    const savedRightState = sessionStorage.getItem(`puck-sidebar-right-${pageId}`);
+    const savedLeftState = PuckSession.getSidebarState(pageId, 'left');
+    const savedRightState = PuckSession.getSidebarState(pageId, 'right');
 
     if (savedLeftState !== null || savedRightState !== null) {
-      const uiUpdate: any = {};
+      const uiUpdate: { leftSideBarVisible?: boolean; rightSideBarVisible?: boolean } = {};
 
       if (savedLeftState !== null) {
-        uiUpdate.leftSideBarVisible = savedLeftState === 'true';
+        uiUpdate.leftSideBarVisible = savedLeftState;
       }
 
       if (savedRightState !== null) {
-        uiUpdate.rightSideBarVisible = savedRightState === 'true';
+        uiUpdate.rightSideBarVisible = savedRightState;
       }
 
       dispatch({ type: 'setUi', ui: uiUpdate });
@@ -57,11 +58,11 @@ function SidebarStatePersistence({ pageId }: { pageId: number }) {
     const rightVisible = appState.ui.rightSideBarVisible;
 
     if (leftVisible !== undefined) {
-      sessionStorage.setItem(`puck-sidebar-left-${pageId}`, String(leftVisible));
+      PuckSession.setSidebarState(pageId, 'left', leftVisible);
     }
 
     if (rightVisible !== undefined) {
-      sessionStorage.setItem(`puck-sidebar-right-${pageId}`, String(rightVisible));
+      PuckSession.setSidebarState(pageId, 'right', rightVisible);
     }
   }, [appState.ui.leftSideBarVisible, appState.ui.rightSideBarVisible, pageId, isInitialized]);
 
@@ -97,10 +98,8 @@ function CustomHeaderActions({
     try {
       // Save theme first if needed
       if (themeContext.hasUnsavedChanges) {
-        const sessionKey = `page-theme-${pageId}`;
-        const savedTheme = sessionStorage.getItem(sessionKey);
-        if (savedTheme) {
-          const themeData = JSON.parse(savedTheme);
+        const themeData = PuckSession.getTheme(pageId);
+        if (themeData) {
           await themeContext.saveTheme(themeData);
         }
       }
@@ -119,7 +118,7 @@ function CustomHeaderActions({
       toast.success("Page saved successfully!");
 
       // Clean up sessionStorage
-      sessionStorage.removeItem(`puck-data-${pageId}`);
+      PuckSession.clearData(pageId);
       setLoadedFromSessionStorage(false);
     } catch (err) {
       console.error('Error saving page:', err);
@@ -132,7 +131,7 @@ function CustomHeaderActions({
     const currentData = appState.data;
 
     // Save current data to sessionStorage so preview can access unsaved changes
-    sessionStorage.setItem(`puck-data-${pageId}`, JSON.stringify(currentData));
+    PuckSession.setData(pageId, currentData);
 
     // Navigate to preview route
     router.push(`/apps/${appId}/pages/${pageId}/preview`);
@@ -204,18 +203,17 @@ export default function PageEditPage() {
         setPage(pageResult.data);
 
         // Check for unsaved changes in sessionStorage
-        const savedData = sessionStorage.getItem(`puck-data-${pageId}`);
+        const savedData = PuckSession.getData(pageId);
         if (savedData) {
           try {
-            const rawData = JSON.parse(savedData);
-            const resolvedData = await resolveAllData(rawData, config, {});
+            const resolvedData = await resolveAllData(savedData, config, {});
             setInitialData(resolvedData);
             setLoadedFromSessionStorage(true);
             setLoading(false);
             return;
           } catch (err) {
             console.error('Error parsing saved data:', err);
-            sessionStorage.removeItem(`puck-data-${pageId}`);
+            PuckSession.clearData(pageId);
           }
         }
 
