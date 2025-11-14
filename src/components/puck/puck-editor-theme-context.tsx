@@ -36,7 +36,6 @@ interface PuckEditorThemeContextValue {
   removeTheme: () => Promise<void>;
 
   // State flags
-  isSaving: boolean;
   hasUnsavedChanges: boolean;
 }
 
@@ -55,7 +54,6 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
     return app.themeConfig ? ThemeConfig.create(app.themeConfig) : ThemeConfig.default();
   });
 
-  const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Initialize theme on mount
@@ -109,29 +107,16 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
     sessionStorage.setItem(sessionKey, JSON.stringify(newTheme));
   }, [app, pageId]);
 
-  // Save theme to database
+  // Save theme to database (silent background save - no re-renders)
   const saveTheme = useCallback(async (theme: ThemeConfigProps | undefined) => {
-    setIsSaving(true);
-
     try {
       const result = await updatePageTheme(pageId, theme);
 
       if (!result.success) {
         toast.error(result.error || "Failed to save theme");
-        setIsSaving(false);
         return;
       }
 
-      // Calculate new effective theme
-      const appTheme = app.themeConfig
-        ? ThemeConfig.create(app.themeConfig)
-        : ThemeConfig.default();
-
-      const newEffectiveTheme = theme
-        ? ThemeConfig.merge(appTheme, ThemeConfig.create(theme))
-        : appTheme;
-
-      setCurrentTheme(newEffectiveTheme);
       toast.success("Theme saved successfully");
       setHasUnsavedChanges(false);
 
@@ -141,10 +126,8 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
     } catch (error) {
       console.error('[PuckEditorTheme] Error saving theme:', error);
       toast.error("Failed to save theme");
-    } finally {
-      setIsSaving(false);
     }
-  }, [pageId, app]);
+  }, [pageId]);
 
   // Remove page theme override (revert to app theme)
   const removeTheme = useCallback(async () => {
@@ -165,7 +148,6 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
     updateLiveTheme,
     saveTheme,
     removeTheme,
-    isSaving,
     hasUnsavedChanges,
   };
 
