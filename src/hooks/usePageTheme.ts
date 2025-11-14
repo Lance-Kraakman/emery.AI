@@ -108,6 +108,19 @@ export function usePageTheme(pageId: number | null, page: PageDTO | null, app: A
         return;
       }
 
+      // Calculate new effective theme (app theme + saved page override)
+      const appTheme = app.themeConfig
+        ? ThemeConfig.create(app.themeConfig)
+        : ThemeConfig.default();
+
+      const newEffectiveTheme = theme
+        ? ThemeConfig.merge(appTheme, ThemeConfig.create(theme))
+        : appTheme;
+
+      // Update currentTheme to reflect saved state
+      console.log('[usePageTheme] Updating currentTheme with saved theme:', newEffectiveTheme);
+      setCurrentTheme(newEffectiveTheme);
+
       toast.success("Theme saved successfully");
       setHasUnsavedChanges(false);
 
@@ -115,10 +128,7 @@ export function usePageTheme(pageId: number | null, page: PageDTO | null, app: A
       const sessionKey = `page-theme-${pageId}`;
       sessionStorage.removeItem(sessionKey);
 
-      console.log('[usePageTheme] Theme saved successfully, returning updated page');
-
-      // Return updated page so parent can update state and trigger re-initialization
-      return result.data;
+      console.log('[usePageTheme] Theme saved successfully');
     } catch (error) {
       console.error('[usePageTheme] Error saving theme:', error);
       toast.error("Failed to save theme");
