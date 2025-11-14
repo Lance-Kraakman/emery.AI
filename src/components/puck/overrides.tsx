@@ -2,7 +2,6 @@ import { ReactNode } from "react";
 import type { Overrides } from "@measured/puck";
 import { ThemeSidebarPanel } from "@/app/(app)/apps/components/ThemeEditorSheet";
 import { PageSettingsPanel } from "@/app/(app)/apps/components/PageSettingsPanel";
-import type { ThemeConfigProps } from "@/ddd/domain/puck/value-objects/theme-config";
 
 /**
  * Puck UI Overrides for Transparent Theme
@@ -10,21 +9,14 @@ import type { ThemeConfigProps } from "@/ddd/domain/puck/value-objects/theme-con
  * Uses the official Puck overrides API to customize UI components
  * while preserving all default functionality by rendering {children}.
  *
- * Key Pattern: Always render {children} to maintain Puck's behavior.
- *
  * Documentation: https://puckeditor.com/docs/extending-puck/ui-overrides
  */
 
 interface PuckUIOverridesOptions {
-  // Page settings
   pageId?: number;
   pageName?: string;
   pageSlug?: string;
   onSavePageSettings?: (data: { name: string; slug: string }) => Promise<void>;
-  // Theme settings
-  themeConfig?: any; // ThemeConfigProps from DTO
-  onSaveTheme?: (theme: ThemeConfigProps | undefined) => Promise<void>;
-  onThemeChange?: (theme: ThemeConfigProps) => void; // Live preview
   themeMode?: "app" | "page";
 }
 
@@ -33,10 +25,8 @@ export const createPuckUIOverrides = (
 ): Partial<Overrides> => ({
   /**
    * Fields - Right sidebar containing page settings, theme panel, and component properties
-   * Makes the fields panel background transparent and adds custom panels
    */
   fields: ({ children, isLoading, itemSelector }) => {
-    // Only show page/theme panels when no component is selected (root level)
     const isRootLevel = !itemSelector;
 
     return (
@@ -46,7 +36,7 @@ export const createPuckUIOverrides = (
             <div className="text-sm text-muted-foreground">Loading...</div>
           </div>
         )}
-        {/* Page Settings Panel - shown only at root level when page options are provided */}
+        {/* Page Settings Panel */}
         {isRootLevel && options?.onSavePageSettings && options?.pageId !== undefined && (
           <div className="border-b border-border">
             <PageSettingsPanel
@@ -57,25 +47,20 @@ export const createPuckUIOverrides = (
             />
           </div>
         )}
-        {/* Theme Panel - shown only at root level when theme options are provided */}
-        {isRootLevel && options?.onSaveTheme && options?.themeMode && (
+        {/* Theme Panel - uses context for all operations */}
+        {isRootLevel && options?.themeMode && (
           <div className="border-b border-border">
-            <ThemeSidebarPanel
-              initialTheme={options.themeConfig}
-              onSave={options.onSaveTheme}
-              onThemeChange={options.onThemeChange}
-              mode={options.themeMode}
-            />
+            <ThemeSidebarPanel mode={options.themeMode} />
           </div>
         )}
         {children}
       </div>
     );
   },
-  components: ({ children }) => {
+  drawer: ({ children }) => {
     return <div className="bg-transparent">{children}</div>;
   }
 });
 
-// Backward compatibility export with no theme options
+// Backward compatibility export
 export const puckUIOverrides = createPuckUIOverrides();
