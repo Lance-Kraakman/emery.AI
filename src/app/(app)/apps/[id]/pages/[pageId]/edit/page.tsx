@@ -89,15 +89,12 @@ function CustomHeaderActions({
   const router = useRouter();
   const { appState, history } = usePuck();
   const themeContext = usePuckEditorTheme();
-  const [saving, setSaving] = useState(false);
 
   // Detect unsaved changes: Puck history OR sessionStorage OR theme changes
   const hasUnsavedChanges = history.hasPast || loadedFromSessionStorage || themeContext.hasUnsavedChanges;
 
   const handleSave = async () => {
     try {
-      setSaving(true);
-
       // Save theme first if needed
       if (themeContext.hasUnsavedChanges) {
         const sessionKey = `page-theme-${pageId}`;
@@ -108,11 +105,11 @@ function CustomHeaderActions({
         }
       }
 
-      // Save page content
+      // Save page content (no revalidation - prevents page reload)
       const result = await updatePageContent({
         id: pageId,
         templateData: appState.data
-      }, `/apps/${appId}/pages/${pageId}/edit`);
+      });
 
       if (!result.success) {
         toast.error(result.error || "Failed to save page");
@@ -127,8 +124,6 @@ function CustomHeaderActions({
     } catch (err) {
       console.error('Error saving page:', err);
       toast.error("Failed to save page");
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -152,7 +147,7 @@ function CustomHeaderActions({
       <div className="flex gap-2 items-center">
         <Button
           onClick={handleSave}
-          disabled={saving || !hasUnsavedChanges}
+          disabled={!hasUnsavedChanges}
         >
           {hasUnsavedChanges ? "Save Changes" : "Saved"}
         </Button>

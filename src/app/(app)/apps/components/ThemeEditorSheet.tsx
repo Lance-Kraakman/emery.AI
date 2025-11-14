@@ -60,10 +60,10 @@ export function ThemeSidebarPanel({
   const themeContext = mode === "page" ? usePuckEditorTheme() : null;
 
   const [selectedPreset, setSelectedPreset] = React.useState<string>("custom");
+  const [isSaving, setIsSaving] = React.useState(false);
 
   // Get theme and handlers based on mode
   const currentTheme = themeContext?.formTheme || initialTheme || DEFAULT_THEME;
-  const isSaving = themeContext?.isSaving || false;
   const handleSave = themeContext?.saveTheme || onSave;
   const handleLivePreview = themeContext?.updateLiveTheme;
 
@@ -72,7 +72,17 @@ export function ThemeSidebarPanel({
     defaultValues: currentTheme,
     onSubmit: async ({ value }) => {
       if (handleSave) {
-        await handleSave(value as ThemeConfigProps);
+        // Only use isSaving state for app mode (page mode saves via header)
+        if (mode === "app") {
+          setIsSaving(true);
+        }
+        try {
+          await handleSave(value as ThemeConfigProps);
+        } finally {
+          if (mode === "app") {
+            setIsSaving(false);
+          }
+        }
       }
     },
   });
@@ -127,14 +137,7 @@ export function ThemeSidebarPanel({
         </h3>
       </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          form.handleSubmit();
-        }}
-        className="space-y-0.5"
-      >
+      <div className="space-y-0.5">
         {/* Colors Section */}
         <Collapsible className="w-full border rounded">
           <CollapsibleTrigger className="flex items-center justify-between w-full px-2 py-1.5 text-xs font-medium hover:bg-muted/50">
@@ -509,7 +512,7 @@ export function ThemeSidebarPanel({
             </Button>
           </div>
         )}
-      </form>
+      </div>
     </div>
   );
 }

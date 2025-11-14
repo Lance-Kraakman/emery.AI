@@ -284,11 +284,9 @@ export async function updatePageContent(data: z.infer<typeof updatePageContentSc
       };
     }
 
-    // Revalidate the appropriate path
+    // Only revalidate if explicitly requested (prevents unnecessary page reloads during editing)
     if (revalidateUrl) {
       revalidatePath(revalidateUrl)
-    } else {
-      revalidatePath('/apps') // Default path
     }
 
     return {
