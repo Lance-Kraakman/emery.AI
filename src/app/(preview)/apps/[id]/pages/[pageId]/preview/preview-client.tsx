@@ -40,10 +40,11 @@ export function PreviewClient({ resolvedData, pageName }: PreviewClientProps) {
     <div className="h-screen w-screen bg-white overflow-auto flex flex-col items-center">
       {/* Viewport container */}
       <div
-        className="bg-white transition-all duration-300 min-h-screen"
+        className="bg-white transition-all duration-300 min-h-screen overflow-x-hidden"
         style={{
           width: viewport === "desktop" ? "100%" : `${viewportWidths[viewport]}px`,
-          maxWidth: "100%"
+          maxWidth: "100%",
+          boxSizing: "border-box"
         }}
       >
         <Render config={config} data={resolvedData} />
