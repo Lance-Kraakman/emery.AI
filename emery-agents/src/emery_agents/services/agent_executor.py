@@ -100,6 +100,28 @@ class AgentExecutor:
         agent_model = request.agent_config.default_model if hasattr(request.agent_config, 'default_model') else None
         org_model = request.organization_model if hasattr(request, 'organization_model') else None
 
+        # Extract attachments from skill definition (skill-level attachments)
+        skill_content = list(skill.content) if hasattr(skill, 'content') and skill.content else []
+
+        # Extract runtime input attachments (passed during invocation)
+        input_content = list(request.input_content) if hasattr(request, 'input_content') and request.input_content else []
+
+        # Merge skill-level and runtime attachments
+        all_content = skill_content + input_content
+
+        # Separate images and files from MessageParts
+        images = []
+        attachments = []
+        for part in all_content:
+            if hasattr(part, 'image_url') and part.image_url:
+                # Convert MessagePart.ImageUrlPart to ImageAttachment for compatibility
+                from ..grpc.generated.agent_worker_pb2 import ImageAttachment
+                img_attachment = ImageAttachment(url=part.image_url.url)
+                images.append(img_attachment)
+            elif hasattr(part, 'file') and part.file:
+                # Files are already in the right format
+                attachments.append(part.file)
+
         return ExecutionContext(
             mode=ExecutionMode.SKILL,
             task=skill.instructions,  # Changed from 'instructions'
@@ -110,6 +132,8 @@ class AgentExecutor:
             skill=skill,
             agent_model=agent_model,
             org_model=org_model,
+            images=images,
+            attachments=attachments,
             environment={}
         )
 

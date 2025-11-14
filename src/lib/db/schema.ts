@@ -6,6 +6,8 @@ import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organization
 import type { ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
 import type { PuckDataStructure } from '@/ddd/domain/puck/value-objects/puck-data';
 import type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
+import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import type { SkillParameterType, SkillInputFileConfig } from '@/ddd/domain/skills/entities/skill';
 
 // AIDEV-NOTE: Authenticated user role for RLS policies
 export const authenticatedRole = pgRole('authenticated', {
@@ -365,6 +367,10 @@ export const users = pgTable("users", {
   teams: text("teams").array(),
   apiKey: text("api_key").unique(), // User API key for management APIs
   createdAt: timestamp("created_at").defaultNow(),
+
+  // Published app authentication fields
+  isAppOnlyUser: boolean("is_app_only_user").default(false).notNull(), // User restricted to published apps only
+  allowedApps: integer("allowed_apps").array(), // App IDs user can access (null = all published apps)
 }, (table) => [
   // RBAC-based policy for viewing users
   pgPolicy("users_view_permission", {
@@ -395,9 +401,16 @@ export const users = pgTable("users", {
     withCheck: sql`current_organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
-        'users:manage', 
+        'users:manage',
         current_organization_id
       )`
+  }),
+  // Public read for app-only users (can only read their own record)
+  pgPolicy("users_public_app_read", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`is_app_only_user = true AND id = current_setting('app.current_user_id', true)::uuid`,
   }),
 ]);
 
@@ -728,12 +741,17 @@ export const skills = pgTable("skills", {
   inputs: jsonb("inputs").$type<Array<{
     name: string;
     required: boolean;
+    type?: SkillParameterType;
+    fileConfig?: SkillInputFileConfig;
+    default?: any;
   }>>().default([]),
   outputs: jsonb("outputs").$type<Array<{
     name: string;
+    type?: SkillParameterType;
   }>>().default([]),
   instructions: text("instructions").notNull().default(''),
   tools: jsonb("tools").default('[]').notNull(),
+  content: jsonb("content").$type<MessagePart[]>(), // Skill-level attachments (images, files, text)
 
   // Model configuration
   // AIDEV-NOTE: Used for skill tool execution (future implementation)
@@ -1284,7 +1302,7 @@ export const apps = pgTable("apps", {
     using: sql`EXISTS (
       SELECT 1 FROM pages p
       WHERE p.app_id = id
-      AND p.is_published = true
+      AND p.is_public = true
     )`,
   }),
 ]);
@@ -1300,7 +1318,9 @@ export const pages = pgTable("pages", {
   order: integer("order").default(0).notNull(),
   templateData: jsonb("template_data").notNull().$type<PuckDataStructure>(),
   themeConfig: jsonb("theme_config"),
-  isPublished: boolean("is_published").default(false).notNull(),
+  isPublic: boolean("is_public").default(false).notNull(),
+  requiresAuth: boolean("requires_auth").default(false).notNull(),
+  allowedRoles: text("allowed_roles").array(),
   createdBy: uuid("created_by")
     .notNull()
     .references(() => users.id),
@@ -1367,6 +1387,28 @@ export const pages = pgTable("pages", {
     as: "permissive",
     for: "select",
     to: "public",
-    using: sql`is_published = true`,
+    using: sql`is_public = true AND requires_auth = false`,
+  }),
+
+  // Authenticated read: Public pages requiring authentication with optional role checks
+  pgPolicy("pages_authenticated_read", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`
+      is_public = true
+      AND requires_auth = true
+      AND current_setting('app.current_user_id', true)::uuid IS NOT NULL
+      AND (
+        allowed_roles IS NULL
+        OR allowed_roles = '{}'
+        OR EXISTS (
+          SELECT 1 FROM user_roles ur
+          JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = current_setting('app.current_user_id', true)::uuid
+          AND r.name = ANY(allowed_roles)
+        )
+      )
+    `,
   }),
 ]);

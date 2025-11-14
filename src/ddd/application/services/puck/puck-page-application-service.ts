@@ -114,7 +114,9 @@ export class PuckPageApplicationService {
         description: command.description,
         order: pageOrder.value,
         templateData: puckData.toDatabaseJson(),
-        isPublished: false,
+        isPublic: false,
+        requiresAuth: false,
+        allowedRoles: undefined,
         createdBy: command.createdBy.value,
         createdAt: new Date(),
         updatedAt: new Date()

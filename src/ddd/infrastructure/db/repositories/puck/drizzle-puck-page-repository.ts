@@ -87,7 +87,9 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
         order: persistence.order,
         templateData: persistence.templateData,
         themeConfig: persistence.themeConfig,
-        isPublished: persistence.isPublished,
+        isPublic: persistence.isPublic,
+        requiresAuth: persistence.requiresAuth,
+        allowedRoles: persistence.allowedRoles,
         createdBy: persistence.createdBy,
         createdAt: persistence.createdAt,
         updatedAt: persistence.updatedAt
@@ -113,7 +115,9 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
           order: persistence.order,
           templateData: persistence.templateData,
           themeConfig: persistence.themeConfig,
-          isPublished: persistence.isPublished,
+          isPublic: persistence.isPublic,
+          requiresAuth: persistence.requiresAuth,
+          allowedRoles: persistence.allowedRoles,
           updatedAt: new Date()
         })
         .where(eq(pages.id, persistence.id))
@@ -206,7 +210,7 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
       const records = await this.db.query.pages.findMany({
         where: and(
           eq(pages.appId, appId.value),
-          eq(pages.isPublished, true)
+          eq(pages.isPublic, true)
         )
       });
 
@@ -231,7 +235,9 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
       order: record.order,
       templateData: record.templateData,
       themeConfig: record.themeConfig,
-      isPublished: record.isPublished,
+      isPublic: record.isPublic,
+      requiresAuth: record.requiresAuth,
+      allowedRoles: record.allowedRoles,
       createdBy: record.createdBy,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt

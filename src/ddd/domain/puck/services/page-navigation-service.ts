@@ -11,7 +11,9 @@ export interface NavigationItem {
   name: string;
   slug: string;
   order: number;
-  isPublished: boolean;
+  isPublic: boolean;
+  requiresAuth: boolean;
+  allowedRoles?: string[];
   children?: NavigationItem[]; // For future nested navigation support
 }
 
@@ -27,7 +29,9 @@ export class PageNavigationService {
         name: page.name,
         slug: page.slug.value,
         order: page.order.value,
-        isPublished: page.isPublished
+        isPublic: page.isPublic,
+        requiresAuth: page.requiresAuth,
+        allowedRoles: page.allowedRoles
       }))
       .sort((a, b) => a.order - b.order);
   }
@@ -38,13 +42,15 @@ export class PageNavigationService {
    */
   buildPublishedNavigation(pages: PuckPage[]): NavigationItem[] {
     return pages
-      .filter(page => page.isPublished)
+      .filter(page => page.isPublic)
       .map(page => ({
         id: page.id.value,
         name: page.name,
         slug: page.slug.value,
         order: page.order.value,
-        isPublished: page.isPublished
+        isPublic: page.isPublic,
+        requiresAuth: page.requiresAuth,
+        allowedRoles: page.allowedRoles
       }))
       .sort((a, b) => a.order - b.order);
   }
