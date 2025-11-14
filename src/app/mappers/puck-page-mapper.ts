@@ -3,6 +3,7 @@
 
 import type { PuckPage } from '@/ddd/domain/puck/entities/puck-page';
 import type { PuckDataStructure } from '@/ddd/domain/puck/value-objects/puck-data';
+import type { ThemeConfigProps } from '@/ddd/domain/puck/value-objects/theme-config';
 
 export interface PageDTO {
   id: number;
@@ -12,7 +13,7 @@ export interface PageDTO {
   description?: string;
   order: number;
   templateData: PuckDataStructure;
-  themeConfig?: any;
+  themeConfig?: ThemeConfigProps | null;
   isPublished: boolean;
   createdBy: string;
   createdAt: string;

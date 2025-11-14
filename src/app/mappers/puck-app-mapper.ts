@@ -2,6 +2,7 @@
 // Follows the pattern used in table-mapper.ts
 
 import type { App } from '@/ddd/domain/puck/entities/app';
+import type { ThemeConfigProps } from '@/ddd/domain/puck/value-objects/theme-config';
 
 export interface AppDTO {
   id: number;
@@ -9,7 +10,7 @@ export interface AppDTO {
   name: string;
   slug: string;
   description?: string;
-  themeConfig?: any;
+  themeConfig?: ThemeConfigProps | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
