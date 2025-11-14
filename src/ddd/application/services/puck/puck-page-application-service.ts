@@ -232,8 +232,8 @@ export class PuckPageApplicationService {
         return ResultHelpers.failure(`Page ${id.value} not found`);
       }
 
-      // 2. Publish (domain enforces business rules)
-      page.publish();
+      // 2. Make public (domain enforces business rules)
+      page.makePublic();
 
       // 3. Save updates
       const publishedPage = await this.pageRepository.update(page);
@@ -260,8 +260,8 @@ export class PuckPageApplicationService {
         return ResultHelpers.failure(`Page ${id.value} not found`);
       }
 
-      // 2. Unpublish
-      page.unpublish();
+      // 2. Make private
+      page.makePrivate();
 
       // 3. Save updates
       const unpublishedPage = await this.pageRepository.update(page);
