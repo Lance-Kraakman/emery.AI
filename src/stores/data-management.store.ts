@@ -10,7 +10,6 @@
  */
 
 import { Store } from '@tanstack/react-store'
-import type { TableDTO } from '@/app/mappers/table-mapper'
 import type { FieldDTO } from '@/app/mappers/field-mapper'
 import type { RowDTO, FieldValueDTO } from '@/app/mappers/row-mapper'
 import type { FilterConfig } from '@/lib/types/filters'
@@ -335,6 +334,7 @@ export const dataActions = {
     dataStore.setState((state) => ({
       ...state,
       activeFilters: [...state.activeFilters, filter],
+      selectedViewId: undefined, // Reset to "All Data" when user modifies filters
       currentPage: 1 // Reset to first page when filter changes
     }))
   },
@@ -343,6 +343,7 @@ export const dataActions = {
     dataStore.setState((state) => ({
       ...state,
       activeFilters: state.activeFilters.filter((_, i) => i !== index),
+      selectedViewId: undefined, // Reset to "All Data" when user modifies filters
       currentPage: 1
     }))
   },
@@ -351,6 +352,15 @@ export const dataActions = {
     dataStore.setState((state) => ({
       ...state,
       activeFilters: [],
+      selectedViewId: undefined, // Reset to "All Data" when filters are cleared
+      currentPage: 1
+    }))
+  },
+
+  setActiveFilters: (filters: FilterConfig[]) => {
+    dataStore.setState((state) => ({
+      ...state,
+      activeFilters: filters,
       currentPage: 1
     }))
   },

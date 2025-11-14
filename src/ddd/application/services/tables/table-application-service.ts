@@ -494,8 +494,15 @@ export class TableApplicationService {
       // 6. Update field in table using internal method
       table.updateField(existingField.id, updatedField);
 
-      // 5. Save the updated table
-      const saveResult = await this.dynamicTableService.updateTable(table);
+      console.log('[updateField] Calling saveTable with updated field', {
+        fieldName: updatedField.name,
+        fieldId: updatedField.id.value,
+        hasMetadata: !!updatedField.metadata,
+        metadataKeys: updatedField.metadata ? Object.keys(updatedField.metadata) : []
+      });
+
+      // 7. Save the updated table (use saveTable to persist field changes)
+      const saveResult = await this.dynamicTableService.saveTable(table);
       if (!saveResult.success) {
         return ResultHelpers.failure(saveResult.error || 'Failed to save table with updated field');
       }
@@ -541,9 +548,10 @@ export class TableApplicationService {
 
       // 4. Remove field from table using internal method
       table.removeField(field.id);
+      console.log(`[deleteField] After removeField - table has ${table.fields.length} fields`);
 
-      // 5. Save the updated table
-      const saveResult = await this.dynamicTableService.updateTable(table);
+      // 5. Save the updated table (use saveTable to persist field changes)
+      const saveResult = await this.dynamicTableService.saveTable(table);
       if (!saveResult.success) {
         return ResultHelpers.failure(saveResult.error || 'Failed to save table after field removal');
       }

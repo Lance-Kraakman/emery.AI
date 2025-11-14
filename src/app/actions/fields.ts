@@ -187,10 +187,15 @@ export async function updateField(data: {
   }
 }, revalidateUrl?: string): Promise<Result> {
   try {
+    logger.debug('[updateField] Called', { tableId: data.tableId, fieldName: data.fieldName, updates: data.updates });
+
     const session = await requirePermission("data:manage");
+    logger.debug('[updateField] Permission check passed', { userId: session.user.id });
+
     const { tableId, fieldName, updates } = data;
 
     if (!tableId || !fieldName) {
+      logger.error('[updateField] Validation failed: missing tableId or fieldName');
       return {
         success: false,
         error: "tableId and fieldName are required",
@@ -198,6 +203,7 @@ export async function updateField(data: {
     }
 
     const tableApplicationService = getTableApplicationService();
+    logger.debug('[updateField] Calling tableApplicationService.updateField');
 
     // Log metadata updates for select fields
     if (updates.metadata?.options) {
@@ -218,12 +224,14 @@ export async function updateField(data: {
     });
 
     if (!result.success) {
-      logger.error('Field update failed', { fieldName, error: result.error });
+      logger.error('[updateField] tableApplicationService.updateField failed', { fieldName, error: result.error });
       return {
         success: false,
         error: result.error || "Failed to update field"
       };
     }
+
+    logger.debug('[updateField] tableApplicationService.updateField succeeded');
 
     // Log successful update
     if (updates.metadata?.options) {
@@ -240,11 +248,13 @@ export async function updateField(data: {
       revalidatePath('/data'); // Default path for field operations
     }
 
+    logger.debug('[updateField] Completed successfully', { fieldName });
     return {
       success: true,
       data: result.data ? FieldMapper.toDTO(result.data) : null,
     };
   } catch (error) {
+    logger.error("[updateField] Exception caught", error);
     console.error("Error updating field:", error);
     return {
       success: false,
@@ -255,9 +265,13 @@ export async function updateField(data: {
 
 export async function deleteField(tableId: number, fieldName: string, revalidateUrl?: string): Promise<Result> {
   try {
+    logger.debug('[deleteField] Called', { tableId, fieldName });
+
     const session = await requirePermission("data:manage");
-    
+    logger.debug('[deleteField] Permission check passed', { userId: session.user.id });
+
     if (!tableId || !fieldName) {
+      logger.error('[deleteField] Validation failed: missing tableId or fieldName');
       return {
         success: false,
         error: "Table ID and field name are required",
@@ -265,15 +279,19 @@ export async function deleteField(tableId: number, fieldName: string, revalidate
     }
 
     const tableApplicationService = getTableApplicationService();
+    logger.debug('[deleteField] Calling tableApplicationService.deleteField');
 
     const result = await tableApplicationService.deleteField(TableId.fromNumber(tableId), fieldName);
 
     if (!result.success) {
+      logger.error('[deleteField] tableApplicationService.deleteField failed', { fieldName, error: result.error });
       return {
         success: false,
         error: result.error || "Failed to delete field"
       };
     }
+
+    logger.debug('[deleteField] tableApplicationService.deleteField succeeded');
 
     // Revalidate the appropriate path
     if (revalidateUrl) {
@@ -281,12 +299,14 @@ export async function deleteField(tableId: number, fieldName: string, revalidate
     } else {
       revalidatePath('/data'); // Default path for field operations
     }
-    
+
+    logger.debug('[deleteField] Completed successfully', { fieldName });
     return {
       success: true,
       data: { message: "Field deleted successfully" },
     };
   } catch (error) {
+    logger.error("[deleteField] Exception caught", error);
     console.error("Error deleting field:", error);
     return {
       success: false,
