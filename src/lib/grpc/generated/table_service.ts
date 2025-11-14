@@ -726,8 +726,8 @@ export interface AddFieldRequest {
 
 export interface UpdateFieldRequest {
   tableId: string;
-  /** Current field name for lookup */
-  fieldName: string;
+  /** Field ID for lookup */
+  fieldId: number;
   /** New field definition */
   updatedField: TableField | undefined;
   organizationId: string;
@@ -739,8 +739,8 @@ export interface UpdateFieldRequest {
 
 export interface DeleteFieldRequest {
   tableId: string;
-  /** Field name to delete */
-  fieldName: string;
+  /** Field ID to delete */
+  fieldId: number;
   organizationId: string;
   /** S3 path for Delta Lake table data */
   s3Path: string;
@@ -5136,7 +5136,7 @@ export const AddFieldRequest: MessageFns<AddFieldRequest> = {
 };
 
 function createBaseUpdateFieldRequest(): UpdateFieldRequest {
-  return { tableId: "", fieldName: "", updatedField: undefined, organizationId: "", s3Path: "", migrateData: false };
+  return { tableId: "", fieldId: 0, updatedField: undefined, organizationId: "", s3Path: "", migrateData: false };
 }
 
 export const UpdateFieldRequest: MessageFns<UpdateFieldRequest> = {
@@ -5144,8 +5144,8 @@ export const UpdateFieldRequest: MessageFns<UpdateFieldRequest> = {
     if (message.tableId !== "") {
       writer.uint32(10).string(message.tableId);
     }
-    if (message.fieldName !== "") {
-      writer.uint32(18).string(message.fieldName);
+    if (message.fieldId !== 0) {
+      writer.uint32(16).int32(message.fieldId);
     }
     if (message.updatedField !== undefined) {
       TableField.encode(message.updatedField, writer.uint32(26).fork()).join();
@@ -5178,11 +5178,11 @@ export const UpdateFieldRequest: MessageFns<UpdateFieldRequest> = {
           continue;
         }
         case 2: {
-          if (tag !== 18) {
+          if (tag !== 16) {
             break;
           }
 
-          message.fieldName = reader.string();
+          message.fieldId = reader.int32();
           continue;
         }
         case 3: {
@@ -5229,7 +5229,7 @@ export const UpdateFieldRequest: MessageFns<UpdateFieldRequest> = {
   fromJSON(object: any): UpdateFieldRequest {
     return {
       tableId: isSet(object.tableId) ? globalThis.String(object.tableId) : "",
-      fieldName: isSet(object.fieldName) ? globalThis.String(object.fieldName) : "",
+      fieldId: isSet(object.fieldId) ? globalThis.Number(object.fieldId) : 0,
       updatedField: isSet(object.updatedField) ? TableField.fromJSON(object.updatedField) : undefined,
       organizationId: isSet(object.organizationId) ? globalThis.String(object.organizationId) : "",
       s3Path: isSet(object.s3Path) ? globalThis.String(object.s3Path) : "",
@@ -5242,8 +5242,8 @@ export const UpdateFieldRequest: MessageFns<UpdateFieldRequest> = {
     if (message.tableId !== "") {
       obj.tableId = message.tableId;
     }
-    if (message.fieldName !== "") {
-      obj.fieldName = message.fieldName;
+    if (message.fieldId !== 0) {
+      obj.fieldId = Math.round(message.fieldId);
     }
     if (message.updatedField !== undefined) {
       obj.updatedField = TableField.toJSON(message.updatedField);
@@ -5266,7 +5266,7 @@ export const UpdateFieldRequest: MessageFns<UpdateFieldRequest> = {
   fromPartial<I extends Exact<DeepPartial<UpdateFieldRequest>, I>>(object: I): UpdateFieldRequest {
     const message = createBaseUpdateFieldRequest();
     message.tableId = object.tableId ?? "";
-    message.fieldName = object.fieldName ?? "";
+    message.fieldId = object.fieldId ?? 0;
     message.updatedField = (object.updatedField !== undefined && object.updatedField !== null)
       ? TableField.fromPartial(object.updatedField)
       : undefined;
@@ -5278,7 +5278,7 @@ export const UpdateFieldRequest: MessageFns<UpdateFieldRequest> = {
 };
 
 function createBaseDeleteFieldRequest(): DeleteFieldRequest {
-  return { tableId: "", fieldName: "", organizationId: "", s3Path: "", backupData: false };
+  return { tableId: "", fieldId: 0, organizationId: "", s3Path: "", backupData: false };
 }
 
 export const DeleteFieldRequest: MessageFns<DeleteFieldRequest> = {
@@ -5286,8 +5286,8 @@ export const DeleteFieldRequest: MessageFns<DeleteFieldRequest> = {
     if (message.tableId !== "") {
       writer.uint32(10).string(message.tableId);
     }
-    if (message.fieldName !== "") {
-      writer.uint32(18).string(message.fieldName);
+    if (message.fieldId !== 0) {
+      writer.uint32(16).int32(message.fieldId);
     }
     if (message.organizationId !== "") {
       writer.uint32(26).string(message.organizationId);
@@ -5317,11 +5317,11 @@ export const DeleteFieldRequest: MessageFns<DeleteFieldRequest> = {
           continue;
         }
         case 2: {
-          if (tag !== 18) {
+          if (tag !== 16) {
             break;
           }
 
-          message.fieldName = reader.string();
+          message.fieldId = reader.int32();
           continue;
         }
         case 3: {
@@ -5360,7 +5360,7 @@ export const DeleteFieldRequest: MessageFns<DeleteFieldRequest> = {
   fromJSON(object: any): DeleteFieldRequest {
     return {
       tableId: isSet(object.tableId) ? globalThis.String(object.tableId) : "",
-      fieldName: isSet(object.fieldName) ? globalThis.String(object.fieldName) : "",
+      fieldId: isSet(object.fieldId) ? globalThis.Number(object.fieldId) : 0,
       organizationId: isSet(object.organizationId) ? globalThis.String(object.organizationId) : "",
       s3Path: isSet(object.s3Path) ? globalThis.String(object.s3Path) : "",
       backupData: isSet(object.backupData) ? globalThis.Boolean(object.backupData) : false,
@@ -5372,8 +5372,8 @@ export const DeleteFieldRequest: MessageFns<DeleteFieldRequest> = {
     if (message.tableId !== "") {
       obj.tableId = message.tableId;
     }
-    if (message.fieldName !== "") {
-      obj.fieldName = message.fieldName;
+    if (message.fieldId !== 0) {
+      obj.fieldId = Math.round(message.fieldId);
     }
     if (message.organizationId !== "") {
       obj.organizationId = message.organizationId;
@@ -5393,7 +5393,7 @@ export const DeleteFieldRequest: MessageFns<DeleteFieldRequest> = {
   fromPartial<I extends Exact<DeepPartial<DeleteFieldRequest>, I>>(object: I): DeleteFieldRequest {
     const message = createBaseDeleteFieldRequest();
     message.tableId = object.tableId ?? "";
-    message.fieldName = object.fieldName ?? "";
+    message.fieldId = object.fieldId ?? 0;
     message.organizationId = object.organizationId ?? "";
     message.s3Path = object.s3Path ?? "";
     message.backupData = object.backupData ?? false;

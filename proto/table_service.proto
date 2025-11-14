@@ -353,7 +353,7 @@ message AddFieldRequest {
 
 message UpdateFieldRequest {
   string table_id = 1;
-  string field_name = 2;              // Current field name for lookup
+  int32 field_id = 2;                 // Field ID for lookup
   TableField updated_field = 3;        // New field definition
   string organization_id = 4;
   string s3_path = 5;                // S3 path for Delta Lake table data
@@ -362,7 +362,7 @@ message UpdateFieldRequest {
 
 message DeleteFieldRequest {
   string table_id = 1;
-  string field_name = 2;              // Field name to delete
+  int32 field_id = 2;                 // Field ID to delete
   string organization_id = 3;
   string s3_path = 4;                // S3 path for Delta Lake table data
   bool backup_data = 5;               // Whether to backup deleted data (default: true)

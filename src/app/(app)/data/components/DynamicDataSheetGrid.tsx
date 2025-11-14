@@ -37,6 +37,7 @@ import 'react-datasheet-grid/dist/style.css' // Base DSG styles
 import './datasheet-grid.css' // Custom overrides
 
 import type { FieldDTO } from '@/app/mappers/field-mapper'
+import type { ViewDTO } from '@/app/mappers/view-mapper'
 import type { FieldValue as DomainFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 import type { DSGRow } from '@/app/mappers/dsg-mapper'
 import type { SelectOption } from '@/ddd/domain/tables/value-objects/table-field'
@@ -57,6 +58,9 @@ import type { FilterConfig } from '@/lib/types/filters'
 import { createField, updateField, deleteField } from '@/app/actions/fields'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { GridContext, GridHeaderBar, type GridContextValue } from './grid'
+import { createDebugLogger } from '@/lib/utils/debug-logger'
+
+const logger = createDebugLogger('DynamicDataSheetGrid')
 import type {
   RelationCellProps,
   FileCellProps,
@@ -73,6 +77,10 @@ interface DynamicDataSheetGridProps {
   organizationId: number;
   tableId: number;
   tableName: string;
+  // View props
+  currentView?: ViewDTO;
+  availableViews?: ViewDTO[];
+  onSelectView?: (viewId: number | undefined) => void;
   searchTerm: string;
   onSearchChange: (value: string) => void;
   onManageFields: () => void;
@@ -368,6 +376,9 @@ export function DynamicDataSheetGrid({
   organizationId,
   tableId,
   tableName,
+  currentView,
+  availableViews = [],
+  onSelectView,
   searchTerm,
   onSearchChange,
   onManageFields,
@@ -399,11 +410,16 @@ export function DynamicDataSheetGrid({
 
   // Handlers for field management
   const handleEditField = useCallback((field: FieldDTO) => {
+    console.log('[DynamicDataSheetGrid] handleEditField CALLED', { fieldName: field.name, fieldId: field.id })
+    logger.debug('handleEditField called', { fieldName: field.name, fieldId: field.id })
     setEditingField(field)
     setIsEditFieldOpen(true)
+    logger.debug('Edit field dialog opened', { isOpen: true })
   }, [])
 
   const handleSaveField = useCallback(async (field: FieldDTO, updates: Partial<FieldDTO>) => {
+    console.log('[DynamicDataSheetGrid] handleSaveField CALLED', { fieldName: field.name, updates })
+    logger.debug('handleSaveField called', { fieldName: field.name, updates })
     const result = await updateField({
       tableId,
       fieldName: field.name,
@@ -416,18 +432,30 @@ export function DynamicDataSheetGrid({
       }
     })
 
+    console.log('[DynamicDataSheetGrid] updateField RESULT', { success: result.success, error: result.error })
+    logger.debug('updateField result', { success: result.success, error: result.error })
     if (result.success) {
+      logger.debug('Field updated successfully, refreshing data')
       onRefresh()
     } else {
+      logger.error('Failed to update field', result.error)
       alert(result.error || "Failed to update field")
     }
   }, [tableId, onRefresh])
 
   const handleDeleteField = useCallback(async (fieldName: string) => {
+    console.log('[DynamicDataSheetGrid] handleDeleteField CALLED', { tableId, fieldName })
+    logger.debug('handleDeleteField called', { tableId, fieldName })
     const result = await deleteField(tableId, fieldName)
+    console.log('[DynamicDataSheetGrid] deleteField RESULT', { success: result.success, error: result.error })
+    logger.debug('deleteField result', { success: result.success, error: result.error })
     if (result.success) {
+      console.log('[DynamicDataSheetGrid] Delete successful, calling onRefresh')
+      logger.debug('Field deleted successfully, refreshing data')
       onRefresh()
     } else {
+      console.log('[DynamicDataSheetGrid] Delete FAILED', result.error)
+      logger.error('Failed to delete field', result.error)
       alert(result.error || "Failed to delete field")
     }
   }, [tableId, onRefresh])
@@ -484,8 +512,16 @@ export function DynamicDataSheetGrid({
   }, [tableId, onRefresh])
 
   // Use custom hook for column building
+  console.log('[DynamicDataSheetGrid] Calling useGridColumns with handlers', {
+    hasHandleEditField: typeof handleEditField === 'function',
+    hasHandleDeleteField: typeof handleDeleteField === 'function',
+    fieldCount: fields?.length
+  })
+
   const columns = useGridColumns({
     fields,
+    fieldMappings: currentView?.fieldMappings,
+    currentView,
     organizationId,
     tableId,
     availableTables,
@@ -631,6 +667,11 @@ export function DynamicDataSheetGrid({
     totalCount: totalCount ?? 0,
     isLoading,
     error,
+    currentView,
+    availableViews,
+    onSelectView: onSelectView ?? (() => {}),
+    fieldMappings: currentView?.fieldMappings,
+    // onFieldMappingsChange will be added when we create the update hook
     searchTerm,
     onSearchChange,
     activeFilters: activeFilters ?? [],
@@ -666,7 +707,7 @@ export function DynamicDataSheetGrid({
           </div>
         ) : (
           <DataSheetGrid
-            key={`grid-${tableId}-${fields.length}`}  // CRITICAL: Remount on column count change, but stable during data updates to preserve scroll position
+            key={`grid-${tableId}-${columns.length}-${currentView?.id || 'no-view'}`}  // CRITICAL: Remount on visible column count change or view change, but stable during data updates to preserve scroll position
             value={state.data}
             onChange={handleChange}
             columns={columns}

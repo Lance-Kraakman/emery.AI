@@ -631,18 +631,10 @@ export class DynamicTableDataLake {
         fieldType: field.type 
       });
 
-      // Convert domain field to protobuf format
-      const protoField = {
-        name: field.name,
-        type: TableGrpcMapper.mapFieldTypeToProto(field.type) as any,
-        required: field.required || false,
-        metadata: field.metadata || {}
-      };
-
-      // Create add field request
+      // Create add field request - pass the domain field directly
       const addRequest = TableGrpcMapper.toAddFieldRequest(
         table.id,
-        protoField,
+        field,
         table.organizationId,
         table.storageLocation || `s3://emery-tables/${table.id.value}`
       );
@@ -684,21 +676,22 @@ export class DynamicTableDataLake {
         fieldType: field.type 
       });
 
-      // Convert domain field to protobuf format
-      const protoField = {
-        name: field.name,
-        type: TableGrpcMapper.mapFieldTypeToProto(field.type) as any,
-        required: field.required || false,
-        metadata: field.metadata || {}
-      };
-
-      // Create update field request
+      // Create update field request - pass the domain field directly
       const updateRequest = TableGrpcMapper.toUpdateFieldRequest(
         table.id,
-        protoField,
+        field.name,  // Current field name for lookup
+        field,       // Updated field definition
         table.organizationId,
         table.storageLocation || `s3://emery-tables/${table.id.value}`
       );
+
+      logger.debug('Sending updateField gRPC request', {
+        fieldId: field.id.value,
+        fieldName: field.name,
+        fieldType: field.type,
+        hasMetadata: !!field.metadata,
+        metadataKeys: field.metadata ? Object.keys(field.metadata) : []
+      });
 
       // Send to gRPC service
       const response = await this.grpcClient.updateField(updateRequest);
@@ -727,19 +720,19 @@ export class DynamicTableDataLake {
   }
 
   /**
-    * Delete a field from the table using gRPC service
-    */
-  async deleteField(table: DynamicTable, fieldName: string): Promise<Result<void>> {
+     * Delete a field from table using gRPC service
+     */
+  async deleteField(table: DynamicTable, fieldId: number): Promise<Result<void>> {
     try {
       logger.debug('Deleting field', { 
         tableId: table.id.value, 
-        fieldName 
+        fieldId 
       });
 
       // Create delete field request
       const deleteRequest = TableGrpcMapper.toDeleteFieldRequest(
         table.id,
-        fieldName,
+        fieldId,
         table.organizationId,
         table.storageLocation || `s3://emery-tables/${table.id.value}`
       );
@@ -750,7 +743,7 @@ export class DynamicTableDataLake {
       if (response && response.success) {
         logger.summary('Deleted field', { 
           tableId: table.id.value, 
-          fieldName 
+          fieldId 
         });
         return { success: true, data: undefined };
       } else {

@@ -17,6 +17,7 @@
 import { createContext, useContext } from 'react'
 import type { FieldDTO } from '@/app/mappers/field-mapper'
 import type { DSGRow } from '@/app/mappers/dsg-mapper'
+import type { ViewDTO } from '@/app/mappers/view-mapper'
 import type { FieldValue as DomainFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 import type { FilterConfig } from '@/lib/types/filters'
 
@@ -35,6 +36,13 @@ export interface GridContextValue {
   totalCount: number
   isLoading: boolean
   error: string | null
+
+  // View state
+  currentView?: ViewDTO
+  availableViews: ViewDTO[]
+  onSelectView: (viewId: number | undefined) => void
+  fieldMappings?: ViewDTO['fieldMappings']
+  onFieldMappingsChange?: (mappings: NonNullable<ViewDTO['fieldMappings']>) => void
 
   // Search
   searchTerm: string

@@ -66,10 +66,10 @@ export function ColorInput({
   };
 
   return (
-    <div className={cn("space-y-2", className)}>
-      {label && <Label>{label}</Label>}
+    <div className={cn("space-y-1", className)}>
+      {label && <Label className="text-xs">{label}</Label>}
 
-      <div className="flex gap-2">
+      <div className="flex gap-1.5 items-center">
         {/* Visual Color Picker */}
         <div className="relative">
           <input
@@ -77,7 +77,7 @@ export function ColorInput({
             value={localValue}
             onChange={(e) => handleColorChange(e.target.value)}
             disabled={disabled}
-            className="w-14 h-10 rounded-md border border-input cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-8 h-8 rounded-full border border-input cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
             style={{
               // Remove default browser styling
               WebkitAppearance: "none",
@@ -94,14 +94,14 @@ export function ColorInput({
           onChange={(e) => handleTextChange(e.target.value)}
           disabled={disabled}
           placeholder="#2563eb"
-          className="flex-1 font-mono"
+          className="flex-1 font-mono h-8 text-xs"
           maxLength={7}
         />
       </div>
 
       {/* Error Message */}
       {error && (
-        <p className="text-sm text-destructive">{error}</p>
+        <p className="text-xs text-destructive">{error}</p>
       )}
     </div>
   );

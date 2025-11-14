@@ -8,7 +8,7 @@
 
 import React from "react";
 import type { Row } from "@/ddd/domain/tables/value-objects/row";
-import type { TableField } from "@/ddd/domain/tables/value-objects/table-field";
+import { getVisibleFieldMappings } from "@/components/puck/lib/field-visibility-utils";
 import styles from "./styles.module.css";
 
 export interface FieldMapping {
@@ -32,7 +32,7 @@ export interface TableBlockProps {
   _tableName?: string;              // Table name for display
   _tableId?: number;                // Table ID
   _rows?: Row[];
-  _fields?: TableField[];
+  _fields?: Array<{ id: number; name: string; type: string }>;
   _totalCount?: number;
   _availableFieldsInfo?: string;
 }
@@ -71,7 +71,8 @@ export default function TableBlock(props: TableBlockProps) {
     mappingCount: fieldMappings.length,
     sampleRow: _rows[0],
     sampleField: _fields[0],
-    visibleMappings: fieldMappings.filter(m => m.visible).length
+    visibleMappedCount: fieldMappings.filter(m => m.visible).length,
+    fieldMappings: fieldMappings
   });
 
   // If no view selected, show placeholder
@@ -104,15 +105,17 @@ export default function TableBlock(props: TableBlockProps) {
     );
   }
 
-  // Filter and sort field mappings by visibility and order
-  const visibleMappings = fieldMappings
-    .filter((m) => m.visible)
-    .sort((a, b) => a.order - b.order);
+  // AIDEV-NOTE: Calculate visible columns using shared utility
+  // Logic: mapped visible fields (sorted by order) + unmapped fields (shown by default)
+  const columnsToDisplay = getVisibleFieldMappings(_fields, fieldMappings);
 
-  console.log('[TableBlock render] Visible mappings:', visibleMappings);
+  console.log('[TableBlock render] Columns to display:', {
+    totalColumns: columnsToDisplay.length,
+    columns: columnsToDisplay
+  });
 
-  // If no visible columns, show message
-  if (visibleMappings.length === 0) {
+  // If no visible columns after combining mapped + unmapped, show message
+  if (columnsToDisplay.length === 0) {
     console.log('[TableBlock render] No visible columns, showing message');
     return (
       <div className={styles.emptyState}>
@@ -150,7 +153,7 @@ export default function TableBlock(props: TableBlockProps) {
           {showHeader && (
             <thead>
               <tr>
-                {visibleMappings.map((mapping) => (
+                {columnsToDisplay.map((mapping) => (
                   <th key={mapping.sourceFieldId} className={styles.th}>
                     {mapping.displayName}
                   </th>
@@ -167,18 +170,19 @@ export default function TableBlock(props: TableBlockProps) {
 
               return (
                 <tr key={rowData.id || rowIndex} className={styles.tr}>
-                  {visibleMappings.map((mapping) => {
+                  {columnsToDisplay.map((mapping) => {
                     // AIDEV-NOTE: _fields are now plain objects: { id, name, type, slug }
                     const field = _fields.find(
                       (f) => (f as any).id === mapping.sourceFieldId
                     );
 
                     // AIDEV-NOTE: Special handling for 'id' field
-                    // The 'id' field is stored as `row.id`, NOT as `row.field_X`
-                    // See src/ddd/domain/tables/value-objects/row.ts:162-164
+                    // The 'id' field is stored as `row.id`, NOT as a field value
+                    // Other fields are stored with numeric field IDs as keys (e.g., rowData["10"])
+                    // See src/ddd/domain/tables/value-objects/row.ts:119-138
                     const fieldValue = field?.name === 'id'
                       ? rowData.id
-                      : rowData[`field_${mapping.sourceFieldId}`];
+                      : rowData[mapping.sourceFieldId.toString()];
 
                     return (
                       <td key={mapping.sourceFieldId} className={styles.td}>

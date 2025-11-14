@@ -18,17 +18,23 @@ import React from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
-import { Search, Settings, RefreshCw, Filter, X } from 'lucide-react'
+import { Search, Settings, RefreshCw, Filter, X, Save, Check } from 'lucide-react'
 import { FilterPopover } from '../FilterPopover'
 import { FilterChip } from '../FilterChip'
+import { ViewSelector } from '../ViewSelector'
+import { SaveViewDialog } from '../SaveViewDialog'
 import { useGrid } from './GridContext'
 
 export const GridHeaderBar = () => {
   // Access all grid state via context - no props!
   const {
+    tableId,
     tableName,
     rows,
     totalCount,
+    currentView,
+    availableViews,
+    onSelectView,
     searchTerm,
     onSearchChange,
     onManageFields,
@@ -43,6 +49,17 @@ export const GridHeaderBar = () => {
     onClearSort
   } = useGrid()
 
+  // State for Save View dialog
+  const [isSaveViewDialogOpen, setIsSaveViewDialogOpen] = React.useState(false)
+
+  // State for ID column visibility
+  const [showIdColumn, setShowIdColumn] = React.useState(() => {
+    if (typeof window !== 'undefined' && tableId) {
+      return localStorage.getItem(`showIdColumn_${tableId}`) === 'true'
+    }
+    return false
+  })
+
   // Local state for input value to prevent cursor jumping
   const [inputValue, setInputValue] = React.useState(searchTerm)
 
@@ -50,6 +67,17 @@ export const GridHeaderBar = () => {
   React.useEffect(() => {
     setInputValue(searchTerm)
   }, [searchTerm])
+
+  // Toggle ID column visibility
+  const handleToggleIdColumn = () => {
+    const newValue = !showIdColumn
+    setShowIdColumn(newValue)
+    if (typeof window !== 'undefined' && tableId) {
+      localStorage.setItem(`showIdColumn_${tableId}`, newValue.toString())
+    }
+    // Refresh to apply change
+    onRefresh()
+  }
 
   // Trigger search on Enter key
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -100,8 +128,29 @@ export const GridHeaderBar = () => {
         </div>
       </div>
 
-    {/* Right: Actions */}
+    {/* Right: View selector and Actions */}
     <div className="flex items-center gap-2 flex-wrap">
+      {/* View Selector - compact, fixed width */}
+      <ViewSelector
+        views={availableViews.filter(v => v.viewType === 'grid')}
+        selectedViewId={currentView?.id}
+        onSelectView={onSelectView}
+        className="shrink-0 w-[120px]"
+      />
+
+      {/* Save View Button - shown when filters/sorting are active */}
+      {(activeFilters.length > 0 || (sortState?.field && sortState?.order)) && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setIsSaveViewDialogOpen(true)}
+          className="h-9 gap-1"
+        >
+          <Save className="h-4 w-4" />
+          <span className="text-xs">Save View</span>
+        </Button>
+      )}
+
       {/* Filter Popover + Active Filter Chips */}
       {onAddFilter && (
         <FilterPopover
@@ -171,6 +220,11 @@ export const GridHeaderBar = () => {
             Manage Fields
           </DropdownMenuItem>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={handleToggleIdColumn}>
+            <Check className={`h-4 w-4 mr-2 ${showIdColumn ? 'opacity-100' : 'opacity-0'}`} />
+            Show ID Column
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={onRefresh}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh Data
@@ -179,6 +233,21 @@ export const GridHeaderBar = () => {
       </DropdownMenu>
     </div>
   </div>
+
+  {/* Save View Dialog */}
+  <SaveViewDialog
+    isOpen={isSaveViewDialogOpen}
+    onClose={() => setIsSaveViewDialogOpen(false)}
+    tableId={tableId}
+    fields={fields}
+    activeFilters={activeFilters}
+    sortState={sortState}
+    onSuccess={(view) => {
+      // Select the newly created view
+      onSelectView(view.id)
+      setIsSaveViewDialogOpen(false)
+    }}
+  />
   </>
   )
 }

@@ -236,12 +236,8 @@ export async function updatePage(data: z.infer<typeof updatePageSchema>, revalid
       };
     }
 
-    // Revalidate the appropriate path
-    if (revalidateUrl) {
-      revalidatePath(revalidateUrl)
-    } else {
-      revalidatePath('/apps') // Default path
-    }
+    // No revalidatePath() needed - page settings managed in client-side state
+    // The page will fetch fresh data on next navigation/refresh
 
     return {
       success: true,
@@ -288,11 +284,9 @@ export async function updatePageContent(data: z.infer<typeof updatePageContentSc
       };
     }
 
-    // Revalidate the appropriate path
+    // Only revalidate if explicitly requested (prevents unnecessary page reloads during editing)
     if (revalidateUrl) {
       revalidatePath(revalidateUrl)
-    } else {
-      revalidatePath('/apps') // Default path
     }
 
     return {
@@ -648,16 +642,8 @@ export async function updatePageTheme(
     const pageRepository = getPuckPageRepository();
     const updatedPage = await pageRepository.update(page);
 
-    // Revalidate page routes
-    revalidatePath(`/apps/${page.appId.value}/pages/${pageId}`);
-
-    // Import getAppApplicationService to get app slug
-    const { getAppApplicationService } = await import("@/ddd/application/di/container");
-    const appService = getAppApplicationService();
-    const app = await appService.getApp(page.appId);
-    if (app) {
-      revalidatePath(`/p/${app.slug.value}${page.slug.value}`);
-    }
+    // No revalidatePath() needed - theme is managed in client-side state
+    // The page will fetch fresh data on next navigation/refresh
 
     return {
       success: true,

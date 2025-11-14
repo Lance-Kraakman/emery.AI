@@ -9102,7 +9102,7 @@ proto.emery.tables.UpdateFieldRequest.prototype.toObject = function(opt_includeI
 proto.emery.tables.UpdateFieldRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
     tableId: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    fieldName: jspb.Message.getFieldWithDefault(msg, 2, ""),
+    fieldId: jspb.Message.getFieldWithDefault(msg, 2, 0),
     updatedField: (f = msg.getUpdatedField()) && proto.emery.tables.TableField.toObject(includeInstance, f),
     organizationId: jspb.Message.getFieldWithDefault(msg, 4, ""),
     s3Path: jspb.Message.getFieldWithDefault(msg, 5, ""),
@@ -9148,8 +9148,8 @@ proto.emery.tables.UpdateFieldRequest.deserializeBinaryFromReader = function(msg
       msg.setTableId(value);
       break;
     case 2:
-      var value = /** @type {string} */ (reader.readString());
-      msg.setFieldName(value);
+      var value = /** @type {number} */ (reader.readInt32());
+      msg.setFieldId(value);
       break;
     case 3:
       var value = new proto.emery.tables.TableField;
@@ -9204,9 +9204,9 @@ proto.emery.tables.UpdateFieldRequest.serializeBinaryToWriter = function(message
       f
     );
   }
-  f = message.getFieldName();
-  if (f.length > 0) {
-    writer.writeString(
+  f = message.getFieldId();
+  if (f !== 0) {
+    writer.writeInt32(
       2,
       f
     );
@@ -9262,20 +9262,20 @@ proto.emery.tables.UpdateFieldRequest.prototype.setTableId = function(value) {
 
 
 /**
- * optional string field_name = 2;
- * @return {string}
+ * optional int32 field_id = 2;
+ * @return {number}
  */
-proto.emery.tables.UpdateFieldRequest.prototype.getFieldName = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
+proto.emery.tables.UpdateFieldRequest.prototype.getFieldId = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 2, 0));
 };
 
 
 /**
- * @param {string} value
+ * @param {number} value
  * @return {!proto.emery.tables.UpdateFieldRequest} returns this
  */
-proto.emery.tables.UpdateFieldRequest.prototype.setFieldName = function(value) {
-  return jspb.Message.setProto3StringField(this, 2, value);
+proto.emery.tables.UpdateFieldRequest.prototype.setFieldId = function(value) {
+  return jspb.Message.setProto3IntField(this, 2, value);
 };
 
 
@@ -9403,7 +9403,7 @@ proto.emery.tables.DeleteFieldRequest.prototype.toObject = function(opt_includeI
 proto.emery.tables.DeleteFieldRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
     tableId: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    fieldName: jspb.Message.getFieldWithDefault(msg, 2, ""),
+    fieldId: jspb.Message.getFieldWithDefault(msg, 2, 0),
     organizationId: jspb.Message.getFieldWithDefault(msg, 3, ""),
     s3Path: jspb.Message.getFieldWithDefault(msg, 4, ""),
     backupData: jspb.Message.getBooleanFieldWithDefault(msg, 5, false)
@@ -9448,8 +9448,8 @@ proto.emery.tables.DeleteFieldRequest.deserializeBinaryFromReader = function(msg
       msg.setTableId(value);
       break;
     case 2:
-      var value = /** @type {string} */ (reader.readString());
-      msg.setFieldName(value);
+      var value = /** @type {number} */ (reader.readInt32());
+      msg.setFieldId(value);
       break;
     case 3:
       var value = /** @type {string} */ (reader.readString());
@@ -9499,9 +9499,9 @@ proto.emery.tables.DeleteFieldRequest.serializeBinaryToWriter = function(message
       f
     );
   }
-  f = message.getFieldName();
-  if (f.length > 0) {
-    writer.writeString(
+  f = message.getFieldId();
+  if (f !== 0) {
+    writer.writeInt32(
       2,
       f
     );
@@ -9549,20 +9549,20 @@ proto.emery.tables.DeleteFieldRequest.prototype.setTableId = function(value) {
 
 
 /**
- * optional string field_name = 2;
- * @return {string}
+ * optional int32 field_id = 2;
+ * @return {number}
  */
-proto.emery.tables.DeleteFieldRequest.prototype.getFieldName = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
+proto.emery.tables.DeleteFieldRequest.prototype.getFieldId = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 2, 0));
 };
 
 
 /**
- * @param {string} value
+ * @param {number} value
  * @return {!proto.emery.tables.DeleteFieldRequest} returns this
  */
-proto.emery.tables.DeleteFieldRequest.prototype.setFieldName = function(value) {
-  return jspb.Message.setProto3StringField(this, 2, value);
+proto.emery.tables.DeleteFieldRequest.prototype.setFieldId = function(value) {
+  return jspb.Message.setProto3IntField(this, 2, value);
 };
 
 

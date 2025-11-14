@@ -1,27 +1,32 @@
 /**
- * ThemeEditorSheet - Reusable Theme Configuration UI
+ * ThemeSidebarPanel - Compact Theme Configuration UI for Puck Sidebar
  *
- * AIDEV-NOTE: Used in both app settings and Puck editor header.
- * Provides tabbed interface for editing theme configuration (colors, typography, layout).
- * Supports both app-level themes and page-level overrides.
+ * AIDEV-NOTE: Used in Puck editor sidebar (right panel).
+ * Provides accordion interface for editing theme configuration (colors, typography, layout).
+ * Supports both app-level themes (via props) and page-level overrides (via context).
  */
 
 "use client";
 
 import * as React from "react";
 import { useForm } from "@tanstack/react-form";
+import { useStore } from "@tanstack/react-store";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
-  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ColorInput } from "@/components/ui/color-input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -38,58 +43,65 @@ import {
   DEFAULT_THEME,
 } from "@/ddd/domain/puck/value-objects/theme-config";
 import { THEME_PRESETS, matchesPreset } from "@/components/puck/theme-presets";
+import { usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 
-export interface ThemeEditorSheetProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  initialTheme: any | undefined; // ThemeConfigProps from DTO
-  onSave: (theme: ThemeConfigProps | undefined) => Promise<void>;
+export interface ThemeSidebarPanelProps {
+  initialTheme?: any | undefined; // ThemeConfigProps from DTO (app mode only)
+  onSave?: (theme: ThemeConfigProps | undefined) => Promise<void>; // App mode only
   mode: "app" | "page";
 }
 
-export function ThemeEditorSheet({
-  open,
-  onOpenChange,
+export function ThemeSidebarPanel({
   initialTheme,
   onSave,
   mode,
-}: ThemeEditorSheetProps) {
-  const [isSaving, setIsSaving] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState("colors");
+}: ThemeSidebarPanelProps) {
+  // For page mode, use context. For app mode, use props.
+  const themeContext = mode === "page" ? usePuckEditorTheme() : null;
+
   const [selectedPreset, setSelectedPreset] = React.useState<string>("custom");
+  const [isSaving, setIsSaving] = React.useState(false);
 
-  // Initialize form with current theme or default
-  const currentTheme = initialTheme || DEFAULT_THEME;
+  // Get theme and handlers based on mode
+  const currentTheme = themeContext?.formTheme || initialTheme || DEFAULT_THEME;
+  const handleSave = themeContext?.saveTheme || onSave;
+  const handleLivePreview = themeContext?.updateLiveTheme;
 
+  // Initialize form with current theme
   const form = useForm({
     defaultValues: currentTheme,
     onSubmit: async ({ value }) => {
-      try {
-        setIsSaving(true);
-        await onSave(value as ThemeConfigProps);
-        form.reset();
-        onOpenChange(false);
-      } catch (error) {
-        console.error("Error saving theme:", error);
-      } finally {
-        setIsSaving(false);
+      if (handleSave) {
+        // Only use isSaving state for app mode (page mode saves via header)
+        if (mode === "app") {
+          setIsSaving(true);
+        }
+        try {
+          await handleSave(value as ThemeConfigProps);
+        } finally {
+          if (mode === "app") {
+            setIsSaving(false);
+          }
+        }
       }
     },
   });
 
-  // Reset form when sheet closes
-  React.useEffect(() => {
-    if (!open) {
-      form.reset();
-    }
-  }, [open, form]);
+  // Watch form values for live preview and preset matching
+  const formValues = useStore(form.store, (state) => state.values) as ThemeConfigProps;
 
-  // Check if current colors match a preset
   React.useEffect(() => {
-    const currentColors = form.getFieldValue("colors");
-    const matchedPresetId = matchesPreset(currentColors);
+    if (!formValues?.colors) return;
+
+    // Update preset matching
+    const matchedPresetId = matchesPreset(formValues.colors);
     setSelectedPreset(matchedPresetId || "custom");
-  }, [form]);
+
+    // Trigger live preview (page mode only via context)
+    if (handleLivePreview) {
+      handleLivePreview(formValues);
+    }
+  }, [formValues, handleLivePreview]);
 
   // Handle preset selection
   const handlePresetChange = (presetId: string) => {
@@ -104,10 +116,9 @@ export function ThemeEditorSheet({
 
   // Reset to default theme
   const handleReset = () => {
-    if (mode === "page") {
-      // For page mode, reset means clear overrides (save undefined)
-      onSave(undefined);
-      onOpenChange(false);
+    if (mode === "page" && themeContext) {
+      // For page mode, reset means clear overrides
+      themeContext.removeTheme();
     } else {
       // For app mode, reset to default theme
       form.setFieldValue("colors", DEFAULT_THEME.colors);
@@ -119,65 +130,51 @@ export function ThemeEditorSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>
-            {mode === "app" ? "Edit App Theme" : "Edit Page Theme"}
-          </SheetTitle>
-          <SheetDescription>
-            {mode === "app"
-              ? "Customize the default theme for all pages in this app"
-              : "Override the app theme for this specific page"}
-          </SheetDescription>
-        </SheetHeader>
+    <div className="w-full space-y-1 px-2 py-1.5">
+      <div>
+        <h3 className="text-xs font-semibold">
+          {mode === "app" ? "App Theme" : "Page Theme"}
+        </h3>
+      </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            form.handleSubmit();
-          }}
-          className="mt-6"
-        >
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="colors">Colors</TabsTrigger>
-              <TabsTrigger value="typography">Typography</TabsTrigger>
-              <TabsTrigger value="layout">Layout</TabsTrigger>
-            </TabsList>
-
-            {/* Colors Tab */}
-            <TabsContent value="colors" className="space-y-3 mt-4">
+      <div className="space-y-0.5">
+        {/* Colors Section */}
+        <Collapsible className="w-full border rounded">
+          <CollapsibleTrigger className="flex items-center justify-between w-full px-2 py-1.5 text-xs font-medium hover:bg-muted/50">
+            <span>Colors</span>
+            <ChevronDown className="h-3 w-3 transition-transform duration-200 data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="px-2 pb-1.5 pt-1 max-h-[400px] overflow-y-auto">
+            <div className="space-y-1">
               {/* Preset Selector */}
-              <div className="space-y-2">
-                <Label>Color Palette</Label>
+              <div className="space-y-0.5">
+                <Label className="text-xs">Palette</Label>
                 <Select value={selectedPreset} onValueChange={handlePresetChange}>
-                  <SelectTrigger>
-                    <div className="flex items-center gap-2 w-full">
-                      <span className="flex-1 text-left">
+                  <SelectTrigger className="h-7 text-xs">
+                    <div className="flex items-center gap-1.5 w-full">
+                      <span className="flex-1 text-left text-xs">
                         {selectedPreset === "custom"
                           ? "Custom"
                           : THEME_PRESETS.find((p) => p.id === selectedPreset)?.name}
                       </span>
                       {selectedPreset !== "custom" && (
-                        <div className="flex gap-1">
+                        <div className="flex gap-0.5">
                           {(() => {
                             const preset = THEME_PRESETS.find((p) => p.id === selectedPreset);
                             return preset ? (
                               <>
                                 <div
-                                  className="w-4 h-4 rounded-full border border-gray-200"
+                                  className="w-3 h-3 rounded-full border border-gray-200"
                                   style={{ backgroundColor: preset.colors.primary }}
                                   title="Primary"
                                 />
                                 <div
-                                  className="w-4 h-4 rounded-full border border-gray-200"
+                                  className="w-3 h-3 rounded-full border border-gray-200"
                                   style={{ backgroundColor: preset.colors.secondary }}
                                   title="Secondary"
                                 />
                                 <div
-                                  className="w-4 h-4 rounded-full border border-gray-200"
+                                  className="w-3 h-3 rounded-full border border-gray-200"
                                   style={{ backgroundColor: preset.colors.success }}
                                   title="Success"
                                 />
@@ -217,15 +214,9 @@ export function ThemeEditorSheet({
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  {selectedPreset === "custom"
-                    ? "Using custom colors"
-                    : THEME_PRESETS.find((p) => p.id === selectedPreset)?.description}
-                </p>
               </div>
 
-              <ScrollArea className="h-[calc(100vh-420px)] max-h-[500px] pr-4">
-                <div className="space-y-3">
+              <div className="space-y-0.5">
                   <form.Field name="colors.primary">
                     {(field) => (
                       <ColorInput
@@ -335,14 +326,19 @@ export function ThemeEditorSheet({
                       />
                     )}
                   </form.Field>
-                </div>
-              </ScrollArea>
-            </TabsContent>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
-            {/* Typography Tab */}
-            <TabsContent value="typography" className="space-y-3 mt-4">
-              <ScrollArea className="h-[calc(100vh-320px)] max-h-[600px] pr-4">
-                <div className="space-y-3">
+        {/* Typography Section */}
+        <Collapsible className="w-full border rounded">
+          <CollapsibleTrigger className="flex items-center justify-between w-full px-2 py-1.5 text-xs font-medium hover:bg-muted/50">
+            <span>Typography</span>
+            <ChevronDown className="h-3 w-3 transition-transform duration-200 data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="px-2 pb-1.5 pt-1 max-h-[400px] overflow-y-auto">
+            <div className="space-y-0.5">
                   <form.Field name="typography.fontFamily">
                     {(field) => (
                       <FontSelect
@@ -355,13 +351,13 @@ export function ThemeEditorSheet({
 
                   <form.Field name="typography.fontSize">
                     {(field) => (
-                      <div className="space-y-2">
-                        <Label>Base Font Size</Label>
+                      <div className="space-y-0.5">
+                        <Label className="text-xs">Base Font Size</Label>
                         <Select
                           value={field.state.value}
                           onValueChange={(value) => field.handleChange(value)}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs">
                             <SelectValue placeholder="Select size..." />
                           </SelectTrigger>
                           <SelectContent>
@@ -373,22 +369,19 @@ export function ThemeEditorSheet({
                             <SelectItem value="24px">24px (Large)</SelectItem>
                           </SelectContent>
                         </Select>
-                        <p className="text-xs text-muted-foreground">
-                          Base font size for body text
-                        </p>
                       </div>
                     )}
                   </form.Field>
 
                   <form.Field name="typography.headingFontWeight">
                     {(field) => (
-                      <div className="space-y-2">
-                        <Label>Heading Font Weight</Label>
+                      <div className="space-y-0.5">
+                        <Label className="text-xs">Heading Font Weight</Label>
                         <Select
                           value={String(field.state.value)}
                           onValueChange={(value) => field.handleChange(Number(value))}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs">
                             <SelectValue placeholder="Select weight..." />
                           </SelectTrigger>
                           <SelectContent>
@@ -403,55 +396,49 @@ export function ThemeEditorSheet({
                             <SelectItem value="900">Black (900)</SelectItem>
                           </SelectContent>
                         </Select>
-                        <p className="text-xs text-muted-foreground">
-                          Font weight for headings
-                        </p>
                       </div>
                     )}
                   </form.Field>
 
                   <form.Field name="typography.headingColor">
                     {(field) => (
-                      <div className="space-y-2">
-                        <ColorInput
-                          label="Heading Color (Optional)"
-                          value={field.state.value || "#1e293b"}
-                          onChange={(value) => field.handleChange(value)}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Leave empty to use default text color
-                        </p>
-                      </div>
+                      <ColorInput
+                        label="Heading Color (Optional)"
+                        value={field.state.value || "#1e293b"}
+                        onChange={(value) => field.handleChange(value)}
+                      />
                     )}
                   </form.Field>
                 </div>
-              </ScrollArea>
-            </TabsContent>
+          </CollapsibleContent>
+        </Collapsible>
 
-            {/* Layout Tab */}
-            <TabsContent value="layout" className="space-y-3 mt-4">
-              <ScrollArea className="h-[calc(100vh-320px)] max-h-[600px] pr-4">
-                <div className="space-y-3">
+        {/* Layout Section */}
+        <Collapsible className="w-full border rounded">
+          <CollapsibleTrigger className="flex items-center justify-between w-full px-2 py-1.5 text-xs font-medium hover:bg-muted/50">
+            <span>Layout</span>
+            <ChevronDown className="h-3 w-3 transition-transform duration-200 data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="px-2 pb-1.5 pt-1 max-h-[400px] overflow-y-auto">
+            <div className="space-y-0.5">
               <form.Field name="spacing.unit">
                 {(field) => (
-                  <div className="space-y-2">
-                    <Label>Spacing Unit</Label>
+                  <div className="space-y-0.5">
+                    <Label className="text-xs">Spacing Unit</Label>
                     <Input
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       placeholder="0.25rem"
+                      className="h-8 text-xs"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Base unit for spacing calculations
-                    </p>
                   </div>
                 )}
               </form.Field>
 
               <form.Field name="spacing.scale">
                 {(field) => (
-                  <div className="space-y-2">
-                    <Label>Spacing Scale</Label>
+                  <div className="space-y-0.5">
+                    <Label className="text-xs">Spacing Scale</Label>
                     <Input
                       type="number"
                       step={0.1}
@@ -460,64 +447,115 @@ export function ThemeEditorSheet({
                       value={field.state.value}
                       onChange={(e) => field.handleChange(Number(e.target.value))}
                       placeholder="1.5"
+                      className="h-8 text-xs"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Multiplier for spacing progression (1.0 - 3.0)
-                    </p>
                   </div>
                 )}
               </form.Field>
 
               <form.Field name="borders.radius">
                 {(field) => (
-                  <div className="space-y-2">
-                    <Label>Border Radius</Label>
+                  <div className="space-y-0.5">
+                    <Label className="text-xs">Border Radius</Label>
                     <Input
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       placeholder="0.5rem"
+                      className="h-8 text-xs"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Roundness of corners (e.g., 0.5rem, 8px)
-                    </p>
                   </div>
                 )}
               </form.Field>
 
               <form.Field name="borders.width">
                 {(field) => (
-                  <div className="space-y-2">
-                    <Label>Border Width</Label>
+                  <div className="space-y-0.5">
+                    <Label className="text-xs">Border Width</Label>
                     <Input
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       placeholder="1px"
+                      className="h-8 text-xs"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Default border thickness (e.g., 1px, 2px)
-                    </p>
                   </div>
                 )}
               </form.Field>
-                </div>
-              </ScrollArea>
-            </TabsContent>
-          </Tabs>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
-          <SheetFooter className="mt-6 flex gap-2">
+        {/* Only show Save/Remove buttons in app mode - page mode uses header Save button */}
+        {mode === "app" && (
+          <div className="flex gap-1 pt-1">
             <Button
               type="button"
               variant="outline"
               onClick={handleReset}
               disabled={isSaving}
+              size="sm"
+              className="flex-1 h-6 text-xs px-2"
             >
-              {mode === "page" ? "Remove Override" : "Reset to Default"}
+              Reset
             </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save Changes"}
+            <Button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                form.handleSubmit();
+              }}
+              disabled={isSaving}
+              size="sm"
+              className="flex-1 h-6 text-xs px-2"
+            >
+              {isSaving ? "Saving..." : "Save"}
             </Button>
-          </SheetFooter>
-        </form>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Backward compatibility wrapper for standalone Sheet usage (e.g., app settings)
+export interface ThemeEditorSheetProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  initialTheme: any | undefined;
+  onSave: (theme: ThemeConfigProps | undefined) => Promise<void>;
+  mode: "app" | "page";
+}
+
+export function ThemeEditorSheet({
+  open,
+  onOpenChange,
+  initialTheme,
+  onSave,
+  mode,
+}: ThemeEditorSheetProps) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>
+            {mode === "app" ? "Edit App Theme" : "Edit Page Theme"}
+          </SheetTitle>
+          <SheetDescription>
+            {mode === "app"
+              ? "Customize the default theme for all pages"
+              : "Override the app theme for this page"}
+          </SheetDescription>
+        </SheetHeader>
+        <div className="mt-4">
+          <ThemeSidebarPanel
+            initialTheme={initialTheme}
+            onSave={async (theme) => {
+              await onSave(theme);
+              onOpenChange(false);
+            }}
+            mode={mode}
+          />
+        </div>
       </SheetContent>
     </Sheet>
   );
