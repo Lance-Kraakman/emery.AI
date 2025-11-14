@@ -42,9 +42,13 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
   const loadPages = async () => {
     try {
       setLoadingPages(true);
-      const pagesData = await getPages(app.id);
-      setPages(pagesData);
-      appsActions.setPages(pagesData);
+      const result = await getPages(app.id);
+      if (result.success && result.data) {
+        setPages(result.data);
+        appsActions.setPages(result.data);
+      } else {
+        toast.error(result.error || "Failed to load pages");
+      }
     } catch (error) {
       console.error('Error loading pages:', error);
       toast.error("Failed to load pages for this app");
@@ -238,13 +242,6 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
                     title={`Secondary: ${app.themeConfig.colors.secondary}`}
                   />
                 )}
-                {app.themeConfig.colors?.accent && (
-                  <div
-                    className="w-5 h-5 rounded border border-border"
-                    style={{ backgroundColor: app.themeConfig.colors.accent }}
-                    title={`Accent: ${app.themeConfig.colors.accent}`}
-                  />
-                )}
               </div>
             )}
           </div>
@@ -269,7 +266,7 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
       <ThemeEditorSheet
         open={themeSheetOpen}
         onOpenChange={setThemeSheetOpen}
-        initialTheme={app.themeConfig}
+        initialTheme={app.themeConfig || undefined}
         onSave={handleSaveAppTheme}
         mode="app"
       />

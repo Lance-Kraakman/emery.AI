@@ -189,13 +189,19 @@ export default function PageEditPage() {
         setLoading(true);
 
         // Fetch app and page
-        const [loadedApp, loadedPage] = await Promise.all([
+        const [appResult, pageResult] = await Promise.all([
           getApp(appId),
           getPage(pageId)
         ]);
 
-        setApp(loadedApp);
-        setPage(loadedPage);
+        if (!appResult.success || !appResult.data || !pageResult.success || !pageResult.data) {
+          toast.error("Failed to load app or page");
+          setLoading(false);
+          return;
+        }
+
+        setApp(appResult.data);
+        setPage(pageResult.data);
 
         // Check for unsaved changes in sessionStorage
         const savedData = sessionStorage.getItem(`puck-data-${pageId}`);
@@ -214,7 +220,7 @@ export default function PageEditPage() {
         }
 
         // Load from database
-        const rawData = loadedPage.templateData || { content: [], root: {}, zones: {} };
+        const rawData = pageResult.data.templateData || { content: [], root: {}, zones: {} };
         const resolvedData = await resolveAllData(rawData, config, {});
         setInitialData(resolvedData);
       } catch (err) {
