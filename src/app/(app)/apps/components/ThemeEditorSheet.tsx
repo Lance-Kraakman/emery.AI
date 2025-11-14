@@ -54,33 +54,62 @@ export function ThemeSidebarPanel({
   onSave,
   mode,
 }: ThemeSidebarPanelProps) {
+  console.log('[ThemeSidebarPanel] Component render. initialTheme:', initialTheme, 'mode:', mode);
+
   const [isSaving, setIsSaving] = React.useState(false);
   const [selectedPreset, setSelectedPreset] = React.useState<string>("custom");
 
   // Initialize form with current theme or default
   const currentTheme = initialTheme || DEFAULT_THEME;
+  console.log('[ThemeSidebarPanel] currentTheme calculated:', currentTheme);
 
   const form = useForm({
     defaultValues: currentTheme,
     onSubmit: async ({ value }) => {
+      console.log('[ThemeSidebarPanel.onSubmit] Starting save with value:', value);
       try {
         setIsSaving(true);
+        console.log('[ThemeSidebarPanel.onSubmit] Calling onSave callback');
         await onSave(value as ThemeConfigProps);
-        // No form.reset() - router.refresh() will reload the page with fresh data
+        console.log('[ThemeSidebarPanel.onSubmit] onSave completed successfully');
       } catch (error) {
-        console.error("Error saving theme:", error);
+        console.error("[ThemeSidebarPanel.onSubmit] Error saving theme:", error);
       } finally {
         setIsSaving(false);
       }
     },
   });
 
-  // Check if current colors match a preset
+  // Reset form when initialTheme prop changes (e.g., after save completes and page state updates)
   React.useEffect(() => {
+    console.log('[ThemeSidebarPanel] initialTheme changed, resetting form. New theme:', initialTheme);
+    const newTheme = initialTheme || DEFAULT_THEME;
+    form.reset(newTheme);
+    console.log('[ThemeSidebarPanel] Form reset complete');
+  }, [initialTheme]);
+
+  // Check if current colors match a preset whenever form values change
+  React.useEffect(() => {
+    console.log('[ThemeSidebarPanel] Setting up preset matching subscription');
+    // Subscribe to form store changes
+    const subscription = form.store.subscribe(() => {
+      const currentColors = form.getFieldValue("colors");
+      const matchedPresetId = matchesPreset(currentColors);
+      console.log('[ThemeSidebarPanel.presetMatcher] Colors changed, matched preset:', matchedPresetId || 'custom');
+      setSelectedPreset(matchedPresetId || "custom");
+    });
+
+    // Run once on mount to set initial preset
     const currentColors = form.getFieldValue("colors");
     const matchedPresetId = matchesPreset(currentColors);
+    console.log('[ThemeSidebarPanel.presetMatcher] Initial mount, matched preset:', matchedPresetId || 'custom');
     setSelectedPreset(matchedPresetId || "custom");
-  }, [form]);
+
+    return () => {
+      console.log('[ThemeSidebarPanel] Cleaning up preset matching subscription');
+      subscription();
+    };
+  }, []);
 
   // Handle preset selection
   const handlePresetChange = (presetId: string) => {
@@ -481,7 +510,17 @@ export function ThemeSidebarPanel({
           >
             {mode === "page" ? "Remove" : "Reset"}
           </Button>
-          <Button type="submit" disabled={isSaving} size="sm" className="flex-1 h-6 text-xs px-2">
+          <Button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              form.handleSubmit();
+            }}
+            disabled={isSaving}
+            size="sm"
+            className="flex-1 h-6 text-xs px-2"
+          >
             {isSaving ? "Saving..." : "Save"}
           </Button>
         </div>

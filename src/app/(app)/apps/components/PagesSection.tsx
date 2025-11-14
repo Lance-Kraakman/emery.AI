@@ -120,83 +120,61 @@ export function PagesSection({ appId, pages, loading, onPagesChange }: PagesSect
               </Button>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {pages.map((page) => (
                 <div
                   key={page.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-secondary/50 transition-colors"
+                  className="flex items-center justify-between p-2 border rounded hover:bg-secondary/50 transition-colors"
                 >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-medium truncate">{page.name}</h4>
-                        <Badge
-                          variant={page.isPublished ? "default" : "secondary"}
-                          className="flex-shrink-0"
-                        >
-                          {page.isPublished ? (
-                            <>
-                              <Eye className="h-3 w-3 mr-1" />
-                              Published
-                            </>
-                          ) : (
-                            <>
-                              <EyeOff className="h-3 w-3 mr-1" />
-                              Draft
-                            </>
-                          )}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground truncate">{page.slug}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePreviewPage(page)}
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="text-sm font-medium truncate">{page.name}</span>
+                    <span className="text-xs text-muted-foreground truncate">/{page.slug}</span>
+                    <Badge
+                      variant={page.isPublished ? "default" : "secondary"}
+                      className="flex-shrink-0 text-xs h-5"
                     >
-                      <Monitor className="h-4 w-4 mr-1" />
-                      Preview
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEditPage(page)}
-                    >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Edit
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handlePreviewPage(page)}>
-                          <Monitor className="h-4 w-4 mr-2" />
-                          Preview
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleEditPage(page)}>
-                          <Edit className="h-4 w-4 mr-2" />
-                          Edit Content
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleEditPageMetadata(page)}>
-                          Edit Details
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => setDeletingPage(page)}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                      {page.isPublished ? (
+                        <>
+                          <Eye className="h-2.5 w-2.5 mr-1" />
+                          Published
+                        </>
+                      ) : (
+                        <>
+                          <EyeOff className="h-2.5 w-2.5 mr-1" />
+                          Draft
+                        </>
+                      )}
+                    </Badge>
                   </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                        <MoreVertical className="h-3.5 w-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handlePreviewPage(page)}>
+                        <Monitor className="h-4 w-4 mr-2" />
+                        Preview
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleEditPage(page)}>
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit Content
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleEditPageMetadata(page)}>
+                        Edit Details
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-destructive"
+                        onClick={() => setDeletingPage(page)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               ))}
             </div>
