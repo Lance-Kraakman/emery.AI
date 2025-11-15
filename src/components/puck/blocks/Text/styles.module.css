@@ -1,4 +1,43 @@
-.Text {
+.text {
   line-height: 1.5;
-  padding: 0px;
+  color: var(--theme-text, #1e293b);
+  font-family: var(--theme-font-family, inherit);
+  margin: 0;
+}
+
+/* Size variants using theme variables */
+.text[data-size="xs"] {
+  font-size: var(--theme-font-xs, 12px);
+}
+
+.text[data-size="sm"] {
+  font-size: var(--theme-font-sm, 14px);
+}
+
+.text[data-size="base"] {
+  font-size: var(--theme-font-base, 16px);
+}
+
+.text[data-size="lg"] {
+  font-size: var(--theme-font-lg, 18px);
+}
+
+.text[data-size="xl"] {
+  font-size: var(--theme-font-xl, 20px);
+}
+
+.text[data-size="2xl"] {
+  font-size: var(--theme-font-2xl, 24px);
+}
+
+.text[data-size="3xl"] {
+  font-size: var(--theme-font-3xl, 30px);
+}
+
+.text[data-size="4xl"] {
+  font-size: var(--theme-font-4xl, 36px);
+}
+
+.text[data-size="5xl"] {
+  font-size: var(--theme-font-5xl, 48px);
 }

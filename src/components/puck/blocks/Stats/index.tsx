@@ -4,6 +4,7 @@ import { ComponentConfig } from "@measured/puck";
 import styles from "./styles.module.css";
 import { getClassNameFactory } from "@/components/puck/lib";
 import { Section } from "../../components/Section";
+import { backgroundColorField, textColorField } from "../../fields/standard-fields";
 
 const getClassName = getClassNameFactory("Stats", styles);
 
@@ -12,6 +13,9 @@ export type StatsProps = {
     title: string;
     description: string;
   }[];
+  labelColor?: string;
+  valueColor?: string;
+  backgroundColor?: string;
 };
 
 export const Stats: ComponentConfig<StatsProps> = {
@@ -34,6 +38,15 @@ export const Stats: ComponentConfig<StatsProps> = {
         },
       },
     },
+    labelColor: {
+      ...textColorField,
+      label: "Label Color (Optional)",
+    },
+    valueColor: {
+      ...textColorField,
+      label: "Value Color (Optional)",
+    },
+    backgroundColor: backgroundColorField,
   },
   defaultProps: {
     items: [
@@ -42,15 +55,31 @@ export const Stats: ComponentConfig<StatsProps> = {
         description: "1,000",
       },
     ],
+    labelColor: undefined,
+    valueColor: undefined,
+    backgroundColor: undefined,
   },
-  render: ({ items }) => {
+  render: ({ items, labelColor, valueColor, backgroundColor }) => {
     return (
       <Section className={getClassName()} maxWidth={"916px"}>
-        <div className={getClassName("items")}>
+        <div
+          className={getClassName("items")}
+          style={{ ...(backgroundColor && { backgroundImage: 'none', backgroundColor }) }}
+        >
           {items.map((item, i) => (
             <div key={i} className={getClassName("item")}>
-              <div className={getClassName("label")}>{item.title}</div>
-              <div className={getClassName("value")}>{item.description}</div>
+              <div
+                className={getClassName("label")}
+                style={{ ...(labelColor && { color: labelColor }) }}
+              >
+                {item.title}
+              </div>
+              <div
+                className={getClassName("value")}
+                style={{ ...(valueColor && { color: valueColor }) }}
+              >
+                {item.description}
+              </div>
             </div>
           ))}
         </div>

@@ -19,6 +19,7 @@ import type { ComponentConfig } from "@measured/puck";
 import MetricBlock, { type MetricBlockProps } from "./MetricBlock";
 import { getView, executeViewAggregations, getViewsForOrganization } from "@/app/actions/views";
 import { getTables } from "@/app/actions/tables";
+import { typographySizeField, backgroundColorField, textColorField } from "../../fields/standard-fields";
 
 export const MetricBlockConfig: ComponentConfig<MetricBlockProps> = {
   label: "Metric",
@@ -124,21 +125,25 @@ export const MetricBlockConfig: ComponentConfig<MetricBlockProps> = {
         { label: "Hide", value: false },
       ],
     },
-    size: {
-      label: "Size",
-      type: "radio",
-      options: [
-        { label: "Small", value: "small" },
-        { label: "Medium", value: "medium" },
-        { label: "Large", value: "large" },
-      ],
+    size: typographySizeField,
+    labelColor: {
+      ...textColorField,
+      label: "Label Color (Optional)",
     },
+    valueColor: {
+      ...textColorField,
+      label: "Value Color (Optional)",
+    },
+    backgroundColor: backgroundColorField,
   },
 
   defaultProps: {
     showLabel: true,
     showChange: false,
-    size: 'medium',
+    size: '2xl',
+    labelColor: undefined,
+    valueColor: undefined,
+    backgroundColor: undefined,
   },
 
   /**

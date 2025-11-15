@@ -71,9 +71,9 @@
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
 }
 
-/* Label */
+/* Label - uses data-size attribute for theme-aware sizing */
 .label {
-  font-size: 0.875rem;
+  font-family: var(--theme-font-family, inherit);
   font-weight: 500;
   color: var(--theme-text-muted, #6b7280);
   margin-bottom: 0.5rem;
@@ -82,19 +82,41 @@
   gap: 0.5rem;
 }
 
+/* Label size variants */
+.label[data-size="xs"] { font-size: var(--theme-font-xs, 12px); }
+.label[data-size="sm"] { font-size: var(--theme-font-sm, 14px); }
+.label[data-size="base"] { font-size: var(--theme-font-base, 16px); }
+.label[data-size="lg"] { font-size: var(--theme-font-lg, 18px); }
+.label[data-size="xl"] { font-size: var(--theme-font-xl, 20px); }
+.label[data-size="2xl"] { font-size: var(--theme-font-2xl, 24px); }
+.label[data-size="3xl"] { font-size: var(--theme-font-3xl, 30px); }
+.label[data-size="4xl"] { font-size: var(--theme-font-4xl, 36px); }
+.label[data-size="5xl"] { font-size: var(--theme-font-5xl, 48px); }
+
 .metricType {
   font-size: 0.75rem;
   font-weight: 400;
   color: var(--theme-text-muted, #9ca3af);
 }
 
-/* Value */
+/* Value - uses data-size attribute for theme-aware sizing */
 .value {
-  font-size: 2.5rem;
+  font-family: var(--theme-font-family, inherit);
   font-weight: 700;
   color: var(--theme-text, #111827);
   line-height: 1.2;
 }
+
+/* Value size variants - uses larger sizes for impact */
+.value[data-size="xs"] { font-size: var(--theme-font-lg, 18px); }
+.value[data-size="sm"] { font-size: var(--theme-font-xl, 20px); }
+.value[data-size="base"] { font-size: var(--theme-font-2xl, 24px); }
+.value[data-size="lg"] { font-size: var(--theme-font-3xl, 30px); }
+.value[data-size="xl"] { font-size: var(--theme-font-4xl, 36px); }
+.value[data-size="2xl"] { font-size: var(--theme-font-5xl, 48px); }
+.value[data-size="3xl"] { font-size: calc(var(--theme-font-5xl, 48px) * 1.25); }
+.value[data-size="4xl"] { font-size: calc(var(--theme-font-5xl, 48px) * 1.5); }
+.value[data-size="5xl"] { font-size: calc(var(--theme-font-5xl, 48px) * 2); }
 
 /* Change indicator */
 .change {
@@ -118,39 +140,21 @@
   color: var(--theme-error, #ef4444);
 }
 
-/* Size variants */
-.small {
+/* Size-based padding variants */
+.metricBlock[data-size="xs"],
+.metricBlock[data-size="sm"] {
   padding: 1rem;
 }
 
-.small .value {
-  font-size: 1.75rem;
-}
-
-.small .label {
-  font-size: 0.75rem;
-}
-
-.medium {
+.metricBlock[data-size="base"],
+.metricBlock[data-size="lg"],
+.metricBlock[data-size="xl"],
+.metricBlock[data-size="2xl"] {
   padding: 1.5rem;
 }
 
-.medium .value {
-  font-size: 2.5rem;
-}
-
-.medium .label {
-  font-size: 0.875rem;
-}
-
-.large {
+.metricBlock[data-size="3xl"],
+.metricBlock[data-size="4xl"],
+.metricBlock[data-size="5xl"] {
   padding: 2rem;
-}
-
-.large .value {
-  font-size: 3.5rem;
-}
-
-.large .label {
-  font-size: 1rem;
 }
