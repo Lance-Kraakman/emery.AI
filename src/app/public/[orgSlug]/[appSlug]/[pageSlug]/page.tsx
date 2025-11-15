@@ -1,10 +1,11 @@
 // AIDEV-NOTE: Public page renderer for published Puck pages
-// No authentication required - renders public pages
+// Implements authentication checks for protected pages
 
 import { Metadata } from "next"
-import { notFound } from "next/navigation"
-import { getPublicApp, getPublicPage } from "@/app/actions/public-pages"
+import { notFound, redirect } from "next/navigation"
+import { getPublicApp, getPublicPage, checkPageAccess } from "@/app/actions/public-pages"
 import { PublicPageRenderer } from "./PublicPageRenderer"
+import { auth } from "@/lib/auth"
 
 interface PublicPageProps {
   params: Promise<{
@@ -55,8 +56,38 @@ export default async function PublicPage({ params }: PublicPageProps) {
   const app = appResult.data
   const page = pageResult.data
 
-  // TODO: Check requiresAuth and allowedRoles (Phase 2)
-  // For now, just render public pages without auth checks
+  // Check authentication and access control
+  const session = await auth()
+  const accessCheck = await checkPageAccess(
+    page.id,
+    session?.user?.id || null
+  )
+
+  if (!accessCheck.allowed) {
+    if (accessCheck.redirectToLogin) {
+      // Save requested URL for post-login redirect
+      const callbackUrl = `/public/${orgSlug}/${appSlug}/${pageSlug}`
+      redirect(`/public/${orgSlug}/${appSlug}/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
+    } else {
+      // User is authenticated but doesn't have required permissions
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center max-w-md p-8">
+            <h1 className="text-3xl font-bold mb-4 text-gray-900">Access Denied</h1>
+            <p className="text-gray-600 mb-6">
+              {accessCheck.reason || "You don't have permission to view this page."}
+            </p>
+            <a
+              href={`/public/${orgSlug}/${appSlug}`}
+              className="text-blue-600 hover:text-blue-500 underline"
+            >
+              Back to app
+            </a>
+          </div>
+        </div>
+      )
+    }
+  }
 
   return (
     <PublicPageRenderer

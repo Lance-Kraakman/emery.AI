@@ -1,5 +1,5 @@
-// AIDEV-NOTE: PageSlug value object for URL-safe page route paths
-// Validates slug format for use in URL routing (can include forward slashes)
+// AIDEV-NOTE: PageSlug value object for URL-safe page identifiers
+// Validates slug format for use in URL routing (no leading slash, consistent with org/app slugs)
 
 import type { Result } from '@/ddd/domain/shared/result';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
@@ -10,7 +10,7 @@ export class PageSlug {
   /**
    * Create a PageSlug from a string value
    * Validates that the slug is URL-safe and suitable for routing
-   * Can contain forward slashes for nested routes (e.g., "/products/pricing")
+   * Should NOT include leading slash (consistent with org/app slugs)
    */
   static create(value: string): Result<PageSlug> {
     // Trim whitespace
@@ -21,38 +21,34 @@ export class PageSlug {
       return ResultHelpers.failure('Page slug cannot be empty');
     }
 
-    // Ensure it starts with a forward slash
-    const normalized = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-
     // Check length
-    if (normalized.length < 2) {
-      return ResultHelpers.failure('Page slug must be at least 2 characters (including leading /)');
+    if (trimmed.length < 1) {
+      return ResultHelpers.failure('Page slug must be at least 1 character');
     }
 
-    if (normalized.length > 200) {
+    if (trimmed.length > 200) {
       return ResultHelpers.failure('Page slug cannot exceed 200 characters');
     }
 
-    // Validate format: /path/to/page with lowercase, numbers, hyphens, underscores
-    // Each segment must start with alphanumeric
-    const slugRegex = /^\/[a-z0-9]([a-z0-9_-]*[a-z0-9])?(\/[a-z0-9]([a-z0-9_-]*[a-z0-9])?)*$/;
-    if (!slugRegex.test(normalized)) {
+    // Validate format: lowercase letters, numbers, and hyphens only
+    const slugRegex = /^[a-z0-9-]+$/;
+    if (!slugRegex.test(trimmed)) {
       return ResultHelpers.failure(
-        'Page slug must start with /, contain only lowercase letters, numbers, hyphens, underscores, and forward slashes. Each segment must start and end with alphanumeric characters'
+        'Page slug must contain only lowercase letters, numbers, and hyphens'
       );
     }
 
-    // Disallow consecutive slashes or hyphens
-    if (normalized.includes('//') || normalized.includes('--')) {
-      return ResultHelpers.failure('Page slug cannot contain consecutive slashes or hyphens');
+    // Disallow consecutive hyphens
+    if (trimmed.includes('--')) {
+      return ResultHelpers.failure('Page slug cannot contain consecutive hyphens');
     }
 
-    // Disallow trailing slash (except for root "/")
-    if (normalized.length > 1 && normalized.endsWith('/')) {
-      return ResultHelpers.failure('Page slug cannot end with a slash (except root path)');
+    // Disallow leading/trailing hyphens
+    if (trimmed.startsWith('-') || trimmed.endsWith('-')) {
+      return ResultHelpers.failure('Page slug cannot start or end with a hyphen');
     }
 
-    return ResultHelpers.success(new PageSlug(normalized));
+    return ResultHelpers.success(new PageSlug(trimmed));
   }
 
   /**
@@ -65,7 +61,7 @@ export class PageSlug {
       .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with hyphens
       .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
 
-    return PageSlug.create(`/${slug}`);
+    return PageSlug.create(slug);
   }
 
   get value(): string {
@@ -78,12 +74,5 @@ export class PageSlug {
 
   toString(): string {
     return this._value;
-  }
-
-  /**
-   * Get the path without the leading slash (useful for routing)
-   */
-  get pathWithoutLeadingSlash(): string {
-    return this._value.substring(1);
   }
 }

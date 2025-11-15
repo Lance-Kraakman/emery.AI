@@ -607,3 +607,64 @@ export async function updateAppTheme(
     };
   }
 }
+
+/**
+ * Set the home page for an app
+ */
+export async function setAppHomePage(
+  appId: number,
+  pageId: number | null,
+  revalidateUrl?: string
+): Promise<Result<AppDTO>> {
+  try {
+    await requirePermission("apps:manage");
+
+    if (!appId) {
+      return {
+        success: false,
+        error: ActionError.validation(['App ID required']),
+        errorCode: 'VALIDATION'
+      };
+    }
+
+    const appService = getAppApplicationService();
+
+    // Get the app
+    const app = await appService.getApp(AppId.fromNumber(appId));
+    if (!app) {
+      return {
+        success: false,
+        error: ActionError.notFound('App', appId),
+        errorCode: 'NOT_FOUND'
+      };
+    }
+
+    // Set the home page
+    const { PageId } = await import("@/ddd/domain/puck/value-objects/page-id");
+    app.setHomePage(pageId ? PageId.fromNumber(pageId) : undefined);
+
+    // Save the app using repository
+    const { getAppRepository } = await import("@/ddd/application/di/container");
+    const appRepository = getAppRepository();
+    const updatedApp = await appRepository.update(app);
+
+    // Revalidate app routes
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl);
+    }
+    revalidatePath(`/apps/${appId}`);
+    revalidatePath(`/public/${app.organizationId.value}/${app.slug.value}`);
+
+    return {
+      success: true,
+      data: AppMapper.toDTO(updatedApp)
+    };
+  } catch (error) {
+    console.error('[setAppHomePage] Error:', error);
+    return {
+      success: false,
+      error: ActionError.database('set app home page'),
+      errorCode: 'DATABASE'
+    };
+  }
+}

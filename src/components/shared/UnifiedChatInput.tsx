@@ -1,14 +1,14 @@
 'use client';
 
 /**
- * CustomChatInput with Enhanced Tool Selection Support
+ * Unified Chat Input Component
  *
- * Chat input with @ tool selection functionality using ReferenceTool objects.
- * Supports @doc:, @file:, @agent:, @table:, @database: for tool selection.
+ * Reusable input component for both chat UI and form fields (like skill instructions).
+ * Supports @ tool selection, file attachments, and optional send button.
  *
- * AIDEV-NOTE: Enhanced with proper Tool domain integration.
- * Uses ReferenceTool objects for type-safe tool configs and unified architecture.
- * Simplified @ detection using input change handler with DDD ToolDropdown.
+ * AIDEV-NOTE: Extracted from CustomChatInput to enable reuse across chat and forms.
+ * Chat mode: auto-resize, send button, Enter to send
+ * Form mode: fixed height, no send button, form field behavior
  */
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -16,48 +16,96 @@ import { Send, Paperclip, X, Image as ImageIcon, File as FileIcon, Music } from 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { ToolDropdown } from './ToolDropdown';
-import { resolveReferences } from '@/app/actions/references';
+import { Label } from '@/components/ui/label';
+import { ToolDropdown } from '@/components/chat/ToolDropdown';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { toolResolverService } from '@/ddd/domain/tools/services/tool-resolver-service';
 import { useChatInputState } from '@/hooks/useChatInputState';
 
-interface CustomChatInputProps {
-  onSendMessage: (message: string) => void;
-  onToolsChange?: (tools: ToolDTO[]) => void;
+interface UnifiedChatInputProps<T = ToolDTO> {
+  // Core text input
+  value?: string;
+  onChange?: (value: string) => void;
   placeholder?: string;
-  className?: string;
   disabled?: boolean;
-  // Multimodal support
+  className?: string;
+
+  // Tool selection (@mentions)
+  tools?: T[];
+  onToolsChange?: (tools: T[]) => void;
+
+  // File attachments (optional)
+  enableAttachments?: boolean;
   pendingAttachments?: File[];
   onAttachmentAdd?: (file: File) => void;
   onAttachmentRemove?: (index: number) => void;
+
+  // Send functionality (optional)
+  enableSendButton?: boolean;
+  onSendMessage?: (message: string) => void;
+
+  // Layout mode
+  mode?: 'chat' | 'form'; // chat = auto-resize + Enter sends, form = fixed height + form behavior
+  minHeight?: string;     // For form mode
+
+  // Form field props (optional)
+  id?: string;
+  label?: string;
+  helpText?: string;
 }
 
-export default function CustomChatInput({
-  onSendMessage,
-  onToolsChange,
+export function UnifiedChatInput<T = ToolDTO>({
+  value: controlledValue,
+  onChange: controlledOnChange,
   placeholder = "Type your message here...",
-  className = "",
   disabled = false,
+  className = "",
+  tools,
+  onToolsChange,
+  enableAttachments = true,
   pendingAttachments = [],
   onAttachmentAdd,
-  onAttachmentRemove
-}: CustomChatInputProps) {
-  const [inputValue, setInputValue] = useState('');
+  onAttachmentRemove,
+  enableSendButton = true,
+  onSendMessage,
+  mode = 'chat',
+  minHeight,
+  id,
+  label,
+  helpText
+}: UnifiedChatInputProps<T>) {
+  // Support both controlled and uncontrolled modes
+  const [internalValue, setInternalValue] = useState('');
+  const inputValue = controlledValue !== undefined ? controlledValue : internalValue;
+  const setInputValue = (val: string) => {
+    if (controlledValue !== undefined) {
+      controlledOnChange?.(val);
+    } else {
+      setInternalValue(val);
+    }
+  };
+
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownQuery, setDropdownQuery] = useState('');
   const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number; maxHeight?: number }>({ left: 0 });
-  const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([]);
+  const [selectedTools, setSelectedTools] = useState<T[]>(tools || []);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-resize textarea and track single-line mode for conditional layout
-  const { isSingleLine } = useChatInputState(inputRef, inputValue, {
-    minHeight: 44,  // Single line height (~2.75rem)
-    maxHeight: 400  // Max height before scrolling
+  // Auto-resize textarea only in chat mode
+  const chatInputState = useChatInputState(inputRef, inputValue, {
+    minHeight: mode === 'chat' ? 44 : undefined,  // Single line height
+    maxHeight: mode === 'chat' ? 400 : undefined  // Max height before scrolling
   });
+  const isSingleLine = mode === 'chat' ? chatInputState.isSingleLine : false;
+
+  // Sync selected tools with prop
+  useEffect(() => {
+    if (tools) {
+      setSelectedTools(tools);
+    }
+  }, [tools]);
 
   // Detect @ tools and show/hide dropdown
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -142,22 +190,14 @@ export default function CustomChatInput({
         }
       };
 
-      console.log('[CustomChatInput] Tool info:', {
-        name: tool.name,
-        type: tool.type,
-        category: tool.category,
-        insertText: tool.insertText,
-        fallback: getReferenceFallback()
-      });
-
       const rawInsertText = tool.insertText || getReferenceFallback();
       // AIDEV-NOTE: Remove line breaks, tabs, and extra whitespace from insert text
       const insertText = rawInsertText.replace(/[\n\r\t]+/g, ' ').replace(/\s+/g, ' ').trim();
       const newValue = beforeAt + insertText + ' ' + afterCursor;
       setInputValue(newValue);
 
-      // Add to selected tools
-      const updatedTools = [...selectedTools, tool];
+      // Add to selected tools (cast ToolDTO to T for generic compatibility)
+      const updatedTools = [...selectedTools, tool as T];
       setSelectedTools(updatedTools);
       onToolsChange?.(updatedTools);
 
@@ -174,20 +214,13 @@ export default function CustomChatInput({
     setShowDropdown(false);
   };
 
-
   // Send message with simple reference mapping
   const handleSendMessage = async () => {
-    if (inputValue.trim() && !disabled) {
+    if (inputValue.trim() && !disabled && onSendMessage) {
       const message = inputValue.trim();
 
       // Use simple reference mapping
-      const { mappedMessage, toolReferences } = toolResolverService.mapReferencesToTools(message);
-
-      console.log('[CustomChatInput] Reference mapping:', {
-        original: message,
-        mapped: mappedMessage,
-        references: toolReferences
-      });
+      const { mappedMessage } = toolResolverService.mapReferencesToTools(message);
 
       // Send the mapped message (e.g., "@doc:myfile.pdf" becomes "@tool:document_reader")
       onSendMessage(mappedMessage);
@@ -208,10 +241,10 @@ export default function CustomChatInput({
       return; // Let ToolDropdown handle these
     }
 
-    // Enter without Shift sends message, Shift+Enter creates new line
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Enter sends message in chat mode (if send button is enabled)
+    if (mode === 'chat' && enableSendButton && e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      e.stopPropagation(); // AIDEV-NOTE: Prevent event bubbling to parent forms
+      e.stopPropagation();
       handleSendMessage();
     }
   };
@@ -289,9 +322,16 @@ export default function CustomChatInput({
   }, [showDropdown]);
 
   return (
-    <div className={`relative ${className}`}>
-      {/* Attachment previews */}
-      {pendingAttachments.length > 0 && (
+    <div className={className}>
+      {/* Form label */}
+      {label && <Label htmlFor={id} className="mb-2 block">{label}</Label>}
+
+      {/* Help text */}
+      {helpText && <p className="text-sm text-muted-foreground mb-2">{helpText}</p>}
+
+      <div className="relative">
+        {/* Attachment previews */}
+        {enableAttachments && pendingAttachments.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-2">
           {pendingAttachments.map((file, index) => (
             <Badge
@@ -315,10 +355,10 @@ export default function CustomChatInput({
         </div>
       )}
 
-      {/* Conditional layout: single-row when compact, traditional when multi-line */}
-      <div className={isSingleLine ? "flex items-center gap-2" : "relative"}>
-        {/* File upload button - inline when single-line */}
-        {isSingleLine && (
+      {/* Conditional layout: single-row when compact (chat mode), traditional when multi-line or form mode */}
+      <div className={isSingleLine && mode === 'chat' ? "flex items-center gap-2" : "relative"}>
+        {/* File upload button - inline when single-line in chat mode */}
+        {enableAttachments && isSingleLine && mode === 'chat' && (
           <Button
             onClick={handleFileButtonClick}
             disabled={disabled}
@@ -334,20 +374,25 @@ export default function CustomChatInput({
         {/* Textarea */}
         <Textarea
           ref={inputRef}
+          id={id}
           value={inputValue}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          rows={1}
-          className={isSingleLine
-            ? "resize-none px-3 py-2 flex-1 min-w-0"
-            : "resize-none px-3 pr-12 pb-10"
+          rows={mode === 'chat' ? 1 : undefined}
+          className={
+            isSingleLine && mode === 'chat'
+              ? "resize-none px-3 py-2 flex-1 min-w-0"
+              : mode === 'form'
+              ? "resize-y px-3 py-2"
+              : "resize-none px-3 pr-12 pb-10"
           }
+          style={mode === 'form' && minHeight ? { minHeight } : undefined}
         />
 
-        {/* Send button - inline when single-line */}
-        {isSingleLine && (
+        {/* Send button - inline when single-line in chat mode */}
+        {enableSendButton && isSingleLine && mode === 'chat' && (
           <Button
             onClick={handleSendMessage}
             disabled={!inputValue.trim() || disabled}
@@ -358,42 +403,48 @@ export default function CustomChatInput({
           </Button>
         )}
 
-        {/* Bottom action bar - only show when multi-line */}
-        {!isSingleLine && (
+        {/* Bottom action bar - only show in chat mode when multi-line */}
+        {mode === 'chat' && !isSingleLine && (
           <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
             {/* File upload button */}
-            <Button
-              onClick={handleFileButtonClick}
-              disabled={disabled}
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              title="Attach file (images, audio, documents)"
-            >
-              <Paperclip className="h-4 w-4" />
-            </Button>
+            {enableAttachments && (
+              <Button
+                onClick={handleFileButtonClick}
+                disabled={disabled}
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                title="Attach file (images, audio, documents)"
+              >
+                <Paperclip className="h-4 w-4" />
+              </Button>
+            )}
 
             {/* Send Button */}
-            <Button
-              onClick={handleSendMessage}
-              disabled={!inputValue.trim() || disabled}
-              size="sm"
-              className="h-8 w-8 p-0 rounded-full shadow-sm hover:shadow-md transition-shadow"
-            >
-              <Send className="h-3 w-3" />
-            </Button>
+            {enableSendButton && (
+              <Button
+                onClick={handleSendMessage}
+                disabled={!inputValue.trim() || disabled}
+                size="sm"
+                className="h-8 w-8 p-0 rounded-full shadow-sm hover:shadow-md transition-shadow"
+              >
+                <Send className="h-3 w-3" />
+              </Button>
+            )}
           </div>
         )}
 
         {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.txt"
-          onChange={handleFileSelect}
-          className="hidden"
-        />
+        {enableAttachments && (
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.txt"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+        )}
 
         {/* Tool Dropdown */}
         <ToolDropdown
@@ -404,7 +455,7 @@ export default function CustomChatInput({
           position={dropdownPosition}
         />
       </div>
-
+    </div>
     </div>
   );
 }

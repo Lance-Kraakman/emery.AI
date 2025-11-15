@@ -9,6 +9,46 @@
   font-weight: 700;
 }
 
+/* New semantic size classes */
+.Heading--5xl {
+  font-size: var(--puck-font-size-xxxxl);
+  letter-spacing: 0.08ch;
+  font-weight: 800;
+}
+
+.Heading--4xl {
+  font-size: var(--puck-font-size-xxxl);
+}
+
+.Heading--3xl {
+  font-size: var(--puck-font-size-xxl);
+}
+
+.Heading--2xl {
+  font-size: var(--puck-font-size-xl);
+}
+
+.Heading--xl {
+  font-size: var(--puck-font-size-l);
+}
+
+.Heading--lg {
+  font-size: var(--puck-font-size-m);
+}
+
+.Heading--base {
+  font-size: var(--puck-font-size-s);
+}
+
+.Heading--sm {
+  font-size: var(--puck-font-size-xs);
+}
+
+.Heading--xs {
+  font-size: calc(var(--puck-font-size-xs) * 0.875);
+}
+
+/* Legacy size classes for backwards compatibility */
 .Heading--xxxxl {
   font-size: var(--puck-font-size-xxxxl);
   letter-spacing: 0.08ch;
@@ -23,10 +63,6 @@
   font-size: var(--puck-font-size-xxl);
 }
 
-.Heading--xl {
-  font-size: var(--puck-font-size-xl);
-}
-
 .Heading--l {
   font-size: var(--puck-font-size-l);
 }
@@ -37,8 +73,4 @@
 
 .Heading--s {
   font-size: var(--puck-font-size-s);
-}
-
-.Heading--xs {
-  font-size: var(--puck-font-size-xs);
 }

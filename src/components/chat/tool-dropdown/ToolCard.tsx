@@ -4,19 +4,29 @@ import { cn } from '@/lib/utils';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { getToolInsertTextWithParameters } from './utils';
 
+type App = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  icon: string;
+};
+
 interface ToolCardProps {
   tool: ToolDTO;
   index: number;
   isSelected: boolean;
   onSelect: (tool: ToolDTO) => void;
   onMouseEnter: () => void;
+  availableApps: App[];
 }
 
 /**
  * Individual tool card display
  */
-export function ToolCard({ tool, index, isSelected, onSelect, onMouseEnter }: ToolCardProps) {
+export function ToolCard({ tool, index, isSelected, onSelect, onMouseEnter, availableApps }: ToolCardProps) {
   try {
+    const [iconError, setIconError] = React.useState(false);
     const params = tool.config.parameters;
     const paramEntries = Object.entries(params);
 
@@ -26,6 +36,13 @@ export function ToolCard({ tool, index, isSelected, onSelect, onMouseEnter }: To
       insertText: getToolInsertTextWithParameters(tool),
       requiresConnection: tool.requiresConnection,
     };
+
+    // Find the app for this tool
+    const appName = tool.requiredApps?.[0];
+    const app = appName ? availableApps.find(a => a.id === appName || a.name === appName) : null;
+
+    // Detect MCP tools by app name
+    const isMCPTool = appName?.toLowerCase().includes('mcp') || false;
 
     // Use tool icon or default
     const Icon = FileText; // Default icon for now
@@ -44,19 +61,46 @@ export function ToolCard({ tool, index, isSelected, onSelect, onMouseEnter }: To
         )}
       >
         <div className="flex items-start gap-3">
-          <div className="p-1 rounded-md flex-shrink-0 text-gray-600 bg-gray-50">
-            <Icon className="w-3 h-3" />
-          </div>
+          {/* Provider icon or default */}
+          {app?.icon && !iconError ? (
+            <div className="p-1 rounded-md flex-shrink-0 bg-white border border-gray-200">
+              <img
+                src={app.icon}
+                alt={app.name}
+                className="w-4 h-4 object-contain"
+                onError={() => setIconError(true)}
+              />
+            </div>
+          ) : (
+            <div className="p-1 rounded-md flex-shrink-0 text-gray-600 bg-gray-50">
+              <Icon className="w-3 h-3" />
+            </div>
+          )}
+
           <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 mb-0.5">
               <div className="font-medium text-sm text-gray-900 truncate">
                 {displayInfo.displayName}
               </div>
-              {displayInfo.requiresConnection && (
-                <span className="text-xs text-orange-500 whitespace-nowrap flex-shrink-0">
-                  Requires OAuth connection
-                </span>
-              )}
+
+              {/* Badges */}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {isMCPTool && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">
+                    MCP
+                  </span>
+                )}
+                {displayInfo.requiresConnection && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-medium">
+                    OAuth
+                  </span>
+                )}
+                {app && !tool.type.includes('reference') && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">
+                    {app.name}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="text-xs text-gray-500 line-clamp-2">
               {displayInfo.description}

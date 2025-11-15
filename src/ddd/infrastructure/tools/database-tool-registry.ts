@@ -10,7 +10,7 @@
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { eq, like, and, desc, or, ilike } from 'drizzle-orm';
+import { eq, like, and, desc, asc, or, ilike } from 'drizzle-orm';
 import { parseConnectionString } from '@/lib/db/client-parser';
 import type {
   IToolRegistryService,
@@ -74,7 +74,7 @@ export class DatabaseToolRegistry implements IToolRegistryService {
         })
         .from(tools)
         .leftJoin(appTypes, eq(tools.appId, appTypes.id))
-        .orderBy(desc(tools.createdAt));
+        .orderBy(asc(tools.displayName));
 
       console.log(`[DatabaseToolRegistry] Loaded ${toolsWithApps.length} tools from database`);
 
@@ -286,7 +286,7 @@ export class DatabaseToolRegistry implements IToolRegistryService {
         .leftJoin(appTypes, eq(tools.appId, appTypes.id))
         .limit(limit)
         .offset(offset)
-        .orderBy(desc(tools.createdAt));
+        .orderBy(asc(tools.displayName));
 
       // Apply where conditions if any
       console.log(`[DatabaseToolRegistry] Executing query with ${whereConditions.length} conditions`, {

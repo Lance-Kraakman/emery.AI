@@ -122,12 +122,27 @@ export class DrizzleOrganizationRepository
       name: data.name.value, // Convert OrganizationName to string
       slug: data.slug || this.generateSlug(data.name.value) // Generate slug if not provided
     };
-    
-    // Create organization
-    const [org] = await tx
-      .insert(organizations)
-      .values(dbData)
-      .returning();
+
+    // Pre-validate slug uniqueness to provide clear error message
+    const slugExists = await this.existsBySlug(dbData.slug);
+    if (slugExists) {
+      throw new Error(`SLUG_TAKEN:${dbData.slug}`); // Special error format for parsing
+    }
+
+    // Create organization (with backup database constraint error handling)
+    let org;
+    try {
+      [org] = await tx
+        .insert(organizations)
+        .values(dbData)
+        .returning();
+    } catch (error: any) {
+      // Backup: Handle race condition where slug was taken between check and insert
+      if (error?.code === '23505' && error?.constraint_name === 'organizations_slug_unique') {
+        throw new Error(`SLUG_TAKEN:${dbData.slug}`);
+      }
+      throw error; // Re-throw other errors
+    }
 
     // Add owner as organization member (no role column in new schema)
     await tx
@@ -274,6 +289,21 @@ export class DrizzleOrganizationRepository
     } finally {
       return []
     }
+  }
+
+  async existsBySlug(slug: string): Promise<boolean> {
+    const result = await this.db.query.organizations.findFirst({
+      where: eq(organizations.slug, slug.toLowerCase()),
+      columns: { id: true } // Only select id for performance
+    });
+    return !!result;
+  }
+
+  async findBySlug(slug: string): Promise<Organization | null> {
+    const result = await this.db.query.organizations.findFirst({
+      where: eq(organizations.slug, slug.toLowerCase())
+    });
+    return result ? this.fromPersistence(result) : null;
   }
 
   // AIDEV-NOTE: Boundary conversion - maps database primitives to domain Value Objects

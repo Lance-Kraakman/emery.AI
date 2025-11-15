@@ -253,7 +253,13 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
       </div>
 
       {/* Pages Section */}
-      <PagesSection appId={app.id} pages={pages} loading={loadingPages} onPagesChange={loadPages} />
+      <PagesSection
+        appId={app.id}
+        pages={pages}
+        loading={loadingPages}
+        homePageId={app.homePageId}
+        onPagesChange={loadPages}
+      />
 
       {/* Data Sources Section */}
       <ViewsSection

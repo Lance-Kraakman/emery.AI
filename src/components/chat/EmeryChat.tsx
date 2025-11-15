@@ -19,7 +19,7 @@ import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
 import { RightPanelResizeHandle } from '@/components/ui/right-panel-resize-handle'
 // import { ChatCanvas } from './ChatCanvas'
-import CustomChatInput from './CustomChatInput'
+import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
 import { createChatContextForPage, type ChatContextConfig } from '@/components/layout/types'
 import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
@@ -352,7 +352,7 @@ function ChatContentWithCanvas({
 
       {/* Input area */}
       <div className="flex-shrink-0 py-2 px-3 border-t border-border/10 bg-card">
-        <CustomChatInput
+        <UnifiedChatInput
           onSendMessage={async (message) => {
             // Send message with proper MessagePart format
             handler.append({

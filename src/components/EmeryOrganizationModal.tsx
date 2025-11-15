@@ -17,9 +17,28 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
   const [isOpen, setIsOpen] = React.useState(false)
   const [showCreateModal, setShowCreateModal] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
+  const [createError, setCreateError] = React.useState<string | null>(null)
+  const [orgName, setOrgName] = React.useState('')
+  const [orgSlug, setOrgSlug] = React.useState('')
+  const [slugManuallyEdited, setSlugManuallyEdited] = React.useState(false)
 
   const currentOrg = session?.user?.currentOrganization
   const availableOrgs = session?.user?.availableOrganizations || []
+
+  // Auto-generate slug from name (unless manually edited)
+  React.useEffect(() => {
+    if (!slugManuallyEdited && orgName) {
+      const autoSlug = orgName
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
+        .replace(/\s+/g, '-')          // Spaces to hyphens
+        .replace(/-+/g, '-')           // Multiple hyphens to single
+        .replace(/^-|-$/g, '')         // Trim hyphens
+        .slice(0, 50);                 // Max length
+      setOrgSlug(autoSlug);
+    }
+  }, [orgName, slugManuallyEdited]);
 
   const handleSwitchOrganization = async (orgId: number) => {
     if (orgId === currentOrg?.id) {
@@ -45,20 +64,72 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
     }
   }
 
-  const handleCreateOrganization = async (formData: FormData) => {
+  const handleCreateOrganization = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
     setIsLoading(true)
+    setCreateError(null) // Clear previous errors
+
+    // Client-side validation
+    if (!orgName.trim()) {
+      setCreateError('Organization name is required')
+      setIsLoading(false)
+      return
+    }
+
+    if (!orgSlug.trim()) {
+      setCreateError('Organization slug is required')
+      setIsLoading(false)
+      return
+    }
+
+    if (!/^[a-z0-9-]+$/.test(orgSlug)) {
+      setCreateError('Slug can only contain lowercase letters, numbers, and hyphens')
+      setIsLoading(false)
+      return
+    }
+
+    if (orgSlug.length < 2) {
+      setCreateError('Slug must be at least 2 characters')
+      setIsLoading(false)
+      return
+    }
+
     try {
-      await createOrganization(formData)
-      await update()
-      setShowCreateModal(false)
-      setIsOpen(false)
-      window.location.reload() // Refresh to show new org
+      const formData = new FormData()
+      formData.append('organizationName', orgName)
+      formData.append('organizationSlug', orgSlug)
+      formData.append('organizationMission', (document.getElementById('organizationMission') as HTMLTextAreaElement)?.value || '')
+
+      const result = await createOrganization(formData)
+
+      if (result.success) {
+        await update()
+        setShowCreateModal(false)
+        setIsOpen(false)
+        // Reset form state
+        setOrgName('')
+        setOrgSlug('')
+        setSlugManuallyEdited(false)
+        window.location.reload() // Refresh to show new org
+      } else {
+        setCreateError(result.error || 'Failed to create organization')
+      }
     } catch (error) {
       console.error('Error creating organization:', error)
-      alert('Failed to create organization')
+      setCreateError('An unexpected error occurred. Please try again.')
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleSlugChange = (value: string) => {
+    // Auto-format: lowercase, allow only valid characters
+    const formatted = value
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '')
+      .slice(0, 50);
+    setOrgSlug(formatted);
+    setSlugManuallyEdited(true);
   }
 
   if (!currentOrg) {
@@ -111,12 +182,26 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
 
       {/* Create Organization Modal */}
       {showCreateModal && (
-        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <Dialog open={showCreateModal} onOpenChange={(open) => {
+          setShowCreateModal(open)
+          if (!open) {
+            // Clear all form state when closing
+            setCreateError(null)
+            setOrgName('')
+            setOrgSlug('')
+            setSlugManuallyEdited(false)
+          }
+        }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create New Organization</DialogTitle>
             </DialogHeader>
-            <form action={handleCreateOrganization} className="space-y-4">
+            {createError && (
+              <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-md text-sm">
+                {createError}
+              </div>
+            )}
+            <form onSubmit={handleCreateOrganization} className="space-y-4">
               <div>
                 <label htmlFor="organizationName" className="block text-sm font-medium mb-1">
                   Organization Name *
@@ -126,10 +211,35 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
                   name="organizationName"
                   type="text"
                   required
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
                   className="w-full p-2 border border-input bg-background rounded-md focus:ring-2 focus:ring-ring focus:border-ring"
-                  placeholder="Enter organization name"
+                  placeholder="e.g., Acme Corporation"
                 />
               </div>
+
+              <div>
+                <label htmlFor="organizationSlug" className="block text-sm font-medium mb-1">
+                  Organization Slug *
+                </label>
+                <input
+                  id="organizationSlug"
+                  name="organizationSlug"
+                  type="text"
+                  required
+                  value={orgSlug}
+                  onChange={(e) => handleSlugChange(e.target.value)}
+                  className="w-full p-2 border border-input bg-background rounded-md focus:ring-2 focus:ring-ring focus:border-ring font-mono text-sm"
+                  placeholder="e.g., acme-corp"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  💡 Used in URLs: /public/<span className="font-mono font-semibold">{orgSlug || 'your-slug'}</span>/...
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Only lowercase letters, numbers, and hyphens allowed
+                </p>
+              </div>
+
               <div>
                 <label htmlFor="organizationMission" className="block text-sm font-medium mb-1">
                   Mission (Optional)
