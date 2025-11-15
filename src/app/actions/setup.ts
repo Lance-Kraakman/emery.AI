@@ -16,17 +16,32 @@ export async function createOrganization(formData: FormData): Promise<Result> {
   }
 
   const name = formData.get("organizationName") as string;
+  const slug = formData.get("organizationSlug") as string;
   const mission = formData.get("organizationMission") as string | null;
 
   if (!name) {
     return { success: false, error: "Organization name is required" };
   }
 
+  if (!slug) {
+    return { success: false, error: "Organization slug is required" };
+  }
+
+  // Validate slug format server-side
+  if (!/^[a-z0-9-]+$/.test(slug)) {
+    return { success: false, error: "Slug can only contain lowercase letters, numbers, and hyphens" };
+  }
+
+  if (slug.length < 2 || slug.length > 50) {
+    return { success: false, error: "Slug must be between 2 and 50 characters" };
+  }
+
   try {
     const orgRepo = getOrganizationRepository();
-    
+
     const orgData: CreateOrganizationData = {
       name: OrganizationName.fromString(name),
+      slug: slug, // Use user-provided slug instead of auto-generating
       mission: mission || undefined
     };
 
@@ -61,7 +76,28 @@ export async function createOrganization(formData: FormData): Promise<Result> {
     return { success: true, data: serializedOrg };
   } catch (error) {
     console.error("Failed to create organization:", error);
-    return { success: false, error: "Failed to create organization." };
+
+    // Parse specific error types for better user messages
+    if (error instanceof Error) {
+      // Check for slug uniqueness error
+      if (error.message.startsWith('SLUG_TAKEN:')) {
+        const takenSlug = error.message.split(':')[1];
+        // Suggest alternative slugs
+        const suggestions = [
+          `${takenSlug}-2`,
+          `${takenSlug}-inc`,
+          `${takenSlug}-corp`
+        ].join(', ');
+
+        return {
+          success: false,
+          error: `The slug "${takenSlug}" is already taken. Try one of these: ${suggestions}`
+        };
+      }
+    }
+
+    // Generic fallback error
+    return { success: false, error: "Failed to create organization. Please try again." };
   }
 }
 

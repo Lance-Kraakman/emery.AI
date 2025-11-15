@@ -4,8 +4,8 @@
 // Handles fetching published pages for public viewing
 
 import { db } from "@/lib/db/client"
-import { apps, pages, organizations } from "@/lib/db/schema"
-import { eq, and } from "drizzle-orm"
+import { apps, pages, organizations, userRoles, roles } from "@/lib/db/schema"
+import { eq, and, inArray } from "drizzle-orm"
 import { ActionError, type Result } from "@/lib/puck/errors"
 import { PuckPageMapper, type PageDTO } from "@/app/mappers/puck-page-mapper"
 import { AppMapper, type AppDTO } from "@/app/mappers/puck-app-mapper"
@@ -82,14 +82,28 @@ export async function getPublicApp(
       slug: appRecord.slug,
       description: appRecord.description,
       themeConfig: appRecord.themeConfig,
+      homePageId: appRecord.homePageId ?? undefined,
       createdBy: appRecord.createdBy,
       createdAt: appRecord.createdAt,
       updatedAt: appRecord.updatedAt
     });
 
+    // Fetch home page slug if homePageId is set
+    let homePageSlug: string | undefined;
+    if (appRecord.homePageId) {
+      const homePageRecord = await db.query.pages.findFirst({
+        where: eq(pages.id, appRecord.homePageId)
+      });
+      homePageSlug = homePageRecord?.slug;
+    }
+
+    const appDTO = AppMapper.toDTO(app);
     return {
       success: true,
-      data: AppMapper.toDTO(app)
+      data: {
+        ...appDTO,
+        homePageSlug
+      }
     };
   } catch (error) {
     console.error('[getPublicApp] Error:', error);
@@ -194,5 +208,75 @@ export async function getPublicPage(
       error: error instanceof Error ? error.message : 'Failed to fetch page',
       errorCode: 'UNKNOWN'
     };
+  }
+}
+
+/**
+ * Check if a user can access a published page
+ * Validates authentication requirements and role-based access
+ *
+ * Returns:
+ * - allowed: true if user can access
+ * - redirectToLogin: true if user needs to sign in
+ * - reason: explanation if access is denied
+ */
+export async function checkPageAccess(
+  pageId: number,
+  userId: string | null
+): Promise<{ allowed: boolean; redirectToLogin: boolean; reason?: string }> {
+  try {
+    // Get page data
+    const pageRecord = await db.query.pages.findFirst({
+      where: eq(pages.id, pageId)
+    });
+
+    if (!pageRecord) {
+      return { allowed: false, redirectToLogin: false, reason: 'Page not found' };
+    }
+
+    // Page must be published
+    if (!pageRecord.isPublic) {
+      return { allowed: false, redirectToLogin: false, reason: 'Page not published' };
+    }
+
+    // Public pages (no auth required)
+    if (!pageRecord.requiresAuth) {
+      return { allowed: true, redirectToLogin: false };
+    }
+
+    // Auth required but no user
+    if (!userId) {
+      return { allowed: false, redirectToLogin: true, reason: 'Authentication required' };
+    }
+
+    // No role restrictions = all authenticated users allowed
+    if (!pageRecord.allowedRoles || pageRecord.allowedRoles.length === 0) {
+      return { allowed: true, redirectToLogin: false };
+    }
+
+    // Check user roles
+    const userRolesData = await db
+      .select({
+        roleName: roles.name
+      })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(eq(userRoles.userId, userId));
+
+    const userRoleNames = userRolesData.map((r: { roleName: string }) => r.roleName);
+    const hasAllowedRole = pageRecord.allowedRoles.some((role: string) => userRoleNames.includes(role));
+
+    if (!hasAllowedRole) {
+      return {
+        allowed: false,
+        redirectToLogin: false,
+        reason: 'Insufficient permissions. Required roles: ' + pageRecord.allowedRoles.join(', ')
+      };
+    }
+
+    return { allowed: true, redirectToLogin: false };
+  } catch (error) {
+    console.error('[checkPageAccess] Error:', error);
+    return { allowed: false, redirectToLogin: false, reason: 'Internal error' };
   }
 }

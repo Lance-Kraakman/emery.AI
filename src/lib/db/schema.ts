@@ -1246,6 +1246,7 @@ export const apps = pgTable("apps", {
   slug: text("slug").notNull(),
   description: text("description"),
   themeConfig: jsonb("theme_config"),
+  homePageId: integer("home_page_id"), // FK to pages.id - constraint added in migration to avoid circular dependency
   createdBy: uuid("created_by")
     .notNull()
     .references(() => users.id),

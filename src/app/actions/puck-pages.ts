@@ -19,8 +19,8 @@ const createPageSchema = z.object({
   appId: z.number(),
   name: z.string().min(1, "Page name is required").optional(),
   slug: z.string().min(1, "Page slug is required").regex(
-    /^\/[a-z0-9-\/]*[a-z0-9]$/,
-    "Slug must start with /, contain only lowercase letters, numbers, hyphens, and forward slashes, and end with a letter or number"
+    /^[a-z0-9-]+$/,
+    "Slug must contain only lowercase letters, numbers, and hyphens"
   ).optional(),
   description: z.string().optional(),
   templateData: z.any().optional(), // Puck JSON structure
@@ -30,8 +30,8 @@ const updatePageSchema = z.object({
   id: z.number(),
   name: z.string().min(1, "Page name is required").optional(),
   slug: z.string().regex(
-    /^\/[a-z0-9-\/]*[a-z0-9]$/,
-    "Slug must start with /, contain only lowercase letters, numbers, hyphens, and forward slashes, and end with a letter or number"
+    /^[a-z0-9-]+$/,
+    "Slug must contain only lowercase letters, numbers, and hyphens"
   ).optional(),
   description: z.string().optional(),
 })

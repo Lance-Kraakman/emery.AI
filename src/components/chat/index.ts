@@ -10,7 +10,6 @@ export { useChatGRPC, useChatForPage } from './useChatGRPC'
 
 // Chat Mention System (+ button and @ mentions)
 export { ChatPlusButton } from './ChatPlusButton'
-export { default as CustomChatInput } from './CustomChatInput'
 
 // Mention types
 export type * from './types/chat-mentions'

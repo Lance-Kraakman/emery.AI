@@ -7,6 +7,7 @@ import { title } from "process";
 export type RootProps = DefaultRootProps;
 
 export const Root = {
+  fields : {},
   render: ({ puck: { isEditing, renderDropZone: DropZone } }: DefaultRootProps) => {
     // Get theme from context (will use default if not provided)
     const theme = useTheme();

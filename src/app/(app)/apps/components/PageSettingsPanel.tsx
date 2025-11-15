@@ -53,9 +53,9 @@ export function PageSettingsPanel({
         return;
       }
 
-      if (!slug.match(/^\/[a-z0-9-\/]*[a-z0-9]$/)) {
+      if (!slug.match(/^[a-z0-9-]+$/)) {
         toast.error(
-          "Slug must start with /, contain only lowercase letters, numbers, and hyphens, and end with a letter or number"
+          "Slug must contain only lowercase letters, numbers, and hyphens"
         );
         return;
       }
@@ -74,14 +74,12 @@ export function PageSettingsPanel({
   const handleSlugChange = (value: string) => {
     // Auto-format slug as user types
     let formatted = value.toLowerCase();
-    // Ensure it starts with /
-    if (!formatted.startsWith("/")) {
-      formatted = "/" + formatted;
-    }
-    // Remove invalid characters
-    formatted = formatted.replace(/[^a-z0-9\/-]/g, "-");
+    // Remove invalid characters (only allow lowercase letters, numbers, and hyphens)
+    formatted = formatted.replace(/[^a-z0-9-]/g, "-");
     // Remove consecutive hyphens
     formatted = formatted.replace(/-+/g, "-");
+    // Remove leading/trailing hyphens
+    formatted = formatted.replace(/^-+|-+$/g, "");
     setSlug(formatted);
   };
 
@@ -103,11 +101,11 @@ export function PageSettingsPanel({
           <Input
             value={slug}
             onChange={(e) => handleSlugChange(e.target.value)}
-            placeholder="/my-page"
+            placeholder="my-page"
             className="h-8 font-mono text-xs"
           />
           <p className="text-xs text-muted-foreground leading-tight">
-            URL path (e.g., /about or /products/new)
+            URL identifier (e.g., about or contact-us)
           </p>
         </div>
 

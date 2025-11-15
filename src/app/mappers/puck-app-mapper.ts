@@ -11,6 +11,8 @@ export interface AppDTO {
   slug: string;
   description?: string;
   themeConfig?: ThemeConfigProps | null;
+  homePageId?: number;
+  homePageSlug?: string;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -28,6 +30,7 @@ export class AppMapper {
       slug: app.slug.value,
       description: app.description,
       themeConfig: app.themeConfig ? app.themeConfig.toJSON() : undefined,
+      homePageId: app.homePageId?.value,
       createdBy: app.createdBy.value,
       createdAt: app.createdAt.toISOString(),
       updatedAt: app.updatedAt.toISOString()

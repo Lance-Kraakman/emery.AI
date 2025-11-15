@@ -9,7 +9,7 @@ import { createTask } from '@/app/actions/tasks';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { InstructionsWithToolsInput } from '@/components/shared/InstructionsWithToolsInput';
+import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
 
 interface TaskAssignmentModalProps {
   isOpen: boolean;
@@ -149,7 +149,7 @@ export function TaskAssignmentModal({ isOpen, onClose, agent, onSuccess }: TaskA
 
           {/* Task Instructions with @ Tool Mentions */}
           <div className="space-y-2">
-            <InstructionsWithToolsInput
+            <UnifiedChatInput
               value={instructions}
               onChange={setInstructions}
               tools={tools}
@@ -158,7 +158,10 @@ export function TaskAssignmentModal({ isOpen, onClose, agent, onSuccess }: TaskA
               helpText="Define what should be done. Use @ to reference tools, documents, files, agents, or tables."
               placeholder="Describe the task to execute... (Type @ to add tools)"
               id="task-instructions"
+              mode="form"
               minHeight="200px"
+              enableSendButton={false}
+              enableAttachments={false}
             />
           </div>
 

@@ -1,0 +1,2 @@
+ALTER TABLE "apps" ADD COLUMN "home_page_id" integer;--> statement-breakpoint
+ALTER TABLE "apps" ADD CONSTRAINT "apps_home_page_id_pages_id_fk" FOREIGN KEY ("home_page_id") REFERENCES "public"."pages"("id") ON DELETE no action ON UPDATE no action;

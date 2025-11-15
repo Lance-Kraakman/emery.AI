@@ -4,6 +4,7 @@
 
 import type { AppId } from '../value-objects/app-id';
 import type { AppSlug } from '../value-objects/app-slug';
+import type { PageId } from '../value-objects/page-id';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { ThemeConfig, type ThemeConfigProps } from '../value-objects/theme-config';
 
@@ -15,6 +16,7 @@ export class App {
     private _slug: AppSlug,
     private _description: string | undefined,
     private _themeConfig: ThemeConfig | undefined,
+    private _homePageId: PageId | undefined,
     private readonly _createdBy: UserId,
     private readonly _createdAt: Date,
     private _updatedAt: Date
@@ -55,6 +57,10 @@ export class App {
 
   get themeConfig(): ThemeConfig {
     return this._themeConfig || ThemeConfig.default();
+  }
+
+  get homePageId(): PageId | undefined {
+    return this._homePageId;
   }
 
   // Business methods
@@ -100,6 +106,14 @@ export class App {
    */
   updateTheme(config: Partial<ThemeConfigProps> | undefined): void {
     this._themeConfig = config ? ThemeConfig.create(config) : undefined;
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Set the home page for this app
+   */
+  setHomePage(pageId: PageId | undefined): void {
+    this._homePageId = pageId;
     this._updatedAt = new Date();
   }
 
@@ -165,6 +179,7 @@ export class App {
       data.slug,
       data.description,
       data.themeConfig ? ThemeConfig.create(data.themeConfig) : undefined,
+      undefined, // No home page on creation
       data.createdBy,
       now,
       now
@@ -181,6 +196,7 @@ export class App {
     slug: string;
     description?: string;
     themeConfig?: any;
+    homePageId?: number;
     createdBy: string;
     createdAt: Date;
     updatedAt: Date;
@@ -188,6 +204,7 @@ export class App {
     // Import here to avoid circular dependencies
     const { AppId } = require('../value-objects/app-id');
     const { AppSlug } = require('../value-objects/app-slug');
+    const { PageId } = require('../value-objects/page-id');
 
     const slugResult = AppSlug.create(data.slug);
     if (!slugResult.success) {
@@ -201,6 +218,7 @@ export class App {
       slugResult.data,
       data.description,
       data.themeConfig ? ThemeConfig.fromJSON(data.themeConfig) : undefined,
+      data.homePageId ? PageId.fromNumber(data.homePageId) : undefined,
       UserId.fromString(data.createdBy),
       data.createdAt,
       data.updatedAt
@@ -217,6 +235,7 @@ export class App {
     slug: string;
     description: string | undefined;
     themeConfig: any;
+    homePageId: number | undefined;
     createdBy: string;
     createdAt: Date;
     updatedAt: Date;
@@ -228,6 +247,7 @@ export class App {
       slug: this._slug.value,
       description: this._description,
       themeConfig: this._themeConfig?.toJSON(),
+      homePageId: this._homePageId?.value,
       createdBy: this._createdBy.value,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt

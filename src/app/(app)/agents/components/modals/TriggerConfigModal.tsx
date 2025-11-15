@@ -32,7 +32,7 @@ import {
   isWebhookTrigger,
   getTriggerTypeLabel
 } from '../trigger-utils';
-import { InstructionsWithToolsInput } from '@/components/shared/InstructionsWithToolsInput';
+import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
 import type { ScheduleConfigurationDTO } from '@/app/dtos/schedule.dto';
 
 interface TriggerConfigModalProps {
@@ -657,7 +657,7 @@ export function TriggerConfigModal({
 
             {/* Task Instructions with @ Tool Mentions */}
             <div className="space-y-2">
-              <InstructionsWithToolsInput
+              <UnifiedChatInput
                 value={taskInstructions}
                 onChange={setTaskInstructions}
                 tools={taskTools}
@@ -666,7 +666,10 @@ export function TriggerConfigModal({
                 helpText="Define what task should be created when this schedule triggers. Use @ to reference tools, documents, files, or agents."
                 placeholder="Describe the task to execute... (Type @ to add tools)"
                 id="schedule-task-instructions"
+                mode="form"
                 minHeight="200px"
+                enableSendButton={false}
+                enableAttachments={false}
               />
             </div>
 
