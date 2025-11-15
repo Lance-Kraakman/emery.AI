@@ -3,12 +3,28 @@
 import React from "react";
 import { ComponentConfig } from "@measured/puck";
 import { SignOutBlock as _SignOutBlock } from "./SignOutBlock";
+import {
+  backgroundColorField,
+  textColorField,
+  borderColorField,
+  borderRadiusField
+} from "@/components/puck/fields/standard-fields";
 
 export type SignOutBlockProps = {
   buttonText: string;
   showUserInfo: boolean;
+  showAvatar: boolean;
   redirectAfterSignOut: string;
   variant: "default" | "destructive" | "outline" | "secondary" | "ghost";
+  popoverSide: "top" | "bottom" | "left" | "right";
+  popoverAlign: "start" | "center" | "end";
+  // Theme fields
+  backgroundColor?: string;
+  textColor?: string;
+  buttonColor?: string;
+  buttonTextColor?: string;
+  borderColor?: string;
+  borderRadius?: string;
 };
 
 export const SignOutBlock: ComponentConfig<SignOutBlockProps> = {
@@ -21,6 +37,14 @@ export const SignOutBlock: ComponentConfig<SignOutBlockProps> = {
     showUserInfo: {
       type: "radio",
       label: "Show User Info",
+      options: [
+        { label: "Yes", value: true },
+        { label: "No", value: false },
+      ],
+    },
+    showAvatar: {
+      type: "radio",
+      label: "Show Avatar in Trigger",
       options: [
         { label: "Yes", value: true },
         { label: "No", value: false },
@@ -41,12 +65,52 @@ export const SignOutBlock: ComponentConfig<SignOutBlockProps> = {
       type: "text",
       label: "Redirect URL after sign out",
     },
+    popoverSide: {
+      type: "select",
+      label: "Popover Position",
+      options: [
+        { label: "Bottom", value: "bottom" },
+        { label: "Top", value: "top" },
+        { label: "Left", value: "left" },
+        { label: "Right", value: "right" },
+      ],
+    },
+    popoverAlign: {
+      type: "select",
+      label: "Popover Alignment",
+      options: [
+        { label: "Center", value: "center" },
+        { label: "Start", value: "start" },
+        { label: "End", value: "end" },
+      ],
+    },
+    backgroundColor: backgroundColorField,
+    textColor: textColorField,
+    buttonColor: {
+      ...textColorField,
+      label: "Button Color (Optional)",
+    },
+    buttonTextColor: {
+      ...textColorField,
+      label: "Button Text Color (Optional)",
+    },
+    borderColor: borderColorField,
+    borderRadius: borderRadiusField,
   },
   defaultProps: {
     buttonText: "Sign Out",
     showUserInfo: true,
+    showAvatar: true,
     redirectAfterSignOut: "",
     variant: "outline",
+    popoverSide: "bottom",
+    popoverAlign: "center",
+    backgroundColor: undefined,
+    textColor: undefined,
+    buttonColor: undefined,
+    buttonTextColor: undefined,
+    borderColor: undefined,
+    borderRadius: undefined,
   },
   render: (props) => {
     return <_SignOutBlock {...props} />;
