@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import type { Overrides } from "@measured/puck";
 import { ThemeSidebarPanel } from "@/app/(app)/apps/components/ThemeEditorSheet";
 import { PageSettingsPanel } from "@/app/(app)/apps/components/PageSettingsPanel";
+import { PageAccessSettings } from "@/app/(app)/apps/components/PageAccessSettings";
 
 /**
  * Puck UI Overrides for Transparent Theme
@@ -16,7 +17,11 @@ interface PuckUIOverridesOptions {
   pageId?: number;
   pageName?: string;
   pageSlug?: string;
+  pageIsPublic?: boolean;
+  pageRequiresAuth?: boolean;
+  pageAllowedRoles?: string[];
   onSavePageSettings?: (data: { name: string; slug: string }) => Promise<void>;
+  onSaveAccessSettings?: (data: { requiresAuth: boolean; allowedRoles: string[] }) => Promise<void>;
   themeMode?: "app" | "page";
 }
 
@@ -44,6 +49,18 @@ export const createPuckUIOverrides = (
               initialName={options.pageName || ""}
               initialSlug={options.pageSlug || "/"}
               onSave={options.onSavePageSettings}
+            />
+          </div>
+        )}
+        {/* Page Access Settings Panel */}
+        {isRootLevel && options?.onSaveAccessSettings && options?.pageId !== undefined && (
+          <div className="border-b border-border">
+            <PageAccessSettings
+              pageId={options.pageId}
+              isPublic={options.pageIsPublic || false}
+              initialRequiresAuth={options.pageRequiresAuth || false}
+              initialAllowedRoles={options.pageAllowedRoles || []}
+              onSave={options.onSaveAccessSettings}
             />
           </div>
         )}

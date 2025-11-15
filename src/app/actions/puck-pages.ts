@@ -34,6 +34,8 @@ const updatePageSchema = z.object({
     "Slug must contain only lowercase letters, numbers, and hyphens"
   ).optional(),
   description: z.string().optional(),
+  requiresAuth: z.boolean().optional(),
+  allowedRoles: z.array(z.string()).optional(),
 })
 
 const updatePageContentSchema = z.object({
@@ -293,7 +295,9 @@ export async function updatePage(data: z.infer<typeof updatePageSchema>, revalid
       id: PageId.fromNumber(validatedData.id),
       name: validatedData.name,
       slug: validatedData.slug,
-      description: validatedData.description
+      description: validatedData.description,
+      requiresAuth: validatedData.requiresAuth,
+      allowedRoles: validatedData.allowedRoles
     });
 
     if (!result.success) {
