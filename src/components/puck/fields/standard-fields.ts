@@ -88,3 +88,32 @@ export const spacingField = {
     { value: "10", label: "5XL (10)" },
   ],
 };
+
+/**
+ * Standard font family field
+ * Allows custom font-family CSS value override
+ */
+export const fontFamilyField = {
+  type: "text" as const,
+  label: "Font Family (Optional)",
+  placeholder: "e.g., Georgia, serif (leave empty for theme default)",
+};
+
+/**
+ * Standard font weight field
+ * Provides common font weight values
+ */
+export const fontWeightField = {
+  type: "select" as const,
+  label: "Font Weight (Optional)",
+  options: [
+    { value: "", label: "Use Theme Default" },
+    { value: "300", label: "Light (300)" },
+    { value: "400", label: "Normal (400)" },
+    { value: "500", label: "Medium (500)" },
+    { value: "600", label: "Semibold (600)" },
+    { value: "700", label: "Bold (700)" },
+    { value: "800", label: "Extrabold (800)" },
+    { value: "900", label: "Black (900)" },
+  ],
+};

@@ -5,7 +5,7 @@ import { Heading as _Heading } from "@/components/puck/components/Heading";
 import type { HeadingProps as _HeadingProps } from "@/components/puck/components/Heading";
 import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
-import { typographySizeField, backgroundColorField, textColorField } from "../../fields/standard-fields";
+import { typographySizeField, backgroundColorField, textColorField, fontFamilyField, fontWeightField } from "../../fields/standard-fields";
 
 export type HeadingProps = WithLayout<{
   align: "left" | "center" | "right";
@@ -14,6 +14,8 @@ export type HeadingProps = WithLayout<{
   size: _HeadingProps["size"];
   textColor?: string;
   backgroundColor?: string;
+  fontFamily?: string;
+  fontWeight?: string;
 }>;
 
 const levelOptions = [
@@ -47,6 +49,8 @@ const HeadingInternal: ComponentConfig<HeadingProps> = {
     },
     textColor: textColorField,
     backgroundColor: backgroundColorField,
+    fontFamily: fontFamilyField,
+    fontWeight: fontWeightField,
   },
   defaultProps: {
     align: "left",
@@ -54,11 +58,13 @@ const HeadingInternal: ComponentConfig<HeadingProps> = {
     size: "2xl",
     textColor: undefined,
     backgroundColor: undefined,
+    fontFamily: undefined,
+    fontWeight: undefined,
     layout: {
       padding: "8px",
     },
   },
-  render: ({ align, text, size, level, textColor, backgroundColor }) => {
+  render: ({ align, text, size, level, textColor, backgroundColor, fontFamily, fontWeight }) => {
     return (
       <Section>
         <_Heading size={size} rank={level as any}>
@@ -69,6 +75,8 @@ const HeadingInternal: ComponentConfig<HeadingProps> = {
               width: "100%",
               ...(textColor && { color: textColor }),
               ...(backgroundColor && { backgroundColor }),
+              ...(fontFamily && { fontFamily }),
+              ...(fontWeight && { fontWeight }),
             }}
           >
             {text}

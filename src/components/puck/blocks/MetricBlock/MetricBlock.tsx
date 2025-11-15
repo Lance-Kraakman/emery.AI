@@ -19,6 +19,10 @@ export interface MetricBlockProps {
   labelColor?: string;              // Optional label color override
   valueColor?: string;              // Optional value color override
   backgroundColor?: string;         // Optional background color override
+  labelFontFamily?: string;         // Optional label font family override
+  labelFontWeight?: string;         // Optional label font weight override
+  valueFontFamily?: string;         // Optional value font family override
+  valueFontWeight?: string;         // Optional value font weight override
 
   // Resolved data (injected by resolveData hook)
   _viewName?: string;               // View name for display
@@ -44,6 +48,10 @@ export default function MetricBlock(props: MetricBlockProps) {
     labelColor,
     valueColor,
     backgroundColor,
+    labelFontFamily,
+    labelFontWeight,
+    valueFontFamily,
+    valueFontWeight,
     _viewName,
     _metricValue,
     _metricLabel,
@@ -135,7 +143,11 @@ export default function MetricBlock(props: MetricBlockProps) {
         <div
           className={styles.label}
           data-size={size}
-          style={{ ...(labelColor && { color: labelColor }) }}
+          style={{
+            ...(labelColor && { color: labelColor }),
+            ...(labelFontFamily && { fontFamily: labelFontFamily }),
+            ...(labelFontWeight && { fontWeight: labelFontWeight }),
+          }}
         >
           {displayLabel}
           {_metricType && (
@@ -149,7 +161,11 @@ export default function MetricBlock(props: MetricBlockProps) {
       <div
         className={styles.value}
         data-size={size}
-        style={{ ...(valueColor && { color: valueColor }) }}
+        style={{
+          ...(valueColor && { color: valueColor }),
+          ...(valueFontFamily && { fontFamily: valueFontFamily }),
+          ...(valueFontWeight && { fontWeight: valueFontWeight }),
+        }}
       >
         {formattedValue}
       </div>

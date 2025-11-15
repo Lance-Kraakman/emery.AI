@@ -27,6 +27,10 @@ export type HeroProps = {
   titleColor?: string;
   subtitleColor?: string;
   backgroundColor?: string;
+  titleFontFamily?: string;
+  titleFontWeight?: string;
+  subtitleFontFamily?: string;
+  subtitleFontWeight?: string;
 };
 
 export const Hero: PuckComponent<HeroProps> = ({
@@ -39,6 +43,10 @@ export const Hero: PuckComponent<HeroProps> = ({
   titleColor,
   subtitleColor,
   backgroundColor,
+  titleFontFamily,
+  titleFontWeight,
+  subtitleFontFamily,
+  subtitleFontWeight,
   puck,
 }) => {
   return (
@@ -69,10 +77,22 @@ export const Hero: PuckComponent<HeroProps> = ({
 
       <div className={getClassName("inner")}>
         <div className={getClassName("content")}>
-          <h1 style={{ ...(titleColor && { color: titleColor }) }}>{title}</h1>
+          <h1
+            style={{
+              ...(titleColor && { color: titleColor }),
+              ...(titleFontFamily && { fontFamily: titleFontFamily }),
+              ...(titleFontWeight && { fontWeight: titleFontWeight }),
+            }}
+          >
+            {title}
+          </h1>
           <p
             className={getClassName("subtitle")}
-            style={{ ...(subtitleColor && { color: subtitleColor }) }}
+            style={{
+              ...(subtitleColor && { color: subtitleColor }),
+              ...(subtitleFontFamily && { fontFamily: subtitleFontFamily }),
+              ...(subtitleFontWeight && { fontWeight: subtitleFontWeight }),
+            }}
           >
             {description}
           </p>
