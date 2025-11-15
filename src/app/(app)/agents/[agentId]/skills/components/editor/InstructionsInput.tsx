@@ -7,8 +7,7 @@
  * Uses UnifiedChatInput in form mode without send button.
  *
  * AIDEV-NOTE: Refactored to use UnifiedChatInput component.
- * Same features as chat input (@ mentions, tool selection) but form-optimized.
- * File attachments disabled for now but can be enabled by adding attachment props.
+ * Same features as chat input (@ mentions, tool selection, file attachments) but form-optimized.
  */
 
 import React from 'react';
@@ -21,6 +20,18 @@ interface InstructionsInputProps {
   onToolsChange: (tools: ToolConfigDTO[]) => void;
   tools: ToolConfigDTO[];
   stepIndex: number;
+  // Attachment support (optional)
+  pendingAttachments?: File[];
+  onAttachmentAdd?: (file: File) => void;
+  onAttachmentRemove?: (index: number) => void;
+  // Existing attachments (already uploaded to S3)
+  existingAttachments?: Array<{
+    url: string;
+    filename: string;
+    type: 'image' | 'file';
+    size?: number;
+  }>;
+  onExistingAttachmentRemove?: (index: number) => void;
 }
 
 export function InstructionsInput({
@@ -28,7 +39,12 @@ export function InstructionsInput({
   onChange,
   onToolsChange,
   tools,
-  stepIndex
+  stepIndex,
+  pendingAttachments,
+  onAttachmentAdd,
+  onAttachmentRemove,
+  existingAttachments,
+  onExistingAttachmentRemove
 }: InstructionsInputProps) {
   return (
     <UnifiedChatInput
@@ -41,7 +57,12 @@ export function InstructionsInput({
       mode="form"
       minHeight="300px"
       enableSendButton={false}
-      enableAttachments={false}
+      enableAttachments={true}
+      pendingAttachments={pendingAttachments}
+      onAttachmentAdd={onAttachmentAdd}
+      onAttachmentRemove={onAttachmentRemove}
+      existingAttachments={existingAttachments}
+      onExistingAttachmentRemove={onExistingAttachmentRemove}
     />
   );
 }

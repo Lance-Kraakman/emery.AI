@@ -87,8 +87,28 @@ export function PublicAppAuthProvider({
 
 export function usePublicAppAuth() {
   const context = useContext(PublicAppAuthContext);
+  const { data: session, status } = useSession();
+
+  // If no provider exists (e.g., in Puck editor), return fallback state using NextAuth session
+  // This allows auth blocks to work in both editor (preview mode) and public pages (full mode)
   if (!context) {
-    throw new Error('usePublicAppAuth must be used within PublicAppAuthProvider');
+    return {
+      user: session?.user ? {
+        id: session.user.id,
+        email: session.user.email || null,
+        name: session.user.name || null,
+        roles: [], // No app-specific roles in editor
+        isAppOnlyUser: session.user.isAppOnlyUser || false,
+      } : null,
+      isAuthenticated: status === 'authenticated',
+      isLoading: status === 'loading',
+      appId: 0, // No app context (indicates editor mode)
+      orgSlug: '',
+      appSlug: '',
+      hasRole: () => false, // No role checking in editor
+      hasAnyRole: () => false,
+    };
   }
+
   return context;
 }

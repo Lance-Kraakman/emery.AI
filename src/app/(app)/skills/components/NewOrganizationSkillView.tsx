@@ -6,7 +6,7 @@ import { Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { createOrganizationSkill, getSkillTemplate } from '@/app/actions/skills';
+import { createOrganizationSkill, getSkillTemplate, uploadSkillAttachment } from '@/app/actions/skills';
 import { toast } from 'sonner';
 import { SkillEditor, type SkillFormData } from '../../agents/[agentId]/skills/components/SkillEditor';
 
@@ -76,6 +76,7 @@ export function NewOrganizationSkillView({ organizationId, templateId }: NewOrga
     setIsSaving(true);
 
     try {
+      // Step 1: Create the skill
       const result = await createOrganizationSkill({
         organizationId,
         name: formData.name,
@@ -86,12 +87,32 @@ export function NewOrganizationSkillView({ organizationId, templateId }: NewOrga
         tools: formData.tools
       });
 
-      if (result.success) {
-        toast.success('Organization skill created successfully');
-        router.push('/skills');
-      } else {
+      if (!result.success || !result.data) {
         toast.error(result.error || 'Failed to create organization skill');
+        return;
       }
+
+      const skillId = result.data.id;
+
+      // Step 2: Upload pending attachments if any
+      if (formData.pendingAttachments && formData.pendingAttachments.length > 0) {
+        toast.info(`Uploading ${formData.pendingAttachments.length} attachment(s)...`);
+
+        for (const file of formData.pendingAttachments) {
+          const attachFormData = new FormData();
+          attachFormData.append('file', file);
+          attachFormData.append('type', file.type.startsWith('image/') ? 'image' : 'file');
+
+          const uploadResult = await uploadSkillAttachment(skillId, attachFormData);
+          if (!uploadResult.success) {
+            console.error('Failed to upload attachment:', file.name, uploadResult.error);
+            toast.error(`Failed to upload ${file.name}`);
+          }
+        }
+      }
+
+      toast.success('Organization skill created successfully');
+      router.push('/skills');
     } catch (error) {
       console.error('Error creating organization skill:', error);
       toast.error('An unexpected error occurred');

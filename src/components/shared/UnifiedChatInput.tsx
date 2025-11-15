@@ -39,6 +39,14 @@ interface UnifiedChatInputProps<T = ToolDTO> {
   pendingAttachments?: File[];
   onAttachmentAdd?: (file: File) => void;
   onAttachmentRemove?: (index: number) => void;
+  // Existing attachments (for skills - already uploaded to S3)
+  existingAttachments?: Array<{
+    url: string;
+    filename: string;
+    type: 'image' | 'file';
+    size?: number;
+  }>;
+  onExistingAttachmentRemove?: (index: number) => void;
 
   // Send functionality (optional)
   enableSendButton?: boolean;
@@ -66,6 +74,8 @@ export function UnifiedChatInput<T = ToolDTO>({
   pendingAttachments = [],
   onAttachmentAdd,
   onAttachmentRemove,
+  existingAttachments = [],
+  onExistingAttachmentRemove,
   enableSendButton = true,
   onSendMessage,
   mode = 'chat',
@@ -330,12 +340,33 @@ export function UnifiedChatInput<T = ToolDTO>({
       {helpText && <p className="text-sm text-muted-foreground mb-2">{helpText}</p>}
 
       <div className="relative">
-        {/* Attachment previews */}
-        {enableAttachments && pendingAttachments.length > 0 && (
+        {/* Attachment previews - show both existing and pending */}
+        {enableAttachments && (existingAttachments.length > 0 || pendingAttachments.length > 0) && (
         <div className="mb-2 flex flex-wrap gap-2">
+          {/* Existing attachments */}
+          {existingAttachments.map((attachment, index) => (
+            <Badge
+              key={`existing-${index}`}
+              variant="secondary"
+              className="flex items-center gap-2 px-2 py-1 max-w-[200px]"
+            >
+              {attachment.type === 'image' ? <ImageIcon className="w-3 h-3" /> : <FileIcon className="w-3 h-3" />}
+              <span className="text-xs truncate flex-1">{attachment.filename}</span>
+              {attachment.size && <span className="text-xs text-muted-foreground">{formatFileSize(attachment.size)}</span>}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onExistingAttachmentRemove?.(index)}
+                className="h-4 w-4 p-0 hover:bg-transparent"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </Badge>
+          ))}
+          {/* Pending attachments */}
           {pendingAttachments.map((file, index) => (
             <Badge
-              key={index}
+              key={`pending-${index}`}
               variant="secondary"
               className="flex items-center gap-2 px-2 py-1 max-w-[200px]"
             >
@@ -385,7 +416,7 @@ export function UnifiedChatInput<T = ToolDTO>({
             isSingleLine && mode === 'chat'
               ? "resize-none px-3 py-2 flex-1 min-w-0"
               : mode === 'form'
-              ? "resize-y px-3 py-2"
+              ? "resize-y px-3 py-2 pb-10"
               : "resize-none px-3 pr-12 pb-10"
           }
           style={mode === 'form' && minHeight ? { minHeight } : undefined}
@@ -403,7 +434,7 @@ export function UnifiedChatInput<T = ToolDTO>({
           </Button>
         )}
 
-        {/* Bottom action bar - only show in chat mode when multi-line */}
+        {/* Bottom action bar - chat mode when multi-line */}
         {mode === 'chat' && !isSingleLine && (
           <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
             {/* File upload button */}
@@ -431,6 +462,22 @@ export function UnifiedChatInput<T = ToolDTO>({
                 <Send className="h-3 w-3" />
               </Button>
             )}
+          </div>
+        )}
+
+        {/* Bottom action bar - form mode */}
+        {mode === 'form' && enableAttachments && (
+          <div className="absolute bottom-2 left-2">
+            <Button
+              onClick={handleFileButtonClick}
+              disabled={disabled}
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              title="Attach file (images, audio, documents)"
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
           </div>
         )}
 
