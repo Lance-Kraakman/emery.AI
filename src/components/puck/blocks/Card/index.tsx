@@ -6,6 +6,7 @@ import { getClassNameFactory } from "@/components/puck/lib";
 import dynamic from "next/dynamic";
 import dynamicIconImports from "lucide-react/dynamicIconImports";
 import { withLayout, WithLayout } from "../../components/Layout";
+import { backgroundColorField, textColorField } from "../../fields/standard-fields";
 
 const getClassName = getClassNameFactory("Card", styles);
 
@@ -30,6 +31,9 @@ export type CardProps = WithLayout<{
   description: string;
   icon?: string;
   mode: "flat" | "card";
+  titleColor?: string;
+  textColor?: string;
+  backgroundColor?: string;
 }>;
 
 const CardInner: ComponentConfig<CardProps> = {
@@ -53,21 +57,46 @@ const CardInner: ComponentConfig<CardProps> = {
         { label: "flat", value: "flat" },
       ],
     },
+    titleColor: {
+      ...textColorField,
+      label: "Title Color (Optional)",
+    },
+    textColor: {
+      ...textColorField,
+      label: "Text Color (Optional)",
+    },
+    backgroundColor: backgroundColorField,
   },
   defaultProps: {
     title: "Title",
     description: "Description",
     icon: "Feather",
     mode: "flat",
+    titleColor: undefined,
+    textColor: undefined,
+    backgroundColor: undefined,
   },
-  render: ({ title, icon, description, mode }) => {
+  render: ({ title, icon, description, mode, titleColor, textColor, backgroundColor }) => {
     return (
-      <div className={getClassName({ [mode]: mode })}>
+      <div
+        className={getClassName({ [mode]: mode })}
+        style={{ ...(backgroundColor && { backgroundColor }) }}
+      >
         <div className={getClassName("inner")}>
           <div className={getClassName("icon")}>{icon && icons[icon]}</div>
 
-          <div className={getClassName("title")}>{title}</div>
-          <div className={getClassName("description")}>{description}</div>
+          <div
+            className={getClassName("title")}
+            style={{ ...(titleColor && { color: titleColor }) }}
+          >
+            {title}
+          </div>
+          <div
+            className={getClassName("description")}
+            style={{ ...(textColor && { color: textColor }) }}
+          >
+            {description}
+          </div>
         </div>
       </div>
     );

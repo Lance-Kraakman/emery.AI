@@ -179,7 +179,11 @@ export class ThemeConfig {
    * Returns object that can be spread into inline styles
    */
   toCSSVariables(): Record<string, string> {
+    // Parse base font size for typography scale calculations
+    const baseFontSize = parseFloat(this._config.typography.fontSize);
+
     return {
+      // Colors
       '--theme-primary': this._config.colors.primary,
       '--theme-secondary': this._config.colors.secondary,
       '--theme-background': this._config.colors.background,
@@ -191,10 +195,25 @@ export class ThemeConfig {
       '--theme-success': this._config.colors.success,
       '--theme-warning': this._config.colors.warning,
       '--theme-error': this._config.colors.error,
+
+      // Base Typography
       '--theme-font-family': this._config.typography.fontFamily,
       '--theme-font-size': this._config.typography.fontSize,
       '--theme-heading-font-weight': this._config.typography.headingFontWeight.toString(),
       '--theme-heading-color': this._config.typography.headingColor || this._config.colors.text,
+
+      // Typography Scale (calculated from base font size)
+      '--theme-font-xs': `${baseFontSize * 0.75}px`,      // 12px at 16px base
+      '--theme-font-sm': `${baseFontSize * 0.875}px`,     // 14px at 16px base
+      '--theme-font-base': this._config.typography.fontSize, // 16px base
+      '--theme-font-lg': `${baseFontSize * 1.125}px`,     // 18px at 16px base
+      '--theme-font-xl': `${baseFontSize * 1.25}px`,      // 20px at 16px base
+      '--theme-font-2xl': `${baseFontSize * 1.5}px`,      // 24px at 16px base
+      '--theme-font-3xl': `${baseFontSize * 1.875}px`,    // 30px at 16px base
+      '--theme-font-4xl': `${baseFontSize * 2.25}px`,     // 36px at 16px base
+      '--theme-font-5xl': `${baseFontSize * 3}px`,        // 48px at 16px base
+
+      // Spacing and Borders
       '--theme-spacing-unit': this._config.spacing.unit,
       '--theme-spacing-scale': this._config.spacing.scale.toString(),
       '--theme-border-radius': this._config.borders.radius,

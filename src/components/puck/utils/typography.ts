@@ -2,14 +2,15 @@
  * Typography Utility Functions
  *
  * Provides unified typography size calculations based on theme configuration.
- * All blocks should use these utilities instead of hardcoded sizes.
+ * All blocks should use theme CSS variables as primary approach.
+ * These utilities are for SSR, email templates, and fallback calculations.
  */
 
 import type { ThemeConfig } from '@/ddd/domain/puck/value-objects/theme-config';
 
 /**
  * Semantic typography size scale
- * Replaces inconsistent sizing systems (XXXL-XS, M/S, small/medium/large)
+ * Unified across all components
  */
 export type TypographySize =
   | "xs"
@@ -23,38 +24,57 @@ export type TypographySize =
   | "5xl";
 
 /**
+ * Typography scale multipliers
+ * Used for calculating sizes based on theme base font size
+ */
+export const TYPOGRAPHY_SCALE: Record<TypographySize, number> = {
+  xs: 0.75,      // 12px at 16px base
+  sm: 0.875,     // 14px at 16px base
+  base: 1,       // 16px at 16px base
+  lg: 1.125,     // 18px at 16px base
+  xl: 1.25,      // 20px at 16px base
+  '2xl': 1.5,    // 24px at 16px base
+  '3xl': 1.875,  // 30px at 16px base
+  '4xl': 2.25,   // 36px at 16px base
+  '5xl': 3,      // 48px at 16px base
+};
+
+/**
+ * Get CSS variable reference for typography size
+ * PRIMARY METHOD for components to use
+ *
+ * @param size - Semantic size value
+ * @returns CSS variable string
+ *
+ * @example
+ * const varRef = getTypographyVar('xl'); // "var(--theme-font-xl)"
+ * <div style={{ fontSize: getTypographyVar('2xl') }}>Text</div>
+ */
+export function getTypographyVar(size: TypographySize): string {
+  return `var(--theme-font-${size})`;
+}
+
+/**
  * Calculate typography size based on theme configuration
+ * For SSR, email templates, or when CSS variables not available
+ * DON'T use in component inline styles if avoidable - use CSS variables instead
  *
  * @param size - Semantic size value
  * @param theme - Theme configuration
  * @returns CSS size value (e.g., "16px", "1.5rem")
  *
  * @example
+ * // SSR/email template usage:
  * const size = getTypographySize('xl', theme); // "20px"
- * const headingSize = getTypographySize('3xl', theme); // "30px"
+ * const emailHTML = `<h1 style="font-size: ${size}">Title</h1>`;
  */
 export function getTypographySize(
   size: TypographySize,
   theme: ThemeConfig
 ): string {
-  // Parse base font size from theme (default: 16px)
   const baseSizeStr = theme.typography?.fontSize || '16px';
   const baseSize = parseFloat(baseSizeStr);
-
-  // Size multipliers based on semantic scale
-  const sizeMap: Record<TypographySize, number> = {
-    xs: 0.75,      // 12px at 16px base
-    sm: 0.875,     // 14px at 16px base
-    base: 1,       // 16px at 16px base
-    lg: 1.125,     // 18px at 16px base
-    xl: 1.25,      // 20px at 16px base
-    '2xl': 1.5,    // 24px at 16px base
-    '3xl': 1.875,  // 30px at 16px base
-    '4xl': 2.25,   // 36px at 16px base
-    '5xl': 3,      // 48px at 16px base
-  };
-
-  const calculatedSize = baseSize * sizeMap[size];
+  const calculatedSize = baseSize * TYPOGRAPHY_SCALE[size];
 
   // Return in same unit as base size
   if (baseSizeStr.endsWith('rem')) {
@@ -72,10 +92,6 @@ export function getTypographySize(
  * @param type - 'heading' or 'body'
  * @param theme - Theme configuration
  * @returns Font weight number
- *
- * @example
- * const headingWeight = getFontWeight('heading', theme); // 700
- * const bodyWeight = getFontWeight('body', theme); // 400
  */
 export function getFontWeight(
   type: 'heading' | 'body',
@@ -84,7 +100,7 @@ export function getFontWeight(
   if (type === 'heading') {
     return theme.typography?.headingFontWeight || 700;
   }
-  return 400; // Default body weight
+  return 400;
 }
 
 /**
@@ -92,9 +108,6 @@ export function getFontWeight(
  *
  * @param theme - Theme configuration
  * @returns CSS font-family value
- *
- * @example
- * const fontFamily = getFontFamily(theme); // "Inter, sans-serif"
  */
 export function getFontFamily(theme: ThemeConfig): string {
   return theme.typography?.fontFamily || 'system-ui, -apple-system, sans-serif';
@@ -106,51 +119,10 @@ export function getFontFamily(theme: ThemeConfig): string {
  * @param theme - Theme configuration
  * @param fallback - Fallback color if not defined in theme
  * @returns CSS color value
- *
- * @example
- * const color = getHeadingColor(theme); // "#000000" or theme default
  */
 export function getHeadingColor(
   theme: ThemeConfig,
   fallback?: string
 ): string | undefined {
   return theme.typography?.headingColor || fallback;
-}
-
-/**
- * Backwards compatibility mapping for old size values
- * Allows gradual migration from old to new size system
- */
-export const SIZE_MIGRATION_MAP: Record<string, TypographySize> = {
-  // Old Heading block sizes (XXXL-XS)
-  'XXXL': '5xl',
-  'XXL': '4xl',
-  'XL': '3xl',
-  'L': '2xl',
-  'M': 'xl',
-  'S': 'base',
-  'XS': 'sm',
-
-  // Old Text block sizes
-  'm': 'base',
-  's': 'sm',
-
-  // Old MetricBlock sizes
-  'large': 'xl',
-  'medium': 'base',
-  'small': 'sm',
-};
-
-/**
- * Migrate old size value to new semantic size
- *
- * @param oldSize - Old size value
- * @returns New semantic size value
- *
- * @example
- * const newSize = migrateSize('XXXL'); // "5xl"
- * const newSize2 = migrateSize('m'); // "base"
- */
-export function migrateSize(oldSize: string): TypographySize {
-  return SIZE_MIGRATION_MAP[oldSize] as TypographySize || 'base';
 }

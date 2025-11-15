@@ -51,14 +51,16 @@
 }
 
 .Stats-label {
-  font-size: 22px;
+  font-size: var(--theme-font-xl, 20px);
+  font-family: var(--theme-font-family, inherit);
   text-align: center;
   font-weight: 600;
   opacity: 0.8;
 }
 
 .Stats-value {
-  font-size: 72px;
+  font-size: var(--theme-font-5xl, 72px);
+  font-family: var(--theme-font-family, inherit);
   line-height: 1;
   font-weight: 700;
 }

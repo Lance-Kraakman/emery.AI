@@ -5,6 +5,7 @@ import { quotes } from "./quotes";
 import { AutoField, FieldLabel } from "@measured/puck";
 import { Link2 } from "lucide-react";
 import HeroComponent, { HeroProps } from "./Hero";
+import { backgroundColorField, textColorField } from "../../fields/standard-fields";
 
 export const Hero: ComponentConfig<HeroProps> = {
   fields: {
@@ -133,6 +134,15 @@ export const Hero: ComponentConfig<HeroProps> = {
         },
       },
     },
+    titleColor: {
+      ...textColorField,
+      label: "Title Color (Optional)",
+    },
+    subtitleColor: {
+      ...textColorField,
+      label: "Subtitle Color (Optional)",
+    },
+    backgroundColor: backgroundColorField,
   },
   defaultProps: {
     title: "Hero",
@@ -140,6 +150,9 @@ export const Hero: ComponentConfig<HeroProps> = {
     description: "Description",
     buttons: [{ label: "Learn more", href: "#" }],
     padding: "64px",
+    titleColor: undefined,
+    subtitleColor: undefined,
+    backgroundColor: undefined,
   },
   /**
    * The resolveData method allows us to modify component data after being

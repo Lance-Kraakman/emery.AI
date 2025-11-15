@@ -25,19 +25,23 @@
 
 .Hero h1 {
   line-height: 1.1;
-  font-size: 48px;
+  font-size: var(--theme-font-4xl, 48px);
   margin: 0;
+  color: var(--theme-heading-color, var(--theme-text, #000));
+  font-weight: var(--theme-heading-font-weight, 700);
+  font-family: var(--theme-font-family, inherit);
 }
 
 @media (min-width: 768px) {
   .Hero h1 {
-    font-size: 64px;
+    font-size: var(--theme-font-5xl, 64px);
   }
 }
 
 .Hero-subtitle {
   color: var(--theme-text-muted, var(--puck-color-grey-05));
-  font-size: var(--puck-font-size-m);
+  font-size: var(--theme-font-lg, 18px);
+  font-family: var(--theme-font-family, inherit);
   line-height: 1.5;
   margin: 0;
   margin-bottom: 8px;
