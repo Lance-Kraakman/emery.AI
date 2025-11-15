@@ -6,7 +6,7 @@ import { getClassNameFactory } from "@/components/puck/lib";
 import dynamic from "next/dynamic";
 import dynamicIconImports from "lucide-react/dynamicIconImports";
 import { withLayout, WithLayout } from "../../components/Layout";
-import { backgroundColorField, textColorField } from "../../fields/standard-fields";
+import { backgroundColorField, textColorField, fontFamilyField, fontWeightField } from "../../fields/standard-fields";
 
 const getClassName = getClassNameFactory("Card", styles);
 
@@ -34,6 +34,10 @@ export type CardProps = WithLayout<{
   titleColor?: string;
   textColor?: string;
   backgroundColor?: string;
+  titleFontFamily?: string;
+  titleFontWeight?: string;
+  textFontFamily?: string;
+  textFontWeight?: string;
 }>;
 
 const CardInner: ComponentConfig<CardProps> = {
@@ -66,6 +70,22 @@ const CardInner: ComponentConfig<CardProps> = {
       label: "Text Color (Optional)",
     },
     backgroundColor: backgroundColorField,
+    titleFontFamily: {
+      ...fontFamilyField,
+      label: "Title Font Family (Optional)",
+    },
+    titleFontWeight: {
+      ...fontWeightField,
+      label: "Title Font Weight (Optional)",
+    },
+    textFontFamily: {
+      ...fontFamilyField,
+      label: "Text Font Family (Optional)",
+    },
+    textFontWeight: {
+      ...fontWeightField,
+      label: "Text Font Weight (Optional)",
+    },
   },
   defaultProps: {
     title: "Title",
@@ -75,8 +95,12 @@ const CardInner: ComponentConfig<CardProps> = {
     titleColor: undefined,
     textColor: undefined,
     backgroundColor: undefined,
+    titleFontFamily: undefined,
+    titleFontWeight: undefined,
+    textFontFamily: undefined,
+    textFontWeight: undefined,
   },
-  render: ({ title, icon, description, mode, titleColor, textColor, backgroundColor }) => {
+  render: ({ title, icon, description, mode, titleColor, textColor, backgroundColor, titleFontFamily, titleFontWeight, textFontFamily, textFontWeight }) => {
     return (
       <div
         className={getClassName({ [mode]: mode })}
@@ -87,13 +111,21 @@ const CardInner: ComponentConfig<CardProps> = {
 
           <div
             className={getClassName("title")}
-            style={{ ...(titleColor && { color: titleColor }) }}
+            style={{
+              ...(titleColor && { color: titleColor }),
+              ...(titleFontFamily && { fontFamily: titleFontFamily }),
+              ...(titleFontWeight && { fontWeight: titleFontWeight }),
+            }}
           >
             {title}
           </div>
           <div
             className={getClassName("description")}
-            style={{ ...(textColor && { color: textColor }) }}
+            style={{
+              ...(textColor && { color: textColor }),
+              ...(textFontFamily && { fontFamily: textFontFamily }),
+              ...(textFontWeight && { fontWeight: textFontWeight }),
+            }}
           >
             {description}
           </div>

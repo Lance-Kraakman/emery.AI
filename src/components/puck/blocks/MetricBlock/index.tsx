@@ -19,7 +19,7 @@ import type { ComponentConfig } from "@measured/puck";
 import MetricBlock, { type MetricBlockProps } from "./MetricBlock";
 import { getView, executeViewAggregations, getViewsForOrganization } from "@/app/actions/views";
 import { getTables } from "@/app/actions/tables";
-import { typographySizeField, backgroundColorField, textColorField } from "../../fields/standard-fields";
+import { typographySizeField, backgroundColorField, textColorField, fontFamilyField, fontWeightField } from "../../fields/standard-fields";
 
 export const MetricBlockConfig: ComponentConfig<MetricBlockProps> = {
   label: "Metric",
@@ -135,6 +135,22 @@ export const MetricBlockConfig: ComponentConfig<MetricBlockProps> = {
       label: "Value Color (Optional)",
     },
     backgroundColor: backgroundColorField,
+    labelFontFamily: {
+      ...fontFamilyField,
+      label: "Label Font Family (Optional)",
+    },
+    labelFontWeight: {
+      ...fontWeightField,
+      label: "Label Font Weight (Optional)",
+    },
+    valueFontFamily: {
+      ...fontFamilyField,
+      label: "Value Font Family (Optional)",
+    },
+    valueFontWeight: {
+      ...fontWeightField,
+      label: "Value Font Weight (Optional)",
+    },
   },
 
   defaultProps: {
@@ -144,6 +160,10 @@ export const MetricBlockConfig: ComponentConfig<MetricBlockProps> = {
     labelColor: undefined,
     valueColor: undefined,
     backgroundColor: undefined,
+    labelFontFamily: undefined,
+    labelFontWeight: undefined,
+    valueFontFamily: undefined,
+    valueFontWeight: undefined,
   },
 
   /**
