@@ -14,8 +14,8 @@ import { TableBlockProps } from "./blocks/TableBlock/TableBlock";
 import { MetricBlockProps } from "./blocks/MetricBlock/MetricBlock";
 import { ChartBlockProps } from "./blocks/ChartBlock/ChartBlock";
 import { FormBlockProps } from "./blocks/FormBlock/FormBlock";
-import { LoginBlockProps } from "./blocks/LoginBlock";
-import { SignOutBlockProps } from "./blocks/SignOutBlock";
+import type { LoginBlockProps } from "./blocks/LoginBlock";
+import type { SignOutBlockProps } from "./blocks/SignOutBlock";
 
 import { RootProps } from "./root";
 
