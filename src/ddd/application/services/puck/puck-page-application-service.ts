@@ -33,6 +33,8 @@ export interface UpdatePageCommand {
   name?: string;
   slug?: string;
   description?: string;
+  requiresAuth?: boolean;
+  allowedRoles?: string[];
 }
 
 export interface UpdatePageContentCommand {
@@ -171,6 +173,14 @@ export class PuckPageApplicationService {
 
       if (command.description !== undefined) {
         page.updateDescription(command.description);
+      }
+
+      if (command.requiresAuth !== undefined) {
+        page.setRequiresAuth(command.requiresAuth);
+      }
+
+      if (command.allowedRoles !== undefined) {
+        page.setAllowedRoles(command.allowedRoles);
       }
 
       // 3. Save updates

@@ -212,6 +212,44 @@ export async function getPublicPage(
 }
 
 /**
+ * Get user's roles for a specific app context
+ * Used by PublicAppAuthProvider to check role-based access
+ */
+export async function getUserRolesForApp(
+  orgSlug: string,
+  userId: string
+): Promise<string[]> {
+  try {
+    // Find organization by slug
+    const org = await db.query.organizations.findFirst({
+      where: eq(organizations.slug, orgSlug)
+    });
+
+    if (!org) {
+      console.warn('[getUserRolesForApp] Organization not found:', orgSlug);
+      return [];
+    }
+
+    // Get user's roles in this organization
+    const userRolesData = await db
+      .select({
+        roleName: roles.name
+      })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(and(
+        eq(userRoles.userId, userId),
+        eq(userRoles.organizationId, org.id)
+      ));
+
+    return userRolesData.map((r: { roleName: string }) => r.roleName);
+  } catch (error) {
+    console.error('[getUserRolesForApp] Error:', error);
+    return [];
+  }
+}
+
+/**
  * Check if a user can access a published page
  * Validates authentication requirements and role-based access
  *

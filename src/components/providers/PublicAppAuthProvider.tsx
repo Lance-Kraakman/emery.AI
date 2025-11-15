@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useSession } from 'next-auth/react';
+import { getUserRolesForApp } from '@/app/actions/public-pages';
 
 interface PublicAppAuthContextValue {
   user: {
@@ -40,27 +41,25 @@ export function PublicAppAuthProvider({
 
   useEffect(() => {
     // Fetch user roles for this app
-    if (session?.user?.id) {
-      fetch(`/api/public/${orgSlug}/${appSlug}/user-roles`)
-        .then(res => res.json())
-        .then(data => setUserRoles(data.roles || []))
-        .catch(err => console.error('Failed to fetch user roles:', err));
-    } else {
-      setUserRoles([]);
+    async function loadRoles() {
+      if (session?.user?.id) {
+        try {
+          const roles = await getUserRolesForApp(orgSlug, session.user.id);
+          setUserRoles(roles);
+        } catch (err) {
+          console.error('Failed to fetch user roles:', err);
+          setUserRoles([]);
+        }
+      } else {
+        setUserRoles([]);
+      }
     }
+
+    loadRoles();
   }, [session?.user?.id, orgSlug, appSlug]);
 
-  // Track last app access in session
-  useEffect(() => {
-    if (session?.user?.id) {
-      // Update last app access for redirects
-      fetch('/api/auth/update-last-app', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appContext: `${orgSlug}/${appSlug}` }),
-      }).catch(err => console.error('Failed to update last app access:', err));
-    }
-  }, [session?.user?.id, orgSlug, appSlug]);
+  // NOTE: Last app access tracking removed - not needed for org-wide user model
+  // Users are org members, not app-specific, so no need to track last app
 
   const value: PublicAppAuthContextValue = {
     user: session?.user ? {

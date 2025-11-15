@@ -339,6 +339,31 @@ export default function PageEditPage() {
     }
   };
 
+  const handleSaveAccessSettings = async (data: { requiresAuth: boolean; allowedRoles: string[] }) => {
+    try {
+      const result = await updatePage(
+        { id: pageId, requiresAuth: data.requiresAuth, allowedRoles: data.allowedRoles },
+        `/apps/${appId}/pages/${pageId}/edit`
+      );
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update access settings");
+        return;
+      }
+
+      toast.success("Access settings updated successfully");
+      // Update local state to reflect changes
+      setPage(prev => prev ? {
+        ...prev,
+        requiresAuth: data.requiresAuth,
+        allowedRoles: data.allowedRoles
+      } : null);
+    } catch (error) {
+      console.error('Error updating access settings:', error);
+      toast.error("Failed to update access settings");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -381,7 +406,11 @@ export default function PageEditPage() {
                 pageId: pageId,
                 pageName: page.name,
                 pageSlug: page.slug,
+                pageIsPublic: page.isPublic,
+                pageRequiresAuth: page.requiresAuth,
+                pageAllowedRoles: page.allowedRoles || [],
                 onSavePageSettings: handleSavePageSettings,
+                onSaveAccessSettings: handleSaveAccessSettings,
                 themeMode: "page",
               }),
               puck: ({ children }) => (
