@@ -51,7 +51,7 @@ interface FieldManagerDialogProps {
 }
 
 // Sortable row component for drag-and-drop
-function SortableFieldRow({ field, index, onDelete }: { 
+function SortableFieldRow({ field, index, onDelete }: {
   field: FieldDTO
   index: number
   onDelete: (fieldName: string) => void
@@ -148,7 +148,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   const [embeddingSize, setEmbeddingSize] = useState<number | undefined>()
   const [loading, setLoading] = useState(false)
   const [availableTables, setAvailableTables] = useState<TableDTO[]>([])
-  
+
   // Optimistic state for field reordering
   const [optimisticFields, setOptimisticFields] = useState<FieldDTO[] | null>(null)
   const [reorderError, setReorderError] = useState<string | null>(null)

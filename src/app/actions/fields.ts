@@ -8,7 +8,7 @@ import { requirePermission } from "./permissions";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateFieldData } from "./types";
-import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field";
+import type { FieldType, AutonumberFieldConfig } from "@/ddd/domain/tables/value-objects/table-field";
 import type { CreateFieldCommand } from "@/ddd/application/services/tables/table-application-service";
 import { TableId } from "@/ddd/domain/shared/value-objects";
 import { FieldMapper, type FieldDTO } from "@/app/mappers/field-mapper";
@@ -420,7 +420,7 @@ export async function reorderFields(data: {
     } else {
       revalidatePath('/data'); // Default path for field operations
     }
-    
+
     return {
       success: true,
       data: { message: "Fields reordered successfully" },
@@ -430,6 +430,53 @@ export async function reorderFields(data: {
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to reorder fields",
+    };
+  }
+}
+
+/**
+ * Reset autonumber field counter
+ * Only affects new rows - existing rows are not changed
+ */
+export async function resetAutonumberCounter(
+  tableId: number,
+  fieldName: string,
+  resetValue?: number,
+  revalidateUrl?: string
+): Promise<Result> {
+  try {
+    await requirePermission("data:manage");
+
+    // Get field and verify it's autonumber
+    const fields = await getFields(tableId);
+    const field = fields.find(f => f.name === fieldName);
+
+    if (!field || field.type !== 'autonumber') {
+      return {
+        success: false,
+        error: "Field not found or not an autonumber field",
+      };
+    }
+
+    // Get current metadata and determine reset value
+    const currentMetadata = (field.metadata as AutonumberFieldConfig) || {};
+    const newCurrentValue = resetValue ?? currentMetadata.startingNumber ?? 1;
+
+    // Update field metadata (set to resetValue - 1 so next number is resetValue)
+    return await updateField({
+      tableId,
+      fieldName,
+      updates: {
+        metadata: {
+          ...currentMetadata,
+          currentValue: newCurrentValue - 1
+        }
+      }
+    }, revalidateUrl);
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to reset counter",
     };
   }
 }
