@@ -90,7 +90,7 @@ export const HeaderBlock: ComponentConfig<HeaderBlockProps> = {
     const logo = [
       await createComponent("Heading", {
         text: "LOGO",
-        size: "l",
+        size: "xl",
       }),
     ];
 
