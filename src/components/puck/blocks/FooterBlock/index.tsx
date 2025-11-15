@@ -116,7 +116,7 @@ export const FooterBlock: ComponentConfig<FooterBlockProps> = {
     const column1 = [
       await createComponent("Heading", {
         text: "Product",
-        size: "m",
+        size: "lg",
       }),
       await createComponent("Text", {
         text: "Features",
@@ -132,7 +132,7 @@ export const FooterBlock: ComponentConfig<FooterBlockProps> = {
     const column2 = [
       await createComponent("Heading", {
         text: "Company",
-        size: "m",
+        size: "lg",
       }),
       await createComponent("Text", {
         text: "About",
@@ -148,7 +148,7 @@ export const FooterBlock: ComponentConfig<FooterBlockProps> = {
     const column3 = [
       await createComponent("Heading", {
         text: "Support",
-        size: "m",
+        size: "lg",
       }),
       await createComponent("Text", {
         text: "Help Center",
@@ -164,7 +164,7 @@ export const FooterBlock: ComponentConfig<FooterBlockProps> = {
     const column4 = [
       await createComponent("Heading", {
         text: "Legal",
-        size: "m",
+        size: "lg",
       }),
       await createComponent("Text", {
         text: "Privacy",
