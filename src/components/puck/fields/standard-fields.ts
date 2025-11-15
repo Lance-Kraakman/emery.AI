@@ -91,12 +91,34 @@ export const spacingField = {
 
 /**
  * Standard font family field
- * Allows custom font-family CSS value override
+ * Dropdown selector with common web-safe fonts
+ * Matches options from FontSelect component used in theme editor
  */
 export const fontFamilyField = {
-  type: "text" as const,
+  type: "select" as const,
   label: "Font Family (Optional)",
-  placeholder: "e.g., Georgia, serif (leave empty for theme default)",
+  options: [
+    { value: "", label: "Use Theme Default" },
+    // System Fonts
+    { value: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", label: "System Default" },
+    { value: "system-ui, sans-serif", label: "System UI" },
+    // Sans-Serif Fonts
+    { value: "'Helvetica Neue', Helvetica, Arial, sans-serif", label: "Helvetica Neue" },
+    { value: "Arial, 'Helvetica Neue', Helvetica, sans-serif", label: "Arial" },
+    { value: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif", label: "Segoe UI" },
+    { value: "Verdana, Geneva, Tahoma, sans-serif", label: "Verdana" },
+    { value: "'Trebuchet MS', 'Lucida Grande', 'Lucida Sans Unicode', sans-serif", label: "Trebuchet MS" },
+    // Serif Fonts
+    { value: "Georgia, 'Times New Roman', Times, serif", label: "Georgia" },
+    { value: "'Times New Roman', Times, Georgia, serif", label: "Times New Roman" },
+    { value: "Palatino, 'Palatino Linotype', 'Book Antiqua', Georgia, serif", label: "Palatino" },
+    { value: "Garamond, Baskerville, 'Baskerville Old Face', 'Hoefler Text', serif", label: "Garamond" },
+    // Monospace Fonts
+    { value: "Menlo, Monaco, 'Courier New', Courier, monospace", label: "Menlo" },
+    { value: "Monaco, Menlo, Consolas, 'Courier New', monospace", label: "Monaco" },
+    { value: "Consolas, Monaco, 'Lucida Console', 'Liberation Mono', monospace", label: "Consolas" },
+    { value: "'Courier New', Courier, 'Lucida Sans Typewriter', monospace", label: "Courier New" },
+  ],
 };
 
 /**
