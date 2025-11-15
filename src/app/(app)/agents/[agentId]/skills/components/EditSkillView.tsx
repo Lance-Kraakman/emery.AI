@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
-import { updateSkill, deleteSkill } from '@/app/actions/skills';
+import { updateSkill, deleteSkill, uploadSkillAttachment } from '@/app/actions/skills';
 import { toast } from 'sonner';
 import { SkillEditor, type SkillFormData } from './SkillEditor';
 
@@ -26,7 +26,9 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
     inputs: skill.inputs,
     outputs: skill.outputs,
     instructions: skill.instructions,
-    tools: skill.tools
+    tools: skill.tools,
+    content: skill.content, // Load existing attachments
+    pendingAttachments: [] // Start with no pending attachments
   });
 
   const handleSave = async () => {
@@ -38,6 +40,7 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
     setIsSaving(true);
 
     try {
+      // Step 1: Update the skill
       const result = await updateSkill(skill.id, {
         name: formData.name,
         description: formData.description,
@@ -47,12 +50,30 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
         tools: formData.tools
       });
 
-      if (result.success) {
-        toast.success('Skill updated successfully');
-        router.refresh();
-      } else {
+      if (!result.success) {
         toast.error(result.error || 'Failed to update skill');
+        return;
       }
+
+      // Step 2: Upload pending attachments if any
+      if (formData.pendingAttachments && formData.pendingAttachments.length > 0) {
+        toast.info(`Uploading ${formData.pendingAttachments.length} attachment(s)...`);
+
+        for (const file of formData.pendingAttachments) {
+          const attachFormData = new FormData();
+          attachFormData.append('file', file);
+          attachFormData.append('type', file.type.startsWith('image/') ? 'image' : 'file');
+
+          const uploadResult = await uploadSkillAttachment(skill.id, attachFormData);
+          if (!uploadResult.success) {
+            console.error('Failed to upload attachment:', file.name, uploadResult.error);
+            toast.error(`Failed to upload ${file.name}`);
+          }
+        }
+      }
+
+      toast.success('Skill updated successfully');
+      router.refresh();
     } catch (error) {
       console.error('Error updating skill:', error);
       toast.error('An unexpected error occurred');

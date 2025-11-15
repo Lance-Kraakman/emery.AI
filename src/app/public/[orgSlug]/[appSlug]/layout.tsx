@@ -1,9 +1,10 @@
 // AIDEV-NOTE: Layout for public Puck apps
-// Provides app-level theme and metadata
+// Provides app-level theme, metadata, and authentication context
 
 import type { Metadata } from "next"
 import { getPublicApp } from "@/app/actions/public-pages"
 import { notFound } from "next/navigation"
+import { PublicAppAuthProvider } from "@/components/providers/PublicAppAuthProvider"
 
 interface PublicAppLayoutProps {
   children: React.ReactNode
@@ -51,9 +52,15 @@ export default async function PublicAppLayout({
   const app = result.data
 
   return (
-    <div className="min-h-screen">
-      {/* App-level theme will be applied via PuckRenderer in page */}
-      {children}
-    </div>
+    <PublicAppAuthProvider
+      appId={app.id}
+      orgSlug={orgSlug}
+      appSlug={appSlug}
+    >
+      <div className="min-h-screen">
+        {/* App-level theme will be applied via PuckRenderer in page */}
+        {children}
+      </div>
+    </PublicAppAuthProvider>
   )
 }
