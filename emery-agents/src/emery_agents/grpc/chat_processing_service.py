@@ -84,6 +84,38 @@ class StepProgressDict(TypedDict):
     step_index: int
 
 
+class ContentChunkDict(TypedDict):
+    """Typed structure for content chunk events."""
+    type: Literal["content_chunk"]
+    content: str
+
+
+class ErrorDetailsDict(TypedDict, total=False):
+    """Error details metadata."""
+    severity: str
+
+
+class ErrorDataDict(TypedDict):
+    """Error data structure."""
+    error_code: str
+    error_message: str
+    error_details: ErrorDetailsDict
+    hint: str
+    can_retry: bool
+    auto_retry: bool
+    session_reset: bool
+
+
+class ErrorResponseDict(TypedDict):
+    """Typed structure for error response events."""
+    type: Literal["error"]
+    error: ErrorDataDict
+
+
+# Union type for all possible stream response types
+StreamResponseDict = StepProgressDict | ContentChunkDict | ErrorResponseDict
+
+
 # Type variable for generic async function return type
 T = TypeVar('T')
 
@@ -378,7 +410,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                     elif response_type == "content_chunk":
                         # Send content chunk (final answer text)
-                        chunk = response_dict.get("content", "")
+                        # Type assertion: we know this is ContentChunkDict
+                        chunk_resp = response_dict  # type: ContentChunkDict
+                        chunk = chunk_resp["content"]
                         total_content += chunk
 
                         chunk_response = agent_worker_pb2.ProcessMessageResponse(
@@ -393,16 +427,19 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                     elif response_type == "error":
                         # Send error response from agent execution
-                        error_data = response_dict.get("error", {})
+                        # Type assertion: we know this is ErrorResponseDict from _stream_tool_calling_agent_response
+                        error_resp = response_dict  # type: ErrorResponseDict
+                        error_data: ErrorDataDict = error_resp["error"]
+
                         error_response = agent_worker_pb2.ProcessMessageResponse(
                             error=agent_worker_pb2.ProcessingError(
-                                error_code=error_data.get("error_code", "UNKNOWN_ERROR"),
-                                error_message=error_data.get("error_message", "An error occurred"),
-                                error_details=error_data.get("error_details", {}),
-                                hint=error_data.get("hint", ""),
-                                can_retry=error_data.get("can_retry", False),
-                                auto_retry=error_data.get("auto_retry", False),
-                                session_reset=error_data.get("session_reset", False)
+                                error_code=error_data["error_code"],
+                                error_message=error_data["error_message"],
+                                error_details=error_data["error_details"],
+                                hint=error_data["hint"],
+                                can_retry=error_data["can_retry"],
+                                auto_retry=error_data["auto_retry"],
+                                session_reset=error_data["session_reset"]
                             ),
                             timestamp=int(time.time() * 1000)
                         )
@@ -558,7 +595,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         org_id: Optional[int] = None,
         conversation_history: Optional[List] = None,
         agent_config: Optional['agent_worker_pb2.AgentConfig'] = None
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[StreamResponseDict]:
         """
         Stream AI response using ToolCallingAgent with stateful session support.
 
@@ -706,10 +743,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                     # Stream final answer as content chunks
                     async for chunk in self._stream_text_chunks(final_answer_text):
-                        yield {
+                        content_chunk: ContentChunkDict = {
                             "type": "content_chunk",
                             "content": chunk
                         }
+                        yield content_chunk
 
                     step_index += 1
                     continue
@@ -785,20 +823,23 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     session_was_reset = True
 
             # 4. Send user-friendly error (NO technical details)
-            yield {
-                "type": "error",
-                "error": {
-                    "error_code": error_info.error_type,
-                    "error_message": error_info.user_message,
-                    "error_details": {
-                        "severity": error_info.severity.value
-                    },
-                    "hint": error_info.hint or "",
-                    "can_retry": error_info.can_retry,
-                    "auto_retry": False,  # Auto-retry not implemented in current flow
-                    "session_reset": session_was_reset
-                }
+            error_details: ErrorDetailsDict = {
+                "severity": error_info.severity.value
             }
+            error_data: ErrorDataDict = {
+                "error_code": error_info.error_type,
+                "error_message": error_info.user_message,
+                "error_details": error_details,
+                "hint": error_info.hint or "",
+                "can_retry": error_info.can_retry,
+                "auto_retry": False,  # Auto-retry not implemented in current flow
+                "session_reset": session_was_reset
+            }
+            error_response: ErrorResponseDict = {
+                "type": "error",
+                "error": error_data
+            }
+            yield error_response
 
             logger.info(f"📨 Sent user-friendly error message (type={error_info.error_type})")
 
