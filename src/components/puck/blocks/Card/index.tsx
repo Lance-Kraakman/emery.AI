@@ -6,7 +6,7 @@ import { getClassNameFactory } from "@/components/puck/lib";
 import dynamic from "next/dynamic";
 import dynamicIconImports from "lucide-react/dynamicIconImports";
 import { withLayout, WithLayout } from "../../components/Layout";
-import { backgroundColorField, textColorField, fontFamilyField, fontWeightField } from "../../fields/standard-fields";
+import { backgroundColorField, textColorField, fontFamilyField, fontWeightField, borderRadiusField, borderWidthField, paddingField } from "../../fields/standard-fields";
 
 const getClassName = getClassNameFactory("Card", styles);
 
@@ -38,6 +38,9 @@ export type CardProps = WithLayout<{
   titleFontWeight?: string;
   textFontFamily?: string;
   textFontWeight?: string;
+  borderRadius?: string;
+  borderWidth?: string;
+  paddingLevel?: string;
 }>;
 
 const CardInner: ComponentConfig<CardProps> = {
@@ -86,6 +89,9 @@ const CardInner: ComponentConfig<CardProps> = {
       ...fontWeightField,
       label: "Text Font Weight (Optional)",
     },
+    borderRadius: borderRadiusField,
+    borderWidth: borderWidthField,
+    paddingLevel: paddingField,
   },
   defaultProps: {
     title: "Title",
@@ -99,12 +105,23 @@ const CardInner: ComponentConfig<CardProps> = {
     titleFontWeight: undefined,
     textFontFamily: undefined,
     textFontWeight: undefined,
+    borderRadius: undefined,
+    borderWidth: undefined,
+    paddingLevel: undefined,
   },
-  render: ({ title, icon, description, mode, titleColor, textColor, backgroundColor, titleFontFamily, titleFontWeight, textFontFamily, textFontWeight }) => {
+  render: ({ title, icon, description, mode, titleColor, textColor, backgroundColor, titleFontFamily, titleFontWeight, textFontFamily, textFontWeight, borderRadius, borderWidth, paddingLevel }) => {
+    // Calculate padding from level if provided
+    const padding = paddingLevel ? `calc(var(--theme-spacing-unit, 0.25rem) * ${paddingLevel})` : undefined;
+
     return (
       <div
         className={getClassName({ [mode]: mode })}
-        style={{ ...(backgroundColor && { backgroundColor }) }}
+        style={{
+          ...(backgroundColor && { backgroundColor }),
+          ...(borderRadius && { borderRadius }),
+          ...(borderWidth && { borderWidth }),
+          ...(padding && { padding }),
+        }}
       >
         <div className={getClassName("inner")}>
           <div className={getClassName("icon")}>{icon && icons[icon]}</div>

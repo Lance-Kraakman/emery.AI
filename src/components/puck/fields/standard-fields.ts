@@ -70,6 +70,7 @@ export const borderRadiusField = {
 /**
  * Standard spacing/gap field
  * Provides common spacing levels
+ * Used for gap in Grid/Flex containers
  */
 export const spacingField = {
   type: "select" as const,
@@ -86,6 +87,47 @@ export const spacingField = {
     { value: "8", label: "3XL (8)" },
     { value: "9", label: "4XL (9)" },
     { value: "10", label: "5XL (10)" },
+  ],
+};
+
+/**
+ * Standard padding field
+ * Uses spacing scale (0-10) that calculates as: level × theme spacing unit
+ * Example: level 4 with 0.25rem unit = 1rem padding
+ */
+export const paddingField = {
+  type: "select" as const,
+  label: "Padding (Optional)",
+  options: [
+    { value: "", label: "Use Theme Default" },
+    { value: "0", label: "None (0)" },
+    { value: "1", label: "XS (1)" },
+    { value: "2", label: "SM (2)" },
+    { value: "3", label: "MD (3)" },
+    { value: "4", label: "Base (4)" },
+    { value: "5", label: "LG (5)" },
+    { value: "6", label: "XL (6)" },
+    { value: "7", label: "2XL (7)" },
+    { value: "8", label: "3XL (8)" },
+    { value: "9", label: "4XL (9)" },
+    { value: "10", label: "5XL (10)" },
+  ],
+};
+
+/**
+ * Standard border width field
+ * Provides common border thickness values
+ */
+export const borderWidthField = {
+  type: "select" as const,
+  label: "Border Width (Optional)",
+  options: [
+    { value: "", label: "Use Theme Default" },
+    { value: "0", label: "None (0px)" },
+    { value: "1px", label: "Thin (1px)" },
+    { value: "2px", label: "Medium (2px)" },
+    { value: "3px", label: "Thick (3px)" },
+    { value: "4px", label: "Extra Thick (4px)" },
   ],
 };
 
