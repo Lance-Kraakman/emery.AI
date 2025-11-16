@@ -189,9 +189,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         if has_image_content:
             logger.info(f"🖼️ Message contains images")
 
-        # Always use ToolCallingAgent - handles empty tools gracefully
-        tools_count = len(request.tools) if hasattr(request, 'tools') and request.tools else 0
-        logger.info(f"🔧 Tools provided: {tools_count}, always using ToolCallingAgent")
+        # Extract tools and skills from AgentConfig
+        agent_config = request.agent_config if hasattr(request, 'agent_config') and request.agent_config else None
+
+        if agent_config:
+            tools_count = len(agent_config.tools) if agent_config.tools else 0
+            skills_count = len(agent_config.skills) if agent_config.skills else 0
+            logger.info(f"🔧 AgentConfig provided: {tools_count} tools, {skills_count} skills")
+        else:
+            logger.info(f"⚠️ No AgentConfig provided, using empty tools")
 
         try:
             # RAG context has been removed - chat is now simpler without automatic RAG
@@ -212,14 +218,25 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             sequence = 0
             total_content = ""
 
-            # Always use ToolCallingAgent - handles RAG context and tools
-            tools_to_use = request.tools if hasattr(request, 'tools') and request.tools else []
-            logger.info(f"📨 Request tools received: {len(tools_to_use)} tools")
-            if tools_to_use:
-                for i, tool in enumerate(tools_to_use):
-                    logger.info(f"  Tool {i}: name={tool.name}, config_keys={list(tool.config.keys()) if tool.config else 'none'}")
+            # Extract tools from AgentConfig
+            tools_to_use = []
+            skills_to_use = []
+
+            if agent_config:
+                tools_to_use = list(agent_config.tools) if agent_config.tools else []
+                skills_to_use = list(agent_config.skills) if agent_config.skills else []
+
+                logger.info(f"📨 AgentConfig tools received: {len(tools_to_use)} tools")
+                if tools_to_use:
+                    for i, tool in enumerate(tools_to_use):
+                        logger.info(f"  Tool {i}: name={tool.name}, config_keys={list(tool.config.keys()) if tool.config else 'none'}")
+
+                logger.info(f"🎯 AgentConfig skills received: {len(skills_to_use)} skills")
+                if skills_to_use:
+                    for i, skill in enumerate(skills_to_use):
+                        logger.info(f"  Skill {i}: name={skill.name}, tools={len(skill.tools) if skill.tools else 0}")
             else:
-                logger.info("  No tools received from frontend")
+                logger.info("  No AgentConfig received from frontend")
 
             # Extract organization model from request (if provided)
             org_model = request.model if request.model else None
@@ -238,7 +255,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 session_id=session_id,
                 user_id=user_id,
                 org_id=org_id,
-                conversation_history=request.conversation_history
+                conversation_history=request.conversation_history,
+                agent_config=agent_config  # Pass agent_config for skill execution
             ):
                 # Check for cancellation
                 if self.active_streams.get(message_id, False):
@@ -464,7 +482,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
         org_id: Optional[int] = None,
-        conversation_history: Optional[List] = None
+        conversation_history: Optional[List] = None,
+        agent_config: Optional['agent_worker_pb2.AgentConfig'] = None
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream AI response using ToolCallingAgent with stateful session support.
@@ -486,7 +505,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"📝 Built system prompt: {len(system_prompt)} chars")
 
             # 2. Convert protobuf tools to smolagents tools
-            smolagents_tools = self._convert_tools_to_smolagents(tools)
+            smolagents_tools = self._convert_tools_to_smolagents(tools, agent_config=agent_config, org_model=org_model)
             logger.info(f"🔧 Converted {len(smolagents_tools)} tools for ToolCallingAgent")
 
             # 3. Get or create agent with session management
@@ -737,18 +756,123 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         return self._build_basic_system_prompt(domain_context)
 
-    def _convert_tools_to_smolagents(self, tools: List['agent_worker_pb2.ToolConfig']) -> List[Any]:
-        """Convert protobuf ToolConfig objects to smolagents tools using shared utility."""
+    def _convert_tools_to_smolagents(
+        self,
+        tools: List['agent_worker_pb2.ToolConfig'],
+        agent_config: Optional['agent_worker_pb2.AgentConfig'] = None,
+        org_model: Optional[str] = None
+    ) -> List[Any]:
+        """
+        Convert protobuf ToolConfig objects to smolagents tools using shared utility.
+
+        Args:
+            tools: List of ToolConfig proto objects
+            agent_config: Optional AgentConfig containing skills for skill execution
+            org_model: Organization default model (used as fallback for skills)
+
+        Returns:
+            List of loaded tool instances (including SkillTools)
+        """
         if not self.tool_registry:
             logger.error("❌ Tool registry not available - tools cannot be loaded")
             return []
+
+        # Create skill execution callback if agent_config has skills
+        skill_executor = None
+        if agent_config and agent_config.skills:
+            skill_executor = self._create_skill_executor_callback(org_model=org_model)
 
         # Use consolidated load_tools_from_configs method
         return self.tool_registry.load_tools_from_configs(
             tool_configs=tools,
             api_key=None,  # API keys are in tool configs already
-            api_key_mode="user"  # Chat system uses user API key mode
+            api_key_mode="user",  # Chat system uses user API key mode
+            agent_config=agent_config,
+            skill_executor=skill_executor
         )
+
+    def _create_skill_executor_callback(self, org_model: Optional[str] = None):
+        """
+        Create a callback function for executing skills.
+
+        This callback is used by SkillTool to execute skills when called by the LLM.
+        It creates a sub-agent with the skill's tools and executes the skill's instructions.
+
+        Args:
+            org_model: Organization default model (used as fallback if skill has no model)
+
+        Returns:
+            Callable that takes (SkillConfig, runtime_inputs) and returns result string
+        """
+        def execute_skill(skill_config: 'agent_worker_pb2.SkillConfig', runtime_inputs: Dict[str, Any]) -> str:
+            """
+            Execute a skill by creating a sub-agent.
+
+            Args:
+                skill_config: Full skill definition from proto
+                runtime_inputs: Runtime inputs from LLM (matching skill.inputs)
+
+            Returns:
+                Skill execution result as string
+            """
+            logger.info(f"🎯 Executing skill: {skill_config.name} with inputs: {list(runtime_inputs.keys())}")
+
+            try:
+                # 1. Load skill's tools
+                skill_tools = []
+                if skill_config.tools:
+                    skill_tools = self.tool_registry.load_tools_from_configs(
+                        tool_configs=list(skill_config.tools),
+                        api_key=None,
+                        api_key_mode="user"
+                    )
+                    logger.info(f"🔧 Loaded {len(skill_tools)} tools for skill {skill_config.name}")
+
+                # 2. Create sub-agent with skill's tools
+                from ..services.agent_factory import AgentConfig as FactoryAgentConfig
+                agent_config = FactoryAgentConfig(
+                    tools=skill_tools,
+                    skill_model=skill_config.model if skill_config.model else None,
+                    org_model=org_model,
+                    has_images=False,  # Skills don't support images in v1
+                    max_steps=10,
+                    agent_name=f"skill_{skill_config.name}",
+                    agent_description=skill_config.description,
+                    enable_caching=False
+                )
+                sub_agent = self.agent_factory.create_agent(agent_config)
+                logger.info(f"✨ Created sub-agent for skill {skill_config.name}")
+
+                # 3. Build task from instructions + inputs
+                task_parts = [skill_config.instructions]
+
+                # Add runtime inputs to task
+                if runtime_inputs:
+                    task_parts.append("\n\nInputs:")
+                    for key, value in runtime_inputs.items():
+                        task_parts.append(f"- {key}: {value}")
+
+                task = "\n".join(task_parts)
+                logger.info(f"📝 Skill task: {task[:200]}...")
+
+                # 4. Execute skill with sub-agent
+                result_parts = []
+                for step in sub_agent.run(task=task, stream=False, reset=True):
+                    if hasattr(step, 'final_answer') and step.final_answer:
+                        result_parts.append(str(step.final_answer))
+                    elif hasattr(step, 'observations') and step.observations:
+                        result_parts.append(str(step.observations))
+
+                result = "\n".join(result_parts) if result_parts else "Skill completed with no output"
+                logger.info(f"✅ Skill {skill_config.name} completed: {len(result)} chars")
+                return result
+
+            except Exception as e:
+                error_msg = f"Skill execution error: {str(e)}"
+                logger.error(f"❌ Skill {skill_config.name} failed: {e}", exc_info=True)
+                return error_msg
+
+        return execute_skill
 
     def _create_agent_with_model_provider(
         self,

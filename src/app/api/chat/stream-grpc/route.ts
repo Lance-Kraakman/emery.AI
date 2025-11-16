@@ -23,7 +23,7 @@ import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
-import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository } from '@/ddd/application/di/container';
+import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository, getSkillApplicationService } from '@/ddd/application/di/container';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 import type { CreateChatDTO, SendMessageDTO, ExecutionStep, ExecutionStepMetadata } from '@/app/dtos/chat.dto';
@@ -142,6 +142,8 @@ export async function POST(req: NextRequest) {
       domainType = body.domainType;
       domainId = body.domainId;
       tools = body.tools || [];
+
+      console.log('[CHAT-GRPC-API] [DEBUG] Received tools from frontend:', JSON.stringify(tools, null, 2));
     }
 
     const latestMessage = getMessageContent(messages[messages.length - 1]);
@@ -376,9 +378,23 @@ export async function POST(req: NextRequest) {
     const defaultModel = organization?.defaultModel || null;
     console.log('[CHAT-GRPC-API] Organization default model:', defaultModel || 'not set (will use system default)');
 
-    // 5.1 Enrich tools with user API key for chat-based tool execution
-    let enrichedTools: any[] = tools;
-    if (tools.length > 0 && userId) {
+    // 5.1 Separate skill references from regular tools BEFORE enrichment
+    // This prevents skill_reference type from being overwritten during enrichment
+    const skillReferenceTools = tools.filter((t: any) => t.config?.type === 'skill_reference');
+    const regularTools = tools.filter((t: any) => t.config?.type !== 'skill_reference');
+
+    console.log('[CHAT-GRPC-API] Separated tools:', {
+      totalTools: tools.length,
+      skillReferences: skillReferenceTools.length,
+      regularTools: regularTools.length
+    });
+
+    console.log('[CHAT-GRPC-API] [DEBUG] Skill reference tools:', JSON.stringify(skillReferenceTools, null, 2));
+    console.log('[CHAT-GRPC-API] [DEBUG] Regular tools:', JSON.stringify(regularTools.map(t => ({ name: t.name, configType: t.config?.type })), null, 2));
+
+    // 5.1 Enrich regular tools with user API key for chat-based tool execution
+    let enrichedRegularTools: any[] = regularTools;
+    if (regularTools.length > 0 && userId) {
       try {
         console.log('[CHAT-GRPC-API] Starting tool enrichment with user API key');
 
@@ -398,8 +414,8 @@ export async function POST(req: NextRequest) {
         }
 
         if (userApiKey) {
-          // Convert plain tools to ToolConfig Value Objects
-          const toolConfigs = tools.map((tool: any) => ToolConfig.fromPlain(tool));
+          // Convert plain tools to ToolConfig Value Objects (only regular tools, NOT skill references)
+          const toolConfigs = regularTools.map((tool: any) => ToolConfig.fromPlain(tool));
 
           // Use application service to enrich tools with user API key
           const toolConfigService = getToolConfigurationApplicationService();
@@ -412,21 +428,21 @@ export async function POST(req: NextRequest) {
 
           if (enrichResult.success && enrichResult.data) {
             // Convert back to plain objects for gRPC transmission
-            enrichedTools = enrichResult.data.enrichedTools.map((tc: ToolConfig) => tc.toPlain());
+            enrichedRegularTools = enrichResult.data.enrichedTools.map((tc: ToolConfig) => tc.toPlain());
 
             console.log('[CHAT-GRPC-API] Tool enrichment result:', {
-              toolCount: enrichedTools.length,
+              toolCount: enrichedRegularTools.length,
               userApiKeyProvided: enrichResult.data.userApiKeyProvided,
-              toolNames: enrichedTools.map(t => t.name)
+              toolNames: enrichedRegularTools.map(t => t.name)
             });
 
             // Debug: Log first tool's config to verify api_key is present
-            if (enrichedTools.length > 0) {
+            if (enrichedRegularTools.length > 0) {
               console.log('[CHAT-GRPC-API] First enriched tool config sample:', {
-                name: enrichedTools[0].name,
-                hasApiKey: !!enrichedTools[0].config?.api_key,
-                apiKeyPresent: enrichedTools[0].config?.api_key ? 'YES' : 'NO',
-                configKeys: Object.keys(enrichedTools[0].config || {})
+                name: enrichedRegularTools[0].name,
+                hasApiKey: !!enrichedRegularTools[0].config?.api_key,
+                apiKeyPresent: enrichedRegularTools[0].config?.api_key ? 'YES' : 'NO',
+                configKeys: Object.keys(enrichedRegularTools[0].config || {})
               });
             }
           } else {
@@ -442,14 +458,75 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Combine enriched regular tools with unchanged skill references
+    const enrichedTools = [...enrichedRegularTools, ...skillReferenceTools];
+
+    // 5.2 Enrich skill references with full skill definitions
+    let enrichedSkills: any[] = [];
+    // Use the already-separated skillReferenceTools (preserves type: 'skill_reference')
+    const skillTools = skillReferenceTools;
+
+    if (skillTools.length > 0) {
+      try {
+        console.log('[CHAT-GRPC-API] Loading skills by ID:', skillTools.map(s => s.config.skill_id));
+
+        const skillService = getSkillApplicationService();
+
+        for (const skillTool of skillTools) {
+          // Extract skill ID from config - MUST be provided by frontend
+          const skillId = parseInt(skillTool.config.skill_id, 10);
+
+          // Direct ID lookup - fast, no ambiguity
+          const skillResult = await skillService.getSkill(skillId);
+
+          if (skillResult.success && skillResult.data) {
+            const skill = skillResult.data;
+
+            // Convert skill to enriched format with full data
+            enrichedSkills.push({
+              id: skill.id,
+              name: skill.name,
+              description: skill.description,
+              instructions: skill.instructions,
+              inputs: skill.inputs,
+              outputs: skill.outputs,
+              tools: skill.tools,
+              content: skill.content || [], // Message parts (attachments)
+              model: skill.model || null // Model override for this skill
+            });
+
+            console.log('[CHAT-GRPC-API] Loaded skill by ID:', {
+              skillId: skillId,
+              name: skill.name,
+              hasInstructions: !!skill.instructions,
+              toolCount: skill.tools?.length || 0,
+              contentCount: skill.content?.length || 0
+            });
+          } else {
+            console.warn('[CHAT-GRPC-API] Skill not found for ID:', skillId);
+          }
+        }
+
+        console.log('[CHAT-GRPC-API] Enriched skills:', enrichedSkills.length);
+      } catch (error) {
+        console.error('[CHAT-GRPC-API] Error loading skills:', error);
+        // Continue without skills if enrichment fails
+      }
+    }
+
+    // Filter out skills from tools array (they go in separate skills array)
+    const nonSkillTools = enrichedTools.filter((t: any) => t.config?.type !== 'skill_reference');
+
     const processingOptions: ChatProcessingOptions = {
       domainType: resolvedDomainType,
       domainId: resolvedDomainId,
-      tools: enrichedTools, // DDD-enriched tools with user API key authentication
+      tools: nonSkillTools, // DDD-enriched tools with user API key authentication (excluding skills)
+      skills: enrichedSkills, // Fully resolved skill definitions
       defaultModel: defaultModel // Organization's default AI model
     };
 
-    console.log('[CHAT-GRPC-API] Chat processing options:', processingOptions);
+    console.log('[CHAT-GRPC-API] [DEBUG] Processing options - nonSkillTools:', JSON.stringify(nonSkillTools.map(t => ({ name: t.name, configType: t.config?.type, configKeys: Object.keys(t.config || {}) })), null, 2));
+    console.log('[CHAT-GRPC-API] [DEBUG] Processing options - enrichedSkills:', JSON.stringify(enrichedSkills.map(s => ({ id: s.id, name: s.name })), null, 2));
 
     // 6. Set up streaming response
     let fullAssistantResponse = '';

@@ -71,6 +71,7 @@ export interface Skill {
   readonly instructions: string;
   readonly tools: ToolConfig[];
   readonly content?: MessagePart[]; // Skill-level attachments (images, files, text)
+  readonly model?: string | null; // Optional: Override model for this skill
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -88,6 +89,7 @@ export interface CreateSkillProps {
   instructions: string;
   tools?: ToolConfig[];
   content?: MessagePart[];
+  model?: string | null; // Optional: Override model for this skill
 }
 
 /**
@@ -101,6 +103,7 @@ export interface UpdateSkillProps {
   instructions?: string;
   tools?: ToolConfig[];
   content?: MessagePart[];
+  model?: string | null; // Optional: Override model for this skill
 }
 
 /**
