@@ -75,6 +75,9 @@ export interface ToolDTO {
 
   // Database tools
   databaseId?: string
+
+  // Skill tools
+  skillId?: number
 }
 
 /**

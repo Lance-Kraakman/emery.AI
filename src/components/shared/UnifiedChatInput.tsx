@@ -135,7 +135,8 @@ export function UnifiedChatInput<T = ToolDTO>({
       atMatch[0].startsWith('@file:') ||
       atMatch[0].startsWith('@agent:') ||
       atMatch[0].startsWith('@table:') ||
-      atMatch[0].startsWith('@database:')
+      atMatch[0].startsWith('@database:') ||
+      atMatch[0].startsWith('@skill:')
     );
 
     if (atMatch && !isCompletedTool) {
@@ -348,11 +349,10 @@ export function UnifiedChatInput<T = ToolDTO>({
             <Badge
               key={`existing-${index}`}
               variant="secondary"
-              className="flex items-center gap-2 px-2 py-1 max-w-[200px]"
+              className="flex items-center gap-2 px-2 py-1 max-w-[400px]"
             >
               {attachment.type === 'image' ? <ImageIcon className="w-3 h-3" /> : <FileIcon className="w-3 h-3" />}
               <span className="text-xs truncate flex-1">{attachment.filename}</span>
-              {attachment.size && <span className="text-xs text-muted-foreground">{formatFileSize(attachment.size)}</span>}
               <Button
                 variant="ghost"
                 size="sm"
@@ -368,11 +368,10 @@ export function UnifiedChatInput<T = ToolDTO>({
             <Badge
               key={`pending-${index}`}
               variant="secondary"
-              className="flex items-center gap-2 px-2 py-1 max-w-[200px]"
+              className="flex items-center gap-2 px-2 py-1 max-w-[400px]"
             >
               {getFileIcon(file)}
               <span className="text-xs truncate flex-1">{file.name}</span>
-              <span className="text-xs text-muted-foreground">{formatFileSize(file.size)}</span>
               <Button
                 variant="ghost"
                 size="sm"

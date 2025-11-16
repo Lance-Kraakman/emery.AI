@@ -11,6 +11,7 @@ import type { SkillInput, SkillOutput, ToolConfigDTO } from '@/app/mappers/skill
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
+import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 
 /**
  * Server Actions for Skill Management
@@ -198,6 +199,7 @@ export async function updateSkill(
     outputs?: SkillOutput[];
     instructions?: string;
     tools?: ToolConfigDTO[];
+    content?: MessagePart[]; // Skill-level attachments
   }
 ): Promise<Result<SkillDTO>> {
   try {

@@ -124,6 +124,26 @@ export function mapReferenceToolToDTO(referenceTool: ReferenceTool): ToolDTO {
       databaseId: dbConfig.databaseId,
       organizationId: dbConfig.organizationId
     }
+  } else if (referenceTool.toolConfig.isSkillTool()) {
+    const skillConfig = referenceTool.toolConfig.getSkillConfig()!
+    runtimeValues = {
+      skillId: skillConfig.skillId,
+      organizationId: skillConfig.organizationId
+    }
+  }
+
+  // Convert skill inputs to parameters format for insert text generation
+  let parameters: Record<string, { type: string; description?: string; required: boolean }> = {}
+  if (referenceTool.toolConfig.isSkillTool()) {
+    const skillConfig = referenceTool.toolConfig.getSkillConfig()!
+    const skillInputs = skillConfig.inputs || []
+
+    for (const input of skillInputs) {
+      parameters[input.name] = {
+        type: input.type || 'text',
+        required: input.required
+      }
+    }
   }
 
   return {
@@ -139,10 +159,10 @@ export function mapReferenceToolToDTO(referenceTool: ReferenceTool): ToolDTO {
     supportsArtifacts: referenceTool.supportsArtifacts(),
     type: 'reference',
     // Construct ToolDefinitionData for reference tools
-    // Reference tools are data pointers, not executable tools, so they have no parameters
+    // Reference tools are data pointers, not executable tools (except skills which have parameters)
     config: {
-      type: 'reference',
-      parameters: {},  // No parameters - reference tools are data pointers
+      type: referenceTool.toolConfig.isSkillTool() ? 'skill_reference' : 'reference',
+      parameters,  // Populated for skills with their inputs
       implementation: {
         type: 'reference',
         backend_class: 'ReferencePointer',

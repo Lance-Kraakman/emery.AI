@@ -10,6 +10,7 @@
  */
 
 import type { AgentId, UserId, OrganizationId } from '@/ddd/domain/shared/value-objects'
+import type { SkillInput } from '@/ddd/domain/skills/entities/skill'
 
 /**
  * Base configuration interface
@@ -86,6 +87,7 @@ export interface SkillToolConfig extends BaseToolConfig {
   skillId: number
   organizationId: number
   agentId?: number // Optional: null for org skills, number for agent-scoped skills
+  inputs?: SkillInput[] // Skill inputs for parameter placeholders
 }
 
 /**
@@ -263,12 +265,14 @@ export class ToolConfig {
     skillId: number,
     organizationId: number,
     agentId?: number,
-    version: string = '1.0'
+    version: string = '1.0',
+    inputs?: SkillInput[]
   ): ToolConfig {
     const config: SkillToolConfig = {
       skillId,
       organizationId,
-      agentId
+      agentId,
+      inputs
     }
     return new ToolConfig(name, config)
   }

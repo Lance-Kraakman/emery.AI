@@ -414,7 +414,7 @@ export default function PageEditPage() {
                 themeMode: "page",
               }),
               header: ({ children, actions }) => (
-                <div className="bg-transparent">{actions}</div>
+                <div className="bg-transparent">{children}</div>
               ),
               puck: ({ children }) => (
                 <div className="puck-themed-wrapper">

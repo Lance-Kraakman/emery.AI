@@ -7,10 +7,11 @@ source of truth for both frontend and backend tool configurations.
 
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable
 from pathlib import Path
 
-from ..grpc.generated.agent_worker_pb2 import ToolConfig
+from ..grpc.generated.agent_worker_pb2 import ToolConfig, AgentConfig, SkillConfig
+from ..tools.skill_tool import SkillTool
 
 
 class UnifiedToolLoader:
@@ -77,8 +78,67 @@ class UnifiedToolLoader:
         """Get tool configuration by ID."""
         return self.tool_lookup.get(tool_id)
 
-    def load_tool(self, tool_config: ToolConfig, api_key: str = "", api_key_mode: str = "agent") -> Any:
-        """Load a tool instance from ToolConfig using unified metadata."""
+    def _find_skill_by_id(self, skills: List[SkillConfig], skill_id: int) -> Optional[SkillConfig]:
+        """
+        Find a skill in the skills list by ID.
+
+        Args:
+            skills: List of SkillConfig proto objects
+            skill_id: ID of the skill to find
+
+        Returns:
+            SkillConfig if found, None otherwise
+        """
+        if not skills:
+            return None
+
+        for skill in skills:
+            if skill.id == skill_id:
+                return skill
+
+        return None
+
+    def load_tool(
+        self,
+        tool_config: ToolConfig,
+        api_key: str = "",
+        api_key_mode: str = "agent",
+        agent_config: Optional[AgentConfig] = None,
+        skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None
+    ) -> Any:
+        """
+        Load a tool instance from ToolConfig using unified metadata.
+
+        Args:
+            tool_config: Tool configuration from proto
+            api_key: API key for tool authentication
+            api_key_mode: API key mode ("agent" or "user")
+            agent_config: Optional AgentConfig containing skills list
+            skill_executor: Optional callback for executing skills
+
+        Returns:
+            Tool instance (either regular tool or SkillTool)
+        """
+        # Check if this is a skill_reference tool
+        if 'type' in tool_config.config and tool_config.config['type'] == 'skill_reference':
+            if not agent_config or not skill_executor:
+                raise ValueError(f"Skill reference tool '{tool_config.name}' requires agent_config and skill_executor")
+
+            # Extract skill ID from config
+            if 'skill_id' not in tool_config.config:
+                raise ValueError(f"Skill reference tool '{tool_config.name}' missing skill_id in config")
+
+            skill_id = int(tool_config.config['skill_id'])
+
+            # Find the skill in agent_config.skills by ID
+            skill_config = self._find_skill_by_id(list(agent_config.skills), skill_id)
+            if not skill_config:
+                raise ValueError(f"Skill with ID {skill_id} not found in agent_config.skills")
+
+            # Create and return SkillTool
+            return SkillTool(skill_config, skill_executor)
+
+        # Regular tool loading (existing logic)
         # Convert tool name from hyphen to underscore format for lookup (frontend uses hyphens, backend uses underscores)
         tool_name_lookup = tool_config.name.replace("-", "_")
 
@@ -333,7 +393,9 @@ class UnifiedToolLoader:
         self,
         tool_configs: List[ToolConfig],
         api_key: Optional[str] = None,
-        api_key_mode: str = "agent"
+        api_key_mode: str = "agent",
+        agent_config: Optional[AgentConfig] = None,
+        skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None
     ) -> List[Any]:
         """
         Load smolagents tools from ToolConfig protobuf objects.
@@ -345,6 +407,8 @@ class UnifiedToolLoader:
             tool_configs: List of ToolConfig protobuf objects
             api_key: Optional API key for tool authentication
             api_key_mode: API key mode ("agent" or "user")
+            agent_config: Optional AgentConfig containing skills list
+            skill_executor: Optional callback for executing skills
 
         Returns:
             List of successfully loaded tool instances
@@ -367,7 +431,13 @@ class UnifiedToolLoader:
                 tool_api_key = tool_config.config.get('api_key', api_key) if tool_config.config else api_key
                 logger.info(f"  Extracted API key from config: present={bool(tool_api_key)}")
 
-                tool_instance = self.load_tool(tool_config, api_key=tool_api_key or "", api_key_mode=api_key_mode)
+                tool_instance = self.load_tool(
+                    tool_config,
+                    api_key=tool_api_key or "",
+                    api_key_mode=api_key_mode,
+                    agent_config=agent_config,
+                    skill_executor=skill_executor
+                )
                 smolagents_tools.append(tool_instance)
                 logger.info(f"✅ Successfully loaded tool: {tool_config.name}")
             except Exception as tool_error:

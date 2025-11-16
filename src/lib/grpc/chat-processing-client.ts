@@ -44,6 +44,7 @@ export interface ChatProcessingOptions {
   domainType?: string;
   domainId?: number;
   tools?: ToolConfig[];          // Available tools for the chat
+  skills?: any[];                // Fully resolved skill definitions with instructions, tools, inputs, outputs, content
   defaultModel?: string | null;  // Organization's default AI model
 }
 
@@ -110,6 +111,56 @@ export class ChatProcessingClient {
     const protoMessageParts = toProtoMessageParts(messageParts);
     console.log(`[CHAT-GRPC-CLIENT] Converted to ${protoMessageParts.length} proto message parts`);
 
+    // Build AgentConfig with tools and skills
+    const systemTools = (options.tools || []).map(tool => ({
+      name: tool.name,
+      version: '', // Empty version since ToolConfig no longer has version
+      config: tool.config || {}
+    }));
+
+    // Create skill reference tools for LLM to call
+    const skillReferenceTools = (options.skills || []).map(skill => ({
+      name: `skill-${skill.name}`,
+      version: '',
+      config: {
+        type: 'skill_reference',
+        skill_id: skill.id.toString()  // Use ID for lookup
+      }
+    }));
+
+    // Combine system tools and skill reference tools
+    const allTools = [...systemTools, ...skillReferenceTools];
+
+    // Build full SkillConfig definitions
+    const skillConfigs = (options.skills || []).map(skill => ({
+      id: skill.id,  // Include skill ID
+      name: skill.name,
+      description: skill.description || '',
+      inputs: skill.inputs || [],
+      outputs: skill.outputs || [],
+      instructions: skill.instructions || '',
+      tools: (skill.tools || []).map((t: any) => ({
+        name: t.name,
+        version: '',
+        config: t.config || {}
+      })),
+      model: skill.model || '',
+      content: skill.content || []
+    }));
+
+    const agentConfig = {
+      name: '', // Chat agents don't have a specific name
+      role: '',
+      description: '',
+      persona: '',
+      tools: allTools,
+      servers: [],
+      skills: skillConfigs,
+      defaultModel: options.defaultModel || ''
+    };
+
+    console.log(`[CHAT-GRPC-CLIENT] Built AgentConfig with ${allTools.length} tools (${systemTools.length} system + ${skillReferenceTools.length} skill refs) and ${skillConfigs.length} skills`);
+
     // Build request
     const request: ProcessMessageRequest = {
       context: undefined, // Will set below if needed
@@ -117,14 +168,10 @@ export class ChatProcessingClient {
       userId: userId,
       organizationId: organizationId,
       conversationHistory: conversationHistory,
+      agentConfig: agentConfig,
       model: options.defaultModel || '', // Pass organization's default model or empty string for system default
       messageId: actualMessageId, // Add message ID for cancellation tracking
-      sessionId: actualSessionId, // Session ID for stateful agent persistence
-      tools: (options.tools || []).map(tool => ({
-        name: tool.name,
-        version: '', // Empty version since ToolConfig no longer has version
-        config: tool.config || {}
-      })) // Add tools from options
+      sessionId: actualSessionId // Session ID for stateful agent persistence
     };
 
     // Add context if provided
