@@ -5,11 +5,12 @@ import { X, Save, Loader2, CheckCircle2 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { ToolConfigDTO } from '@/app/mappers/skill-mapper';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import { createTask } from '@/app/actions/tasks';
+import { createTask, uploadTaskAttachment } from '@/app/actions/tasks';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
+import type { ImageAttachment, FileAttachment } from '@/ddd/domain/tasks/entities/task';
 
 interface TaskAssignmentModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export function TaskAssignmentModal({ isOpen, onClose, agent, onSuccess }: TaskA
   const [taskName, setTaskName] = useState('');
   const [instructions, setInstructions] = useState('');
   const [tools, setTools] = useState<ToolConfigDTO[]>([]);
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
@@ -32,10 +34,20 @@ export function TaskAssignmentModal({ isOpen, onClose, agent, onSuccess }: TaskA
       setTaskName('');
       setInstructions('');
       setTools([]);
+      setPendingAttachments([]);
       setSaveStatus('idle');
       setErrorMessage('');
     }
   }, [isOpen]);
+
+  // Attachment handlers
+  const handleAttachmentAdd = (file: File) => {
+    setPendingAttachments(prev => [...prev, file]);
+  };
+
+  const handleAttachmentRemove = (index: number) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleSave = async () => {
     try {
@@ -59,17 +71,50 @@ export function TaskAssignmentModal({ isOpen, onClose, agent, onSuccess }: TaskA
         throw new Error(`Validation failed: ${errorMsg}`);
       }
 
+      // Upload attachments to S3 if present
+      const imageAttachments: ImageAttachment[] = [];
+      const fileAttachments: FileAttachment[] = [];
+
+      if (pendingAttachments.length > 0) {
+        for (const file of pendingAttachments) {
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const uploadResult = await uploadTaskAttachment(agent.id, formData);
+
+          if (!uploadResult.success) {
+            throw new Error(`Failed to upload ${file.name}: ${uploadResult.error}`);
+          }
+
+          const { url, s3Key, type } = uploadResult.data!;
+
+          if (type === 'image') {
+            imageAttachments.push({ url, s3Key });
+          } else {
+            fileAttachments.push({
+              type: 'document',
+              url,
+              filename: file.name,
+              mimeType: file.type,
+              preprocessed: true
+            });
+          }
+        }
+      }
+
       // Convert ToolConfigDTO[] to ToolConfig[] for domain layer
       const domainTools = tools.length > 0
         ? tools.map(t => ToolConfig.create(t.name, t.config || {}))
         : undefined;
 
-      // Create task
+      // Create task with attachments
       const result = await createTask({
         agentId: agent.id,
         name: taskName.trim(),
         instructions: {
           task: instructions.trim(),
+          images: imageAttachments.length > 0 ? imageAttachments : undefined,
+          attachments: fileAttachments.length > 0 ? fileAttachments : undefined,
           tools: domainTools,
           metadata: {}
         }
@@ -161,7 +206,10 @@ export function TaskAssignmentModal({ isOpen, onClose, agent, onSuccess }: TaskA
               mode="form"
               minHeight="200px"
               enableSendButton={false}
-              enableAttachments={false}
+              enableAttachments={true}
+              pendingAttachments={pendingAttachments}
+              onAttachmentAdd={handleAttachmentAdd}
+              onAttachmentRemove={handleAttachmentRemove}
             />
           </div>
 

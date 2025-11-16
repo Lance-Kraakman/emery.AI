@@ -19,6 +19,7 @@ import { taskToDTO } from '@/app/mappers/task-mapper';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { getOrganizationRepository } from '@/ddd/application/di/container';
+import { InstructionTemplateService } from '@/ddd/domain/tasks/services/instruction-template-service';
 
 const logger = createDebugLogger('AgentTaskService');
 
@@ -181,10 +182,16 @@ export class AgentTaskApplicationService {
         startedAt: task.startedAt
       });
 
-      // 5. Execute via execution repository
+      // 5. Expand template variables in instructions
+      const expandedInstructions = InstructionTemplateService.expandTemplate(
+        task.instructions.task,
+        task.triggerContext
+      );
+
+      // 6. Execute via execution repository
       const executionRequest: AgentExecutionRequest = {
         agentId: task.agentId.value,
-        instructions: task.instructions.task,
+        instructions: expandedInstructions,
         tools: task.instructions.tools,
         executionId: task.id.value,
         organizationId: task.organizationId.value,

@@ -34,6 +34,9 @@ import {
 } from '../trigger-utils';
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
 import type { ScheduleConfigurationDTO } from '@/app/dtos/schedule.dto';
+import { uploadTaskAttachment } from '@/app/actions/tasks';
+import type { ImageAttachment, FileAttachment } from '@/ddd/domain/tasks/entities/task';
+import { InstructionTemplateService } from '@/ddd/domain/tasks/services/instruction-template-service';
 
 interface TriggerConfigModalProps {
   isOpen: boolean;
@@ -111,6 +114,7 @@ export function TriggerConfigModal({
   const [scheduleName, setScheduleName] = useState('');
   const [taskInstructions, setTaskInstructions] = useState('');
   const [taskTools, setTaskTools] = useState<any[]>([]); // ToolConfigDTO[]
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
 
   // Initialize with current schedule or start fresh for create mode
   useEffect(() => {
@@ -126,6 +130,7 @@ export function TriggerConfigModal({
       setScheduleName('');
       setTaskInstructions('');
       setTaskTools([]);
+      setPendingAttachments([]);
       setCurrentStep('select');
     } else if (mode === 'edit' && agent.schedules[scheduleIndex]) {
       // Load existing schedule for editing
@@ -164,6 +169,15 @@ export function TriggerConfigModal({
   const handleTypeSelect = (type: TriggerType) => {
     setSelectedType(type);
     setCurrentStep('configure');
+  };
+
+  // Attachment handlers
+  const handleAttachmentAdd = (file: File) => {
+    setPendingAttachments(prev => [...prev, file]);
+  };
+
+  const handleAttachmentRemove = (index: number) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSave = async () => {
@@ -246,11 +260,51 @@ export function TriggerConfigModal({
         serialized: triggerConfig.toJSON()
       });
 
+      // Upload attachments to S3 if present
+      const imageAttachments: ImageAttachment[] = [];
+      const fileAttachments: FileAttachment[] = [];
+
+      if (pendingAttachments.length > 0) {
+        console.log('[TriggerConfigModal] Uploading attachments', { count: pendingAttachments.length });
+
+        for (const file of pendingAttachments) {
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const uploadResult = await uploadTaskAttachment(agent.id, formData);
+
+          if (!uploadResult.success) {
+            throw new Error(`Failed to upload ${file.name}: ${uploadResult.error}`);
+          }
+
+          const { url, s3Key, type } = uploadResult.data!;
+
+          if (type === 'image') {
+            imageAttachments.push({ url, s3Key });
+          } else {
+            fileAttachments.push({
+              type: 'document',
+              url,
+              filename: file.name,
+              mimeType: file.type,
+              preprocessed: true
+            });
+          }
+        }
+
+        console.log('[TriggerConfigModal] Attachments uploaded', {
+          imageCount: imageAttachments.length,
+          fileCount: fileAttachments.length
+        });
+      }
+
       // Step 2: Create ScheduleConfigurationDTO with trigger + task instructions
       const newSchedule: ScheduleConfigurationDTO = {
         trigger: triggerConfig.toJSON() as any, // AIDEV-NOTE: toJSON() returns plain object compatible with TriggerConfigDTO
         taskInstructions: {
           task: taskInstructions,
+          images: imageAttachments.length > 0 ? imageAttachments : undefined,
+          attachments: fileAttachments.length > 0 ? fileAttachments : undefined,
           tools: taskTools,
           metadata: {}
         },
@@ -655,6 +709,44 @@ export function TriggerConfigModal({
               </p>
             </div>
 
+            {/* Variables Section */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Variables</Label>
+              <div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg border">
+                {InstructionTemplateService.getAvailableVariables(selectedType).map((variable) => (
+                  <Badge
+                    key={variable.name}
+                    variant="secondary"
+                    className="cursor-pointer hover:bg-secondary/80 transition-colors text-xs font-mono"
+                    onClick={() => {
+                      // Insert variable at cursor position
+                      const input = document.getElementById('schedule-task-instructions') as HTMLTextAreaElement;
+                      if (input) {
+                        const start = input.selectionStart;
+                        const end = input.selectionEnd;
+                        const text = taskInstructions;
+                        const before = text.substring(0, start);
+                        const after = text.substring(end);
+                        const variableText = `\${${variable.name}}`;
+                        setTaskInstructions(before + variableText + after);
+                        // Set cursor position after inserted text
+                        setTimeout(() => {
+                          input.focus();
+                          input.setSelectionRange(start + variableText.length, start + variableText.length);
+                        }, 0);
+                      }
+                    }}
+                    title={variable.description}
+                  >
+                    ${variable.name}
+                  </Badge>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Click a variable to insert it into your instructions. Variables will be replaced with actual values when the task runs.
+              </p>
+            </div>
+
             {/* Task Instructions with @ Tool Mentions */}
             <div className="space-y-2">
               <UnifiedChatInput
@@ -662,14 +754,18 @@ export function TriggerConfigModal({
                 onChange={setTaskInstructions}
                 tools={taskTools}
                 onToolsChange={setTaskTools}
+                variables={InstructionTemplateService.getAvailableVariables(selectedType)}
                 label="Task Instructions *"
                 helpText="Define what task should be created when this schedule triggers. Use @ to reference tools, documents, files, or agents."
-                placeholder="Describe the task to execute... (Type @ to add tools)"
+                placeholder="Describe the task to execute... (Type @ to add tools or $ for variables)"
                 id="schedule-task-instructions"
                 mode="form"
                 minHeight="200px"
                 enableSendButton={false}
-                enableAttachments={false}
+                enableAttachments={true}
+                pendingAttachments={pendingAttachments}
+                onAttachmentAdd={handleAttachmentAdd}
+                onAttachmentRemove={handleAttachmentRemove}
               />
             </div>
 
