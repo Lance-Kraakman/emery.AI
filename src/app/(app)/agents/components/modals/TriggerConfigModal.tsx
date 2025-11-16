@@ -37,6 +37,7 @@ import type { ScheduleConfigurationDTO } from '@/app/dtos/schedule.dto';
 import { uploadTaskAttachment } from '@/app/actions/tasks';
 import type { ImageAttachment, FileAttachment } from '@/ddd/domain/tasks/entities/task';
 import { InstructionTemplateService } from '@/ddd/domain/tasks/services/instruction-template-service';
+import { getSampleRow } from '@/app/actions/rows';
 
 interface TriggerConfigModalProps {
   isOpen: boolean;
@@ -116,6 +117,10 @@ export function TriggerConfigModal({
   const [taskTools, setTaskTools] = useState<any[]>([]); // ToolConfigDTO[]
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
 
+  // Sample data for database triggers
+  const [sampleRowData, setSampleRowData] = useState<Record<string, any> | null>(null);
+  const [isLoadingSampleData, setIsLoadingSampleData] = useState(false);
+
   // Initialize with current schedule or start fresh for create mode
   useEffect(() => {
     if (!isOpen) return;
@@ -165,6 +170,34 @@ export function TriggerConfigModal({
       setCurrentStep('select');
     }
   }, [isOpen, agent, mode, scheduleIndex]);
+
+  // Fetch sample row data when table is selected for database triggers
+  useEffect(() => {
+    const fetchSampleData = async () => {
+      if (selectedType !== 'DATABASE_EVENT' || !databaseConfig.tableId) {
+        setSampleRowData(null);
+        return;
+      }
+
+      setIsLoadingSampleData(true);
+      try {
+        const result = await getSampleRow(parseInt(databaseConfig.tableId));
+        if (result.success && result.data) {
+          setSampleRowData(result.data.sampleData);
+        } else {
+          console.error('Failed to fetch sample row:', result.error);
+          setSampleRowData(null);
+        }
+      } catch (error) {
+        console.error('Error fetching sample row:', error);
+        setSampleRowData(null);
+      } finally {
+        setIsLoadingSampleData(false);
+      }
+    };
+
+    fetchSampleData();
+  }, [selectedType, databaseConfig.tableId]);
 
   const handleTypeSelect = (type: TriggerType) => {
     setSelectedType(type);
@@ -694,9 +727,19 @@ export function TriggerConfigModal({
           <div className="space-y-6">
             {/* Schedule Name */}
             <div className="space-y-2">
-              <Label htmlFor="schedule-name" className="text-base font-medium">
-                Schedule Name *
-              </Label>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="schedule-name" className="text-base font-medium">
+                  Schedule Name *
+                </Label>
+                <div className="group relative">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
+                    <p className="text-foreground">
+                      Give this schedule a descriptive name to identify it easily
+                    </p>
+                  </div>
+                </div>
+              </div>
               <Input
                 id="schedule-name"
                 value={scheduleName}
@@ -704,14 +747,52 @@ export function TriggerConfigModal({
                 placeholder="e.g., Daily Sales Report, Weekly Data Sync"
                 className="text-base"
               />
-              <p className="text-xs text-muted-foreground">
-                Give this schedule a descriptive name to identify it easily
-              </p>
+            </div>
+
+            {/* Task Instructions with @ Tool Mentions */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium">Task Instructions *</Label>
+                <div className="group relative">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
+                    <p className="text-foreground">
+                      Define what task should be created when this schedule triggers. Use @ to reference tools, documents, files, or agents. When triggered, a new task will be created with these instructions.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <UnifiedChatInput
+                value={taskInstructions}
+                onChange={setTaskInstructions}
+                tools={taskTools}
+                onToolsChange={setTaskTools}
+                variables={InstructionTemplateService.getAvailableVariables(selectedType)}
+                placeholder="Describe the task to execute... (Type @ to add tools or $ for variables)"
+                id="schedule-task-instructions"
+                mode="form"
+                minHeight="70px"
+                enableSendButton={false}
+                enableAttachments={true}
+                pendingAttachments={pendingAttachments}
+                onAttachmentAdd={handleAttachmentAdd}
+                onAttachmentRemove={handleAttachmentRemove}
+              />
             </div>
 
             {/* Variables Section */}
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Variables</Label>
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium">Variables</Label>
+                <div className="group relative">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
+                    <p className="text-foreground">
+                      Click a variable to insert it into your instructions. Variables will be replaced with actual values when the task runs.
+                    </p>
+                  </div>
+                </div>
+              </div>
               <div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg border">
                 {InstructionTemplateService.getAvailableVariables(selectedType).map((variable) => (
                   <Badge
@@ -742,46 +823,49 @@ export function TriggerConfigModal({
                   </Badge>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Click a variable to insert it into your instructions. Variables will be replaced with actual values when the task runs.
-              </p>
             </div>
 
-            {/* Task Instructions with @ Tool Mentions */}
-            <div className="space-y-2">
-              <UnifiedChatInput
-                value={taskInstructions}
-                onChange={setTaskInstructions}
-                tools={taskTools}
-                onToolsChange={setTaskTools}
-                variables={InstructionTemplateService.getAvailableVariables(selectedType)}
-                label="Task Instructions *"
-                helpText="Define what task should be created when this schedule triggers. Use @ to reference tools, documents, files, or agents."
-                placeholder="Describe the task to execute... (Type @ to add tools or $ for variables)"
-                id="schedule-task-instructions"
-                mode="form"
-                minHeight="200px"
-                enableSendButton={false}
-                enableAttachments={true}
-                pendingAttachments={pendingAttachments}
-                onAttachmentAdd={handleAttachmentAdd}
-                onAttachmentRemove={handleAttachmentRemove}
-              />
-            </div>
-
-            {/* Info box explaining the concept */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <Info className="h-5 w-5 text-blue-600 mt-0.5" />
-                <div>
-                  <h4 className="font-medium text-blue-900">What happens when triggered?</h4>
-                  <p className="text-sm text-blue-700 mt-1">
-                    When this schedule triggers, a new task will be created with these instructions.
-                    The task will have access to the tools you've selected using @ mentions.
-                  </p>
+            {/* Sample Data Section - Only for DATABASE_EVENT triggers */}
+            {selectedType === 'DATABASE_EVENT' && databaseConfig.tableId && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">Sample Row Data</Label>
+                  <div className="group relative">
+                    <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
+                      <p className="text-foreground">
+                        Example values from the selected table. Use these to understand what data will be available in your task instructions.
+                      </p>
+                    </div>
+                  </div>
                 </div>
+                {isLoadingSampleData ? (
+                  <div className="p-3 bg-muted/50 rounded-lg border flex items-center justify-center text-sm text-muted-foreground">
+                    Loading sample data...
+                  </div>
+                ) : sampleRowData ? (
+                  <div className="p-3 bg-muted/50 rounded-lg border">
+                    <div className="space-y-1.5">
+                      {Object.entries(sampleRowData).map(([fieldName, value]) => (
+                        <div key={fieldName} className="flex items-start gap-2 text-xs">
+                          <span className="font-mono text-muted-foreground min-w-[120px]">
+                            ${`row.${fieldName}`}
+                          </span>
+                          <span className="text-muted-foreground">→</span>
+                          <span className="font-mono text-foreground">
+                            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-muted/50 rounded-lg border text-sm text-muted-foreground">
+                    No sample data available
+                  </div>
+                )}
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}

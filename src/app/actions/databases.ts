@@ -5,7 +5,7 @@
 
 import { z } from "zod"
 import { revalidatePath } from "next/cache"
-import { requirePermission } from "./permissions"
+import { requirePermission, requireResourcePermission } from "./permissions"
 import { requireCurrentOrganization } from "./user-organizations"
 import { withAuthContext } from '@/lib/auth/with-context';
 import { getDatabaseApplicationService } from "@/ddd/application/di/container"
@@ -56,19 +56,19 @@ export async function getDatabases(searchQuery?: string, hasTables?: boolean): P
 
 export async function getDatabase(id: number): Promise<DatabaseDTO> {
   try {
-    const session = await requirePermission("data:view");
-    
     if (!id) {
       throw new Error("Database ID is required");
     }
-    
+
+    await requireResourcePermission("data:view", "database", id);
+
     const databaseApplicationService = getDatabaseApplicationService();
     const database = await databaseApplicationService.getDatabase(DatabaseId.fromNumber(id));
-    
+
     if (!database) {
       throw new Error("Database not found");
     }
-    
+
     return DatabaseMapper.toDTO(database);
   } catch (error) {
     console.error('Error fetching database:', error)
@@ -90,7 +90,7 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
       description: validatedData.description,
       metadata: validatedData.metadata,
       organizationId: currentOrg.id,
-      createdBy: session.user.id
+      ownerId: session.user.id
     };
 
     const result = await databaseApplicationService.createDatabase(dto);
@@ -132,13 +132,13 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
 
 export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
-
     const validatedData = updateDatabaseSchema.parse(data);
 
     if (!validatedData.id) {
       return { success: false, error: "Database ID is required" };
     }
+
+    await requireResourcePermission("data:manage", "database", validatedData.id);
 
     const databaseApplicationService = getDatabaseApplicationService();
 
@@ -188,13 +188,13 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>,
 
 export async function deleteDatabase(id: number, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
-    const currentOrg = await requireCurrentOrganization();
-    
     if (!id) {
       return { success: false, error: "Database ID is required" };
     }
-    
+
+    await requireResourcePermission("data:manage", "database", id);
+
+    const currentOrg = await requireCurrentOrganization();
     const databaseApplicationService = getDatabaseApplicationService();
     const result = await databaseApplicationService.deleteDatabase(DatabaseId.fromNumber(id), OrganizationId.fromNumber(currentOrg.id));
 
@@ -247,12 +247,15 @@ export async function getDatabaseCount() {
  */
 export async function duplicateDatabase(id: number, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:create");
-    const currentOrg = await requireCurrentOrganization();
-
     if (!id) {
       return { success: false, error: "Database ID is required" };
     }
+
+    // Need to view the original database to duplicate it
+    await requireResourcePermission("data:view", "database", id);
+    // Need create permission for the new database
+    const session = await requirePermission("data:create");
+    const currentOrg = await requireCurrentOrganization();
 
     const databaseApplicationService = getDatabaseApplicationService();
 
@@ -271,7 +274,7 @@ export async function duplicateDatabase(id: number, revalidateUrl?: string): Pro
       description: originalDatabase.description || undefined,
       metadata: originalDatabase.metadata || {},
       organizationId: currentOrg.id,
-      createdBy: session.user.id
+      ownerId: session.user.id
     };
 
     const result = await databaseApplicationService.createDatabase(dto);

@@ -53,7 +53,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         organizationId: data.organizationId.value,
         s3Path: s3Path.path,
         metadata: data.metadata || null,
-        createdBy: data.createdBy.value
+        ownerId: data.ownerId.value
       }).returning();
       
       // Update S3 path with real table ID
@@ -75,7 +75,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         description: tableRecord.metadata?.description,
         metadata: tableRecord.metadata ? TableMetadata.fromDatabase(tableRecord.metadata).data : undefined,
         fields: [],  // Empty fields - system 'id' column exists at Delta Lake level
-        createdBy: tableRecord.createdBy,
+        ownerId: tableRecord.ownerId,
         createdAt: tableRecord.createdAt!,
         updatedAt: tableRecord.updatedAt!
       });
@@ -138,7 +138,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         storageLocation: tableRecord.s3Path,
         description: tableRecord.metadata?.description,
         metadata: tableRecord.metadata ? TableMetadata.fromDatabase(tableRecord.metadata).data : undefined,
-        createdBy: tableRecord.createdBy,
+        ownerId: tableRecord.ownerId,
         createdAt: tableRecord.createdAt!,
         updatedAt: tableRecord.updatedAt!,
         fields: tableFields
@@ -204,7 +204,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           storageLocation: tableRecord.s3Path,
           description: tableRecord.metadata?.description,
           metadata: tableRecord.metadata ? TableMetadata.fromDatabase(tableRecord.metadata).data : undefined,
-          createdBy: tableRecord.createdBy,
+          ownerId: tableRecord.ownerId,
           createdAt: tableRecord.createdAt!,
           updatedAt: tableRecord.updatedAt!,
           fields: tableFields
@@ -235,7 +235,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         storageLocation: record.s3Path,
         description: record.metadata?.description,
         metadata: record.metadata ? TableMetadata.fromDatabase(record.metadata).data : undefined,
-        createdBy: record.createdBy,
+        ownerId: record.ownerId,
         createdAt: record.createdAt!,
         updatedAt: record.updatedAt!,
         fields: [] // Not loaded for bulk operations - use findById for full entity
@@ -784,7 +784,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         storageLocation: record.s3Path,
         description: record.metadata?.description,
         metadata: record.metadata ? TableMetadata.fromDatabase(record.metadata).data : undefined,
-        createdBy: record.createdBy,
+        ownerId: record.ownerId,
         createdAt: record.createdAt!,
         updatedAt: record.updatedAt!,
         fields: [] // Not loaded for bulk operations - use findById for full entity

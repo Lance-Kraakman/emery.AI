@@ -22,7 +22,7 @@ export class PuckPage {
     private _isPublic: boolean,
     private _requiresAuth: boolean,
     private _allowedRoles: string[] | undefined,
-    private readonly _createdBy: UserId,
+    private readonly _ownerId: UserId,
     private readonly _createdAt: Date,
     private _updatedAt: Date
   ) {}
@@ -68,8 +68,12 @@ export class PuckPage {
     return this._allowedRoles ? [...this._allowedRoles] : undefined;
   }
 
+  get ownerId(): UserId {
+    return this._ownerId;
+  }
+
   get createdBy(): UserId {
-    return this._createdBy;
+    return this._ownerId; // Backward compatibility alias
   }
 
   get createdAt(): Date {
@@ -259,7 +263,7 @@ export class PuckPage {
     isPublic: boolean;
     requiresAuth: boolean;
     allowedRoles?: string[];
-    createdBy: string;
+    ownerId: string;
     createdAt: Date;
     updatedAt: Date;
   }): PuckPage {
@@ -300,7 +304,7 @@ export class PuckPage {
       data.isPublic,
       data.requiresAuth,
       data.allowedRoles,
-      UserId.fromString(data.createdBy),
+      UserId.fromString(data.ownerId),
       data.createdAt,
       data.updatedAt
     );
@@ -321,7 +325,7 @@ export class PuckPage {
     isPublic: boolean;
     requiresAuth: boolean;
     allowedRoles: string[] | undefined;
-    createdBy: string;
+    ownerId: string;
     createdAt: Date;
     updatedAt: Date;
   } {
@@ -337,7 +341,7 @@ export class PuckPage {
       isPublic: this._isPublic,
       requiresAuth: this._requiresAuth,
       allowedRoles: this._allowedRoles,
-      createdBy: this._createdBy.value,
+      ownerId: this._ownerId.value,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt
     };

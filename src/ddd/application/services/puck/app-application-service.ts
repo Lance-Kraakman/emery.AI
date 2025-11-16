@@ -22,7 +22,7 @@ export interface CreateAppCommand {
   slug: string;
   description?: string;
   organizationId: OrganizationId;
-  createdBy: UserId;
+  ownerId: UserId;
 }
 
 export interface UpdateAppCommand {
@@ -82,7 +82,7 @@ export class AppApplicationService {
         slug: appSlug,
         description: command.description,
         organizationId: command.organizationId,
-        createdBy: command.createdBy
+        ownerId: command.ownerId
       });
 
       // 5. Save to repository

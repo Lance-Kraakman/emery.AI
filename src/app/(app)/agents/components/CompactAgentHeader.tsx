@@ -11,6 +11,8 @@ import { useRouter } from 'next/navigation';
 import { AgentAvatar } from '@/components/agents/AgentAvatar';
 import { createDefaultAgentSkill } from '@/app/actions/skills';
 import { TaskAssignmentModal } from './TaskAssignmentModal';
+import { ShareButton } from '@/components/permissions/ShareButton';
+import { ShareDialog } from '@/components/permissions/ShareDialog';
 
 interface CompactAgentHeaderProps {
   agent: AgentDTO;
@@ -36,6 +38,7 @@ export function CompactAgentHeader({
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const activeSchedules = agent.schedules?.filter(s => s.enabled).length || 0;
   const totalSchedules = agent.schedules?.length || 0;
@@ -264,6 +267,15 @@ export function CompactAgentHeader({
           <Link2 className="h-3.5 w-3.5" />
           Connections ({connections.length})
         </button>
+
+        {/* Share Button */}
+        <ShareButton
+          resourceType="agent"
+          resourceId={agent.id}
+          variant="outline"
+          size="sm"
+          onShare={() => setShareDialogOpen(true)}
+        />
       </div>
 
       {/* Task Assignment Modal */}
@@ -271,6 +283,15 @@ export function CompactAgentHeader({
         isOpen={taskDialogOpen}
         onClose={() => setTaskDialogOpen(false)}
         agent={agent}
+      />
+
+      {/* Share Dialog */}
+      <ShareDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        resourceType="agent"
+        resourceId={agent.id}
+        resourceName={agent.name}
       />
     </div>
   );

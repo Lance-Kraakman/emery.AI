@@ -10,7 +10,7 @@ export interface CreateDatabaseData {
   slug: string;
   metadata?: Record<string, any> | null;
   organizationId: number;
-  createdBy: string;
+  ownerId: string;
 }
 
 export interface UpdateDatabaseData {

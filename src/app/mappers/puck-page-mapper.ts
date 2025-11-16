@@ -17,7 +17,7 @@ export interface PageDTO {
   isPublic: boolean;
   requiresAuth: boolean;
   allowedRoles?: string[];
-  createdBy: string;
+  ownerId: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,7 +39,7 @@ export class PuckPageMapper {
       isPublic: page.isPublic,
       requiresAuth: page.requiresAuth,
       allowedRoles: page.allowedRoles,
-      createdBy: page.createdBy.value,
+      ownerId: page.ownerId.value,
       createdAt: page.createdAt.toISOString(),
       updatedAt: page.updatedAt.toISOString()
     };

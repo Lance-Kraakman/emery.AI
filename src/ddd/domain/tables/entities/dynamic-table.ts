@@ -16,7 +16,7 @@ export class DynamicTable {
     private _description: string | undefined,              // Optional description
     private _metadata: TableMetadata | undefined,         // Metadata using value object
     private _fields: TableField[],                        // Fields owned by this table (mutable within aggregate)
-    private readonly _createdBy: UserId,                   // UUID reference to users.id
+    private readonly _ownerId: UserId,                     // UUID reference to users.id
     private readonly _createdAt: Date | null,
     private _updatedAt: Date | null
   ) {}
@@ -30,7 +30,8 @@ export class DynamicTable {
   get description(): string | undefined { return this._description; }
   get metadata(): TableMetadata | undefined { return this._metadata; }
   get fields(): TableField[] { return [...this._fields]; } // Return copy to maintain encapsulation
-  get createdBy(): UserId { return this._createdBy; }
+  get ownerId(): UserId { return this._ownerId; }
+  get createdBy(): UserId { return this._ownerId; } // Backward compatibility alias
   get createdAt(): Date | null { return this._createdAt ? new Date(this._createdAt) : null; }
   get updatedAt(): Date | null { return this._updatedAt ? new Date(this._updatedAt) : null; }
 
@@ -167,7 +168,7 @@ export class DynamicTable {
     description?: string;
     metadata?: TableMetadata;
     fields: TableField[];
-    createdBy: string;
+    ownerId: string;
     createdAt?: Date | null;
     updatedAt?: Date | null;
   }): DynamicTable {
@@ -180,7 +181,7 @@ export class DynamicTable {
       data.description,
       data.metadata,
       data.fields,
-      UserId.fromString(data.createdBy),
+      UserId.fromString(data.ownerId),
       data.createdAt || null,
       data.updatedAt || null
     );
@@ -196,7 +197,7 @@ export class DynamicTable {
     storageLocation: string;
     metadata?: TableMetadata;
     fields: TableField[];
-    createdBy: string;
+    ownerId: string;
     createdAt: Date | null;
     updatedAt: Date | null;
   } {
@@ -209,7 +210,7 @@ export class DynamicTable {
       storageLocation: this._storageLocation,
       metadata: this._metadata,
       fields: this._fields,
-      createdBy: this._createdBy.value,
+      ownerId: this._ownerId.value,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt
     };

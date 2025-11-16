@@ -14,6 +14,7 @@ export interface CreateTeamData {
   agentIds?: string[] | null;
   databaseId?: string | null;
   organizationId: number;
+  ownerId: string;
 }
 
 export interface UpdateTeamData extends Partial<CreateTeamData> {}

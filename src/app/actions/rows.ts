@@ -662,11 +662,114 @@ export async function deleteRowAction(formData: FormData) {
   const rowId = formData.get('rowId') as string;
 
   const result = await deleteRowData(tableId, rowId);
-  
+
   if (!result.success) {
     throw new Error(result.error);
   }
 
   revalidatePath('/mission-control');
   return result;
+}
+
+/**
+ * Get a sample row from a table for displaying example variable values
+ * If no rows exist, generates default placeholder values based on field types
+ */
+export async function getSampleRow(tableId: number): Promise<Result<{
+  fields: Array<{ id: number; name: string; type: string }>;
+  sampleData: Record<string, any>;
+}>> {
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("tables:view");
+
+      const tableApplicationService = getTableApplicationService();
+
+      // Get table with field definitions
+      const table = await tableApplicationService.getTable(TableId.fromNumber(tableId));
+      if (!table) {
+        return { success: false, error: "Table not found" };
+      }
+
+      // Try to get one sample row
+      const rows = await tableApplicationService.getRows(TableId.fromNumber(tableId), {
+        limit: 1,
+        offset: 0
+      });
+
+      let sampleData: Record<string, any>;
+
+      if (rows.length > 0) {
+        // Use actual row data
+        const row = rows[0];
+        sampleData = row.toNamedObject(table.fields);
+      } else {
+        // Generate default placeholder values based on field types
+        sampleData = {};
+        for (const field of table.fields) {
+          if (field.name === 'id') continue; // Skip ID field
+
+          // Generate default values based on field type
+          switch (field.type) {
+            case 'text':
+            case 'document':
+              sampleData[field.name] = 'Sample text';
+              break;
+            case 'number':
+              sampleData[field.name] = 123;
+              break;
+            case 'boolean':
+              sampleData[field.name] = true;
+              break;
+            case 'date':
+            case 'created-at':
+            case 'last-updated':
+              sampleData[field.name] = new Date().toISOString().split('T')[0];
+              break;
+            case 'single-select':
+              sampleData[field.name] = 'Option 1';
+              break;
+            case 'multi-select':
+              sampleData[field.name] = ['Option 1'];
+              break;
+            case 'autonumber':
+              sampleData[field.name] = 1;
+              break;
+            case 'file':
+              sampleData[field.name] = 'sample-file.pdf';
+              break;
+            case 'relation':
+              sampleData[field.name] = 'Related record';
+              break;
+            case 'embedding':
+              sampleData[field.name] = '[0.1, 0.2, ...]';
+              break;
+            default:
+              sampleData[field.name] = 'Sample value';
+          }
+        }
+      }
+
+      // Return field info and sample data
+      const fieldsInfo = table.fields.map(f => ({
+        id: f.id.value,
+        name: f.name,
+        type: f.type
+      }));
+
+      return {
+        success: true,
+        data: {
+          fields: fieldsInfo,
+          sampleData
+        }
+      };
+    } catch (error) {
+      console.error("Error getting sample row:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to get sample row"
+      };
+    }
+  });
 }

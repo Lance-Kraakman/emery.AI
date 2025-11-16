@@ -18,6 +18,9 @@ import { ViewsSection } from './ViewsSection';
 import { ThemeEditorSheet } from './ThemeEditorSheet';
 import { useRouter } from 'next/navigation';
 import type { ThemeConfigProps } from '@/ddd/domain/puck/value-objects/theme-config';
+import { ShareButton } from '@/components/permissions/ShareButton';
+import { ShareDialog } from '@/components/permissions/ShareDialog';
+import { PermissionsPanel } from '@/components/permissions/PermissionsPanel';
 
 interface AppDetailsViewProps {
   app: AppDTO;
@@ -26,6 +29,7 @@ interface AppDetailsViewProps {
 export function AppDetailsView({ app }: AppDetailsViewProps) {
   const router = useRouter();
   const [themeSheetOpen, setThemeSheetOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [pages, setPages] = useState<PageDTO[]>([]);
   const [loadingPages, setLoadingPages] = useState(true);
   const [dataSources, setDataSources] = useState<ViewDTO[]>([]);
@@ -162,31 +166,39 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
     <div className="space-y-4">
       {/* Header with inline editing */}
       <div className="space-y-1">
-        {isEditingName ? (
-          <Input
-            autoFocus
-            value={editedName}
-            onChange={(e) => setEditedName(e.target.value)}
-            onBlur={handleSaveName}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSaveName();
-              if (e.key === 'Escape') {
-                setEditedName(app.name);
-                setIsEditingName(false);
-              }
-            }}
-            disabled={isSaving}
-            className="text-2xl font-bold h-auto py-1 px-2"
+        <div className="flex items-center justify-between">
+          {isEditingName ? (
+            <Input
+              autoFocus
+              value={editedName}
+              onChange={(e) => setEditedName(e.target.value)}
+              onBlur={handleSaveName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveName();
+                if (e.key === 'Escape') {
+                  setEditedName(app.name);
+                  setIsEditingName(false);
+                }
+              }}
+              disabled={isSaving}
+              className="text-2xl font-bold h-auto py-1 px-2 flex-1"
+            />
+          ) : (
+            <h2
+              className="text-2xl font-bold cursor-pointer hover:text-primary transition-colors"
+              onClick={() => setIsEditingName(true)}
+              title="Click to edit name"
+            >
+              {app.name}
+            </h2>
+          )}
+
+          <ShareButton
+            resourceType="app"
+            resourceId={app.id}
+            onShare={() => setShareDialogOpen(true)}
           />
-        ) : (
-          <h2
-            className="text-2xl font-bold cursor-pointer hover:text-primary transition-colors"
-            onClick={() => setIsEditingName(true)}
-            title="Click to edit name"
-          >
-            {app.name}
-          </h2>
-        )}
+        </div>
 
         <div className="flex items-center gap-1">
           <span className="text-sm text-muted-foreground">/</span>
@@ -268,6 +280,13 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
         onViewsChange={loadDataSources}
       />
 
+      {/* Permissions Panel */}
+      <PermissionsPanel
+        resourceType="app"
+        resourceId={app.id}
+        resourceName={app.name}
+      />
+
       {/* Theme Editor Sheet */}
       <ThemeEditorSheet
         open={themeSheetOpen}
@@ -275,6 +294,15 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
         initialTheme={app.themeConfig || undefined}
         onSave={handleSaveAppTheme}
         mode="app"
+      />
+
+      {/* Share Dialog */}
+      <ShareDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        resourceType="app"
+        resourceId={app.id}
+        resourceName={app.name}
       />
     </div>
   );

@@ -4,7 +4,7 @@
 // Uses application service for business logic and validation
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "./permissions";
+import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
@@ -43,7 +43,7 @@ export async function createTable(data: CreateTableData & { databaseId: number; 
       name,
       databaseId: DatabaseId.fromNumber(databaseId),
       organizationId: OrganizationId.fromNumber(currentOrg.id),
-      createdBy: UserId.fromString(session.user.id),
+      ownerId: UserId.fromString(session.user.id),
       description,
       metadata: {}
     };
@@ -127,15 +127,15 @@ export async function updateTable(
   revalidateUrl?: string
 ): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
-    const currentOrg = await requireCurrentOrganization();
-
     if (!tableId) {
       return {
         success: false,
         error: "Table ID is required",
       };
     }
+
+    await requireResourcePermission("data:manage", "table", tableId);
+    const currentOrg = await requireCurrentOrganization();
 
     const tableApplicationService = getTableApplicationService();
 
@@ -177,15 +177,15 @@ export async function updateTable(
 
 export async function deleteTable(tableId: number, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
-    const currentOrg = await requireCurrentOrganization();
-    
     if (!tableId) {
       return {
         success: false,
         error: "Table ID is required",
       };
     }
+
+    await requireResourcePermission("data:manage", "table", tableId);
+    const currentOrg = await requireCurrentOrganization();
 
     const tableApplicationService = getTableApplicationService();
 
@@ -237,15 +237,18 @@ export async function deleteTableAction(formData: FormData) {
  */
 export async function duplicateTable(tableId: number, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:create");
-    const currentOrg = await requireCurrentOrganization();
-
     if (!tableId) {
       return {
         success: false,
         error: "Table ID is required",
       };
     }
+
+    // Need to view the original table to duplicate it
+    await requireResourcePermission("data:view", "table", tableId);
+    // Need create permission for the new table
+    const session = await requirePermission("data:create");
+    const currentOrg = await requireCurrentOrganization();
 
     const tableApplicationService = getTableApplicationService();
 
@@ -263,7 +266,7 @@ export async function duplicateTable(tableId: number, revalidateUrl?: string): P
       name: newName,
       databaseId: originalTable.databaseId,
       organizationId: OrganizationId.fromNumber(currentOrg.id),
-      createdBy: UserId.fromString(session.user.id),
+      ownerId: UserId.fromString(session.user.id),
       description: originalTable.description,
       metadata: originalTable.metadata || {}
     };
@@ -306,9 +309,7 @@ export async function duplicateTable(tableId: number, revalidateUrl?: string): P
 export async function searchTableRows(tableId: number, query: string, limit: number = 20): Promise<Result> {
   try {
     console.log('[searchTableRows] Starting search:', { tableId, query, limit });
-    const session = await requirePermission("data:view");
-    const currentOrg = await requireCurrentOrganization();
-    
+
     if (!tableId) {
       console.error('[searchTableRows] No tableId provided');
       return {
@@ -316,6 +317,9 @@ export async function searchTableRows(tableId: number, query: string, limit: num
         error: "tableId is required",
       };
     }
+
+    await requireResourcePermission("data:view", "table", tableId);
+    const currentOrg = await requireCurrentOrganization();
 
     // Use TableApplicationService for search
     const tableApplicationService = getTableApplicationService();

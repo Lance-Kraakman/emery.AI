@@ -18,6 +18,7 @@ export interface CreateTeamDTO {
   agentIds?: string[];
   databaseId?: string;
   organizationId: number;
+  ownerId: string;
 }
 
 /**

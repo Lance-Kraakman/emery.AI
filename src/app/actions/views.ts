@@ -13,7 +13,7 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "./permissions";
+import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { getViewApplicationService } from "@/ddd/application/di/container";
 import { OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
@@ -183,9 +183,6 @@ export async function updateView(
   revalidateUrl?: string
 ): Promise<Result<ViewDTO>> {
   try {
-    await requirePermission("data:manage");
-    await requireCurrentOrganization();
-
     const { id, name, description, filters, sorting, pagination, fieldMappings } = data;
 
     if (!id) {
@@ -194,6 +191,9 @@ export async function updateView(
         error: "View ID is required",
       };
     }
+
+    await requireResourcePermission("data:manage", "view", id);
+    await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();
 
@@ -337,15 +337,15 @@ export async function deleteView(
   revalidateUrl?: string
 ): Promise<Result> {
   try {
-    await requirePermission("data:manage");
-    await requireCurrentOrganization();
-
     if (!id) {
       return {
         success: false,
         error: "View ID is required",
       };
     }
+
+    await requireResourcePermission("data:manage", "view", id);
+    await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();
 
@@ -384,12 +384,12 @@ export async function deleteView(
  */
 export async function getView(id: number): Promise<ViewDTO | null> {
   try {
-    await requirePermission("data:view");
-    await requireCurrentOrganization();
-
     if (!id) {
       return null;
     }
+
+    await requireResourcePermission("data:view", "view", id);
+    await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();
 
@@ -493,12 +493,12 @@ export async function executeView(
   offset: number;
 } | null> {
   try {
-    await requirePermission("data:view");
-    await requireCurrentOrganization();
-
     if (!dataSourceId) {
       return null;
     }
+
+    await requireResourcePermission("data:view", "view", dataSourceId);
+    await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();
 
@@ -580,12 +580,12 @@ export async function executeViewAggregations(
   }>;
 } | null> {
   try {
-    await requirePermission("data:view");
-    await requireCurrentOrganization();
-
     if (!viewId) {
       return null;
     }
+
+    await requireResourcePermission("data:view", "view", viewId);
+    await requireCurrentOrganization();
 
     const viewService = getViewApplicationService();
 
@@ -629,12 +629,12 @@ export async function executeChartView(
   dataMode: 'raw' | 'aggregated';
 } | null> {
   try {
-    await requirePermission("data:view");
-    await requireCurrentOrganization();
-
     if (!viewId) {
       return null;
     }
+
+    await requireResourcePermission("data:view", "view", viewId);
+    await requireCurrentOrganization();
 
     const viewService = getViewApplicationService();
 
@@ -671,12 +671,12 @@ export async function getFormViewConfiguration(
   tableId: number;
 } | null> {
   try {
-    await requirePermission("data:view");
-    await requireCurrentOrganization();
-
     if (!viewId) {
       return null;
     }
+
+    await requireResourcePermission("data:view", "view", viewId);
+    await requireCurrentOrganization();
 
     const viewService = getViewApplicationService();
 
@@ -713,15 +713,18 @@ export async function submitFormView(
   revalidateUrl?: string
 ): Promise<Result<{ rowId: string }>> {
   try {
-    const session = await requirePermission("data:create");
-    await requireCurrentOrganization();
-
     if (!viewId) {
       return {
         success: false,
         error: "View ID is required",
       };
     }
+
+    // Need to view the form configuration
+    await requireResourcePermission("data:view", "view", viewId);
+    // Need create permission to create a new row
+    const session = await requirePermission("data:create");
+    await requireCurrentOrganization();
 
     if (!formData || Object.keys(formData).length === 0) {
       return {
