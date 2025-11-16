@@ -114,16 +114,16 @@ export function SignOutBlock({
               <Avatar className="h-8 w-8">
                 <AvatarImage
                   src={sessionData?.user?.image || undefined}
-                  alt={displayUser.name || "User"}
+                  alt={displayUser?.name || "User"}
                 />
                 <AvatarFallback className="text-sm">
-                  {displayUser.name?.charAt(0).toUpperCase() ||
-                    displayUser.email?.charAt(0).toUpperCase() ||
+                  {displayUser?.name?.charAt(0).toUpperCase() ||
+                    displayUser?.email?.charAt(0).toUpperCase() ||
                     "U"}
                 </AvatarFallback>
               </Avatar>
             )}
-            <span>{displayUser.name || "User"}</span>
+            <span>{displayUser?.name || "User"}</span>
             <ChevronDown className="w-4 h-4 opacity-50" />
             {isPreviewMode && (
               <Badge variant="secondary" className="text-xs">
@@ -156,11 +156,11 @@ export function SignOutBlock({
                 <Avatar className="h-10 w-10">
                   <AvatarImage
                     src={sessionData?.user?.image || undefined}
-                    alt={displayUser.name || "User"}
+                    alt={displayUser?.name || "User"}
                   />
                   <AvatarFallback className="text-base">
-                    {displayUser.name?.charAt(0).toUpperCase() ||
-                      displayUser.email?.charAt(0).toUpperCase() ||
+                    {displayUser?.name?.charAt(0).toUpperCase() ||
+                      displayUser?.email?.charAt(0).toUpperCase() ||
                       "U"}
                   </AvatarFallback>
                 </Avatar>
@@ -169,9 +169,9 @@ export function SignOutBlock({
                     className="text-sm font-semibold truncate"
                     style={{ color: textColor || 'var(--theme-text, #1e293b)' }}
                   >
-                    {displayUser.name || "User"}
+                    {displayUser?.name || "User"}
                   </span>
-                  {displayUser.email && (
+                  {displayUser?.email && (
                     <span
                       className="text-xs truncate"
                       style={{ color: 'var(--theme-text-muted, #64748b)' }}
@@ -179,7 +179,7 @@ export function SignOutBlock({
                       {displayUser.email}
                     </span>
                   )}
-                  {displayUser.roles && displayUser.roles.length > 0 && (
+                  {displayUser?.roles && displayUser.roles.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {displayUser.roles.map((role) => (
                         <span
