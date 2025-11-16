@@ -45,7 +45,8 @@ from .mappers.message_mapper import (
     build_conversation_messages,
     has_images,
     extract_text_from_parts,
-    download_image_from_url
+    download_image_from_url,
+    proto_parts_to_smolagents_content
 )
 from .mappers.message_types import MessageContentList
 from ..services.model_provider import SmolagentsModelProvider
@@ -86,9 +87,7 @@ class StepProgressDict(TypedDict):
 # Type variable for generic async function return type
 T = TypeVar('T')
 
-# Constants for skill attachment processing
-FILE_CONTENT_PREFIX = "\n\n[File: {filename}]\n"
-FILE_ERROR_PREFIX = "\n\n[File: {filename}] "
+# Constants for skill task building
 INPUTS_HEADER = "\n\nInputs:"
 
 
@@ -129,8 +128,8 @@ async def _process_skill_content_async(content_parts: List['agent_worker_pb2.Mes
     """
     Process MessageParts for skill execution (images + files).
 
-    Uses shared utilities from message_mapper and file_processor for consistency.
-    Downloads images and extracts text from files (PDFs, audio, documents).
+    Uses shared proto_parts_to_smolagents_content for consistent processing,
+    then transforms the result to separate images and text for skill execution.
 
     Args:
         content_parts: List of MessagePart from skill_config.content
@@ -138,41 +137,23 @@ async def _process_skill_content_async(content_parts: List['agent_worker_pb2.Mes
     Returns:
         Tuple of (images list, text_parts list)
     """
+    # Use shared processing function to get MessageContentList
+    content_list = await proto_parts_to_smolagents_content(content_parts)
+
+    # Transform MessageContentList to (images, text_parts) format for skills
     images = []
     text_parts = []
 
-    for part in content_parts:
-        if part.HasField('image_url'):
-            # Use shared helper for image download
-            image_url = part.image_url.url
-            logger.info(f"🖼️ Loading image from: {image_url[:80]}...")
-            try:
-                img = download_image_from_url(image_url)
-                images.append(img)
-                logger.info(f"✅ Loaded image: {img.size} {img.mode}")
-            except requests.exceptions.RequestException as e:
-                logger.error(f"❌ Failed to download image from {image_url}: {e}")
-            except (IOError, OSError) as e:
-                logger.error(f"❌ Failed to open image from {image_url}: {e}")
-
-        elif part.HasField('file'):
-            # Process file to extract text using shared utility
-            file_url = part.file.url
-            mime_type = part.file.mime_type
-            filename = part.file.filename
-            logger.info(f"📄 Processing file: {filename} ({mime_type})")
-            try:
-                extracted_text = await process_file(file_url, mime_type, filename)
-                text_parts.append(FILE_CONTENT_PREFIX.format(filename=filename) + extracted_text)
-                logger.info(f"✅ Extracted {len(extracted_text)} chars from {filename}")
-            except Exception as e:
-                logger.error(f"❌ Failed to process file {filename}: {e}")
-                text_parts.append(FILE_ERROR_PREFIX.format(filename=filename) + f"(Processing failed: {str(e)})")
-
-        elif part.HasField('text'):
-            # Add text content directly
-            text_parts.append(f"\n\n{part.text.text}")
-            logger.info(f"📝 Added text content: {part.text.text[:50]}...")
+    for content_item in content_list:
+        if content_item["type"] == "image":
+            # Extract PIL Image from ImageContentPart
+            images.append(content_item["image"])
+        elif content_item["type"] == "text":
+            # Extract text from TextContentPart
+            # Add file prefix if this text came from file processing
+            text = content_item["text"]
+            # Note: File processing errors already include "[File: ...]" prefix from proto_parts_to_smolagents_content
+            text_parts.append(f"\n\n{text}")
 
     return images, text_parts
 
