@@ -56,7 +56,7 @@ from ..services.file_processor import process_file
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
 from ..services.image_processor import ImageProcessor
-from ..services.agent_factory import AgentFactory, AgentConfig as FactoryAgentConfig
+from ..services.agent_factory import AgentFactory, AgentConfig
 from ..services.token_usage_extractor import TokenUsageExtractor
 from ..rag.rag_processor import RagProcessor
 
@@ -391,18 +391,28 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         yield chunk_response
                         sequence += 1
 
-                else:
-                    # Legacy fallback for string responses (error messages)
-                    total_content += str(response_dict)
-                    chunk_response = agent_worker_pb2.ProcessMessageResponse(
-                        content_chunk=agent_worker_pb2.ContentChunk(
-                            content=str(response_dict),
-                            sequence=sequence
-                        ),
-                        timestamp=int(time.time() * 1000)
-                    )
-                    yield chunk_response
-                    sequence += 1
+                    elif response_type == "error":
+                        # Send error response from agent execution
+                        error_data = response_dict.get("error", {})
+                        error_response = agent_worker_pb2.ProcessMessageResponse(
+                            error=agent_worker_pb2.ProcessingError(
+                                error_code=error_data.get("error_code", "UNKNOWN_ERROR"),
+                                error_message=error_data.get("error_message", "An error occurred"),
+                                error_details=error_data.get("error_details", {}),
+                                hint=error_data.get("hint", ""),
+                                can_retry=error_data.get("can_retry", False),
+                                auto_retry=error_data.get("auto_retry", False),
+                                session_reset=error_data.get("session_reset", False)
+                            ),
+                            timestamp=int(time.time() * 1000)
+                        )
+                        yield error_response
+                        # Stop processing after error
+                        break
+
+                    else:
+                        # Unknown response type - log warning
+                        logger.warning(f"⚠️ Unknown response type: {response_type}, ignoring")
 
             # 4. Send completion marker
             processing_time = int((time.time() - start_time) * 1000)
@@ -927,7 +937,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 # 4. Create sub-agent with skill's tools and correct has_images flag
                 has_images = bool(images)  # Calculate once for clarity
-                agent_config = FactoryAgentConfig(
+                agent_config = AgentConfig(
                     tools=skill_tools,
                     skill_model=skill_config.model if skill_config.model else None,
                     org_model=org_model,
