@@ -29,11 +29,12 @@ import logging
 import time
 import asyncio
 import concurrent.futures
-from typing import AsyncIterator, Optional, List, Dict, Any, TypedDict, Literal
+from typing import AsyncIterator, Optional, List, Dict, Any, TypedDict, Literal, TypeVar, Coroutine
 
 import grpc
 from grpc import aio
 from PIL import Image
+import requests
 
 from smolagents import ToolCallingAgent, AgentText
 from smolagents.models import ChatMessage, MessageRole
@@ -54,7 +55,7 @@ from ..services.file_processor import process_file
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
 from ..services.image_processor import ImageProcessor
-from ..services.agent_factory import AgentFactory, AgentConfig
+from ..services.agent_factory import AgentFactory, AgentConfig as FactoryAgentConfig
 from ..services.token_usage_extractor import TokenUsageExtractor
 from ..rag.rag_processor import RagProcessor
 
@@ -82,6 +83,15 @@ class StepProgressDict(TypedDict):
     step_index: int
 
 
+# Type variable for generic async function return type
+T = TypeVar('T')
+
+# Constants for skill attachment processing
+FILE_CONTENT_PREFIX = "\n\n[File: {filename}]\n"
+FILE_ERROR_PREFIX = "\n\n[File: {filename}] "
+INPUTS_HEADER = "\n\nInputs:"
+
+
 def _populate_protobuf_map(proto_map, data: Dict[str, str]) -> None:
     """
     Explicitly populate a protobuf ScalarMap field.
@@ -97,7 +107,7 @@ def _populate_protobuf_map(proto_map, data: Dict[str, str]) -> None:
         proto_map[key] = str(value)
 
 
-def _run_async_in_thread(coro):
+def _run_async_in_thread(coro: Coroutine[Any, Any, T]) -> T:
     """
     Run async coroutine in a separate thread with its own event loop.
 
@@ -105,10 +115,10 @@ def _run_async_in_thread(coro):
     The gRPC service runs in an async context, but skill execution callbacks are sync.
 
     Args:
-        coro: Coroutine to run
+        coro: Coroutine to run (with generic return type T)
 
     Returns:
-        Result of the coroutine
+        Result of the coroutine (type T)
     """
     with concurrent.futures.ThreadPoolExecutor() as executor:
         future = executor.submit(asyncio.run, coro)
@@ -126,10 +136,10 @@ async def _process_skill_content_async(content_parts: List['agent_worker_pb2.Mes
         content_parts: List of MessagePart from skill_config.content
 
     Returns:
-        Tuple of (images list, text_additions list)
+        Tuple of (images list, text_parts list)
     """
     images = []
-    text_additions = []
+    text_parts = []
 
     for part in content_parts:
         if part.HasField('image_url'):
@@ -140,8 +150,10 @@ async def _process_skill_content_async(content_parts: List['agent_worker_pb2.Mes
                 img = download_image_from_url(image_url)
                 images.append(img)
                 logger.info(f"✅ Loaded image: {img.size} {img.mode}")
-            except Exception as e:
-                logger.error(f"❌ Failed to load image from {image_url}: {e}")
+            except requests.exceptions.RequestException as e:
+                logger.error(f"❌ Failed to download image from {image_url}: {e}")
+            except (IOError, OSError) as e:
+                logger.error(f"❌ Failed to open image from {image_url}: {e}")
 
         elif part.HasField('file'):
             # Process file to extract text using shared utility
@@ -151,18 +163,18 @@ async def _process_skill_content_async(content_parts: List['agent_worker_pb2.Mes
             logger.info(f"📄 Processing file: {filename} ({mime_type})")
             try:
                 extracted_text = await process_file(file_url, mime_type, filename)
-                text_additions.append(f"\n\n[File: {filename}]\n{extracted_text}")
+                text_parts.append(FILE_CONTENT_PREFIX.format(filename=filename) + extracted_text)
                 logger.info(f"✅ Extracted {len(extracted_text)} chars from {filename}")
             except Exception as e:
                 logger.error(f"❌ Failed to process file {filename}: {e}")
-                text_additions.append(f"\n\n[File: {filename}] (Processing failed: {str(e)})")
+                text_parts.append(FILE_ERROR_PREFIX.format(filename=filename) + f"(Processing failed: {str(e)})")
 
         elif part.HasField('text'):
             # Add text content directly
-            text_additions.append(f"\n\n{part.text.text}")
+            text_parts.append(f"\n\n{part.text.text}")
             logger.info(f"📝 Added text content: {part.text.text[:50]}...")
 
-    return images, text_additions
+    return images, text_parts
 
 
 class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingServiceServicer):
@@ -901,17 +913,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 # 2. Process attachments from skill_config.content using shared utilities
                 images = []
-                text_additions = []
+                text_parts = []
 
                 if skill_config.content:
                     logger.info(f"📎 Processing {len(skill_config.content)} attachments from skill config")
                     try:
                         # Use shared async helper for consistent attachment processing
                         # Run in separate thread since we're already in an async context
-                        images, text_additions = _run_async_in_thread(
+                        images, text_parts = _run_async_in_thread(
                             _process_skill_content_async(skill_config.content)
                         )
-                        logger.info(f"✅ Processed: {len(images)} images, {len(text_additions)} text parts")
+                        logger.info(f"✅ Processed: {len(images)} images, {len(text_parts)} text parts")
                     except Exception as e:
                         logger.error(f"❌ Failed to process attachments: {e}")
 
@@ -920,12 +932,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 # Add runtime inputs to task
                 if runtime_inputs:
-                    task_parts.append("\n\nInputs:")
+                    task_parts.append(INPUTS_HEADER)
                     for key, value in runtime_inputs.items():
                         task_parts.append(f"- {key}: {value}")
 
-                # Add text additions from attachments to task
-                task_parts.extend(text_additions)
+                # Add text parts from attachments to task
+                task_parts.extend(text_parts)
 
                 task = "\n".join(task_parts)
                 logger.info(f"📝 Skill task: {task[:200]}...")
@@ -933,19 +945,19 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     logger.info(f"🖼️ Passing {len(images)} images to sub-agent")
 
                 # 4. Create sub-agent with skill's tools and correct has_images flag
-                from ..services.agent_factory import AgentConfig as FactoryAgentConfig
+                has_images = bool(images)  # Calculate once for clarity
                 agent_config = FactoryAgentConfig(
                     tools=skill_tools,
                     skill_model=skill_config.model if skill_config.model else None,
                     org_model=org_model,
-                    has_images=len(images) > 0,  # Set based on processed attachments
+                    has_images=has_images,
                     max_steps=10,
                     agent_name=f"skill_{skill_config.name}",
                     agent_description=skill_config.description,
                     enable_caching=False
                 )
                 sub_agent = self.agent_factory.create_agent(agent_config)
-                logger.info(f"✨ Created sub-agent for skill {skill_config.name} (has_images={len(images) > 0})")
+                logger.info(f"✨ Created sub-agent for skill {skill_config.name} (has_images={has_images})")
 
                 # 5. Execute skill with sub-agent
                 # When stream=False, run() returns the final output directly (not an iterable)
