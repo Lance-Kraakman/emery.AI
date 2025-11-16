@@ -481,9 +481,9 @@ class InfraStack(Stack):
             self, f"{prefix}AgentServiceV2",
             cluster=cluster,
             service_name=f"{prefix}-Agent-Internal",
-            cpu=512,  # AIDEV-NOTE: Increased CPU for better startup performance
-            memory_limit_mib=1024,  # AIDEV-NOTE: Increased memory for smolagents dependencies
-            desired_count=1,
+            cpu=1024,  # AIDEV-NOTE: 1 vCPU for better gRPC performance
+            memory_limit_mib=2048,  # AIDEV-NOTE: 2 GB for AI processing and table operations
+            desired_count=2,  # AIDEV-NOTE: Run 2 tasks for redundancy and better availability
             task_image_options=ecs_patterns.NetworkLoadBalancedTaskImageOptions(
                 image=self._get_agent_image(),
                 container_port=50051,

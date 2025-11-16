@@ -183,8 +183,16 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             )
 
 async def serve(port: int, organization_id: str):
-    server = aio.server()
-    
+    # Configure gRPC server with keepalive settings for better connection performance
+    server = aio.server(
+        options=[
+            ('grpc.keepalive_time_ms', 30000),  # Send keepalive ping every 30s
+            ('grpc.keepalive_timeout_ms', 10000),  # Wait 10s for keepalive response
+            ('grpc.keepalive_permit_without_calls', 1),  # Allow keepalive pings when no calls
+            ('grpc.http2.max_pings_without_data', 0),  # Allow unlimited pings without data
+        ]
+    )
+
     # Add AgentWorker service
     agent_service_impl = AgentWorkerServiceImplementation(organization_id)
     agent_worker_pb2_grpc.add_AgentWorkerServicer_to_server(agent_service_impl, server)
