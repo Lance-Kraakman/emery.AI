@@ -44,10 +44,10 @@ export function LoginBlock({
   borderRadius,
 }: LoginBlockProps) {
   const { isAuthenticated, isLoading, user, appId } = usePublicAppAuth();
-  const isEditorMode = appId === 0;
+  const isPreviewMode = appId === 0;
 
-  // Show loading state
-  if (isLoading) {
+  // Show loading state (but not in preview mode)
+  if (isLoading && !isPreviewMode) {
     return (
       <div className="flex items-center justify-center p-4">
         <div
@@ -61,8 +61,9 @@ export function LoginBlock({
     );
   }
 
-  // Show success message if already authenticated
-  if (isAuthenticated && user) {
+  // In preview mode, always show login form even if authenticated
+  // In normal mode, show success message if already authenticated
+  if (isAuthenticated && user && !isPreviewMode) {
     return (
       <div
         className="flex flex-col items-center gap-4 text-center p-6 rounded-lg"
@@ -107,7 +108,7 @@ export function LoginBlock({
           >
             <LogIn className="w-4 h-4" />
             {triggerText}
-            {isEditorMode && (
+            {isPreviewMode && (
               <Badge variant="secondary" className="ml-2 text-xs">
                 Preview
               </Badge>

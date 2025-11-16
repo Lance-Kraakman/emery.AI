@@ -9,8 +9,9 @@ import {
   borderColorField,
   borderRadiusField
 } from "@/components/puck/fields/standard-fields";
+import { withLayout, WithLayout } from "../../components/Layout";
 
-export type SignOutBlockProps = {
+export type SignOutBlockProps = WithLayout<{
   buttonText: string;
   showUserInfo: boolean;
   showAvatar: boolean;
@@ -25,9 +26,9 @@ export type SignOutBlockProps = {
   buttonTextColor?: string;
   borderColor?: string;
   borderRadius?: string;
-};
+}>;
 
-export const SignOutBlock: ComponentConfig<SignOutBlockProps> = {
+const SignOutBlockInternal: ComponentConfig<SignOutBlockProps> = {
   label: "Sign Out",
   fields: {
     buttonText: {
@@ -116,3 +117,5 @@ export const SignOutBlock: ComponentConfig<SignOutBlockProps> = {
     return <_SignOutBlock {...props} />;
   },
 };
+
+export const SignOutBlock = withLayout(SignOutBlockInternal);

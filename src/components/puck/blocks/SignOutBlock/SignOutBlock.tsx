@@ -41,10 +41,17 @@ export function SignOutBlock({
 }: SignOutBlockProps) {
   const { isAuthenticated, isLoading, user, appId } = usePublicAppAuth();
   const { data: sessionData } = useSession();
-  const isEditorMode = appId === 0;
+  const isPreviewMode = appId === 0;
 
-  // Show loading state
-  if (isLoading) {
+  // In preview mode, always show sign out button with mock data
+  const previewUser = {
+    name: "Preview User",
+    email: "preview@example.com",
+    roles: ["viewer"],
+  };
+
+  // Show loading state (but not in preview mode)
+  if (isLoading && !isPreviewMode) {
     return (
       <div className="flex items-center justify-center p-4">
         <div
@@ -58,8 +65,12 @@ export function SignOutBlock({
     );
   }
 
-  // Don't show anything if user is not authenticated
-  if (!isAuthenticated || !user) {
+  // In preview mode, always show the sign out UI
+  const displayUser = isPreviewMode ? previewUser : user;
+  const shouldShowSignOut = isPreviewMode || (isAuthenticated && user);
+
+  // Don't show anything if user is not authenticated (and not in preview mode)
+  if (!shouldShowSignOut) {
     return (
       <div
         className="flex items-center justify-center p-4 rounded-lg"
@@ -103,18 +114,18 @@ export function SignOutBlock({
               <Avatar className="h-8 w-8">
                 <AvatarImage
                   src={sessionData?.user?.image || undefined}
-                  alt={user.name || "User"}
+                  alt={displayUser.name || "User"}
                 />
                 <AvatarFallback className="text-sm">
-                  {user.name?.charAt(0).toUpperCase() ||
-                    user.email?.charAt(0).toUpperCase() ||
+                  {displayUser.name?.charAt(0).toUpperCase() ||
+                    displayUser.email?.charAt(0).toUpperCase() ||
                     "U"}
                 </AvatarFallback>
               </Avatar>
             )}
-            <span>{user.name || "User"}</span>
+            <span>{displayUser.name || "User"}</span>
             <ChevronDown className="w-4 h-4 opacity-50" />
-            {isEditorMode && (
+            {isPreviewMode && (
               <Badge variant="secondary" className="text-xs">
                 Preview
               </Badge>
@@ -145,11 +156,11 @@ export function SignOutBlock({
                 <Avatar className="h-10 w-10">
                   <AvatarImage
                     src={sessionData?.user?.image || undefined}
-                    alt={user.name || "User"}
+                    alt={displayUser.name || "User"}
                   />
                   <AvatarFallback className="text-base">
-                    {user.name?.charAt(0).toUpperCase() ||
-                      user.email?.charAt(0).toUpperCase() ||
+                    {displayUser.name?.charAt(0).toUpperCase() ||
+                      displayUser.email?.charAt(0).toUpperCase() ||
                       "U"}
                   </AvatarFallback>
                 </Avatar>
@@ -158,19 +169,19 @@ export function SignOutBlock({
                     className="text-sm font-semibold truncate"
                     style={{ color: textColor || 'var(--theme-text, #1e293b)' }}
                   >
-                    {user.name || "User"}
+                    {displayUser.name || "User"}
                   </span>
-                  {user.email && (
+                  {displayUser.email && (
                     <span
                       className="text-xs truncate"
                       style={{ color: 'var(--theme-text-muted, #64748b)' }}
                     >
-                      {user.email}
+                      {displayUser.email}
                     </span>
                   )}
-                  {user.roles && user.roles.length > 0 && (
+                  {displayUser.roles && displayUser.roles.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {user.roles.map((role) => (
+                      {displayUser.roles.map((role) => (
                         <span
                           key={role}
                           className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded"
