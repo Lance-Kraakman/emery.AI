@@ -54,7 +54,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       organizationId: OrganizationId.fromNumber(
         organizationId ? parseInt(organizationId) : user.organizationId || 1
       ),
-      createdBy: UserId.fromString(user.id),
+      ownerId: UserId.fromString(user.id),
       description,
       metadata: metadata || {}
     };

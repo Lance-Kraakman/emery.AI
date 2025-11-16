@@ -8,7 +8,7 @@ export interface DatabaseConfig {
   slug: string;
   metadata?: Record<string, any> | null;
   organizationId: OrganizationId;
-  createdBy: UserId;
+  ownerId: UserId;
 }
 
 export interface DatabasePersistenceData {
@@ -17,7 +17,7 @@ export interface DatabasePersistenceData {
   slug: string;
   metadata?: Record<string, any> | null;
   organizationId: number;
-  createdBy: string;
+  ownerId: string;
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -29,10 +29,15 @@ export class Database {
     public readonly slug: string,
     public readonly metadata: Record<string, any> | null,
     public readonly organizationId: OrganizationId,
-    public readonly createdBy: UserId,
+    public readonly ownerId: UserId,
     public readonly createdAt?: Date | null,
     public readonly updatedAt?: Date | null
   ) {}
+
+  // Backward compatibility alias
+  get createdBy(): UserId {
+    return this.ownerId;
+  }
 
   static create(config: DatabaseConfig): Database {
     return new Database(
@@ -41,7 +46,7 @@ export class Database {
       config.slug,
       config.metadata || null,
       config.organizationId,
-      config.createdBy
+      config.ownerId
     );
   }
 
@@ -52,7 +57,7 @@ export class Database {
       data.slug,
       data.metadata || null,
       OrganizationId.fromNumber(data.organizationId),
-      UserId.fromString(data.createdBy),
+      UserId.fromString(data.ownerId),
       data.createdAt || null,
       data.updatedAt || null
     );
@@ -65,7 +70,7 @@ export class Database {
       slug: this.slug,
       metadata: this.metadata,
       organizationId: this.organizationId.value,
-      createdBy: this.createdBy.value,
+      ownerId: this.ownerId.value,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt
     };

@@ -20,15 +20,7 @@ import { getOrganizationMembers, getPendingInvitations, inviteUser } from "@/app
 import { assignUserRole } from "@/app/actions/permissions";
 import type { OrganizationMember } from "@/ddd/domain/organizations/entities/organization";
 import { SYSTEM_ROLES, type SystemRoleType } from "@/ddd/domain/rbac/entities/role";
-
-
-// DTO for UI layer - converts domain Invitation to UI-friendly format
-interface PendingInvitation {
-  id: number; // invitationId.value
-  email: string; // email.value
-  systemRole: SystemRoleType; // Updated to use RBAC system role
-  expiresAt?: Date;
-}
+import type { InvitationDTO } from "@/app/dtos/invitation.dto";
 
 // DTO for UI layer - converts domain OrganizationMember to UI-friendly format
 interface OrganizationMemberDTO {
@@ -43,7 +35,7 @@ interface OrganizationMemberDTO {
 
 export function UsersTab() {
   const [members, setMembers] = useState<OrganizationMemberDTO[]>([]);
-  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<InvitationDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<SystemRoleType>(SYSTEM_ROLES.MEMBER);

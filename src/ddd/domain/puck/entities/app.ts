@@ -17,7 +17,7 @@ export class App {
     private _description: string | undefined,
     private _themeConfig: ThemeConfig | undefined,
     private _homePageId: PageId | undefined,
-    private readonly _createdBy: UserId,
+    private readonly _ownerId: UserId,
     private readonly _createdAt: Date,
     private _updatedAt: Date
   ) {}
@@ -43,8 +43,13 @@ export class App {
     return this._description;
   }
 
+  get ownerId(): UserId {
+    return this._ownerId;
+  }
+
+  // Backward compatibility alias
   get createdBy(): UserId {
-    return this._createdBy;
+    return this._ownerId;
   }
 
   get createdAt(): Date {
@@ -151,7 +156,7 @@ export class App {
     description?: string;
     themeConfig?: Partial<ThemeConfigProps>;
     organizationId: OrganizationId;
-    createdBy: UserId;
+    ownerId: UserId;
   }): App {
     // Import here to avoid circular dependencies
     const { AppId } = require('../value-objects/app-id');
@@ -180,7 +185,7 @@ export class App {
       data.description,
       data.themeConfig ? ThemeConfig.create(data.themeConfig) : undefined,
       undefined, // No home page on creation
-      data.createdBy,
+      data.ownerId,
       now,
       now
     );
@@ -197,7 +202,7 @@ export class App {
     description?: string;
     themeConfig?: any;
     homePageId?: number;
-    createdBy: string;
+    ownerId: string;
     createdAt: Date;
     updatedAt: Date;
   }): App {
@@ -219,7 +224,7 @@ export class App {
       data.description,
       data.themeConfig ? ThemeConfig.fromJSON(data.themeConfig) : undefined,
       data.homePageId ? PageId.fromNumber(data.homePageId) : undefined,
-      UserId.fromString(data.createdBy),
+      UserId.fromString(data.ownerId),
       data.createdAt,
       data.updatedAt
     );
@@ -236,7 +241,7 @@ export class App {
     description: string | undefined;
     themeConfig: any;
     homePageId: number | undefined;
-    createdBy: string;
+    ownerId: string;
     createdAt: Date;
     updatedAt: Date;
   } {
@@ -248,7 +253,7 @@ export class App {
       description: this._description,
       themeConfig: this._themeConfig?.toJSON(),
       homePageId: this._homePageId?.value,
-      createdBy: this._createdBy.value,
+      ownerId: this._ownerId.value,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt
     };

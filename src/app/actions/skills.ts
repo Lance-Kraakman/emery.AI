@@ -6,6 +6,7 @@ import { SkillMapper } from '@/app/mappers/skill-mapper';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { requirePermission, requireResourcePermission } from './permissions';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { SkillInput, SkillOutput, ToolConfigDTO } from '@/app/mappers/skill-mapper';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
@@ -45,6 +46,9 @@ export async function createSkill(command: {
     if (!session?.user?.id) {
       return { success: false, error: 'Unauthorized' };
     }
+
+    // Check permission to manage the agent (agent-scoped skills require agent management permission)
+    await requireResourcePermission("agents:manage", "agent", command.agentId);
 
     // Validation
     if (!command.name?.trim()) {
@@ -124,6 +128,9 @@ export async function createOrganizationSkill(command: {
     if (!session?.user?.id) {
       return { success: false, error: 'Unauthorized' };
     }
+
+    // Check permission to create organization skills
+    await requirePermission("skills:create");
 
     // Validation
     if (!command.name?.trim()) {
@@ -209,6 +216,24 @@ export async function updateSkill(
     }
 
     const service = getSkillApplicationService();
+
+    // Fetch skill to determine if agent-scoped or org-level
+    const skillResult = await service.getSkill(skillId);
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    const skill = skillResult.data;
+
+    // Check appropriate permission based on skill type
+    if (skill.agentId) {
+      // Agent-scoped skill: check agent management permission
+      await requireResourcePermission("agents:manage", "agent", skill.agentId.value);
+    } else {
+      // Org-level skill: check skill management permission
+      await requireResourcePermission("skills:manage", "skill", skillId);
+    }
+
     const result = await service.updateSkill(skillId, command);
 
     if (!result.success) {
@@ -216,15 +241,15 @@ export async function updateSkill(
     }
 
     // Fetch updated skill to return full DTO
-    const skillResult = await service.getSkill(skillId);
-    if (!skillResult.success || !skillResult.data) {
+    const updatedSkillResult = await service.getSkill(skillId);
+    if (!updatedSkillResult.success || !updatedSkillResult.data) {
       return { success: false, error: 'Failed to fetch updated skill' };
     }
 
     // Revalidate sidebar and skill pages
-    const skill = skillResult.data;
-    if (skill.agentId) {
-      revalidatePath(`/agents/${skill.agentId.value}/skills`);
+    const updatedSkill = updatedSkillResult.data;
+    if (updatedSkill.agentId) {
+      revalidatePath(`/agents/${updatedSkill.agentId.value}/skills`);
     } else {
       revalidatePath('/skills');
     }
@@ -232,7 +257,7 @@ export async function updateSkill(
 
     return {
       success: true,
-      data: SkillMapper.toDTO(skillResult.data)
+      data: SkillMapper.toDTO(updatedSkillResult.data)
     };
   } catch (error) {
     console.error('[updateSkill] error:', error);
@@ -255,9 +280,23 @@ export async function deleteSkill(skillId: number): Promise<Result<void>> {
 
     const service = getSkillApplicationService();
 
-    // Get skill info before deleting for revalidation
+    // Get skill info before deleting for permission check and revalidation
     const skillResult = await service.getSkill(skillId);
-    const agentId = skillResult.success && skillResult.data ? skillResult.data.agentId?.value : null;
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    const skill = skillResult.data;
+    const agentId = skill.agentId?.value ?? null;
+
+    // Check appropriate permission based on skill type
+    if (skill.agentId) {
+      // Agent-scoped skill: check agent management permission
+      await requireResourcePermission("agents:manage", "agent", skill.agentId.value);
+    } else {
+      // Org-level skill: check skill management permission
+      await requireResourcePermission("skills:manage", "skill", skillId);
+    }
 
     const result = await service.deleteSkill(skillId);
 

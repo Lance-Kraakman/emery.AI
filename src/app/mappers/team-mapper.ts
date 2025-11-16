@@ -10,6 +10,7 @@ export interface TeamDTO {
   agentIds: string[] | null;
   databaseId: string | null;
   organizationId: number;
+  ownerId: string;
   createdAt?: string | null; // ISO string for serialization
 }
 
@@ -25,6 +26,7 @@ export class TeamMapper {
       agentIds: team.agentIds ? team.agentIds.map(agentId => agentId.value.toString()) : null,
       databaseId: team.databaseId,
       organizationId: team.organizationId.value,
+      ownerId: team.ownerId.value,
       // Convert Date to ISO string for server component serialization
       createdAt: team.createdAt ? team.createdAt.toISOString() : null
     };

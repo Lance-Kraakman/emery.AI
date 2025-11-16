@@ -25,7 +25,7 @@ export interface CreatePageCommand {
   slug: string;
   description?: string;
   templateData?: any; // Puck JSON structure
-  createdBy: UserId;
+  ownerId: UserId;
 }
 
 export interface UpdatePageCommand {
@@ -119,7 +119,7 @@ export class PuckPageApplicationService {
         isPublic: false,
         requiresAuth: false,
         allowedRoles: undefined,
-        createdBy: command.createdBy.value,
+        ownerId: command.ownerId.value,
         createdAt: new Date(),
         updatedAt: new Date()
       });

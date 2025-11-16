@@ -90,7 +90,7 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
         isPublic: persistence.isPublic,
         requiresAuth: persistence.requiresAuth,
         allowedRoles: persistence.allowedRoles,
-        createdBy: persistence.createdBy,
+        ownerId: persistence.ownerId,
         createdAt: persistence.createdAt,
         updatedAt: persistence.updatedAt
       }).returning();
@@ -238,7 +238,7 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
       isPublic: record.isPublic,
       requiresAuth: record.requiresAuth,
       allowedRoles: record.allowedRoles,
-      createdBy: record.createdBy,
+      ownerId: record.ownerId,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     });

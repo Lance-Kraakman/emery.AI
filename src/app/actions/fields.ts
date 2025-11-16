@@ -4,7 +4,7 @@
 // Uses table application service for field operations as part of table aggregate
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "./permissions";
+import { requirePermission, requireResourcePermission } from "./permissions";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateFieldData } from "./types";
@@ -148,6 +148,9 @@ export async function getFields(tableId: number): Promise<FieldDTO[]> {
       throw new Error("tableId is required");
     }
 
+    // Fields inherit permissions from their parent table
+    await requireResourcePermission("data:view", "table", tableId);
+
     const tableApplicationService = getTableApplicationService();
     const fieldList = await tableApplicationService.getFieldsForTable(TableId.fromNumber(tableId));
     const dtoFields = fieldList.map(FieldMapper.toDTO);
@@ -189,9 +192,6 @@ export async function updateField(data: {
   try {
     logger.debug('[updateField] Called', { tableId: data.tableId, fieldName: data.fieldName, updates: data.updates });
 
-    const session = await requirePermission("data:manage");
-    logger.debug('[updateField] Permission check passed', { userId: session.user.id });
-
     const { tableId, fieldName, updates } = data;
 
     if (!tableId || !fieldName) {
@@ -201,6 +201,10 @@ export async function updateField(data: {
         error: "tableId and fieldName are required",
       };
     }
+
+    // Fields inherit permissions from their parent table
+    await requireResourcePermission("data:manage", "table", tableId);
+    logger.debug('[updateField] Permission check passed');
 
     const tableApplicationService = getTableApplicationService();
     logger.debug('[updateField] Calling tableApplicationService.updateField');
@@ -267,9 +271,6 @@ export async function deleteField(tableId: number, fieldName: string, revalidate
   try {
     logger.debug('[deleteField] Called', { tableId, fieldName });
 
-    const session = await requirePermission("data:manage");
-    logger.debug('[deleteField] Permission check passed', { userId: session.user.id });
-
     if (!tableId || !fieldName) {
       logger.error('[deleteField] Validation failed: missing tableId or fieldName');
       return {
@@ -277,6 +278,10 @@ export async function deleteField(tableId: number, fieldName: string, revalidate
         error: "Table ID and field name are required",
       };
     }
+
+    // Fields inherit permissions from their parent table
+    await requireResourcePermission("data:manage", "table", tableId);
+    logger.debug('[deleteField] Permission check passed');
 
     const tableApplicationService = getTableApplicationService();
     logger.debug('[deleteField] Calling tableApplicationService.deleteField');
@@ -328,7 +333,6 @@ export async function deleteFieldAction(formData: FormData): Promise<Result> {
 
   try {
     // We need to find the field by ID to get its name and table
-    const session = await requirePermission("data:manage");
     const tableApplicationService = getTableApplicationService();
 
     // Get all tables to find which table contains this field
@@ -355,6 +359,9 @@ export async function deleteFieldAction(formData: FormData): Promise<Result> {
         error: "Field not found"
       };
     }
+
+    // Fields inherit permissions from their parent table
+    await requireResourcePermission("data:manage", "table", targetTable.id);
 
     logger.debug('Deleting field', {
       fieldId,
@@ -385,7 +392,6 @@ export async function reorderFields(data: {
   fieldOrders: Array<{ fieldName: string; orderIndex: number }>
 }, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
     const { tableId, fieldOrders } = data;
 
     if (!tableId || !fieldOrders || fieldOrders.length === 0) {
@@ -394,6 +400,9 @@ export async function reorderFields(data: {
         error: "tableId and fieldOrders are required",
       };
     }
+
+    // Fields inherit permissions from their parent table
+    await requireResourcePermission("data:manage", "table", tableId);
 
     const tableApplicationService = getTableApplicationService();
 
@@ -445,7 +454,8 @@ export async function resetAutonumberCounter(
   revalidateUrl?: string
 ): Promise<Result> {
   try {
-    await requirePermission("data:manage");
+    // Fields inherit permissions from their parent table
+    await requireResourcePermission("data:manage", "table", tableId);
 
     // Get field and verify it's autonumber
     const fields = await getFields(tableId);

@@ -12,6 +12,8 @@ import type { Result } from "./types";
 import type { SendInvitationCommand, AcceptInvitationCommand } from "@/ddd/application/services/invitations/invitation-application-service";
 import { EmailAddress, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
 import { SystemRoleType, SYSTEM_ROLES } from "@/ddd/domain/rbac/entities/role";
+import { toInvitationDTO, toInvitationDTOs } from "@/app/mappers/invitation-mapper";
+import type { InvitationDTO } from "@/app/dtos/invitation.dto";
 
 export async function inviteUser(formData: FormData): Promise<Result> {
   return withAuthContext(async () => {
@@ -51,7 +53,7 @@ export async function inviteUser(formData: FormData): Promise<Result> {
     revalidatePath("/organization/settings/users");
     return {
       success: true,
-      data: result.data,
+      data: result.data ? toInvitationDTO(result.data) : undefined,
       warnings: result.warnings
     };
     } catch (error) {
@@ -136,21 +138,16 @@ export async function getOrganizationMembers(): Promise<Array<{id: string, name:
   }
 }
 
-export async function getPendingInvitations(): Promise<Array<{id: number, email: string, systemRole: SystemRoleType, expiresAt?: Date}>> {
+export async function getPendingInvitations(): Promise<InvitationDTO[]> {
   try {
     const session = await requirePermission("users:view");
     const currentOrg = await requireCurrentOrganization();
-    
+
     const invitationApplicationService = getInvitationApplicationService();
     const invitations = await invitationApplicationService.getPendingInvitations(currentOrg.id);
-    
+
     // Convert domain objects to DTOs for UI
-    return invitations.map(invitation => ({
-      id: invitation.id.value,
-      email: invitation.email.value,
-      systemRole: invitation.systemRole,
-      expiresAt: invitation.expiresAt
-    }));
+    return toInvitationDTOs(invitations);
   } catch (error) {
     console.error("Error fetching pending invitations:", error);
     throw new Error("Failed to fetch pending invitations");
@@ -222,7 +219,7 @@ export async function resendInvitation(invitationId: number): Promise<Result> {
     revalidatePath("/organization/settings/users");
     return {
       success: true,
-      data: result.data,
+      data: result.data ? toInvitationDTO(result.data) : undefined,
       warnings: result.warnings
     };
   } catch (error) {
@@ -298,7 +295,7 @@ export async function getInvitationByToken(token: string) {
       throw new Error(result.error || "Failed to fetch invitation");
     }
 
-    return result.data;
+    return result.data ? toInvitationDTO(result.data) : undefined;
   } catch (error) {
     console.error("Error fetching invitation by token:", error);
     throw new Error("Failed to fetch invitation");

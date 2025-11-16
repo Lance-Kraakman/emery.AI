@@ -103,6 +103,7 @@ export function UnifiedChatInput<T = ToolDTO>({
   const [dropdownQuery, setDropdownQuery] = useState('');
   const [dropdownType, setDropdownType] = useState<'tools' | 'variables'>('tools');
   const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number; maxHeight?: number }>({ left: 0 });
+  const [selectedIndex, setSelectedIndex] = useState(0); // For keyboard navigation in variable dropdown
   const [selectedTools, setSelectedTools] = useState<T[]>(tools || []);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -121,6 +122,11 @@ export function UnifiedChatInput<T = ToolDTO>({
       setSelectedTools(tools);
     }
   }, [tools]);
+
+  // Reset selected index when dropdown query changes
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [dropdownQuery, showDropdown]);
 
   // Detect @ tools and $ variables - show/hide dropdown
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -302,11 +308,42 @@ export function UnifiedChatInput<T = ToolDTO>({
 
   // Handle key presses
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // When dropdown is open, prevent default behavior for navigation keys
+    // When dropdown is open, handle keyboard navigation
     if (showDropdown && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape', 'Tab'].includes(e.key)) {
       e.preventDefault();
       e.stopPropagation();
-      return; // Let ToolDropdown handle these
+
+      if (dropdownType === 'tools') {
+        return; // Let ToolDropdown handle these
+      }
+
+      // Handle keyboard navigation for variables dropdown
+      if (dropdownType === 'variables' && variables) {
+        const filteredVariables = variables.filter(v =>
+          v.name.toLowerCase().includes(dropdownQuery.toLowerCase())
+        );
+
+        switch (e.key) {
+          case 'ArrowDown':
+            setSelectedIndex(prev => Math.min(prev + 1, filteredVariables.length - 1));
+            break;
+          case 'ArrowUp':
+            setSelectedIndex(prev => Math.max(prev - 1, 0));
+            break;
+          case 'Enter':
+          case 'Tab':
+            if (filteredVariables[selectedIndex]) {
+              handleVariableSelect(filteredVariables[selectedIndex]);
+            }
+            break;
+          case 'Escape':
+            setShowDropdown(false);
+            setSelectedIndex(0);
+            break;
+        }
+      }
+
+      return;
     }
 
     // Enter sends message in chat mode (if send button is enabled)
@@ -575,10 +612,12 @@ export function UnifiedChatInput<T = ToolDTO>({
                 </div>
                 {variables
                   .filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase()))
-                  .map((variable) => (
+                  .map((variable, index) => (
                     <button
                       key={variable.name}
-                      className="w-full text-left px-3 py-2 rounded hover:bg-accent transition-colors flex flex-col gap-1"
+                      className={`w-full text-left px-3 py-2 rounded transition-colors flex flex-col gap-1 ${
+                        index === selectedIndex ? 'bg-accent' : 'hover:bg-accent'
+                      }`}
                       onClick={() => handleVariableSelect(variable)}
                     >
                       <div className="font-mono text-sm">${variable.name}</div>

@@ -392,6 +392,10 @@ export default function PageEditPage() {
           <Puck
             config={config}
             data={initialData}
+            ui={{
+              leftSideBarWidth: 180,
+              rightSideBarWidth: 180,
+            }}
             viewports={[
               { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
               { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },

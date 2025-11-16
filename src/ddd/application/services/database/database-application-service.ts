@@ -38,7 +38,7 @@ export class DatabaseApplicationService {
 
       // Convert DTO to Value Objects
       const organizationId = OrganizationId.fromNumber(dto.organizationId);
-      const createdBy = UserId.fromString(dto.createdBy);
+      const createdBy = UserId.fromString(dto.ownerId);
 
       // Create URL-safe slug
       const baseSlug = dto.name
@@ -65,7 +65,7 @@ export class DatabaseApplicationService {
         slug,
         metadata,
         organizationId,
-        createdBy
+        ownerId: createdBy
       });
 
       // Create database using repository
@@ -74,7 +74,7 @@ export class DatabaseApplicationService {
         slug: database.slug,
         metadata: database.metadata,
         organizationId: database.organizationId.value,
-        createdBy: database.createdBy.value
+        ownerId: database.ownerId.value
       };
       const savedDatabase = await this.databaseRepository.create(createData);
 
@@ -133,7 +133,7 @@ export class DatabaseApplicationService {
         slug: existingDatabase.slug, // Slug doesn't change on update
         metadata: metadata || null,
         organizationId: existingDatabase.organizationId.value,
-        createdBy: existingDatabase.createdBy.value,
+        ownerId: existingDatabase.ownerId.value,
         createdAt: existingDatabase.createdAt,
         updatedAt: new Date()
       });

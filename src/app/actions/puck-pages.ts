@@ -5,7 +5,7 @@
 
 import { z } from "zod"
 import { revalidatePath } from "next/cache"
-import { requirePermission } from "./permissions"
+import { requirePermission, requireResourcePermission } from "./permissions"
 import { getPuckPageApplicationService } from "@/ddd/application/di/container"
 import { ActionError, type Result } from "@/lib/puck/errors"
 
@@ -119,8 +119,6 @@ export async function getPublishedPages(appId: number): Promise<Result<PageDTO[]
  */
 export async function getPage(id: number): Promise<Result<PageDTO>> {
   try {
-    await requirePermission("apps:view");
-
     if (!id) {
       return {
         success: false,
@@ -128,6 +126,8 @@ export async function getPage(id: number): Promise<Result<PageDTO>> {
         errorCode: 'VALIDATION'
       };
     }
+
+    await requireResourcePermission("apps:view", "page", id);
 
     const pageService = getPuckPageApplicationService();
     const page = await pageService.getPage(PageId.fromNumber(id));
@@ -231,7 +231,7 @@ export async function createPage(data: z.infer<typeof createPageSchema>, revalid
       slug,
       description: validatedData.description,
       templateData: validatedData.templateData,
-      createdBy: UserId.fromString(session.user.id)
+      ownerId: UserId.fromString(session.user.id)
     });
 
     if (!result.success) {
@@ -277,8 +277,6 @@ export async function createPage(data: z.infer<typeof createPageSchema>, revalid
  */
 export async function updatePage(data: z.infer<typeof updatePageSchema>, revalidateUrl?: string): Promise<Result<PageDTO>> {
   try {
-    await requirePermission("apps:manage");
-
     const validatedData = updatePageSchema.parse(data);
 
     if (!validatedData.id) {
@@ -288,6 +286,8 @@ export async function updatePage(data: z.infer<typeof updatePageSchema>, revalid
         errorCode: 'VALIDATION'
       };
     }
+
+    await requireResourcePermission("apps:manage", "page", validatedData.id);
 
     const pageService = getPuckPageApplicationService();
 
@@ -339,8 +339,6 @@ export async function updatePage(data: z.infer<typeof updatePageSchema>, revalid
  */
 export async function updatePageContent(data: z.infer<typeof updatePageContentSchema>, revalidateUrl?: string): Promise<Result<PageDTO>> {
   try {
-    await requirePermission("apps:manage");
-
     const validatedData = updatePageContentSchema.parse(data);
 
     if (!validatedData.id) {
@@ -350,6 +348,8 @@ export async function updatePageContent(data: z.infer<typeof updatePageContentSc
         errorCode: 'VALIDATION'
       };
     }
+
+    await requireResourcePermission("apps:manage", "page", validatedData.id);
 
     const pageService = getPuckPageApplicationService();
 
@@ -399,8 +399,6 @@ export async function updatePageContent(data: z.infer<typeof updatePageContentSc
  */
 export async function publishPage(id: number, revalidateUrl?: string): Promise<Result<PageDTO>> {
   try {
-    await requirePermission("apps:publish");
-
     if (!id) {
       return {
         success: false,
@@ -408,6 +406,8 @@ export async function publishPage(id: number, revalidateUrl?: string): Promise<R
         errorCode: 'VALIDATION'
       };
     }
+
+    await requireResourcePermission("apps:publish", "page", id);
 
     const pageService = getPuckPageApplicationService();
     const result = await pageService.publishPage(PageId.fromNumber(id));
@@ -446,8 +446,6 @@ export async function publishPage(id: number, revalidateUrl?: string): Promise<R
  */
 export async function unpublishPage(id: number, revalidateUrl?: string): Promise<Result<PageDTO>> {
   try {
-    await requirePermission("apps:publish");
-
     if (!id) {
       return {
         success: false,
@@ -455,6 +453,8 @@ export async function unpublishPage(id: number, revalidateUrl?: string): Promise
         errorCode: 'VALIDATION'
       };
     }
+
+    await requireResourcePermission("apps:publish", "page", id);
 
     const pageService = getPuckPageApplicationService();
     const result = await pageService.unpublishPage(PageId.fromNumber(id));
@@ -493,8 +493,6 @@ export async function unpublishPage(id: number, revalidateUrl?: string): Promise
  */
 export async function deletePage(id: number, revalidateUrl?: string): Promise<Result<{ message: string }>> {
   try {
-    await requirePermission("apps:manage");
-
     if (!id) {
       return {
         success: false,
@@ -502,6 +500,8 @@ export async function deletePage(id: number, revalidateUrl?: string): Promise<Re
         errorCode: 'VALIDATION'
       };
     }
+
+    await requireResourcePermission("apps:manage", "page", id);
 
     const pageService = getPuckPageApplicationService();
     const result = await pageService.deletePage(PageId.fromNumber(id));
@@ -755,7 +755,7 @@ export async function duplicatePage(id: number, revalidateUrl?: string): Promise
       slug: slugResult.data!,
       description: originalPage.description,
       templateData: originalPage.templateData,
-      createdBy: UserId.fromString(session.user.id)
+      ownerId: UserId.fromString(session.user.id)
     });
 
     if (!result.success || !result.data) {

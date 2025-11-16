@@ -230,4 +230,148 @@ export async function checkPermission(permissionString: string): Promise<Result<
   }
 }
 
-// AIDEV-NOTE: Only these 5 functions are actually used throughout the app
+/**
+ * Check multiple permissions at once (batch operation for client-side use)
+ */
+export async function checkPermissions(permissions: string[]): Promise<Result<Record<string, boolean>>> {
+  try {
+    const session = await requireAuth();
+
+    if (!session.user.currentOrganizationId) {
+      return {
+        success: false,
+        error: "No current organization selected"
+      };
+    }
+
+    const { hasPermission } = await import('@/lib/auth');
+    const results: Record<string, boolean> = {};
+
+    // Check all permissions in parallel
+    await Promise.all(
+      permissions.map(async (permissionString) => {
+        const hasPermissionResult = await hasPermission(
+          session.user.id,
+          permissionString,
+          session.user.currentOrganizationId!
+        );
+        results[permissionString] = hasPermissionResult;
+      })
+    );
+
+    return {
+      success: true,
+      data: results
+    };
+  } catch (error) {
+    console.error("Error checking permissions:", error);
+    return {
+      success: false,
+      error: "Failed to check permissions"
+    };
+  }
+}
+
+/**
+ * Check resource permission (for client-side use)
+ */
+export async function checkResourcePermission(
+  permissionString: string,
+  resourceType: string,
+  resourceId?: number
+): Promise<Result<boolean>> {
+  try {
+    const session = await requireAuth();
+
+    if (!session.user.currentOrganizationId) {
+      return {
+        success: false,
+        error: "No current organization selected"
+      };
+    }
+
+    const permission = Permission.fromString(permissionString);
+    const rbacRepository = getRBACRepository();
+
+    const hasPermissionResult = await rbacRepository.hasResourcePermission(
+      UserId.fromString(session.user.id),
+      permission,
+      OrganizationId.fromNumber(session.user.currentOrganizationId),
+      resourceType,
+      resourceId
+    );
+
+    return {
+      success: true,
+      data: hasPermissionResult
+    };
+  } catch (error) {
+    console.error("Error checking resource permission:", error);
+    return {
+      success: false,
+      error: "Failed to check resource permission"
+    };
+  }
+}
+
+export interface ResourcePermissionCheck {
+  permission: string;
+  resourceType: string;
+  resourceId?: number;
+}
+
+/**
+ * Check multiple resource permissions at once (batch operation for client-side use)
+ */
+export async function checkResourcePermissions(
+  checks: ResourcePermissionCheck[]
+): Promise<Result<boolean[]>> {
+  try {
+    const session = await requireAuth();
+
+    if (!session.user.currentOrganizationId) {
+      return {
+        success: false,
+        error: "No current organization selected"
+      };
+    }
+
+    const rbacRepository = getRBACRepository();
+    const results: boolean[] = [];
+
+    // Check all permissions in parallel
+    await Promise.all(
+      checks.map(async (check, index) => {
+        const permission = Permission.fromString(check.permission);
+        const hasPermissionResult = await rbacRepository.hasResourcePermission(
+          UserId.fromString(session.user.id),
+          permission,
+          OrganizationId.fromNumber(session.user.currentOrganizationId!),
+          check.resourceType,
+          check.resourceId
+        );
+        results[index] = hasPermissionResult;
+      })
+    );
+
+    return {
+      success: true,
+      data: results
+    };
+  } catch (error) {
+    console.error("Error checking resource permissions:", error);
+    return {
+      success: false,
+      error: "Failed to check resource permissions"
+    };
+  }
+}
+
+// AIDEV-NOTE: Functions for permission checking:
+// - requireAuth() - Ensures user is authenticated
+// - requirePermission() - Throws if user lacks org-level permission
+// - requireResourcePermission() - Throws if user lacks resource-specific permission
+// - checkPermission() - Returns boolean for single org-level permission (client-side)
+// - checkPermissions() - Returns Record for multiple org-level permissions (client-side)
+// - checkResourcePermission() - Returns boolean for single resource permission (client-side)
+// - checkResourcePermissions() - Returns array of booleans for multiple resource permissions (client-side)

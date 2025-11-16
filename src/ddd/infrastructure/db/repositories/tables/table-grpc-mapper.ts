@@ -426,7 +426,7 @@ export class TableGrpcMapper {
       description: protoTable.getDescription() || undefined,
       metadata: undefined,
       fields: fields,
-      createdBy: protoTable.getCreatedBy(),
+      ownerId: protoTable.getCreatedBy(),
       createdAt: createdAt,
       updatedAt: updatedAt,
     });

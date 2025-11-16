@@ -86,7 +86,7 @@ export class DrizzleAppRepository implements IAppRepository {
         description: persistence.description,
         themeConfig: persistence.themeConfig,
         homePageId: persistence.homePageId,
-        createdBy: persistence.createdBy,
+        ownerId: persistence.ownerId,
         createdAt: persistence.createdAt,
         updatedAt: persistence.updatedAt
       }).returning();
@@ -162,7 +162,7 @@ export class DrizzleAppRepository implements IAppRepository {
       description: record.description,
       themeConfig: record.themeConfig,
       homePageId: record.homePageId ?? undefined,
-      createdBy: record.createdBy,
+      ownerId: record.ownerId,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     });
