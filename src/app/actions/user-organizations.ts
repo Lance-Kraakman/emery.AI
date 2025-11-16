@@ -389,7 +389,8 @@ export async function getOrganizationMembers(organizationId?: number, searchQuer
       includeUserDetails: true
     };
 
-    return await userOrganizationApplicationService.getOrganizationMembers(filters);
+    const members = await userOrganizationApplicationService.getOrganizationMembers(filters);
+    return members.map(OrganizationMapper.memberToDTO);
     } catch (error) {
       console.error("Error fetching organization members:", error);
       throw new Error("Failed to fetch organization members");

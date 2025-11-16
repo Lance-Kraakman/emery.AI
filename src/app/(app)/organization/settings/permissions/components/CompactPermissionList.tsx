@@ -172,7 +172,7 @@ export function CompactPermissionList({
     onSelectionChange(updatedPermissions);
   };
 
-  const handleResourceSelection = (permissionId: number, resourceIds: number[]) => {
+  const handleResourceSelection = (permissionId: number, resourceIds: (number | string)[]) => {
     if (disabled) return;
 
     const updatedPermissions = selectedPermissions.map(p =>

@@ -84,6 +84,7 @@ describe('Resource Permissions RBAC Integration Tests', () => {
     // Create a team with both users as members
     const team = await createTestTeam(
       'Test Team',
+      ownerId,
       OrganizationId.fromNumber(organizationId)
     );
     teamId = team.id.value;

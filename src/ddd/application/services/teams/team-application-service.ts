@@ -63,7 +63,8 @@ export class TeamApplicationService {
         goals: dto.goals,
         agentIds: validatedAgentIds ? validatedAgentIds.map(id => id.toString()) : undefined,
         databaseId: dto.databaseId,
-        organizationId: dto.organizationId
+        organizationId: dto.organizationId,
+        ownerId: dto.ownerId
       });
 
       // Create team via repository
@@ -75,7 +76,8 @@ export class TeamApplicationService {
         goals: dto.goals || null,
         agentIds: validatedAgentIds ? validatedAgentIds.map(id => id.toString()) : null,
         databaseId: dto.databaseId || null,
-        organizationId: dto.organizationId
+        organizationId: dto.organizationId,
+        ownerId: dto.ownerId
       };
       const savedTeam = await this.teamRepository.create(createData);
 
@@ -132,6 +134,7 @@ export class TeamApplicationService {
         goals: dto.goals !== undefined ? dto.goals : existingTeam.goals,
         agentIds: validatedAgentIds !== undefined ? validatedAgentIds : existingTeam.agentIds?.map(id => id.toString()) || null,
         organizationId: existingTeam.organizationId.value,
+        ownerId: existingTeam.ownerId.value,
         createdAt: existingTeam.createdAt
       });
 
@@ -297,6 +300,7 @@ export class TeamApplicationService {
         goals: existingTeam.goals,
         agentIds: updatedAgentIds,
         organizationId: existingTeam.organizationId.value,
+        ownerId: existingTeam.ownerId.value,
         createdAt: existingTeam.createdAt
       });
 
@@ -348,6 +352,7 @@ export class TeamApplicationService {
         goals: existingTeam.goals,
         agentIds: updatedAgentIds,
         organizationId: existingTeam.organizationId.value,
+        ownerId: existingTeam.ownerId.value,
         createdAt: existingTeam.createdAt
       });
 
@@ -415,6 +420,7 @@ export class TeamApplicationService {
         goals: existingTeam.goals,
         agentIds: agentIds.map(id => id.value.toString()),
         organizationId: existingTeam.organizationId.value,
+        ownerId: existingTeam.ownerId.value,
         createdAt: existingTeam.createdAt
       });
 
