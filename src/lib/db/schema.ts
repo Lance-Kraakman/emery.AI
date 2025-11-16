@@ -414,18 +414,27 @@ export const permissions = pgTable("permissions", {
   unique("unique_permission").on(table.resource, table.action)
 ]);
 
-// Roles (system + custom per organization)  
+// Roles (system + custom per organization)
 export const roles = pgTable("roles", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
   organizationId: integer("organization_id").references(() => organizations.id),
   isSystem: boolean("is_system").default(false),
+  // Role type: system (built-in), personal (user-specific), team (team-specific), custom (org-defined)
+  type: text("type", { enum: ['system', 'personal', 'team', 'custom'] }).notNull().default('custom'),
+  // User ID for personal roles, null for other types
+  ownerId: uuid("owner_id").references(() => users.id, { onDelete: "cascade" }),
+  // Team ID for team roles, null for other types
+  teamId: integer("team_id").references(() => teams.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
+  index("roles_type_idx").on(table.type),
+  index("roles_owner_idx").on(table.ownerId),
+  index("roles_team_idx").on(table.teamId),
   pgPolicy("roles_tenant_isolation", {
     as: "permissive",
-    for: "all", 
+    for: "all",
     to: "public",
     using: sql`organization_id = current_setting('app.current_organization_id')::integer OR is_system = true`,
   })

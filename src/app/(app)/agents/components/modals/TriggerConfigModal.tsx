@@ -749,10 +749,106 @@ export function TriggerConfigModal({
               />
             </div>
 
+            {/* Context Reference - Combined Variables + Sample Data */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium">Context Reference</Label>
+                <div className="group relative">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
+                    <p className="text-foreground">
+                      Available variables and sample data for use in your task instructions
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Variables Column */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground font-medium">Variables</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 p-2.5 bg-muted/50 rounded-lg border min-h-[100px]">
+                    {InstructionTemplateService.getAvailableVariables(selectedType).map((variable) => (
+                      <Badge
+                        key={variable.name}
+                        variant="secondary"
+                        className="cursor-pointer hover:bg-secondary/80 transition-colors text-xs font-mono h-6"
+                        onClick={() => {
+                          // Insert variable at cursor position
+                          const input = document.getElementById('schedule-task-instructions') as HTMLTextAreaElement;
+                          if (input) {
+                            const start = input.selectionStart;
+                            const end = input.selectionEnd;
+                            const text = taskInstructions;
+                            const before = text.substring(0, start);
+                            const after = text.substring(end);
+                            const variableText = `\${${variable.name}}`;
+                            setTaskInstructions(before + variableText + after);
+                            // Set cursor position after inserted text
+                            setTimeout(() => {
+                              input.focus();
+                              input.setSelectionRange(start + variableText.length, start + variableText.length);
+                            }, 0);
+                          }
+                        }}
+                        title={variable.description}
+                      >
+                        ${variable.name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sample Data Column - Only for DATABASE_EVENT triggers */}
+                {selectedType === 'DATABASE_EVENT' && databaseConfig.tableId ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground font-medium">Sample Data</span>
+                    </div>
+                    {isLoadingSampleData ? (
+                      <div className="p-2.5 bg-muted/50 rounded-lg border flex items-center justify-center text-xs text-muted-foreground min-h-[100px]">
+                        Loading...
+                      </div>
+                    ) : sampleRowData ? (
+                      <div className="p-2.5 bg-muted/50 rounded-lg border max-h-[200px] overflow-y-auto">
+                        <div className="space-y-1">
+                          {Object.entries(sampleRowData).map(([fieldName, value]) => (
+                            <div key={fieldName} className="flex items-start gap-1.5 text-xs">
+                              <span className="font-mono text-muted-foreground min-w-[100px] flex-shrink-0">
+                                ${`row.${fieldName}`}
+                              </span>
+                              <span className="text-muted-foreground flex-shrink-0">→</span>
+                              <span className="font-mono text-foreground break-all">
+                                {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 bg-muted/50 rounded-lg border text-xs text-muted-foreground min-h-[100px] flex items-center justify-center">
+                        No sample data
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground font-medium">Sample Data</span>
+                    </div>
+                    <div className="p-2.5 bg-muted/50 rounded-lg border text-xs text-muted-foreground min-h-[100px] flex items-center justify-center">
+                      {selectedType === 'DATABASE_EVENT' ? 'Select a table to view sample data' : 'Available for database triggers'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Task Instructions with @ Tool Mentions */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium">Task Instructions *</Label>
+                <Label className="text-base font-medium">Task Instructions *</Label>
                 <div className="group relative">
                   <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                   <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
@@ -779,93 +875,6 @@ export function TriggerConfigModal({
                 onAttachmentRemove={handleAttachmentRemove}
               />
             </div>
-
-            {/* Variables Section */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium">Variables</Label>
-                <div className="group relative">
-                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                  <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
-                    <p className="text-foreground">
-                      Click a variable to insert it into your instructions. Variables will be replaced with actual values when the task runs.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg border">
-                {InstructionTemplateService.getAvailableVariables(selectedType).map((variable) => (
-                  <Badge
-                    key={variable.name}
-                    variant="secondary"
-                    className="cursor-pointer hover:bg-secondary/80 transition-colors text-xs font-mono"
-                    onClick={() => {
-                      // Insert variable at cursor position
-                      const input = document.getElementById('schedule-task-instructions') as HTMLTextAreaElement;
-                      if (input) {
-                        const start = input.selectionStart;
-                        const end = input.selectionEnd;
-                        const text = taskInstructions;
-                        const before = text.substring(0, start);
-                        const after = text.substring(end);
-                        const variableText = `\${${variable.name}}`;
-                        setTaskInstructions(before + variableText + after);
-                        // Set cursor position after inserted text
-                        setTimeout(() => {
-                          input.focus();
-                          input.setSelectionRange(start + variableText.length, start + variableText.length);
-                        }, 0);
-                      }
-                    }}
-                    title={variable.description}
-                  >
-                    ${variable.name}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-
-            {/* Sample Data Section - Only for DATABASE_EVENT triggers */}
-            {selectedType === 'DATABASE_EVENT' && databaseConfig.tableId && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm font-medium">Sample Row Data</Label>
-                  <div className="group relative">
-                    <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                    <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
-                      <p className="text-foreground">
-                        Example values from the selected table. Use these to understand what data will be available in your task instructions.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                {isLoadingSampleData ? (
-                  <div className="p-3 bg-muted/50 rounded-lg border flex items-center justify-center text-sm text-muted-foreground">
-                    Loading sample data...
-                  </div>
-                ) : sampleRowData ? (
-                  <div className="p-3 bg-muted/50 rounded-lg border">
-                    <div className="space-y-1.5">
-                      {Object.entries(sampleRowData).map(([fieldName, value]) => (
-                        <div key={fieldName} className="flex items-start gap-2 text-xs">
-                          <span className="font-mono text-muted-foreground min-w-[120px]">
-                            ${`row.${fieldName}`}
-                          </span>
-                          <span className="text-muted-foreground">→</span>
-                          <span className="font-mono text-foreground">
-                            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-muted/50 rounded-lg border text-sm text-muted-foreground">
-                    No sample data available
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       )}

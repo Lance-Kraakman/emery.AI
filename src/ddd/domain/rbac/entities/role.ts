@@ -2,7 +2,9 @@
 // Represents a collection of permissions that can be assigned to users
 
 import { Permission } from '@/ddd/domain/shared/value-objects/permission';
-import { OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+
+export type RoleType = 'system' | 'personal' | 'team' | 'custom';
 
 export interface Role {
   id: number;
@@ -10,6 +12,9 @@ export interface Role {
   description?: string;
   organizationId?: OrganizationId; // null for system roles
   isSystem: boolean;
+  type: RoleType; // Role type: system, personal, team, or custom
+  ownerId?: UserId; // User ID for personal roles, null for other types
+  teamId?: number; // Team ID for team roles, null for other types
   permissions: Permission[];
   createdAt: Date;
 }
@@ -19,6 +24,9 @@ export interface CreateRoleData {
   description?: string;
   organizationId: OrganizationId;
   permissions: Permission[];
+  type?: 'personal' | 'team' | 'custom'; // System roles can't be created via this interface
+  ownerId?: UserId; // Required for personal roles
+  teamId?: number; // Required for team roles
 }
 
 export interface UpdateRoleData {

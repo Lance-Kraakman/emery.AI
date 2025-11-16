@@ -4,7 +4,7 @@
 // Uses domain service for business logic and validation
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "./permissions";
+import { requirePermission, requireResourcePermission } from "./permissions";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateRowCommand, UpdateRowCommand } from "./types";
@@ -681,7 +681,7 @@ export async function getSampleRow(tableId: number): Promise<Result<{
 }>> {
   return withAuthContext(async () => {
     try {
-      await requirePermission("tables:view");
+      await requireResourcePermission("data:view", "table", tableId);
 
       const tableApplicationService = getTableApplicationService();
 
