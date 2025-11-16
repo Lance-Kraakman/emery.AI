@@ -852,15 +852,63 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     for key, value in runtime_inputs.items():
                         task_parts.append(f"- {key}: {value}")
 
+                # Extract attachments from skill_config.content (MessagePart[])
+                images = []
+                file_attachments = []
+
+                if skill_config.content:
+                    logger.info(f"📎 Processing {len(skill_config.content)} content parts from skill config")
+                    for content_part in skill_config.content:
+                        if content_part.HasField('image_url'):
+                            # Load image from URL/path
+                            image_url = content_part.image_url.url
+                            logger.info(f"🖼️ Loading image from: {image_url}")
+                            try:
+                                from PIL import Image
+                                import requests
+                                from io import BytesIO
+
+                                if image_url.startswith('http'):
+                                    # Download from URL
+                                    response = requests.get(image_url)
+                                    img = Image.open(BytesIO(response.content))
+                                else:
+                                    # Load from file path
+                                    img = Image.open(image_url)
+                                images.append(img)
+                                logger.info(f"✅ Loaded image: {img.size}")
+                            except Exception as e:
+                                logger.error(f"❌ Failed to load image from {image_url}: {e}")
+
+                        elif content_part.HasField('file'):
+                            # Add file info to task description
+                            file_info = f"- File: {content_part.file.filename} ({content_part.file.mime_type})"
+                            if content_part.file.url:
+                                file_info += f" at {content_part.file.url}"
+                            file_attachments.append(file_info)
+                            logger.info(f"📄 Added file attachment: {content_part.file.filename}")
+
+                        elif content_part.HasField('text'):
+                            # Add text content to task
+                            task_parts.append(f"\n\n{content_part.text.text}")
+                            logger.info(f"📝 Added text content: {content_part.text.text[:50]}...")
+
+                # Add file attachments to task description
+                if file_attachments:
+                    task_parts.append("\n\nAttached Files:")
+                    task_parts.extend(file_attachments)
+
                 task = "\n".join(task_parts)
                 logger.info(f"📝 Skill task: {task[:200]}...")
+                if images:
+                    logger.info(f"🖼️ Passing {len(images)} images to sub-agent")
 
                 # 4. Execute skill with sub-agent
                 # When stream=False, run() returns the final output directly (not an iterable)
                 from smolagents.agent_types import AgentText, AgentImage, AgentAudio
                 import json
 
-                result = sub_agent.run(task=task, stream=False, reset=True)
+                result = sub_agent.run(task=task, images=images if images else None, stream=False, reset=True)
                 logger.info(f"🔍 Skill output type: {type(result).__name__}")
 
                 # Create MessagePart based on output type
