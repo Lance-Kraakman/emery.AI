@@ -34,6 +34,9 @@ interface UnifiedChatInputProps<T = ToolDTO> {
   tools?: T[];
   onToolsChange?: (tools: T[]) => void;
 
+  // Variable selection ($mentions)
+  variables?: Array<{ name: string; description: string }>;
+
   // File attachments (optional)
   enableAttachments?: boolean;
   pendingAttachments?: File[];
@@ -70,6 +73,7 @@ export function UnifiedChatInput<T = ToolDTO>({
   className = "",
   tools,
   onToolsChange,
+  variables,
   enableAttachments = true,
   pendingAttachments = [],
   onAttachmentAdd,
@@ -97,6 +101,7 @@ export function UnifiedChatInput<T = ToolDTO>({
 
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownQuery, setDropdownQuery] = useState('');
+  const [dropdownType, setDropdownType] = useState<'tools' | 'variables'>('tools');
   const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number; maxHeight?: number }>({ left: 0 });
   const [selectedTools, setSelectedTools] = useState<T[]>(tools || []);
 
@@ -117,16 +122,17 @@ export function UnifiedChatInput<T = ToolDTO>({
     }
   }, [tools]);
 
-  // Detect @ tools and show/hide dropdown
+  // Detect @ tools and $ variables - show/hide dropdown
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     const cursorPos = e.target.selectionStart || 0;
 
     setInputValue(value);
 
-    // Find @ symbol before cursor - allow spaces in search but exclude completed tool references
+    // Find @ or $ symbol before cursor
     const beforeCursor = value.slice(0, cursorPos);
     const atMatch = beforeCursor.match(/@([^@]*)$/);
+    const dollarMatch = beforeCursor.match(/\$([^\s$]*)$/);
 
     // Don't show dropdown if we're in a completed tool reference
     const isCompletedTool = atMatch && (
@@ -139,9 +145,33 @@ export function UnifiedChatInput<T = ToolDTO>({
       atMatch[0].startsWith('@skill:')
     );
 
-    if (atMatch && !isCompletedTool) {
+    // Check for $ variable trigger (only if variables are provided)
+    if (dollarMatch && variables && variables.length > 0) {
+      const query = dollarMatch[1] || '';
+      setDropdownQuery(query);
+      setDropdownType('variables');
+      setShowDropdown(true);
+
+      // Position dropdown (same logic as @ mentions)
+      if (inputRef.current) {
+        const rect = inputRef.current.getBoundingClientRect();
+        const gap = 8;
+        const bottom = window.innerHeight - rect.top + gap;
+        const maxHeight = rect.top - gap - 20;
+        let left = rect.left;
+        const dropdownWidth = 440;
+        if (left + dropdownWidth > window.innerWidth) {
+          left = window.innerWidth - dropdownWidth - 16;
+        }
+        if (left < 0) {
+          left = 16;
+        }
+        setDropdownPosition({ bottom, left, maxHeight });
+      }
+    } else if (atMatch && !isCompletedTool) {
       const query = atMatch[1] || '';
       setDropdownQuery(query);
+      setDropdownType('tools');
       setShowDropdown(true);
 
       // Position above input since chat is at bottom of screen
@@ -214,6 +244,33 @@ export function UnifiedChatInput<T = ToolDTO>({
 
       // Position cursor after inserted text
       const newCursorPos = beforeAt.length + (insertText?.length || 0) + 1;
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+          inputRef.current.focus();
+        }
+      }, 0);
+    }
+
+    setShowDropdown(false);
+  };
+
+  // Handle variable selection - insert ${variableName} at cursor
+  const handleVariableSelect = (variable: { name: string; description: string }) => {
+    const cursorPos = inputRef.current?.selectionStart || 0;
+    const beforeCursor = inputValue.slice(0, cursorPos);
+    const afterCursor = inputValue.slice(cursorPos);
+
+    // Find and replace the $ query with the full variable reference
+    const dollarMatch = beforeCursor.match(/\$[^\s$]*$/);
+    if (dollarMatch) {
+      const beforeDollar = beforeCursor.slice(0, dollarMatch.index);
+      const variableText = `\${${variable.name}}`;
+      const newValue = beforeDollar + variableText + ' ' + afterCursor;
+      setInputValue(newValue);
+
+      // Position cursor after inserted text
+      const newCursorPos = beforeDollar.length + variableText.length + 1;
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
@@ -492,14 +549,51 @@ export function UnifiedChatInput<T = ToolDTO>({
           />
         )}
 
-        {/* Tool Dropdown */}
-        <ToolDropdown
-          query={dropdownQuery}
-          isOpen={showDropdown}
-          onClose={() => setShowDropdown(false)}
-          onSelect={handleToolSelect}
-          position={dropdownPosition}
-        />
+        {/* Tool/Variable Dropdown */}
+        {dropdownType === 'tools' ? (
+          <ToolDropdown
+            query={dropdownQuery}
+            isOpen={showDropdown}
+            onClose={() => setShowDropdown(false)}
+            onSelect={handleToolSelect}
+            position={dropdownPosition}
+          />
+        ) : (
+          /* Variable Dropdown */
+          showDropdown && variables && (
+            <div
+              className="fixed z-[100] bg-popover border rounded-lg shadow-lg w-[440px] overflow-auto"
+              style={{
+                bottom: dropdownPosition.bottom,
+                left: dropdownPosition.left,
+                maxHeight: dropdownPosition.maxHeight || 300
+              }}
+            >
+              <div className="p-2">
+                <div className="text-xs font-medium text-muted-foreground px-2 py-1.5">
+                  Variables
+                </div>
+                {variables
+                  .filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase()))
+                  .map((variable) => (
+                    <button
+                      key={variable.name}
+                      className="w-full text-left px-3 py-2 rounded hover:bg-accent transition-colors flex flex-col gap-1"
+                      onClick={() => handleVariableSelect(variable)}
+                    >
+                      <div className="font-mono text-sm">${variable.name}</div>
+                      <div className="text-xs text-muted-foreground">{variable.description}</div>
+                    </button>
+                  ))}
+                {variables.filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase())).length === 0 && (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">
+                    No variables found
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        )}
       </div>
     </div>
     </div>

@@ -5,8 +5,15 @@ import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result, CreateTaskData } from "./types";
-import { getAgentTaskApplicationService } from "@/ddd/application/di/container";
+import { getAgentTaskApplicationService, getAgentApplicationService } from "@/ddd/application/di/container";
 import type { CreateTaskDTO } from "@/app/dtos/task.dto";
+import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { v4 as uuidv4 } from 'uuid';
+import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 
 export async function createTask(data: CreateTaskData): Promise<Result> {
   return withAuthContext(async () => {
@@ -288,4 +295,85 @@ export async function getTaskStats(agentId?: number): Promise<Result> {
       };
     }
   });
+}
+
+/**
+ * Upload attachment for a task
+ * Uploads file to S3 and returns the URL for inclusion in task instructions
+ */
+export async function uploadTaskAttachment(
+  agentId: number,
+  formData: FormData
+): Promise<Result<{ url: string; s3Key: string; filename: string; mimeType: string; type: 'image' | 'document' }>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const file = formData.get('file') as File;
+    if (!file) {
+      return { success: false, error: 'No file provided' };
+    }
+
+    // Get agent to retrieve organizationId
+    const agentService = getAgentApplicationService();
+    const agent = await agentService.getAgent(AgentId.fromNumber(agentId));
+    if (!agent) {
+      return { success: false, error: 'Agent not found' };
+    }
+
+    // Determine file type
+    const isImage = file.type.startsWith('image/');
+    const attachmentType = isImage ? 'image' : 'document';
+
+    // Generate S3 key: task-attachments/{org_id}/{agent_id}/{uuid}.{ext}
+    const fileId = uuidv4();
+    const extension = file.name.split('.').pop() || 'bin';
+    const sanitizedExt = extension.replace(/[^\w.-]/g, '_');
+    const s3Key = `task-attachments/${agent.organizationId.value}/${agentId}/${fileId}.${sanitizedExt}`;
+
+    // Upload to S3
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const shouldUseEncryption = !process.env.AWS_ENDPOINT_URL;
+
+    const putCommand = new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: s3Key,
+      Body: buffer,
+      ContentType: file.type,
+      ...(shouldUseEncryption && {
+        ServerSideEncryption: 'AES256'
+      })
+    });
+
+    await s3Client.send(putCommand);
+
+    // Generate pre-signed URL
+    const getCommand = new GetObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: s3Key
+    });
+
+    const url = await getSignedUrl(s3Client, getCommand, {
+      expiresIn: 3600 // 1 hour
+    });
+
+    return {
+      success: true,
+      data: {
+        url,
+        s3Key,
+        filename: file.name,
+        mimeType: file.type,
+        type: attachmentType
+      }
+    };
+  } catch (error) {
+    console.error('[uploadTaskAttachment] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to upload task attachment'
+    };
+  }
 }

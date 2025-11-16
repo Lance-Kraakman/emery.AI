@@ -42,6 +42,10 @@ export interface TriggerContext {
   type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL';
   scheduleName?: string; // Name of the schedule that triggered this task
   tableChange?: TableChangeEvent; // For DATABASE_EVENT triggers
+  calendarData?: {  // For CALENDAR triggers
+    scheduledTime: string; // ISO timestamp of scheduled execution
+    timezone: string; // Timezone of the schedule
+  };
 }
 
 /**
