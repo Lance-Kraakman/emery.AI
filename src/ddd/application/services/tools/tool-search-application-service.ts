@@ -445,7 +445,8 @@ export class ToolSearchApplicationService {
         skill.id.toString(),
         organizationId.value,
         skill.name,
-        `Skill - ${skill.description || 'No description'}`
+        `Skill - ${skill.description || 'No description'}`,
+        skill.inputs
       );
     });
   }

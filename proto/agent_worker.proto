@@ -122,14 +122,15 @@ message AgentConfig {
 // AIDEV-NOTE: Simplified single-instruction skill model (removed multi-step workflow)
 // Skill configuration with single instruction block
 message SkillConfig {
-  string name = 1;
-  string description = 2;
-  repeated SkillInput inputs = 3;
-  repeated SkillOutput outputs = 4;
-  string instructions = 5;
-  repeated ToolConfig tools = 6;
-  string model = 7;                    // Optional: model override for this skill
-  repeated MessagePart content = 8;    // Skill-level attachments (images, files, text)
+  int32 id = 1;                        // Skill ID for unique identification
+  string name = 2;
+  string description = 3;
+  repeated SkillInput inputs = 4;
+  repeated SkillOutput outputs = 5;
+  string instructions = 6;
+  repeated ToolConfig tools = 7;
+  string model = 8;                    // Optional: model override for this skill
+  repeated MessagePart content = 9;    // Skill-level attachments (images, files, text)
 }
 
 // Skill input parameter
@@ -223,8 +224,8 @@ message ProcessMessageRequest {
   // Conversation history (only used if session not in memory - for restoration after restart/timeout)
   repeated HistoryMessage conversation_history = 5;
 
-  // Tools for ToolCallingAgent execution (can be empty)
-  repeated ToolConfig tools = 6;
+  // Complete agent configuration (tools, skills, servers)
+  AgentConfig agent_config = 6;
 
   string model = 7;                  // Optional: model override for this chat message
 

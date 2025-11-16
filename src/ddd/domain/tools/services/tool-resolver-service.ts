@@ -182,6 +182,8 @@ export class ToolResolverService {
       return [SEARCH_CATEGORIES.TABLE]
     } else if (cleanQuery.startsWith('@database:')) {
       return [SEARCH_CATEGORIES.DATABASE]
+    } else if (cleanQuery.startsWith('@skill:')) {
+      return [SEARCH_CATEGORIES.SKILL]
     } else if (cleanQuery === '@' || cleanQuery === '') {
       // Show all categories when just @ or empty
       return this.getAllSearchCategories()
@@ -288,6 +290,9 @@ export class ToolResolverService {
     }
     if (text.startsWith('@database:')) {
       return { category: ReferenceCategory.DATABASE, searchTerm: text.substring(10) }
+    }
+    if (text.startsWith('@skill:')) {
+      return { category: ReferenceCategory.SKILL, searchTerm: text.substring(7) }
     }
 
     return { category: null, searchTerm: text }

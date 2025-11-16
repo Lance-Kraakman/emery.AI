@@ -322,6 +322,8 @@ export interface AgentConfig {
  * Skill configuration with single instruction block
  */
 export interface SkillConfig {
+  /** Skill ID for unique identification */
+  id: number;
   name: string;
   description: string;
   inputs: SkillInput[];
@@ -450,8 +452,10 @@ export interface ProcessMessageRequest {
     | undefined;
   /** Conversation history (only used if session not in memory - for restoration after restart/timeout) */
   conversationHistory: HistoryMessage[];
-  /** Tools for ToolCallingAgent execution (can be empty) */
-  tools: ToolConfig[];
+  /** Complete agent configuration (tools, skills, servers) */
+  agentConfig:
+    | AgentConfig
+    | undefined;
   /** Optional: model override for this chat message */
   model: string;
   /** Unique message identifier for cancellation */
@@ -1879,34 +1883,47 @@ export const AgentConfig: MessageFns<AgentConfig> = {
 };
 
 function createBaseSkillConfig(): SkillConfig {
-  return { name: "", description: "", inputs: [], outputs: [], instructions: "", tools: [], model: "", content: [] };
+  return {
+    id: 0,
+    name: "",
+    description: "",
+    inputs: [],
+    outputs: [],
+    instructions: "",
+    tools: [],
+    model: "",
+    content: [],
+  };
 }
 
 export const SkillConfig: MessageFns<SkillConfig> = {
   encode(message: SkillConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== 0) {
+      writer.uint32(8).int32(message.id);
+    }
     if (message.name !== "") {
-      writer.uint32(10).string(message.name);
+      writer.uint32(18).string(message.name);
     }
     if (message.description !== "") {
-      writer.uint32(18).string(message.description);
+      writer.uint32(26).string(message.description);
     }
     for (const v of message.inputs) {
-      SkillInput.encode(v!, writer.uint32(26).fork()).join();
+      SkillInput.encode(v!, writer.uint32(34).fork()).join();
     }
     for (const v of message.outputs) {
-      SkillOutput.encode(v!, writer.uint32(34).fork()).join();
+      SkillOutput.encode(v!, writer.uint32(42).fork()).join();
     }
     if (message.instructions !== "") {
-      writer.uint32(42).string(message.instructions);
+      writer.uint32(50).string(message.instructions);
     }
     for (const v of message.tools) {
-      ToolConfig.encode(v!, writer.uint32(50).fork()).join();
+      ToolConfig.encode(v!, writer.uint32(58).fork()).join();
     }
     if (message.model !== "") {
-      writer.uint32(58).string(message.model);
+      writer.uint32(66).string(message.model);
     }
     for (const v of message.content) {
-      MessagePart.encode(v!, writer.uint32(66).fork()).join();
+      MessagePart.encode(v!, writer.uint32(74).fork()).join();
     }
     return writer;
   },
@@ -1919,11 +1936,11 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1: {
-          if (tag !== 10) {
+          if (tag !== 8) {
             break;
           }
 
-          message.name = reader.string();
+          message.id = reader.int32();
           continue;
         }
         case 2: {
@@ -1931,7 +1948,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.description = reader.string();
+          message.name = reader.string();
           continue;
         }
         case 3: {
@@ -1939,7 +1956,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.inputs.push(SkillInput.decode(reader, reader.uint32()));
+          message.description = reader.string();
           continue;
         }
         case 4: {
@@ -1947,7 +1964,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.outputs.push(SkillOutput.decode(reader, reader.uint32()));
+          message.inputs.push(SkillInput.decode(reader, reader.uint32()));
           continue;
         }
         case 5: {
@@ -1955,7 +1972,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.instructions = reader.string();
+          message.outputs.push(SkillOutput.decode(reader, reader.uint32()));
           continue;
         }
         case 6: {
@@ -1963,7 +1980,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.tools.push(ToolConfig.decode(reader, reader.uint32()));
+          message.instructions = reader.string();
           continue;
         }
         case 7: {
@@ -1971,11 +1988,19 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.model = reader.string();
+          message.tools.push(ToolConfig.decode(reader, reader.uint32()));
           continue;
         }
         case 8: {
           if (tag !== 66) {
+            break;
+          }
+
+          message.model = reader.string();
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
             break;
           }
 
@@ -1993,6 +2018,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
 
   fromJSON(object: any): SkillConfig {
     return {
+      id: isSet(object.id) ? globalThis.Number(object.id) : 0,
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       description: isSet(object.description) ? globalThis.String(object.description) : "",
       inputs: globalThis.Array.isArray(object?.inputs) ? object.inputs.map((e: any) => SkillInput.fromJSON(e)) : [],
@@ -2006,6 +2032,9 @@ export const SkillConfig: MessageFns<SkillConfig> = {
 
   toJSON(message: SkillConfig): unknown {
     const obj: any = {};
+    if (message.id !== 0) {
+      obj.id = Math.round(message.id);
+    }
     if (message.name !== "") {
       obj.name = message.name;
     }
@@ -2038,6 +2067,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
   },
   fromPartial<I extends Exact<DeepPartial<SkillConfig>, I>>(object: I): SkillConfig {
     const message = createBaseSkillConfig();
+    message.id = object.id ?? 0;
     message.name = object.name ?? "";
     message.description = object.description ?? "";
     message.inputs = object.inputs?.map((e) => SkillInput.fromPartial(e)) || [];
@@ -3196,7 +3226,7 @@ function createBaseProcessMessageRequest(): ProcessMessageRequest {
     organizationId: 0,
     context: undefined,
     conversationHistory: [],
-    tools: [],
+    agentConfig: undefined,
     model: "",
     messageId: "",
     sessionId: "",
@@ -3220,8 +3250,8 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     for (const v of message.conversationHistory) {
       HistoryMessage.encode(v!, writer.uint32(42).fork()).join();
     }
-    for (const v of message.tools) {
-      ToolConfig.encode(v!, writer.uint32(50).fork()).join();
+    if (message.agentConfig !== undefined) {
+      AgentConfig.encode(message.agentConfig, writer.uint32(50).fork()).join();
     }
     if (message.model !== "") {
       writer.uint32(58).string(message.model);
@@ -3287,7 +3317,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
             break;
           }
 
-          message.tools.push(ToolConfig.decode(reader, reader.uint32()));
+          message.agentConfig = AgentConfig.decode(reader, reader.uint32());
           continue;
         }
         case 7: {
@@ -3334,7 +3364,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
       conversationHistory: globalThis.Array.isArray(object?.conversationHistory)
         ? object.conversationHistory.map((e: any) => HistoryMessage.fromJSON(e))
         : [],
-      tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
+      agentConfig: isSet(object.agentConfig) ? AgentConfig.fromJSON(object.agentConfig) : undefined,
       model: isSet(object.model) ? globalThis.String(object.model) : "",
       messageId: isSet(object.messageId) ? globalThis.String(object.messageId) : "",
       sessionId: isSet(object.sessionId) ? globalThis.String(object.sessionId) : "",
@@ -3358,8 +3388,8 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     if (message.conversationHistory?.length) {
       obj.conversationHistory = message.conversationHistory.map((e) => HistoryMessage.toJSON(e));
     }
-    if (message.tools?.length) {
-      obj.tools = message.tools.map((e) => ToolConfig.toJSON(e));
+    if (message.agentConfig !== undefined) {
+      obj.agentConfig = AgentConfig.toJSON(message.agentConfig);
     }
     if (message.model !== "") {
       obj.model = message.model;
@@ -3385,7 +3415,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
       ? ChatContext.fromPartial(object.context)
       : undefined;
     message.conversationHistory = object.conversationHistory?.map((e) => HistoryMessage.fromPartial(e)) || [];
-    message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
+    message.agentConfig = (object.agentConfig !== undefined && object.agentConfig !== null)
+      ? AgentConfig.fromPartial(object.agentConfig)
+      : undefined;
     message.model = object.model ?? "";
     message.messageId = object.messageId ?? "";
     message.sessionId = object.sessionId ?? "";

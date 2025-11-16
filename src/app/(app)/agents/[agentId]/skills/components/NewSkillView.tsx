@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import { createSkill, getSkillTemplate, uploadSkillAttachment } from '@/app/actions/skills';
+import { createSkill, getSkillTemplate, uploadSkillAttachment, updateSkill } from '@/app/actions/skills';
 import { toast } from 'sonner';
 import { SkillEditor, type SkillFormData } from './SkillEditor';
+import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 
 interface NewSkillViewProps {
   agent: AgentDTO;
@@ -93,7 +94,9 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
 
       const skillId = result.data.id;
 
-      // Step 2: Upload pending attachments if any
+      // Step 2: Upload pending attachments if any and collect metadata
+      let contentParts: MessagePart[] = [];
+
       if (formData.pendingAttachments && formData.pendingAttachments.length > 0) {
         toast.info(`Uploading ${formData.pendingAttachments.length} attachment(s)...`);
 
@@ -103,9 +106,36 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
           attachFormData.append('type', file.type.startsWith('image/') ? 'image' : 'file');
 
           const uploadResult = await uploadSkillAttachment(skillId, attachFormData);
-          if (!uploadResult.success) {
+
+          if (uploadResult.success && uploadResult.data) {
+            // Convert upload metadata to MessagePart and add to content
+            const metadata = uploadResult.data;
+            const messagePart: MessagePart = metadata.type === 'image'
+              ? { imageUrl: { url: metadata.url } }
+              : {
+                  file: {
+                    url: metadata.url,
+                    filename: metadata.filename,
+                    size: metadata.sizeBytes,
+                    mimeType: metadata.mimeType
+                  }
+                };
+            contentParts.push(messagePart);
+          } else {
             console.error('Failed to upload attachment:', file.name, uploadResult.error);
             toast.error(`Failed to upload ${file.name}`);
+          }
+        }
+
+        // Step 3: Update skill with content metadata
+        if (contentParts.length > 0) {
+          const updateResult = await updateSkill(skillId, {
+            content: contentParts
+          });
+
+          if (!updateResult.success) {
+            console.error('Failed to save attachment metadata:', updateResult.error);
+            toast.warning('Skill created but attachment metadata may not be saved');
           }
         }
       }

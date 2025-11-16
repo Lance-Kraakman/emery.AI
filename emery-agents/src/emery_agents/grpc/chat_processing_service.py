@@ -856,16 +856,74 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 logger.info(f"📝 Skill task: {task[:200]}...")
 
                 # 4. Execute skill with sub-agent
-                result_parts = []
-                for step in sub_agent.run(task=task, stream=False, reset=True):
-                    if hasattr(step, 'final_answer') and step.final_answer:
-                        result_parts.append(str(step.final_answer))
-                    elif hasattr(step, 'observations') and step.observations:
-                        result_parts.append(str(step.observations))
+                # When stream=False, run() returns the final output directly (not an iterable)
+                from smolagents.agent_types import AgentText, AgentImage, AgentAudio
+                import json
 
-                result = "\n".join(result_parts) if result_parts else "Skill completed with no output"
-                logger.info(f"✅ Skill {skill_config.name} completed: {len(result)} chars")
-                return result
+                result = sub_agent.run(task=task, stream=False, reset=True)
+                logger.info(f"🔍 Skill output type: {type(result).__name__}")
+
+                # Create MessagePart based on output type
+                message_parts = []
+
+                if isinstance(result, AgentImage):
+                    # Image output - save to temp and create ImageUrlPart
+                    temp_path = result.to_string()  # Saves to temp directory
+                    logger.info(f"📸 Skill generated image: {temp_path}")
+                    # TODO: Upload image to S3 and get URL instead of temp path
+                    image_part = agent_worker_pb2.ImageUrlPart(url=temp_path)
+                    message_part = agent_worker_pb2.MessagePart(image_url=image_part)
+                    message_parts.append(message_part)
+
+                elif isinstance(result, AgentAudio):
+                    # Audio output - save to temp and create FilePart
+                    temp_path = result.to_string()  # Saves to temp directory
+                    logger.info(f"🔊 Skill generated audio: {temp_path}")
+                    # TODO: Upload audio to S3 and get URL instead of temp path
+                    file_part = agent_worker_pb2.FilePart(
+                        url=temp_path,
+                        mime_type="audio/wav",
+                        filename="audio.wav",
+                        size=0  # TODO: Get actual file size
+                    )
+                    message_part = agent_worker_pb2.MessagePart(file=file_part)
+                    message_parts.append(message_part)
+
+                elif isinstance(result, AgentText) or isinstance(result, str):
+                    # Text output - create TextPart
+                    text_content = str(result)
+                    logger.info(f"📝 Skill generated text: {text_content[:100]}...")
+                    text_part = agent_worker_pb2.TextPart(text=text_content)
+                    message_part = agent_worker_pb2.MessagePart(text=text_part)
+                    message_parts.append(message_part)
+
+                else:
+                    # Unknown type - convert to string
+                    text_content = str(result)
+                    logger.info(f"❓ Skill generated unknown type, converting to text: {text_content[:100]}...")
+                    text_part = agent_worker_pb2.TextPart(text=text_content)
+                    message_part = agent_worker_pb2.MessagePart(text=text_part)
+                    message_parts.append(message_part)
+
+                # Serialize MessageParts to JSON for now
+                # TODO: Update SkillTool and parent agent to handle MessagePart[] natively
+                serialized_parts = []
+                for part in message_parts:
+                    if part.HasField('text'):
+                        serialized_parts.append({'type': 'text', 'text': part.text.text})
+                    elif part.HasField('image_url'):
+                        serialized_parts.append({'type': 'image', 'url': part.image_url.url})
+                    elif part.HasField('file'):
+                        serialized_parts.append({
+                            'type': 'file',
+                            'url': part.file.url,
+                            'mime_type': part.file.mime_type,
+                            'filename': part.file.filename
+                        })
+
+                result_json = json.dumps({'parts': serialized_parts})
+                logger.info(f"✅ Skill {skill_config.name} completed: {len(message_parts)} message parts")
+                return result_json
 
             except Exception as e:
                 error_msg = f"Skill execution error: {str(e)}"

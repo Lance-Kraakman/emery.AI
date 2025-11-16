@@ -18,6 +18,7 @@
 import { ToolConfig, AgentToolConfig, TableToolConfig, DocumentToolConfig, FileToolConfig, DatabaseToolConfig } from '../value-objects/tool-config'
 import { ToolMetadata, ToolCategory } from '../value-objects/tool-metadata'
 import { Reference } from '@/ddd/domain/chat/value-objects/reference'
+import type { SkillInput } from '@/ddd/domain/skills/entities/skill'
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
 import { Tool } from './tool'
 
@@ -174,9 +175,10 @@ export class ReferenceTool extends Tool {
     skillId: string,
     organizationId: number,
     skillName: string,
-    description?: string
+    description?: string,
+    inputs?: SkillInput[]
   ): ReferenceTool {
-    const toolConfig = ToolConfig.skill(`skill-${skillId}`, Number(skillId), organizationId)
+    const toolConfig = ToolConfig.skill(`skill-${skillId}`, Number(skillId), organizationId, undefined, '1.0', inputs)
     const toolMetadata = ToolMetadata.skill(
       `skill-${skillId}`,
       skillName,

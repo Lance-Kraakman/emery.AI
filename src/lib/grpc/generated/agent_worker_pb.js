@@ -3453,7 +3453,7 @@ proto.emery.agents.AgentConfig.prototype.setDefaultModel = function(value) {
  * @private {!Array<number>}
  * @const
  */
-proto.emery.agents.SkillConfig.repeatedFields_ = [3,4,6,8];
+proto.emery.agents.SkillConfig.repeatedFields_ = [4,5,7,9];
 
 
 
@@ -3486,16 +3486,17 @@ proto.emery.agents.SkillConfig.prototype.toObject = function(opt_includeInstance
  */
 proto.emery.agents.SkillConfig.toObject = function(includeInstance, msg) {
   var f, obj = {
-    name: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    description: jspb.Message.getFieldWithDefault(msg, 2, ""),
+    id: jspb.Message.getFieldWithDefault(msg, 1, 0),
+    name: jspb.Message.getFieldWithDefault(msg, 2, ""),
+    description: jspb.Message.getFieldWithDefault(msg, 3, ""),
     inputsList: jspb.Message.toObjectList(msg.getInputsList(),
     proto.emery.agents.SkillInput.toObject, includeInstance),
     outputsList: jspb.Message.toObjectList(msg.getOutputsList(),
     proto.emery.agents.SkillOutput.toObject, includeInstance),
-    instructions: jspb.Message.getFieldWithDefault(msg, 5, ""),
+    instructions: jspb.Message.getFieldWithDefault(msg, 6, ""),
     toolsList: jspb.Message.toObjectList(msg.getToolsList(),
     proto.emery.agents.ToolConfig.toObject, includeInstance),
-    model: jspb.Message.getFieldWithDefault(msg, 7, ""),
+    model: jspb.Message.getFieldWithDefault(msg, 8, ""),
     contentList: jspb.Message.toObjectList(msg.getContentList(),
     proto.emery.agents.MessagePart.toObject, includeInstance)
   };
@@ -3535,37 +3536,41 @@ proto.emery.agents.SkillConfig.deserializeBinaryFromReader = function(msg, reade
     var field = reader.getFieldNumber();
     switch (field) {
     case 1:
-      var value = /** @type {string} */ (reader.readString());
-      msg.setName(value);
+      var value = /** @type {number} */ (reader.readInt32());
+      msg.setId(value);
       break;
     case 2:
       var value = /** @type {string} */ (reader.readString());
-      msg.setDescription(value);
+      msg.setName(value);
       break;
     case 3:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setDescription(value);
+      break;
+    case 4:
       var value = new proto.emery.agents.SkillInput;
       reader.readMessage(value,proto.emery.agents.SkillInput.deserializeBinaryFromReader);
       msg.addInputs(value);
       break;
-    case 4:
+    case 5:
       var value = new proto.emery.agents.SkillOutput;
       reader.readMessage(value,proto.emery.agents.SkillOutput.deserializeBinaryFromReader);
       msg.addOutputs(value);
       break;
-    case 5:
+    case 6:
       var value = /** @type {string} */ (reader.readString());
       msg.setInstructions(value);
       break;
-    case 6:
+    case 7:
       var value = new proto.emery.agents.ToolConfig;
       reader.readMessage(value,proto.emery.agents.ToolConfig.deserializeBinaryFromReader);
       msg.addTools(value);
       break;
-    case 7:
+    case 8:
       var value = /** @type {string} */ (reader.readString());
       msg.setModel(value);
       break;
-    case 8:
+    case 9:
       var value = new proto.emery.agents.MessagePart;
       reader.readMessage(value,proto.emery.agents.MessagePart.deserializeBinaryFromReader);
       msg.addContent(value);
@@ -3599,24 +3604,31 @@ proto.emery.agents.SkillConfig.prototype.serializeBinary = function() {
  */
 proto.emery.agents.SkillConfig.serializeBinaryToWriter = function(message, writer) {
   var f = undefined;
-  f = message.getName();
-  if (f.length > 0) {
-    writer.writeString(
+  f = message.getId();
+  if (f !== 0) {
+    writer.writeInt32(
       1,
       f
     );
   }
-  f = message.getDescription();
+  f = message.getName();
   if (f.length > 0) {
     writer.writeString(
       2,
       f
     );
   }
+  f = message.getDescription();
+  if (f.length > 0) {
+    writer.writeString(
+      3,
+      f
+    );
+  }
   f = message.getInputsList();
   if (f.length > 0) {
     writer.writeRepeatedMessage(
-      3,
+      4,
       f,
       proto.emery.agents.SkillInput.serializeBinaryToWriter
     );
@@ -3624,7 +3636,7 @@ proto.emery.agents.SkillConfig.serializeBinaryToWriter = function(message, write
   f = message.getOutputsList();
   if (f.length > 0) {
     writer.writeRepeatedMessage(
-      4,
+      5,
       f,
       proto.emery.agents.SkillOutput.serializeBinaryToWriter
     );
@@ -3632,14 +3644,14 @@ proto.emery.agents.SkillConfig.serializeBinaryToWriter = function(message, write
   f = message.getInstructions();
   if (f.length > 0) {
     writer.writeString(
-      5,
+      6,
       f
     );
   }
   f = message.getToolsList();
   if (f.length > 0) {
     writer.writeRepeatedMessage(
-      6,
+      7,
       f,
       proto.emery.agents.ToolConfig.serializeBinaryToWriter
     );
@@ -3647,14 +3659,14 @@ proto.emery.agents.SkillConfig.serializeBinaryToWriter = function(message, write
   f = message.getModel();
   if (f.length > 0) {
     writer.writeString(
-      7,
+      8,
       f
     );
   }
   f = message.getContentList();
   if (f.length > 0) {
     writer.writeRepeatedMessage(
-      8,
+      9,
       f,
       proto.emery.agents.MessagePart.serializeBinaryToWriter
     );
@@ -3663,28 +3675,28 @@ proto.emery.agents.SkillConfig.serializeBinaryToWriter = function(message, write
 
 
 /**
- * optional string name = 1;
+ * optional int32 id = 1;
+ * @return {number}
+ */
+proto.emery.agents.SkillConfig.prototype.getId = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 1, 0));
+};
+
+
+/**
+ * @param {number} value
+ * @return {!proto.emery.agents.SkillConfig} returns this
+ */
+proto.emery.agents.SkillConfig.prototype.setId = function(value) {
+  return jspb.Message.setProto3IntField(this, 1, value);
+};
+
+
+/**
+ * optional string name = 2;
  * @return {string}
  */
 proto.emery.agents.SkillConfig.prototype.getName = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
-};
-
-
-/**
- * @param {string} value
- * @return {!proto.emery.agents.SkillConfig} returns this
- */
-proto.emery.agents.SkillConfig.prototype.setName = function(value) {
-  return jspb.Message.setProto3StringField(this, 1, value);
-};
-
-
-/**
- * optional string description = 2;
- * @return {string}
- */
-proto.emery.agents.SkillConfig.prototype.getDescription = function() {
   return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
 };
 
@@ -3693,18 +3705,36 @@ proto.emery.agents.SkillConfig.prototype.getDescription = function() {
  * @param {string} value
  * @return {!proto.emery.agents.SkillConfig} returns this
  */
-proto.emery.agents.SkillConfig.prototype.setDescription = function(value) {
+proto.emery.agents.SkillConfig.prototype.setName = function(value) {
   return jspb.Message.setProto3StringField(this, 2, value);
 };
 
 
 /**
- * repeated SkillInput inputs = 3;
+ * optional string description = 3;
+ * @return {string}
+ */
+proto.emery.agents.SkillConfig.prototype.getDescription = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 3, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.agents.SkillConfig} returns this
+ */
+proto.emery.agents.SkillConfig.prototype.setDescription = function(value) {
+  return jspb.Message.setProto3StringField(this, 3, value);
+};
+
+
+/**
+ * repeated SkillInput inputs = 4;
  * @return {!Array<!proto.emery.agents.SkillInput>}
  */
 proto.emery.agents.SkillConfig.prototype.getInputsList = function() {
   return /** @type{!Array<!proto.emery.agents.SkillInput>} */ (
-    jspb.Message.getRepeatedWrapperField(this, proto.emery.agents.SkillInput, 3));
+    jspb.Message.getRepeatedWrapperField(this, proto.emery.agents.SkillInput, 4));
 };
 
 
@@ -3713,7 +3743,7 @@ proto.emery.agents.SkillConfig.prototype.getInputsList = function() {
  * @return {!proto.emery.agents.SkillConfig} returns this
 */
 proto.emery.agents.SkillConfig.prototype.setInputsList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 3, value);
+  return jspb.Message.setRepeatedWrapperField(this, 4, value);
 };
 
 
@@ -3723,7 +3753,7 @@ proto.emery.agents.SkillConfig.prototype.setInputsList = function(value) {
  * @return {!proto.emery.agents.SkillInput}
  */
 proto.emery.agents.SkillConfig.prototype.addInputs = function(opt_value, opt_index) {
-  return jspb.Message.addToRepeatedWrapperField(this, 3, opt_value, proto.emery.agents.SkillInput, opt_index);
+  return jspb.Message.addToRepeatedWrapperField(this, 4, opt_value, proto.emery.agents.SkillInput, opt_index);
 };
 
 
@@ -3737,12 +3767,12 @@ proto.emery.agents.SkillConfig.prototype.clearInputsList = function() {
 
 
 /**
- * repeated SkillOutput outputs = 4;
+ * repeated SkillOutput outputs = 5;
  * @return {!Array<!proto.emery.agents.SkillOutput>}
  */
 proto.emery.agents.SkillConfig.prototype.getOutputsList = function() {
   return /** @type{!Array<!proto.emery.agents.SkillOutput>} */ (
-    jspb.Message.getRepeatedWrapperField(this, proto.emery.agents.SkillOutput, 4));
+    jspb.Message.getRepeatedWrapperField(this, proto.emery.agents.SkillOutput, 5));
 };
 
 
@@ -3751,7 +3781,7 @@ proto.emery.agents.SkillConfig.prototype.getOutputsList = function() {
  * @return {!proto.emery.agents.SkillConfig} returns this
 */
 proto.emery.agents.SkillConfig.prototype.setOutputsList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 4, value);
+  return jspb.Message.setRepeatedWrapperField(this, 5, value);
 };
 
 
@@ -3761,7 +3791,7 @@ proto.emery.agents.SkillConfig.prototype.setOutputsList = function(value) {
  * @return {!proto.emery.agents.SkillOutput}
  */
 proto.emery.agents.SkillConfig.prototype.addOutputs = function(opt_value, opt_index) {
-  return jspb.Message.addToRepeatedWrapperField(this, 4, opt_value, proto.emery.agents.SkillOutput, opt_index);
+  return jspb.Message.addToRepeatedWrapperField(this, 5, opt_value, proto.emery.agents.SkillOutput, opt_index);
 };
 
 
@@ -3775,11 +3805,11 @@ proto.emery.agents.SkillConfig.prototype.clearOutputsList = function() {
 
 
 /**
- * optional string instructions = 5;
+ * optional string instructions = 6;
  * @return {string}
  */
 proto.emery.agents.SkillConfig.prototype.getInstructions = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 5, ""));
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 6, ""));
 };
 
 
@@ -3788,17 +3818,17 @@ proto.emery.agents.SkillConfig.prototype.getInstructions = function() {
  * @return {!proto.emery.agents.SkillConfig} returns this
  */
 proto.emery.agents.SkillConfig.prototype.setInstructions = function(value) {
-  return jspb.Message.setProto3StringField(this, 5, value);
+  return jspb.Message.setProto3StringField(this, 6, value);
 };
 
 
 /**
- * repeated ToolConfig tools = 6;
+ * repeated ToolConfig tools = 7;
  * @return {!Array<!proto.emery.agents.ToolConfig>}
  */
 proto.emery.agents.SkillConfig.prototype.getToolsList = function() {
   return /** @type{!Array<!proto.emery.agents.ToolConfig>} */ (
-    jspb.Message.getRepeatedWrapperField(this, proto.emery.agents.ToolConfig, 6));
+    jspb.Message.getRepeatedWrapperField(this, proto.emery.agents.ToolConfig, 7));
 };
 
 
@@ -3807,7 +3837,7 @@ proto.emery.agents.SkillConfig.prototype.getToolsList = function() {
  * @return {!proto.emery.agents.SkillConfig} returns this
 */
 proto.emery.agents.SkillConfig.prototype.setToolsList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 6, value);
+  return jspb.Message.setRepeatedWrapperField(this, 7, value);
 };
 
 
@@ -3817,7 +3847,7 @@ proto.emery.agents.SkillConfig.prototype.setToolsList = function(value) {
  * @return {!proto.emery.agents.ToolConfig}
  */
 proto.emery.agents.SkillConfig.prototype.addTools = function(opt_value, opt_index) {
-  return jspb.Message.addToRepeatedWrapperField(this, 6, opt_value, proto.emery.agents.ToolConfig, opt_index);
+  return jspb.Message.addToRepeatedWrapperField(this, 7, opt_value, proto.emery.agents.ToolConfig, opt_index);
 };
 
 
@@ -3831,11 +3861,11 @@ proto.emery.agents.SkillConfig.prototype.clearToolsList = function() {
 
 
 /**
- * optional string model = 7;
+ * optional string model = 8;
  * @return {string}
  */
 proto.emery.agents.SkillConfig.prototype.getModel = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 7, ""));
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 8, ""));
 };
 
 
@@ -3844,17 +3874,17 @@ proto.emery.agents.SkillConfig.prototype.getModel = function() {
  * @return {!proto.emery.agents.SkillConfig} returns this
  */
 proto.emery.agents.SkillConfig.prototype.setModel = function(value) {
-  return jspb.Message.setProto3StringField(this, 7, value);
+  return jspb.Message.setProto3StringField(this, 8, value);
 };
 
 
 /**
- * repeated MessagePart content = 8;
+ * repeated MessagePart content = 9;
  * @return {!Array<!proto.emery.agents.MessagePart>}
  */
 proto.emery.agents.SkillConfig.prototype.getContentList = function() {
   return /** @type{!Array<!proto.emery.agents.MessagePart>} */ (
-    jspb.Message.getRepeatedWrapperField(this, proto.emery.agents.MessagePart, 8));
+    jspb.Message.getRepeatedWrapperField(this, proto.emery.agents.MessagePart, 9));
 };
 
 
@@ -3863,7 +3893,7 @@ proto.emery.agents.SkillConfig.prototype.getContentList = function() {
  * @return {!proto.emery.agents.SkillConfig} returns this
 */
 proto.emery.agents.SkillConfig.prototype.setContentList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 8, value);
+  return jspb.Message.setRepeatedWrapperField(this, 9, value);
 };
 
 
@@ -3873,7 +3903,7 @@ proto.emery.agents.SkillConfig.prototype.setContentList = function(value) {
  * @return {!proto.emery.agents.MessagePart}
  */
 proto.emery.agents.SkillConfig.prototype.addContent = function(opt_value, opt_index) {
-  return jspb.Message.addToRepeatedWrapperField(this, 8, opt_value, proto.emery.agents.MessagePart, opt_index);
+  return jspb.Message.addToRepeatedWrapperField(this, 9, opt_value, proto.emery.agents.MessagePart, opt_index);
 };
 
 
@@ -5787,7 +5817,7 @@ proto.emery.agents.FileAttachment.prototype.setMimeType = function(value) {
  * @private {!Array<number>}
  * @const
  */
-proto.emery.agents.ProcessMessageRequest.repeatedFields_ = [1,5,6];
+proto.emery.agents.ProcessMessageRequest.repeatedFields_ = [1,5];
 
 
 
@@ -5827,8 +5857,7 @@ proto.emery.agents.ProcessMessageRequest.toObject = function(includeInstance, ms
     context: (f = msg.getContext()) && proto.emery.agents.ChatContext.toObject(includeInstance, f),
     conversationHistoryList: jspb.Message.toObjectList(msg.getConversationHistoryList(),
     proto.emery.agents.HistoryMessage.toObject, includeInstance),
-    toolsList: jspb.Message.toObjectList(msg.getToolsList(),
-    proto.emery.agents.ToolConfig.toObject, includeInstance),
+    agentConfig: (f = msg.getAgentConfig()) && proto.emery.agents.AgentConfig.toObject(includeInstance, f),
     model: jspb.Message.getFieldWithDefault(msg, 7, ""),
     messageId: jspb.Message.getFieldWithDefault(msg, 8, ""),
     sessionId: jspb.Message.getFieldWithDefault(msg, 9, "")
@@ -5892,9 +5921,9 @@ proto.emery.agents.ProcessMessageRequest.deserializeBinaryFromReader = function(
       msg.addConversationHistory(value);
       break;
     case 6:
-      var value = new proto.emery.agents.ToolConfig;
-      reader.readMessage(value,proto.emery.agents.ToolConfig.deserializeBinaryFromReader);
-      msg.addTools(value);
+      var value = new proto.emery.agents.AgentConfig;
+      reader.readMessage(value,proto.emery.agents.AgentConfig.deserializeBinaryFromReader);
+      msg.setAgentConfig(value);
       break;
     case 7:
       var value = /** @type {string} */ (reader.readString());
@@ -5975,12 +6004,12 @@ proto.emery.agents.ProcessMessageRequest.serializeBinaryToWriter = function(mess
       proto.emery.agents.HistoryMessage.serializeBinaryToWriter
     );
   }
-  f = message.getToolsList();
-  if (f.length > 0) {
-    writer.writeRepeatedMessage(
+  f = message.getAgentConfig();
+  if (f != null) {
+    writer.writeMessage(
       6,
       f,
-      proto.emery.agents.ToolConfig.serializeBinaryToWriter
+      proto.emery.agents.AgentConfig.serializeBinaryToWriter
     );
   }
   f = message.getModel();
@@ -6157,40 +6186,39 @@ proto.emery.agents.ProcessMessageRequest.prototype.clearConversationHistoryList 
 
 
 /**
- * repeated ToolConfig tools = 6;
- * @return {!Array<!proto.emery.agents.ToolConfig>}
+ * optional AgentConfig agent_config = 6;
+ * @return {?proto.emery.agents.AgentConfig}
  */
-proto.emery.agents.ProcessMessageRequest.prototype.getToolsList = function() {
-  return /** @type{!Array<!proto.emery.agents.ToolConfig>} */ (
-    jspb.Message.getRepeatedWrapperField(this, proto.emery.agents.ToolConfig, 6));
+proto.emery.agents.ProcessMessageRequest.prototype.getAgentConfig = function() {
+  return /** @type{?proto.emery.agents.AgentConfig} */ (
+    jspb.Message.getWrapperField(this, proto.emery.agents.AgentConfig, 6));
 };
 
 
 /**
- * @param {!Array<!proto.emery.agents.ToolConfig>} value
+ * @param {?proto.emery.agents.AgentConfig|undefined} value
  * @return {!proto.emery.agents.ProcessMessageRequest} returns this
 */
-proto.emery.agents.ProcessMessageRequest.prototype.setToolsList = function(value) {
-  return jspb.Message.setRepeatedWrapperField(this, 6, value);
+proto.emery.agents.ProcessMessageRequest.prototype.setAgentConfig = function(value) {
+  return jspb.Message.setWrapperField(this, 6, value);
 };
 
 
 /**
- * @param {!proto.emery.agents.ToolConfig=} opt_value
- * @param {number=} opt_index
- * @return {!proto.emery.agents.ToolConfig}
- */
-proto.emery.agents.ProcessMessageRequest.prototype.addTools = function(opt_value, opt_index) {
-  return jspb.Message.addToRepeatedWrapperField(this, 6, opt_value, proto.emery.agents.ToolConfig, opt_index);
-};
-
-
-/**
- * Clears the list making it empty but non-null.
+ * Clears the message field making it undefined.
  * @return {!proto.emery.agents.ProcessMessageRequest} returns this
  */
-proto.emery.agents.ProcessMessageRequest.prototype.clearToolsList = function() {
-  return this.setToolsList([]);
+proto.emery.agents.ProcessMessageRequest.prototype.clearAgentConfig = function() {
+  return this.setAgentConfig(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.emery.agents.ProcessMessageRequest.prototype.hasAgentConfig = function() {
+  return jspb.Message.getField(this, 6) != null;
 };
 
 
