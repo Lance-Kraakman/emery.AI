@@ -70,10 +70,18 @@ export class ChatProcessingClient {
     // Default to Cloud Map service discovery for production, localhost for development
     this.address = serviceAddress || process.env.WORKER_ADDRESS || 'localhost:50051';
     console.log(`[CHAT-GRPC-CLIENT] Creating ChatProcessingClient for address: ${this.address}`);
-    
+
     this.client = new ChatProcessingService(
       this.address,
-      grpc.credentials.createInsecure() // AIDEV-TODO: Add TLS in production
+      grpc.credentials.createInsecure(), // AIDEV-TODO: Add TLS in production
+      {
+        // gRPC keepalive settings for better connection performance
+        'grpc.keepalive_time_ms': 30000, // Send keepalive ping every 30s
+        'grpc.keepalive_timeout_ms': 10000, // Wait 10s for keepalive response
+        'grpc.keepalive_permit_without_calls': 1, // Allow keepalive pings when no calls
+        'grpc.http2.max_pings_without_data': 0, // Allow unlimited pings without data
+        'grpc.http2.min_time_between_pings_ms': 10000, // Min 10s between pings
+      }
     );
   }
 
