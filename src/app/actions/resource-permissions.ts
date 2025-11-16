@@ -44,10 +44,11 @@ async function getOrCreateUserPersonalRole(
 ): Promise<number> {
   const rbacRepository = getRBACRepository();
 
-  // Check if user already has a personal role
-  const personalRoleName = `user-${userId}-personal`;
-  const existingRoles = await rbacRepository.findRolesByOrganization(OrganizationId.fromNumber(organizationId));
-  const personalRole = existingRoles.find(r => r.name === personalRoleName);
+  // Check if user already has a personal role using new efficient lookup
+  const personalRole = await rbacRepository.findPersonalRole(
+    UserId.fromString(userId),
+    OrganizationId.fromNumber(organizationId)
+  );
 
   if (personalRole) {
     // Ensure user is assigned to this role
@@ -59,12 +60,14 @@ async function getOrCreateUserPersonalRole(
     return personalRole.id;
   }
 
-  // Create new personal role
+  // Create new personal role with user-friendly name
   const newRole = await rbacRepository.createRole({
-    name: personalRoleName,
+    name: `Personal permissions`,
     description: `Personal role for resource-specific permissions`,
     organizationId: OrganizationId.fromNumber(organizationId),
-    permissions: [] // No base permissions
+    permissions: [], // No base permissions
+    type: 'personal',
+    ownerId: UserId.fromString(userId)
   });
 
   // Assign to user
@@ -86,22 +89,26 @@ async function getOrCreateTeamRole(
   organizationId: number
 ): Promise<number> {
   const rbacRepository = getRBACRepository();
+  const numericTeamId = typeof teamId === 'string' ? parseInt(teamId) : teamId;
 
-  // Check if team already has a role
-  const teamRoleName = `team-${teamId}`;
-  const existingRoles = await rbacRepository.findRolesByOrganization(OrganizationId.fromNumber(organizationId));
-  const teamRole = existingRoles.find(r => r.name === teamRoleName);
+  // Check if team already has a role using new efficient lookup
+  const teamRole = await rbacRepository.findTeamRole(
+    numericTeamId,
+    OrganizationId.fromNumber(organizationId)
+  );
 
   if (teamRole) {
     return teamRole.id;
   }
 
-  // Create new team role
+  // Create new team role with user-friendly name
   const newRole = await rbacRepository.createRole({
-    name: teamRoleName,
-    description: `Role for team ${teamId} resource-specific permissions`,
+    name: `Team permissions`,
+    description: `Team role for resource-specific permissions`,
     organizationId: OrganizationId.fromNumber(organizationId),
-    permissions: []
+    permissions: [], // No base permissions
+    type: 'team',
+    teamId: numericTeamId
   });
 
   return newRole.id;
@@ -234,20 +241,22 @@ export async function removeResourcePermission(data: {
       data.resourceId
     );
 
-    // Find the role for the user/team
+    // Find the role for the user/team using new efficient lookups
+    const rbacRepository = getRBACRepository();
     let roleId: number | null = null;
 
     if (data.entityType === 'user') {
-      const personalRoleName = `user-${data.entityId}-personal`;
-      const rbacRepository = getRBACRepository();
-      const existingRoles = await rbacRepository.findRolesByOrganization(OrganizationId.fromNumber(organizationId));
-      const personalRole = existingRoles.find(r => r.name === personalRoleName);
+      const personalRole = await rbacRepository.findPersonalRole(
+        UserId.fromString(data.entityId),
+        OrganizationId.fromNumber(organizationId)
+      );
       roleId = personalRole?.id || null;
     } else {
-      const teamRoleName = `team-${data.entityId}`;
-      const rbacRepository = getRBACRepository();
-      const existingRoles = await rbacRepository.findRolesByOrganization(OrganizationId.fromNumber(organizationId));
-      const teamRole = existingRoles.find(r => r.name === teamRoleName);
+      const numericTeamId = parseInt(data.entityId);
+      const teamRole = await rbacRepository.findTeamRole(
+        numericTeamId,
+        OrganizationId.fromNumber(organizationId)
+      );
       roleId = teamRole?.id || null;
     }
 
@@ -336,7 +345,7 @@ export async function getResourceAccessList(
         eq(rolePermissions.resourceId, resourceId),
         eq(rolePermissions.resourceScope, 'specific'),
         eq(userRoles.organizationId, organizationId),
-        sql`${roles.name} LIKE 'user-%'` // Only personal roles
+        eq(roles.type, 'personal') // Only personal roles
       ));
 
     // Query for teams with permissions on this resource
@@ -348,14 +357,14 @@ export async function getResourceAccessList(
       })
       .from(rolePermissions)
       .innerJoin(roles, eq(rolePermissions.roleId, roles.id))
-      .innerJoin(teams, sql`${teams.id}::text = SUBSTRING(${roles.name} FROM 'team-(.*)$')`)
+      .innerJoin(teams, eq(teams.id, roles.teamId))
       .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
       .where(and(
         eq(rolePermissions.resourceType, resourceType),
         eq(rolePermissions.resourceId, resourceId),
         eq(rolePermissions.resourceScope, 'specific'),
         eq(teams.organizationId, organizationId),
-        sql`${roles.name} LIKE 'team-%'` // Only team roles
+        eq(roles.type, 'team') // Only team roles
       ));
 
     // Aggregate permissions by user
