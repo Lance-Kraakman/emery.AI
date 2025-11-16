@@ -83,7 +83,7 @@ export async function getPublicApp(
       description: appRecord.description,
       themeConfig: appRecord.themeConfig,
       homePageId: appRecord.homePageId ?? undefined,
-      createdBy: appRecord.createdBy,
+      ownerId: appRecord.ownerId,
       createdAt: appRecord.createdAt,
       updatedAt: appRecord.updatedAt
     });
@@ -192,7 +192,7 @@ export async function getPublicPage(
       isPublic: pageRecord.isPublic,
       requiresAuth: pageRecord.requiresAuth,
       allowedRoles: pageRecord.allowedRoles,
-      createdBy: pageRecord.createdBy,
+      ownerId: pageRecord.ownerId,
       createdAt: pageRecord.createdAt,
       updatedAt: pageRecord.updatedAt
     });

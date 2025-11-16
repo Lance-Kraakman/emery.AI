@@ -6,7 +6,7 @@
 import { z } from "zod"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
-import { requirePermission } from "./permissions"
+import { requirePermission, requireResourcePermission } from "./permissions"
 import { requireCurrentOrganization } from "./user-organizations"
 import { getAppApplicationService } from "@/ddd/application/di/container"
 import { ActionError, type Result, type ErrorCode } from "@/lib/puck/errors"
@@ -77,8 +77,6 @@ export async function getApps(): Promise<Result<AppDTO[]>> {
  */
 export async function getApp(id: number): Promise<Result<AppDTO>> {
   try {
-    await requirePermission("apps:view");
-
     if (!id) {
       return {
         success: false,
@@ -86,6 +84,8 @@ export async function getApp(id: number): Promise<Result<AppDTO>> {
         errorCode: 'VALIDATION'
       };
     }
+
+    await requireResourcePermission("apps:view", "app", id);
 
     const appService = getAppApplicationService();
     const app = await appService.getApp(AppId.fromNumber(id));
@@ -158,8 +158,6 @@ export async function getAppBySlug(slug: string): Promise<Result<AppDTO>> {
  */
 export async function getAppWithPages(id: number): Promise<Result<{ app: AppDTO; pageCount: number }>> {
   try {
-    await requirePermission("apps:view");
-
     if (!id) {
       return {
         success: false,
@@ -167,6 +165,8 @@ export async function getAppWithPages(id: number): Promise<Result<{ app: AppDTO;
         errorCode: 'VALIDATION'
       };
     }
+
+    await requireResourcePermission("apps:view", "app", id);
 
     const appService = getAppApplicationService();
     const result = await appService.getAppWithPages(AppId.fromNumber(id));
@@ -232,7 +232,7 @@ export async function createApp(data?: z.infer<typeof createAppSchema>, revalida
       slug,
       description: validatedData.description,
       organizationId: OrganizationId.fromNumber(currentOrg.id),
-      createdBy: UserId.fromString(session.user.id)
+      ownerId: UserId.fromString(session.user.id)
     });
 
     if (!result.success) {
@@ -278,8 +278,6 @@ export async function createApp(data?: z.infer<typeof createAppSchema>, revalida
  */
 export async function updateApp(data: z.infer<typeof updateAppSchema>, revalidateUrl?: string): Promise<Result<AppDTO>> {
   try {
-    await requirePermission("apps:manage");
-
     const validatedData = updateAppSchema.parse(data);
 
     if (!validatedData.id) {
@@ -289,6 +287,8 @@ export async function updateApp(data: z.infer<typeof updateAppSchema>, revalidat
         errorCode: 'VALIDATION'
       };
     }
+
+    await requireResourcePermission("apps:manage", "app", validatedData.id);
 
     const appService = getAppApplicationService();
 
@@ -342,8 +342,6 @@ export async function updateApp(data: z.infer<typeof updateAppSchema>, revalidat
  */
 export async function deleteApp(id: number, revalidateUrl?: string): Promise<Result<{ message: string }>> {
   try {
-    await requirePermission("apps:manage");
-
     if (!id) {
       return {
         success: false,
@@ -351,6 +349,8 @@ export async function deleteApp(id: number, revalidateUrl?: string): Promise<Res
         errorCode: 'VALIDATION'
       };
     }
+
+    await requireResourcePermission("apps:manage", "app", id);
 
     const appService = getAppApplicationService();
     const result = await appService.deleteApp(AppId.fromNumber(id));
@@ -456,9 +456,6 @@ export async function getAppCount(): Promise<Result<number>> {
  */
 export async function duplicateApp(id: number, revalidateUrl?: string): Promise<Result<AppDTO>> {
   try {
-    const session = await requirePermission("apps:create");
-    const currentOrg = await requireCurrentOrganization();
-
     if (!id) {
       return {
         success: false,
@@ -466,6 +463,12 @@ export async function duplicateApp(id: number, revalidateUrl?: string): Promise<
         errorCode: 'VALIDATION'
       };
     }
+
+    // Need to view the original app to duplicate it
+    await requireResourcePermission("apps:view", "app", id);
+    // Need create permission for the new app
+    const session = await requirePermission("apps:create");
+    const currentOrg = await requireCurrentOrganization();
 
     const appService = getAppApplicationService();
 
@@ -501,7 +504,7 @@ export async function duplicateApp(id: number, revalidateUrl?: string): Promise<
       slug: slugResult.data!,
       description: originalApp.description,
       organizationId: OrganizationId.fromNumber(currentOrg.id),
-      createdBy: UserId.fromString(session.user.id)
+      ownerId: UserId.fromString(session.user.id)
     });
 
     if (!result.success || !result.data) {
@@ -527,7 +530,7 @@ export async function duplicateApp(id: number, revalidateUrl?: string): Promise<
         slug: page.slug.value, // Extract the value from PageSlug value object
         description: page.description,
         templateData: page.templateData,
-        createdBy: UserId.fromString(session.user.id)
+        ownerId: UserId.fromString(session.user.id)
       });
     }
 
@@ -560,8 +563,6 @@ export async function updateAppTheme(
   themeConfig: ThemeConfigProps | undefined
 ): Promise<Result<AppDTO>> {
   try {
-    await requirePermission("apps:manage");
-
     if (!appId) {
       return {
         success: false,
@@ -569,6 +570,8 @@ export async function updateAppTheme(
         errorCode: 'VALIDATION'
       };
     }
+
+    await requireResourcePermission("apps:manage", "app", appId);
 
     const appService = getAppApplicationService();
 
@@ -617,8 +620,6 @@ export async function setAppHomePage(
   revalidateUrl?: string
 ): Promise<Result<AppDTO>> {
   try {
-    await requirePermission("apps:manage");
-
     if (!appId) {
       return {
         success: false,
@@ -626,6 +627,8 @@ export async function setAppHomePage(
         errorCode: 'VALIDATION'
       };
     }
+
+    await requireResourcePermission("apps:manage", "app", appId);
 
     const appService = getAppApplicationService();
 
