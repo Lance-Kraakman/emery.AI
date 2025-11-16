@@ -28,6 +28,7 @@ AIDEV-NOTE: Refactored to use shared utilities:
 import logging
 import time
 import asyncio
+import concurrent.futures
 from typing import AsyncIterator, Optional, List, Dict, Any, TypedDict, Literal
 
 import grpc
@@ -42,12 +43,14 @@ from .mappers import ProtoMapper
 from .mappers.message_mapper import (
     build_conversation_messages,
     has_images,
-    extract_text_from_parts
+    extract_text_from_parts,
+    download_image_from_url
 )
 from .mappers.message_types import MessageContentList
 from ..services.model_provider import SmolagentsModelProvider
 from ..services.tool_loader import UnifiedToolLoader
 from ..services.session_manager import SessionManager
+from ..services.file_processor import process_file
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
 from ..services.image_processor import ImageProcessor
@@ -92,6 +95,74 @@ def _populate_protobuf_map(proto_map, data: Dict[str, str]) -> None:
     """
     for key, value in data.items():
         proto_map[key] = str(value)
+
+
+def _run_async_in_thread(coro):
+    """
+    Run async coroutine in a separate thread with its own event loop.
+
+    This is necessary when calling async code from sync code within an existing event loop.
+    The gRPC service runs in an async context, but skill execution callbacks are sync.
+
+    Args:
+        coro: Coroutine to run
+
+    Returns:
+        Result of the coroutine
+    """
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(asyncio.run, coro)
+        return future.result()
+
+
+async def _process_skill_content_async(content_parts: List['agent_worker_pb2.MessagePart']) -> tuple[List[Image.Image], List[str]]:
+    """
+    Process MessageParts for skill execution (images + files).
+
+    Uses shared utilities from message_mapper and file_processor for consistency.
+    Downloads images and extracts text from files (PDFs, audio, documents).
+
+    Args:
+        content_parts: List of MessagePart from skill_config.content
+
+    Returns:
+        Tuple of (images list, text_additions list)
+    """
+    images = []
+    text_additions = []
+
+    for part in content_parts:
+        if part.HasField('image_url'):
+            # Use shared helper for image download
+            image_url = part.image_url.url
+            logger.info(f"🖼️ Loading image from: {image_url[:80]}...")
+            try:
+                img = download_image_from_url(image_url)
+                images.append(img)
+                logger.info(f"✅ Loaded image: {img.size} {img.mode}")
+            except Exception as e:
+                logger.error(f"❌ Failed to load image from {image_url}: {e}")
+
+        elif part.HasField('file'):
+            # Process file to extract text using shared utility
+            file_url = part.file.url
+            mime_type = part.file.mime_type
+            filename = part.file.filename
+            logger.info(f"📄 Processing file: {filename} ({mime_type})")
+            try:
+                extracted_text = await process_file(file_url, mime_type, filename)
+                text_additions.append(f"\n\n[File: {filename}]\n{extracted_text}")
+                logger.info(f"✅ Extracted {len(extracted_text)} chars from {filename}")
+            except Exception as e:
+                logger.error(f"❌ Failed to process file {filename}: {e}")
+                text_additions.append(f"\n\n[File: {filename}] (Processing failed: {str(e)})")
+
+        elif part.HasField('text'):
+            # Add text content directly
+            text_additions.append(f"\n\n{part.text.text}")
+            logger.info(f"📝 Added text content: {part.text.text[:50]}...")
+
+    return images, text_additions
 
 
 class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingServiceServicer):
@@ -828,22 +899,23 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     )
                     logger.info(f"🔧 Loaded {len(skill_tools)} tools for skill {skill_config.name}")
 
-                # 2. Create sub-agent with skill's tools
-                from ..services.agent_factory import AgentConfig as FactoryAgentConfig
-                agent_config = FactoryAgentConfig(
-                    tools=skill_tools,
-                    skill_model=skill_config.model if skill_config.model else None,
-                    org_model=org_model,
-                    has_images=False,  # Skills don't support images in v1
-                    max_steps=10,
-                    agent_name=f"skill_{skill_config.name}",
-                    agent_description=skill_config.description,
-                    enable_caching=False
-                )
-                sub_agent = self.agent_factory.create_agent(agent_config)
-                logger.info(f"✨ Created sub-agent for skill {skill_config.name}")
+                # 2. Process attachments from skill_config.content using shared utilities
+                images = []
+                text_additions = []
 
-                # 3. Build task from instructions + inputs
+                if skill_config.content:
+                    logger.info(f"📎 Processing {len(skill_config.content)} attachments from skill config")
+                    try:
+                        # Use shared async helper for consistent attachment processing
+                        # Run in separate thread since we're already in an async context
+                        images, text_additions = _run_async_in_thread(
+                            _process_skill_content_async(skill_config.content)
+                        )
+                        logger.info(f"✅ Processed: {len(images)} images, {len(text_additions)} text parts")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to process attachments: {e}")
+
+                # 3. Build task from instructions + inputs + attachments
                 task_parts = [skill_config.instructions]
 
                 # Add runtime inputs to task
@@ -852,58 +924,30 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     for key, value in runtime_inputs.items():
                         task_parts.append(f"- {key}: {value}")
 
-                # Extract attachments from skill_config.content (MessagePart[])
-                images = []
-                file_attachments = []
-
-                if skill_config.content:
-                    logger.info(f"📎 Processing {len(skill_config.content)} content parts from skill config")
-                    for content_part in skill_config.content:
-                        if content_part.HasField('image_url'):
-                            # Load image from URL/path
-                            image_url = content_part.image_url.url
-                            logger.info(f"🖼️ Loading image from: {image_url}")
-                            try:
-                                from PIL import Image
-                                import requests
-                                from io import BytesIO
-
-                                if image_url.startswith('http'):
-                                    # Download from URL
-                                    response = requests.get(image_url)
-                                    img = Image.open(BytesIO(response.content))
-                                else:
-                                    # Load from file path
-                                    img = Image.open(image_url)
-                                images.append(img)
-                                logger.info(f"✅ Loaded image: {img.size}")
-                            except Exception as e:
-                                logger.error(f"❌ Failed to load image from {image_url}: {e}")
-
-                        elif content_part.HasField('file'):
-                            # Add file info to task description
-                            file_info = f"- File: {content_part.file.filename} ({content_part.file.mime_type})"
-                            if content_part.file.url:
-                                file_info += f" at {content_part.file.url}"
-                            file_attachments.append(file_info)
-                            logger.info(f"📄 Added file attachment: {content_part.file.filename}")
-
-                        elif content_part.HasField('text'):
-                            # Add text content to task
-                            task_parts.append(f"\n\n{content_part.text.text}")
-                            logger.info(f"📝 Added text content: {content_part.text.text[:50]}...")
-
-                # Add file attachments to task description
-                if file_attachments:
-                    task_parts.append("\n\nAttached Files:")
-                    task_parts.extend(file_attachments)
+                # Add text additions from attachments to task
+                task_parts.extend(text_additions)
 
                 task = "\n".join(task_parts)
                 logger.info(f"📝 Skill task: {task[:200]}...")
                 if images:
                     logger.info(f"🖼️ Passing {len(images)} images to sub-agent")
 
-                # 4. Execute skill with sub-agent
+                # 4. Create sub-agent with skill's tools and correct has_images flag
+                from ..services.agent_factory import AgentConfig as FactoryAgentConfig
+                agent_config = FactoryAgentConfig(
+                    tools=skill_tools,
+                    skill_model=skill_config.model if skill_config.model else None,
+                    org_model=org_model,
+                    has_images=len(images) > 0,  # Set based on processed attachments
+                    max_steps=10,
+                    agent_name=f"skill_{skill_config.name}",
+                    agent_description=skill_config.description,
+                    enable_caching=False
+                )
+                sub_agent = self.agent_factory.create_agent(agent_config)
+                logger.info(f"✨ Created sub-agent for skill {skill_config.name} (has_images={len(images) > 0})")
+
+                # 5. Execute skill with sub-agent
                 # When stream=False, run() returns the final output directly (not an iterable)
                 from smolagents.agent_types import AgentText, AgentImage, AgentAudio
                 import json
