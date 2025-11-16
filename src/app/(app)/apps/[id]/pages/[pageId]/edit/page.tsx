@@ -169,11 +169,11 @@ function CustomHeaderActions({
   };
 
   return (
-    <div className="flex items-center gap-2 w-full">
+    <div className="flex items-center gap-2 w-full min-w-0">
       {/* Public URL display (left side) */}
       {page.isPublic && publicUrl && (
         <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-md border border-border">
-          <span className="text-xs text-muted-foreground font-mono truncate max-w-[300px]" title={fullPublicUrl || undefined}>
+          <span className="text-xs text-muted-foreground font-mono truncate max-w-[150px] sm:max-w-[300px]" title={fullPublicUrl || undefined}>
             {publicUrl}
           </span>
           <button
@@ -201,7 +201,7 @@ function CustomHeaderActions({
       <div className="flex-1" />
 
       {/* Custom Action Buttons using Puck's Button component */}
-      <div className="flex gap-2 items-center">
+      <div className="flex gap-2 items-center flex-shrink-0">
         <PuckButton
           onClick={handleSave}
           disabled={!hasUnsavedChanges}
@@ -413,6 +413,9 @@ export default function PageEditPage() {
                 onSaveAccessSettings: handleSaveAccessSettings,
                 themeMode: "page",
               }),
+              header: ({ children, actions }) => (
+                <div className="bg-transparent">{actions}</div>
+              ),
               puck: ({ children }) => (
                 <div className="puck-themed-wrapper">
                   <SidebarStatePersistence pageId={pageId} />
