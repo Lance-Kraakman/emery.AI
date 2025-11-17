@@ -12,7 +12,8 @@ import type { Result } from "./types";
 import { SYSTEM_ROLES, type SystemRoleType } from "@/ddd/domain/rbac/entities/role";
 import { OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
 import { headers } from "next/headers";
-import { extractApiKeyFromHeader, authenticateWithApiKey } from "@/lib/auth/test-auth";
+import { extractApiKeyFromHeader } from "@/lib/auth/user-api-keys";
+import { authenticateWithApiKey } from "@/lib/auth/test-auth";
 
 export async function assignUserRole(userId: string, role: SystemRoleType): Promise<Result> {
   try {
