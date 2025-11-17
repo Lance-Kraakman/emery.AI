@@ -795,11 +795,13 @@ def load_database_crud(config: ToolConfig) -> Any:
 
 
 # Registry of CRUD tools
+# AIDEV-NOTE: Tool names match category names directly (agents, tables, etc.)
+# This eliminates need for complex category mapping in seeding
 CRUD_TOOLS = {
-    "agent_crud": load_agent_crud,
-    "document_crud": load_document_crud,
-    "file_crud": load_file_crud,
-    "table_crud": load_table_crud,
-    "team_crud": load_team_crud,
-    "database_crud": load_database_crud,
+    "agents": load_agent_crud,
+    "documents": load_document_crud,
+    "files": load_file_crud,
+    "tables": load_table_crud,
+    "teams": load_team_crud,
+    "databases": load_database_crud,
 }

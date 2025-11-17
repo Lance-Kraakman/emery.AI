@@ -137,8 +137,15 @@ function convertPipedreamToolToDatabase(tool: UnifiedToolMetadata): ToolData {
 }
 
 function getCategoryFromToolType(toolId: string): string {
-  if (toolId.includes('crud')) return 'management';
-  if (toolId.includes('api')) return 'integration';
+  // CRUD tools: tool ID matches category directly
+  // AIDEV-NOTE: Renamed from *_crud to match category names (agents, tables, etc.)
+  const crudTools = ['agents', 'tables', 'databases', 'files', 'documents', 'teams'];
+  if (crudTools.includes(toolId)) {
+    return toolId;
+  }
+
+  // Generic tool categorization for other Emery tools
+  if (toolId.includes('api')) return 'utility';
   if (toolId.includes('database') || toolId.includes('table')) return 'data';
   if (toolId.includes('file') || toolId.includes('document')) return 'storage';
   if (toolId.includes('team')) return 'collaboration';

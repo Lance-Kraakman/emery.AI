@@ -194,6 +194,7 @@ export class AgentApplicationService {
       if (dto.schedules !== undefined) updateData.schedules = ScheduleMapper.fromDTOs(dto.schedules);
       if (dto.status !== undefined) updateData.status = dto.status;
       if (dto.avatarConfig !== undefined) updateData.avatarConfig = dto.avatarConfig;
+      if (dto.defaultModel !== undefined) updateData.defaultModel = dto.defaultModel;
 
       // LOGGING: Update data prepared
       logger.debug('Update data prepared for repository', {

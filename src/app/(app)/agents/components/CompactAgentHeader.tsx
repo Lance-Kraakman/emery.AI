@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Settings, Zap, Calendar, Link2, Plus, ChevronRight, ClipboardList } from 'lucide-react';
+import { Settings, Zap, Calendar, Link2, Plus, ChevronRight, ClipboardList, Edit2, Trash2 } from 'lucide-react';
 import type { AgentDTO } from '@/app/dtos/agent.dto';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useRouter } from 'next/navigation';
 import { AgentAvatar } from '@/components/agents/AgentAvatar';
 import { createDefaultAgentSkill } from '@/app/actions/skills';
+import { updateAgentFromClient } from '@/app/actions/agents';
 import { TaskAssignmentModal } from './TaskAssignmentModal';
 import { ShareButton } from '@/components/permissions/ShareButton';
 import { ShareDialog } from '@/components/permissions/ShareDialog';
@@ -39,6 +40,7 @@ export function CompactAgentHeader({
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
 
   const activeSchedules = agent.schedules?.filter(s => s.enabled).length || 0;
   const totalSchedules = agent.schedules?.length || 0;
@@ -68,8 +70,37 @@ export function CompactAgentHeader({
 
   const handleScheduleClick = (scheduleIndex: number) => {
     setSchedulesOpen(false);
-    // Could open schedule edit modal here if needed
-    openModal('trigger-config', { agent });
+    openModal('trigger-config', { agent, mode: 'edit', scheduleIndex });
+  };
+
+  const handleDeleteSchedule = async (index: number, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering parent click handlers
+
+    if (agent.schedules.length === 1) {
+      // Cannot delete the last schedule
+      return;
+    }
+
+    try {
+      setDeletingIndex(index);
+
+      const newSchedules = agent.schedules.filter((_, i) => i !== index);
+
+      const result = await updateAgentFromClient(agent.id, {
+        schedules: newSchedules
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to delete schedule');
+      }
+
+      // Refresh the page to show updated schedules
+      router.refresh();
+    } catch (error) {
+      console.error('Error deleting schedule:', error);
+    } finally {
+      setDeletingIndex(null);
+    }
   };
 
   return (
@@ -212,12 +243,14 @@ export function CompactAgentHeader({
                 ) : (
                   <div className="py-1">
                     {agent.schedules.map((schedule, index) => (
-                      <button
+                      <div
                         key={index}
-                        onClick={() => handleScheduleClick(index)}
-                        className="w-full flex items-center justify-between px-4 py-2 hover:bg-accent transition-colors text-left"
+                        className="group flex items-center justify-between px-4 py-2 hover:bg-accent transition-colors"
                       >
-                        <div className="flex-1 min-w-0">
+                        <button
+                          onClick={() => handleScheduleClick(index)}
+                          className="flex-1 min-w-0 text-left"
+                        >
                           <div className="flex items-center gap-2">
                             <div className="text-sm font-medium truncate">
                               {schedule.name || `Schedule ${index + 1}`}
@@ -236,9 +269,25 @@ export function CompactAgentHeader({
                           <div className="text-xs text-muted-foreground mt-0.5">
                             {schedule.trigger.type}
                           </div>
+                        </button>
+                        <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                          <button
+                            onClick={() => handleScheduleClick(index)}
+                            className="p-1.5 rounded hover:bg-accent-foreground/10 transition-colors"
+                            title="Edit schedule"
+                          >
+                            <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteSchedule(index, e)}
+                            disabled={deletingIndex === index || agent.schedules.length === 1}
+                            className="p-1.5 rounded hover:bg-destructive/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={agent.schedules.length === 1 ? "Cannot delete last schedule" : "Delete schedule"}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                          </button>
                         </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0 ml-2" />
-                      </button>
+                      </div>
                     ))}
                   </div>
                 )}

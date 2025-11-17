@@ -221,6 +221,7 @@ export interface UpdateAgentData {
   status?: AgentStatus;
   apiKey?: string;  // API key updates for regeneration
   avatarConfig?: AvatarConfig | null;  // Avatar configuration with icon + color (versioned JSON)
+  defaultModel?: string | null;  // AI model override for this agent
   // Note: organizationId typically not changed after creation
 }
 
