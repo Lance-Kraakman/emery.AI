@@ -903,7 +903,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             api_key=None,  # API keys are in tool configs already
             api_key_mode="user",  # Chat system uses user API key mode
             agent_config=agent_config,
-            skill_executor=skill_executor
+            skill_executor=skill_executor,
+            organization_id=org_id  # Pass organization ID for CRUD tools
         )
 
     def _create_skill_executor_callback(self, org_model: Optional[str] = None):

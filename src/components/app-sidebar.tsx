@@ -43,6 +43,7 @@ import { EmeryOrganizationModal } from "./EmeryOrganizationModal"
 import { SidebarSection } from "./sidebar-section"
 import { NestedSidebarSection } from "./nested-sidebar-section"
 import { GroupedSidebarSection } from "./grouped-sidebar-section"
+import { ShareDialog } from "./permissions/ShareDialog"
 import { useEntityCreation } from "@/hooks/use-entity-creation"
 import { useToggleSet } from "@/hooks/use-toggle-set"
 import { createApp, updateApp, deleteApp, duplicateApp } from "@/app/actions/puck-apps"
@@ -152,6 +153,14 @@ export function AppSidebar({
   } | null>(null)
   const [isDeleting, setIsDeleting] = React.useState(false)
 
+  // Share dialog state
+  const [shareDialogOpen, setShareDialogOpen] = React.useState(false)
+  const [sharingItem, setSharingItem] = React.useState<{
+    type: 'app' | 'page' | 'agent' | 'team' | 'skill' | 'database' | 'table'
+    id: number
+    name: string
+  } | null>(null)
+
   // Action handlers for Apps
   const handleRenameApp = async (app: AppData, newName: string) => {
     await updateApp({ id: app.id, name: newName })
@@ -159,6 +168,11 @@ export function AppSidebar({
 
   const handleDuplicateApp = async (app: AppData) => {
     await duplicateApp(app.id)
+  }
+
+  const handleShareApp = (app: AppData) => {
+    setSharingItem({ type: 'app', id: app.id, name: app.name })
+    setShareDialogOpen(true)
   }
 
   const handleDeleteApp = (app: AppData) => {
@@ -174,6 +188,11 @@ export function AppSidebar({
     await duplicatePage(page.id)
   }
 
+  const handleSharePage = (page: PageData, app: AppData) => {
+    setSharingItem({ type: 'page', id: page.id, name: page.name })
+    setShareDialogOpen(true)
+  }
+
   const handleDeletePage = (page: PageData, app: AppData) => {
     setDeletingItem({ type: 'page', id: page.id, name: page.name })
   }
@@ -185,6 +204,11 @@ export function AppSidebar({
 
   const handleDuplicateAgent = async (agent: AgentData) => {
     await duplicateAgent(agent.id)
+  }
+
+  const handleShareAgent = (agent: AgentData) => {
+    setSharingItem({ type: 'agent', id: agent.id, name: agent.name })
+    setShareDialogOpen(true)
   }
 
   const handleDeleteAgent = (agent: AgentData) => {
@@ -200,6 +224,11 @@ export function AppSidebar({
     await duplicateTeam(team.id)
   }
 
+  const handleShareTeam = (team: TeamData) => {
+    setSharingItem({ type: 'team', id: team.id, name: team.name })
+    setShareDialogOpen(true)
+  }
+
   const handleDeleteTeam = (team: TeamData) => {
     setDeletingItem({ type: 'team', id: team.id, name: team.name })
   }
@@ -211,6 +240,11 @@ export function AppSidebar({
 
   const handleDuplicateSkill = async (skill: SkillData) => {
     await duplicateSkill(skill.id)
+  }
+
+  const handleShareSkill = (skill: SkillData) => {
+    setSharingItem({ type: 'skill', id: skill.id, name: skill.name })
+    setShareDialogOpen(true)
   }
 
   const handleDeleteSkill = (skill: SkillData) => {
@@ -226,6 +260,11 @@ export function AppSidebar({
     await duplicateDatabase(database.id)
   }
 
+  const handleShareDatabase = (database: DatabaseData) => {
+    setSharingItem({ type: 'database', id: database.id, name: database.name })
+    setShareDialogOpen(true)
+  }
+
   const handleDeleteDatabase = (database: DatabaseData) => {
     setDeletingItem({ type: 'database', id: database.id, name: database.name })
   }
@@ -237,6 +276,11 @@ export function AppSidebar({
 
   const handleDuplicateTable = async (table: TableData, database: DatabaseData) => {
     await duplicateTable(table.id)
+  }
+
+  const handleShareTable = (table: TableData, database: DatabaseData) => {
+    setSharingItem({ type: 'table', id: table.id, name: table.name })
+    setShareDialogOpen(true)
   }
 
   const handleDeleteTable = (table: TableData, database: DatabaseData) => {
@@ -369,9 +413,11 @@ export function AppSidebar({
           addChildLabel="Add Page"
           onRenameParent={handleRenameApp}
           onDuplicateParent={handleDuplicateApp}
+          onShareParent={handleShareApp}
           onDeleteParent={handleDeleteApp}
           onRenameChild={handleRenamePage}
           onDuplicateChild={handleDuplicatePage}
+          onShareChild={handleSharePage}
           onDeleteChild={handleDeletePage}
         />
 
@@ -391,6 +437,7 @@ export function AppSidebar({
           addButtonLabel="Add Agent"
           onRename={handleRenameAgent}
           onDuplicate={handleDuplicateAgent}
+          onShare={handleShareAgent}
           onDelete={handleDeleteAgent}
         />
 
@@ -410,6 +457,7 @@ export function AppSidebar({
           addButtonLabel="Add Team"
           onRename={handleRenameTeam}
           onDuplicate={handleDuplicateTeam}
+          onShare={handleShareTeam}
           onDelete={handleDeleteTeam}
         />
 
@@ -440,6 +488,7 @@ export function AppSidebar({
           addButtonLabel="Add Skill"
           onRename={handleRenameSkill}
           onDuplicate={handleDuplicateSkill}
+          onShare={handleShareSkill}
           onDelete={handleDeleteSkill}
         />
 
@@ -472,9 +521,11 @@ export function AppSidebar({
           addChildLabel="Add Table"
           onRenameParent={handleRenameDatabase}
           onDuplicateParent={handleDuplicateDatabase}
+          onShareParent={handleShareDatabase}
           onDeleteParent={handleDeleteDatabase}
           onRenameChild={handleRenameTable}
           onDuplicateChild={handleDuplicateTable}
+          onShareChild={handleShareTable}
           onDeleteChild={handleDeleteTable}
         />
 
@@ -623,6 +674,20 @@ export function AppSidebar({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Share Dialog */}
+      {sharingItem && (
+        <ShareDialog
+          open={shareDialogOpen}
+          onOpenChange={(open) => {
+            setShareDialogOpen(open)
+            if (!open) setSharingItem(null)
+          }}
+          resourceType={sharingItem.type}
+          resourceId={sharingItem.id}
+          resourceName={sharingItem.name}
+        />
+      )}
     </Sidebar>
   )
 }

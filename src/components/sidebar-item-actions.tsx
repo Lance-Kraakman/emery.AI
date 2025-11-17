@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { MoreVertical, Edit, Copy, Trash2 } from "lucide-react"
+import { MoreVertical, Edit, Copy, Trash2, Share2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -14,17 +14,19 @@ import {
 export interface SidebarItemActionsProps {
   onRename?: () => void
   onDuplicate?: () => void
+  onShare?: () => void
   onDelete?: () => void
   className?: string
 }
 
 /**
- * Reusable dropdown menu for sidebar item actions (rename, duplicate, delete)
+ * Reusable dropdown menu for sidebar item actions (rename, duplicate, share, delete)
  * Shows a "..." button that appears on hover
  */
 export function SidebarItemActions({
   onRename,
   onDuplicate,
+  onShare,
   onDelete,
   className = ""
 }: SidebarItemActionsProps) {
@@ -53,7 +55,13 @@ export function SidebarItemActions({
             Duplicate
           </DropdownMenuItem>
         )}
-        {(onRename || onDuplicate) && onDelete && <DropdownMenuSeparator />}
+        {onShare && (
+          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShare(); }}>
+            <Share2 className="h-4 w-4 mr-2" />
+            Share
+          </DropdownMenuItem>
+        )}
+        {(onRename || onDuplicate || onShare) && onDelete && <DropdownMenuSeparator />}
         {onDelete && (
           <DropdownMenuItem
             className="text-destructive focus:text-destructive"
