@@ -61,7 +61,10 @@ export class InstructionTemplateService {
       vars['table.name'] = tc.tableName;
       vars['event.operation'] = tc.operation;
       vars['event.rowId'] = tc.rowId;
-      vars['event.timestamp'] = tc.timestamp.toISOString();
+      // Handle both Date objects (in-memory) and ISO strings (after JSONB deserialization)
+      vars['event.timestamp'] = tc.timestamp instanceof Date
+        ? tc.timestamp.toISOString()
+        : tc.timestamp;
 
       // Enable direct row field access: ${row.fieldName} or ${row[fieldId]}
       // Note: rowData uses field IDs as keys
