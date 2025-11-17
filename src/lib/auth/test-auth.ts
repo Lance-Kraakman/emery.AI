@@ -11,9 +11,8 @@ import { validateUserApiKey, extractApiKeyFromHeader, UserApiKeyInfo } from './u
 import { db } from '@/lib/db/client';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { getAgentRepository } from '@/ddd/infrastructure/di/repository-factory';
-import { getUserRepository } from '@/ddd/infrastructure/di/repository-factory';
-import { ApiKey } from '@/ddd/domain/agents/value-objects/api-key';
+import { getAgentRepository, getUserRepository } from '@/ddd/application/di/container';
+import { ApiKey } from '@/ddd/domain/shared/value-objects';
 
 export interface AuthResult {
   success: boolean;
