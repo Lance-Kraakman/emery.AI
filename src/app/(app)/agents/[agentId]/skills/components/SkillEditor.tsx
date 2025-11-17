@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModelSelector } from '@/components/ai/ModelSelector';
 import { InstructionsInput } from './editor/InstructionsInput';
-import { ToolsSection } from './editor/ToolsSection';
 import { SkillInputsSection } from './editor/SkillInputsSection';
 import { SkillOutputsSection } from './editor/SkillOutputsSection';
 import type { ToolConfigDTO, SkillInput, SkillOutput } from '@/app/mappers/skill-mapper';
@@ -176,6 +175,39 @@ export function SkillEditor({
       {/* Instructions Section */}
       <div className="space-y-3">
         <Label className="text-base font-semibold">Instructions</Label>
+
+        {/* Selected Tools Display - ABOVE instructions (like chat UI) */}
+        {localValue.tools.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {localValue.tools.map((tool, index) => (
+              <div key={index} className="relative flex items-center group">
+                <div
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs
+                    transition-colors duration-150 flex-shrink-0 max-w-xs
+                    border-border bg-background hover:bg-muted/50"
+                  title={tool.config?.displayName || tool.name}
+                >
+                  <span className="truncate font-medium">
+                    {tool.config?.displayName || tool.name}
+                  </span>
+                </div>
+
+                {/* Remove button */}
+                <button
+                  onClick={() => {
+                    const newTools = localValue.tools.filter((_, i) => i !== index);
+                    handleChange({ tools: newTools });
+                  }}
+                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Remove tool"
+                >
+                  <X className="w-2 h-2" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <InstructionsInput
           value={localValue.instructions}
           onChange={(text) => handleChange({ instructions: text })}
@@ -189,23 +221,8 @@ export function SkillEditor({
           onExistingAttachmentRemove={handleExistingAttachmentRemove}
         />
 
-        {/* Tools Display - BELOW instructions */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm text-muted-foreground">Tools Used</Label>
-            <span className="text-xs text-muted-foreground">
-              {localValue.tools.length} tool{localValue.tools.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-          <ToolsSection
-            tools={localValue.tools}
-            onToolsChange={(tools) => handleChange({ tools })}
-            stepIndex={0}
-          />
-        </div>
-
         <p className="text-xs text-muted-foreground">
-          Type @ to reference tools, documents, or other skills
+          Type @ to reference tools, documents, or other skills. Selected tools will appear above.
         </p>
       </div>
 
@@ -225,23 +242,6 @@ export function SkillEditor({
           Define what data this skill returns
         </p>
       </div>
-
-      {/* Tools Section - Display Only */}
-      {localValue.tools.length > 0 && (
-        <div className="space-y-2">
-          <Label className="text-sm text-muted-foreground">Tools Used</Label>
-          <div className="flex items-center gap-2 flex-wrap">
-            {localValue.tools.map((tool, index) => (
-              <div
-                key={index}
-                className="px-2.5 py-1.5 rounded-md border text-xs bg-muted/50"
-              >
-                {tool.config?.displayName || tool.name}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Advanced Settings Section */}
       <div className="space-y-3 border-t pt-6">
