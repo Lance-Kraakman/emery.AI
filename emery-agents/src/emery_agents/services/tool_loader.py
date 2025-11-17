@@ -98,6 +98,72 @@ class UnifiedToolLoader:
 
         return None
 
+    def _get_crud_tool_loader(self, tool_name: str) -> Optional[Callable]:
+        """
+        Get the appropriate CRUD tool loader function for a given tool name.
+
+        Maps CRUD tool names from the database (e.g., 'emery-create-row') to their
+        loader functions without needing unified_metadata.json.
+
+        Args:
+            tool_name: Tool name from frontend (e.g., "emery-create-agent")
+
+        Returns:
+            Loader function or None if not a CRUD tool
+        """
+        # AIDEV-NOTE: Explicit mapping for all CRUD tools seeded in database
+        CRUD_TOOL_ROUTING = {
+            # Agent operations
+            "emery-create-agent": self._load_agent_crud_tool,
+            "emery-read-agent": self._load_agent_crud_tool,
+            "emery-update-agent": self._load_agent_crud_tool,
+            "emery-delete-agent": self._load_agent_crud_tool,
+            "emery-list-agents": self._load_agent_crud_tool,
+
+            # Document operations
+            "emery-create-document": self._load_document_crud_tool,
+            "emery-read-document": self._load_document_crud_tool,
+            "emery-update-document": self._load_document_crud_tool,
+            "emery-delete-document": self._load_document_crud_tool,
+            "emery-list-documents": self._load_document_crud_tool,
+
+            # File operations
+            "emery-create-file": self._load_file_crud_tool,
+            "emery-read-file": self._load_file_crud_tool,
+            "emery-update-file": self._load_file_crud_tool,
+            "emery-delete-file": self._load_file_crud_tool,
+            "emery-list-files": self._load_file_crud_tool,
+
+            # Table operations
+            "emery-create-table": self._load_table_crud_tool,
+            "emery-read-table": self._load_table_crud_tool,
+            "emery-update-table": self._load_table_crud_tool,
+            "emery-delete-table": self._load_table_crud_tool,
+            "emery-list-tables": self._load_table_crud_tool,
+
+            # Row operations (also use table_crud)
+            "emery-create-row": self._load_table_crud_tool,
+            "emery-get-rows": self._load_table_crud_tool,
+            "emery-update-row": self._load_table_crud_tool,
+            "emery-delete-row": self._load_table_crud_tool,
+
+            # Team operations
+            "emery-create-team": self._load_team_crud_tool,
+            "emery-read-team": self._load_team_crud_tool,
+            "emery-update-team": self._load_team_crud_tool,
+            "emery-delete-team": self._load_team_crud_tool,
+            "emery-list-teams": self._load_team_crud_tool,
+
+            # Database operations
+            "emery-create-database": self._load_database_crud_tool,
+            "emery-read-database": self._load_database_crud_tool,
+            "emery-update-database": self._load_database_crud_tool,
+            "emery-delete-database": self._load_database_crud_tool,
+            "emery-list-databases": self._load_database_crud_tool,
+        }
+
+        return CRUD_TOOL_ROUTING.get(tool_name)
+
     def load_tool(
         self,
         tool_config: ToolConfig,
@@ -137,6 +203,14 @@ class UnifiedToolLoader:
 
             # Create and return SkillTool
             return SkillTool(skill_config, skill_executor)
+
+        # AIDEV-NOTE: Handle CRUD tools from database - they don't need unified_metadata
+        # These tools are seeded in the DB and sent with full config via gRPC
+        crud_loader = self._get_crud_tool_loader(tool_config.name)
+        if crud_loader:
+            # Create a minimal unified_tool dict just to satisfy the loader signature
+            unified_tool = {"id": tool_config.name, "source": "emery"}
+            return crud_loader(tool_config, unified_tool, api_key, api_key_mode)
 
         # Regular tool loading (existing logic)
         # Convert tool name from hyphen to underscore format for lookup (frontend uses hyphens, backend uses underscores)
