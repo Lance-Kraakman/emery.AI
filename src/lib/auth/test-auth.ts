@@ -54,7 +54,7 @@ async function authenticateAgentApiKey(apiKeyString: string): Promise<AuthResult
         id: owner.id.value,
         email: owner.email?.value || '',
         name: owner.name ?? null,
-        organizationId: owner.currentOrganizationId,
+        organizationId: owner.currentOrganizationId?.value ?? null,
         organizationRole: 'member',
       },
     };
