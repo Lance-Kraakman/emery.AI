@@ -53,7 +53,7 @@ async function authenticateAgentApiKey(apiKeyString: string): Promise<AuthResult
       user: {
         id: owner.id.value,
         email: owner.email?.value || '',
-        name: owner.name,
+        name: owner.name ?? null,
         organizationId: owner.currentOrganizationId,
         organizationRole: 'member',
       },
