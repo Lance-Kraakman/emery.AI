@@ -616,7 +616,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"📝 Built system prompt: {len(system_prompt)} chars")
 
             # 2. Convert protobuf tools to smolagents tools
-            smolagents_tools = self._convert_tools_to_smolagents(tools, agent_config=agent_config, org_model=org_model)
+            smolagents_tools = self._convert_tools_to_smolagents(tools, agent_config=agent_config, org_model=org_model, org_id=org_id)
             logger.info(f"🔧 Converted {len(smolagents_tools)} tools for ToolCallingAgent")
 
             # 3. Get or create agent with session management
@@ -875,7 +875,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         self,
         tools: List['agent_worker_pb2.ToolConfig'],
         agent_config: Optional['agent_worker_pb2.AgentConfig'] = None,
-        org_model: Optional[str] = None
+        org_model: Optional[str] = None,
+        org_id: Optional[int] = None
     ) -> List[Any]:
         """
         Convert protobuf ToolConfig objects to smolagents tools using shared utility.
@@ -884,6 +885,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             tools: List of ToolConfig proto objects
             agent_config: Optional AgentConfig containing skills for skill execution
             org_model: Organization default model (used as fallback for skills)
+            org_id: Organization ID for CRUD tool authentication
 
         Returns:
             List of loaded tool instances (including SkillTools)
