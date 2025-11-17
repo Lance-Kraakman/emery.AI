@@ -6,6 +6,8 @@ import { Save, Trash2, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ShareButton } from '@/components/permissions/ShareButton';
+import { ShareDialog } from '@/components/permissions/ShareDialog';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { updateSkill, deleteSkill, uploadSkillAttachment } from '@/app/actions/skills';
 import { toast } from 'sonner';
@@ -20,6 +22,7 @@ export function EditOrganizationSkillView({ skill }: EditOrganizationSkillViewPr
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [formData, setFormData] = useState<SkillFormData>({
     name: skill.name,
     description: skill.description,
@@ -150,6 +153,13 @@ export function EditOrganizationSkillView({ skill }: EditOrganizationSkillViewPr
             <Trash2 className="h-4 w-4" />
             {isDeleting ? 'Deleting...' : 'Delete'}
           </Button>
+          <ShareButton
+            resourceType="skill"
+            resourceId={skill.id}
+            onShare={() => setShareDialogOpen(true)}
+            variant="outline"
+            size="default"
+          />
           <Button onClick={handleSave} disabled={isSaving} className="gap-2">
             <Save className="h-4 w-4" />
             {isSaving ? 'Saving...' : 'Save Changes'}
@@ -166,6 +176,15 @@ export function EditOrganizationSkillView({ skill }: EditOrganizationSkillViewPr
           skillId={skill.id}
         />
       </Card>
+
+      {/* Share Dialog */}
+      <ShareDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        resourceType="skill"
+        resourceId={skill.id}
+        resourceName={skill.name}
+      />
     </div>
   );
 }

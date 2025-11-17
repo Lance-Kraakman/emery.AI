@@ -87,18 +87,25 @@ export class ToolSearchApplicationService {
       showReferenceTools
     });
 
-    // Only search system tools when NO reference category filter is active
-    // Reference categories (documents, files, agents, tables, databases) are mutually exclusive with system tools
-    const shouldSearchSystemTools = !categories || categories.length === 0;
+    // AIDEV-NOTE: Always search system tools (including CRUD tools like agents, tables, databases)
+    // When reference categories are provided, also filter system tools by matching ToolCategory
+    const mergedToolCategories = this.mergeToolCategories(categories, toolCategories);
 
-    logger.debug(`Should search system tools: ${shouldSearchSystemTools} (categories: ${categories?.length || 0})`);
+    logger.debug(`Merged tool categories for system tool search:`, mergedToolCategories);
     logger.debug(`Should search reference tools: ${showReferenceTools}`);
 
     // Search both reference tools and system tools in parallel
     // Get ALL results first, then apply unified pagination
-    const systemToolsPromise = shouldSearchSystemTools
-      ? this.searchSystemTools(query, toolCategories, appIds, connectedOnly, requiresConnection, 1000, organizationId, userId)
-      : Promise.resolve([]);
+    const systemToolsPromise = this.searchSystemTools(
+      query,
+      mergedToolCategories,
+      appIds,
+      connectedOnly,
+      requiresConnection,
+      1000,
+      organizationId,
+      userId
+    );
 
     const referenceToolsPromise = showReferenceTools
       ? this.searchOnlyReferenceTools({ ...options, limit: 1000, offset: 0 })
@@ -141,6 +148,43 @@ export class ToolSearchApplicationService {
       hasMore,
       totalCount: totalItems
     };
+  }
+
+  /**
+   * Merge reference categories with tool categories for unified filtering
+   * Maps ReferenceCategory → ToolCategory so system tools can be filtered by the same categories
+   */
+  private mergeToolCategories(
+    referenceCategories?: ReferenceCategory[],
+    toolCategories?: ToolCategory[]
+  ): ToolCategory[] | undefined {
+    const mapped: ToolCategory[] = [];
+
+    // Add explicitly provided tool categories
+    if (toolCategories && toolCategories.length > 0) {
+      mapped.push(...toolCategories);
+    }
+
+    // Map reference categories to tool categories
+    if (referenceCategories && referenceCategories.length > 0) {
+      const categoryMap: Record<ReferenceCategory, ToolCategory> = {
+        [ReferenceCategory.AGENT]: ToolCategory.AGENTS,
+        [ReferenceCategory.TABLE]: ToolCategory.TABLES,
+        [ReferenceCategory.DATABASE]: ToolCategory.DATABASES,
+        [ReferenceCategory.DOC]: ToolCategory.DOCUMENTS,
+        [ReferenceCategory.FILE]: ToolCategory.FILES,
+        [ReferenceCategory.SKILL]: ToolCategory.SKILLS,
+      };
+
+      for (const refCat of referenceCategories) {
+        const toolCat = categoryMap[refCat];
+        if (toolCat && !mapped.includes(toolCat)) {
+          mapped.push(toolCat);
+        }
+      }
+    }
+
+    return mapped.length > 0 ? mapped : undefined;
   }
 
   /**

@@ -115,7 +115,7 @@ class BaseCrudTool(Tool):
             }
 
 
-def load_agent_crud(config: ToolConfig) -> Any:
+def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """Load Agent CRUD tool with method-specific routing."""
 
     class AgentCrudTool(BaseCrudTool):
@@ -212,7 +212,7 @@ def load_agent_crud(config: ToolConfig) -> Any:
     return AgentCrudTool()
 
 
-def load_document_crud(config: ToolConfig) -> Any:
+def load_document_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """Load Document CRUD tool with method-specific routing."""
 
     class DocumentCrudTool(BaseCrudTool):
@@ -308,7 +308,7 @@ def load_document_crud(config: ToolConfig) -> Any:
     return DocumentCrudTool()
 
 
-def load_file_crud(config: ToolConfig) -> Any:
+def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """Load File CRUD tool with method-specific routing."""
 
     class FileCrudTool(BaseCrudTool):
@@ -404,7 +404,7 @@ def load_file_crud(config: ToolConfig) -> Any:
     return FileCrudTool()
 
 
-def load_table_crud(config: ToolConfig) -> Any:
+def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """
     Load comprehensive Table CRUD tool with table and row operations.
 
@@ -412,6 +412,9 @@ def load_table_crud(config: ToolConfig) -> Any:
     - Table operations (5): create_table, read_table, update_table, delete_table, list_tables
     - Row operations (4): create_row, get_rows, update_row, delete_row
     """
+    # Capture auth credentials from context
+    _auth_token = api_key or ""
+    _org_id = str(organization_id) if organization_id else ""
 
     class TableCrudTool(BaseCrudTool):
         """Comprehensive CRUD operations for Emery tables and rows."""
@@ -427,16 +430,14 @@ def load_table_crud(config: ToolConfig) -> Any:
             "offset": {"type": "integer", "description": "Pagination offset for get_rows (default: 0)", "nullable": True},
             "order_by": {"type": "string", "description": "Field to sort by for get_rows", "nullable": True},
             "order_direction": {"type": "string", "description": "Sort direction: ASC or DESC", "nullable": True},
-            "filters": {"type": "object", "description": "Filter criteria for queries", "nullable": True},
-            "auth_token": {"type": "string", "description": "User API key (user_xxx format) or Bearer token"},
-            "organization_id": {"type": "string", "description": "Organization ID for RLS context"}
+            "filters": {"type": "object", "description": "Filter criteria for queries", "nullable": True}
         }
         output_type = "object"
 
         def __init__(self):
             super().__init__("table", "crud")
 
-        def forward(self, method: str, auth_token: str, organization_id: str,
+        def forward(self, method: str,
                    table_id: Optional[str] = None, row_id: Optional[str] = None,
                    data: Optional[Dict] = None, limit: Optional[int] = None,
                    offset: Optional[int] = None, order_by: Optional[str] = None,
@@ -455,8 +456,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                     endpoint="tables",
                     method="POST",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "read_table":
@@ -466,8 +467,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                 return self._make_api_request(
                     endpoint=f"tables/{table_id}",
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "update_table":
@@ -480,8 +481,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                     endpoint=f"tables/{table_id}",
                     method="PUT",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "delete_table":
@@ -491,8 +492,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                 return self._make_api_request(
                     endpoint=f"tables/{table_id}",
                     method="DELETE",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "list_tables":
@@ -507,8 +508,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                 return self._make_api_request(
                     endpoint=endpoint,
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             # ============================================================
@@ -525,8 +526,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                     endpoint="rows",
                     method="POST",
                     data={"tableId": int(table_id), "data": data},
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "get_rows":
@@ -558,8 +559,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                 return self._make_api_request(
                     endpoint=endpoint,
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "update_row":
@@ -574,8 +575,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                     endpoint="rows",
                     method="PUT",
                     data={"tableId": int(table_id), "rowId": row_id, "data": data},
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "delete_row":
@@ -589,8 +590,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                 return self._make_api_request(
                     endpoint=endpoint,
                     method="DELETE",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             else:
@@ -602,7 +603,7 @@ def load_table_crud(config: ToolConfig) -> Any:
     return TableCrudTool()
 
 
-def load_team_crud(config: ToolConfig) -> Any:
+def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """Load Team CRUD tool with method-specific routing."""
 
     class TeamCrudTool(BaseCrudTool):
@@ -698,7 +699,7 @@ def load_team_crud(config: ToolConfig) -> Any:
     return TeamCrudTool()
 
 
-def load_database_crud(config: ToolConfig) -> Any:
+def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """Load Database CRUD tool with method-specific routing."""
 
     class DatabaseCrudTool(BaseCrudTool):

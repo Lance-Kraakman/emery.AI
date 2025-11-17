@@ -23,6 +23,8 @@ import { FilterPopover } from '../FilterPopover'
 import { FilterChip } from '../FilterChip'
 import { ViewSelector } from '../ViewSelector'
 import { SaveViewDialog } from '../SaveViewDialog'
+import { ShareButton } from '@/components/permissions/ShareButton'
+import { ShareDialog } from '@/components/permissions/ShareDialog'
 import { useGrid } from './GridContext'
 
 export const GridHeaderBar = () => {
@@ -51,6 +53,9 @@ export const GridHeaderBar = () => {
 
   // State for Save View dialog
   const [isSaveViewDialogOpen, setIsSaveViewDialogOpen] = React.useState(false)
+
+  // State for Share dialog
+  const [shareDialogOpen, setShareDialogOpen] = React.useState(false)
 
   // State for ID column visibility
   const [showIdColumn, setShowIdColumn] = React.useState(() => {
@@ -208,6 +213,16 @@ export const GridHeaderBar = () => {
       >
         <RefreshCw className="h-4 w-4" />
       </Button>
+
+      {/* Share Button */}
+      <ShareButton
+        resourceType="table"
+        resourceId={tableId}
+        onShare={() => setShareDialogOpen(true)}
+        variant="outline"
+        size="sm"
+      />
+
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="h-9 w-9 p-0">
@@ -247,6 +262,15 @@ export const GridHeaderBar = () => {
       onSelectView(view.id)
       setIsSaveViewDialogOpen(false)
     }}
+  />
+
+  {/* Share Dialog */}
+  <ShareDialog
+    open={shareDialogOpen}
+    onOpenChange={setShareDialogOpen}
+    resourceType="table"
+    resourceId={tableId}
+    resourceName={tableName}
   />
   </>
   )

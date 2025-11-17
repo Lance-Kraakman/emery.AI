@@ -911,7 +911,7 @@ export async function getAvailableApps(): Promise<Result<Array<{
     const { drizzle } = await import('drizzle-orm/postgres-js');
     const postgres = (await import('postgres')).default;
     const { appTypes } = await import('@/lib/db/schema');
-    const { eq } = await import('drizzle-orm');
+    const { eq, or } = await import('drizzle-orm');
     const { parseConnectionString } = await import('@/lib/db/client-parser');
 
     const rawConnectionString = process.env.DATABASE_URL;
@@ -926,7 +926,7 @@ export async function getAvailableApps(): Promise<Result<Array<{
 
     console.log('[ConnectionActions] Loading available apps from database...');
 
-    // Get OAuth-enabled apps (exclude system apps like "emery")
+    // Get OAuth-enabled apps AND system apps (like "emery")
     const apps = await db
       .select({
         id: appTypes.id,
@@ -936,7 +936,7 @@ export async function getAvailableApps(): Promise<Result<Array<{
         iconUrl: appTypes.iconUrl,
       })
       .from(appTypes)
-      .where(eq(appTypes.supportsOAuth, true))
+      .where(or(eq(appTypes.supportsOAuth, true), eq(appTypes.category, 'system')))
       .orderBy(appTypes.name);
 
     console.log(`[ConnectionActions] Found ${apps.length} available apps`);

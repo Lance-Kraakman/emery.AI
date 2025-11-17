@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Save, Trash2, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ShareButton } from '@/components/permissions/ShareButton';
+import { ShareDialog } from '@/components/permissions/ShareDialog';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { updateSkill, deleteSkill, uploadSkillAttachment } from '@/app/actions/skills';
@@ -21,6 +23,7 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [formData, setFormData] = useState<SkillFormData>({
     name: skill.name,
     description: skill.description,
@@ -157,6 +160,13 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
             <Trash2 className="h-4 w-4" />
             {isDeleting ? 'Deleting...' : 'Delete'}
           </Button>
+          <ShareButton
+            resourceType="skill"
+            resourceId={skill.id}
+            onShare={() => setShareDialogOpen(true)}
+            variant="outline"
+            size="default"
+          />
           <Button onClick={handleSave} disabled={isSaving} className="gap-2">
             <Save className="h-4 w-4" />
             {isSaving ? 'Saving...' : 'Save Changes'}
@@ -173,6 +183,15 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
           skillId={skill.id}
         />
       </Card>
+
+      {/* Share Dialog */}
+      <ShareDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        resourceType="skill"
+        resourceId={skill.id}
+        resourceName={skill.name}
+      />
     </div>
   );
 }

@@ -112,21 +112,63 @@ class ToolRegistry:
         Get CRUD routing for method-specific tool names.
 
         Args:
-            tool_name: Tool name from frontend (e.g., "agent_create")
+            tool_name: Tool name from frontend (e.g., "emery-create-agent")
 
         Returns:
             Tuple of (base_tool_name, method) or None if not a CRUD tool
         """
-        # AIDEV-NOTE: Map frontend tool names to CRUD base tools and methods
-        crud_methods = ["create", "read", "update", "delete", "list"]
-        crud_resources = ["agent", "document", "file", "table", "team", "database"]
+        # AIDEV-NOTE: Explicit mapping - clear and maintainable
+        TOOL_ROUTING = {
+            # Agent operations
+            "emery-create-agent": ("agent_crud", "create"),
+            "emery-read-agent": ("agent_crud", "read"),
+            "emery-update-agent": ("agent_crud", "update"),
+            "emery-delete-agent": ("agent_crud", "delete"),
+            "emery-list-agents": ("agent_crud", "list"),
 
-        for resource in crud_resources:
-            for method in crud_methods:
-                if tool_name == f"{resource}_{method}":
-                    return f"{resource}_crud", method
+            # Document operations
+            "emery-create-document": ("document_crud", "create"),
+            "emery-read-document": ("document_crud", "read"),
+            "emery-update-document": ("document_crud", "update"),
+            "emery-delete-document": ("document_crud", "delete"),
+            "emery-list-documents": ("document_crud", "list"),
 
-        return None
+            # File operations
+            "emery-create-file": ("file_crud", "create"),
+            "emery-read-file": ("file_crud", "read"),
+            "emery-update-file": ("file_crud", "update"),
+            "emery-delete-file": ("file_crud", "delete"),
+            "emery-list-files": ("file_crud", "list"),
+
+            # Table operations
+            "emery-create-table": ("table_crud", "create_table"),
+            "emery-read-table": ("table_crud", "read_table"),
+            "emery-update-table": ("table_crud", "update_table"),
+            "emery-delete-table": ("table_crud", "delete_table"),
+            "emery-list-tables": ("table_crud", "list_tables"),
+
+            # Row operations (also use table_crud)
+            "emery-create-row": ("table_crud", "create_row"),
+            "emery-get-rows": ("table_crud", "get_rows"),
+            "emery-update-row": ("table_crud", "update_row"),
+            "emery-delete-row": ("table_crud", "delete_row"),
+
+            # Team operations
+            "emery-create-team": ("team_crud", "create"),
+            "emery-read-team": ("team_crud", "read"),
+            "emery-update-team": ("team_crud", "update"),
+            "emery-delete-team": ("team_crud", "delete"),
+            "emery-list-teams": ("team_crud", "list"),
+
+            # Database operations
+            "emery-create-database": ("database_crud", "create"),
+            "emery-read-database": ("database_crud", "read"),
+            "emery-update-database": ("database_crud", "update"),
+            "emery-delete-database": ("database_crud", "delete"),
+            "emery-list-databases": ("database_crud", "list"),
+        }
+
+        return TOOL_ROUTING.get(tool_name)
     
     def load_tools(self, tool_configs: List[ToolConfig]) -> List[Any]:
         """Load multiple tools from configurations."""

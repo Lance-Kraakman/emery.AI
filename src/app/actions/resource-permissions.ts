@@ -62,8 +62,8 @@ async function getOrCreateUserPersonalRole(
 
   // Create new personal role with user-friendly name
   const newRole = await rbacRepository.createRole({
-    name: `Personal permissions`,
-    description: `Personal role for resource-specific permissions`,
+    name: `Resource Access`,
+    description: `Auto-managed role for shared resource permissions`,
     organizationId: OrganizationId.fromNumber(organizationId),
     permissions: [], // No base permissions
     type: 'personal',

@@ -170,7 +170,8 @@ class UnifiedToolLoader:
         api_key: str = "",
         api_key_mode: str = "agent",
         agent_config: Optional[AgentConfig] = None,
-        skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None
+        skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None,
+        organization_id: Optional[int] = None
     ) -> Any:
         """
         Load a tool instance from ToolConfig using unified metadata.
@@ -210,7 +211,7 @@ class UnifiedToolLoader:
         if crud_loader:
             # Create a minimal unified_tool dict just to satisfy the loader signature
             unified_tool = {"id": tool_config.name, "source": "emery"}
-            return crud_loader(tool_config, unified_tool, api_key, api_key_mode)
+            return crud_loader(tool_config, unified_tool, api_key, api_key_mode, organization_id)
 
         # Regular tool loading (existing logic)
         # Convert tool name from hyphen to underscore format for lookup (frontend uses hyphens, backend uses underscores)
@@ -305,35 +306,35 @@ class UnifiedToolLoader:
         from ..tools.base_tools import load_table_query
         return load_table_query(tool_config)
 
-    def _load_agent_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_agent_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load Agent CRUD tool."""
         from ..tools.crud_tools import load_agent_crud
-        return load_agent_crud(tool_config)
+        return load_agent_crud(tool_config, api_key, organization_id)
 
-    def _load_document_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_document_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load Document CRUD tool."""
         from ..tools.crud_tools import load_document_crud
-        return load_document_crud(tool_config)
+        return load_document_crud(tool_config, api_key, organization_id)
 
-    def _load_file_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_file_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load File CRUD tool."""
         from ..tools.crud_tools import load_file_crud
-        return load_file_crud(tool_config)
+        return load_file_crud(tool_config, api_key, organization_id)
 
-    def _load_table_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_table_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load Table CRUD tool."""
         from ..tools.crud_tools import load_table_crud
-        return load_table_crud(tool_config)
+        return load_table_crud(tool_config, api_key, organization_id)
 
-    def _load_team_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_team_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load Team CRUD tool."""
         from ..tools.crud_tools import load_team_crud
-        return load_team_crud(tool_config)
+        return load_team_crud(tool_config, api_key, organization_id)
 
-    def _load_database_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_database_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load Database CRUD tool."""
         from ..tools.crud_tools import load_database_crud
-        return load_database_crud(tool_config)
+        return load_database_crud(tool_config, api_key, organization_id)
 
     def _load_emery_database_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Emery Database tool."""
@@ -469,7 +470,8 @@ class UnifiedToolLoader:
         api_key: Optional[str] = None,
         api_key_mode: str = "agent",
         agent_config: Optional[AgentConfig] = None,
-        skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None
+        skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None,
+        organization_id: Optional[int] = None
     ) -> List[Any]:
         """
         Load smolagents tools from ToolConfig protobuf objects.
@@ -510,7 +512,8 @@ class UnifiedToolLoader:
                     api_key=tool_api_key or "",
                     api_key_mode=api_key_mode,
                     agent_config=agent_config,
-                    skill_executor=skill_executor
+                    skill_executor=skill_executor,
+                    organization_id=organization_id
                 )
                 smolagents_tools.append(tool_instance)
                 logger.info(f"✅ Successfully loaded tool: {tool_config.name}")

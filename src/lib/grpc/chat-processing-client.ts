@@ -120,11 +120,23 @@ export class ChatProcessingClient {
     console.log(`[CHAT-GRPC-CLIENT] Converted to ${protoMessageParts.length} proto message parts`);
 
     // Build AgentConfig with tools and skills
-    const systemTools = (options.tools || []).map(tool => ({
-      name: tool.name,
-      version: '', // Empty version since ToolConfig no longer has version
-      config: tool.config || {}
-    }));
+    // AIDEV-NOTE: Serialize nested config objects to JSON for protobuf map<string, string>
+    const systemTools = (options.tools || []).map(tool => {
+      const config: Record<string, string> = {};
+
+      if (tool.config) {
+        for (const [key, value] of Object.entries(tool.config)) {
+          // Serialize objects/arrays to JSON, keep strings as-is
+          config[key] = typeof value === 'string' ? value : JSON.stringify(value);
+        }
+      }
+
+      return {
+        name: tool.name,
+        version: '', // Empty version since ToolConfig no longer has version
+        config: config
+      };
+    });
 
     // Create skill reference tools for LLM to call
     const skillReferenceTools = (options.skills || []).map(skill => ({
