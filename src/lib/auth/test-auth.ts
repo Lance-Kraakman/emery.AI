@@ -27,17 +27,39 @@ export interface AuthResult {
 }
 
 /**
- * Authenticate an agent API key by looking up the agent and using the owner's identity
- * This allows agents to perform operations on behalf of their owners
+ * Authenticate with an API key (user or agent)
+ * Returns a session-like object for compatibility with both NextRequest and server action contexts
+ *
+ * This is the shared authentication logic used by both:
+ * - authenticateRequest() in API routes
+ * - requireAuth() in server actions
  */
-async function authenticateAgentApiKey(apiKeyString: string): Promise<AuthResult> {
+export async function authenticateWithApiKey(apiKeyString: string): Promise<AuthResult> {
+  // Try user API key first (format: user_*)
+  if (apiKeyString.startsWith('user_')) {
+    const apiKeyUser = await validateUserApiKey(apiKeyString);
+    if (apiKeyUser) {
+      return {
+        success: true,
+        user: {
+          id: apiKeyUser.id,
+          email: apiKeyUser.email,
+          name: apiKeyUser.name,
+          organizationId: apiKeyUser.organizationId,
+          organizationRole: 'member',
+        },
+      };
+    }
+  }
+
+  // Try agent API key (uses agent owner's identity)
   try {
     const agentRepository = getAgentRepository();
     const apiKey = ApiKey.fromString(apiKeyString);
     const agent = await agentRepository.findByApiKey(apiKey);
 
     if (!agent) {
-      return { success: false, error: 'Invalid agent API key' };
+      return { success: false, error: 'Invalid API key' };
     }
 
     // Use agent owner's identity (same pattern as Pipedream proxy)
@@ -59,8 +81,8 @@ async function authenticateAgentApiKey(apiKeyString: string): Promise<AuthResult
       },
     };
   } catch (error) {
-    console.error('Agent API key authentication error:', error);
-    return { success: false, error: 'Agent API key authentication failed' };
+    console.error('API key authentication error:', error);
+    return { success: false, error: 'API key authentication failed' };
   }
 }
 
@@ -95,27 +117,9 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
     const apiKey = extractApiKeyFromHeader(authHeader);
 
     if (apiKey) {
-      // Try user API key first (format: user_*)
-      if (apiKey.startsWith('user_')) {
-        const apiKeyUser = await validateUserApiKey(apiKey);
-        if (apiKeyUser) {
-          return {
-            success: true,
-            user: {
-              id: apiKeyUser.id,
-              email: apiKeyUser.email,
-              name: apiKeyUser.name,
-              organizationId: apiKeyUser.organizationId,
-              organizationRole: 'member', // Default role for API key users
-            },
-          };
-        }
-      }
-
-      // Try agent API key (any other format - uses agent owner's identity)
-      const agentAuth = await authenticateAgentApiKey(apiKey);
-      if (agentAuth.success) {
-        return agentAuth;
+      const apiKeyAuth = await authenticateWithApiKey(apiKey);
+      if (apiKeyAuth.success) {
+        return apiKeyAuth;
       }
     }
 

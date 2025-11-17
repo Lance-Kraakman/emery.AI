@@ -7,12 +7,12 @@ import { auth, hasPermission as authHasPermission, requirePermission as authRequ
 import { Permission } from "@/ddd/domain/shared/value-objects/permission";
 import { revalidatePath } from "next/cache";
 // REMOVED: import { requireCurrentOrganization } from "./user-organizations"; - causes circular dependency
-import { getRBACRepository, getUserRoleApplicationService, getAgentRepository, getUserRepository } from "@/ddd/application/di/container";
+import { getRBACRepository, getUserRoleApplicationService } from "@/ddd/application/di/container";
 import type { Result } from "./types";
 import { SYSTEM_ROLES, type SystemRoleType } from "@/ddd/domain/rbac/entities/role";
-import { OrganizationId, UserId, ApiKey } from "@/ddd/domain/shared/value-objects";
+import { OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
 import { headers } from "next/headers";
-import { validateUserApiKey, extractApiKeyFromHeader } from "@/lib/auth/user-api-keys";
+import { extractApiKeyFromHeader, authenticateWithApiKey } from "@/lib/auth/test-auth";
 
 export async function assignUserRole(userId: string, role: SystemRoleType): Promise<Result> {
   try {
@@ -108,47 +108,18 @@ export async function requireAuth() {
   const apiKey = extractApiKeyFromHeader(authHeader);
 
   if (apiKey) {
-    // Try user API key (format: user_*)
-    if (apiKey.startsWith('user_')) {
-      const apiKeyUser = await validateUserApiKey(apiKey);
-      if (apiKeyUser) {
-        // Return session-like object for compatibility
-        return {
-          user: {
-            id: apiKeyUser.id,
-            email: apiKeyUser.email,
-            name: apiKeyUser.name,
-            currentOrganizationId: apiKeyUser.organizationId,
-            organizationRole: 'member',
-          },
-        };
-      }
-    }
-
-    // Try agent API key (uses agent owner's identity)
-    try {
-      const agentRepository = getAgentRepository();
-      const agent = await agentRepository.findByApiKey(ApiKey.fromString(apiKey));
-
-      if (agent) {
-        const userRepository = getUserRepository();
-        const owner = await userRepository.findById(agent.ownerId);
-
-        if (owner) {
-          // Return session-like object using agent owner's identity
-          return {
-            user: {
-              id: owner.id.value,
-              email: owner.email?.value || '',
-              name: owner.name ?? null,
-              currentOrganizationId: owner.currentOrganizationId?.value ?? null,
-              organizationRole: 'member',
-            },
-          };
-        }
-      }
-    } catch (error) {
-      console.error('Agent API key authentication error in requireAuth:', error);
+    const apiKeyAuth = await authenticateWithApiKey(apiKey);
+    if (apiKeyAuth.success && apiKeyAuth.user) {
+      // Return session-like object for compatibility
+      return {
+        user: {
+          id: apiKeyAuth.user.id,
+          email: apiKeyAuth.user.email,
+          name: apiKeyAuth.user.name,
+          currentOrganizationId: apiKeyAuth.user.organizationId,
+          organizationRole: apiKeyAuth.user.organizationRole || 'member',
+        },
+      };
     }
   }
 
