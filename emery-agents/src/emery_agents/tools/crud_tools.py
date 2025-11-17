@@ -21,8 +21,9 @@ class BaseCrudTool(Tool):
         super().__init__()
         self.resource_type = resource_type
         self.method = method
-        # AIDEV-NOTE: Use emery-api base URL from environment, fallback to development default
-        self.base_url = os.getenv("EMERY_API_BASE_URL", "http://localhost:3000/api")
+        # AIDEV-NOTE: Use Next.js base URL from environment, append /api path
+        nextjs_base = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
+        self.base_url = f"{nextjs_base}/api"
 
     def _make_api_request(self, endpoint: str, method: str = "GET", data: Optional[Dict] = None,
                          auth_token: Optional[str] = None, organization_id: Optional[str] = None) -> Dict[str, Any]:
