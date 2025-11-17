@@ -52,7 +52,7 @@ async function authenticateAgentApiKey(apiKeyString: string): Promise<AuthResult
       success: true,
       user: {
         id: owner.id.value,
-        email: owner.email,
+        email: owner.email?.value || '',
         name: owner.name,
         organizationId: owner.currentOrganizationId,
         organizationRole: 'member',
