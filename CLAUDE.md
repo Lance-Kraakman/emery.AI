@@ -1,1 +1,2 @@
 - stop fucking start the worker locally
+- just run typecheck

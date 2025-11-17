@@ -204,37 +204,59 @@ export class AgentTaskApplicationService {
         }
       };
 
-      const executionResult = await this.executionRepository.executeAgent(executionRequest);
+      try {
+        const executionResult = await this.executionRepository.executeAgent(executionRequest);
 
-      // 5. Update task based on execution result (domain logic)
-      if (executionResult.success) {
-        task.complete(executionResult.outputData);
-        logger.summary(`Task ${taskId.substring(0, 8)} completed successfully`);
-      } else {
-        task.fail(executionResult.error || 'Execution failed');
-      }
-
-      // 6. Save final task state
-      await this.taskRepository.update(task.id, {
-        status: task.status.value,
-        result: task.result,
-        completedAt: task.completedAt,
-        error: task.error,
-        logs: task.logs
-      });
-
-      logger.summary(`Completed task ${taskId.substring(0, 8)}: ${executionResult.success ? 'SUCCESS' : 'FAILED'}`);
-
-      return {
-        success: true,
-        data: {
-          task: taskToDTO(task),
-          executionResult
+        // 5. Update task based on execution result (domain logic)
+        if (executionResult.success) {
+          task.complete(executionResult.outputData);
+          logger.summary(`Task ${taskId.substring(0, 8)} completed successfully`);
+        } else {
+          task.fail(executionResult.error || 'Execution failed');
         }
-      };
+
+        logger.summary(`Completed task ${taskId.substring(0, 8)}: ${executionResult.success ? 'SUCCESS' : 'FAILED'}`);
+
+        return {
+          success: true,
+          data: {
+            task: taskToDTO(task),
+            executionResult
+          }
+        };
+
+      } finally {
+        // 6. ALWAYS save final task state and logs, even if execution threw an exception
+        await this.taskRepository.update(task.id, {
+          status: task.status.value,
+          result: task.result,
+          completedAt: task.completedAt,
+          error: task.error,
+          logs: task.logs
+        });
+      }
 
     } catch (error) {
       logger.error('Error executing task', error);
+
+      // Attempt to mark task as failed in database when exception occurs
+      // Need to reload task since it might not be in scope
+      try {
+        const { taskId } = dto;
+        const failedTask = await this.taskRepository.findById(TaskId.fromString(taskId));
+        if (failedTask) {
+          failedTask.fail(error instanceof Error ? error.message : 'Failed to execute task');
+          await this.taskRepository.update(failedTask.id, {
+            status: failedTask.status.value,
+            error: failedTask.error,
+            completedAt: failedTask.completedAt,
+            logs: failedTask.logs
+          });
+        }
+      } catch (updateError) {
+        logger.error('Failed to update task status after error', updateError);
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to execute task'
