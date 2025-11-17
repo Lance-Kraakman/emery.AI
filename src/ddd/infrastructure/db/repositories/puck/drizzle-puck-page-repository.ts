@@ -106,6 +106,8 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
     try {
       const persistence = page.toPersistence();
 
+      console.log('[DrizzlePuckPageRepository] update - persistence.themeConfig:', persistence.themeConfig);
+
       const [record] = await this.db
         .update(pages)
         .set({
@@ -123,11 +125,16 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
         .where(eq(pages.id, persistence.id))
         .returning();
 
+      console.log('[DrizzlePuckPageRepository] update - returned record.themeConfig:', record?.themeConfig);
+
       if (!record) {
         throw new Error(`Page ${persistence.id} not found`);
       }
 
-      return this.toDomain(record);
+      const domain = this.toDomain(record);
+      console.log('[DrizzlePuckPageRepository] update - domain page themeConfig:', domain.themeConfig?.toJSON());
+
+      return domain;
     } catch (error) {
       console.error('[DrizzlePuckPageRepository] Error updating page:', error);
       throw error;

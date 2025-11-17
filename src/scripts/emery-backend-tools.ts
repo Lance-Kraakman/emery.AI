@@ -47,10 +47,11 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
 
   // CRUD Tools (from crud_tools.py)
-  "agent_crud": {
-    id: "agent_crud",
+  // AIDEV-NOTE: Tool names match category names directly (agents, tables, etc.)
+  "agents": {
+    id: "agents",
     app: "emery",
-    name: "Agent Management",
+    name: "Agents",
     description: "Create, read, update, delete agents",
     type: "action",
     inputs: {
@@ -66,10 +67,10 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "document_crud": {
-    id: "document_crud",
+  "documents": {
+    id: "documents",
     app: "emery",
-    name: "Document Management",
+    name: "Documents",
     description: "Manage organization documents",
     type: "action",
     inputs: {
@@ -85,10 +86,10 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "file_crud": {
-    id: "file_crud",
+  "files": {
+    id: "files",
     app: "emery",
-    name: "File Management",
+    name: "Files",
     description: "Manage organization files",
     type: "action",
     inputs: {
@@ -104,10 +105,10 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "table_crud": {
-    id: "table_crud",
+  "tables": {
+    id: "tables",
     app: "emery",
-    name: "Table Management",
+    name: "Tables",
     description: "Comprehensive table and row management with 9 operations. TABLE: create_table (create new table), read_table (get details), update_table (modify metadata), delete_table (remove table), list_tables (list all). ROWS: create_row (add row), get_rows (query with pagination, default 100 rows), update_row (modify row), delete_row (remove row).",
     type: "action",
     inputs: {
@@ -158,10 +159,10 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "team_crud": {
-    id: "team_crud",
+  "teams": {
+    id: "teams",
     app: "emery",
-    name: "Team Management",
+    name: "Teams",
     description: "Manage organization teams",
     type: "action",
     inputs: {
@@ -177,10 +178,10 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "database_crud": {
-    id: "database_crud",
+  "databases": {
+    id: "databases",
     app: "emery",
-    name: "Database Management",
+    name: "Databases",
     description: "Manage databases",
     type: "action",
     inputs: {

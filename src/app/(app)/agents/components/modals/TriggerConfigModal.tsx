@@ -80,6 +80,58 @@ const triggerTypes: TriggerTypeOption[] = [
   }
 ];
 
+/**
+ * Generate sample values for all variables based on trigger type
+ * Combines trigger metadata samples with actual table data for DATABASE_EVENT
+ */
+function generateVariableSamples(
+  triggerType: TriggerType,
+  scheduleName: string,
+  sampleRowData: Record<string, any> | null
+): Array<{ variable: string; sampleValue: string }> {
+  const samples: Array<{ variable: string; sampleValue: string }> = [];
+
+  // Common trigger variables
+  samples.push({ variable: '$trigger.type', sampleValue: triggerType });
+  samples.push({ variable: '$trigger.scheduleName', sampleValue: scheduleName || 'Daily sync' });
+
+  if (triggerType === 'CALENDAR') {
+    // Calendar-specific variables
+    const now = new Date();
+    const scheduledTime = new Date(now.getTime() + 3600000); // 1 hour from now
+    samples.push({ variable: '$trigger.scheduledTime', sampleValue: scheduledTime.toISOString() });
+    samples.push({ variable: '$trigger.timezone', sampleValue: 'America/New_York' });
+  } else if (triggerType === 'DATABASE_EVENT') {
+    // Database event variables
+    samples.push({ variable: '$table.id', sampleValue: '1' });
+    samples.push({ variable: '$table.name', sampleValue: 'customers' });
+    samples.push({ variable: '$event.operation', sampleValue: 'INSERT' });
+    samples.push({ variable: '$event.rowId', sampleValue: '6a0c5b17-d4dc-4c47-924b-8dc47b8f9c76' });
+    samples.push({ variable: '$event.timestamp', sampleValue: new Date().toISOString() });
+
+    // Add actual row data if available
+    if (sampleRowData) {
+      Object.entries(sampleRowData).forEach(([fieldName, value]) => {
+        const displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        samples.push({ variable: `$row.${fieldName}`, sampleValue: displayValue });
+      });
+
+      // Show previousRow example for one field
+      const firstField = Object.keys(sampleRowData)[0];
+      if (firstField) {
+        samples.push({ variable: `$previousRow.${firstField}`, sampleValue: '(previous value)' });
+      }
+    }
+  } else if (triggerType === 'WEBHOOK') {
+    // Webhook-specific variables
+    samples.push({ variable: '$webhook.payload', sampleValue: '{"event": "user.created"}' });
+    samples.push({ variable: '$webhook.headers', sampleValue: '{"content-type": "application/json"}' });
+    samples.push({ variable: '$webhook.origin', sampleValue: 'https://example.com' });
+  }
+
+  return samples;
+}
+
 export function TriggerConfigModal({
   isOpen,
   onClose,
@@ -442,15 +494,15 @@ export function TriggerConfigModal({
   };
 
   const getStepTitle = () => {
-    const modePrefix = mode === 'create' ? 'Add New Schedule' : `Edit Schedule ${scheduleIndex + 1}`;
+    const modePrefix = mode === 'create' ? 'Add Schedule' : `Edit Schedule`;
 
     switch (currentStep) {
       case 'select':
         return `${modePrefix}: Choose Type`;
       case 'configure':
-        return `${modePrefix}: Configure ${getTriggerTypeLabel(selectedType)}`;
+        return `${modePrefix}: Configure`;
       case 'instructions':
-        return `${modePrefix}: Define Task`;
+        return `${modePrefix}: Task`;
       case 'review':
         return `${modePrefix}: Review`;
       default:
@@ -519,7 +571,7 @@ export function TriggerConfigModal({
       isOpen={isOpen}
       onClose={onClose}
       title={getStepTitle()}
-      description="Configure when and how this agent should be triggered"
+      description={currentStep === 'instructions' ? undefined : "Configure when and how this agent should be triggered"}
       size="lg"
       footer={footer}
       closeOnEscape={!isSaving}
@@ -725,10 +777,10 @@ export function TriggerConfigModal({
       {currentStep === 'instructions' && (
         <div className="p-6">
           <div className="space-y-6">
-            {/* Schedule Name */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="schedule-name" className="text-base font-medium">
+            {/* Schedule Name - Inline */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Label htmlFor="schedule-name" className="text-sm font-medium whitespace-nowrap">
                   Schedule Name *
                 </Label>
                 <div className="group relative">
@@ -745,35 +797,34 @@ export function TriggerConfigModal({
                 value={scheduleName}
                 onChange={(e) => setScheduleName(e.target.value)}
                 placeholder="e.g., Daily Sales Report, Weekly Data Sync"
-                className="text-base"
+                className="flex-1"
               />
             </div>
 
-            {/* Context Reference - Combined Variables + Sample Data */}
+            {/* Variables */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium">Context Reference</Label>
+                <Label className="text-sm font-medium">Variables</Label>
                 <div className="group relative">
                   <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                   <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
                     <p className="text-foreground">
-                      Available variables and sample data for use in your task instructions
+                      Click any variable to insert it into your task instructions. Values shown are examples.
                     </p>
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {/* Variables Column */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground font-medium">Variables</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 p-2.5 bg-muted/50 rounded-lg border min-h-[100px]">
-                    {InstructionTemplateService.getAvailableVariables(selectedType).map((variable) => (
-                      <Badge
-                        key={variable.name}
-                        variant="secondary"
-                        className="cursor-pointer hover:bg-secondary/80 transition-colors text-xs font-mono h-6"
+              {isLoadingSampleData && selectedType === 'DATABASE_EVENT' ? (
+                <div className="p-3 bg-muted/50 rounded-lg border flex items-center justify-center text-xs text-muted-foreground">
+                  Loading sample data...
+                </div>
+              ) : (
+                <div className="p-2.5 bg-muted/50 rounded-lg border max-h-[180px] overflow-y-auto">
+                  <div className="space-y-1">
+                    {generateVariableSamples(selectedType, scheduleName, sampleRowData).map((sample) => (
+                      <div
+                        key={sample.variable}
+                        className="flex items-start gap-2 text-xs cursor-pointer hover:bg-muted/80 p-1 rounded transition-colors"
                         onClick={() => {
                           // Insert variable at cursor position
                           const input = document.getElementById('schedule-task-instructions') as HTMLTextAreaElement;
@@ -783,7 +834,7 @@ export function TriggerConfigModal({
                             const text = taskInstructions;
                             const before = text.substring(0, start);
                             const after = text.substring(end);
-                            const variableText = `\${${variable.name}}`;
+                            const variableText = sample.variable.replace('$', '${') + '}';
                             setTaskInstructions(before + variableText + after);
                             // Set cursor position after inserted text
                             setTimeout(() => {
@@ -792,57 +843,20 @@ export function TriggerConfigModal({
                             }, 0);
                           }
                         }}
-                        title={variable.description}
+                        title="Click to insert this variable"
                       >
-                        ${variable.name}
-                      </Badge>
+                        <span className="font-mono text-muted-foreground min-w-[140px] flex-shrink-0">
+                          {sample.variable}
+                        </span>
+                        <span className="text-muted-foreground flex-shrink-0">→</span>
+                        <span className="font-mono text-foreground break-all">
+                          {sample.sampleValue}
+                        </span>
+                      </div>
                     ))}
                   </div>
                 </div>
-
-                {/* Sample Data Column - Only for DATABASE_EVENT triggers */}
-                {selectedType === 'DATABASE_EVENT' && databaseConfig.tableId ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground font-medium">Sample Data</span>
-                    </div>
-                    {isLoadingSampleData ? (
-                      <div className="p-2.5 bg-muted/50 rounded-lg border flex items-center justify-center text-xs text-muted-foreground min-h-[100px]">
-                        Loading...
-                      </div>
-                    ) : sampleRowData ? (
-                      <div className="p-2.5 bg-muted/50 rounded-lg border max-h-[200px] overflow-y-auto">
-                        <div className="space-y-1">
-                          {Object.entries(sampleRowData).map(([fieldName, value]) => (
-                            <div key={fieldName} className="flex items-start gap-1.5 text-xs">
-                              <span className="font-mono text-muted-foreground min-w-[100px] flex-shrink-0">
-                                ${`row.${fieldName}`}
-                              </span>
-                              <span className="text-muted-foreground flex-shrink-0">→</span>
-                              <span className="font-mono text-foreground break-all">
-                                {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-2.5 bg-muted/50 rounded-lg border text-xs text-muted-foreground min-h-[100px] flex items-center justify-center">
-                        No sample data
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground font-medium">Sample Data</span>
-                    </div>
-                    <div className="p-2.5 bg-muted/50 rounded-lg border text-xs text-muted-foreground min-h-[100px] flex items-center justify-center">
-                      {selectedType === 'DATABASE_EVENT' ? 'Select a table to view sample data' : 'Available for database triggers'}
-                    </div>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
 
             {/* Task Instructions with @ Tool Mentions */}

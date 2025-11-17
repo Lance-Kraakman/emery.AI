@@ -2,15 +2,26 @@
 
 import React from "react"
 import { signIn } from "next-auth/react"
-import { Button } from "@/components/ui/button"
 import { Github } from "lucide-react"
 
 interface SignInButtonProps {
   provider: "github" | "google"
   callbackUrl?: string
+  // Theme overrides
+  buttonColor?: string
+  buttonTextColor?: string
+  borderColor?: string
+  borderRadius?: string
 }
 
-export function SignInButton({ provider, callbackUrl = "/mission-control" }: SignInButtonProps) {
+export function SignInButton({
+  provider,
+  callbackUrl = "/mission-control",
+  buttonColor,
+  buttonTextColor,
+  borderColor,
+  borderRadius
+}: SignInButtonProps) {
   const handleSignIn = () => {
     signIn(provider, { callbackUrl })
   }
@@ -19,7 +30,6 @@ export function SignInButton({ provider, callbackUrl = "/mission-control" }: Sig
     github: {
       text: "Continue with GitHub",
       icon: <Github className="w-4 h-4 mr-2" />,
-      variant: "outline" as const
     },
     google: {
       text: "Continue with Google",
@@ -31,21 +41,24 @@ export function SignInButton({ provider, callbackUrl = "/mission-control" }: Sig
           <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
         </svg>
       ),
-      variant: "outline" as const
     }
   }
 
   const config = buttonConfig[provider]
 
   return (
-    <Button
+    <button
       onClick={handleSignIn}
-      variant={config.variant}
-      size="lg"
-      className="w-full"
+      className="w-full inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium transition-colors hover:opacity-90"
+      style={{
+        backgroundColor: buttonColor || 'var(--theme-surface, #f8fafc)',
+        color: buttonTextColor || 'var(--theme-text, #1e293b)',
+        borderRadius: borderRadius || 'var(--theme-border-radius, 0.5rem)',
+        border: borderColor ? `1px solid ${borderColor}` : '1px solid var(--theme-border, #e2e8f0)',
+      }}
     >
       {config.icon}
       {config.text}
-    </Button>
+    </button>
   )
 }

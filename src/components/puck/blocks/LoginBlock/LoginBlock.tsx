@@ -4,20 +4,16 @@ import React from "react";
 import { usePublicAppAuth } from "@/components/providers/PublicAppAuthProvider";
 import { SignInButton } from "@/components/auth/SignInButton";
 import { EmailSignInForm } from "@/components/auth/EmailSignInForm";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, LogIn } from "lucide-react";
+import { CheckCircle } from "lucide-react";
 
 export interface LoginBlockProps {
   title: string;
   description: string;
-  triggerText: string;
   showGithub: boolean;
   showGoogle: boolean;
   showEmail: boolean;
   redirectAfterLogin: string;
-  popoverSide: "top" | "bottom" | "left" | "right";
-  popoverAlign: "start" | "center" | "end";
   backgroundColor?: string;
   textColor?: string;
   buttonColor?: string;
@@ -29,13 +25,10 @@ export interface LoginBlockProps {
 export function LoginBlock({
   title,
   description,
-  triggerText,
   showGithub,
   showGoogle,
   showEmail,
   redirectAfterLogin,
-  popoverSide,
-  popoverAlign,
   backgroundColor,
   textColor,
   buttonColor,
@@ -95,109 +88,109 @@ export function LoginBlock({
 
   return (
     <div className="flex items-center justify-center">
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            className="inline-flex items-center gap-2 px-6 py-3 font-medium transition-colors hover:opacity-90"
-            style={{
-              backgroundColor: buttonColor || 'var(--theme-primary, #2563eb)',
-              color: buttonTextColor || '#ffffff',
-              borderRadius: borderRadius || 'var(--theme-border-radius, 0.5rem)',
-              border: borderColor ? `1px solid ${borderColor}` : 'none',
-            }}
+      <div
+        className="relative w-full max-w-md rounded-lg p-6"
+        style={{
+          backgroundColor: backgroundColor || 'var(--theme-background, #ffffff)',
+          borderRadius: borderRadius || 'var(--theme-border-radius, 0.5rem)',
+          border: borderColor ? `1px solid ${borderColor}` : '1px solid var(--theme-border, #e2e8f0)',
+        }}
+      >
+        {/* Preview Badge in top-right corner */}
+        {isPreviewMode && (
+          <Badge variant="secondary" className="absolute top-3 right-3 text-xs">
+            Preview
+          </Badge>
+        )}
+
+        {/* Header Section */}
+        <div className="space-y-2 mb-6">
+          <h2
+            className="text-lg font-bold"
+            style={{ color: textColor || 'var(--theme-text, #1e293b)' }}
           >
-            <LogIn className="w-4 h-4" />
-            {triggerText}
-            {isPreviewMode && (
-              <Badge variant="secondary" className="ml-2 text-xs">
-                Preview
-              </Badge>
-            )}
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          side={popoverSide}
-          align={popoverAlign}
-          className="w-80 p-0"
-          style={{
-            backgroundColor: backgroundColor || 'var(--theme-background, #ffffff)',
-            borderColor: borderColor || 'var(--theme-border, #e2e8f0)',
-            borderRadius: borderRadius || 'var(--theme-border-radius, 0.5rem)',
-          }}
-        >
-          {/* Header Section */}
-          <div
-            className="p-4 space-y-2"
-            style={{
-              borderBottom: borderColor
-                ? `1px solid ${borderColor}`
-                : '1px solid var(--theme-border, #e2e8f0)',
-            }}
-          >
-            <h2
-              className="text-lg font-bold"
-              style={{ color: textColor || 'var(--theme-text, #1e293b)' }}
+            {title}
+          </h2>
+          {description && (
+            <p
+              className="text-sm"
+              style={{ color: 'var(--theme-text-muted, #64748b)' }}
             >
-              {title}
-            </h2>
-            {description && (
-              <p
-                className="text-sm"
-                style={{ color: 'var(--theme-text-muted, #64748b)' }}
-              >
-                {description}
-              </p>
-            )}
-          </div>
+              {description}
+            </p>
+          )}
+        </div>
 
-          {/* Login Options */}
-          <div className="p-4 space-y-3">
-            {/* OAuth Providers */}
-            {showGithub && (
-              <SignInButton provider="github" callbackUrl={callbackUrl} />
-            )}
-            {showGoogle && (
-              <SignInButton provider="google" callbackUrl={callbackUrl} />
-            )}
+        {/* Login Options */}
+        <div className="space-y-3">
+          {/* OAuth Providers */}
+          {showGithub && (
+            <SignInButton
+              provider="github"
+              callbackUrl={callbackUrl}
+              buttonColor={buttonColor}
+              buttonTextColor={buttonTextColor}
+              borderColor={borderColor}
+              borderRadius={borderRadius}
+            />
+          )}
+          {showGoogle && (
+            <SignInButton
+              provider="google"
+              callbackUrl={callbackUrl}
+              buttonColor={buttonColor}
+              buttonTextColor={buttonTextColor}
+              borderColor={borderColor}
+              borderRadius={borderRadius}
+            />
+          )}
 
-            {/* Divider if both OAuth and Email are shown */}
-            {(showGithub || showGoogle) && showEmail && (
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span
-                    className="w-full border-t"
-                    style={{ borderColor: borderColor || 'var(--theme-border, #e2e8f0)' }}
-                  />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span
-                    className="px-2"
-                    style={{
-                      backgroundColor: backgroundColor || 'var(--theme-background, #ffffff)',
-                      color: 'var(--theme-text-muted, #64748b)',
-                    }}
-                  >
-                    Or continue with
-                  </span>
-                </div>
+          {/* Divider if both OAuth and Email are shown */}
+          {(showGithub || showGoogle) && showEmail && (
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span
+                  className="w-full border-t"
+                  style={{ borderColor: borderColor || 'var(--theme-border, #e2e8f0)' }}
+                />
               </div>
-            )}
+              <div className="relative flex justify-center text-xs uppercase">
+                <span
+                  className="px-2"
+                  style={{
+                    backgroundColor: backgroundColor || 'var(--theme-background, #ffffff)',
+                    color: 'var(--theme-text-muted, #64748b)',
+                  }}
+                >
+                  Or continue with
+                </span>
+              </div>
+            </div>
+          )}
 
-            {/* Email Login */}
-            {showEmail && <EmailSignInForm callbackUrl={callbackUrl} />}
+          {/* Email Login */}
+          {showEmail && (
+            <EmailSignInForm
+              callbackUrl={callbackUrl}
+              buttonColor={buttonColor}
+              buttonTextColor={buttonTextColor}
+              borderColor={borderColor}
+              borderRadius={borderRadius}
+              textColor={textColor}
+            />
+          )}
 
-            {/* Message if no providers are enabled */}
-            {!showGithub && !showGoogle && !showEmail && (
-              <p
-                className="text-center text-sm"
-                style={{ color: 'var(--theme-text-muted, #64748b)' }}
-              >
-                No login providers configured. Please enable at least one login option.
-              </p>
-            )}
-          </div>
-        </PopoverContent>
-      </Popover>
+          {/* Message if no providers are enabled */}
+          {!showGithub && !showGoogle && !showEmail && (
+            <p
+              className="text-center text-sm"
+              style={{ color: 'var(--theme-text-muted, #64748b)' }}
+            >
+              No login providers configured. Please enable at least one login option.
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

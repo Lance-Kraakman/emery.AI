@@ -796,6 +796,9 @@ export async function updatePageTheme(
   themeConfig: ThemeConfigProps | undefined
 ): Promise<Result<PageDTO>> {
   try {
+    console.log('[updatePageTheme] Called with pageId:', pageId);
+    console.log('[updatePageTheme] Called with themeConfig:', themeConfig);
+
     await requirePermission("apps:manage");
 
     if (!pageId) {
@@ -818,20 +821,29 @@ export async function updatePageTheme(
       };
     }
 
+    console.log('[updatePageTheme] Page loaded, current themeConfig:', page.themeConfig?.toJSON());
+
     // Update theme
     page.updateTheme(themeConfig);
+
+    console.log('[updatePageTheme] After updateTheme, page themeConfig:', page.themeConfig?.toJSON());
 
     // Save the page using repository
     const { getPuckPageRepository } = await import("@/ddd/application/di/container");
     const pageRepository = getPuckPageRepository();
     const updatedPage = await pageRepository.update(page);
 
-    // No revalidatePath() needed - theme is managed in client-side state
-    // The page will fetch fresh data on next navigation/refresh
+    console.log('[updatePageTheme] After repository update, themeConfig:', updatedPage.themeConfig?.toJSON());
+
+    // No revalidation - prevents disruptive page reload during editing
+    // Theme persists to DB and loads on next page visit
+
+    const dto = PuckPageMapper.toDTO(updatedPage);
+    console.log('[updatePageTheme] Returning DTO with themeConfig:', dto.themeConfig);
 
     return {
       success: true,
-      data: PuckPageMapper.toDTO(updatedPage)
+      data: dto
     };
   } catch (error) {
     console.error('[updatePageTheme] Error:', error);
