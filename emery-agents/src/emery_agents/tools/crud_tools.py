@@ -10,8 +10,13 @@ import os
 import json
 import httpx
 from typing import Any, Dict, Optional
+from concurrent.futures import ThreadPoolExecutor
 from smolagents import Tool
 from ..grpc.generated.agent_worker_pb2 import ToolConfig
+
+# AIDEV-NOTE: Shared thread pool for HTTP requests to prevent blocking gRPC event loop
+# This allows HTTP calls to run in background threads while gRPC server remains responsive
+_http_thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="http-client")
 
 
 class BaseCrudTool(Tool):
@@ -29,6 +34,9 @@ class BaseCrudTool(Tool):
                          auth_token: Optional[str] = None, organization_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Make authenticated API request to emery-api with RLS context.
+
+        AIDEV-NOTE: Uses ThreadPoolExecutor to prevent blocking gRPC event loop.
+        HTTP call runs in background thread, allowing gRPC server to handle callbacks.
 
         Args:
             endpoint: API endpoint path
@@ -55,48 +63,63 @@ class BaseCrudTool(Tool):
         if data is not None:
             headers["Content-Type"] = "application/json"
 
-        try:
+        def _http_call():
+            """Execute HTTP call in thread pool to avoid blocking event loop."""
             with httpx.Client(timeout=30.0) as client:
-                response = client.request(
+                return client.request(
                     method=method,
                     url=url,
                     headers=headers,
                     json=data if data else None
                 )
 
-                # Handle HTTP errors
-                if response.status_code >= 400:
-                    error_detail = f"HTTP {response.status_code}"
-                    try:
-                        error_body = response.json()
-                        if "error" in error_body:
-                            error_detail = error_body["error"]
-                        elif "message" in error_body:
-                            error_detail = error_body["message"]
-                    except:
-                        error_detail = response.text[:200] if response.text else error_detail
+        try:
+            # Submit HTTP call to thread pool and wait for result
+            # This prevents blocking the gRPC event loop
+            future = _http_thread_pool.submit(_http_call)
+            response = future.result(timeout=35.0)  # Slightly longer than httpx timeout
 
-                    return {
-                        "success": False,
-                        "error": f"API request failed: {error_detail}",
-                        "status_code": response.status_code
-                    }
-
-                # Parse JSON response
+            # Handle HTTP errors
+            if response.status_code >= 400:
+                error_detail = f"HTTP {response.status_code}"
                 try:
-                    return {
-                        "success": True,
-                        "data": response.json(),
-                        "status_code": response.status_code
-                    }
-                except json.JSONDecodeError:
-                    return {
-                        "success": True,
-                        "data": response.text,
-                        "status_code": response.status_code
-                    }
+                    error_body = response.json()
+                    if "error" in error_body:
+                        error_detail = error_body["error"]
+                    elif "message" in error_body:
+                        error_detail = error_body["message"]
+                except:
+                    error_detail = response.text[:200] if response.text else error_detail
 
+                return {
+                    "success": False,
+                    "error": f"API request failed: {error_detail}",
+                    "status_code": response.status_code
+                }
+
+            # Parse JSON response
+            try:
+                return {
+                    "success": True,
+                    "data": response.json(),
+                    "status_code": response.status_code
+                }
+            except json.JSONDecodeError:
+                return {
+                    "success": True,
+                    "data": response.text,
+                    "status_code": response.status_code
+                }
+
+        except TimeoutError:
+            # Timeout from ThreadPoolExecutor.result()
+            return {
+                "success": False,
+                "error": f"Request timeout after 35 seconds",
+                "endpoint": endpoint
+            }
         except httpx.TimeoutException:
+            # Timeout from httpx client
             return {
                 "success": False,
                 "error": f"Request timeout after 30 seconds",
