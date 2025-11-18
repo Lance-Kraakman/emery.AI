@@ -9,10 +9,14 @@ files, tables, and teams. Uses internal authentication and calls emery-api with 
 import os
 import json
 import httpx
+import asyncio
+import logging
 from typing import Any, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor
 from smolagents import Tool
 from ..grpc.generated.agent_worker_pb2 import ToolConfig
+
+logger = logging.getLogger(__name__)
 
 # AIDEV-NOTE: Shared thread pool for HTTP requests to prevent blocking gRPC event loop
 # This allows HTTP calls to run in background threads while gRPC server remains responsive
@@ -138,6 +142,185 @@ class BaseCrudTool(Tool):
                 "endpoint": endpoint
             }
 
+    async def _make_async_api_request(self, endpoint: str, method: str = "GET", data: Optional[Dict] = None,
+                                    auth_token: Optional[str] = None, organization_id: Optional[str] = None,
+                                    deadline_ms: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Make async API request with deadline propagation to prevent circular dependency deadlocks.
+        """
+        import time
+        import uuid
+        import threading
+        
+        # Generate unique call ID for tracking
+        call_id = f"async_http_{int(time.time())}_{str(uuid.uuid4())[:8]}_{threading.get_ident()}"
+        start_time = time.time()
+        
+        logger.info(f"[ASYNC_HTTP] START - call_id: {call_id}, endpoint: {endpoint}, method: {method}")
+        
+        if deadline_ms:
+            logger.info(f"[ASYNC_HTTP] Deadline provided - call_id: {call_id}, deadline_ms: {deadline_ms}")
+        
+        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        headers = {}
+
+        # Add authentication headers
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
+
+        # Add organization context for RLS
+        if organization_id:
+            headers["X-Organization-ID"] = str(organization_id)
+
+        # Add tracking headers
+        headers["X-Call-ID"] = call_id
+        headers["X-Source"] = "python_tool_async"
+        headers["X-Thread-ID"] = str(threading.get_ident())
+        if deadline_ms:
+            headers["X-Deadline-MS"] = str(deadline_ms)
+
+        # Calculate timeout from deadline
+        timeout = 25.0  # Default 25s
+        if deadline_ms:
+            timeout = min(deadline_ms / 1000 - 5, 25.0)  # 5s buffer
+
+        # Add content type for JSON requests
+        if data is not None:
+            headers["Content-Type"] = "application/json"
+
+        try:
+            logger.info(f"[ASYNC_HTTP] Making async request - call_id: {call_id}, timeout: {timeout}s")
+            request_start = time.time()
+            
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    json=data if data else None
+                )
+                
+                request_time = time.time() - request_start
+                total_time = time.time() - start_time
+                
+                logger.info(f"[ASYNC_HTTP] Response received - call_id: {call_id}, status: {response.status_code}, request_time: {request_time:.2f}s, total_time: {total_time:.2f}s")
+                
+                # Handle HTTP errors
+                if response.status_code >= 400:
+                    error_detail = f"HTTP {response.status_code}"
+                    try:
+                        error_body = response.json()
+                        if "error" in error_body:
+                            error_detail = error_body["error"]
+                        elif "message" in error_body:
+                            error_detail = error_body["message"]
+                    except:
+                        error_detail = response.text[:200] if response.text else error_detail
+
+                    logger.error(f"[ASYNC_HTTP] HTTP error response - call_id: {call_id}, status: {response.status_code}, error: {error_detail}")
+                    return {
+                        "success": False,
+                        "error": f"API request failed: {error_detail}",
+                        "status_code": response.status_code,
+                        "call_id": call_id,
+                        "total_time": total_time
+                    }
+
+                # Parse JSON response
+                try:
+                    logger.info(f"[ASYNC_HTTP] ✅ SUCCESS - call_id: {call_id}, status: {response.status_code}, total_time: {total_time:.2f}s")
+                    return {
+                        "success": True,
+                        "data": response.json(),
+                        "status_code": response.status_code,
+                        "call_id": call_id,
+                        "total_time": total_time
+                    }
+                except json.JSONDecodeError:
+                    logger.info(f"[ASYNC_HTTP] ✅ SUCCESS (text response) - call_id: {call_id}, status: {response.status_code}, total_time: {total_time:.2f}s")
+                    return {
+                        "success": True,
+                        "data": response.text,
+                        "status_code": response.status_code,
+                        "call_id": call_id,
+                        "total_time": total_time
+                    }
+                    
+        except httpx.TimeoutException:
+            total_time = time.time() - start_time
+            logger.error(f"[ASYNC_HTTP] ❌ TIMEOUT - call_id: {call_id}, timeout: {timeout}s, total_time: {total_time:.2f}s")
+            return {
+                "success": False,
+                "error": f"Request timeout after {timeout} seconds",
+                "call_id": call_id,
+                "total_time": total_time
+            }
+        except httpx.RequestError as e:
+            total_time = time.time() - start_time
+            logger.error(f"[ASYNC_HTTP] ❌ REQUEST ERROR - call_id: {call_id}, error: {str(e)}, total_time: {total_time:.2f}s")
+            return {
+                "success": False,
+                "error": f"HTTP request failed: {str(e)}",
+                "call_id": call_id,
+                "total_time": total_time
+            }
+        except Exception as e:
+            total_time = time.time() - start_time
+            logger.error(f"[ASYNC_HTTP] ❌ UNEXPECTED ERROR - call_id: {call_id}, error: {str(e)}, total_time: {total_time:.2f}s")
+            return {
+                "success": False,
+                "error": f"Unexpected error: {str(e)}",
+                "call_id": call_id,
+                "total_time": total_time
+            }
+
+    def _make_api_request_with_deadline(self, endpoint: str, method: str = "GET", data: Optional[Dict] = None,
+                                       auth_token: Optional[str] = None, organization_id: Optional[str] = None,
+                                       deadline_ms: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Wrapper to make async HTTP calls from sync context with deadline propagation.
+        """
+        try:
+            # Check if there's already a running loop
+            try:
+                loop = asyncio.get_running_loop()
+                # Create task and wait for it in existing loop
+                task = loop.create_task(
+                    self._make_async_api_request(
+                        endpoint=endpoint,
+                        method=method,
+                        data=data,
+                        auth_token=auth_token,
+                        organization_id=organization_id,
+                        deadline_ms=deadline_ms
+                    )
+                )
+                # Wait with timeout
+                timeout = 30.0  # Default timeout
+                if deadline_ms:
+                    timeout = deadline_ms / 1000.0
+                return asyncio.wait_for(task, timeout=timeout)
+                
+            except RuntimeError:
+                # No running loop, safe to use asyncio.run()
+                return asyncio.run(
+                    self._make_async_api_request(
+                        endpoint=endpoint,
+                        method=method,
+                        data=data,
+                        auth_token=auth_token,
+                        organization_id=organization_id,
+                        deadline_ms=deadline_ms
+                    )
+                )
+        except Exception as e:
+            logger.error(f"[ASYNC_HTTP_WRAPPER] Error running async call: {str(e)}")
+            return {
+                "success": False,
+                "error": f"Async call failed: {str(e)}",
+                "call_id": "unknown"
+            }
+
 
 def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """Load Agent CRUD tool with method-specific routing."""
@@ -169,7 +352,7 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not data:
                     return {"success": False, "error": "Agent data is required for create operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint="agents",
                     method="POST",
                     data=data,
@@ -181,7 +364,7 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not agent_id:
                     return {"success": False, "error": "Agent ID is required for read operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"agents/{agent_id}",
                     method="GET",
                     auth_token=auth_token,
@@ -194,7 +377,7 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not data:
                     return {"success": False, "error": "Agent data is required for update operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"agents/{agent_id}",
                     method="PUT",
                     data=data,
@@ -206,7 +389,7 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not agent_id:
                     return {"success": False, "error": "Agent ID is required for delete operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"agents/{agent_id}",
                     method="DELETE",
                     auth_token=auth_token,
@@ -223,7 +406,7 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                     if query_params:
                         endpoint += "?" + "&".join(query_params)
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="GET",
                     auth_token=auth_token,
@@ -266,7 +449,7 @@ def load_document_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 if not data:
                     return {"success": False, "error": "Document data is required for create operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint="documents",
                     method="POST",
                     data=data,
@@ -278,7 +461,7 @@ def load_document_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 if not document_id:
                     return {"success": False, "error": "Document ID is required for read operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"documents/{document_id}",
                     method="GET",
                     auth_token=auth_token,
@@ -291,7 +474,7 @@ def load_document_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 if not data:
                     return {"success": False, "error": "Document data is required for update operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"documents/{document_id}",
                     method="PUT",
                     data=data,
@@ -303,7 +486,7 @@ def load_document_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 if not document_id:
                     return {"success": False, "error": "Document ID is required for delete operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"documents/{document_id}",
                     method="DELETE",
                     auth_token=auth_token,
@@ -319,7 +502,7 @@ def load_document_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                     if query_params:
                         endpoint += "?" + "&".join(query_params)
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="GET",
                     auth_token=auth_token,
@@ -362,7 +545,7 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                 if not data:
                     return {"success": False, "error": "File data is required for create operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint="files",
                     method="POST",
                     data=data,
@@ -374,7 +557,7 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                 if not file_id:
                     return {"success": False, "error": "File ID is required for read operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"files/{file_id}",
                     method="GET",
                     auth_token=auth_token,
@@ -387,7 +570,7 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                 if not data:
                     return {"success": False, "error": "File data is required for update operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"files/{file_id}",
                     method="PUT",
                     data=data,
@@ -399,7 +582,7 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                 if not file_id:
                     return {"success": False, "error": "File ID is required for delete operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"files/{file_id}",
                     method="DELETE",
                     auth_token=auth_token,
@@ -415,7 +598,7 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                     if query_params:
                         endpoint += "?" + "&".join(query_params)
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="GET",
                     auth_token=auth_token,
@@ -476,7 +659,7 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not data:
                     return {"success": False, "error": "Table data is required for create_table. Provide {name, databaseId, description}"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint="tables",
                     method="POST",
                     data=data,
@@ -488,7 +671,7 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not table_id:
                     return {"success": False, "error": "Table ID is required for read_table operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"tables/{table_id}",
                     method="GET",
                     auth_token=_auth_token,
@@ -501,7 +684,7 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not data:
                     return {"success": False, "error": "Table data is required for update_table. Provide {name, description, metadata}"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"tables/{table_id}",
                     method="PUT",
                     data=data,
@@ -513,7 +696,7 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not table_id:
                     return {"success": False, "error": "Table ID is required for delete_table operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"tables/{table_id}",
                     method="DELETE",
                     auth_token=_auth_token,
@@ -529,7 +712,7 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                     if query_params:
                         endpoint += "?" + "&".join(query_params)
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="GET",
                     auth_token=_auth_token,
@@ -546,7 +729,7 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not data:
                     return {"success": False, "error": "Row data is required for create_row. Provide field values {field_1: value1, field_2: value2}"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint="rows",
                     method="POST",
                     data={"tableId": int(table_id), "data": data},
@@ -580,7 +763,7 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
 
                 endpoint = "rows?" + "&".join(query_params)
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="GET",
                     auth_token=_auth_token,
@@ -595,7 +778,7 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not data:
                     return {"success": False, "error": "Row data is required for update_row. Provide updated field values"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint="rows",
                     method="PUT",
                     data={"tableId": int(table_id), "rowId": row_id, "data": data},
@@ -611,7 +794,7 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
 
                 endpoint = f"rows?tableId={table_id}&rowId={row_id}"
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="DELETE",
                     auth_token=_auth_token,
@@ -657,7 +840,7 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                 if not data:
                     return {"success": False, "error": "Team data is required for create operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint="teams",
                     method="POST",
                     data=data,
@@ -669,7 +852,7 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                 if not team_id:
                     return {"success": False, "error": "Team ID is required for read operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"teams/{team_id}",
                     method="GET",
                     auth_token=auth_token,
@@ -682,7 +865,7 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                 if not data:
                     return {"success": False, "error": "Team data is required for update operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"teams/{team_id}",
                     method="PUT",
                     data=data,
@@ -694,7 +877,7 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                 if not team_id:
                     return {"success": False, "error": "Team ID is required for delete operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"teams/{team_id}",
                     method="DELETE",
                     auth_token=auth_token,
@@ -710,7 +893,7 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                     if query_params:
                         endpoint += "?" + "&".join(query_params)
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="GET",
                     auth_token=auth_token,
@@ -753,7 +936,7 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 if not data:
                     return {"success": False, "error": "Database data is required for create operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint="databases",
                     method="POST",
                     data=data,
@@ -765,7 +948,7 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 if not database_id:
                     return {"success": False, "error": "Database ID is required for read operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"databases/{database_id}",
                     method="GET",
                     auth_token=auth_token,
@@ -778,7 +961,7 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 if not data:
                     return {"success": False, "error": "Database data is required for update operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"databases/{database_id}",
                     method="PUT",
                     data=data,
@@ -790,7 +973,7 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 if not database_id:
                     return {"success": False, "error": "Database ID is required for delete operation"}
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=f"databases/{database_id}",
                     method="DELETE",
                     auth_token=auth_token,
@@ -806,7 +989,7 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                     if query_params:
                         endpoint += "?" + "&".join(query_params)
 
-                return self._make_api_request(
+                return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="GET",
                     auth_token=auth_token,
