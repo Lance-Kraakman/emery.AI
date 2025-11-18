@@ -21,6 +21,7 @@ import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
 import type { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
+import type { SkillApplicationService } from '@/ddd/application/services/skills/skill-application-service';
 import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
 import { RowMapper, type DocumentFieldValue, type FileFieldValue } from '@/app/mappers/row-mapper';
 import { isDocumentArray, isFileArray } from '@/ddd/domain/tables/value-objects/field-values';
@@ -65,6 +66,7 @@ export class ToolSearchApplicationService {
     private readonly tableApplicationService: TableApplicationService,
     private readonly agentApplicationService: AgentApplicationService,
     private readonly databaseApplicationService: DatabaseApplicationService,
+    private readonly skillApplicationService: SkillApplicationService,
     private readonly toolRegistryService: IToolRegistryService
   ) {}
 
@@ -85,18 +87,25 @@ export class ToolSearchApplicationService {
       showReferenceTools
     });
 
-    // Only search system tools when NO reference category filter is active
-    // Reference categories (documents, files, agents, tables, databases) are mutually exclusive with system tools
-    const shouldSearchSystemTools = !categories || categories.length === 0;
+    // AIDEV-NOTE: Always search system tools (including CRUD tools like agents, tables, databases)
+    // When reference categories are provided, also filter system tools by matching ToolCategory
+    const mergedToolCategories = this.mergeToolCategories(categories, toolCategories);
 
-    logger.debug(`Should search system tools: ${shouldSearchSystemTools} (categories: ${categories?.length || 0})`);
+    logger.debug(`Merged tool categories for system tool search:`, mergedToolCategories);
     logger.debug(`Should search reference tools: ${showReferenceTools}`);
 
     // Search both reference tools and system tools in parallel
     // Get ALL results first, then apply unified pagination
-    const systemToolsPromise = shouldSearchSystemTools
-      ? this.searchSystemTools(query, toolCategories, appIds, connectedOnly, requiresConnection, 1000, organizationId, userId)
-      : Promise.resolve([]);
+    const systemToolsPromise = this.searchSystemTools(
+      query,
+      mergedToolCategories,
+      appIds,
+      connectedOnly,
+      requiresConnection,
+      1000,
+      organizationId,
+      userId
+    );
 
     const referenceToolsPromise = showReferenceTools
       ? this.searchOnlyReferenceTools({ ...options, limit: 1000, offset: 0 })
@@ -139,6 +148,43 @@ export class ToolSearchApplicationService {
       hasMore,
       totalCount: totalItems
     };
+  }
+
+  /**
+   * Merge reference categories with tool categories for unified filtering
+   * Maps ReferenceCategory → ToolCategory so system tools can be filtered by the same categories
+   */
+  private mergeToolCategories(
+    referenceCategories?: ReferenceCategory[],
+    toolCategories?: ToolCategory[]
+  ): ToolCategory[] | undefined {
+    const mapped: ToolCategory[] = [];
+
+    // Add explicitly provided tool categories
+    if (toolCategories && toolCategories.length > 0) {
+      mapped.push(...toolCategories);
+    }
+
+    // Map reference categories to tool categories
+    if (referenceCategories && referenceCategories.length > 0) {
+      const categoryMap: Record<ReferenceCategory, ToolCategory> = {
+        [ReferenceCategory.AGENT]: ToolCategory.AGENTS,
+        [ReferenceCategory.TABLE]: ToolCategory.TABLES,
+        [ReferenceCategory.DATABASE]: ToolCategory.DATABASES,
+        [ReferenceCategory.DOC]: ToolCategory.DOCUMENTS,
+        [ReferenceCategory.FILE]: ToolCategory.FILES,
+        [ReferenceCategory.SKILL]: ToolCategory.SKILLS,
+      };
+
+      for (const refCat of referenceCategories) {
+        const toolCat = categoryMap[refCat];
+        if (toolCat && !mapped.includes(toolCat)) {
+          mapped.push(toolCat);
+        }
+      }
+    }
+
+    return mapped.length > 0 ? mapped : undefined;
   }
 
   /**
@@ -282,6 +328,9 @@ export class ToolSearchApplicationService {
         case 'document':
           return await this.searchDocumentTools(searchText, organizationId, limit, offset);
 
+        case 'skill':
+          return await this.searchSkillTools(searchText, organizationId, limit, offset);
+
         default:
           return [];
       }
@@ -402,6 +451,48 @@ export class ToolSearchApplicationService {
       });
 
     return matchingDatabases;
+  }
+
+
+  /**
+   * Search skills returning ReferenceTool objects
+   */
+  private async searchSkillTools(
+    searchText: string,
+    organizationId: OrganizationId,
+    limit: number,
+    offset: number
+  ): Promise<ReferenceTool[]> {
+    // Get all skills for the organization
+    const result = await this.skillApplicationService.getSkillsByOrganization(organizationId.value);
+
+    if (!result.success || !result.data) {
+      logger.error('Failed to get skills for organization:', result.error);
+      return [];
+    }
+
+    const allSkills = result.data;
+
+    // Filter by searchText if provided
+    const filteredSkills = !searchText
+      ? allSkills
+      : allSkills.filter((skill) =>
+          skill.name.toLowerCase().includes(searchText.toLowerCase()) ||
+          skill.description?.toLowerCase().includes(searchText.toLowerCase())
+        );
+
+    // Apply pagination
+    const paginatedSkills = filteredSkills.slice(offset, offset + limit);
+
+    return paginatedSkills.map((skill) => {
+      return ReferenceTool.fromSkill(
+        skill.id.toString(),
+        organizationId.value,
+        skill.name,
+        `Skill - ${skill.description || 'No description'}`,
+        skill.inputs
+      );
+    });
   }
 
 

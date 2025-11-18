@@ -19,8 +19,10 @@ export class PuckPage {
     private _order: PageOrder,
     private _templateData: PuckData,
     private _themeConfig: ThemeConfig | undefined,
-    private _isPublished: boolean,
-    private readonly _createdBy: UserId,
+    private _isPublic: boolean,
+    private _requiresAuth: boolean,
+    private _allowedRoles: string[] | undefined,
+    private readonly _ownerId: UserId,
     private readonly _createdAt: Date,
     private _updatedAt: Date
   ) {}
@@ -54,12 +56,24 @@ export class PuckPage {
     return this._templateData;
   }
 
-  get isPublished(): boolean {
-    return this._isPublished;
+  get isPublic(): boolean {
+    return this._isPublic;
+  }
+
+  get requiresAuth(): boolean {
+    return this._requiresAuth;
+  }
+
+  get allowedRoles(): string[] | undefined {
+    return this._allowedRoles ? [...this._allowedRoles] : undefined;
+  }
+
+  get ownerId(): UserId {
+    return this._ownerId;
   }
 
   get createdBy(): UserId {
-    return this._createdBy;
+    return this._ownerId; // Backward compatibility alias
   }
 
   get createdAt(): Date {
@@ -149,32 +163,66 @@ export class PuckPage {
   }
 
   /**
-   * Publish the page (make it publicly visible)
+   * Make the page public (publicly accessible)
    */
-  publish(): void {
-    if (this._isPublished) {
-      return; // Already published, no-op
+  makePublic(): void {
+    if (this._isPublic) {
+      return; // Already public, no-op
     }
 
-    // Business rule: Can publish if template data is not empty
+    // Business rule: Can make public if template data is not empty
     if (this._templateData.isEmpty()) {
-      throw new Error('Cannot publish a page with empty template data');
+      throw new Error('Cannot make a page public with empty template data');
     }
 
-    this._isPublished = true;
+    this._isPublic = true;
     this._updatedAt = new Date();
   }
 
   /**
-   * Unpublish the page (make it a draft)
+   * Make the page private (draft mode)
    */
-  unpublish(): void {
-    if (!this._isPublished) {
-      return; // Already unpublished, no-op
+  makePrivate(): void {
+    if (!this._isPublic) {
+      return; // Already private, no-op
     }
 
-    this._isPublished = false;
+    this._isPublic = false;
     this._updatedAt = new Date();
+  }
+
+  /**
+   * Update authentication requirement
+   */
+  setRequiresAuth(requiresAuth: boolean): void {
+    this._requiresAuth = requiresAuth;
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Update allowed roles for access control
+   */
+  setAllowedRoles(roles: string[] | undefined): void {
+    this._allowedRoles = roles && roles.length > 0 ? [...roles] : undefined;
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Check if a user with specific roles can access this page
+   */
+  canBeAccessedByRoles(userRoles: string[]): boolean {
+    // If no auth required, anyone can access
+    if (!this._requiresAuth) {
+      return true;
+    }
+
+    // If auth required but no role restrictions, any authenticated user can access
+    if (!this._allowedRoles || this._allowedRoles.length === 0) {
+      return true;
+    }
+
+    // Check if user has any of the allowed roles
+    return userRoles.some(role => this._allowedRoles!.includes(role));
   }
 
   /**
@@ -212,8 +260,10 @@ export class PuckPage {
     order: number;
     templateData: any;
     themeConfig?: any;
-    isPublished: boolean;
-    createdBy: string;
+    isPublic: boolean;
+    requiresAuth: boolean;
+    allowedRoles?: string[];
+    ownerId: string;
     createdAt: Date;
     updatedAt: Date;
   }): PuckPage {
@@ -251,8 +301,10 @@ export class PuckPage {
       orderResult.data,
       puckDataResult.data,
       data.themeConfig ? ThemeConfig.fromJSON(data.themeConfig) : undefined,
-      data.isPublished,
-      UserId.fromString(data.createdBy),
+      data.isPublic,
+      data.requiresAuth,
+      data.allowedRoles,
+      UserId.fromString(data.ownerId),
       data.createdAt,
       data.updatedAt
     );
@@ -270,8 +322,10 @@ export class PuckPage {
     order: number;
     templateData: any;
     themeConfig: any;
-    isPublished: boolean;
-    createdBy: string;
+    isPublic: boolean;
+    requiresAuth: boolean;
+    allowedRoles: string[] | undefined;
+    ownerId: string;
     createdAt: Date;
     updatedAt: Date;
   } {
@@ -284,8 +338,10 @@ export class PuckPage {
       order: this._order.value,
       templateData: this._templateData.toDatabaseJson(),
       themeConfig: this._themeConfig?.toJSON(),
-      isPublished: this._isPublished,
-      createdBy: this._createdBy.value,
+      isPublic: this._isPublic,
+      requiresAuth: this._requiresAuth,
+      allowedRoles: this._allowedRoles,
+      ownerId: this._ownerId.value,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt
     };

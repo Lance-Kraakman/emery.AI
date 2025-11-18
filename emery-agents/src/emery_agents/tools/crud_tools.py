@@ -10,8 +10,13 @@ import os
 import json
 import httpx
 from typing import Any, Dict, Optional
+from concurrent.futures import ThreadPoolExecutor
 from smolagents import Tool
 from ..grpc.generated.agent_worker_pb2 import ToolConfig
+
+# AIDEV-NOTE: Shared thread pool for HTTP requests to prevent blocking gRPC event loop
+# This allows HTTP calls to run in background threads while gRPC server remains responsive
+_http_thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="http-client")
 
 
 class BaseCrudTool(Tool):
@@ -21,13 +26,17 @@ class BaseCrudTool(Tool):
         super().__init__()
         self.resource_type = resource_type
         self.method = method
-        # AIDEV-NOTE: Use emery-api base URL from environment, fallback to development default
-        self.base_url = os.getenv("EMERY_API_BASE_URL", "http://localhost:3000/api")
+        # AIDEV-NOTE: Use Next.js base URL from environment, append /api path
+        nextjs_base = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
+        self.base_url = f"{nextjs_base}/api"
 
     def _make_api_request(self, endpoint: str, method: str = "GET", data: Optional[Dict] = None,
                          auth_token: Optional[str] = None, organization_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Make authenticated API request to emery-api with RLS context.
+
+        AIDEV-NOTE: Uses ThreadPoolExecutor to prevent blocking gRPC event loop.
+        HTTP call runs in background thread, allowing gRPC server to handle callbacks.
 
         Args:
             endpoint: API endpoint path
@@ -54,51 +63,66 @@ class BaseCrudTool(Tool):
         if data is not None:
             headers["Content-Type"] = "application/json"
 
-        try:
-            with httpx.Client(timeout=30.0) as client:
-                response = client.request(
+        def _http_call():
+            """Execute HTTP call in thread pool to avoid blocking event loop."""
+            with httpx.Client(timeout=60.0) as client:  # Increased timeout for slow operations
+                return client.request(
                     method=method,
                     url=url,
                     headers=headers,
                     json=data if data else None
                 )
 
-                # Handle HTTP errors
-                if response.status_code >= 400:
-                    error_detail = f"HTTP {response.status_code}"
-                    try:
-                        error_body = response.json()
-                        if "error" in error_body:
-                            error_detail = error_body["error"]
-                        elif "message" in error_body:
-                            error_detail = error_body["message"]
-                    except:
-                        error_detail = response.text[:200] if response.text else error_detail
+        try:
+            # Submit HTTP call to thread pool and wait for result
+            # This prevents blocking the gRPC event loop
+            future = _http_thread_pool.submit(_http_call)
+            response = future.result(timeout=65.0)  # Slightly longer than httpx timeout
 
-                    return {
-                        "success": False,
-                        "error": f"API request failed: {error_detail}",
-                        "status_code": response.status_code
-                    }
-
-                # Parse JSON response
+            # Handle HTTP errors
+            if response.status_code >= 400:
+                error_detail = f"HTTP {response.status_code}"
                 try:
-                    return {
-                        "success": True,
-                        "data": response.json(),
-                        "status_code": response.status_code
-                    }
-                except json.JSONDecodeError:
-                    return {
-                        "success": True,
-                        "data": response.text,
-                        "status_code": response.status_code
-                    }
+                    error_body = response.json()
+                    if "error" in error_body:
+                        error_detail = error_body["error"]
+                    elif "message" in error_body:
+                        error_detail = error_body["message"]
+                except:
+                    error_detail = response.text[:200] if response.text else error_detail
 
-        except httpx.TimeoutException:
+                return {
+                    "success": False,
+                    "error": f"API request failed: {error_detail}",
+                    "status_code": response.status_code
+                }
+
+            # Parse JSON response
+            try:
+                return {
+                    "success": True,
+                    "data": response.json(),
+                    "status_code": response.status_code
+                }
+            except json.JSONDecodeError:
+                return {
+                    "success": True,
+                    "data": response.text,
+                    "status_code": response.status_code
+                }
+
+        except TimeoutError:
+            # Timeout from ThreadPoolExecutor.result()
             return {
                 "success": False,
-                "error": f"Request timeout after 30 seconds",
+                "error": f"Request timeout after 65 seconds",
+                "endpoint": endpoint
+            }
+        except httpx.TimeoutException:
+            # Timeout from httpx client
+            return {
+                "success": False,
+                "error": f"Request timeout after 60 seconds",
                 "endpoint": endpoint
             }
         except httpx.RequestError as e:
@@ -115,7 +139,7 @@ class BaseCrudTool(Tool):
             }
 
 
-def load_agent_crud(config: ToolConfig) -> Any:
+def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """Load Agent CRUD tool with method-specific routing."""
 
     class AgentCrudTool(BaseCrudTool):
@@ -212,7 +236,7 @@ def load_agent_crud(config: ToolConfig) -> Any:
     return AgentCrudTool()
 
 
-def load_document_crud(config: ToolConfig) -> Any:
+def load_document_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """Load Document CRUD tool with method-specific routing."""
 
     class DocumentCrudTool(BaseCrudTool):
@@ -308,7 +332,7 @@ def load_document_crud(config: ToolConfig) -> Any:
     return DocumentCrudTool()
 
 
-def load_file_crud(config: ToolConfig) -> Any:
+def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """Load File CRUD tool with method-specific routing."""
 
     class FileCrudTool(BaseCrudTool):
@@ -404,7 +428,7 @@ def load_file_crud(config: ToolConfig) -> Any:
     return FileCrudTool()
 
 
-def load_table_crud(config: ToolConfig) -> Any:
+def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """
     Load comprehensive Table CRUD tool with table and row operations.
 
@@ -412,6 +436,9 @@ def load_table_crud(config: ToolConfig) -> Any:
     - Table operations (5): create_table, read_table, update_table, delete_table, list_tables
     - Row operations (4): create_row, get_rows, update_row, delete_row
     """
+    # Capture auth credentials from context
+    _auth_token = api_key or ""
+    _org_id = str(organization_id) if organization_id else ""
 
     class TableCrudTool(BaseCrudTool):
         """Comprehensive CRUD operations for Emery tables and rows."""
@@ -427,16 +454,14 @@ def load_table_crud(config: ToolConfig) -> Any:
             "offset": {"type": "integer", "description": "Pagination offset for get_rows (default: 0)", "nullable": True},
             "order_by": {"type": "string", "description": "Field to sort by for get_rows", "nullable": True},
             "order_direction": {"type": "string", "description": "Sort direction: ASC or DESC", "nullable": True},
-            "filters": {"type": "object", "description": "Filter criteria for queries", "nullable": True},
-            "auth_token": {"type": "string", "description": "User API key (user_xxx format) or Bearer token"},
-            "organization_id": {"type": "string", "description": "Organization ID for RLS context"}
+            "filters": {"type": "object", "description": "Filter criteria for queries", "nullable": True}
         }
         output_type = "object"
 
         def __init__(self):
             super().__init__("table", "crud")
 
-        def forward(self, method: str, auth_token: str, organization_id: str,
+        def forward(self, method: str,
                    table_id: Optional[str] = None, row_id: Optional[str] = None,
                    data: Optional[Dict] = None, limit: Optional[int] = None,
                    offset: Optional[int] = None, order_by: Optional[str] = None,
@@ -455,8 +480,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                     endpoint="tables",
                     method="POST",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "read_table":
@@ -466,8 +491,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                 return self._make_api_request(
                     endpoint=f"tables/{table_id}",
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "update_table":
@@ -480,8 +505,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                     endpoint=f"tables/{table_id}",
                     method="PUT",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "delete_table":
@@ -491,8 +516,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                 return self._make_api_request(
                     endpoint=f"tables/{table_id}",
                     method="DELETE",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "list_tables":
@@ -507,8 +532,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                 return self._make_api_request(
                     endpoint=endpoint,
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             # ============================================================
@@ -525,8 +550,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                     endpoint="rows",
                     method="POST",
                     data={"tableId": int(table_id), "data": data},
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "get_rows":
@@ -558,8 +583,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                 return self._make_api_request(
                     endpoint=endpoint,
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "update_row":
@@ -574,8 +599,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                     endpoint="rows",
                     method="PUT",
                     data={"tableId": int(table_id), "rowId": row_id, "data": data},
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "delete_row":
@@ -589,8 +614,8 @@ def load_table_crud(config: ToolConfig) -> Any:
                 return self._make_api_request(
                     endpoint=endpoint,
                     method="DELETE",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             else:
@@ -602,7 +627,7 @@ def load_table_crud(config: ToolConfig) -> Any:
     return TableCrudTool()
 
 
-def load_team_crud(config: ToolConfig) -> Any:
+def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """Load Team CRUD tool with method-specific routing."""
 
     class TeamCrudTool(BaseCrudTool):
@@ -698,7 +723,7 @@ def load_team_crud(config: ToolConfig) -> Any:
     return TeamCrudTool()
 
 
-def load_database_crud(config: ToolConfig) -> Any:
+def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """Load Database CRUD tool with method-specific routing."""
 
     class DatabaseCrudTool(BaseCrudTool):
@@ -795,11 +820,13 @@ def load_database_crud(config: ToolConfig) -> Any:
 
 
 # Registry of CRUD tools
+# AIDEV-NOTE: Tool names match category names directly (agents, tables, etc.)
+# This eliminates need for complex category mapping in seeding
 CRUD_TOOLS = {
-    "agent_crud": load_agent_crud,
-    "document_crud": load_document_crud,
-    "file_crud": load_file_crud,
-    "table_crud": load_table_crud,
-    "team_crud": load_team_crud,
-    "database_crud": load_database_crud,
+    "agents": load_agent_crud,
+    "documents": load_document_crud,
+    "files": load_file_crud,
+    "tables": load_table_crud,
+    "teams": load_team_crud,
+    "databases": load_database_crud,
 }

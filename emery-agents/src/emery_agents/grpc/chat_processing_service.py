@@ -28,11 +28,13 @@ AIDEV-NOTE: Refactored to use shared utilities:
 import logging
 import time
 import asyncio
-from typing import AsyncIterator, Optional, List, Dict, Any, TypedDict, Literal
+import concurrent.futures
+from typing import AsyncIterator, Optional, List, Dict, Any, TypedDict, Literal, TypeVar, Coroutine
 
 import grpc
 from grpc import aio
 from PIL import Image
+import requests
 
 from smolagents import ToolCallingAgent, AgentText
 from smolagents.models import ChatMessage, MessageRole
@@ -42,12 +44,15 @@ from .mappers import ProtoMapper
 from .mappers.message_mapper import (
     build_conversation_messages,
     has_images,
-    extract_text_from_parts
+    extract_text_from_parts,
+    download_image_from_url,
+    proto_parts_to_smolagents_content
 )
 from .mappers.message_types import MessageContentList
 from ..services.model_provider import SmolagentsModelProvider
 from ..services.tool_loader import UnifiedToolLoader
 from ..services.session_manager import SessionManager
+from ..services.file_processor import process_file
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
 from ..services.image_processor import ImageProcessor
@@ -79,6 +84,45 @@ class StepProgressDict(TypedDict):
     step_index: int
 
 
+class ContentChunkDict(TypedDict):
+    """Typed structure for content chunk events."""
+    type: Literal["content_chunk"]
+    content: str
+
+
+class ErrorDetailsDict(TypedDict, total=False):
+    """Error details metadata."""
+    severity: str
+
+
+class ErrorDataDict(TypedDict):
+    """Error data structure."""
+    error_code: str
+    error_message: str
+    error_details: ErrorDetailsDict
+    hint: str
+    can_retry: bool
+    auto_retry: bool
+    session_reset: bool
+
+
+class ErrorResponseDict(TypedDict):
+    """Typed structure for error response events."""
+    type: Literal["error"]
+    error: ErrorDataDict
+
+
+# Union type for all possible stream response types
+StreamResponseDict = StepProgressDict | ContentChunkDict | ErrorResponseDict
+
+
+# Type variable for generic async function return type
+T = TypeVar('T')
+
+# Constants for skill task building
+INPUTS_HEADER = "\n\nInputs:"
+
+
 def _populate_protobuf_map(proto_map, data: Dict[str, str]) -> None:
     """
     Explicitly populate a protobuf ScalarMap field.
@@ -92,6 +136,58 @@ def _populate_protobuf_map(proto_map, data: Dict[str, str]) -> None:
     """
     for key, value in data.items():
         proto_map[key] = str(value)
+
+
+def _run_async_in_thread(coro: Coroutine[Any, Any, T]) -> T:
+    """
+    Run async coroutine in a separate thread with its own event loop.
+
+    This is necessary when calling async code from sync code within an existing event loop.
+    The gRPC service runs in an async context, but skill execution callbacks are sync.
+
+    Args:
+        coro: Coroutine to run (with generic return type T)
+
+    Returns:
+        Result of the coroutine (type T)
+    """
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(asyncio.run, coro)
+        return future.result()
+
+
+async def _process_skill_content_async(content_parts: List['agent_worker_pb2.MessagePart']) -> tuple[List[Image.Image], List[str]]:
+    """
+    Process MessageParts for skill execution (images + files).
+
+    Uses shared proto_parts_to_smolagents_content for consistent processing,
+    then transforms the result to separate images and text for skill execution.
+
+    Args:
+        content_parts: List of MessagePart from skill_config.content
+
+    Returns:
+        Tuple of (images list, text_parts list)
+    """
+    # Use shared processing function to get MessageContentList
+    content_list = await proto_parts_to_smolagents_content(content_parts)
+
+    # Transform MessageContentList to (images, text_parts) format for skills
+    images = []
+    text_parts = []
+
+    for content_item in content_list:
+        if content_item["type"] == "image":
+            # Extract PIL Image from ImageContentPart
+            images.append(content_item["image"])
+        elif content_item["type"] == "text":
+            # Extract text from TextContentPart
+            # Add file prefix if this text came from file processing
+            text = content_item["text"]
+            # Note: File processing errors already include "[File: ...]" prefix from proto_parts_to_smolagents_content
+            text_parts.append(f"\n\n{text}")
+
+    return images, text_parts
 
 
 class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingServiceServicer):
@@ -189,9 +285,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         if has_image_content:
             logger.info(f"🖼️ Message contains images")
 
-        # Always use ToolCallingAgent - handles empty tools gracefully
-        tools_count = len(request.tools) if hasattr(request, 'tools') and request.tools else 0
-        logger.info(f"🔧 Tools provided: {tools_count}, always using ToolCallingAgent")
+        # Extract tools and skills from AgentConfig
+        agent_config = request.agent_config if hasattr(request, 'agent_config') and request.agent_config else None
+
+        if agent_config:
+            tools_count = len(agent_config.tools) if agent_config.tools else 0
+            skills_count = len(agent_config.skills) if agent_config.skills else 0
+            logger.info(f"🔧 AgentConfig provided: {tools_count} tools, {skills_count} skills")
+        else:
+            logger.info(f"⚠️ No AgentConfig provided, using empty tools")
 
         try:
             # RAG context has been removed - chat is now simpler without automatic RAG
@@ -212,14 +314,25 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             sequence = 0
             total_content = ""
 
-            # Always use ToolCallingAgent - handles RAG context and tools
-            tools_to_use = request.tools if hasattr(request, 'tools') and request.tools else []
-            logger.info(f"📨 Request tools received: {len(tools_to_use)} tools")
-            if tools_to_use:
-                for i, tool in enumerate(tools_to_use):
-                    logger.info(f"  Tool {i}: name={tool.name}, config_keys={list(tool.config.keys()) if tool.config else 'none'}")
+            # Extract tools from AgentConfig
+            tools_to_use = []
+            skills_to_use = []
+
+            if agent_config:
+                tools_to_use = list(agent_config.tools) if agent_config.tools else []
+                skills_to_use = list(agent_config.skills) if agent_config.skills else []
+
+                logger.info(f"📨 AgentConfig tools received: {len(tools_to_use)} tools")
+                if tools_to_use:
+                    for i, tool in enumerate(tools_to_use):
+                        logger.info(f"  Tool {i}: name={tool.name}, config_keys={list(tool.config.keys()) if tool.config else 'none'}")
+
+                logger.info(f"🎯 AgentConfig skills received: {len(skills_to_use)} skills")
+                if skills_to_use:
+                    for i, skill in enumerate(skills_to_use):
+                        logger.info(f"  Skill {i}: name={skill.name}, tools={len(skill.tools) if skill.tools else 0}")
             else:
-                logger.info("  No tools received from frontend")
+                logger.info("  No AgentConfig received from frontend")
 
             # Extract organization model from request (if provided)
             org_model = request.model if request.model else None
@@ -238,7 +351,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 session_id=session_id,
                 user_id=user_id,
                 org_id=org_id,
-                conversation_history=request.conversation_history
+                conversation_history=request.conversation_history,
+                agent_config=agent_config  # Pass agent_config for skill execution
             ):
                 # Check for cancellation
                 if self.active_streams.get(message_id, False):
@@ -296,7 +410,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                     elif response_type == "content_chunk":
                         # Send content chunk (final answer text)
-                        chunk = response_dict.get("content", "")
+                        # Type assertion: we know this is ContentChunkDict
+                        chunk_resp = response_dict  # type: ContentChunkDict
+                        chunk = chunk_resp["content"]
                         total_content += chunk
 
                         chunk_response = agent_worker_pb2.ProcessMessageResponse(
@@ -309,18 +425,31 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         yield chunk_response
                         sequence += 1
 
-                else:
-                    # Legacy fallback for string responses (error messages)
-                    total_content += str(response_dict)
-                    chunk_response = agent_worker_pb2.ProcessMessageResponse(
-                        content_chunk=agent_worker_pb2.ContentChunk(
-                            content=str(response_dict),
-                            sequence=sequence
-                        ),
-                        timestamp=int(time.time() * 1000)
-                    )
-                    yield chunk_response
-                    sequence += 1
+                    elif response_type == "error":
+                        # Send error response from agent execution
+                        # Type assertion: we know this is ErrorResponseDict from _stream_tool_calling_agent_response
+                        error_resp = response_dict  # type: ErrorResponseDict
+                        error_data: ErrorDataDict = error_resp["error"]
+
+                        error_response = agent_worker_pb2.ProcessMessageResponse(
+                            error=agent_worker_pb2.ProcessingError(
+                                error_code=error_data["error_code"],
+                                error_message=error_data["error_message"],
+                                error_details=error_data["error_details"],
+                                hint=error_data["hint"],
+                                can_retry=error_data["can_retry"],
+                                auto_retry=error_data["auto_retry"],
+                                session_reset=error_data["session_reset"]
+                            ),
+                            timestamp=int(time.time() * 1000)
+                        )
+                        yield error_response
+                        # Stop processing after error
+                        break
+
+                    else:
+                        # Unknown response type - log warning
+                        logger.warning(f"⚠️ Unknown response type: {response_type}, ignoring")
 
             # 4. Send completion marker
             processing_time = int((time.time() - start_time) * 1000)
@@ -464,8 +593,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
         org_id: Optional[int] = None,
-        conversation_history: Optional[List] = None
-    ) -> AsyncIterator[Dict[str, Any]]:
+        conversation_history: Optional[List] = None,
+        agent_config: Optional['agent_worker_pb2.AgentConfig'] = None
+    ) -> AsyncIterator[StreamResponseDict]:
         """
         Stream AI response using ToolCallingAgent with stateful session support.
 
@@ -486,7 +616,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"📝 Built system prompt: {len(system_prompt)} chars")
 
             # 2. Convert protobuf tools to smolagents tools
-            smolagents_tools = self._convert_tools_to_smolagents(tools)
+            smolagents_tools = self._convert_tools_to_smolagents(tools, agent_config=agent_config, org_model=org_model, org_id=org_id)
             logger.info(f"🔧 Converted {len(smolagents_tools)} tools for ToolCallingAgent")
 
             # 3. Get or create agent with session management
@@ -613,10 +743,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                     # Stream final answer as content chunks
                     async for chunk in self._stream_text_chunks(final_answer_text):
-                        yield {
+                        content_chunk: ContentChunkDict = {
                             "type": "content_chunk",
                             "content": chunk
                         }
+                        yield content_chunk
 
                     step_index += 1
                     continue
@@ -692,20 +823,23 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     session_was_reset = True
 
             # 4. Send user-friendly error (NO technical details)
-            yield {
-                "type": "error",
-                "error": {
-                    "error_code": error_info.error_type,
-                    "error_message": error_info.user_message,
-                    "error_details": {
-                        "severity": error_info.severity.value
-                    },
-                    "hint": error_info.hint or "",
-                    "can_retry": error_info.can_retry,
-                    "auto_retry": False,  # Auto-retry not implemented in current flow
-                    "session_reset": session_was_reset
-                }
+            error_details: ErrorDetailsDict = {
+                "severity": error_info.severity.value
             }
+            error_data: ErrorDataDict = {
+                "error_code": error_info.error_type,
+                "error_message": error_info.user_message,
+                "error_details": error_details,
+                "hint": error_info.hint or "",
+                "can_retry": error_info.can_retry,
+                "auto_retry": False,  # Auto-retry not implemented in current flow
+                "session_reset": session_was_reset
+            }
+            error_response: ErrorResponseDict = {
+                "type": "error",
+                "error": error_data
+            }
+            yield error_response
 
             logger.info(f"📨 Sent user-friendly error message (type={error_info.error_type})")
 
@@ -737,18 +871,205 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         return self._build_basic_system_prompt(domain_context)
 
-    def _convert_tools_to_smolagents(self, tools: List['agent_worker_pb2.ToolConfig']) -> List[Any]:
-        """Convert protobuf ToolConfig objects to smolagents tools using shared utility."""
+    def _convert_tools_to_smolagents(
+        self,
+        tools: List['agent_worker_pb2.ToolConfig'],
+        agent_config: Optional['agent_worker_pb2.AgentConfig'] = None,
+        org_model: Optional[str] = None,
+        org_id: Optional[int] = None
+    ) -> List[Any]:
+        """
+        Convert protobuf ToolConfig objects to smolagents tools using shared utility.
+
+        Args:
+            tools: List of ToolConfig proto objects
+            agent_config: Optional AgentConfig containing skills for skill execution
+            org_model: Organization default model (used as fallback for skills)
+            org_id: Organization ID for CRUD tool authentication
+
+        Returns:
+            List of loaded tool instances (including SkillTools)
+        """
         if not self.tool_registry:
             logger.error("❌ Tool registry not available - tools cannot be loaded")
             return []
+
+        # Create skill execution callback if agent_config has skills
+        skill_executor = None
+        if agent_config and agent_config.skills:
+            skill_executor = self._create_skill_executor_callback(org_model=org_model)
 
         # Use consolidated load_tools_from_configs method
         return self.tool_registry.load_tools_from_configs(
             tool_configs=tools,
             api_key=None,  # API keys are in tool configs already
-            api_key_mode="user"  # Chat system uses user API key mode
+            api_key_mode="user",  # Chat system uses user API key mode
+            agent_config=agent_config,
+            skill_executor=skill_executor,
+            organization_id=org_id  # Pass organization ID for CRUD tools
         )
+
+    def _create_skill_executor_callback(self, org_model: Optional[str] = None):
+        """
+        Create a callback function for executing skills.
+
+        This callback is used by SkillTool to execute skills when called by the LLM.
+        It creates a sub-agent with the skill's tools and executes the skill's instructions.
+
+        Args:
+            org_model: Organization default model (used as fallback if skill has no model)
+
+        Returns:
+            Callable that takes (SkillConfig, runtime_inputs) and returns result string
+        """
+        def execute_skill(skill_config: 'agent_worker_pb2.SkillConfig', runtime_inputs: Dict[str, Any]) -> str:
+            """
+            Execute a skill by creating a sub-agent.
+
+            Args:
+                skill_config: Full skill definition from proto
+                runtime_inputs: Runtime inputs from LLM (matching skill.inputs)
+
+            Returns:
+                Skill execution result as string
+            """
+            logger.info(f"🎯 Executing skill: {skill_config.name} with inputs: {list(runtime_inputs.keys())}")
+
+            try:
+                # 1. Load skill's tools
+                skill_tools = []
+                if skill_config.tools:
+                    skill_tools = self.tool_registry.load_tools_from_configs(
+                        tool_configs=list(skill_config.tools),
+                        api_key=None,
+                        api_key_mode="user"
+                    )
+                    logger.info(f"🔧 Loaded {len(skill_tools)} tools for skill {skill_config.name}")
+
+                # 2. Process attachments from skill_config.content using shared utilities
+                images = []
+                text_parts = []
+
+                if skill_config.content:
+                    logger.info(f"📎 Processing {len(skill_config.content)} attachments from skill config")
+                    try:
+                        # Use shared async helper for consistent attachment processing
+                        # Run in separate thread since we're already in an async context
+                        images, text_parts = _run_async_in_thread(
+                            _process_skill_content_async(skill_config.content)
+                        )
+                        logger.info(f"✅ Processed: {len(images)} images, {len(text_parts)} text parts")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to process attachments: {e}")
+
+                # 3. Build task from instructions + inputs + attachments
+                task_parts = [skill_config.instructions]
+
+                # Add runtime inputs to task
+                if runtime_inputs:
+                    task_parts.append(INPUTS_HEADER)
+                    for key, value in runtime_inputs.items():
+                        task_parts.append(f"- {key}: {value}")
+
+                # Add text parts from attachments to task
+                task_parts.extend(text_parts)
+
+                task = "\n".join(task_parts)
+                logger.info(f"📝 Skill task: {task[:200]}...")
+                if images:
+                    logger.info(f"🖼️ Passing {len(images)} images to sub-agent")
+
+                # 4. Create sub-agent with skill's tools and correct has_images flag
+                has_images = bool(images)  # Calculate once for clarity
+                agent_config = AgentConfig(
+                    tools=skill_tools,
+                    skill_model=skill_config.model if skill_config.model else None,
+                    org_model=org_model,
+                    has_images=has_images,
+                    max_steps=10,
+                    agent_name=f"skill_{skill_config.name}",
+                    agent_description=skill_config.description,
+                    enable_caching=False
+                )
+                sub_agent = self.agent_factory.create_agent(agent_config)
+                logger.info(f"✨ Created sub-agent for skill {skill_config.name} (has_images={has_images})")
+
+                # 5. Execute skill with sub-agent
+                # When stream=False, run() returns the final output directly (not an iterable)
+                from smolagents.agent_types import AgentText, AgentImage, AgentAudio
+                import json
+
+                result = sub_agent.run(task=task, images=images if images else None, stream=False, reset=True)
+                logger.info(f"🔍 Skill output type: {type(result).__name__}")
+
+                # Create MessagePart based on output type
+                message_parts = []
+
+                if isinstance(result, AgentImage):
+                    # Image output - save to temp and create ImageUrlPart
+                    temp_path = result.to_string()  # Saves to temp directory
+                    logger.info(f"📸 Skill generated image: {temp_path}")
+                    # TODO: Upload image to S3 and get URL instead of temp path
+                    image_part = agent_worker_pb2.ImageUrlPart(url=temp_path)
+                    message_part = agent_worker_pb2.MessagePart(image_url=image_part)
+                    message_parts.append(message_part)
+
+                elif isinstance(result, AgentAudio):
+                    # Audio output - save to temp and create FilePart
+                    temp_path = result.to_string()  # Saves to temp directory
+                    logger.info(f"🔊 Skill generated audio: {temp_path}")
+                    # TODO: Upload audio to S3 and get URL instead of temp path
+                    file_part = agent_worker_pb2.FilePart(
+                        url=temp_path,
+                        mime_type="audio/wav",
+                        filename="audio.wav",
+                        size=0  # TODO: Get actual file size
+                    )
+                    message_part = agent_worker_pb2.MessagePart(file=file_part)
+                    message_parts.append(message_part)
+
+                elif isinstance(result, AgentText) or isinstance(result, str):
+                    # Text output - create TextPart
+                    text_content = str(result)
+                    logger.info(f"📝 Skill generated text: {text_content[:100]}...")
+                    text_part = agent_worker_pb2.TextPart(text=text_content)
+                    message_part = agent_worker_pb2.MessagePart(text=text_part)
+                    message_parts.append(message_part)
+
+                else:
+                    # Unknown type - convert to string
+                    text_content = str(result)
+                    logger.info(f"❓ Skill generated unknown type, converting to text: {text_content[:100]}...")
+                    text_part = agent_worker_pb2.TextPart(text=text_content)
+                    message_part = agent_worker_pb2.MessagePart(text=text_part)
+                    message_parts.append(message_part)
+
+                # Serialize MessageParts to JSON for now
+                # TODO: Update SkillTool and parent agent to handle MessagePart[] natively
+                serialized_parts = []
+                for part in message_parts:
+                    if part.HasField('text'):
+                        serialized_parts.append({'type': 'text', 'text': part.text.text})
+                    elif part.HasField('image_url'):
+                        serialized_parts.append({'type': 'image', 'url': part.image_url.url})
+                    elif part.HasField('file'):
+                        serialized_parts.append({
+                            'type': 'file',
+                            'url': part.file.url,
+                            'mime_type': part.file.mime_type,
+                            'filename': part.file.filename
+                        })
+
+                result_json = json.dumps({'parts': serialized_parts})
+                logger.info(f"✅ Skill {skill_config.name} completed: {len(message_parts)} message parts")
+                return result_json
+
+            except Exception as e:
+                error_msg = f"Skill execution error: {str(e)}"
+                logger.error(f"❌ Skill {skill_config.name} failed: {e}", exc_info=True)
+                return error_msg
+
+        return execute_skill
 
     def _create_agent_with_model_provider(
         self,

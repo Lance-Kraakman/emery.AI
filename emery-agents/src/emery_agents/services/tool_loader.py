@@ -7,10 +7,11 @@ source of truth for both frontend and backend tool configurations.
 
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable
 from pathlib import Path
 
-from ..grpc.generated.agent_worker_pb2 import ToolConfig
+from ..grpc.generated.agent_worker_pb2 import ToolConfig, AgentConfig, SkillConfig
+from ..tools.skill_tool import SkillTool
 
 
 class UnifiedToolLoader:
@@ -77,8 +78,142 @@ class UnifiedToolLoader:
         """Get tool configuration by ID."""
         return self.tool_lookup.get(tool_id)
 
-    def load_tool(self, tool_config: ToolConfig, api_key: str = "", api_key_mode: str = "agent") -> Any:
-        """Load a tool instance from ToolConfig using unified metadata."""
+    def _find_skill_by_id(self, skills: List[SkillConfig], skill_id: int) -> Optional[SkillConfig]:
+        """
+        Find a skill in the skills list by ID.
+
+        Args:
+            skills: List of SkillConfig proto objects
+            skill_id: ID of the skill to find
+
+        Returns:
+            SkillConfig if found, None otherwise
+        """
+        if not skills:
+            return None
+
+        for skill in skills:
+            if skill.id == skill_id:
+                return skill
+
+        return None
+
+    def _get_crud_tool_loader(self, tool_name: str) -> Optional[Callable]:
+        """
+        Get the appropriate CRUD tool loader function for a given tool name.
+
+        Maps CRUD tool names from the database (e.g., 'emery-create-row') to their
+        loader functions without needing unified_metadata.json.
+
+        Args:
+            tool_name: Tool name from frontend (e.g., "emery-create-agent")
+
+        Returns:
+            Loader function or None if not a CRUD tool
+        """
+        # AIDEV-NOTE: Explicit mapping for all CRUD tools seeded in database
+        CRUD_TOOL_ROUTING = {
+            # Agent operations
+            "emery-create-agent": self._load_agent_crud_tool,
+            "emery-read-agent": self._load_agent_crud_tool,
+            "emery-update-agent": self._load_agent_crud_tool,
+            "emery-delete-agent": self._load_agent_crud_tool,
+            "emery-list-agents": self._load_agent_crud_tool,
+
+            # Document operations
+            "emery-create-document": self._load_document_crud_tool,
+            "emery-read-document": self._load_document_crud_tool,
+            "emery-update-document": self._load_document_crud_tool,
+            "emery-delete-document": self._load_document_crud_tool,
+            "emery-list-documents": self._load_document_crud_tool,
+
+            # File operations
+            "emery-create-file": self._load_file_crud_tool,
+            "emery-read-file": self._load_file_crud_tool,
+            "emery-update-file": self._load_file_crud_tool,
+            "emery-delete-file": self._load_file_crud_tool,
+            "emery-list-files": self._load_file_crud_tool,
+
+            # Table operations
+            "emery-create-table": self._load_table_crud_tool,
+            "emery-read-table": self._load_table_crud_tool,
+            "emery-update-table": self._load_table_crud_tool,
+            "emery-delete-table": self._load_table_crud_tool,
+            "emery-list-tables": self._load_table_crud_tool,
+
+            # Row operations (also use table_crud)
+            "emery-create-row": self._load_table_crud_tool,
+            "emery-get-rows": self._load_table_crud_tool,
+            "emery-update-row": self._load_table_crud_tool,
+            "emery-delete-row": self._load_table_crud_tool,
+
+            # Team operations
+            "emery-create-team": self._load_team_crud_tool,
+            "emery-read-team": self._load_team_crud_tool,
+            "emery-update-team": self._load_team_crud_tool,
+            "emery-delete-team": self._load_team_crud_tool,
+            "emery-list-teams": self._load_team_crud_tool,
+
+            # Database operations
+            "emery-create-database": self._load_database_crud_tool,
+            "emery-read-database": self._load_database_crud_tool,
+            "emery-update-database": self._load_database_crud_tool,
+            "emery-delete-database": self._load_database_crud_tool,
+            "emery-list-databases": self._load_database_crud_tool,
+        }
+
+        return CRUD_TOOL_ROUTING.get(tool_name)
+
+    def load_tool(
+        self,
+        tool_config: ToolConfig,
+        api_key: str = "",
+        api_key_mode: str = "agent",
+        agent_config: Optional[AgentConfig] = None,
+        skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None,
+        organization_id: Optional[int] = None
+    ) -> Any:
+        """
+        Load a tool instance from ToolConfig using unified metadata.
+
+        Args:
+            tool_config: Tool configuration from proto
+            api_key: API key for tool authentication
+            api_key_mode: API key mode ("agent" or "user")
+            agent_config: Optional AgentConfig containing skills list
+            skill_executor: Optional callback for executing skills
+
+        Returns:
+            Tool instance (either regular tool or SkillTool)
+        """
+        # Check if this is a skill_reference tool
+        if 'type' in tool_config.config and tool_config.config['type'] == 'skill_reference':
+            if not agent_config or not skill_executor:
+                raise ValueError(f"Skill reference tool '{tool_config.name}' requires agent_config and skill_executor")
+
+            # Extract skill ID from config
+            if 'skill_id' not in tool_config.config:
+                raise ValueError(f"Skill reference tool '{tool_config.name}' missing skill_id in config")
+
+            skill_id = int(tool_config.config['skill_id'])
+
+            # Find the skill in agent_config.skills by ID
+            skill_config = self._find_skill_by_id(list(agent_config.skills), skill_id)
+            if not skill_config:
+                raise ValueError(f"Skill with ID {skill_id} not found in agent_config.skills")
+
+            # Create and return SkillTool
+            return SkillTool(skill_config, skill_executor)
+
+        # AIDEV-NOTE: Handle CRUD tools from database - they don't need unified_metadata
+        # These tools are seeded in the DB and sent with full config via gRPC
+        crud_loader = self._get_crud_tool_loader(tool_config.name)
+        if crud_loader:
+            # Create a minimal unified_tool dict just to satisfy the loader signature
+            unified_tool = {"id": tool_config.name, "source": "emery"}
+            return crud_loader(tool_config, unified_tool, api_key, api_key_mode, organization_id)
+
+        # Regular tool loading (existing logic)
         # Convert tool name from hyphen to underscore format for lookup (frontend uses hyphens, backend uses underscores)
         tool_name_lookup = tool_config.name.replace("-", "_")
 
@@ -171,35 +306,35 @@ class UnifiedToolLoader:
         from ..tools.base_tools import load_table_query
         return load_table_query(tool_config)
 
-    def _load_agent_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_agent_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load Agent CRUD tool."""
         from ..tools.crud_tools import load_agent_crud
-        return load_agent_crud(tool_config)
+        return load_agent_crud(tool_config, api_key, organization_id)
 
-    def _load_document_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_document_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load Document CRUD tool."""
         from ..tools.crud_tools import load_document_crud
-        return load_document_crud(tool_config)
+        return load_document_crud(tool_config, api_key, organization_id)
 
-    def _load_file_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_file_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load File CRUD tool."""
         from ..tools.crud_tools import load_file_crud
-        return load_file_crud(tool_config)
+        return load_file_crud(tool_config, api_key, organization_id)
 
-    def _load_table_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_table_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load Table CRUD tool."""
         from ..tools.crud_tools import load_table_crud
-        return load_table_crud(tool_config)
+        return load_table_crud(tool_config, api_key, organization_id)
 
-    def _load_team_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_team_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load Team CRUD tool."""
         from ..tools.crud_tools import load_team_crud
-        return load_team_crud(tool_config)
+        return load_team_crud(tool_config, api_key, organization_id)
 
-    def _load_database_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_database_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load Database CRUD tool."""
         from ..tools.crud_tools import load_database_crud
-        return load_database_crud(tool_config)
+        return load_database_crud(tool_config, api_key, organization_id)
 
     def _load_emery_database_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Emery Database tool."""
@@ -333,7 +468,10 @@ class UnifiedToolLoader:
         self,
         tool_configs: List[ToolConfig],
         api_key: Optional[str] = None,
-        api_key_mode: str = "agent"
+        api_key_mode: str = "agent",
+        agent_config: Optional[AgentConfig] = None,
+        skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None,
+        organization_id: Optional[int] = None
     ) -> List[Any]:
         """
         Load smolagents tools from ToolConfig protobuf objects.
@@ -345,6 +483,8 @@ class UnifiedToolLoader:
             tool_configs: List of ToolConfig protobuf objects
             api_key: Optional API key for tool authentication
             api_key_mode: API key mode ("agent" or "user")
+            agent_config: Optional AgentConfig containing skills list
+            skill_executor: Optional callback for executing skills
 
         Returns:
             List of successfully loaded tool instances
@@ -367,7 +507,14 @@ class UnifiedToolLoader:
                 tool_api_key = tool_config.config.get('api_key', api_key) if tool_config.config else api_key
                 logger.info(f"  Extracted API key from config: present={bool(tool_api_key)}")
 
-                tool_instance = self.load_tool(tool_config, api_key=tool_api_key or "", api_key_mode=api_key_mode)
+                tool_instance = self.load_tool(
+                    tool_config,
+                    api_key=tool_api_key or "",
+                    api_key_mode=api_key_mode,
+                    agent_config=agent_config,
+                    skill_executor=skill_executor,
+                    organization_id=organization_id
+                )
                 smolagents_tools.append(tool_instance)
                 logger.info(f"✅ Successfully loaded tool: {tool_config.name}")
             except Exception as tool_error:

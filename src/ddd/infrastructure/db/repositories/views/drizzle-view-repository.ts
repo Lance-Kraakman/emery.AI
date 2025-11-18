@@ -29,6 +29,7 @@ export class DrizzleViewRepository implements ViewRepository {
             organizationId: persistence.organizationId,
             tableId: persistence.tableId,
             name: persistence.name,
+            ownerId: persistence.createdBy, // Map createdBy to ownerId for database
             viewType: persistence.viewType,
             viewConfig: persistence.viewConfig,
             filters: persistence.filters,
@@ -173,6 +174,7 @@ export class DrizzleViewRepository implements ViewRepository {
       sorting: record.sorting,
       pagination: record.pagination,
       fieldMappings: record.fieldMappings ?? undefined,
+      createdBy: record.ownerId, // Map ownerId from database to createdBy for domain
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     });

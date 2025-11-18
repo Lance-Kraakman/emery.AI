@@ -5,11 +5,11 @@ import { getApps } from '@/app/actions/puck-apps';
 // This page redirects to first app or mission-control
 
 export default async function AppsPage() {
-  const apps = await getApps();
+  const result = await getApps();
 
   // Redirect to first app if exists, otherwise to mission-control
-  if (apps && apps.length > 0) {
-    redirect(`/apps/${apps[0].id}`);
+  if (result.success && result.data && result.data.length > 0) {
+    redirect(`/apps/${result.data[0].id}`);
   }
 
   redirect("/mission-control/dashboard");

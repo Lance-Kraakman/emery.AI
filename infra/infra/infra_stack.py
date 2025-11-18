@@ -341,6 +341,20 @@ class InfraStack(Stack):
             )
         )
 
+        # AIDEV-NOTE: Configure auto-scaling for frontend service
+        # Web application that needs to scale based on user traffic
+        frontend_scaling = frontend_service.service.auto_scale_task_count(
+            min_capacity=2,  # Run 2 tasks minimum for HA across AZs
+            max_capacity=20  # Can scale up to 20 tasks during traffic spikes
+        )
+
+        frontend_scaling.scale_on_cpu_utilization(
+            "FrontendCpuScaling",
+            target_utilization_percent=70,  # Target 70% CPU utilization
+            scale_in_cooldown=Duration.seconds(120),  # Standard scale-in cooldown
+            scale_out_cooldown=Duration.seconds(60)   # Fast scale-out for user traffic
+        )
+
         # Create CloudFront distribution for static URL routing
         cloudfront_distribution = cloudfront.Distribution(
             self, f"{prefix}CloudFrontDistribution",
@@ -463,6 +477,20 @@ class InfraStack(Stack):
         # This ensures frontend (with migration init container) starts and becomes healthy before scheduler
         scheduler_service.node.add_dependency(frontend_service.service)
 
+        # AIDEV-NOTE: Configure auto-scaling for scheduler service
+        # Background job processing that can scale based on CPU utilization
+        scheduler_scaling = scheduler_service.auto_scale_task_count(
+            min_capacity=1,  # Low baseline for cost optimization
+            max_capacity=5   # Limited scaling for background tasks
+        )
+
+        scheduler_scaling.scale_on_cpu_utilization(
+            "SchedulerCpuScaling",
+            target_utilization_percent=75,  # Can run hotter since it's background processing
+            scale_in_cooldown=Duration.seconds(180),  # Conservative scale-in for batch jobs
+            scale_out_cooldown=Duration.seconds(90)   # Slower scale-out OK for background work
+        )
+
         # AIDEV-NOTE: Add WORKER_ADDRESS to scheduler after agent service is created
         # This will be done after agent_service definition below
 
@@ -481,9 +509,9 @@ class InfraStack(Stack):
             self, f"{prefix}AgentServiceV2",
             cluster=cluster,
             service_name=f"{prefix}-Agent-Internal",
-            cpu=512,  # AIDEV-NOTE: Increased CPU for better startup performance
-            memory_limit_mib=1024,  # AIDEV-NOTE: Increased memory for smolagents dependencies
-            desired_count=1,
+            cpu=1024,  # AIDEV-NOTE: 1 vCPU for better gRPC performance
+            memory_limit_mib=2048,  # AIDEV-NOTE: 2 GB for AI processing and table operations
+            desired_count=2,  # AIDEV-NOTE: Run 2 tasks for redundancy and better availability
             task_image_options=ecs_patterns.NetworkLoadBalancedTaskImageOptions(
                 image=self._get_agent_image(),
                 container_port=50051,
@@ -554,7 +582,19 @@ class InfraStack(Stack):
         # AIDEV-NOTE: ECS health checks should be configured in container definition, not added afterwards
         # For agent gRPC service, we rely on ECS service health monitoring
 
+        # AIDEV-NOTE: Configure auto-scaling for agent service
+        # Heavy AI processing workload that needs to scale based on CPU utilization
+        agent_scaling = agent_service.service.auto_scale_task_count(
+            min_capacity=2,  # Already running 2 tasks for redundancy
+            max_capacity=10  # Can scale up to 10 tasks during high AI workload
+        )
 
+        agent_scaling.scale_on_cpu_utilization(
+            "AgentCpuScaling",
+            target_utilization_percent=70,  # Target 70% CPU utilization
+            scale_in_cooldown=Duration.seconds(180),  # Conservative scale-in (AI tasks can be long)
+            scale_out_cooldown=Duration.seconds(60)   # Fast scale-out for AI workload spikes
+        )
 
         # Update environment variables to use Cloud Map DNS instead of NLB DNS
         # This provides reliable internal service-to-service communication

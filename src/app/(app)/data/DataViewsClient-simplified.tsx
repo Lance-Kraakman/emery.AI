@@ -602,39 +602,37 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
         {isInitialLoading ? renderLoadingState() :
          error ? renderErrorState() :
          !selectedTable ? renderEmptyState() : (
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <DynamicDataSheetGrid
-              fields={fields}
-              rows={rows}
-              totalCount={totalCount}
-              organizationId={selectedTable.organizationId!}
-              tableId={selectedTable.id}
-              tableName={selectedTable.name}
-              currentView={currentView || undefined}
-              availableViews={availableViews}
-              onSelectView={(viewId) => {
-                console.log('[ONSELECT VIEW] View selected:', viewId)
-                dataActions.setSelectedView(viewId)
-              }}
-              searchTerm={searchTerm}
-              onSearchChange={(value) => dataActions.setSearchTerm(value)}
-              onManageFields={() => dataActions.setFieldManagerOpen(true)}
-              onRefresh={refreshTableData}
-              onUpdateRow={handleUpdateRow}
-              onAddRows={handleAddRows}
-              onDeleteRow={handleDeleteRow}
-              onScroll={handleScrollThrottled}
-              isLoading={isSearching}
-              error={error ? String(error) : null}
-              activeFilters={activeFilters ?? []}
-              onAddFilter={handleAddFilter}
-              onRemoveFilter={handleRemoveFilter}
-              onClearFilters={handleClearFilters}
-              sortState={sortBy}
-              onSort={handleSort}
-              onClearSort={handleClearSort}
-            />
-          </div>
+          <DynamicDataSheetGrid
+            fields={fields}
+            rows={rows}
+            totalCount={totalCount}
+            organizationId={selectedTable.organizationId!}
+            tableId={selectedTable.id}
+            tableName={selectedTable.name}
+            currentView={currentView || undefined}
+            availableViews={availableViews}
+            onSelectView={(viewId) => {
+              console.log('[ONSELECT VIEW] View selected:', viewId)
+              dataActions.setSelectedView(viewId)
+            }}
+            searchTerm={searchTerm}
+            onSearchChange={(value) => dataActions.setSearchTerm(value)}
+            onManageFields={() => dataActions.setFieldManagerOpen(true)}
+            onRefresh={refreshTableData}
+            onUpdateRow={handleUpdateRow}
+            onAddRows={handleAddRows}
+            onDeleteRow={handleDeleteRow}
+            onScroll={handleScrollThrottled}
+            isLoading={isSearching}
+            error={error ? String(error) : null}
+            activeFilters={activeFilters ?? []}
+            onAddFilter={handleAddFilter}
+            onRemoveFilter={handleRemoveFilter}
+            onClearFilters={handleClearFilters}
+            sortState={sortBy}
+            onSort={handleSort}
+            onClearSort={handleClearSort}
+          />
         )}
       </div>
 

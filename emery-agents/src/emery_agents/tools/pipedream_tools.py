@@ -11,9 +11,12 @@ import requests
 import inspect
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor
 from smolagents import Tool
 from ..grpc.generated.agent_worker_pb2 import ToolConfig
-# ApiKey is now just a string in simplified architecture
+
+# AIDEV-NOTE: Shared thread pool for HTTP requests to prevent blocking gRPC event loop
+_http_thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="pipedream-http")
 
 # Load metadata once
 METADATA_PATH = Path(__file__).parent / "pipedream_metadata.json"
@@ -131,49 +134,65 @@ class PipedreamTool(Tool):
             return {"success": False, "error": f"Request error: {str(e)}"}
     
     def _execute_action_call(self, api_key_value: str, **kwargs) -> Dict[str, Any]:
-        """Execute a specific Pipedream action."""
+        """Execute a specific Pipedream action.
+
+        AIDEV-NOTE: Uses ThreadPoolExecutor to prevent blocking gRPC event loop.
+        """
         # Parse tool_id: "gmail-send-email" -> service="gmail", action="send_email"
         parts = self.tool_id.split("-", 1)
         service = parts[0]
         action = parts[1].replace("-", "_") if len(parts) > 1 else "default"
 
-        response = requests.post(
-            f"{self.base_url}/api/connections/proxy",
-            headers={
-                "Authorization": f"Bearer {api_key_value}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "service": service,
-                "action": action,
-                "params": kwargs,
-                "api_key_mode": self.api_key_mode  # Use mode from config
-            },
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            return response.json()
-        elif response.status_code == 401:
-            return {"success": False, "error": "Authentication failed"}
-        else:
-            return {"success": False, "error": f"Request failed: {response.status_code}"}
+        def _http_call():
+            """Execute HTTP call in thread pool."""
+            return requests.post(
+                f"{self.base_url}/api/connections/proxy",
+                headers={
+                    "Authorization": f"Bearer {api_key_value}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "service": service,
+                    "action": action,
+                    "params": kwargs,
+                    "api_key_mode": self.api_key_mode
+                },
+                timeout=30
+            )
+
+        try:
+            future = _http_thread_pool.submit(_http_call)
+            response = future.result(timeout=35.0)
+
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 401:
+                return {"success": False, "error": "Authentication failed"}
+            else:
+                return {"success": False, "error": f"Request failed: {response.status_code}"}
+        except TimeoutError:
+            return {"success": False, "error": "Request timeout after 35 seconds"}
+        except Exception as e:
+            return {"success": False, "error": f"Request error: {str(e)}"}
     
     def _execute_mcp_call(self, api_key_value: str, **kwargs) -> Dict[str, Any]:
-        """Execute a generic MCP API call."""
+        """Execute a generic MCP API call.
+
+        AIDEV-NOTE: Uses ThreadPoolExecutor to prevent blocking gRPC event loop.
+        """
         # Extract MCP parameters
         method = kwargs.get("method", "GET").upper()
         endpoint = kwargs.get("endpoint", "")
         body = kwargs.get("body", {})
         headers = kwargs.get("headers", {})
-        
+
         if not endpoint:
             return {"success": False, "error": "MCP calls require 'endpoint' parameter"}
-        
+
         # Prepare MCP request payload
         mcp_payload = {
             "service": self.app_name,
-            "action": "mcp_call",  # Special action for generic MCP calls
+            "action": "mcp_call",
             "params": {
                 "method": method,
                 "endpoint": endpoint,
@@ -181,23 +200,33 @@ class PipedreamTool(Tool):
                 "headers": headers
             }
         }
-        
-        response = requests.post(
-            f"{self.base_url}/api/agents/proxy",
-            headers={
-                "Authorization": f"Bearer {api_key_value}",
-                "Content-Type": "application/json"
-            },
-            json=mcp_payload,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            return response.json()
-        elif response.status_code == 401:
-            return {"success": False, "error": "Authentication failed"}
-        else:
-            return {"success": False, "error": f"MCP request failed: {response.status_code}"}
+
+        def _http_call():
+            """Execute HTTP call in thread pool."""
+            return requests.post(
+                f"{self.base_url}/api/agents/proxy",
+                headers={
+                    "Authorization": f"Bearer {api_key_value}",
+                    "Content-Type": "application/json"
+                },
+                json=mcp_payload,
+                timeout=30
+            )
+
+        try:
+            future = _http_thread_pool.submit(_http_call)
+            response = future.result(timeout=35.0)
+
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 401:
+                return {"success": False, "error": "Authentication failed"}
+            else:
+                return {"success": False, "error": f"MCP request failed: {response.status_code}"}
+        except TimeoutError:
+            return {"success": False, "error": "Request timeout after 35 seconds"}
+        except Exception as e:
+            return {"success": False, "error": f"Request error: {str(e)}"}
 
 
 # Tool registry

@@ -15,7 +15,7 @@ export interface CreateDatabaseDTO {
   name: string;
   description?: string;
   organizationId: number;
-  createdBy: string;
+  ownerId: string;
   metadata?: Record<string, any>;
 }
 

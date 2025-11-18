@@ -77,12 +77,13 @@ export class DrizzleTeamRepository
       agentIds: record.agentIds,
       databaseId: record.databaseId,
       organizationId: record.organizationId,
+      ownerId: record.ownerId,
       createdAt: record.createdAt
     });
   }
   
   protected toPersistence(team: Team): any {
-    // Team entity doesn't have a toPersistence method yet, 
+    // Team entity doesn't have a toPersistence method yet,
     // but we can extract the data from the entity
     return {
       id: team.id.value,
@@ -94,6 +95,7 @@ export class DrizzleTeamRepository
       agentIds: team.agentIds?.map(id => id.value.toString()) || null,
       databaseId: team.databaseId,
       organizationId: team.organizationId.value,
+      ownerId: team.ownerId.value,
       createdAt: team.createdAt
     };
   }

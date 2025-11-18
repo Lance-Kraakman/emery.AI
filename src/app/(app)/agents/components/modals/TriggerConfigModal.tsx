@@ -32,8 +32,12 @@ import {
   isWebhookTrigger,
   getTriggerTypeLabel
 } from '../trigger-utils';
-import { InstructionsWithToolsInput } from '@/components/shared/InstructionsWithToolsInput';
+import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
 import type { ScheduleConfigurationDTO } from '@/app/dtos/schedule.dto';
+import { uploadTaskAttachment } from '@/app/actions/tasks';
+import type { ImageAttachment, FileAttachment } from '@/ddd/domain/tasks/entities/task';
+import { InstructionTemplateService } from '@/ddd/domain/tasks/services/instruction-template-service';
+import { getSampleRow } from '@/app/actions/rows';
 
 interface TriggerConfigModalProps {
   isOpen: boolean;
@@ -76,6 +80,58 @@ const triggerTypes: TriggerTypeOption[] = [
   }
 ];
 
+/**
+ * Generate sample values for all variables based on trigger type
+ * Combines trigger metadata samples with actual table data for DATABASE_EVENT
+ */
+function generateVariableSamples(
+  triggerType: TriggerType,
+  scheduleName: string,
+  sampleRowData: Record<string, any> | null
+): Array<{ variable: string; sampleValue: string }> {
+  const samples: Array<{ variable: string; sampleValue: string }> = [];
+
+  // Common trigger variables
+  samples.push({ variable: '$trigger.type', sampleValue: triggerType });
+  samples.push({ variable: '$trigger.scheduleName', sampleValue: scheduleName || 'Daily sync' });
+
+  if (triggerType === 'CALENDAR') {
+    // Calendar-specific variables
+    const now = new Date();
+    const scheduledTime = new Date(now.getTime() + 3600000); // 1 hour from now
+    samples.push({ variable: '$trigger.scheduledTime', sampleValue: scheduledTime.toISOString() });
+    samples.push({ variable: '$trigger.timezone', sampleValue: 'America/New_York' });
+  } else if (triggerType === 'DATABASE_EVENT') {
+    // Database event variables
+    samples.push({ variable: '$table.id', sampleValue: '1' });
+    samples.push({ variable: '$table.name', sampleValue: 'customers' });
+    samples.push({ variable: '$event.operation', sampleValue: 'INSERT' });
+    samples.push({ variable: '$event.rowId', sampleValue: '6a0c5b17-d4dc-4c47-924b-8dc47b8f9c76' });
+    samples.push({ variable: '$event.timestamp', sampleValue: new Date().toISOString() });
+
+    // Add actual row data if available
+    if (sampleRowData) {
+      Object.entries(sampleRowData).forEach(([fieldName, value]) => {
+        const displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        samples.push({ variable: `$row.${fieldName}`, sampleValue: displayValue });
+      });
+
+      // Show previousRow example for one field
+      const firstField = Object.keys(sampleRowData)[0];
+      if (firstField) {
+        samples.push({ variable: `$previousRow.${firstField}`, sampleValue: '(previous value)' });
+      }
+    }
+  } else if (triggerType === 'WEBHOOK') {
+    // Webhook-specific variables
+    samples.push({ variable: '$webhook.payload', sampleValue: '{"event": "user.created"}' });
+    samples.push({ variable: '$webhook.headers', sampleValue: '{"content-type": "application/json"}' });
+    samples.push({ variable: '$webhook.origin', sampleValue: 'https://example.com' });
+  }
+
+  return samples;
+}
+
 export function TriggerConfigModal({
   isOpen,
   onClose,
@@ -111,6 +167,11 @@ export function TriggerConfigModal({
   const [scheduleName, setScheduleName] = useState('');
   const [taskInstructions, setTaskInstructions] = useState('');
   const [taskTools, setTaskTools] = useState<any[]>([]); // ToolConfigDTO[]
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+
+  // Sample data for database triggers
+  const [sampleRowData, setSampleRowData] = useState<Record<string, any> | null>(null);
+  const [isLoadingSampleData, setIsLoadingSampleData] = useState(false);
 
   // Initialize with current schedule or start fresh for create mode
   useEffect(() => {
@@ -126,6 +187,7 @@ export function TriggerConfigModal({
       setScheduleName('');
       setTaskInstructions('');
       setTaskTools([]);
+      setPendingAttachments([]);
       setCurrentStep('select');
     } else if (mode === 'edit' && agent.schedules[scheduleIndex]) {
       // Load existing schedule for editing
@@ -161,9 +223,46 @@ export function TriggerConfigModal({
     }
   }, [isOpen, agent, mode, scheduleIndex]);
 
+  // Fetch sample row data when table is selected for database triggers
+  useEffect(() => {
+    const fetchSampleData = async () => {
+      if (selectedType !== 'DATABASE_EVENT' || !databaseConfig.tableId) {
+        setSampleRowData(null);
+        return;
+      }
+
+      setIsLoadingSampleData(true);
+      try {
+        const result = await getSampleRow(parseInt(databaseConfig.tableId));
+        if (result.success && result.data) {
+          setSampleRowData(result.data.sampleData);
+        } else {
+          console.error('Failed to fetch sample row:', result.error);
+          setSampleRowData(null);
+        }
+      } catch (error) {
+        console.error('Error fetching sample row:', error);
+        setSampleRowData(null);
+      } finally {
+        setIsLoadingSampleData(false);
+      }
+    };
+
+    fetchSampleData();
+  }, [selectedType, databaseConfig.tableId]);
+
   const handleTypeSelect = (type: TriggerType) => {
     setSelectedType(type);
     setCurrentStep('configure');
+  };
+
+  // Attachment handlers
+  const handleAttachmentAdd = (file: File) => {
+    setPendingAttachments(prev => [...prev, file]);
+  };
+
+  const handleAttachmentRemove = (index: number) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSave = async () => {
@@ -246,11 +345,51 @@ export function TriggerConfigModal({
         serialized: triggerConfig.toJSON()
       });
 
+      // Upload attachments to S3 if present
+      const imageAttachments: ImageAttachment[] = [];
+      const fileAttachments: FileAttachment[] = [];
+
+      if (pendingAttachments.length > 0) {
+        console.log('[TriggerConfigModal] Uploading attachments', { count: pendingAttachments.length });
+
+        for (const file of pendingAttachments) {
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const uploadResult = await uploadTaskAttachment(agent.id, formData);
+
+          if (!uploadResult.success) {
+            throw new Error(`Failed to upload ${file.name}: ${uploadResult.error}`);
+          }
+
+          const { url, s3Key, type } = uploadResult.data!;
+
+          if (type === 'image') {
+            imageAttachments.push({ url, s3Key });
+          } else {
+            fileAttachments.push({
+              type: 'document',
+              url,
+              filename: file.name,
+              mimeType: file.type,
+              preprocessed: true
+            });
+          }
+        }
+
+        console.log('[TriggerConfigModal] Attachments uploaded', {
+          imageCount: imageAttachments.length,
+          fileCount: fileAttachments.length
+        });
+      }
+
       // Step 2: Create ScheduleConfigurationDTO with trigger + task instructions
       const newSchedule: ScheduleConfigurationDTO = {
         trigger: triggerConfig.toJSON() as any, // AIDEV-NOTE: toJSON() returns plain object compatible with TriggerConfigDTO
         taskInstructions: {
           task: taskInstructions,
+          images: imageAttachments.length > 0 ? imageAttachments : undefined,
+          attachments: fileAttachments.length > 0 ? fileAttachments : undefined,
           tools: taskTools,
           metadata: {}
         },
@@ -355,15 +494,15 @@ export function TriggerConfigModal({
   };
 
   const getStepTitle = () => {
-    const modePrefix = mode === 'create' ? 'Add New Schedule' : `Edit Schedule ${scheduleIndex + 1}`;
+    const modePrefix = mode === 'create' ? 'Add Schedule' : `Edit Schedule`;
 
     switch (currentStep) {
       case 'select':
         return `${modePrefix}: Choose Type`;
       case 'configure':
-        return `${modePrefix}: Configure ${getTriggerTypeLabel(selectedType)}`;
+        return `${modePrefix}: Configure`;
       case 'instructions':
-        return `${modePrefix}: Define Task`;
+        return `${modePrefix}: Task`;
       case 'review':
         return `${modePrefix}: Review`;
       default:
@@ -432,7 +571,7 @@ export function TriggerConfigModal({
       isOpen={isOpen}
       onClose={onClose}
       title={getStepTitle()}
-      description="Configure when and how this agent should be triggered"
+      description={currentStep === 'instructions' ? undefined : "Configure when and how this agent should be triggered"}
       size="lg"
       footer={footer}
       closeOnEscape={!isSaving}
@@ -638,50 +777,117 @@ export function TriggerConfigModal({
       {currentStep === 'instructions' && (
         <div className="p-6">
           <div className="space-y-6">
-            {/* Schedule Name */}
-            <div className="space-y-2">
-              <Label htmlFor="schedule-name" className="text-base font-medium">
-                Schedule Name *
-              </Label>
+            {/* Schedule Name - Inline */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Label htmlFor="schedule-name" className="text-sm font-medium whitespace-nowrap">
+                  Schedule Name *
+                </Label>
+                <div className="group relative">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
+                    <p className="text-foreground">
+                      Give this schedule a descriptive name to identify it easily
+                    </p>
+                  </div>
+                </div>
+              </div>
               <Input
                 id="schedule-name"
                 value={scheduleName}
                 onChange={(e) => setScheduleName(e.target.value)}
                 placeholder="e.g., Daily Sales Report, Weekly Data Sync"
-                className="text-base"
+                className="flex-1"
               />
-              <p className="text-xs text-muted-foreground">
-                Give this schedule a descriptive name to identify it easily
-              </p>
+            </div>
+
+            {/* Variables */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium">Variables</Label>
+                <div className="group relative">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
+                    <p className="text-foreground">
+                      Click any variable to insert it into your task instructions. Values shown are examples.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              {isLoadingSampleData && selectedType === 'DATABASE_EVENT' ? (
+                <div className="p-3 bg-muted/50 rounded-lg border flex items-center justify-center text-xs text-muted-foreground">
+                  Loading sample data...
+                </div>
+              ) : (
+                <div className="p-2.5 bg-muted/50 rounded-lg border max-h-[180px] overflow-y-auto">
+                  <div className="space-y-1">
+                    {generateVariableSamples(selectedType, scheduleName, sampleRowData).map((sample) => (
+                      <div
+                        key={sample.variable}
+                        className="flex items-start gap-2 text-xs cursor-pointer hover:bg-muted/80 p-1 rounded transition-colors"
+                        onClick={() => {
+                          // Insert variable at cursor position
+                          const input = document.getElementById('schedule-task-instructions') as HTMLTextAreaElement;
+                          if (input) {
+                            const start = input.selectionStart;
+                            const end = input.selectionEnd;
+                            const text = taskInstructions;
+                            const before = text.substring(0, start);
+                            const after = text.substring(end);
+                            const variableText = sample.variable.replace('$', '${') + '}';
+                            setTaskInstructions(before + variableText + after);
+                            // Set cursor position after inserted text
+                            setTimeout(() => {
+                              input.focus();
+                              input.setSelectionRange(start + variableText.length, start + variableText.length);
+                            }, 0);
+                          }
+                        }}
+                        title="Click to insert this variable"
+                      >
+                        <span className="font-mono text-muted-foreground min-w-[140px] flex-shrink-0">
+                          {sample.variable}
+                        </span>
+                        <span className="text-muted-foreground flex-shrink-0">→</span>
+                        <span className="font-mono text-foreground break-all">
+                          {sample.sampleValue}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Task Instructions with @ Tool Mentions */}
             <div className="space-y-2">
-              <InstructionsWithToolsInput
+              <div className="flex items-center gap-2">
+                <Label className="text-base font-medium">Task Instructions *</Label>
+                <div className="group relative">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
+                    <p className="text-foreground">
+                      Define what task should be created when this schedule triggers. Use @ to reference tools, documents, files, or agents. When triggered, a new task will be created with these instructions.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <UnifiedChatInput
                 value={taskInstructions}
                 onChange={setTaskInstructions}
                 tools={taskTools}
                 onToolsChange={setTaskTools}
-                label="Task Instructions *"
-                helpText="Define what task should be created when this schedule triggers. Use @ to reference tools, documents, files, or agents."
-                placeholder="Describe the task to execute... (Type @ to add tools)"
+                variables={InstructionTemplateService.getAvailableVariables(selectedType)}
+                placeholder="Describe the task to execute... (Type @ to add tools or $ for variables)"
                 id="schedule-task-instructions"
-                minHeight="200px"
+                mode="form"
+                minHeight="70px"
+                enableSendButton={false}
+                enableAttachments={true}
+                pendingAttachments={pendingAttachments}
+                onAttachmentAdd={handleAttachmentAdd}
+                onAttachmentRemove={handleAttachmentRemove}
               />
-            </div>
-
-            {/* Info box explaining the concept */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <Info className="h-5 w-5 text-blue-600 mt-0.5" />
-                <div>
-                  <h4 className="font-medium text-blue-900">What happens when triggered?</h4>
-                  <p className="text-sm text-blue-700 mt-1">
-                    When this schedule triggers, a new task will be created with these instructions.
-                    The task will have access to the tools you've selected using @ mentions.
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         </div>

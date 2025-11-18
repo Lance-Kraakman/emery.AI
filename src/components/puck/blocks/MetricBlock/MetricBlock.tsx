@@ -8,13 +8,24 @@
 
 import React from "react";
 import styles from "./styles.module.css";
+import type { TypographySize } from "../../utils/typography";
 
 export interface MetricBlockProps {
   // Configuration props (set in Puck editor)
   viewId?: number;                  // Selected metric view ID
   showLabel?: boolean;              // Show metric label
   showChange?: boolean;             // Show change indicator (future)
-  size?: 'small' | 'medium' | 'large';
+  size?: TypographySize;            // Typography size (xs-5xl)
+  labelColor?: string;              // Optional label color override
+  valueColor?: string;              // Optional value color override
+  backgroundColor?: string;         // Optional background color override
+  labelFontFamily?: string;         // Optional label font family override
+  labelFontWeight?: string;         // Optional label font weight override
+  valueFontFamily?: string;         // Optional value font family override
+  valueFontWeight?: string;         // Optional value font weight override
+  borderRadius?: string;            // Optional border radius override
+  borderWidth?: string;             // Optional border width override
+  paddingLevel?: string;            // Optional padding level (0-10 scale)
 
   // Resolved data (injected by resolveData hook)
   _viewName?: string;               // View name for display
@@ -36,7 +47,17 @@ export default function MetricBlock(props: MetricBlockProps) {
     viewId,
     showLabel = true,
     showChange = false,
-    size = 'medium',
+    size = '2xl',
+    labelColor,
+    valueColor,
+    backgroundColor,
+    labelFontFamily,
+    labelFontWeight,
+    valueFontFamily,
+    valueFontWeight,
+    borderRadius,
+    borderWidth,
+    paddingLevel,
     _viewName,
     _metricValue,
     _metricLabel,
@@ -118,10 +139,30 @@ export default function MetricBlock(props: MetricBlockProps) {
   const formattedValue = formatValue(_metricValue, _formatType, _decimals);
   const displayLabel = _metricLabel || _viewName || 'Metric';
 
+  // Calculate padding from level if provided
+  const padding = paddingLevel ? `calc(var(--theme-spacing-unit, 0.25rem) * ${paddingLevel})` : undefined;
+
   return (
-    <div className={`${styles.metricBlock} ${styles[size]}`}>
+    <div
+      className={styles.metricBlock}
+      data-size={size}
+      style={{
+        ...(backgroundColor && { backgroundColor }),
+        ...(borderRadius && { borderRadius }),
+        ...(borderWidth && { borderWidth }),
+        ...(padding && { padding }),
+      }}
+    >
       {showLabel && (
-        <div className={styles.label}>
+        <div
+          className={styles.label}
+          data-size={size}
+          style={{
+            ...(labelColor && { color: labelColor }),
+            ...(labelFontFamily && { fontFamily: labelFontFamily }),
+            ...(labelFontWeight && { fontWeight: labelFontWeight }),
+          }}
+        >
           {displayLabel}
           {_metricType && (
             <span className={styles.metricType}>
@@ -131,7 +172,15 @@ export default function MetricBlock(props: MetricBlockProps) {
         </div>
       )}
 
-      <div className={styles.value}>
+      <div
+        className={styles.value}
+        data-size={size}
+        style={{
+          ...(valueColor && { color: valueColor }),
+          ...(valueFontFamily && { fontFamily: valueFontFamily }),
+          ...(valueFontWeight && { fontWeight: valueFontWeight }),
+        }}
+      >
         {formattedValue}
       </div>
 

@@ -1,16 +1,26 @@
 import React from "react"
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { SignInButton } from "./SignInButton"
-import { EmailSignInForm } from "./EmailSignInForm"
+import { SignInButton } from "@/components/auth/SignInButton"
+import { EmailSignInForm } from "@/components/auth/EmailSignInForm"
 import { Separator } from "@/components/ui/separator"
 
-export default async function SignInPage() {
+interface SignInPageProps {
+  searchParams: Promise<{
+    callbackUrl?: string;
+    error?: string;
+  }>;
+}
+
+export default async function SignInPage({ searchParams }: SignInPageProps) {
   const session = await auth()
-  
+  const params = await searchParams
+
   // if (session) {
-  //   redirect("/mission-control")
+  //   redirect("/mission-control/dashboard")
   // }
+
+  const callbackUrl = params.callbackUrl || '/mission-control/dashboard'
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -23,15 +33,15 @@ export default async function SignInPage() {
             Dynamic database builder for modern teams
           </p>
         </div>
-        
+
         <div className="bg-card border border-border rounded-lg shadow-sm p-6 space-y-6">
           <div>
             <h2 className="text-2xl font-semibold text-center mb-6">Sign in to your account</h2>
-            
+
             {/* OAuth Providers */}
             <div className="space-y-3">
-              <SignInButton provider="github" />
-              <SignInButton provider="google" />
+              <SignInButton provider="github" callbackUrl={callbackUrl} />
+              <SignInButton provider="google" callbackUrl={callbackUrl} />
             </div>
 
             <div className="relative my-6">
@@ -45,10 +55,10 @@ export default async function SignInPage() {
               </div>
             </div>
 
-            <EmailSignInForm />
+            <EmailSignInForm callbackUrl={callbackUrl} />
           </div>
         </div>
-        
+
         <p className="text-center text-sm text-muted-foreground">
           Don't have an account? Contact your organization administrator.
         </p>

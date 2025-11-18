@@ -6,9 +6,13 @@ import { SkillMapper } from '@/app/mappers/skill-mapper';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { requirePermission, requireResourcePermission } from './permissions';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { SkillInput, SkillOutput, ToolConfigDTO } from '@/app/mappers/skill-mapper';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
+import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
+import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
+import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 
 /**
  * Server Actions for Skill Management
@@ -42,6 +46,9 @@ export async function createSkill(command: {
     if (!session?.user?.id) {
       return { success: false, error: 'Unauthorized' };
     }
+
+    // Check permission to manage the agent (agent-scoped skills require agent management permission)
+    await requireResourcePermission("agents:manage", "agent", command.agentId);
 
     // Validation
     if (!command.name?.trim()) {
@@ -122,6 +129,9 @@ export async function createOrganizationSkill(command: {
       return { success: false, error: 'Unauthorized' };
     }
 
+    // Check permission to create organization skills
+    await requirePermission("skills:create");
+
     // Validation
     if (!command.name?.trim()) {
       return { success: false, error: 'Skill name is required' };
@@ -196,6 +206,7 @@ export async function updateSkill(
     outputs?: SkillOutput[];
     instructions?: string;
     tools?: ToolConfigDTO[];
+    content?: MessagePart[]; // Skill-level attachments
   }
 ): Promise<Result<SkillDTO>> {
   try {
@@ -205,6 +216,24 @@ export async function updateSkill(
     }
 
     const service = getSkillApplicationService();
+
+    // Fetch skill to determine if agent-scoped or org-level
+    const skillResult = await service.getSkill(skillId);
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    const skill = skillResult.data;
+
+    // Check appropriate permission based on skill type
+    if (skill.agentId) {
+      // Agent-scoped skill: check agent management permission
+      await requireResourcePermission("agents:manage", "agent", skill.agentId.value);
+    } else {
+      // Org-level skill: check skill management permission
+      await requireResourcePermission("skills:manage", "skill", skillId);
+    }
+
     const result = await service.updateSkill(skillId, command);
 
     if (!result.success) {
@@ -212,15 +241,15 @@ export async function updateSkill(
     }
 
     // Fetch updated skill to return full DTO
-    const skillResult = await service.getSkill(skillId);
-    if (!skillResult.success || !skillResult.data) {
+    const updatedSkillResult = await service.getSkill(skillId);
+    if (!updatedSkillResult.success || !updatedSkillResult.data) {
       return { success: false, error: 'Failed to fetch updated skill' };
     }
 
     // Revalidate sidebar and skill pages
-    const skill = skillResult.data;
-    if (skill.agentId) {
-      revalidatePath(`/agents/${skill.agentId.value}/skills`);
+    const updatedSkill = updatedSkillResult.data;
+    if (updatedSkill.agentId) {
+      revalidatePath(`/agents/${updatedSkill.agentId.value}/skills`);
     } else {
       revalidatePath('/skills');
     }
@@ -228,7 +257,7 @@ export async function updateSkill(
 
     return {
       success: true,
-      data: SkillMapper.toDTO(skillResult.data)
+      data: SkillMapper.toDTO(updatedSkillResult.data)
     };
   } catch (error) {
     console.error('[updateSkill] error:', error);
@@ -251,9 +280,23 @@ export async function deleteSkill(skillId: number): Promise<Result<void>> {
 
     const service = getSkillApplicationService();
 
-    // Get skill info before deleting for revalidation
+    // Get skill info before deleting for permission check and revalidation
     const skillResult = await service.getSkill(skillId);
-    const agentId = skillResult.success && skillResult.data ? skillResult.data.agentId?.value : null;
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    const skill = skillResult.data;
+    const agentId = skill.agentId?.value ?? null;
+
+    // Check appropriate permission based on skill type
+    if (skill.agentId) {
+      // Agent-scoped skill: check agent management permission
+      await requireResourcePermission("agents:manage", "agent", skill.agentId.value);
+    } else {
+      // Org-level skill: check skill management permission
+      await requireResourcePermission("skills:manage", "skill", skillId);
+    }
 
     const result = await service.deleteSkill(skillId);
 
@@ -564,6 +607,125 @@ export async function createDefaultAgentSkill(agentId: number): Promise<Result<S
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create default agent skill'
+    };
+  }
+}
+
+/**
+ * Upload attachment for a skill
+ */
+export async function uploadSkillAttachment(
+  skillId: number,
+  formData: FormData
+): Promise<Result<AttachmentMetadata>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const file = formData.get('file') as File;
+    if (!file) {
+      return { success: false, error: 'No file provided' };
+    }
+
+    const attachmentType = formData.get('type') as AttachmentType || 'file';
+
+    // Get skill to retrieve organizationId
+    const service = getSkillApplicationService();
+    const skillResult = await service.getSkill(skillId);
+
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    const skill = skillResult.data;
+
+    // Upload to S3
+    const uploadResult = await s3SkillAttachmentService.uploadAttachment({
+      file,
+      organizationId: skill.organizationId.value,
+      skillId,
+      type: attachmentType
+    });
+
+    return {
+      success: true,
+      data: uploadResult.metadata
+    };
+  } catch (error) {
+    console.error('[uploadSkillAttachment] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to upload skill attachment'
+    };
+  }
+}
+
+/**
+ * Delete attachment from a skill
+ */
+export async function deleteSkillAttachment(
+  skillId: number,
+  s3Key: string
+): Promise<Result<void>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Verify skill access
+    const service = getSkillApplicationService();
+    const skillResult = await service.getSkill(skillId);
+
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    // Delete from S3
+    await s3SkillAttachmentService.deleteAttachment(s3Key);
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error('[deleteSkillAttachment] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete skill attachment'
+    };
+  }
+}
+
+/**
+ * Generate fresh pre-signed URL for skill attachment
+ */
+export async function generateSkillAttachmentUrl(
+  skillId: number,
+  s3Key: string
+): Promise<Result<string>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Verify skill access
+    const service = getSkillApplicationService();
+    const skillResult = await service.getSkill(skillId);
+
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    // Generate URL
+    const url = await s3SkillAttachmentService.generateAttachmentUrl(s3Key);
+
+    return { success: true, data: url };
+  } catch (error) {
+    console.error('[generateSkillAttachmentUrl] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to generate attachment URL'
     };
   }
 }

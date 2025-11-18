@@ -19,7 +19,7 @@ export function SkillInputsSection({
 }: SkillInputsSectionProps) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [formData, setFormData] = useState<SkillInput>({ name: '', required: true });
+  const [formData, setFormData] = useState<SkillInput>({ name: '', required: true, type: 'text' });
   const formRef = useRef<HTMLDivElement>(null);
 
   const handleAdd = () => {
@@ -36,7 +36,7 @@ export function SkillInputsSection({
     }
 
     // Reset form
-    setFormData({ name: '', required: true });
+    setFormData({ name: '', required: true, type: 'text' });
     setShowAddForm(false);
     setEditingIndex(null);
   };
@@ -52,7 +52,7 @@ export function SkillInputsSection({
   };
 
   const handleCancel = () => {
-    setFormData({ name: '', required: true });
+    setFormData({ name: '', required: true, type: 'text' });
     setShowAddForm(false);
     setEditingIndex(null);
   };
@@ -86,11 +86,16 @@ export function SkillInputsSection({
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs
               transition-colors duration-150 flex-shrink-0 max-w-xs
               border-border bg-background hover:bg-muted/50 cursor-pointer"
-            title={`${input.name} (${input.required ? 'required' : 'optional'})`}
+            title={`${input.name} (${input.required ? 'required' : 'optional'}, type: ${input.type || 'text'})`}
           >
             <span className="truncate font-medium font-mono">
               {input.name}
             </span>
+            {input.type && input.type !== 'text' && (
+              <span className="text-[10px] text-blue-600 bg-blue-50 px-1 rounded">
+                {input.type}
+              </span>
+            )}
             <span className={`text-[10px] ${input.required ? 'text-orange-600' : 'text-muted-foreground'}`}>
               {input.required ? 'req' : 'opt'}
             </span>
@@ -124,6 +129,22 @@ export function SkillInputsSection({
               if (e.key === 'Escape') handleCancel();
             }}
           />
+          <Select
+            value={formData.type || 'text'}
+            onValueChange={(v) => setFormData({ ...formData, type: v as any })}
+          >
+            <SelectTrigger className="w-24 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="text">Text</SelectItem>
+              <SelectItem value="image">Image</SelectItem>
+              <SelectItem value="file">File</SelectItem>
+              <SelectItem value="audio">Audio</SelectItem>
+              <SelectItem value="video">Video</SelectItem>
+              <SelectItem value="document">Document</SelectItem>
+            </SelectContent>
+          </Select>
           <Select
             value={formData.required ? 'required' : 'optional'}
             onValueChange={(v) => setFormData({ ...formData, required: v === 'required' })}

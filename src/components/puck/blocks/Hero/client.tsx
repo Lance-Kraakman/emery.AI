@@ -5,6 +5,7 @@ import { quotes } from "./quotes";
 import { AutoField, FieldLabel } from "@measured/puck";
 import { Link2 } from "lucide-react";
 import HeroComponent, { HeroProps } from "./Hero";
+import { backgroundColorField, textColorField, fontFamilyField, fontWeightField } from "../../fields/standard-fields";
 
 export const Hero: ComponentConfig<HeroProps> = {
   fields: {
@@ -133,6 +134,31 @@ export const Hero: ComponentConfig<HeroProps> = {
         },
       },
     },
+    titleColor: {
+      ...textColorField,
+      label: "Title Color (Optional)",
+    },
+    subtitleColor: {
+      ...textColorField,
+      label: "Subtitle Color (Optional)",
+    },
+    backgroundColor: backgroundColorField,
+    titleFontFamily: {
+      ...fontFamilyField,
+      label: "Title Font Family (Optional)",
+    },
+    titleFontWeight: {
+      ...fontWeightField,
+      label: "Title Font Weight (Optional)",
+    },
+    subtitleFontFamily: {
+      ...fontFamilyField,
+      label: "Subtitle Font Family (Optional)",
+    },
+    subtitleFontWeight: {
+      ...fontWeightField,
+      label: "Subtitle Font Weight (Optional)",
+    },
   },
   defaultProps: {
     title: "Hero",
@@ -140,6 +166,13 @@ export const Hero: ComponentConfig<HeroProps> = {
     description: "Description",
     buttons: [{ label: "Learn more", href: "#" }],
     padding: "64px",
+    titleColor: undefined,
+    subtitleColor: undefined,
+    backgroundColor: undefined,
+    titleFontFamily: undefined,
+    titleFontWeight: undefined,
+    subtitleFontFamily: undefined,
+    subtitleFontWeight: undefined,
   },
   /**
    * The resolveData method allows us to modify component data after being

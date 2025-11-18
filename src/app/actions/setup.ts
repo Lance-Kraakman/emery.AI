@@ -16,17 +16,32 @@ export async function createOrganization(formData: FormData): Promise<Result> {
   }
 
   const name = formData.get("organizationName") as string;
+  const slug = formData.get("organizationSlug") as string;
   const mission = formData.get("organizationMission") as string | null;
 
   if (!name) {
     return { success: false, error: "Organization name is required" };
   }
 
+  if (!slug) {
+    return { success: false, error: "Organization slug is required" };
+  }
+
+  // Validate slug format server-side
+  if (!/^[a-z0-9-]+$/.test(slug)) {
+    return { success: false, error: "Slug can only contain lowercase letters, numbers, and hyphens" };
+  }
+
+  if (slug.length < 2 || slug.length > 50) {
+    return { success: false, error: "Slug must be between 2 and 50 characters" };
+  }
+
   try {
     const orgRepo = getOrganizationRepository();
-    
+
     const orgData: CreateOrganizationData = {
       name: OrganizationName.fromString(name),
+      slug: slug, // Use user-provided slug instead of auto-generating
       mission: mission || undefined
     };
 
@@ -61,7 +76,111 @@ export async function createOrganization(formData: FormData): Promise<Result> {
     return { success: true, data: serializedOrg };
   } catch (error) {
     console.error("Failed to create organization:", error);
-    return { success: false, error: "Failed to create organization." };
+
+    // Parse specific error types for better user messages
+    if (error instanceof Error) {
+      // Check for slug uniqueness error
+      if (error.message.startsWith('SLUG_TAKEN:')) {
+        const takenSlug = error.message.split(':')[1];
+        // Suggest alternative slugs
+        const suggestions = [
+          `${takenSlug}-2`,
+          `${takenSlug}-inc`,
+          `${takenSlug}-corp`
+        ].join(', ');
+
+        return {
+          success: false,
+          error: `The slug "${takenSlug}" is already taken. Try one of these: ${suggestions}`
+        };
+      }
+    }
+
+    // Generic fallback error
+    return { success: false, error: "Failed to create organization. Please try again." };
+  }
+}
+
+export async function generateOrganizationSlug(name: string): Promise<Result<{ slug: string }>> {
+  if (!name || name.trim().length === 0) {
+    return { success: false, error: "Name is required to generate slug" };
+  }
+
+  try {
+    // Generate base slug from name (lowercase, replace non-alphanumeric with hyphens)
+    const baseSlug = name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') // Remove leading/trailing hyphens
+      .replace(/--+/g, '-') // Replace consecutive hyphens with single hyphen
+      .substring(0, 50); // Enforce max length
+
+    // Validate the base slug format
+    if (!baseSlug || !/^[a-z0-9-]+$/.test(baseSlug)) {
+      return { success: false, error: "Could not generate a valid slug from the provided name" };
+    }
+
+    if (baseSlug.length < 2) {
+      return { success: false, error: "Slug must be at least 2 characters" };
+    }
+
+    const orgRepo = getOrganizationRepository();
+
+    // Check if base slug is available
+    const baseExists = await orgRepo.existsBySlug(baseSlug);
+
+    if (!baseExists) {
+      return { success: true, data: { slug: baseSlug } };
+    }
+
+    // If base slug exists, try appending numbers
+    for (let i = 2; i <= 100; i++) {
+      const candidateSlug = `${baseSlug}-${i}`.substring(0, 50);
+
+      if (!/^[a-z0-9-]+$/.test(candidateSlug)) {
+        continue;
+      }
+
+      const exists = await orgRepo.existsBySlug(candidateSlug);
+
+      if (!exists) {
+        return { success: true, data: { slug: candidateSlug } };
+      }
+    }
+
+    return {
+      success: false,
+      error: "Could not generate a unique slug after 100 attempts. Please try a different name."
+    };
+  } catch (error) {
+    console.error("Error generating organization slug:", error);
+    return { success: false, error: "Failed to generate slug" };
+  }
+}
+
+export async function checkOrganizationSlugAvailability(slug: string): Promise<Result<{ available: boolean }>> {
+  if (!slug) {
+    return { success: false, error: "Slug is required" };
+  }
+
+  // Validate slug format
+  if (!/^[a-z0-9-]+$/.test(slug)) {
+    return { success: false, error: "Slug can only contain lowercase letters, numbers, and hyphens" };
+  }
+
+  if (slug.length < 2 || slug.length > 50) {
+    return { success: false, error: "Slug must be between 2 and 50 characters" };
+  }
+
+  try {
+    const orgRepo = getOrganizationRepository();
+    const exists = await orgRepo.existsBySlug(slug);
+
+    return { success: true, data: { available: !exists } };
+  } catch (error) {
+    console.error("Error checking slug availability:", error);
+    return { success: false, error: "Failed to check slug availability" };
   }
 }
 

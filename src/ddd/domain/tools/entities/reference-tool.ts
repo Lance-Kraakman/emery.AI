@@ -18,6 +18,7 @@
 import { ToolConfig, AgentToolConfig, TableToolConfig, DocumentToolConfig, FileToolConfig, DatabaseToolConfig } from '../value-objects/tool-config'
 import { ToolMetadata, ToolCategory } from '../value-objects/tool-metadata'
 import { Reference } from '@/ddd/domain/chat/value-objects/reference'
+import type { SkillInput } from '@/ddd/domain/skills/entities/skill'
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
 import { Tool } from './tool'
 
@@ -31,16 +32,17 @@ export class ReferenceTool extends Tool {
     public readonly reference: Reference
   ) {
     super(toolConfig, toolMetadata)
-    // Ensure this is a reference category tool (documents, files, agents, tables, databases)
+    // Ensure this is a reference category tool (documents, files, agents, tables, databases, skills)
     const referenceCategories = [
       ToolCategory.DOCUMENTS,
       ToolCategory.FILES,
       ToolCategory.AGENTS,
       ToolCategory.TABLES,
-      ToolCategory.DATABASES
+      ToolCategory.DATABASES,
+      ToolCategory.SKILLS
     ];
     if (!referenceCategories.includes(toolMetadata.category)) {
-      throw new Error(`ReferenceTool must have a reference category (documents, files, agents, tables, databases), got: ${toolMetadata.category}`)
+      throw new Error(`ReferenceTool must have a reference category (documents, files, agents, tables, databases, skills), got: ${toolMetadata.category}`)
     }
 
     // Ensure the tool name matches the reference concept
@@ -167,6 +169,28 @@ export class ReferenceTool extends Tool {
   }
 
   /**
+   * Create a ReferenceTool from a Skill
+   */
+  static fromSkill(
+    skillId: string,
+    organizationId: number,
+    skillName: string,
+    description?: string,
+    inputs?: SkillInput[]
+  ): ReferenceTool {
+    const toolConfig = ToolConfig.skill(`skill-${skillId}`, Number(skillId), organizationId, undefined, '1.0', inputs)
+    const toolMetadata = ToolMetadata.skill(
+      `skill-${skillId}`,
+      skillName,
+      description || `Skill - ${skillName}`,
+      ['skill', 'ai', 'automation']
+    )
+    const reference = Reference.skill(skillId, skillName, description)
+
+    return new ReferenceTool(toolConfig, toolMetadata, reference)
+  }
+
+  /**
    * Get the data pointer from the tool config
    */
   getDataPointer(): string | number {
@@ -184,6 +208,9 @@ export class ReferenceTool extends Tool {
     }
     if (this.toolConfig.isDatabaseTool()) {
       return this.toolConfig.getDatabaseConfig()!.databaseId
+    }
+    if (this.toolConfig.isSkillTool()) {
+      return this.toolConfig.getSkillConfig()!.skillId
     }
     throw new Error('Unknown reference tool type')
   }
@@ -206,6 +233,9 @@ export class ReferenceTool extends Tool {
     }
     if (this.toolConfig.isDatabaseTool()) {
       return this.toolConfig.getDatabaseConfig()!.organizationId
+    }
+    if (this.toolConfig.isSkillTool()) {
+      return this.toolConfig.getSkillConfig()!.organizationId
     }
     throw new Error('Unknown reference tool type')
   }
@@ -234,6 +264,8 @@ export class ReferenceTool extends Tool {
         return this.toolConfig.isFileTool()
       case ReferenceCategory.DATABASE:
         return this.toolConfig.isDatabaseTool()
+      case ReferenceCategory.SKILL:
+        return this.toolConfig.isSkillTool()
       default:
         return false
     }
@@ -307,7 +339,8 @@ export function isReferenceTool(toolMetadata: ToolMetadata): boolean {
     ToolCategory.FILES,
     ToolCategory.AGENTS,
     ToolCategory.TABLES,
-    ToolCategory.DATABASES
+    ToolCategory.DATABASES,
+    ToolCategory.SKILLS
   ];
   return referenceCategories.includes(toolMetadata.category)
 }
@@ -343,6 +376,9 @@ export function toolToReferenceTool(
   } else if (toolConfig.isDatabaseTool()) {
     const config = toolConfig.getDatabaseConfig()!
     reference = Reference.database(config.databaseId, toolMetadata.displayName, toolMetadata.description)
+  } else if (toolConfig.isSkillTool()) {
+    const config = toolConfig.getSkillConfig()!
+    reference = Reference.skill(config.skillId.toString(), toolMetadata.displayName, toolMetadata.description)
   } else {
     return null
   }

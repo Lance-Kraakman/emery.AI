@@ -47,154 +47,546 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
 
   // CRUD Tools (from crud_tools.py)
-  "agent_crud": {
-    id: "agent_crud",
+  // AIDEV-NOTE: Split into individual action tools to match Pipedream pattern
+  // Naming convention: emery-{action}-{resource}
+
+  // Agent CRUD Operations
+  "emery-create-agent": {
+    id: "emery-create-agent",
     app: "emery",
-    name: "Agent Management",
-    description: "Create, read, update, delete agents",
+    name: "Create Agent",
+    description: "Create a new AI agent",
     type: "action",
     inputs: {
-      operation: {
-        type: "string",
-        description: "CRUD operation (create, read, update, delete)",
-        required: true
-      },
-      agent_data: {
+      data: {
         type: "object",
-        description: "Agent data for the operation",
-        required: false
+        description: "Agent configuration data (name, role, description, etc.)",
+        required: true
       }
     }
   },
-  "document_crud": {
-    id: "document_crud",
+  "emery-read-agent": {
+    id: "emery-read-agent",
     app: "emery",
-    name: "Document Management",
-    description: "Manage organization documents",
+    name: "Read Agent",
+    description: "Get details of a specific agent",
     type: "action",
     inputs: {
-      operation: {
+      agent_id: {
         type: "string",
-        description: "CRUD operation (create, read, update, delete)",
+        description: "Agent ID to retrieve",
         required: true
-      },
-      document_data: {
-        type: "object",
-        description: "Document data for the operation",
-        required: false
       }
     }
   },
-  "file_crud": {
-    id: "file_crud",
+  "emery-update-agent": {
+    id: "emery-update-agent",
     app: "emery",
-    name: "File Management",
-    description: "Manage organization files",
+    name: "Update Agent",
+    description: "Update an existing agent",
     type: "action",
     inputs: {
-      operation: {
+      agent_id: {
         type: "string",
-        description: "CRUD operation (create, read, update, delete)",
+        description: "Agent ID to update",
         required: true
-      },
-      file_data: {
-        type: "object",
-        description: "File data for the operation",
-        required: false
-      }
-    }
-  },
-  "table_crud": {
-    id: "table_crud",
-    app: "emery",
-    name: "Table Management",
-    description: "Comprehensive table and row management with 9 operations. TABLE: create_table (create new table), read_table (get details), update_table (modify metadata), delete_table (remove table), list_tables (list all). ROWS: create_row (add row), get_rows (query with pagination, default 100 rows), update_row (modify row), delete_row (remove row).",
-    type: "action",
-    inputs: {
-      method: {
-        type: "string",
-        description: "Operation: create_table, read_table, update_table, delete_table, list_tables, create_row, get_rows, update_row, delete_row",
-        required: true
-      },
-      table_id: {
-        type: "string",
-        description: "Table ID (required for most operations)",
-        required: false
-      },
-      row_id: {
-        type: "string",
-        description: "Row ID (required for update_row, delete_row)",
-        required: false
       },
       data: {
         type: "object",
-        description: "Data payload. For create_table: {name, databaseId, description}. For create_row/update_row: field values {field_1: value1, field_2: value2}. For update_table: {name, description}",
+        description: "Updated agent data",
+        required: true
+      }
+    }
+  },
+  "emery-delete-agent": {
+    id: "emery-delete-agent",
+    app: "emery",
+    name: "Delete Agent",
+    description: "Delete an agent",
+    type: "action",
+    inputs: {
+      agent_id: {
+        type: "string",
+        description: "Agent ID to delete",
+        required: true
+      }
+    }
+  },
+  "emery-list-agents": {
+    id: "emery-list-agents",
+    app: "emery",
+    name: "List Agents",
+    description: "List all agents in the organization",
+    type: "action",
+    inputs: {}
+  },
+
+  // Document CRUD Operations
+  "emery-create-document": {
+    id: "emery-create-document",
+    app: "emery",
+    name: "Create Document",
+    description: "Create a new document",
+    type: "action",
+    inputs: {
+      data: {
+        type: "object",
+        description: "Document data",
+        required: true
+      }
+    }
+  },
+  "emery-read-document": {
+    id: "emery-read-document",
+    app: "emery",
+    name: "Read Document",
+    description: "Get document details",
+    type: "action",
+    inputs: {
+      document_id: {
+        type: "string",
+        description: "Document ID to retrieve",
+        required: true
+      }
+    }
+  },
+  "emery-update-document": {
+    id: "emery-update-document",
+    app: "emery",
+    name: "Update Document",
+    description: "Update an existing document",
+    type: "action",
+    inputs: {
+      document_id: {
+        type: "string",
+        description: "Document ID to update",
+        required: true
+      },
+      data: {
+        type: "object",
+        description: "Updated document data",
+        required: true
+      }
+    }
+  },
+  "emery-delete-document": {
+    id: "emery-delete-document",
+    app: "emery",
+    name: "Delete Document",
+    description: "Delete a document",
+    type: "action",
+    inputs: {
+      document_id: {
+        type: "string",
+        description: "Document ID to delete",
+        required: true
+      }
+    }
+  },
+  "emery-list-documents": {
+    id: "emery-list-documents",
+    app: "emery",
+    name: "List Documents",
+    description: "List all documents in the organization",
+    type: "action",
+    inputs: {}
+  },
+
+  // File CRUD Operations
+  "emery-create-file": {
+    id: "emery-create-file",
+    app: "emery",
+    name: "Create File",
+    description: "Upload a new file",
+    type: "action",
+    inputs: {
+      data: {
+        type: "object",
+        description: "File data",
+        required: true
+      }
+    }
+  },
+  "emery-read-file": {
+    id: "emery-read-file",
+    app: "emery",
+    name: "Read File",
+    description: "Get file details",
+    type: "action",
+    inputs: {
+      file_id: {
+        type: "string",
+        description: "File ID to retrieve",
+        required: true
+      }
+    }
+  },
+  "emery-update-file": {
+    id: "emery-update-file",
+    app: "emery",
+    name: "Update File",
+    description: "Update file metadata",
+    type: "action",
+    inputs: {
+      file_id: {
+        type: "string",
+        description: "File ID to update",
+        required: true
+      },
+      data: {
+        type: "object",
+        description: "Updated file data",
+        required: true
+      }
+    }
+  },
+  "emery-delete-file": {
+    id: "emery-delete-file",
+    app: "emery",
+    name: "Delete File",
+    description: "Delete a file",
+    type: "action",
+    inputs: {
+      file_id: {
+        type: "string",
+        description: "File ID to delete",
+        required: true
+      }
+    }
+  },
+  "emery-list-files": {
+    id: "emery-list-files",
+    app: "emery",
+    name: "List Files",
+    description: "List all files in the organization",
+    type: "action",
+    inputs: {}
+  },
+
+  // Table Operations
+  "emery-create-table": {
+    id: "emery-create-table",
+    app: "emery",
+    name: "Create Table",
+    description: "Create a new table in a database",
+    type: "action",
+    inputs: {
+      name: {
+        type: "string",
+        description: "Table name",
+        required: true
+      },
+      database_id: {
+        type: "number",
+        description: "Database ID where the table will be created",
+        required: true
+      },
+      description: {
+        type: "string",
+        description: "Table description",
         required: false
+      }
+    }
+  },
+  "emery-read-table": {
+    id: "emery-read-table",
+    app: "emery",
+    name: "Read Table",
+    description: "Get table details and metadata",
+    type: "action",
+    inputs: {
+      table_id: {
+        type: "string",
+        description: "Table ID to retrieve",
+        required: true
+      }
+    }
+  },
+  "emery-update-table": {
+    id: "emery-update-table",
+    app: "emery",
+    name: "Update Table",
+    description: "Update table metadata (name, description)",
+    type: "action",
+    inputs: {
+      table_id: {
+        type: "string",
+        description: "Table ID to update",
+        required: true
+      },
+      data: {
+        type: "object",
+        description: "Updated table data (name, description)",
+        required: true
+      }
+    }
+  },
+  "emery-delete-table": {
+    id: "emery-delete-table",
+    app: "emery",
+    name: "Delete Table",
+    description: "Delete a table and all its data",
+    type: "action",
+    inputs: {
+      table_id: {
+        type: "string",
+        description: "Table ID to delete",
+        required: true
+      }
+    }
+  },
+  "emery-list-tables": {
+    id: "emery-list-tables",
+    app: "emery",
+    name: "List Tables",
+    description: "List all tables in the organization",
+    type: "action",
+    inputs: {}
+  },
+
+  // Row Operations
+  "emery-create-row": {
+    id: "emery-create-row",
+    app: "emery",
+    name: "Create Row",
+    description: "Add a new row to a table",
+    type: "action",
+    inputs: {
+      table_id: {
+        type: "string",
+        description: "Table ID where the row will be created",
+        required: true
+      },
+      data: {
+        type: "object",
+        description: "Row field values (field_name: value)",
+        required: true
+      }
+    }
+  },
+  "emery-get-rows": {
+    id: "emery-get-rows",
+    app: "emery",
+    name: "Get Rows",
+    description: "Query rows from a table with pagination and filtering",
+    type: "action",
+    inputs: {
+      table_id: {
+        type: "string",
+        description: "Table ID to query",
+        required: true
       },
       limit: {
         type: "number",
-        description: "Max rows to return for get_rows (default: 100)",
+        description: "Maximum number of rows to return (default: 100)",
         required: false
       },
       offset: {
         type: "number",
-        description: "Pagination offset for get_rows (default: 0)",
+        description: "Pagination offset (default: 0)",
         required: false
       },
       order_by: {
         type: "string",
-        description: "Field to sort by for get_rows",
+        description: "Field to sort by",
         required: false
       },
       order_direction: {
         type: "string",
-        description: "Sort direction for get_rows: ASC or DESC",
+        description: "Sort direction: ASC or DESC",
         required: false
       },
       filters: {
         type: "object",
-        description: "Filter criteria for queries",
+        description: "Filter criteria",
         required: false
       }
     }
   },
-  "team_crud": {
-    id: "team_crud",
+  "emery-update-row": {
+    id: "emery-update-row",
     app: "emery",
-    name: "Team Management",
-    description: "Manage organization teams",
+    name: "Update Row",
+    description: "Update an existing row in a table",
     type: "action",
     inputs: {
-      operation: {
+      table_id: {
         type: "string",
-        description: "CRUD operation (create, read, update, delete)",
+        description: "Table ID containing the row",
         required: true
       },
-      team_data: {
+      row_id: {
+        type: "string",
+        description: "Row ID to update",
+        required: true
+      },
+      data: {
         type: "object",
-        description: "Team data for the operation",
-        required: false
+        description: "Updated field values",
+        required: true
       }
     }
   },
-  "database_crud": {
-    id: "database_crud",
+  "emery-delete-row": {
+    id: "emery-delete-row",
     app: "emery",
-    name: "Database Management",
-    description: "Manage databases",
+    name: "Delete Row",
+    description: "Delete a row from a table",
     type: "action",
     inputs: {
-      operation: {
+      table_id: {
         type: "string",
-        description: "CRUD operation (create, read, update, delete)",
+        description: "Table ID containing the row",
         required: true
       },
-      database_data: {
-        type: "object",
-        description: "Database data for the operation",
-        required: false
+      row_id: {
+        type: "string",
+        description: "Row ID to delete",
+        required: true
       }
     }
+  },
+
+  // Team CRUD Operations
+  "emery-create-team": {
+    id: "emery-create-team",
+    app: "emery",
+    name: "Create Team",
+    description: "Create a new team",
+    type: "action",
+    inputs: {
+      data: {
+        type: "object",
+        description: "Team data",
+        required: true
+      }
+    }
+  },
+  "emery-read-team": {
+    id: "emery-read-team",
+    app: "emery",
+    name: "Read Team",
+    description: "Get team details",
+    type: "action",
+    inputs: {
+      team_id: {
+        type: "string",
+        description: "Team ID to retrieve",
+        required: true
+      }
+    }
+  },
+  "emery-update-team": {
+    id: "emery-update-team",
+    app: "emery",
+    name: "Update Team",
+    description: "Update an existing team",
+    type: "action",
+    inputs: {
+      team_id: {
+        type: "string",
+        description: "Team ID to update",
+        required: true
+      },
+      data: {
+        type: "object",
+        description: "Updated team data",
+        required: true
+      }
+    }
+  },
+  "emery-delete-team": {
+    id: "emery-delete-team",
+    app: "emery",
+    name: "Delete Team",
+    description: "Delete a team",
+    type: "action",
+    inputs: {
+      team_id: {
+        type: "string",
+        description: "Team ID to delete",
+        required: true
+      }
+    }
+  },
+  "emery-list-teams": {
+    id: "emery-list-teams",
+    app: "emery",
+    name: "List Teams",
+    description: "List all teams in the organization",
+    type: "action",
+    inputs: {}
+  },
+
+  // Database CRUD Operations
+  "emery-create-database": {
+    id: "emery-create-database",
+    app: "emery",
+    name: "Create Database",
+    description: "Create a new database",
+    type: "action",
+    inputs: {
+      data: {
+        type: "object",
+        description: "Database data (name, description)",
+        required: true
+      }
+    }
+  },
+  "emery-read-database": {
+    id: "emery-read-database",
+    app: "emery",
+    name: "Read Database",
+    description: "Get database details",
+    type: "action",
+    inputs: {
+      database_id: {
+        type: "string",
+        description: "Database ID to retrieve",
+        required: true
+      }
+    }
+  },
+  "emery-update-database": {
+    id: "emery-update-database",
+    app: "emery",
+    name: "Update Database",
+    description: "Update database metadata",
+    type: "action",
+    inputs: {
+      database_id: {
+        type: "string",
+        description: "Database ID to update",
+        required: true
+      },
+      data: {
+        type: "object",
+        description: "Updated database data",
+        required: true
+      }
+    }
+  },
+  "emery-delete-database": {
+    id: "emery-delete-database",
+    app: "emery",
+    name: "Delete Database",
+    description: "Delete a database",
+    type: "action",
+    inputs: {
+      database_id: {
+        type: "string",
+        description: "Database ID to delete",
+        required: true
+      }
+    }
+  },
+  "emery-list-databases": {
+    id: "emery-list-databases",
+    app: "emery",
+    name: "List Databases",
+    description: "List all databases in the organization",
+    type: "action",
+    inputs: {}
   },
 
   // Organizational Tools (from organizational_tools.py)

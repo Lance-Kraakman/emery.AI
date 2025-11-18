@@ -16,9 +16,12 @@ export const RESOURCES = {
   TEAMS: 'teams',
   AGENTS: 'agents',
   TASKS: 'tasks',
-  DATA: 'data',
+  DATABASE: 'database',
+  TABLE: 'table',
+  VIEW: 'view',
   SKILLS: 'skills',
-  APPS: 'apps'
+  APPS: 'apps',
+  PAGE: 'page'
 } as const;
 
 export type ActionType = typeof ACTIONS[keyof typeof ACTIONS];
@@ -59,10 +62,18 @@ export class Permission {
   static readonly TASKS_MANAGE = new Permission(RESOURCES.TASKS, ACTIONS.MANAGE);
   static readonly TASKS_CREATE = new Permission(RESOURCES.TASKS, ACTIONS.CREATE);
   static readonly TASKS_EXECUTE = new Permission(RESOURCES.TASKS, ACTIONS.EXECUTE);
-  
-  static readonly DATA_VIEW = new Permission(RESOURCES.DATA, ACTIONS.VIEW);
-  static readonly DATA_MANAGE = new Permission(RESOURCES.DATA, ACTIONS.MANAGE);
-  static readonly DATA_CREATE = new Permission(RESOURCES.DATA, ACTIONS.CREATE);
+
+  static readonly DATABASE_VIEW = new Permission(RESOURCES.DATABASE, ACTIONS.VIEW);
+  static readonly DATABASE_MANAGE = new Permission(RESOURCES.DATABASE, ACTIONS.MANAGE);
+  static readonly DATABASE_CREATE = new Permission(RESOURCES.DATABASE, ACTIONS.CREATE);
+
+  static readonly TABLE_VIEW = new Permission(RESOURCES.TABLE, ACTIONS.VIEW);
+  static readonly TABLE_MANAGE = new Permission(RESOURCES.TABLE, ACTIONS.MANAGE);
+  static readonly TABLE_CREATE = new Permission(RESOURCES.TABLE, ACTIONS.CREATE);
+
+  static readonly VIEW_VIEW = new Permission(RESOURCES.VIEW, ACTIONS.VIEW);
+  static readonly VIEW_MANAGE = new Permission(RESOURCES.VIEW, ACTIONS.MANAGE);
+  static readonly VIEW_CREATE = new Permission(RESOURCES.VIEW, ACTIONS.CREATE);
 
   static readonly SKILLS_VIEW = new Permission(RESOURCES.SKILLS, ACTIONS.VIEW);
   static readonly SKILLS_MANAGE = new Permission(RESOURCES.SKILLS, ACTIONS.MANAGE);
@@ -73,6 +84,11 @@ export class Permission {
   static readonly APPS_MANAGE = new Permission(RESOURCES.APPS, ACTIONS.MANAGE);
   static readonly APPS_CREATE = new Permission(RESOURCES.APPS, ACTIONS.CREATE);
   static readonly APPS_PUBLISH = new Permission(RESOURCES.APPS, ACTIONS.PUBLISH);
+
+  static readonly PAGE_VIEW = new Permission(RESOURCES.PAGE, ACTIONS.VIEW);
+  static readonly PAGE_MANAGE = new Permission(RESOURCES.PAGE, ACTIONS.MANAGE);
+  static readonly PAGE_CREATE = new Permission(RESOURCES.PAGE, ACTIONS.CREATE);
+  static readonly PAGE_PUBLISH = new Permission(RESOURCES.PAGE, ACTIONS.PUBLISH);
 
   // Helper method to get all permissions for a resource
   static getAllForResource(resource: ResourceType): Permission[] {

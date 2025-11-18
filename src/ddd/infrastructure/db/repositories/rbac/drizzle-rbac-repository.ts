@@ -221,7 +221,10 @@ export class DrizzleRBACRepository implements IRBACRepository {
           name: data.name,
           description: data.description,
           organizationId: data.organizationId.value,
-          isSystem: false
+          isSystem: false,
+          type: data.type || 'custom',
+          ownerId: data.ownerId?.value,
+          teamId: data.teamId
         })
         .returning();
 
@@ -323,6 +326,48 @@ export class DrizzleRBACRepository implements IRBACRepository {
       .groupBy(roles.id);
 
     return result.map((r: { role: RoleRow; permissions: string[] }) => this.mapToRoleEntity(r.role, r.permissions || []));
+  }
+
+  async findPersonalRole(userId: UserId, organizationId: OrganizationId): Promise<Role | null> {
+    const result = await this.db
+      .select({
+        role: roles,
+        permissions: sql<string[]>`array_agg(${permissions.resource} || ':' || ${permissions.action})`
+      })
+      .from(roles)
+      .leftJoin(rolePermissions, eq(roles.id, rolePermissions.roleId))
+      .leftJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+      .where(and(
+        eq(roles.type, 'personal'),
+        eq(roles.ownerId, userId.value),
+        eq(roles.organizationId, organizationId.value)
+      ))
+      .groupBy(roles.id)
+      .limit(1);
+
+    if (!result[0]) return null;
+    return this.mapToRoleEntity(result[0].role, result[0].permissions || []);
+  }
+
+  async findTeamRole(teamId: number, organizationId: OrganizationId): Promise<Role | null> {
+    const result = await this.db
+      .select({
+        role: roles,
+        permissions: sql<string[]>`array_agg(${permissions.resource} || ':' || ${permissions.action})`
+      })
+      .from(roles)
+      .leftJoin(rolePermissions, eq(roles.id, rolePermissions.roleId))
+      .leftJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+      .where(and(
+        eq(roles.type, 'team'),
+        eq(roles.teamId, teamId),
+        eq(roles.organizationId, organizationId.value)
+      ))
+      .groupBy(roles.id)
+      .limit(1);
+
+    if (!result[0]) return null;
+    return this.mapToRoleEntity(result[0].role, result[0].permissions || []);
   }
 
   // Role-permission assignment
@@ -546,6 +591,9 @@ export class DrizzleRBACRepository implements IRBACRepository {
       description: roleData.description || undefined,
       organizationId: roleData.organizationId ? OrganizationId.fromNumber(roleData.organizationId) : undefined,
       isSystem: roleData.isSystem ?? false,
+      type: (roleData.type as 'system' | 'personal' | 'team' | 'custom') || 'custom',
+      ownerId: roleData.ownerId ? UserId.fromString(roleData.ownerId) : undefined,
+      teamId: roleData.teamId || undefined,
       permissions: rolePermissions,
       createdAt: roleData.createdAt || new Date()
     };

@@ -132,6 +132,24 @@ export class Reference {
   }
 
   /**
+   * Create a skill reference
+   */
+  static skill(
+    id: string,
+    skillName: string,
+    description?: string
+  ): Reference {
+    const slug = skillName.toLowerCase().replace(/\s+/g, '-')
+    return new Reference(
+      id,
+      `@skill:${slug}`,
+      skillName,
+      description || `Skill - ${skillName}`,
+      ReferenceCategory.SKILL
+    )
+  }
+
+  /**
    * Check if this reference matches a search query
    */
   matchesSearch(query: string): boolean {
@@ -211,7 +229,7 @@ export interface SimpleReference {
   insertText: string;
   displayName: string;
   description: string;
-  category: 'doc' | 'file' | 'agent' | 'table' | 'database';
+  category: 'doc' | 'file' | 'agent' | 'table' | 'database' | 'skill';
 }
 
 /**

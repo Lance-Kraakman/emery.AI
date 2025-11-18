@@ -29,7 +29,7 @@ export async function getFileMentionsForTable(
   limit: number = 10
 ): Promise<FileMention[]> {
   try {
-    await requirePermission("data:manage");
+    await requirePermission("table:manage");
     
     if (!tableId) {
       throw new Error("tableId is required");
@@ -99,7 +99,7 @@ export async function getFileMentionsForTable(
  */
 export async function getAllFileMentions(limit: number = 50): Promise<FileMention[]> {
   try {
-    await requirePermission("data:manage");
+    await requirePermission("table:manage");
     
     // This is a placeholder - in a real implementation, you'd want to:
     // 1. Get all tables for the organization

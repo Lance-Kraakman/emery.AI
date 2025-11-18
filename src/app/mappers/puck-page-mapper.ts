@@ -3,6 +3,7 @@
 
 import type { PuckPage } from '@/ddd/domain/puck/entities/puck-page';
 import type { PuckDataStructure } from '@/ddd/domain/puck/value-objects/puck-data';
+import type { ThemeConfigProps } from '@/ddd/domain/puck/value-objects/theme-config';
 
 export interface PageDTO {
   id: number;
@@ -12,9 +13,11 @@ export interface PageDTO {
   description?: string;
   order: number;
   templateData: PuckDataStructure;
-  themeConfig?: any;
-  isPublished: boolean;
-  createdBy: string;
+  themeConfig?: ThemeConfigProps | null;
+  isPublic: boolean;
+  requiresAuth: boolean;
+  allowedRoles?: string[];
+  ownerId: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -33,8 +36,10 @@ export class PuckPageMapper {
       order: page.order.value,
       templateData: page.templateData.data,
       themeConfig: page.themeConfig ? page.themeConfig.toJSON() : undefined,
-      isPublished: page.isPublished,
-      createdBy: page.createdBy.value,
+      isPublic: page.isPublic,
+      requiresAuth: page.requiresAuth,
+      allowedRoles: page.allowedRoles,
+      ownerId: page.ownerId.value,
       createdAt: page.createdAt.toISOString(),
       updatedAt: page.updatedAt.toISOString()
     };

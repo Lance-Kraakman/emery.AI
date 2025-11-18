@@ -486,7 +486,7 @@ def write_with_schema_evolution(
         mode: Write mode ('append' or 'overwrite')
         storage_options: S3 storage options
     """
-    logger.info(f"[write_with_schema_evolution] Writing {len(data)} rows with mode={mode}, schema_evolution=enabled")
+    logger.info("[write_with_schema_evolution] START")
 
     # Normalize strings to large_string before writing
     normalized_data = normalize_arrow_table_to_large_string(data)
@@ -500,7 +500,7 @@ def write_with_schema_evolution(
         storage_options=storage_options
     )
 
-    logger.info(f"[write_with_schema_evolution] Successfully wrote {len(data)} rows to {s3_uri}")
+    logger.info("[write_with_schema_evolution] END")
 
 
 def write_with_merge_operation(

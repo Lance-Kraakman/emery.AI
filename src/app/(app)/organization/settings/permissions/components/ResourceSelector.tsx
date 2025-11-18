@@ -6,13 +6,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Users, Play, Database, Loader2 } from "lucide-react";
+import { Search, Users, Play, Database, Loader2, Layout, Zap, Table, Eye } from "lucide-react";
 import { getAgents } from "@/app/actions/agents";
 import { getTeams } from "@/app/actions/teams";
 import { getOrganizationMembers } from "@/app/actions/user-organizations";
+import { getApps } from "@/app/actions/puck-apps";
+import { getSkillsByOrganization } from "@/app/actions/skills";
+import { getDatabases } from "@/app/actions/databases";
+import { getViewsForOrganization } from "@/app/actions/views";
+import { getTables } from "@/app/actions/tables";
 
 interface Resource {
-  id: number;
+  id: number | string; // number for entities with numeric IDs, string for UUIDs (users)
   name: string;
   description?: string;
   ownerId?: string;
@@ -21,9 +26,9 @@ interface Resource {
 }
 
 interface ResourceSelectorProps {
-  resourceType: 'agent' | 'team' | 'user';
-  selectedResourceIds: number[];
-  onSelectionChange: (selectedIds: number[]) => void;
+  resourceType: 'agent' | 'team' | 'user' | 'app' | 'skill' | 'database' | 'view' | 'table';
+  selectedResourceIds: (number | string)[];
+  onSelectionChange: (selectedIds: (number | string)[]) => void;
   disabled?: boolean;
   className?: string;
 }
@@ -71,9 +76,53 @@ export function ResourceSelector({
           case 'user':
             const members = await getOrganizationMembers();
             fetchedResources = members.map(member => ({
-              id: Number(member.userId.value), // Convert UserId to number
+              id: member.userId, // Already a string UUID after DTO mapping
               name: member.name || 'Unknown User',
               description: member.systemRole || 'Member'
+            }));
+            break;
+          case 'app':
+            const appsResult = await getApps();
+            if (appsResult.success && appsResult.data) {
+              fetchedResources = appsResult.data.map(app => ({
+                id: app.id,
+                name: app.name,
+                description: app.description || 'Application'
+              }));
+            }
+            break;
+          case 'skill':
+            const skillsResult = await getSkillsByOrganization(0); // TODO: Get current org ID
+            if (skillsResult.success && skillsResult.data) {
+              fetchedResources = skillsResult.data.map(skill => ({
+                id: skill.id,
+                name: skill.name,
+                description: skill.description || 'Skill'
+              }));
+            }
+            break;
+          case 'database':
+            const databases = await getDatabases();
+            fetchedResources = databases.map(db => ({
+              id: db.id,
+              name: db.name,
+              description: db.metadata?.description || 'Database'
+            }));
+            break;
+          case 'view':
+            const views = await getViewsForOrganization();
+            fetchedResources = views.map(view => ({
+              id: view.id,
+              name: view.name,
+              description: view.tableName ? `Table: ${view.tableName}` : 'View'
+            }));
+            break;
+          case 'table':
+            const tables = await getTables();
+            fetchedResources = tables.map(table => ({
+              id: table.id,
+              name: table.name,
+              description: table.description || 'Table'
             }));
             break;
         }
@@ -97,7 +146,7 @@ export function ResourceSelector({
     (resource.ownerName && resource.ownerName.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const handleResourceToggle = (resourceId: number) => {
+  const handleResourceToggle = (resourceId: number | string) => {
     if (disabled) return;
 
     if (selectedResourceIds.includes(resourceId)) {
@@ -125,6 +174,16 @@ export function ResourceSelector({
         return <Users className="w-4 h-4" />;
       case 'user':
         return <Users className="w-4 h-4" />;
+      case 'app':
+        return <Layout className="w-4 h-4" />;
+      case 'skill':
+        return <Zap className="w-4 h-4" />;
+      case 'database':
+        return <Database className="w-4 h-4" />;
+      case 'view':
+        return <Eye className="w-4 h-4" />;
+      case 'table':
+        return <Table className="w-4 h-4" />;
       default:
         return <Database className="w-4 h-4" />;
     }
@@ -138,6 +197,16 @@ export function ResourceSelector({
         return 'Teams';
       case 'user':
         return 'Users';
+      case 'app':
+        return 'Apps';
+      case 'skill':
+        return 'Skills';
+      case 'database':
+        return 'Databases';
+      case 'view':
+        return 'Views';
+      case 'table':
+        return 'Tables';
       default:
         return 'Resources';
     }

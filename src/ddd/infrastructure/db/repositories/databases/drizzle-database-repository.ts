@@ -25,12 +25,12 @@ export class DrizzleDatabaseRepository
         slug: data.slug,
         metadata: data.metadata,
         organizationId: data.organizationId,
-        createdBy: data.createdBy,
+        ownerId: data.ownerId,
         createdAt: new Date(),
         updatedAt: new Date()
       })
       .returning();
-    
+
     return this.fromPersistence(record);
   }
   
@@ -117,12 +117,12 @@ export class DrizzleDatabaseRepository
           slug: data.slug,
           metadata: data.metadata,
           organizationId: data.organizationId,
-          createdBy: data.createdBy,
+          ownerId: data.ownerId,
           createdAt: new Date(),
           updatedAt: new Date()
         })
         .returning();
-      
+
       return this.fromPersistence(record);
     }
   }
@@ -143,7 +143,7 @@ export class DrizzleDatabaseRepository
       slug: record.slug,
       metadata: record.metadata as Record<string, any> | null,
       organizationId: record.organizationId,
-      createdBy: record.createdBy,
+      ownerId: record.ownerId,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     });

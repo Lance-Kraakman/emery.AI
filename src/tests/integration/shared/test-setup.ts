@@ -292,6 +292,7 @@ export async function createTestAgent(
  */
 export async function createTestTeam(
   name: string,
+  ownerId: UserId,
   organizationId: OrganizationId
 ): Promise<{ id: TeamId; name: string; organizationId: OrganizationId }> {
   const teamApplicationService = getTeamApplicationService();
@@ -303,6 +304,7 @@ export async function createTestTeam(
   const command = {
     name: uniqueName,
     organizationId: organizationId.value,
+    ownerId: ownerId.value,
     description: 'Test team for permission testing'
   };
   

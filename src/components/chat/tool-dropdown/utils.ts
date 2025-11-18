@@ -1,4 +1,4 @@
-import { FileText, File, Bot, Database, Table } from 'lucide-react';
+import { FileText, File, Bot, Database, Table, Sparkles } from 'lucide-react';
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
@@ -12,6 +12,7 @@ export const categoryIcons = {
   [ReferenceCategory.AGENT]: Bot,
   [ReferenceCategory.TABLE]: Table,
   [ReferenceCategory.DATABASE]: Database,
+  [ReferenceCategory.SKILL]: Sparkles,
 } as const;
 
 /**
@@ -23,6 +24,7 @@ export const categoryColors = {
   [ReferenceCategory.AGENT]: 'text-purple-600 bg-purple-50',
   [ReferenceCategory.TABLE]: 'text-orange-600 bg-orange-50',
   [ReferenceCategory.DATABASE]: 'text-gray-600 bg-gray-50',
+  [ReferenceCategory.SKILL]: 'text-pink-600 bg-pink-50',
 } as const;
 
 /**
@@ -48,6 +50,7 @@ export function getUnifiedCategory(referenceCategory: ReferenceCategory): ToolCa
     case ReferenceCategory.AGENT: return ToolCategory.AGENTS;
     case ReferenceCategory.TABLE: return ToolCategory.TABLES;
     case ReferenceCategory.DATABASE: return ToolCategory.DATABASES;
+    case ReferenceCategory.SKILL: return ToolCategory.SKILLS;
     default: return ToolCategory.BASE;
   }
 }
@@ -67,6 +70,7 @@ export function getToolInsertText(tool: ToolDTO): string {
       case 'agents': return `@agent:${tool.name}`;
       case 'tables': return `@table:${tool.name}`;
       case 'databases': return `@database:${tool.name}`;
+      case 'skills': return `@skill:${tool.name}`;
       default: return `@tool:${tool.name}`;
     }
   }

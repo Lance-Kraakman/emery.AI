@@ -2,21 +2,25 @@
 
 import React, { useEffect, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Puck, Data, usePuck, resolveAllData } from "@measured/puck";
+import { Puck, Data, usePuck, resolveAllData, Button as PuckButton } from "@measured/puck";
 import "@measured/puck/puck.css";
 import "@/styles/puck-theme.css";
 import { config } from "@/components/puck/config";
 import { getPage, updatePage, updatePageContent, publishPage, unpublishPage } from "@/app/actions/puck-pages";
 import { getApp } from "@/app/actions/puck-apps";
+import { getCurrentOrganization } from "@/app/actions/user-organizations";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
+import type { OrganizationDTO } from "@/app/mappers/organization-mapper";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Globe, Eye } from "lucide-react";
+import { ArrowLeft, Globe, Eye, ExternalLink, Copy, Check } from "lucide-react";
 import { Loading } from "@/components/ui/loading";
 import { toast } from "sonner";
 import { ThemeProvider } from "@/components/puck/theme-context";
 import { PuckEditorThemeProvider, usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 import { createPuckUIOverrides } from "@/components/puck/overrides";
+import { PuckSession } from "@/lib/puck/session-storage";
+import { PublicUrlDisplay } from "./components/PublicUrlDisplay";
 
 // Sidebar state persistence component
 // AIDEV-NOTE: This component handles saving/restoring Puck's sidebar state to sessionStorage
@@ -29,18 +33,18 @@ function SidebarStatePersistence({ pageId }: { pageId: number }) {
   useEffect(() => {
     if (isInitialized) return;
 
-    const savedLeftState = sessionStorage.getItem(`puck-sidebar-left-${pageId}`);
-    const savedRightState = sessionStorage.getItem(`puck-sidebar-right-${pageId}`);
+    const savedLeftState = PuckSession.getSidebarState(pageId, 'left');
+    const savedRightState = PuckSession.getSidebarState(pageId, 'right');
 
     if (savedLeftState !== null || savedRightState !== null) {
-      const uiUpdate: any = {};
+      const uiUpdate: { leftSideBarVisible?: boolean; rightSideBarVisible?: boolean } = {};
 
       if (savedLeftState !== null) {
-        uiUpdate.leftSideBarVisible = savedLeftState === 'true';
+        uiUpdate.leftSideBarVisible = savedLeftState;
       }
 
       if (savedRightState !== null) {
-        uiUpdate.rightSideBarVisible = savedRightState === 'true';
+        uiUpdate.rightSideBarVisible = savedRightState;
       }
 
       dispatch({ type: 'setUi', ui: uiUpdate });
@@ -57,11 +61,11 @@ function SidebarStatePersistence({ pageId }: { pageId: number }) {
     const rightVisible = appState.ui.rightSideBarVisible;
 
     if (leftVisible !== undefined) {
-      sessionStorage.setItem(`puck-sidebar-left-${pageId}`, String(leftVisible));
+      PuckSession.setSidebarState(pageId, 'left', leftVisible);
     }
 
     if (rightVisible !== undefined) {
-      sessionStorage.setItem(`puck-sidebar-right-${pageId}`, String(rightVisible));
+      PuckSession.setSidebarState(pageId, 'right', rightVisible);
     }
   }, [appState.ui.leftSideBarVisible, appState.ui.rightSideBarVisible, pageId, isInitialized]);
 
@@ -74,6 +78,8 @@ function CustomHeaderActions({
   pageId,
   appId,
   page,
+  app,
+  organization,
   onPublish,
   loadedFromSessionStorage,
   setLoadedFromSessionStorage,
@@ -82,6 +88,8 @@ function CustomHeaderActions({
   pageId: number;
   appId: number;
   page: PageDTO;
+  app: AppDTO;
+  organization: OrganizationDTO | null;
   onPublish: () => void;
   loadedFromSessionStorage: boolean;
   setLoadedFromSessionStorage: (value: boolean) => void;
@@ -89,18 +97,25 @@ function CustomHeaderActions({
   const router = useRouter();
   const { appState, history } = usePuck();
   const themeContext = usePuckEditorTheme();
+  const [copiedUrl, setCopiedUrl] = useState(false);
 
   // Detect unsaved changes: Puck history OR sessionStorage OR theme changes
   const hasUnsavedChanges = history.hasPast || loadedFromSessionStorage || themeContext.hasUnsavedChanges;
+
+  // Build public URL
+  const publicUrl = organization?.slug && app.slug && page.slug
+    ? `/public/${organization.slug}/${app.slug}/${page.slug}`
+    : null;
+  const fullPublicUrl = typeof window !== 'undefined' && publicUrl
+    ? `${window.location.origin}${publicUrl}`
+    : null;
 
   const handleSave = async () => {
     try {
       // Save theme first if needed
       if (themeContext.hasUnsavedChanges) {
-        const sessionKey = `page-theme-${pageId}`;
-        const savedTheme = sessionStorage.getItem(sessionKey);
-        if (savedTheme) {
-          const themeData = JSON.parse(savedTheme);
+        const themeData = PuckSession.getTheme(pageId);
+        if (themeData) {
           await themeContext.saveTheme(themeData);
         }
       }
@@ -119,7 +134,7 @@ function CustomHeaderActions({
       toast.success("Page saved successfully!");
 
       // Clean up sessionStorage
-      sessionStorage.removeItem(`puck-data-${pageId}`);
+      PuckSession.clearData(pageId);
       setLoadedFromSessionStorage(false);
     } catch (err) {
       console.error('Error saving page:', err);
@@ -132,39 +147,81 @@ function CustomHeaderActions({
     const currentData = appState.data;
 
     // Save current data to sessionStorage so preview can access unsaved changes
-    sessionStorage.setItem(`puck-data-${pageId}`, JSON.stringify(currentData));
+    PuckSession.setData(pageId, currentData);
 
     // Navigate to preview route
     router.push(`/apps/${appId}/pages/${pageId}/preview`);
   };
 
+  const handleCopyUrl = async () => {
+    if (fullPublicUrl) {
+      await navigator.clipboard.writeText(fullPublicUrl);
+      setCopiedUrl(true);
+      toast.success("URL copied to clipboard!");
+      setTimeout(() => setCopiedUrl(false), 2000);
+    }
+  };
+
+  const handleOpenPublicPage = () => {
+    if (publicUrl) {
+      window.open(publicUrl, '_blank');
+    }
+  };
+
   return (
-    <div className="flex items-center gap-2 w-full">
+    <div className="flex items-center gap-2 w-full min-w-0">
+      {/* Public URL display (left side) */}
+      {page.isPublic && publicUrl && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-md border border-border">
+          <span className="text-xs text-muted-foreground font-mono truncate max-w-[150px] sm:max-w-[300px]" title={fullPublicUrl || undefined}>
+            {publicUrl}
+          </span>
+          <button
+            onClick={handleCopyUrl}
+            className="p-1 hover:bg-background rounded transition-colors"
+            title="Copy URL"
+          >
+            {copiedUrl ? (
+              <Check size={14} className="text-green-600" />
+            ) : (
+              <Copy size={14} className="text-muted-foreground" />
+            )}
+          </button>
+          <button
+            onClick={handleOpenPublicPage}
+            className="p-1 hover:bg-background rounded transition-colors"
+            title="Open in new tab"
+          >
+            <ExternalLink size={14} className="text-muted-foreground" />
+          </button>
+        </div>
+      )}
+
       {/* Spacer to push actions to the right */}
       <div className="flex-1" />
 
-      {/* Custom Action Buttons */}
-      <div className="flex gap-2 items-center">
-        <Button
+      {/* Custom Action Buttons using Puck's Button component */}
+      <div className="flex gap-2 items-center flex-shrink-0">
+        <PuckButton
           onClick={handleSave}
           disabled={!hasUnsavedChanges}
         >
           {hasUnsavedChanges ? "Save Changes" : "Saved"}
-        </Button>
+        </PuckButton>
 
-        <Button
+        <PuckButton
           onClick={handlePreview}
         >
           <Eye size={16} className="mr-1" />
           Preview
-        </Button>
+        </PuckButton>
 
-        <Button
+        <PuckButton
           onClick={onPublish}
         >
           <Globe size={16} className="mr-1" />
-          {page.isPublished ? "Unpublish" : "Publish"}
-        </Button>
+          {page.isPublic ? "Make Private" : "Make Public"}
+        </PuckButton>
       </div>
     </div>
   );
@@ -178,6 +235,7 @@ export default function PageEditPage() {
 
   const [page, setPage] = useState<PageDTO | null>(null);
   const [app, setApp] = useState<AppDTO | null>(null);
+  const [organization, setOrganization] = useState<OrganizationDTO | null>(null);
   const [initialData, setInitialData] = useState<Data>({ content: [], root: {}, zones: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -188,33 +246,40 @@ export default function PageEditPage() {
       try {
         setLoading(true);
 
-        // Fetch app and page
-        const [loadedApp, loadedPage] = await Promise.all([
+        // Fetch app, page, and organization
+        const [appResult, pageResult, orgResult] = await Promise.all([
           getApp(appId),
-          getPage(pageId)
+          getPage(pageId),
+          getCurrentOrganization()
         ]);
 
-        setApp(loadedApp);
-        setPage(loadedPage);
+        if (!appResult.success || !appResult.data || !pageResult.success || !pageResult.data) {
+          toast.error("Failed to load app or page");
+          setLoading(false);
+          return;
+        }
+
+        setApp(appResult.data);
+        setPage(pageResult.data);
+        setOrganization(orgResult);
 
         // Check for unsaved changes in sessionStorage
-        const savedData = sessionStorage.getItem(`puck-data-${pageId}`);
+        const savedData = PuckSession.getData(pageId);
         if (savedData) {
           try {
-            const rawData = JSON.parse(savedData);
-            const resolvedData = await resolveAllData(rawData, config, {});
+            const resolvedData = await resolveAllData(savedData, config, {});
             setInitialData(resolvedData);
             setLoadedFromSessionStorage(true);
             setLoading(false);
             return;
           } catch (err) {
             console.error('Error parsing saved data:', err);
-            sessionStorage.removeItem(`puck-data-${pageId}`);
+            PuckSession.clearData(pageId);
           }
         }
 
         // Load from database
-        const rawData = loadedPage.templateData || { content: [], root: {}, zones: {} };
+        const rawData = pageResult.data.templateData || { content: [], root: {}, zones: {} };
         const resolvedData = await resolveAllData(rawData, config, {});
         setInitialData(resolvedData);
       } catch (err) {
@@ -234,22 +299,22 @@ export default function PageEditPage() {
     if (!page) return;
 
     try {
-      const result = page.isPublished
+      const result = page.isPublic
         ? await unpublishPage(pageId, `/apps/${appId}/pages/${pageId}/edit`)
         : await publishPage(pageId, `/apps/${appId}/pages/${pageId}/edit`);
 
       if (!result.success) {
-        toast.error(result.error || `Failed to ${page.isPublished ? 'unpublish' : 'publish'} page`);
+        toast.error(result.error || `Failed to make page ${page.isPublic ? 'private' : 'public'}`);
         return;
       }
 
-      toast.success(`Page ${page.isPublished ? 'unpublished' : 'published'} successfully!`);
+      toast.success(`Page is now ${page.isPublic ? 'private' : 'public'}!`);
 
       // Update local state
-      setPage(prev => prev ? { ...prev, isPublished: !prev.isPublished } : null);
+      setPage(prev => prev ? { ...prev, isPublic: !prev.isPublic } : null);
     } catch (err) {
       console.error('Error publishing page:', err);
-      toast.error(`Failed to ${page.isPublished ? 'unpublish' : 'publish'} page`);
+      toast.error(`Failed to make page ${page.isPublic ? 'private' : 'public'}`);
     }
   };
 
@@ -271,6 +336,31 @@ export default function PageEditPage() {
     } catch (error) {
       console.error('Error updating page settings:', error);
       toast.error("Failed to update page settings");
+    }
+  };
+
+  const handleSaveAccessSettings = async (data: { requiresAuth: boolean; allowedRoles: string[] }) => {
+    try {
+      const result = await updatePage(
+        { id: pageId, requiresAuth: data.requiresAuth, allowedRoles: data.allowedRoles },
+        `/apps/${appId}/pages/${pageId}/edit`
+      );
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update access settings");
+        return;
+      }
+
+      toast.success("Access settings updated successfully");
+      // Update local state to reflect changes
+      setPage(prev => prev ? {
+        ...prev,
+        requiresAuth: data.requiresAuth,
+        allowedRoles: data.allowedRoles
+      } : null);
+    } catch (error) {
+      console.error('Error updating access settings:', error);
+      toast.error("Failed to update access settings");
     }
   };
 
@@ -302,7 +392,10 @@ export default function PageEditPage() {
           <Puck
             config={config}
             data={initialData}
-            headerTitle={page.slug}
+            ui={{
+              leftSideBarWidth: 180,
+              rightSideBarWidth: 180,
+            }}
             viewports={[
               { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
               { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },
@@ -317,9 +410,16 @@ export default function PageEditPage() {
                 pageId: pageId,
                 pageName: page.name,
                 pageSlug: page.slug,
+                pageIsPublic: page.isPublic,
+                pageRequiresAuth: page.requiresAuth,
+                pageAllowedRoles: page.allowedRoles || [],
                 onSavePageSettings: handleSavePageSettings,
+                onSaveAccessSettings: handleSaveAccessSettings,
                 themeMode: "page",
               }),
+              header: ({ children, actions }) => (
+                <div className="bg-transparent">{children}</div>
+              ),
               puck: ({ children }) => (
                 <div className="puck-themed-wrapper">
                   <SidebarStatePersistence pageId={pageId} />
@@ -331,6 +431,8 @@ export default function PageEditPage() {
                   pageId={pageId}
                   appId={appId}
                   page={page}
+                  app={app}
+                  organization={organization}
                   onPublish={handlePublish}
                   loadedFromSessionStorage={loadedFromSessionStorage}
                   setLoadedFromSessionStorage={setLoadedFromSessionStorage}

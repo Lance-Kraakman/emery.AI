@@ -20,6 +20,9 @@ export interface User {
   teams?: string[] | null;
   apiKey?: ApiKey | null;
   createdAt?: Date | null;
+  // Published app authentication fields
+  isAppOnlyUser?: boolean;
+  allowedApps?: number[];
 }
 
 export interface CreateUserData {
@@ -34,6 +37,9 @@ export interface CreateUserData {
   jobTitle?: string;
   teams?: string[];
   apiKey?: ApiKey;                     // Usually generated, not provided
+  // Published app authentication fields
+  isAppOnlyUser?: boolean;
+  allowedApps?: number[];
 }
 
 export interface UpdateUserData {
@@ -47,6 +53,9 @@ export interface UpdateUserData {
   jobTitle?: string;
   teams?: string[];
   // Note: apiKey updates handled through separate methods for security
+  // Published app authentication fields
+  isAppOnlyUser?: boolean;
+  allowedApps?: number[];
 }
 
 export interface UserOrganization {

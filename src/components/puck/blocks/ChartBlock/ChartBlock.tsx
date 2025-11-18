@@ -29,6 +29,12 @@ import {
   Cell,
 } from "recharts";
 
+/**
+ * Chart data values can be strings, numbers, booleans, or null
+ * (representing database column values)
+ */
+type ChartDataValue = string | number | boolean | null | undefined;
+
 export interface ChartBlockProps {
   // Configuration props (set in Puck editor)
   viewId?: number;
@@ -40,9 +46,9 @@ export interface ChartBlockProps {
   // Resolved data (injected by resolveData hook)
   _viewName?: string;
   _dataPoints?: Array<{
-    x: any;
-    y: any;
-    [key: string]: any;
+    x: ChartDataValue;
+    y: ChartDataValue;
+    [key: string]: ChartDataValue;
   }>;
   _xAxisLabel?: string;
   _yAxisLabels?: string[];

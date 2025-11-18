@@ -124,16 +124,46 @@
   --sidebar-backdrop: blur(12px);
 }
 
-/* Sidebar transparency - no blur */
+/* Sidebar transparency with frosted glass blur */
 .puck-themed-wrapper [class*="Sidebar"] {
-  /* backdrop-filter: var(--sidebar-backdrop); */
-  /* -webkit-backdrop-filter: var(--sidebar-backdrop); */
+  background: transparent !important;
+  backdrop-filter: var(--sidebar-backdrop);
+  -webkit-backdrop-filter: var(--sidebar-backdrop);
 }
 
-/* Header transparency - no blur */
+/* Header transparency with frosted glass blur */
 .puck-themed-wrapper [class*="Header"] {
-  /* backdrop-filter: var(--sidebar-backdrop); */
-  /* -webkit-backdrop-filter: var(--sidebar-backdrop); */
+  background: transparent !important;
+  backdrop-filter: var(--sidebar-backdrop);
+  -webkit-backdrop-filter: var(--sidebar-backdrop);
+}
+
+/* Left sidebar - component list drawer - must be transparent */
+.puck-themed-wrapper [class*="ComponentList"],
+.puck-themed-wrapper [class*="Drawer-left"] {
+  background: transparent !important;
+  backdrop-filter: var(--sidebar-backdrop);
+  -webkit-backdrop-filter: var(--sidebar-backdrop);
+}
+
+/* Header actions - our custom header */
+.puck-themed-wrapper [class*="HeaderActions"],
+.puck-themed-wrapper header {
+  background: transparent !important;
+}
+
+/* Target all header-related Puck elements for transparent background */
+.puck-themed-wrapper [class*="Header-header"],
+.puck-themed-wrapper [class*="Header-"] {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Component list sidebar - transparent background */
+.puck-themed-wrapper [class*="componentList-content"],
+.puck-themed-wrapper [class*="ComponentList-"] {
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 /* Component drawer items - semi-transparent with shadows */
@@ -241,9 +271,10 @@
 */
 
 /* Modal/Dialog overlays and containers */
+/* Apply solid backgrounds only to popup/modal drawers, not the permanent left sidebar */
 .puck-themed-wrapper [class*="Modal"],
 .puck-themed-wrapper [class*="Dialog"],
-.puck-themed-wrapper [class*="Drawer"],
+.puck-themed-wrapper [class*="Drawer"]:not([class*="Drawer-left"]):not([class*="ComponentList"]),
 .puck-themed-wrapper [class*="Portal"] {
   background: hsl(var(--background)) !important;
   backdrop-filter: none !important;

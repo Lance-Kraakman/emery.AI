@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Team domain entity with DDD Value Objects
 // Represents a team of agents with shared purpose and goals
 
-import { TeamId, OrganizationId, AgentId } from '@/ddd/domain/shared/value-objects';
+import { TeamId, OrganizationId, AgentId, UserId } from '@/ddd/domain/shared/value-objects';
 
 export interface TeamConfig {
   name: string;
@@ -12,6 +12,7 @@ export interface TeamConfig {
   agentIds?: AgentId[] | null;
   databaseId?: string | null;
   organizationId: OrganizationId;
+  ownerId: UserId;
 }
 
 export class Team {
@@ -25,6 +26,7 @@ export class Team {
     public readonly agentIds: AgentId[] | null,
     public readonly databaseId: string | null,
     public readonly organizationId: OrganizationId,
+    public readonly ownerId: UserId,
     public readonly createdAt?: Date | null
   ) {}
 
@@ -40,6 +42,7 @@ export class Team {
     agentIds?: string[] | null; // Will convert from string[] to AgentId[]
     databaseId?: string | null;
     organizationId: number;
+    ownerId: string;
     createdAt?: Date | null;
   }): Team {
     return new Team(
@@ -52,6 +55,7 @@ export class Team {
       data.agentIds ? data.agentIds.map(id => AgentId.fromNumber(parseInt(id))) : null,
       data.databaseId || null,
       OrganizationId.fromNumber(data.organizationId),
+      UserId.fromString(data.ownerId),
       data.createdAt || null
     );
   }

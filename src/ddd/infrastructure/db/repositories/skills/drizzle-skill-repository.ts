@@ -80,6 +80,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
         outputs: props.outputs || [],
         instructions: props.instructions,
         tools: props.tools || [],
+        content: props.content || null,
         createdAt: now,
         updatedAt: now
       })
@@ -108,6 +109,9 @@ export class DrizzleSkillRepository implements ISkillRepository {
     }
     if (updates.tools !== undefined) {
       updateData.tools = updates.tools;
+    }
+    if (updates.content !== undefined) {
+      updateData.content = updates.content;
     }
 
     const result = await this.db
@@ -182,6 +186,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
       outputs: record.outputs || [],
       instructions: record.instructions || '',
       tools: record.tools || [],
+      content: record.content || undefined,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     };

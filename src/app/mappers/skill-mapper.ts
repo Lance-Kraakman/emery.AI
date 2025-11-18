@@ -1,4 +1,6 @@
-import type { Skill } from '@/ddd/domain/skills/entities/skill';
+import type { Skill, SkillParameterType, SkillInputFileConfig } from '@/ddd/domain/skills/entities/skill';
+import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 
 /**
  * DTO for Tool Configuration
@@ -16,6 +18,9 @@ export interface ToolConfigDTO {
 export interface SkillInput {
   name: string;
   required: boolean;
+  type?: SkillParameterType;
+  fileConfig?: SkillInputFileConfig;
+  default?: any;
 }
 
 /**
@@ -24,6 +29,7 @@ export interface SkillInput {
  */
 export interface SkillOutput {
   name: string;
+  type?: SkillParameterType;
 }
 
 /**
@@ -31,6 +37,7 @@ export interface SkillOutput {
  * Simplified single-instruction model with global skills support
  * AIDEV-NOTE: Removed steps array, replaced with single instructions field + inputs/outputs
  * Added: organizationId, agentId nullable for global skills
+ * Added: content for skill-level attachments (images, files, text)
  */
 export interface SkillDTO {
   id: number;
@@ -42,6 +49,7 @@ export interface SkillDTO {
   outputs: SkillOutput[];
   instructions: string;
   tools: ToolConfigDTO[];
+  content?: MessagePart[]; // Skill-level attachments with pre-signed URLs
   createdAt: string;
   updatedAt: string;
 }
@@ -55,6 +63,9 @@ export interface SkillDTO {
 export class SkillMapper {
   /**
    * Convert Skill domain entity to DTO
+   *
+   * NOTE: Pre-signed URLs in content MessageParts may expire.
+   * Consider refreshing URLs via generateSkillAttachmentUrl() action if needed.
    */
   static toDTO(skill: Skill): SkillDTO {
     return {
@@ -67,6 +78,7 @@ export class SkillMapper {
       outputs: skill.outputs,
       instructions: skill.instructions,
       tools: skill.tools,
+      content: skill.content,
       createdAt: skill.createdAt.toISOString(),
       updatedAt: skill.updatedAt.toISOString()
     };

@@ -20,6 +20,7 @@ import { ThemeConfig } from "@/ddd/domain/puck/value-objects/theme-config";
 import { ThemeProvider } from "@/components/puck/theme-context";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
+import { PuckSession } from "@/lib/puck/session-storage";
 
 export default function PreviewPage() {
   const params = useParams();
@@ -37,23 +38,35 @@ export default function PreviewPage() {
         setLoading(true);
 
         // 1. Fetch app for theme
-        const app = await getApp(appId);
+        const appResult = await getApp(appId);
+        if (!appResult.success || !appResult.data) {
+          throw new Error("Failed to load app");
+        }
+        const app = appResult.data;
 
         // 2. Check sessionStorage first (unsaved changes from editor)
-        const savedData = sessionStorage.getItem(`puck-data-${pageId}`);
+        const savedData = PuckSession.getData(pageId);
         let rawData: Data;
         let page: PageDTO;
 
         if (savedData) {
           console.log('[PreviewPage] Loading unsaved data from sessionStorage');
-          rawData = JSON.parse(savedData);
+          rawData = savedData;
           // Still need page for name and theme
-          page = await getPage(pageId);
+          const pageResult = await getPage(pageId);
+          if (!pageResult.success || !pageResult.data) {
+            throw new Error("Failed to load page");
+          }
+          page = pageResult.data;
           setPageName(page.name);
         } else {
           // 3. Fall back to database (saved state)
           console.log('[PreviewPage] Loading saved data from database');
-          page = await getPage(pageId);
+          const pageResult = await getPage(pageId);
+          if (!pageResult.success || !pageResult.data) {
+            throw new Error("Failed to load page");
+          }
+          page = pageResult.data;
           rawData = page.templateData || { content: [], root: {}, zones: {} };
           setPageName(page.name);
         }

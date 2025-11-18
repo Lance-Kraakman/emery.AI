@@ -27,11 +27,11 @@ export default async function PermissionsPage() {
 
   return (
     <CanvasBase>
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto p-4">
         <div className="max-w-7xl mx-auto">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold">Users & Permissions</h1>
-            <p className="text-muted-foreground mt-2">
+          <div className="mb-4">
+            <h1 className="text-2xl font-bold">Users & Permissions</h1>
+            <p className="text-muted-foreground mt-1">
               Manage user roles, agent task permissions, and team access controls for your organization.
             </p>
           </div>

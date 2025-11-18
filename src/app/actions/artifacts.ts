@@ -26,7 +26,7 @@ export async function getDocumentFieldValue(
   fieldId: number
 ): Promise<Result<DocumentFieldValue>> {
   try {
-    await requirePermission("data:view");
+    await requirePermission("table:view");
 
     const documentService = getDocumentApplicationService();
     const result = await documentService.getDocumentFieldValue(
@@ -63,7 +63,7 @@ export async function fetchTiptapDocumentContent(
   });
 
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("table:view");
 
     console.log('[FETCH-TIPTAP-ACTION] Permission check passed, getting DocumentApplicationService...');
     const documentService = getDocumentApplicationService();
@@ -103,7 +103,7 @@ export async function fetchFileArtifactData(
   mimeType: string
 ): Promise<Result<FileFieldValue>> {
   try {
-    await requirePermission("data:view");
+    await requirePermission("table:view");
 
     // Create FileFieldValue with real data from tool config
     const fileField: FileFieldValue = {
@@ -136,7 +136,7 @@ export async function getFileDownloadUrl(
   organizationId: number
 ): Promise<Result<string>> {
   try {
-    await requirePermission("data:view");
+    await requirePermission("table:view");
 
     // TODO: Implement proper download URL generation
     // For now, return a placeholder URL structure
@@ -166,7 +166,7 @@ export async function getDocumentDownloadUrl(
   fieldId: number
 ): Promise<Result<string>> {
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("table:view");
 
     const documentService = getDocumentApplicationService();
     const result = await documentService.getDocumentFileUrl({
@@ -208,7 +208,7 @@ export async function updateTiptapDocumentContent(
   content: object
 ): Promise<Result<DocumentFieldValue>> {
   try {
-    await requirePermission("data:manage");
+    await requirePermission("table:manage");
 
     // Get current user from session
     const session = await getServerSession(authOptions);

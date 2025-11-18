@@ -229,6 +229,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
     def CreateRows(self, request: table_service_pb2.CreateRowsRequest, context: ServicerContext) -> table_service_pb2.CreateRowsResponse:
         """Efficiently create multiple rows in a Delta table."""
+        logger.info("[CreateRows] START")
         try:
             # Compact logging
             self._log_request("CreateRows", table_id=request.table_id, organization_id=request.organization_id,
@@ -280,6 +281,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             ]
 
             logger.info(f"[CreateRows] ✅ Created {len(df)} rows in '{request.table_id}'")
+            logger.info("[CreateRows] END")
             return table_service_pb2.CreateRowsResponse(
                 success=True,
                 rows=rows,
@@ -289,6 +291,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
         except Exception as e:
             logger.error(f"[CreateRows] Error: {type(e).__name__}: {e}", exc_info=True)
+            logger.info("[CreateRows] END (with error)")
             return table_service_pb2.CreateRowsResponse(
                 success=False,
                 message=f"Failed to create rows: {str(e)}"

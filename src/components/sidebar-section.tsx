@@ -36,6 +36,7 @@ interface SidebarSectionProps<T> {
   // Action callbacks
   onRename?: (item: T, newName: string) => void | Promise<void>
   onDuplicate?: (item: T) => void | Promise<void>
+  onShare?: (item: T) => void | Promise<void>
   onDelete?: (item: T) => void | Promise<void>
 }
 
@@ -54,11 +55,12 @@ export function SidebarSection<T>({
   addButtonLabel = `Add ${label.slice(0, -1)}`, // Remove trailing 's' for singular
   onRename,
   onDuplicate,
+  onShare,
   onDelete,
 }: SidebarSectionProps<T>) {
   const [renamingItemKey, setRenamingItemKey] = React.useState<string | number | null>(null)
 
-  const hasActions = onRename || onDuplicate || onDelete
+  const hasActions = onRename || onDuplicate || onShare || onDelete
 
   const handleRename = async (item: T, newName: string) => {
     if (onRename) {
@@ -107,6 +109,7 @@ export function SidebarSection<T>({
                             <SidebarItemActions
                               onRename={onRename ? () => setRenamingItemKey(itemKey) : undefined}
                               onDuplicate={onDuplicate ? () => onDuplicate(item) : undefined}
+                              onShare={onShare ? () => onShare(item) : undefined}
                               onDelete={onDelete ? () => onDelete(item) : undefined}
                             />
                           )}

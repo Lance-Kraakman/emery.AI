@@ -19,6 +19,7 @@ import { ToolSearchApplicationService } from '@/ddd/application/services/tools/t
 import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
 import type { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
+import type { SkillApplicationService } from '@/ddd/application/services/skills/skill-application-service';
 
 export interface ToolsServices {
   toolRegistryService: IToolRegistryService;
@@ -32,6 +33,7 @@ export interface ToolsDependencies {
   tableApplicationService: TableApplicationService;
   agentApplicationService: AgentApplicationService;
   databaseApplicationService: DatabaseApplicationService;
+  skillApplicationService: SkillApplicationService;
 }
 
 export function registerToolsServices(deps: ToolsDependencies): ToolsServices {
@@ -39,7 +41,8 @@ export function registerToolsServices(deps: ToolsDependencies): ToolsServices {
     agentRepository,
     tableApplicationService,
     agentApplicationService,
-    databaseApplicationService
+    databaseApplicationService,
+    skillApplicationService
   } = deps;
 
   // Validate DATABASE_URL
@@ -61,6 +64,7 @@ export function registerToolsServices(deps: ToolsDependencies): ToolsServices {
     tableApplicationService,
     agentApplicationService,
     databaseApplicationService,
+    skillApplicationService,
     toolRegistryService
   );
 
