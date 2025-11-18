@@ -12,7 +12,7 @@ import type { Result } from "./types";
 
 export async function uploadFileAction(formData: FormData): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("table:manage");
 
     const file = formData.get('file') as File;
     const organizationId = parseInt(formData.get('organizationId') as string);
@@ -90,7 +90,7 @@ export async function uploadFileAction(formData: FormData): Promise<Result> {
 
 export async function deleteFileAction(fileId: string, fieldName: string, tableId: number, organizationId: number): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("table:manage");
 
     // Use TableApplicationService to find field by name and get its ID
     const tableApplicationService = getTableApplicationService();

@@ -141,6 +141,7 @@ export const GridHeaderBar = () => {
         selectedViewId={currentView?.id}
         onSelectView={onSelectView}
         className="shrink-0 w-[120px]"
+        tableId={tableId}
       />
 
       {/* Save View Button - shown when filters/sorting are active */}

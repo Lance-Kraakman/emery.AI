@@ -47,13 +47,13 @@ export const databases = pgTable("databases", {
     for: "select",
     to: "public",
     using: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:view',
-        organization_id,
-        'database',
-        id
-      )`,
+    AND user_has_permission(
+      current_setting('app.current_user_id')::uuid,
+      'view:manage',
+      organization_id,
+      'view',
+      id
+    )`,
   }),
 
   // RLS: Resource-aware permission checking for managing databases
@@ -62,13 +62,13 @@ export const databases = pgTable("databases", {
     for: "all",
     to: "public",
     using: sql`organization_id = current_setting('app.current_organization_id')::integer
-      AND user_has_permission(
-        current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id,
-        'database',
-        id
-      )`,
+    AND user_has_permission(
+      current_setting('app.current_user_id')::uuid,
+      'database:manage',
+      organization_id,
+      'database',
+      id
+    )`,
   }),
 ]);
 
@@ -90,34 +90,56 @@ export const tables = pgTable("tables", {
     using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
 
-  // RLS: Resource-aware permission checking for viewing tables
+  // RLS: Tables check BOTH database permissions (inheritance) AND table permissions (independence)
   pgPolicy("tables_view_permission", {
     as: "permissive",
     for: "select",
     to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+    using: sql`EXISTS (
+      SELECT 1 FROM databases d
+      WHERE d.id = database_id
+      AND d.organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
-        'data:view',
-        organization_id,
-        'table',
-        id
-      )`,
+        'database:view',
+        d.organization_id,
+        'database',
+        d.id
+      )
+    )
+    AND user_has_permission(
+      current_setting('app.current_user_id')::uuid,
+      'table:view',
+      (SELECT organization_id FROM databases WHERE databases.id = database_id),
+      'table',
+      id
+    )`,
   }),
 
-  // RLS: Resource-aware permission checking for managing tables
+  // RLS: Tables check BOTH database permissions (inheritance) AND table permissions (independence)
   pgPolicy("tables_manage_permission", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+    using: sql`EXISTS (
+      SELECT 1 FROM databases d
+      WHERE d.id = database_id
+      AND d.organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id,
-        'table',
-        id
-      )`,
+        'database:manage',
+        d.organization_id,
+        'database',
+        d.id
+      )
+    )
+    AND user_has_permission(
+      current_setting('app.current_user_id')::uuid,
+      'table:manage',
+      (SELECT organization_id FROM databases WHERE databases.id = database_id),
+      'table',
+      id
+    )`,
   }),
 ]);
 
@@ -176,7 +198,7 @@ export const fields = pgTable("fields", {
     using: sql`EXISTS (SELECT 1 FROM tables t WHERE t.id = table_id AND t.organization_id = current_setting('app.current_organization_id')::integer)`,
   }),
 
-  // RLS: Fields inherit permissions from their parent table (resource-aware)
+  // RLS: Fields inherit table permissions (inheritance from parent table)
   pgPolicy("fields_view_permission", {
     as: "permissive",
     for: "select",
@@ -187,7 +209,7 @@ export const fields = pgTable("fields", {
       AND t.organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
-        'data:view',
+        'table:view',
         t.organization_id,
         'table',
         t.id
@@ -195,7 +217,7 @@ export const fields = pgTable("fields", {
     )`,
   }),
 
-  // RLS: Fields inherit manage permissions from their parent table
+  // RLS: Fields inherit table permissions (inheritance from parent table)
   pgPolicy("fields_manage_permission", {
     as: "permissive",
     for: "all",
@@ -206,7 +228,7 @@ export const fields = pgTable("fields", {
       AND t.organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
-        'data:manage',
+        'table:manage',
         t.organization_id,
         'table',
         t.id
@@ -284,55 +306,101 @@ export const views = pgTable("views", {
   // Index for view type queries (e.g., list all metric views)
   index("views_type_idx").on(table.viewType),
 
-  // RLS: Resource-aware permission checking for views
+  // RLS: Views check BOTH table permissions (inheritance) AND view permissions (independence)
   pgPolicy("views_view_permission", {
     as: "permissive",
     for: "select",
     to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+    using: sql`EXISTS (
+      SELECT 1 FROM tables t
+      WHERE t.id = table_id
+      AND t.organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
-        'data:view',
-        organization_id,
-        'view',
-        id
-      )`,
+        'table:view',
+        t.organization_id,
+        'table',
+        t.id
+      )
+    )
+    AND user_has_permission(
+      current_setting('app.current_user_id')::uuid,
+      'view:view',
+      (SELECT organization_id FROM tables WHERE tables.id = table_id),
+      'view',
+      id
+    )`,
   }),
 
-  // RLS: Users can create views if they have data:manage permission (global)
+  // RLS: Views check BOTH table permissions (inheritance) AND view permissions (independence)
   pgPolicy("views_create_permission", {
     as: "permissive",
     for: "insert",
     to: "public",
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+    withCheck: sql`EXISTS (
+      SELECT 1 FROM tables t
+      WHERE t.id = table_id
+      AND t.organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id
-      )`,
+        'table:manage',
+        t.organization_id,
+        'table',
+        t.id
+      )
+    )
+    AND user_has_permission(
+      current_setting('app.current_user_id')::uuid,
+      'view:create',
+      (SELECT organization_id FROM tables WHERE tables.id = table_id),
+      'view',
+      id
+    )`,
   }),
 
-  // RLS: Resource-aware permission checking for managing views
+  // RLS: Views check BOTH table permissions (inheritance) AND view permissions (independence)
   pgPolicy("views_manage_permission", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+    using: sql`EXISTS (
+      SELECT 1 FROM tables t
+      WHERE t.id = table_id
+      AND t.organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id,
-        'view',
-        id
-      )`,
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+        'table:manage',
+        t.organization_id,
+        'table',
+        t.id
+      )
+    )
+    AND user_has_permission(
+      current_setting('app.current_user_id')::uuid,
+      'view:manage',
+      organization_id,
+      'view',
+      id
+    )`,
+    withCheck: sql`EXISTS (
+      SELECT 1 FROM tables t
+      WHERE t.id = table_id
+      AND t.organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
-        'data:manage',
-        organization_id,
-        'view',
-        id
-      )`,
+        'table:manage',
+        t.organization_id,
+        'table',
+        t.id
+      )
+    )
+    AND user_has_permission(
+      current_setting('app.current_user_id')::uuid,
+      'view:manage',
+      organization_id,
+      'view',
+      id
+    )`,
   }),
 ]);
 
@@ -1474,7 +1542,7 @@ export const pages = pgTable("pages", {
   index("pages_app_idx").on(table.appId),
   index("pages_order_idx").on(table.appId, table.order),
 
-  // View permission: Resource-aware permission checking for pages
+  // View permission: Pages check BOTH apps permissions (inheritance) AND page permissions (independence)
   pgPolicy("pages_view_permission", {
     as: "permissive",
     for: "select",
@@ -1483,17 +1551,24 @@ export const pages = pgTable("pages", {
       SELECT 1 FROM apps a
       WHERE a.id = app_id
       AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:view',
+        a.organization_id,
+        'app',
+        a.id
+      )
     )
     AND user_has_permission(
       current_setting('app.current_user_id')::uuid,
-      'apps:view',
-      current_setting('app.current_organization_id')::integer,
+      'page:view',
+      (SELECT organization_id FROM apps WHERE apps.id = app_id),
       'page',
       id
     )`,
   }),
 
-  // Manage permission: Resource-aware permission checking for pages
+  // Manage permission: Pages check BOTH apps permissions (inheritance) AND page permissions (independence)
   pgPolicy("pages_manage_permission", {
     as: "permissive",
     for: "all",
@@ -1502,17 +1577,24 @@ export const pages = pgTable("pages", {
       SELECT 1 FROM apps a
       WHERE a.id = app_id
       AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:manage',
+        a.organization_id,
+        'app',
+        a.id
+      )
     )
     AND user_has_permission(
       current_setting('app.current_user_id')::uuid,
-      'apps:manage',
-      current_setting('app.current_organization_id')::integer,
+      'page:manage',
+      (SELECT organization_id FROM apps WHERE apps.id = app_id),
       'page',
       id
     )`,
   }),
 
-  // Publish permission: Resource-aware permission checking for publishing pages
+  // Publish permission: Pages check BOTH apps permissions (inheritance) AND page permissions (independence)
   pgPolicy("pages_publish_permission", {
     as: "permissive",
     for: "update",
@@ -1521,11 +1603,18 @@ export const pages = pgTable("pages", {
       SELECT 1 FROM apps a
       WHERE a.id = app_id
       AND a.organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:publish',
+        a.organization_id,
+        'app',
+        a.id
+      )
     )
     AND user_has_permission(
       current_setting('app.current_user_id')::uuid,
-      'apps:publish',
-      current_setting('app.current_organization_id')::integer,
+      'page:publish',
+      (SELECT organization_id FROM apps WHERE apps.id = app_id),
       'page',
       id
     )`,

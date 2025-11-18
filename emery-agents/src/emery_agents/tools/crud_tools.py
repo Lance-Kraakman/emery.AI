@@ -65,7 +65,7 @@ class BaseCrudTool(Tool):
 
         def _http_call():
             """Execute HTTP call in thread pool to avoid blocking event loop."""
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=60.0) as client:  # Increased timeout for slow operations
                 return client.request(
                     method=method,
                     url=url,
@@ -77,7 +77,7 @@ class BaseCrudTool(Tool):
             # Submit HTTP call to thread pool and wait for result
             # This prevents blocking the gRPC event loop
             future = _http_thread_pool.submit(_http_call)
-            response = future.result(timeout=35.0)  # Slightly longer than httpx timeout
+            response = future.result(timeout=65.0)  # Slightly longer than httpx timeout
 
             # Handle HTTP errors
             if response.status_code >= 400:
@@ -115,14 +115,14 @@ class BaseCrudTool(Tool):
             # Timeout from ThreadPoolExecutor.result()
             return {
                 "success": False,
-                "error": f"Request timeout after 35 seconds",
+                "error": f"Request timeout after 65 seconds",
                 "endpoint": endpoint
             }
         except httpx.TimeoutException:
             # Timeout from httpx client
             return {
                 "success": False,
-                "error": f"Request timeout after 30 seconds",
+                "error": f"Request timeout after 60 seconds",
                 "endpoint": endpoint
             }
         except httpx.RequestError as e:

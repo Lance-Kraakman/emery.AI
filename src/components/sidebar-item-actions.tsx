@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { ShareButton } from "@/components/permissions/ShareButton"
 
 export interface SidebarItemActionsProps {
   onRename?: () => void
@@ -17,6 +18,9 @@ export interface SidebarItemActionsProps {
   onShare?: () => void
   onDelete?: () => void
   className?: string
+  // Props for ShareButton when using resource-specific sharing
+  shareResourceType?: string
+  shareResourceId?: number
 }
 
 /**
@@ -28,7 +32,9 @@ export function SidebarItemActions({
   onDuplicate,
   onShare,
   onDelete,
-  className = ""
+  className = "",
+  shareResourceType,
+  shareResourceId
 }: SidebarItemActionsProps) {
   return (
     <DropdownMenu>
@@ -55,12 +61,22 @@ export function SidebarItemActions({
             Duplicate
           </DropdownMenuItem>
         )}
-        {onShare && (
+        {onShare && shareResourceType && shareResourceId ? (
+          <div className="px-1 py-0.5">
+            <ShareButton
+              resourceType={shareResourceType}
+              resourceId={shareResourceId}
+              onShare={() => onShare()}
+              variant="ghost"
+              size="icon"
+            />
+          </div>
+        ) : onShare ? (
           <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShare(); }}>
             <Share2 className="h-4 w-4 mr-2" />
             Share
           </DropdownMenuItem>
-        )}
+        ) : null}
         {(onRename || onDuplicate || onShare) && onDelete && <DropdownMenuSeparator />}
         {onDelete && (
           <DropdownMenuItem

@@ -29,7 +29,7 @@ export async function getDocumentMentionsForTable(
   limit: number = 10
 ): Promise<DocumentMention[]> {
   try {
-    await requirePermission("data:manage");
+    await requirePermission("table:manage");
     
     if (!tableId) {
       throw new Error("tableId is required");
@@ -115,7 +115,7 @@ export async function getDocumentMentionsForTable(
  */
 export async function getAllDocumentMentions(limit: number = 50): Promise<DocumentMention[]> {
   try {
-    await requirePermission("data:manage");
+    await requirePermission("table:manage");
     
     // This is a placeholder - in a real implementation, you'd want to:
     // 1. Get all tables for the organization
