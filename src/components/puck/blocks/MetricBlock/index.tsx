@@ -19,6 +19,7 @@ import type { ComponentConfig } from "@measured/puck";
 import MetricBlock, { type MetricBlockProps } from "./MetricBlock";
 import { getView, executeViewAggregations, getViewsForOrganization } from "@/app/actions/views";
 import { getTables } from "@/app/actions/tables";
+import { typographySizeField, backgroundColorField, textColorField, fontFamilyField, fontWeightField, borderRadiusField, borderWidthField, paddingField } from "../../fields/standard-fields";
 
 export const MetricBlockConfig: ComponentConfig<MetricBlockProps> = {
   label: "Metric",
@@ -124,21 +125,51 @@ export const MetricBlockConfig: ComponentConfig<MetricBlockProps> = {
         { label: "Hide", value: false },
       ],
     },
-    size: {
-      label: "Size",
-      type: "radio",
-      options: [
-        { label: "Small", value: "small" },
-        { label: "Medium", value: "medium" },
-        { label: "Large", value: "large" },
-      ],
+    size: typographySizeField,
+    labelColor: {
+      ...textColorField,
+      label: "Label Color (Optional)",
     },
+    valueColor: {
+      ...textColorField,
+      label: "Value Color (Optional)",
+    },
+    backgroundColor: backgroundColorField,
+    labelFontFamily: {
+      ...fontFamilyField,
+      label: "Label Font Family (Optional)",
+    },
+    labelFontWeight: {
+      ...fontWeightField,
+      label: "Label Font Weight (Optional)",
+    },
+    valueFontFamily: {
+      ...fontFamilyField,
+      label: "Value Font Family (Optional)",
+    },
+    valueFontWeight: {
+      ...fontWeightField,
+      label: "Value Font Weight (Optional)",
+    },
+    borderRadius: borderRadiusField,
+    borderWidth: borderWidthField,
+    paddingLevel: paddingField,
   },
 
   defaultProps: {
     showLabel: true,
     showChange: false,
-    size: 'medium',
+    size: '2xl',
+    labelColor: undefined,
+    valueColor: undefined,
+    backgroundColor: undefined,
+    labelFontFamily: undefined,
+    labelFontWeight: undefined,
+    valueFontFamily: undefined,
+    valueFontWeight: undefined,
+    borderRadius: undefined,
+    borderWidth: undefined,
+    paddingLevel: undefined,
   },
 
   /**

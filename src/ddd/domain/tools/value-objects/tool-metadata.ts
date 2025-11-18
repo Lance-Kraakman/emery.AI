@@ -30,7 +30,8 @@ export enum ToolCategory {
   FILES = 'files',            // File references from tables
   AGENTS = 'agents',          // AI agent references
   TABLES = 'tables',          // Database table references
-  DATABASES = 'databases'     // Database references
+  DATABASES = 'databases',    // Database references
+  SKILLS = 'skills'           // Skill references
 }
 
 /**
@@ -290,6 +291,31 @@ export class ToolMetadata {
   }
 
   /**
+   * Create tool metadata for skill reference tools
+   */
+  static skill(
+    name: string,
+    displayName: string,
+    description: string,
+    tags: string[] = []
+  ): ToolMetadata {
+    return new ToolMetadata(
+      name,
+      displayName,
+      description,
+      ToolCategory.SKILLS,
+      false,
+      ConnectionType.NONE,
+      [],
+      undefined,
+      tags,
+      [], // mapsToReferences
+      undefined, // autoBindParameter
+      undefined // extra
+    )
+  }
+
+  /**
    * Create tool metadata for organizational tools
    */
   static organizational(
@@ -474,6 +500,12 @@ export const TOOL_CATEGORY_INFO: Record<ToolCategory, ToolCategoryInfo> = {
     label: 'Databases',
     description: 'Database references',
     icon: 'database'
+  },
+  [ToolCategory.SKILLS]: {
+    category: ToolCategory.SKILLS,
+    label: 'Skills',
+    description: 'Reusable AI skills',
+    icon: 'sparkles'
   }
 } as const
 

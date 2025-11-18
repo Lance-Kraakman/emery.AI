@@ -87,8 +87,10 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
         order: persistence.order,
         templateData: persistence.templateData,
         themeConfig: persistence.themeConfig,
-        isPublished: persistence.isPublished,
-        createdBy: persistence.createdBy,
+        isPublic: persistence.isPublic,
+        requiresAuth: persistence.requiresAuth,
+        allowedRoles: persistence.allowedRoles,
+        ownerId: persistence.ownerId,
         createdAt: persistence.createdAt,
         updatedAt: persistence.updatedAt
       }).returning();
@@ -104,6 +106,8 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
     try {
       const persistence = page.toPersistence();
 
+      console.log('[DrizzlePuckPageRepository] update - persistence.themeConfig:', persistence.themeConfig);
+
       const [record] = await this.db
         .update(pages)
         .set({
@@ -113,17 +117,24 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
           order: persistence.order,
           templateData: persistence.templateData,
           themeConfig: persistence.themeConfig,
-          isPublished: persistence.isPublished,
+          isPublic: persistence.isPublic,
+          requiresAuth: persistence.requiresAuth,
+          allowedRoles: persistence.allowedRoles,
           updatedAt: new Date()
         })
         .where(eq(pages.id, persistence.id))
         .returning();
 
+      console.log('[DrizzlePuckPageRepository] update - returned record.themeConfig:', record?.themeConfig);
+
       if (!record) {
         throw new Error(`Page ${persistence.id} not found`);
       }
 
-      return this.toDomain(record);
+      const domain = this.toDomain(record);
+      console.log('[DrizzlePuckPageRepository] update - domain page themeConfig:', domain.themeConfig?.toJSON());
+
+      return domain;
     } catch (error) {
       console.error('[DrizzlePuckPageRepository] Error updating page:', error);
       throw error;
@@ -206,7 +217,7 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
       const records = await this.db.query.pages.findMany({
         where: and(
           eq(pages.appId, appId.value),
-          eq(pages.isPublished, true)
+          eq(pages.isPublic, true)
         )
       });
 
@@ -231,8 +242,10 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
       order: record.order,
       templateData: record.templateData,
       themeConfig: record.themeConfig,
-      isPublished: record.isPublished,
-      createdBy: record.createdBy,
+      isPublic: record.isPublic,
+      requiresAuth: record.requiresAuth,
+      allowedRoles: record.allowedRoles,
+      ownerId: record.ownerId,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     });

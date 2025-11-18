@@ -21,7 +21,7 @@ export interface CreateTableCommand {
   name: string;
   databaseId: DatabaseId;
   organizationId: OrganizationId;
-  createdBy: UserId;
+  ownerId: UserId;
   description?: string;
   metadata?: TableMetadata;
 }
@@ -54,7 +54,7 @@ export class DynamicTableService {
         databaseId: command.databaseId,
         organizationId: command.organizationId,
         storageLocation: 'temp', // Repository will overwrite with proper S3 path
-        createdBy: command.createdBy,
+        ownerId: command.ownerId,
         description: command.description,
         metadata: command.metadata
       };

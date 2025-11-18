@@ -25,7 +25,7 @@ export interface CreatePageCommand {
   slug: string;
   description?: string;
   templateData?: any; // Puck JSON structure
-  createdBy: UserId;
+  ownerId: UserId;
 }
 
 export interface UpdatePageCommand {
@@ -33,6 +33,8 @@ export interface UpdatePageCommand {
   name?: string;
   slug?: string;
   description?: string;
+  requiresAuth?: boolean;
+  allowedRoles?: string[];
 }
 
 export interface UpdatePageContentCommand {
@@ -114,8 +116,10 @@ export class PuckPageApplicationService {
         description: command.description,
         order: pageOrder.value,
         templateData: puckData.toDatabaseJson(),
-        isPublished: false,
-        createdBy: command.createdBy.value,
+        isPublic: false,
+        requiresAuth: false,
+        allowedRoles: undefined,
+        ownerId: command.ownerId.value,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -169,6 +173,14 @@ export class PuckPageApplicationService {
 
       if (command.description !== undefined) {
         page.updateDescription(command.description);
+      }
+
+      if (command.requiresAuth !== undefined) {
+        page.setRequiresAuth(command.requiresAuth);
+      }
+
+      if (command.allowedRoles !== undefined) {
+        page.setAllowedRoles(command.allowedRoles);
       }
 
       // 3. Save updates
@@ -230,8 +242,8 @@ export class PuckPageApplicationService {
         return ResultHelpers.failure(`Page ${id.value} not found`);
       }
 
-      // 2. Publish (domain enforces business rules)
-      page.publish();
+      // 2. Make public (domain enforces business rules)
+      page.makePublic();
 
       // 3. Save updates
       const publishedPage = await this.pageRepository.update(page);
@@ -258,8 +270,8 @@ export class PuckPageApplicationService {
         return ResultHelpers.failure(`Page ${id.value} not found`);
       }
 
-      // 2. Unpublish
-      page.unpublish();
+      // 2. Make private
+      page.makePrivate();
 
       // 3. Save updates
       const unpublishedPage = await this.pageRepository.update(page);

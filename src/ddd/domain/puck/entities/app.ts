@@ -4,6 +4,7 @@
 
 import type { AppId } from '../value-objects/app-id';
 import type { AppSlug } from '../value-objects/app-slug';
+import type { PageId } from '../value-objects/page-id';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { ThemeConfig, type ThemeConfigProps } from '../value-objects/theme-config';
 
@@ -15,7 +16,8 @@ export class App {
     private _slug: AppSlug,
     private _description: string | undefined,
     private _themeConfig: ThemeConfig | undefined,
-    private readonly _createdBy: UserId,
+    private _homePageId: PageId | undefined,
+    private readonly _ownerId: UserId,
     private readonly _createdAt: Date,
     private _updatedAt: Date
   ) {}
@@ -41,8 +43,13 @@ export class App {
     return this._description;
   }
 
+  get ownerId(): UserId {
+    return this._ownerId;
+  }
+
+  // Backward compatibility alias
   get createdBy(): UserId {
-    return this._createdBy;
+    return this._ownerId;
   }
 
   get createdAt(): Date {
@@ -55,6 +62,10 @@ export class App {
 
   get themeConfig(): ThemeConfig {
     return this._themeConfig || ThemeConfig.default();
+  }
+
+  get homePageId(): PageId | undefined {
+    return this._homePageId;
   }
 
   // Business methods
@@ -104,6 +115,14 @@ export class App {
   }
 
   /**
+   * Set the home page for this app
+   */
+  setHomePage(pageId: PageId | undefined): void {
+    this._homePageId = pageId;
+    this._updatedAt = new Date();
+  }
+
+  /**
    * Check if the app is owned by a specific organization
    */
   isOwnedBy(organizationId: OrganizationId): boolean {
@@ -137,7 +156,7 @@ export class App {
     description?: string;
     themeConfig?: Partial<ThemeConfigProps>;
     organizationId: OrganizationId;
-    createdBy: UserId;
+    ownerId: UserId;
   }): App {
     // Import here to avoid circular dependencies
     const { AppId } = require('../value-objects/app-id');
@@ -165,7 +184,8 @@ export class App {
       data.slug,
       data.description,
       data.themeConfig ? ThemeConfig.create(data.themeConfig) : undefined,
-      data.createdBy,
+      undefined, // No home page on creation
+      data.ownerId,
       now,
       now
     );
@@ -181,13 +201,15 @@ export class App {
     slug: string;
     description?: string;
     themeConfig?: any;
-    createdBy: string;
+    homePageId?: number;
+    ownerId: string;
     createdAt: Date;
     updatedAt: Date;
   }): App {
     // Import here to avoid circular dependencies
     const { AppId } = require('../value-objects/app-id');
     const { AppSlug } = require('../value-objects/app-slug');
+    const { PageId } = require('../value-objects/page-id');
 
     const slugResult = AppSlug.create(data.slug);
     if (!slugResult.success) {
@@ -201,7 +223,8 @@ export class App {
       slugResult.data,
       data.description,
       data.themeConfig ? ThemeConfig.fromJSON(data.themeConfig) : undefined,
-      UserId.fromString(data.createdBy),
+      data.homePageId ? PageId.fromNumber(data.homePageId) : undefined,
+      UserId.fromString(data.ownerId),
       data.createdAt,
       data.updatedAt
     );
@@ -217,7 +240,8 @@ export class App {
     slug: string;
     description: string | undefined;
     themeConfig: any;
-    createdBy: string;
+    homePageId: number | undefined;
+    ownerId: string;
     createdAt: Date;
     updatedAt: Date;
   } {
@@ -228,7 +252,8 @@ export class App {
       slug: this._slug.value,
       description: this._description,
       themeConfig: this._themeConfig?.toJSON(),
-      createdBy: this._createdBy.value,
+      homePageId: this._homePageId?.value,
+      ownerId: this._ownerId.value,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt
     };

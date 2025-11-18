@@ -214,6 +214,7 @@ export function ToolDropdown({
         onLoadMore={search.loadMoreTools}
         onSelectTool={onSelect}
         query={query}
+        availableApps={appFilter.availableApps || []}
       />
     </div>
   );

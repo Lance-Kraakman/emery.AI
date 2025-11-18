@@ -15,6 +15,8 @@ import TableBlockConfig from "./blocks/TableBlock";
 import MetricBlockConfig from "./blocks/MetricBlock";
 import ChartBlockConfig from "./blocks/ChartBlock";
 import { FormBlockConfig } from "./blocks/FormBlock";
+import { LoginBlock } from "./blocks/LoginBlock";
+import { SignOutBlock } from "./blocks/SignOutBlock";
 
 import Root from "./root";
 import { UserConfig } from "./types";
@@ -31,6 +33,10 @@ export const config: UserConfig = {
     interactive: {
       title: "Actions",
       components: ["Button"],
+    },
+    authentication: {
+      title: "Authentication",
+      components: ["LoginBlock", "SignOutBlock"],
     },
     data: {
       title: "Data",
@@ -59,6 +65,8 @@ export const config: UserConfig = {
     MetricBlock: MetricBlockConfig,
     ChartBlock: ChartBlockConfig,
     FormBlock: FormBlockConfig,
+    LoginBlock,
+    SignOutBlock,
   },
 };
 

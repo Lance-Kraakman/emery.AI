@@ -53,7 +53,7 @@ export async function createTeam(data: CreateTeamData): Promise<Result> {
     const { name, purpose, description, responsibilities, goals, agentIds } = data;
 
     const teamApplicationService = getTeamApplicationService();
-    
+
     const dto: CreateTeamDTO = {
       name,
       purpose,
@@ -61,7 +61,8 @@ export async function createTeam(data: CreateTeamData): Promise<Result> {
       responsibilities,
       goals,
       agentIds,
-      organizationId: currentOrg.id
+      organizationId: currentOrg.id,
+      ownerId: session.user.id
     };
 
     const result = await teamApplicationService.createTeam(dto);
@@ -298,7 +299,8 @@ export async function duplicateTeam(teamId: number): Promise<Result> {
         responsibilities: originalTeam.responsibilities || undefined,
         goals: originalTeam.goals || undefined,
         agentIds: originalTeam.agentIds?.map(id => id.value.toString()) || undefined,
-        organizationId: currentOrg.id
+        organizationId: currentOrg.id,
+        ownerId: session.user.id
       };
 
       const result = await teamApplicationService.createTeam(dto);

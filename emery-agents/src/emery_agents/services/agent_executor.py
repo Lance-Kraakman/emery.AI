@@ -96,9 +96,41 @@ class AgentExecutor:
         tool_names = [tool.name for tool in skill.tools] if skill.tools else []
 
         # Extract model overrides
+        # Priority: skill model > request agent model > config default model
         skill_model = skill.model if hasattr(skill, 'model') and skill.model else None
-        agent_model = request.agent_config.default_model if hasattr(request.agent_config, 'default_model') else None
-        org_model = request.organization_model if hasattr(request, 'organization_model') else None
+
+        # Read from request-level fields FIRST (set by frontend), then fallback to config
+        agent_model = None
+        if hasattr(request, 'agent_model') and request.agent_model:
+            agent_model = request.agent_model
+        elif hasattr(request.agent_config, 'default_model') and request.agent_config.default_model:
+            agent_model = request.agent_config.default_model
+
+        org_model = None
+        if hasattr(request, 'organization_model') and request.organization_model:
+            org_model = request.organization_model
+
+        # Extract attachments from skill definition (skill-level attachments)
+        skill_content = list(skill.content) if hasattr(skill, 'content') and skill.content else []
+
+        # Extract runtime input attachments (passed during invocation)
+        input_content = list(request.input_content) if hasattr(request, 'input_content') and request.input_content else []
+
+        # Merge skill-level and runtime attachments
+        all_content = skill_content + input_content
+
+        # Separate images and files from MessageParts
+        images = []
+        attachments = []
+        for part in all_content:
+            if hasattr(part, 'image_url') and part.image_url:
+                # Convert MessagePart.ImageUrlPart to ImageAttachment for compatibility
+                from ..grpc.generated.agent_worker_pb2 import ImageAttachment
+                img_attachment = ImageAttachment(url=part.image_url.url)
+                images.append(img_attachment)
+            elif hasattr(part, 'file') and part.file:
+                # Files are already in the right format
+                attachments.append(part.file)
 
         return ExecutionContext(
             mode=ExecutionMode.SKILL,
@@ -110,6 +142,8 @@ class AgentExecutor:
             skill=skill,
             agent_model=agent_model,
             org_model=org_model,
+            images=images,
+            attachments=attachments,
             environment={}
         )
 
@@ -123,9 +157,19 @@ class AgentExecutor:
             tool_names = [tool.name for tool in instruction_config.tools]
 
         # Extract model overrides
+        # Priority: instruction model > request agent model > config default model
         instruction_model = instruction_config.model if hasattr(instruction_config, 'model') and instruction_config.model else None
-        agent_model = request.agent_config.default_model if hasattr(request.agent_config, 'default_model') else None
-        org_model = request.organization_model if hasattr(request, 'organization_model') else None
+
+        # Read from request-level fields FIRST (set by frontend), then fallback to config
+        agent_model = None
+        if hasattr(request, 'agent_model') and request.agent_model:
+            agent_model = request.agent_model
+        elif hasattr(request.agent_config, 'default_model') and request.agent_config.default_model:
+            agent_model = request.agent_config.default_model
+
+        org_model = None
+        if hasattr(request, 'organization_model') and request.organization_model:
+            org_model = request.organization_model
 
         # Extract images and attachments (new multimodal support)
         images = list(instruction_config.images) if hasattr(instruction_config, 'images') and instruction_config.images else []

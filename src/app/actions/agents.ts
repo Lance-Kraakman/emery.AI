@@ -9,6 +9,7 @@ import { type Result, type CreateAgentData, type CreateAgentClientData } from ".
 import { getAgentApplicationService } from "@/ddd/application/di/container";
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from "@/app/dtos/agent.dto";
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
+import type { UpdateAgentData } from '@/ddd/domain/agents/entities/agent';
 import { AgentMapper } from "@/app/mappers/agent-mapper";
 
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
@@ -224,7 +225,7 @@ export async function getAgent(agentId: number) {
   });
 }
 
-export async function updateAgent(agentId: number, data: Partial<CreateAgentData>, revalidateUrl?: string): Promise<Result> {
+export async function updateAgent(agentId: number, data: Partial<UpdateAgentData>, revalidateUrl?: string): Promise<Result> {
   return withAuthContext(async () => {
     try {
       if (!agentId) {
@@ -277,7 +278,8 @@ export async function updateAgent(agentId: number, data: Partial<CreateAgentData
             ? statusValue as 'active' | 'inactive' | 'archived'
             : undefined;
         })(),
-        avatarConfig: data.avatarConfig
+        avatarConfig: data.avatarConfig,
+        defaultModel: data.defaultModel
       };
 
       // LOGGING: DTO built, calling application service

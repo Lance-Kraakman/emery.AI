@@ -143,11 +143,16 @@ export class GrpcTableClient {
    */
   async createRows(request: CreateRowsRequest): Promise<CreateRowsResponse> {
     return new Promise((resolve, reject) => {
-      this.client.createRows(request, (error, response) => {
+      const timeout = this.config.timeout || 30000;
+      const deadline = new Date(Date.now() + timeout);
+      const metadata = new grpc.Metadata();
+      this.client.createRows(request, metadata, { deadline }, (error, response) => {
         if (error) {
           reject(error);
+        } else if (response) {
+          resolve(response);
         } else {
-          resolve(response!);
+          reject(new Error('No response received from gRPC service'));
         }
       });
     });
@@ -169,30 +174,40 @@ export class GrpcTableClient {
   }
 
   /**
-   * Update multiple rows
-   */
+    * Update multiple rows
+    */
   async updateRows(request: UpdateRowsRequest): Promise<UpdateRowsResponse> {
     return new Promise((resolve, reject) => {
-      this.client.updateRows(request, (error, response) => {
+      const timeout = this.config.timeout || 30000;
+      const deadline = new Date(Date.now() + timeout);
+      const metadata = new grpc.Metadata();
+      this.client.updateRows(request, metadata, { deadline }, (error, response) => {
         if (error) {
           reject(error);
+        } else if (response) {
+          resolve(response);
         } else {
-          resolve(response!);
+          reject(new Error('No response received from gRPC service'));
         }
       });
     });
   }
 
   /**
-   * Delete multiple rows
-   */
+    * Delete multiple rows
+    */
   async deleteRows(request: DeleteRowsRequest): Promise<DeleteRowsResponse> {
     return new Promise((resolve, reject) => {
-      this.client.deleteRows(request, (error, response) => {
+      const timeout = this.config.timeout || 30000;
+      const deadline = new Date(Date.now() + timeout);
+      const metadata = new grpc.Metadata();
+      this.client.deleteRows(request, metadata, { deadline }, (error, response) => {
         if (error) {
           reject(error);
+        } else if (response) {
+          resolve(response);
         } else {
-          resolve(response!);
+          reject(new Error('No response received from gRPC service'));
         }
       });
     });

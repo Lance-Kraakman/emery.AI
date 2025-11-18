@@ -14,6 +14,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { updateTeam } from '@/app/actions/teams';
 import TeamMembersPanel from './TeamMembersPanel';
 import TeamActivityPanel from './TeamActivityPanel';
+import { ShareButton } from '@/components/permissions/ShareButton';
+import { ShareDialog } from '@/components/permissions/ShareDialog';
+import { PermissionsPanel } from '@/components/permissions/PermissionsPanel';
 
 // AIDEV-NOTE: Team details view with inline editing functionality
 
@@ -36,6 +39,7 @@ export default function TeamDetailsView({ team, agents }: TeamDetailsViewProps) 
   const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [editFormData, setEditFormData] = useState<EditFormData>({
     name: team.name || '',
     purpose: team.purpose || '',
@@ -180,14 +184,23 @@ export default function TeamDetailsView({ team, agents }: TeamDetailsViewProps) 
               </Button>
             </>
           ) : (
-            <Button
-              onClick={handleEdit}
-              variant="outline"
-              size="sm"
-            >
-              <Edit size={16} />
-              Edit
-            </Button>
+            <>
+              <ShareButton
+                resourceType="team"
+                resourceId={team.id}
+                variant="outline"
+                size="sm"
+                onShare={() => setShareDialogOpen(true)}
+              />
+              <Button
+                onClick={handleEdit}
+                variant="outline"
+                size="sm"
+              >
+                <Edit size={16} />
+                Edit
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -401,6 +414,22 @@ export default function TeamDetailsView({ team, agents }: TeamDetailsViewProps) 
           </CollapsibleContent>
         </Card>
       </Collapsible>
+
+      {/* Permissions Section */}
+      <PermissionsPanel
+        resourceType="team"
+        resourceId={team.id}
+        resourceName={team.name}
+      />
+
+      {/* Share Dialog */}
+      <ShareDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        resourceType="team"
+        resourceId={team.id}
+        resourceName={team.name}
+      />
     </div>
   );
 }

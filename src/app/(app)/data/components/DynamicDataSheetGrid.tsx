@@ -736,6 +736,7 @@ export function DynamicDataSheetGrid({
         onClose={() => setIsEditFieldOpen(false)}
         onSave={handleSaveField}
         availableTables={availableTables}
+        tableId={tableId}
       />
     </div>
     </GridContext.Provider>

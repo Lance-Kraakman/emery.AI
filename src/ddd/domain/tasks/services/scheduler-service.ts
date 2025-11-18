@@ -97,6 +97,9 @@ export class SchedulerService implements ISchedulerService {
         }
 
         // Create a Task entity for this due schedule
+        // Cast trigger to CalendarTriggerConfig to access calendar-specific properties
+        const calendarTrigger = schedule.trigger as CalendarTriggerConfig;
+
         const task = Task.create({
           agentId: agent.id,
           organizationId: agent.organizationId,
@@ -106,7 +109,18 @@ export class SchedulerService implements ISchedulerService {
             metadata: {
               ...schedule.taskInstructions.metadata,
               scheduleType: schedule.trigger.type,
-              scheduledFor: nextRun.toISOString()
+              scheduledFor: nextRun.toISOString(),
+              'trigger.scheduledTime': nextRun.toISOString(),
+              'trigger.timezone': calendarTrigger.timezone,
+              'trigger.scheduleName': schedule.name
+            }
+          },
+          triggerContext: {
+            type: 'CALENDAR',
+            scheduleName: schedule.name,
+            calendarData: {
+              scheduledTime: nextRun.toISOString(),
+              timezone: calendarTrigger.timezone
             }
           }
         });

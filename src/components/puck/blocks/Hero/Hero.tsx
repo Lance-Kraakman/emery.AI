@@ -24,6 +24,13 @@ export type HeroProps = {
     href: string;
     variant?: "primary" | "secondary";
   }[];
+  titleColor?: string;
+  subtitleColor?: string;
+  backgroundColor?: string;
+  titleFontFamily?: string;
+  titleFontWeight?: string;
+  subtitleFontFamily?: string;
+  subtitleFontWeight?: string;
 };
 
 export const Hero: PuckComponent<HeroProps> = ({
@@ -33,6 +40,13 @@ export const Hero: PuckComponent<HeroProps> = ({
   buttons,
   padding = "48px",
   image,
+  titleColor,
+  subtitleColor,
+  backgroundColor,
+  titleFontFamily,
+  titleFontWeight,
+  subtitleFontFamily,
+  subtitleFontWeight,
   puck,
 }) => {
   return (
@@ -42,7 +56,11 @@ export const Hero: PuckComponent<HeroProps> = ({
         center: align === "center",
         hasImageBackground: image?.mode === "background",
       })}
-      style={{ paddingTop: padding, paddingBottom: padding }}
+      style={{
+        paddingTop: padding,
+        paddingBottom: padding,
+        ...(backgroundColor && { backgroundColor }),
+      }}
     >
       {image?.mode === "background" && (
         <>
@@ -59,8 +77,25 @@ export const Hero: PuckComponent<HeroProps> = ({
 
       <div className={getClassName("inner")}>
         <div className={getClassName("content")}>
-          <h1>{title}</h1>
-          <p className={getClassName("subtitle")}>{description}</p>
+          <h1
+            style={{
+              ...(titleColor && { color: titleColor }),
+              ...(titleFontFamily && { fontFamily: titleFontFamily }),
+              ...(titleFontWeight && { fontWeight: titleFontWeight }),
+            }}
+          >
+            {title}
+          </h1>
+          <p
+            className={getClassName("subtitle")}
+            style={{
+              ...(subtitleColor && { color: subtitleColor }),
+              ...(subtitleFontFamily && { fontFamily: subtitleFontFamily }),
+              ...(subtitleFontWeight && { fontWeight: subtitleFontWeight }),
+            }}
+          >
+            {description}
+          </p>
           <div className={getClassName("actions")}>
             {buttons.map((button, i) => (
               <Button

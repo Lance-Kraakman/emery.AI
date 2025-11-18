@@ -647,7 +647,7 @@ describe('TableApplicationService Integration Tests', () => {
     const createDbResult = await databaseApplicationService.createDatabase({
       name: `Test Database ${timestamp}-${random}`,
       organizationId: testContext.organizationId.value,
-      createdBy: testContext.ownerUserId.value
+      ownerId: testContext.ownerUserId.value
     });
 
     if (!createDbResult.success || !createDbResult.data) {
@@ -662,7 +662,7 @@ describe('TableApplicationService Integration Tests', () => {
       name: tableName,
       databaseId: DatabaseId.fromNumber(testDbId),
       organizationId: testContext.organizationId,
-      createdBy: testContext.ownerUserId
+      ownerId: testContext.ownerUserId
     });
     
     if (!createTableResult.success || !createTableResult.data) {

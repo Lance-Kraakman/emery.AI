@@ -38,7 +38,7 @@ CREATE OR REPLACE FUNCTION user_has_permission(
   permission_string TEXT,
   org_id INTEGER,
   resource_type TEXT DEFAULT NULL,  -- 'agent', 'team', 'user', null for global only
-  resource_id INTEGER DEFAULT NULL  -- specific resource ID, null for scoped permissions
+  resource_id BIGINT DEFAULT NULL  -- specific resource ID, null for scoped permissions (BIGINT supports all table ID types)
 ) RETURNS BOOLEAN AS $$
 BEGIN
   RETURN EXISTS (
@@ -71,20 +71,44 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;--> statement-breakpoint
 
 
 -- AIDEV-NOTE: Helper function to check if user owns a specific resource
--- Supports 'agent' and 'team' resource types with ownership semantics
+-- Supports all resource types with ownership semantics via ownerId
 CREATE OR REPLACE FUNCTION is_resource_owned_by_user(
   resource_type TEXT,
-  resource_id INTEGER, 
+  resource_id BIGINT,
   user_id UUID
 ) RETURNS BOOLEAN AS $$
 BEGIN
   IF resource_type = 'agent' THEN
     RETURN EXISTS (SELECT 1 FROM agents WHERE id = resource_id AND owner_id = is_resource_owned_by_user.user_id);
   ELSIF resource_type = 'team' THEN
-    -- Teams don't have owners, but team leads could be considered "owners"
+    RETURN EXISTS (SELECT 1 FROM teams WHERE id = resource_id AND owner_id = is_resource_owned_by_user.user_id);
+  ELSIF resource_type = 'app' THEN
+    RETURN EXISTS (SELECT 1 FROM apps WHERE id = resource_id AND owner_id = is_resource_owned_by_user.user_id);
+  ELSIF resource_type = 'page' THEN
+    RETURN EXISTS (SELECT 1 FROM pages WHERE id = resource_id AND owner_id = is_resource_owned_by_user.user_id);
+  ELSIF resource_type = 'skill' THEN
+    -- Skills: org-level skills have ownerId, agent-scoped skills inherit from agent owner
     RETURN EXISTS (
-      SELECT 1 FROM team_memberships tm
-      WHERE tm.team_id = resource_id AND tm.user_id = is_resource_owned_by_user.user_id AND tm.role = 'lead'
+      SELECT 1 FROM skills s
+      LEFT JOIN agents a ON s.agent_id = a.id
+      WHERE s.id = resource_id
+      AND (
+        s.owner_id = is_resource_owned_by_user.user_id  -- Direct ownership for org-level skills
+        OR (s.agent_id IS NOT NULL AND a.owner_id = is_resource_owned_by_user.user_id)  -- Inherit from agent for agent-scoped skills
+      )
+    );
+  ELSIF resource_type = 'database' THEN
+    RETURN EXISTS (SELECT 1 FROM databases WHERE id = resource_id AND owner_id = is_resource_owned_by_user.user_id);
+  ELSIF resource_type = 'view' THEN
+    RETURN EXISTS (SELECT 1 FROM views WHERE id = resource_id AND owner_id = is_resource_owned_by_user.user_id);
+  ELSIF resource_type = 'table' THEN
+    RETURN EXISTS (SELECT 1 FROM tables WHERE id = resource_id AND owner_id = is_resource_owned_by_user.user_id);
+  ELSIF resource_type = 'field' THEN
+    -- Fields inherit ownership from their parent table
+    RETURN EXISTS (
+      SELECT 1 FROM fields f
+      JOIN tables t ON f.table_id = t.id
+      WHERE f.id = resource_id AND t.owner_id = is_resource_owned_by_user.user_id
     );
   END IF;
   RETURN FALSE;
@@ -95,7 +119,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;--> statement-breakpoint
 -- Supports 'agent' and 'team' resource types with team membership semantics
 CREATE OR REPLACE FUNCTION is_resource_in_user_teams(
   resource_type TEXT,
-  resource_id INTEGER,
+  resource_id BIGINT,
   user_id UUID
 ) RETURNS BOOLEAN AS $$
 BEGIN

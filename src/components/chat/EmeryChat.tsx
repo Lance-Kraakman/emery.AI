@@ -19,7 +19,7 @@ import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
 import { RightPanelResizeHandle } from '@/components/ui/right-panel-resize-handle'
 // import { ChatCanvas } from './ChatCanvas'
-import CustomChatInput from './CustomChatInput'
+import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
 import { createChatContextForPage, type ChatContextConfig } from '@/components/layout/types'
 import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
@@ -352,7 +352,7 @@ function ChatContentWithCanvas({
 
       {/* Input area */}
       <div className="flex-shrink-0 py-2 px-3 border-t border-border/10 bg-card">
-        <CustomChatInput
+        <UnifiedChatInput
           onSendMessage={async (message) => {
             // Send message with proper MessagePart format
             handler.append({
@@ -533,6 +533,24 @@ export function EmeryChat() {
   // Handle tool changes from chat input
   const handleToolsChange = (tools: ToolDTO[]) => {
     setSelectedTools(tools)
+
+    // Sync with handler's state so tools are sent to backend
+    const currentTools = new Set(handler.selectedTools.map(t => t.name))
+    const newTools = new Set(tools.map(t => t.name))
+
+    // Remove tools no longer selected
+    for (const tool of handler.selectedTools) {
+      if (!newTools.has(tool.name)) {
+        handler.removeTool(tool)
+      }
+    }
+
+    // Add newly selected tools
+    for (const tool of tools) {
+      if (!currentTools.has(tool.name)) {
+        handler.addTool(tool)
+      }
+    }
   }
 
 
@@ -561,7 +579,7 @@ export function EmeryChat() {
 
   return (
     <div
-      className={`relative flex bg-card flex-shrink-0 h-full`}
+      className={`relative flex bg-card h-full`}
       style={{
         width: isFullWidth ? '100%' : `${chatWidth}px`,
         // CSS-based responsive constraints using shadcn's --sidebar-width variable

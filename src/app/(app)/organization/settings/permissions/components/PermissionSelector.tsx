@@ -22,7 +22,7 @@ export interface PermissionAssignment {
   permissionId: number;
   resourceType?: 'agent' | 'team' | 'user' | null;
   resourceScope: 'all' | 'specific' | 'owned' | 'team';
-  resourceIds?: number[];
+  resourceIds?: (number | string)[]; // number for entities with numeric IDs, string for UUIDs (users)
 }
 
 interface PermissionSelectorProps {
@@ -148,7 +148,7 @@ export function PermissionSelector({
     onSelectionChange(updatedPermissions);
   };
 
-  const handleResourceSelection = (permissionId: number, resourceIds: number[]) => {
+  const handleResourceSelection = (permissionId: number, resourceIds: (number | string)[]) => {
     if (disabled) return;
 
     const updatedPermissions = selectedPermissions.map(p =>

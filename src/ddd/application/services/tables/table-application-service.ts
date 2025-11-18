@@ -48,7 +48,7 @@ export interface CreateTableCommand {
   name: string;
   databaseId: DatabaseId;
   organizationId: OrganizationId;
-  createdBy: UserId;
+  ownerId: UserId;
   description?: string;
   metadata?: Record<string, any>;
 }
@@ -69,7 +69,7 @@ export interface CreateDynamicTableData {
   description?: string;
   storageLocation: string;             // Generated storage location (S3 path, table name, etc.)
   metadata?: TableMetadata;
-  createdBy: UserId;
+  ownerId: UserId;
 }
 
 // Field operation interfaces
@@ -206,7 +206,7 @@ export class TableApplicationService {
         name: command.name,
         databaseId: command.databaseId,
         organizationId: command.organizationId,
-        createdBy: command.createdBy,
+        ownerId: command.ownerId,
         description: command.description,
         metadata: tableMetadata
       };

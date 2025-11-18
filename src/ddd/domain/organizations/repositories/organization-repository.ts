@@ -73,4 +73,16 @@ export interface IOrganizationRepository {
    * Find organizations by name (for search/autocomplete)
    */
   findByName(name: string, limit?: number): Promise<Organization[]>;
+
+  /**
+   * Check if an organization with the given slug exists
+   * Used for slug uniqueness validation before creation
+   */
+  existsBySlug(slug: string): Promise<boolean>;
+
+  /**
+   * Find organization by slug
+   * Used for public app routing
+   */
+  findBySlug(slug: string): Promise<Organization | null>;
 }

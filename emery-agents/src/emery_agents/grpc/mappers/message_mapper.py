@@ -12,6 +12,7 @@ import logging
 import asyncio
 from typing import List, Dict, Any
 from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from PIL import Image
@@ -23,10 +24,23 @@ from ...services.file_processor import process_file
 
 logger = logging.getLogger(__name__)
 
+# AIDEV-NOTE: Shared thread pool for image downloads to prevent blocking gRPC event loop
+_image_download_pool = ThreadPoolExecutor(max_workers=5, thread_name_prefix="image-download")
 
-def download_image_from_url(url: str) -> Image.Image:
+
+def _download_image_sync(url: str) -> Image.Image:
+    """Synchronous image download to run in thread pool."""
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
+    return Image.open(BytesIO(response.content))
+
+
+async def download_image_from_url(url: str) -> Image.Image:
     """
     Download image from S3 URL and convert to PIL Image.
+
+    AIDEV-NOTE: Uses ThreadPoolExecutor to prevent blocking gRPC event loop.
+    Runs synchronous download in background thread.
 
     Args:
         url: Pre-signed S3 URL or other image URL
@@ -40,12 +54,11 @@ def download_image_from_url(url: str) -> Image.Image:
     """
     logger.info(f"🖼️ Downloading image from URL: {url[:80]}...")
 
-    response = requests.get(url, timeout=10)
-    response.raise_for_status()
+    # Run blocking download in thread pool to avoid blocking event loop
+    loop = asyncio.get_event_loop()
+    image = await loop.run_in_executor(_image_download_pool, _download_image_sync, url)
 
-    image = Image.open(BytesIO(response.content))
     logger.info(f"✅ Image downloaded: {image.size} {image.mode}")
-
     return image
 
 
@@ -82,7 +95,7 @@ async def proto_parts_to_smolagents_content(
             logger.info(f"🖼️ Processing image URL: {image_url[:80]}...")
 
             try:
-                pil_image = download_image_from_url(image_url)
+                pil_image = await download_image_from_url(image_url)
                 content_parts.append(ImageContentPart(
                     type="image",
                     image=pil_image  # PIL Image object, not URL

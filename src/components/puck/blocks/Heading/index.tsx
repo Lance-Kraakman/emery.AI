@@ -5,7 +5,7 @@ import { Heading as _Heading } from "@/components/puck/components/Heading";
 import type { HeadingProps as _HeadingProps } from "@/components/puck/components/Heading";
 import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
-import { ColorFieldRenderer } from "@/components/puck/fields/ColorField";
+import { typographySizeField, backgroundColorField, textColorField, fontFamilyField, fontWeightField } from "../../fields/standard-fields";
 
 export type HeadingProps = WithLayout<{
   align: "left" | "center" | "right";
@@ -13,17 +13,10 @@ export type HeadingProps = WithLayout<{
   level?: _HeadingProps["rank"];
   size: _HeadingProps["size"];
   textColor?: string;
+  backgroundColor?: string;
+  fontFamily?: string;
+  fontWeight?: string;
 }>;
-
-const sizeOptions = [
-  { value: "xxxl", label: "XXXL" },
-  { value: "xxl", label: "XXL" },
-  { value: "xl", label: "XL" },
-  { value: "l", label: "L" },
-  { value: "m", label: "M" },
-  { value: "s", label: "S" },
-  { value: "xs", label: "XS" },
-];
 
 const levelOptions = [
   { label: "", value: "" },
@@ -41,10 +34,7 @@ const HeadingInternal: ComponentConfig<HeadingProps> = {
       type: "textarea",
       contentEditable: true,
     },
-    size: {
-      type: "select",
-      options: sizeOptions,
-    },
+    size: typographySizeField,
     level: {
       type: "select",
       options: levelOptions,
@@ -57,22 +47,24 @@ const HeadingInternal: ComponentConfig<HeadingProps> = {
         { label: "Right", value: "right" },
       ],
     },
-    textColor: {
-      type: "custom",
-      label: "Text Color (Optional)",
-      render: ColorFieldRenderer,
-    },
+    textColor: textColorField,
+    backgroundColor: backgroundColorField,
+    fontFamily: fontFamilyField,
+    fontWeight: fontWeightField,
   },
   defaultProps: {
     align: "left",
     text: "Heading",
-    size: "m",
+    size: "2xl",
     textColor: undefined,
+    backgroundColor: undefined,
+    fontFamily: undefined,
+    fontWeight: undefined,
     layout: {
       padding: "8px",
     },
   },
-  render: ({ align, text, size, level, textColor }) => {
+  render: ({ align, text, size, level, textColor, backgroundColor, fontFamily, fontWeight }) => {
     return (
       <Section>
         <_Heading size={size} rank={level as any}>
@@ -82,6 +74,9 @@ const HeadingInternal: ComponentConfig<HeadingProps> = {
               textAlign: align,
               width: "100%",
               ...(textColor && { color: textColor }),
+              ...(backgroundColor && { backgroundColor }),
+              ...(fontFamily && { fontFamily }),
+              ...(fontWeight && { fontWeight }),
             }}
           >
             {text}

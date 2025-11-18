@@ -5,11 +5,12 @@ import { useRouter } from 'next/navigation';
 import type { PageDTO } from '@/app/mappers/puck-page-mapper';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, FileText, EyeOff, Edit, Trash2, MoreVertical, Monitor, Eye } from 'lucide-react';
+import { Plus, FileText, EyeOff, Edit, Trash2, MoreVertical, Monitor, Eye, Home } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Loading } from '@/components/ui/loading';
 import { PageFormDialog } from './PageFormDialog';
 import { deletePage } from '@/app/actions/puck-pages';
+import { setAppHomePage } from '@/app/actions/puck-apps';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,20 +29,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
+import { ShareButton } from '@/components/permissions/ShareButton';
 
 interface PagesSectionProps {
   appId: number;
   pages: PageDTO[];
   loading: boolean;
+  homePageId?: number;
   onPagesChange?: () => void;
 }
 
-export function PagesSection({ appId, pages, loading, onPagesChange }: PagesSectionProps) {
+export function PagesSection({ appId, pages, loading, homePageId, onPagesChange }: PagesSectionProps) {
   const router = useRouter();
   const [showPageDialog, setShowPageDialog] = useState(false);
   const [editingPage, setEditingPage] = useState<PageDTO | undefined>();
   const [deletingPage, setDeletingPage] = useState<PageDTO | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [settingHomePage, setSettingHomePage] = useState(false);
 
   const handleAddPage = () => {
     setEditingPage(undefined);
@@ -87,6 +91,56 @@ export function PagesSection({ appId, pages, loading, onPagesChange }: PagesSect
     }
   };
 
+  const handleSetHomePage = async (page: PageDTO) => {
+    try {
+      setSettingHomePage(true);
+      const result = await setAppHomePage(appId, page.id, `/apps/${appId}`);
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to set home page");
+        return;
+      }
+
+      toast.success(`"${page.name}" set as home page`);
+
+      if (onPagesChange) {
+        onPagesChange();
+      }
+
+      router.refresh();
+    } catch (error) {
+      console.error('Error setting home page:', error);
+      toast.error("Failed to set home page");
+    } finally {
+      setSettingHomePage(false);
+    }
+  };
+
+  const handleRemoveHomePage = async () => {
+    try {
+      setSettingHomePage(true);
+      const result = await setAppHomePage(appId, null, `/apps/${appId}`);
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to remove home page");
+        return;
+      }
+
+      toast.success("Home page removed");
+
+      if (onPagesChange) {
+        onPagesChange();
+      }
+
+      router.refresh();
+    } catch (error) {
+      console.error('Error removing home page:', error);
+      toast.error("Failed to remove home page");
+    } finally {
+      setSettingHomePage(false);
+    }
+  };
+
   return (
     <>
       <Card>
@@ -122,32 +176,47 @@ export function PagesSection({ appId, pages, loading, onPagesChange }: PagesSect
           ) : (
             <div className="space-y-1">
               {pages.map((page) => (
-                <div
+                 <div
                   key={page.id}
-                  className="flex items-center justify-between p-2 border rounded hover:bg-secondary/50 transition-colors"
+                  className="flex items-center justify-between p-2 border rounded hover:bg-secondary/50 transition-colors cursor-pointer"
+                  onClick={() => handleEditPage(page)}
                 >
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    {homePageId === page.id ? (
+                      <div title="Home page" className="flex-shrink-0">
+                        <Home className="h-3.5 w-3.5 text-primary" />
+                      </div>
+                    ) : (
+                      <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    )}
                     <span className="text-sm font-medium truncate">{page.name}</span>
                     <span className="text-xs text-muted-foreground truncate">/{page.slug}</span>
                     <Badge
-                      variant={page.isPublished ? "default" : "secondary"}
+                      variant={page.isPublic ? "default" : "secondary"}
                       className="flex-shrink-0 text-xs h-5"
                     >
-                      {page.isPublished ? (
+                      {page.isPublic ? (
                         <>
                           <Eye className="h-2.5 w-2.5 mr-1" />
-                          Published
+                          Public
                         </>
                       ) : (
                         <>
                           <EyeOff className="h-2.5 w-2.5 mr-1" />
-                          Draft
+                          Private
                         </>
                       )}
                     </Badge>
                   </div>
-                  <DropdownMenu>
+                  <div className="flex items-center gap-1">
+                    <ShareButton
+                      resourceType="page"
+                      resourceId={page.id}
+                      variant="ghost"
+                      size="icon"
+                      onShare={() => console.log('Share page:', page.id)}
+                    />
+                    <DropdownMenu>
                     <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
                         <MoreVertical className="h-3.5 w-3.5" />
@@ -166,15 +235,33 @@ export function PagesSection({ appId, pages, loading, onPagesChange }: PagesSect
                         Edit Details
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
+                      {homePageId === page.id ? (
+                        <DropdownMenuItem
+                          onClick={handleRemoveHomePage}
+                          disabled={settingHomePage}
+                        >
+                          <Home className="h-4 w-4 mr-2" />
+                          Remove as Home Page
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem
+                          onClick={() => handleSetHomePage(page)}
+                          disabled={settingHomePage}
+                        >
+                          <Home className="h-4 w-4 mr-2" />
+                          Set as Home Page
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem
                         className="text-destructive"
                         onClick={() => setDeletingPage(page)}
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  </div>
                 </div>
               ))}
             </div>

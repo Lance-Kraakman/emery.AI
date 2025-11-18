@@ -85,7 +85,8 @@ export class DrizzleAppRepository implements IAppRepository {
         slug: persistence.slug,
         description: persistence.description,
         themeConfig: persistence.themeConfig,
-        createdBy: persistence.createdBy,
+        homePageId: persistence.homePageId,
+        ownerId: persistence.ownerId,
         createdAt: persistence.createdAt,
         updatedAt: persistence.updatedAt
       }).returning();
@@ -108,6 +109,7 @@ export class DrizzleAppRepository implements IAppRepository {
           slug: persistence.slug,
           description: persistence.description,
           themeConfig: persistence.themeConfig,
+          homePageId: persistence.homePageId,
           updatedAt: new Date()
         })
         .where(eq(apps.id, persistence.id))
@@ -159,7 +161,8 @@ export class DrizzleAppRepository implements IAppRepository {
       slug: record.slug,
       description: record.description,
       themeConfig: record.themeConfig,
-      createdBy: record.createdBy,
+      homePageId: record.homePageId ?? undefined,
+      ownerId: record.ownerId,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     });

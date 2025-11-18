@@ -4,11 +4,11 @@
 // Uses table application service for field operations as part of table aggregate
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "./permissions";
+import { requirePermission, requireResourcePermission } from "./permissions";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateFieldData } from "./types";
-import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field";
+import type { FieldType, AutonumberFieldConfig } from "@/ddd/domain/tables/value-objects/table-field";
 import type { CreateFieldCommand } from "@/ddd/application/services/tables/table-application-service";
 import { TableId } from "@/ddd/domain/shared/value-objects";
 import { FieldMapper, type FieldDTO } from "@/app/mappers/field-mapper";
@@ -18,7 +18,7 @@ const logger = createDebugLogger('Fields');
 
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:create");
+    const session = await requirePermission("database:create");
     const { tableId, name, type, required = false, relatedTableId, metadata } = data;
 
     if (!tableId || !name || !type) {
@@ -148,6 +148,9 @@ export async function getFields(tableId: number): Promise<FieldDTO[]> {
       throw new Error("tableId is required");
     }
 
+    // Fields inherit permissions from their parent table
+    await requireResourcePermission("database:view", "table", tableId);
+
     const tableApplicationService = getTableApplicationService();
     const fieldList = await tableApplicationService.getFieldsForTable(TableId.fromNumber(tableId));
     const dtoFields = fieldList.map(FieldMapper.toDTO);
@@ -189,9 +192,6 @@ export async function updateField(data: {
   try {
     logger.debug('[updateField] Called', { tableId: data.tableId, fieldName: data.fieldName, updates: data.updates });
 
-    const session = await requirePermission("data:manage");
-    logger.debug('[updateField] Permission check passed', { userId: session.user.id });
-
     const { tableId, fieldName, updates } = data;
 
     if (!tableId || !fieldName) {
@@ -201,6 +201,10 @@ export async function updateField(data: {
         error: "tableId and fieldName are required",
       };
     }
+
+    // Fields inherit permissions from their parent table
+    await requireResourcePermission("database:manage", "table", tableId);
+    logger.debug('[updateField] Permission check passed');
 
     const tableApplicationService = getTableApplicationService();
     logger.debug('[updateField] Calling tableApplicationService.updateField');
@@ -267,9 +271,6 @@ export async function deleteField(tableId: number, fieldName: string, revalidate
   try {
     logger.debug('[deleteField] Called', { tableId, fieldName });
 
-    const session = await requirePermission("data:manage");
-    logger.debug('[deleteField] Permission check passed', { userId: session.user.id });
-
     if (!tableId || !fieldName) {
       logger.error('[deleteField] Validation failed: missing tableId or fieldName');
       return {
@@ -277,6 +278,10 @@ export async function deleteField(tableId: number, fieldName: string, revalidate
         error: "Table ID and field name are required",
       };
     }
+
+    // Fields inherit permissions from their parent table
+    await requireResourcePermission("database:manage", "table", tableId);
+    logger.debug('[deleteField] Permission check passed');
 
     const tableApplicationService = getTableApplicationService();
     logger.debug('[deleteField] Calling tableApplicationService.deleteField');
@@ -328,7 +333,6 @@ export async function deleteFieldAction(formData: FormData): Promise<Result> {
 
   try {
     // We need to find the field by ID to get its name and table
-    const session = await requirePermission("data:manage");
     const tableApplicationService = getTableApplicationService();
 
     // Get all tables to find which table contains this field
@@ -355,6 +359,9 @@ export async function deleteFieldAction(formData: FormData): Promise<Result> {
         error: "Field not found"
       };
     }
+
+    // Fields inherit permissions from their parent table
+    await requireResourcePermission("database:manage", "table", targetTable.id);
 
     logger.debug('Deleting field', {
       fieldId,
@@ -385,7 +392,6 @@ export async function reorderFields(data: {
   fieldOrders: Array<{ fieldName: string; orderIndex: number }>
 }, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
     const { tableId, fieldOrders } = data;
 
     if (!tableId || !fieldOrders || fieldOrders.length === 0) {
@@ -394,6 +400,9 @@ export async function reorderFields(data: {
         error: "tableId and fieldOrders are required",
       };
     }
+
+    // Fields inherit permissions from their parent table
+    await requireResourcePermission("database:manage", "table", tableId);
 
     const tableApplicationService = getTableApplicationService();
 
@@ -420,7 +429,7 @@ export async function reorderFields(data: {
     } else {
       revalidatePath('/data'); // Default path for field operations
     }
-    
+
     return {
       success: true,
       data: { message: "Fields reordered successfully" },
@@ -430,6 +439,54 @@ export async function reorderFields(data: {
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to reorder fields",
+    };
+  }
+}
+
+/**
+ * Reset autonumber field counter
+ * Only affects new rows - existing rows are not changed
+ */
+export async function resetAutonumberCounter(
+  tableId: number,
+  fieldName: string,
+  resetValue?: number,
+  revalidateUrl?: string
+): Promise<Result> {
+  try {
+    // Fields inherit permissions from their parent table
+    await requireResourcePermission("database:manage", "table", tableId);
+
+    // Get field and verify it's autonumber
+    const fields = await getFields(tableId);
+    const field = fields.find(f => f.name === fieldName);
+
+    if (!field || field.type !== 'autonumber') {
+      return {
+        success: false,
+        error: "Field not found or not an autonumber field",
+      };
+    }
+
+    // Get current metadata and determine reset value
+    const currentMetadata = (field.metadata as AutonumberFieldConfig) || {};
+    const newCurrentValue = resetValue ?? currentMetadata.startingNumber ?? 1;
+
+    // Update field metadata (set to resetValue - 1 so next number is resetValue)
+    return await updateField({
+      tableId,
+      fieldName,
+      updates: {
+        metadata: {
+          ...currentMetadata,
+          currentValue: newCurrentValue - 1
+        }
+      }
+    }, revalidateUrl);
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to reset counter",
     };
   }
 }

@@ -216,6 +216,8 @@ export interface TaskRequest {
   agentModel: string;
   /** Organization default model (fallback for agent model) */
   organizationModel: string;
+  /** Runtime input attachments for skill execution */
+  inputContent: MessagePart[];
 }
 
 /**
@@ -320,6 +322,8 @@ export interface AgentConfig {
  * Skill configuration with single instruction block
  */
 export interface SkillConfig {
+  /** Skill ID for unique identification */
+  id: number;
   name: string;
   description: string;
   inputs: SkillInput[];
@@ -328,17 +332,35 @@ export interface SkillConfig {
   tools: ToolConfig[];
   /** Optional: model override for this skill */
   model: string;
+  /** Skill-level attachments (images, files, text) */
+  content: MessagePart[];
 }
 
 /** Skill input parameter */
 export interface SkillInput {
   name: string;
   required: boolean;
+  /** text, image, file, audio, video, document */
+  type: string;
+  /** File configuration (for file-type inputs) */
+  fileConfig: SkillInputFileConfig | undefined;
+}
+
+/** File configuration for skill inputs */
+export interface SkillInputFileConfig {
+  /** Allowed MIME types (e.g., ["image/*", "application/pdf"]) */
+  allowedMimeTypes: string[];
+  /** Maximum file size in bytes */
+  maxSizeBytes: number;
+  /** Allow multiple files */
+  multiple: boolean;
 }
 
 /** Skill output value */
 export interface SkillOutput {
   name: string;
+  /** text, image, file, audio, video, document */
+  type: string;
 }
 
 /** Tool configuration */
@@ -430,8 +452,10 @@ export interface ProcessMessageRequest {
     | undefined;
   /** Conversation history (only used if session not in memory - for restoration after restart/timeout) */
   conversationHistory: HistoryMessage[];
-  /** Tools for ToolCallingAgent execution (can be empty) */
-  tools: ToolConfig[];
+  /** Complete agent configuration (tools, skills, servers) */
+  agentConfig:
+    | AgentConfig
+    | undefined;
   /** Optional: model override for this chat message */
   model: string;
   /** Unique message identifier for cancellation */
@@ -645,6 +669,7 @@ function createBaseTaskRequest(): TaskRequest {
     name: "",
     agentModel: "",
     organizationModel: "",
+    inputContent: [],
   };
 }
 
@@ -685,6 +710,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     }
     if (message.organizationModel !== "") {
       writer.uint32(98).string(message.organizationModel);
+    }
+    for (const v of message.inputContent) {
+      MessagePart.encode(v!, writer.uint32(106).fork()).join();
     }
     return writer;
   },
@@ -792,6 +820,14 @@ export const TaskRequest: MessageFns<TaskRequest> = {
           message.organizationModel = reader.string();
           continue;
         }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          message.inputContent.push(MessagePart.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -817,6 +853,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       agentModel: isSet(object.agentModel) ? globalThis.String(object.agentModel) : "",
       organizationModel: isSet(object.organizationModel) ? globalThis.String(object.organizationModel) : "",
+      inputContent: globalThis.Array.isArray(object?.inputContent)
+        ? object.inputContent.map((e: any) => MessagePart.fromJSON(e))
+        : [],
     };
   },
 
@@ -858,6 +897,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     if (message.organizationModel !== "") {
       obj.organizationModel = message.organizationModel;
     }
+    if (message.inputContent?.length) {
+      obj.inputContent = message.inputContent.map((e) => MessagePart.toJSON(e));
+    }
     return obj;
   },
 
@@ -884,6 +926,7 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     message.name = object.name ?? "";
     message.agentModel = object.agentModel ?? "";
     message.organizationModel = object.organizationModel ?? "";
+    message.inputContent = object.inputContent?.map((e) => MessagePart.fromPartial(e)) || [];
     return message;
   },
 };
@@ -1840,31 +1883,47 @@ export const AgentConfig: MessageFns<AgentConfig> = {
 };
 
 function createBaseSkillConfig(): SkillConfig {
-  return { name: "", description: "", inputs: [], outputs: [], instructions: "", tools: [], model: "" };
+  return {
+    id: 0,
+    name: "",
+    description: "",
+    inputs: [],
+    outputs: [],
+    instructions: "",
+    tools: [],
+    model: "",
+    content: [],
+  };
 }
 
 export const SkillConfig: MessageFns<SkillConfig> = {
   encode(message: SkillConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== 0) {
+      writer.uint32(8).int32(message.id);
+    }
     if (message.name !== "") {
-      writer.uint32(10).string(message.name);
+      writer.uint32(18).string(message.name);
     }
     if (message.description !== "") {
-      writer.uint32(18).string(message.description);
+      writer.uint32(26).string(message.description);
     }
     for (const v of message.inputs) {
-      SkillInput.encode(v!, writer.uint32(26).fork()).join();
+      SkillInput.encode(v!, writer.uint32(34).fork()).join();
     }
     for (const v of message.outputs) {
-      SkillOutput.encode(v!, writer.uint32(34).fork()).join();
+      SkillOutput.encode(v!, writer.uint32(42).fork()).join();
     }
     if (message.instructions !== "") {
-      writer.uint32(42).string(message.instructions);
+      writer.uint32(50).string(message.instructions);
     }
     for (const v of message.tools) {
-      ToolConfig.encode(v!, writer.uint32(50).fork()).join();
+      ToolConfig.encode(v!, writer.uint32(58).fork()).join();
     }
     if (message.model !== "") {
-      writer.uint32(58).string(message.model);
+      writer.uint32(66).string(message.model);
+    }
+    for (const v of message.content) {
+      MessagePart.encode(v!, writer.uint32(74).fork()).join();
     }
     return writer;
   },
@@ -1877,11 +1936,11 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1: {
-          if (tag !== 10) {
+          if (tag !== 8) {
             break;
           }
 
-          message.name = reader.string();
+          message.id = reader.int32();
           continue;
         }
         case 2: {
@@ -1889,7 +1948,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.description = reader.string();
+          message.name = reader.string();
           continue;
         }
         case 3: {
@@ -1897,7 +1956,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.inputs.push(SkillInput.decode(reader, reader.uint32()));
+          message.description = reader.string();
           continue;
         }
         case 4: {
@@ -1905,7 +1964,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.outputs.push(SkillOutput.decode(reader, reader.uint32()));
+          message.inputs.push(SkillInput.decode(reader, reader.uint32()));
           continue;
         }
         case 5: {
@@ -1913,7 +1972,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.instructions = reader.string();
+          message.outputs.push(SkillOutput.decode(reader, reader.uint32()));
           continue;
         }
         case 6: {
@@ -1921,7 +1980,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.tools.push(ToolConfig.decode(reader, reader.uint32()));
+          message.instructions = reader.string();
           continue;
         }
         case 7: {
@@ -1929,7 +1988,23 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
+          message.tools.push(ToolConfig.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
           message.model = reader.string();
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.content.push(MessagePart.decode(reader, reader.uint32()));
           continue;
         }
       }
@@ -1943,6 +2018,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
 
   fromJSON(object: any): SkillConfig {
     return {
+      id: isSet(object.id) ? globalThis.Number(object.id) : 0,
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       description: isSet(object.description) ? globalThis.String(object.description) : "",
       inputs: globalThis.Array.isArray(object?.inputs) ? object.inputs.map((e: any) => SkillInput.fromJSON(e)) : [],
@@ -1950,11 +2026,15 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
       tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
       model: isSet(object.model) ? globalThis.String(object.model) : "",
+      content: globalThis.Array.isArray(object?.content) ? object.content.map((e: any) => MessagePart.fromJSON(e)) : [],
     };
   },
 
   toJSON(message: SkillConfig): unknown {
     const obj: any = {};
+    if (message.id !== 0) {
+      obj.id = Math.round(message.id);
+    }
     if (message.name !== "") {
       obj.name = message.name;
     }
@@ -1976,6 +2056,9 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     if (message.model !== "") {
       obj.model = message.model;
     }
+    if (message.content?.length) {
+      obj.content = message.content.map((e) => MessagePart.toJSON(e));
+    }
     return obj;
   },
 
@@ -1984,6 +2067,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
   },
   fromPartial<I extends Exact<DeepPartial<SkillConfig>, I>>(object: I): SkillConfig {
     const message = createBaseSkillConfig();
+    message.id = object.id ?? 0;
     message.name = object.name ?? "";
     message.description = object.description ?? "";
     message.inputs = object.inputs?.map((e) => SkillInput.fromPartial(e)) || [];
@@ -1991,12 +2075,13 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     message.instructions = object.instructions ?? "";
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.model = object.model ?? "";
+    message.content = object.content?.map((e) => MessagePart.fromPartial(e)) || [];
     return message;
   },
 };
 
 function createBaseSkillInput(): SkillInput {
-  return { name: "", required: false };
+  return { name: "", required: false, type: "", fileConfig: undefined };
 }
 
 export const SkillInput: MessageFns<SkillInput> = {
@@ -2006,6 +2091,12 @@ export const SkillInput: MessageFns<SkillInput> = {
     }
     if (message.required !== false) {
       writer.uint32(16).bool(message.required);
+    }
+    if (message.type !== "") {
+      writer.uint32(26).string(message.type);
+    }
+    if (message.fileConfig !== undefined) {
+      SkillInputFileConfig.encode(message.fileConfig, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -2033,6 +2124,22 @@ export const SkillInput: MessageFns<SkillInput> = {
           message.required = reader.bool();
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.fileConfig = SkillInputFileConfig.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2046,6 +2153,8 @@ export const SkillInput: MessageFns<SkillInput> = {
     return {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       required: isSet(object.required) ? globalThis.Boolean(object.required) : false,
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+      fileConfig: isSet(object.fileConfig) ? SkillInputFileConfig.fromJSON(object.fileConfig) : undefined,
     };
   },
 
@@ -2057,6 +2166,12 @@ export const SkillInput: MessageFns<SkillInput> = {
     if (message.required !== false) {
       obj.required = message.required;
     }
+    if (message.type !== "") {
+      obj.type = message.type;
+    }
+    if (message.fileConfig !== undefined) {
+      obj.fileConfig = SkillInputFileConfig.toJSON(message.fileConfig);
+    }
     return obj;
   },
 
@@ -2067,18 +2182,119 @@ export const SkillInput: MessageFns<SkillInput> = {
     const message = createBaseSkillInput();
     message.name = object.name ?? "";
     message.required = object.required ?? false;
+    message.type = object.type ?? "";
+    message.fileConfig = (object.fileConfig !== undefined && object.fileConfig !== null)
+      ? SkillInputFileConfig.fromPartial(object.fileConfig)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseSkillInputFileConfig(): SkillInputFileConfig {
+  return { allowedMimeTypes: [], maxSizeBytes: 0, multiple: false };
+}
+
+export const SkillInputFileConfig: MessageFns<SkillInputFileConfig> = {
+  encode(message: SkillInputFileConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.allowedMimeTypes) {
+      writer.uint32(10).string(v!);
+    }
+    if (message.maxSizeBytes !== 0) {
+      writer.uint32(16).int64(message.maxSizeBytes);
+    }
+    if (message.multiple !== false) {
+      writer.uint32(24).bool(message.multiple);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SkillInputFileConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSkillInputFileConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.allowedMimeTypes.push(reader.string());
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.maxSizeBytes = longToNumber(reader.int64());
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.multiple = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SkillInputFileConfig {
+    return {
+      allowedMimeTypes: globalThis.Array.isArray(object?.allowedMimeTypes)
+        ? object.allowedMimeTypes.map((e: any) => globalThis.String(e))
+        : [],
+      maxSizeBytes: isSet(object.maxSizeBytes) ? globalThis.Number(object.maxSizeBytes) : 0,
+      multiple: isSet(object.multiple) ? globalThis.Boolean(object.multiple) : false,
+    };
+  },
+
+  toJSON(message: SkillInputFileConfig): unknown {
+    const obj: any = {};
+    if (message.allowedMimeTypes?.length) {
+      obj.allowedMimeTypes = message.allowedMimeTypes;
+    }
+    if (message.maxSizeBytes !== 0) {
+      obj.maxSizeBytes = Math.round(message.maxSizeBytes);
+    }
+    if (message.multiple !== false) {
+      obj.multiple = message.multiple;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SkillInputFileConfig>, I>>(base?: I): SkillInputFileConfig {
+    return SkillInputFileConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SkillInputFileConfig>, I>>(object: I): SkillInputFileConfig {
+    const message = createBaseSkillInputFileConfig();
+    message.allowedMimeTypes = object.allowedMimeTypes?.map((e) => e) || [];
+    message.maxSizeBytes = object.maxSizeBytes ?? 0;
+    message.multiple = object.multiple ?? false;
     return message;
   },
 };
 
 function createBaseSkillOutput(): SkillOutput {
-  return { name: "" };
+  return { name: "", type: "" };
 }
 
 export const SkillOutput: MessageFns<SkillOutput> = {
   encode(message: SkillOutput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.name !== "") {
       writer.uint32(10).string(message.name);
+    }
+    if (message.type !== "") {
+      writer.uint32(18).string(message.type);
     }
     return writer;
   },
@@ -2098,6 +2314,14 @@ export const SkillOutput: MessageFns<SkillOutput> = {
           message.name = reader.string();
           continue;
         }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2108,13 +2332,19 @@ export const SkillOutput: MessageFns<SkillOutput> = {
   },
 
   fromJSON(object: any): SkillOutput {
-    return { name: isSet(object.name) ? globalThis.String(object.name) : "" };
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+    };
   },
 
   toJSON(message: SkillOutput): unknown {
     const obj: any = {};
     if (message.name !== "") {
       obj.name = message.name;
+    }
+    if (message.type !== "") {
+      obj.type = message.type;
     }
     return obj;
   },
@@ -2125,6 +2355,7 @@ export const SkillOutput: MessageFns<SkillOutput> = {
   fromPartial<I extends Exact<DeepPartial<SkillOutput>, I>>(object: I): SkillOutput {
     const message = createBaseSkillOutput();
     message.name = object.name ?? "";
+    message.type = object.type ?? "";
     return message;
   },
 };
@@ -2995,7 +3226,7 @@ function createBaseProcessMessageRequest(): ProcessMessageRequest {
     organizationId: 0,
     context: undefined,
     conversationHistory: [],
-    tools: [],
+    agentConfig: undefined,
     model: "",
     messageId: "",
     sessionId: "",
@@ -3019,8 +3250,8 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     for (const v of message.conversationHistory) {
       HistoryMessage.encode(v!, writer.uint32(42).fork()).join();
     }
-    for (const v of message.tools) {
-      ToolConfig.encode(v!, writer.uint32(50).fork()).join();
+    if (message.agentConfig !== undefined) {
+      AgentConfig.encode(message.agentConfig, writer.uint32(50).fork()).join();
     }
     if (message.model !== "") {
       writer.uint32(58).string(message.model);
@@ -3086,7 +3317,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
             break;
           }
 
-          message.tools.push(ToolConfig.decode(reader, reader.uint32()));
+          message.agentConfig = AgentConfig.decode(reader, reader.uint32());
           continue;
         }
         case 7: {
@@ -3133,7 +3364,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
       conversationHistory: globalThis.Array.isArray(object?.conversationHistory)
         ? object.conversationHistory.map((e: any) => HistoryMessage.fromJSON(e))
         : [],
-      tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
+      agentConfig: isSet(object.agentConfig) ? AgentConfig.fromJSON(object.agentConfig) : undefined,
       model: isSet(object.model) ? globalThis.String(object.model) : "",
       messageId: isSet(object.messageId) ? globalThis.String(object.messageId) : "",
       sessionId: isSet(object.sessionId) ? globalThis.String(object.sessionId) : "",
@@ -3157,8 +3388,8 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     if (message.conversationHistory?.length) {
       obj.conversationHistory = message.conversationHistory.map((e) => HistoryMessage.toJSON(e));
     }
-    if (message.tools?.length) {
-      obj.tools = message.tools.map((e) => ToolConfig.toJSON(e));
+    if (message.agentConfig !== undefined) {
+      obj.agentConfig = AgentConfig.toJSON(message.agentConfig);
     }
     if (message.model !== "") {
       obj.model = message.model;
@@ -3184,7 +3415,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
       ? ChatContext.fromPartial(object.context)
       : undefined;
     message.conversationHistory = object.conversationHistory?.map((e) => HistoryMessage.fromPartial(e)) || [];
-    message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
+    message.agentConfig = (object.agentConfig !== undefined && object.agentConfig !== null)
+      ? AgentConfig.fromPartial(object.agentConfig)
+      : undefined;
     message.model = object.model ?? "";
     message.messageId = object.messageId ?? "";
     message.sessionId = object.sessionId ?? "";

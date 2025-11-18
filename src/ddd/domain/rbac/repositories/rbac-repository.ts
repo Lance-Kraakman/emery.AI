@@ -37,7 +37,11 @@ export interface IRBACRepository {
   findRoleById(id: number): Promise<Role | null>;
   findRolesByOrganization(organizationId: OrganizationId): Promise<Role[]>;
   getSystemRoles(): Promise<Role[]>;
-  
+
+  // Efficient lookups for personal and team roles
+  findPersonalRole(userId: UserId, organizationId: OrganizationId): Promise<Role | null>;
+  findTeamRole(teamId: number, organizationId: OrganizationId): Promise<Role | null>;
+
   // Role-permission assignment
   addPermissionsToRole(roleId: number, permissions: Permission[]): Promise<void>;
   removePermissionsFromRole(roleId: number, permissions: Permission[]): Promise<void>;

@@ -12,6 +12,41 @@ import { getSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from
 import { Permission, type PermissionCheck } from '@/ddd/domain/shared/value-objects/permission'
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects'
 import { getRBACRepository } from "@/ddd/application/di/container"
+import { apps } from "./db/schema"
+
+// AIDEV-NOTE: Helper function to extract app context from public URL
+// Determines which app user is signing into from the callbackUrl
+async function extractAppContextFromUrl(url: string | null): Promise<{ orgSlug: string; appSlug: string; appId: number } | null> {
+  if (!url) return null;
+
+  // Parse URL like "/public/acme/crm/..." or "http://localhost:3000/public/acme/crm/..."
+  const match = url.match(/\/public\/([^/]+)\/([^/]+)/);
+  if (!match) return null;
+
+  const [_, orgSlug, appSlug] = match;
+
+  try {
+    // Look up app by slug to get appId
+    const appResults = await db
+      .select({
+        id: apps.id,
+        slug: apps.slug,
+        orgId: apps.organizationId
+      })
+      .from(apps)
+      .innerJoin(organizations, eq(apps.organizationId, organizations.id))
+      .where(eq(apps.slug, appSlug))
+      .limit(1);
+
+    if (appResults.length === 0) return null;
+
+    const app = appResults[0];
+    return { orgSlug, appSlug, appId: app.id };
+  } catch (error) {
+    console.error('Error extracting app context from URL:', error);
+    return null;
+  }
+}
 
 // AIDEV-NOTE: Development bypass for testing - allows tests to authenticate as specific user
 export function getTestUserId(): string {
@@ -84,7 +119,11 @@ export const authOptions = {
           session.user.id = user.id;
           session.user.currentOrganizationId = userRecord?.currentOrganizationId;
           session.user.jobTitle = userRecord?.jobTitle;
-          
+
+          // NEW: Add app-only user fields
+          session.user.isAppOnlyUser = userRecord?.isAppOnlyUser || false;
+          session.user.allowedApps = userRecord?.allowedApps || null;
+
           // Get user's organizations and current organization details
           if (userRecord) {
             try {
@@ -159,6 +198,55 @@ export const authOptions = {
         token.id = user.id;
       }
       return token;
+    },
+    async signIn({ user, account, profile }: any) {
+      try {
+        // Check if user already exists
+        const existingUser = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, user.id))
+          .limit(1);
+
+        const userExists = existingUser.length > 0;
+
+        // For existing users, validate access based on user type
+        if (userExists) {
+          const dbUser = existingUser[0];
+          // App-only users are allowed to sign in from /public/* routes
+          // Organization users can sign in from anywhere
+          // This check happens in middleware for platform route protection
+          return true;
+        }
+
+        // For new users, they will be created by the adapter automatically
+        // We'll set isAppOnlyUser in a separate callback or during first session
+        return true;
+      } catch (error) {
+        console.error('Error in signIn callback:', error);
+        return true; // Allow sign in to proceed, let NextAuth handle errors
+      }
+    },
+    async redirect({ url, baseUrl }: any) {
+      // Allow relative URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+
+      // Allow same origin URLs
+      try {
+        if (new URL(url).origin === baseUrl) return url;
+      } catch (error) {
+        console.warn('Invalid URL in redirect:', url);
+      }
+
+      // Default redirect: check if it's a public app context or platform
+      // If URL is from public app route, keep them there
+      // Otherwise, send to platform dashboard
+      if (url.includes('/public/')) {
+        return url;
+      }
+
+      // Default to platform dashboard
+      return `${baseUrl}/mission-control/dashboard`;
     },
   },
   pages: {

@@ -12,6 +12,7 @@ import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { FieldType, SelectOption } from "@/ddd/domain/tables/value-objects/table-field"
 import type { TableDTO } from "@/app/mappers/table-mapper"
 import { SelectOptionsManager } from "@/components/tables/fields/SelectOptionsManager"
+import { AutonumberCounterReset } from "@/components/tables/fields/AutonumberCounterReset"
 
 interface EditFieldPanelProps {
   field: FieldDTO | null
@@ -19,6 +20,7 @@ interface EditFieldPanelProps {
   onClose: () => void
   onSave: (field: FieldDTO, updates: Partial<FieldDTO>) => Promise<void>
   availableTables?: TableDTO[]
+  tableId: number
 }
 
 const FIELD_TYPES: Array<{ value: FieldType; label: string }> = [
@@ -37,7 +39,7 @@ const FIELD_TYPES: Array<{ value: FieldType; label: string }> = [
   { value: "embedding", label: "Embedding" },
 ]
 
-export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables = [] }: EditFieldPanelProps) {
+export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables = [], tableId }: EditFieldPanelProps) {
   const [name, setName] = useState(field?.name || "")
   const [type, setType] = useState<FieldType | "">(field?.type || "")
   const [required, setRequired] = useState(field?.required || false)
@@ -349,6 +351,11 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
               <div className="text-sm text-muted-foreground border-t pt-2 mt-2">
                 <strong>Preview:</strong> {autonumberPrefix}{String(autonumberStart).padStart(autonumberDigits, '0')}{autonumberSuffix}
               </div>
+
+              {/* Current counter value and reset */}
+              {field && field.type === 'autonumber' && (
+                <AutonumberCounterReset field={field} tableId={tableId} />
+              )}
             </div>
           )}
 

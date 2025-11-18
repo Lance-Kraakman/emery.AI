@@ -45,13 +45,18 @@ interface NestedSidebarSectionProps<TParent, TChild> {
   onAddChild: (parentId: number) => void
   addParentLabel?: string
   addChildLabel?: string
+  // Resource type mapping for ShareButton
+  parentResourceType?: string
+  childResourceType?: string
   // Parent action callbacks
   onRenameParent?: (parent: TParent, newName: string) => void | Promise<void>
   onDuplicateParent?: (parent: TParent) => void | Promise<void>
+  onShareParent?: (parent: TParent) => void | Promise<void>
   onDeleteParent?: (parent: TParent) => void | Promise<void>
   // Child action callbacks
   onRenameChild?: (child: TChild, parent: TParent, newName: string) => void | Promise<void>
   onDuplicateChild?: (child: TChild, parent: TParent) => void | Promise<void>
+  onShareChild?: (child: TChild, parent: TParent) => void | Promise<void>
   onDeleteChild?: (child: TChild, parent: TParent) => void | Promise<void>
 }
 
@@ -77,18 +82,22 @@ export function NestedSidebarSection<TParent, TChild>({
   onAddChild,
   addParentLabel = `Add ${label.slice(0, -1)}`, // Remove trailing 's'
   addChildLabel = "Add Item",
+  parentResourceType,
+  childResourceType,
   onRenameParent,
   onDuplicateParent,
+  onShareParent,
   onDeleteParent,
   onRenameChild,
   onDuplicateChild,
+  onShareChild,
   onDeleteChild,
 }: NestedSidebarSectionProps<TParent, TChild>) {
   const [renamingParentId, setRenamingParentId] = React.useState<number | null>(null)
   const [renamingChildKey, setRenamingChildKey] = React.useState<number | null>(null)
 
-  const hasParentActions = onRenameParent || onDuplicateParent || onDeleteParent
-  const hasChildActions = onRenameChild || onDuplicateChild || onDeleteChild
+  const hasParentActions = onRenameParent || onDuplicateParent || onShareParent || onDeleteParent
+  const hasChildActions = onRenameChild || onDuplicateChild || onShareChild || onDeleteChild
 
   const handleRenameParent = async (parent: TParent, newName: string) => {
     if (onRenameParent) {
@@ -160,7 +169,10 @@ export function NestedSidebarSection<TParent, TChild>({
                             <SidebarItemActions
                               onRename={onRenameParent ? () => setRenamingParentId(parentId) : undefined}
                               onDuplicate={onDuplicateParent ? () => onDuplicateParent(parent) : undefined}
+                              onShare={onShareParent ? () => onShareParent(parent) : undefined}
                               onDelete={onDeleteParent ? () => onDeleteParent(parent) : undefined}
+                              shareResourceType={parentResourceType}
+                              shareResourceId={parentId}
                             />
                           )}
                         </div>
@@ -201,7 +213,10 @@ export function NestedSidebarSection<TParent, TChild>({
                                         className="opacity-0 group-hover/child:opacity-100"
                                         onRename={onRenameChild ? () => setRenamingChildKey(childKey) : undefined}
                                         onDuplicate={onDuplicateChild ? () => onDuplicateChild(child, parent) : undefined}
+                                        onShare={onShareChild ? () => onShareChild(child, parent) : undefined}
                                         onDelete={onDeleteChild ? () => onDeleteChild(child, parent) : undefined}
+                                        shareResourceType={childResourceType}
+                                        shareResourceId={childKey}
                                       />
                                     )}
                                   </div>

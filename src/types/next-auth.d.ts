@@ -20,6 +20,10 @@ declare module "next-auth" {
       jobTitle?: string
       isFirstUser?: boolean
       needsSetup?: boolean
+      // NEW: App-only user fields for published app authentication
+      isAppOnlyUser: boolean
+      allowedApps: number[] | null
+      lastAppAccess?: string // Format: "orgSlug/appSlug"
     } & DefaultSession["user"]
   }
 
@@ -32,5 +36,8 @@ declare module "next-auth" {
     jobTitle?: string
     isFirstUser?: boolean
     needsSetup?: boolean
+    // NEW: App-only user fields for published app authentication
+    isAppOnlyUser?: boolean
+    allowedApps?: number[] | null
   }
 }

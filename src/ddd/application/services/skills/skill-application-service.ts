@@ -5,6 +5,7 @@ import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-i
 import { SkillEntity, type Skill, type SkillInput, type SkillOutput, type ToolConfig } from '@/ddd/domain/skills/entities/skill';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
+import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 
 const logger = createDebugLogger('SkillService');
 
@@ -34,6 +35,7 @@ export interface UpdateSkillCommand {
   outputs?: SkillOutput[];
   instructions?: string;
   tools?: ToolConfig[];
+  content?: MessagePart[]; // Skill-level attachments
 }
 
 /**

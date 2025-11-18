@@ -46,7 +46,7 @@ import { THEME_PRESETS, matchesPreset } from "@/components/puck/theme-presets";
 import { usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 
 export interface ThemeSidebarPanelProps {
-  initialTheme?: any | undefined; // ThemeConfigProps from DTO (app mode only)
+  initialTheme?: ThemeConfigProps | undefined; // Theme config from DTO (app mode only)
   onSave?: (theme: ThemeConfigProps | undefined) => Promise<void>; // App mode only
   mode: "app" | "page";
 }
@@ -521,7 +521,7 @@ export function ThemeSidebarPanel({
 export interface ThemeEditorSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialTheme: any | undefined;
+  initialTheme: ThemeConfigProps | undefined;
   onSave: (theme: ThemeConfigProps | undefined) => Promise<void>;
   mode: "app" | "page";
 }

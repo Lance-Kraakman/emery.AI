@@ -64,7 +64,8 @@ function createFilePart(attachment: AnyAttachmentMetadata): MessagePart {
 
 /**
  * Extract tool references from message content
- * Finds patterns like @tool:gmail-create-draft and converts them to tool configs
+ * Finds patterns like @tool:gmail-create-draft and @skill:consultation-extraction
+ * and converts them to tool configs
  */
 function extractToolReferencesFromMessage(message: string): Array<{name: string, version: string, config: Record<string, unknown>}> {
   const toolReferences: Array<{name: string, version: string, config: Record<string, unknown>}> = []
@@ -89,6 +90,11 @@ function extractToolReferencesFromMessage(message: string): Array<{name: string,
       })
     }
   }
+
+  // AIDEV-NOTE: @skill: mentions are NOT extracted here
+  // Skills MUST be selected via UI to get proper skillId
+  // If user types @skill: in message, they must select it from autocomplete
+  // which adds it to selectedTools with the correct skillId
 
   return toolReferences
 }
@@ -304,11 +310,25 @@ export function useChatGRPC(
       // AIDEV-NOTE: Extract tools from both UI selection AND message content
 
       // 1. Get explicitly selected tools from UI
-      const selectedToolData = selectedTools.map(tool => ({
-        name: tool.name,
-        version: tool.version,
-        config: tool.config
-      }))
+      const selectedToolData = selectedTools.map(tool => {
+        // If tool has skillId, create skill_reference config
+        if (tool.skillId) {
+          return {
+            name: tool.name,
+            version: tool.version || '',
+            config: {
+              type: 'skill_reference',
+              skill_id: tool.skillId.toString()
+            }
+          }
+        }
+        // Regular tool - use existing config
+        return {
+          name: tool.name,
+          version: tool.version,
+          config: tool.config
+        }
+      })
 
       // 2. Extract tool references from message content (e.g., @tool:gmail-create-draft)
       const messageToolReferences = extractToolReferencesFromMessage(messageContent)

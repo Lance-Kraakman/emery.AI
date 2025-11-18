@@ -11,7 +11,7 @@ interface CategoryFiltersProps {
 }
 
 /**
- * Category filter buttons grid
+ * Category filter buttons grid - Two rows of 3 categories each
  */
 export function CategoryFilters({
   selectedCategories,
@@ -19,44 +19,57 @@ export function CategoryFilters({
   focusedIndex = -1,
   isInCategoryMode = false,
 }: CategoryFiltersProps) {
-  const allCategories = Object.values(ReferenceCategory);
+  // Split categories into two rows
+  const row1Categories = [ReferenceCategory.DOC, ReferenceCategory.FILE, ReferenceCategory.AGENT];
+  const row2Categories = [ReferenceCategory.TABLE, ReferenceCategory.DATABASE, ReferenceCategory.SKILL];
+
+  const renderCategoryButton = (category: ReferenceCategory, globalIndex: number) => {
+    const Icon = categoryIcons[category];
+    const categoryInfo = REFERENCE_CATEGORY_INFO[category];
+    const isSelected = selectedCategories.includes(category);
+    const isFocused = isInCategoryMode && focusedIndex === globalIndex;
+
+    return (
+      <button
+        key={category}
+        onClick={() => onToggleCategory(category)}
+        className={cn(
+          'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap',
+          isSelected
+            ? cn(
+                categoryColors[category],
+                'ring-1 ring-offset-1 shadow-sm',
+                // Ring colors by category
+                category === ReferenceCategory.DOC && 'ring-blue-400',
+                category === ReferenceCategory.FILE && 'ring-green-400',
+                category === ReferenceCategory.AGENT && 'ring-purple-400',
+                category === ReferenceCategory.TABLE && 'ring-orange-400',
+                category === ReferenceCategory.DATABASE && 'ring-gray-400',
+                category === ReferenceCategory.SKILL && 'ring-pink-400'
+              )
+            : 'text-gray-500 bg-gray-50 hover:bg-gray-100 hover:text-gray-700',
+          isFocused && 'ring-2 ring-blue-500 ring-offset-1'
+        )}
+        title={categoryInfo.description}
+      >
+        <Icon className="w-3 h-3" />
+        {categoryInfo.label}
+      </button>
+    );
+  };
 
   return (
     <div className="p-2.5 border-b border-gray-100">
-      <div className="flex flex-wrap gap-1.5">
-        {allCategories.map((category, index) => {
-          const Icon = categoryIcons[category];
-          const categoryInfo = REFERENCE_CATEGORY_INFO[category];
-          const isSelected = selectedCategories.includes(category);
-          const isFocused = isInCategoryMode && focusedIndex === index;
+      <div className="space-y-1.5">
+        {/* Row 1: Documents, Files, Agents */}
+        <div className="grid grid-cols-3 gap-1.5">
+          {row1Categories.map((category, index) => renderCategoryButton(category, index))}
+        </div>
 
-          return (
-            <button
-              key={category}
-              onClick={() => onToggleCategory(category)}
-              className={cn(
-                'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap',
-                isSelected
-                  ? cn(
-                      categoryColors[category],
-                      'ring-1 ring-offset-1 shadow-sm',
-                      // Ring colors by category
-                      category === ReferenceCategory.DOC && 'ring-blue-400',
-                      category === ReferenceCategory.FILE && 'ring-green-400',
-                      category === ReferenceCategory.AGENT && 'ring-purple-400',
-                      category === ReferenceCategory.TABLE && 'ring-orange-400',
-                      category === ReferenceCategory.DATABASE && 'ring-gray-400'
-                    )
-                  : 'text-gray-500 bg-gray-50 hover:bg-gray-100 hover:text-gray-700',
-                isFocused && 'ring-2 ring-blue-500 ring-offset-1'
-              )}
-              title={categoryInfo.description}
-            >
-              <Icon className="w-3 h-3" />
-              {categoryInfo.label}
-            </button>
-          );
-        })}
+        {/* Row 2: Tables, Databases, Skills */}
+        <div className="grid grid-cols-3 gap-1.5">
+          {row2Categories.map((category, index) => renderCategoryButton(category, index + 3))}
+        </div>
       </div>
     </div>
   );

@@ -72,13 +72,17 @@ export default async function AppLayout({
         getTables()
       ])
 
+      // Extract data from Result types
+      const apps = appsResult.success && appsResult.data ? appsResult.data : []
+
       // Fetch pages for each app
       const appsWithPages = await Promise.all(
-        (appsResult || []).map(async (app) => {
-          const pages = await getPages(app.id)
+        apps.map(async (app) => {
+          const pagesResult = await getPages(app.id)
+          const pages = pagesResult.success && pagesResult.data ? pagesResult.data : []
           return {
             ...app,
-            pages: pages || []
+            pages
           }
         })
       )
