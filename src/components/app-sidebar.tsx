@@ -16,6 +16,7 @@ import {
   Plug,
   SlidersHorizontal,
   Activity,
+  FileText,
 } from "lucide-react"
 
 import {
@@ -390,7 +391,7 @@ export function AppSidebar({
 
         {/* Apps */}
         <NestedSidebarSection<AppData, PageData>
-          icon={AppWindow}
+          icon={FileText}
           label="Apps"
           parents={apps}
           pathname={pathname}
@@ -401,7 +402,7 @@ export function AppSidebar({
           getParentId={(app) => app.id}
           getParentName={(app) => app.name}
           getParentHref={(app) => `/apps/${app.id}`}
-          isParentActive={(app, path) => path === `/apps/${app.id}`}
+          isParentActive={(app, path) => path?.startsWith(`/apps/${app.id}`) ?? false}
           getChildren={(app) => app.pages}
           getChildKey={(page) => page.id}
           getChildName={(page) => page.name}
@@ -411,6 +412,8 @@ export function AppSidebar({
           onAddChild={handleCreatePage}
           addParentLabel="Add App"
           addChildLabel="Add Page"
+          parentResourceType="app"
+          childResourceType="page"
           onRenameParent={handleRenameApp}
           onDuplicateParent={handleDuplicateApp}
           onShareParent={handleShareApp}
@@ -519,6 +522,8 @@ export function AppSidebar({
           onAddChild={handleCreateTable}
           addParentLabel="Add Database"
           addChildLabel="Add Table"
+          parentResourceType="database"
+          childResourceType="table"
           onRenameParent={handleRenameDatabase}
           onDuplicateParent={handleDuplicateDatabase}
           onShareParent={handleShareDatabase}

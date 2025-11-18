@@ -35,7 +35,7 @@ const updateDatabaseSchema = z.object({
 
 export async function getDatabases(searchQuery?: string, hasTables?: boolean): Promise<DatabaseDTO[]> {
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("database:view");
     const currentOrg = await requireCurrentOrganization();
 
     const databaseApplicationService = getDatabaseApplicationService();
@@ -60,7 +60,7 @@ export async function getDatabase(id: number): Promise<DatabaseDTO> {
       throw new Error("Database ID is required");
     }
 
-    await requireResourcePermission("data:view", "database", id);
+    await requireResourcePermission("database:view", "database", id);
 
     const databaseApplicationService = getDatabaseApplicationService();
     const database = await databaseApplicationService.getDatabase(DatabaseId.fromNumber(id));
@@ -78,7 +78,7 @@ export async function getDatabase(id: number): Promise<DatabaseDTO> {
 
 export async function createDatabase(data: z.infer<typeof createDatabaseSchema>, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:create");
+    const session = await requirePermission("database:create");
     const currentOrg = await requireCurrentOrganization();
 
     const validatedData = createDatabaseSchema.parse(data);
@@ -138,7 +138,7 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>,
       return { success: false, error: "Database ID is required" };
     }
 
-    await requireResourcePermission("data:manage", "database", validatedData.id);
+    await requireResourcePermission("database:manage", "database", validatedData.id);
 
     const databaseApplicationService = getDatabaseApplicationService();
 
@@ -192,7 +192,7 @@ export async function deleteDatabase(id: number, revalidateUrl?: string): Promis
       return { success: false, error: "Database ID is required" };
     }
 
-    await requireResourcePermission("data:manage", "database", id);
+    await requireResourcePermission("database:manage", "database", id);
 
     const currentOrg = await requireCurrentOrganization();
     const databaseApplicationService = getDatabaseApplicationService();
@@ -230,7 +230,7 @@ export async function deleteDatabase(id: number, revalidateUrl?: string): Promis
  */
 export async function getDatabaseCount() {
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("database:view");
     const currentOrg = await requireCurrentOrganization();
 
     const databaseApplicationService = getDatabaseApplicationService();
@@ -252,9 +252,9 @@ export async function duplicateDatabase(id: number, revalidateUrl?: string): Pro
     }
 
     // Need to view the original database to duplicate it
-    await requireResourcePermission("data:view", "database", id);
+    await requireResourcePermission("database:view", "database", id);
     // Need create permission for the new database
-    const session = await requirePermission("data:create");
+    const session = await requirePermission("database:create");
     const currentOrg = await requireCurrentOrganization();
 
     const databaseApplicationService = getDatabaseApplicationService();
@@ -314,8 +314,8 @@ export async function duplicateDatabase(id: number, revalidateUrl?: string): Pro
  */
 export async function getDatabaseBySlug(slug: string): Promise<DatabaseDTO> {
   try {
-    const session = await requirePermission("data:view");
-    
+    const session = await requirePermission("database:view");
+
     if (!slug) {
       throw new Error("Database slug is required");
     }

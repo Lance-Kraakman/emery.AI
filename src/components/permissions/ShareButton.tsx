@@ -39,9 +39,29 @@ export function ShareButton({
   size = 'sm',
   onShare
 }: ShareButtonProps) {
+  // Map resource types to permission resources
+  const RESOURCE_TO_PERMISSION_MAP: Record<string, string> = {
+    'database': 'database',
+    'table': 'table',
+    'view': 'view',
+    'field': 'table',
+    'app': 'apps',
+    'page': 'apps',
+    'agent': 'agents',
+    'skill': 'skills',
+    'team': 'teams',
+    'user': 'users',
+    'organization': 'organizations',
+    'task': 'tasks',
+  };
+
+  function getPermissionResource(resourceType: string): string {
+    return RESOURCE_TO_PERMISSION_MAP[resourceType] || `${resourceType}s`;
+  }
+
   // Check if user has manage permission on this resource
   const { hasPermission, isLoading } = useResourcePermission(
-    `${resourceType}s:manage`, // e.g., "apps:manage", "agents:manage"
+    `${getPermissionResource(resourceType)}:manage`, // e.g., "apps:manage", "agents:manage"
     resourceType,
     resourceId
   );

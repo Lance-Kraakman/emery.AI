@@ -45,6 +45,9 @@ interface NestedSidebarSectionProps<TParent, TChild> {
   onAddChild: (parentId: number) => void
   addParentLabel?: string
   addChildLabel?: string
+  // Resource type mapping for ShareButton
+  parentResourceType?: string
+  childResourceType?: string
   // Parent action callbacks
   onRenameParent?: (parent: TParent, newName: string) => void | Promise<void>
   onDuplicateParent?: (parent: TParent) => void | Promise<void>
@@ -79,6 +82,8 @@ export function NestedSidebarSection<TParent, TChild>({
   onAddChild,
   addParentLabel = `Add ${label.slice(0, -1)}`, // Remove trailing 's'
   addChildLabel = "Add Item",
+  parentResourceType,
+  childResourceType,
   onRenameParent,
   onDuplicateParent,
   onShareParent,
@@ -166,6 +171,8 @@ export function NestedSidebarSection<TParent, TChild>({
                               onDuplicate={onDuplicateParent ? () => onDuplicateParent(parent) : undefined}
                               onShare={onShareParent ? () => onShareParent(parent) : undefined}
                               onDelete={onDeleteParent ? () => onDeleteParent(parent) : undefined}
+                              shareResourceType={parentResourceType}
+                              shareResourceId={parentId}
                             />
                           )}
                         </div>
@@ -208,6 +215,8 @@ export function NestedSidebarSection<TParent, TChild>({
                                         onDuplicate={onDuplicateChild ? () => onDuplicateChild(child, parent) : undefined}
                                         onShare={onShareChild ? () => onShareChild(child, parent) : undefined}
                                         onDelete={onDeleteChild ? () => onDeleteChild(child, parent) : undefined}
+                                        shareResourceType={childResourceType}
+                                        shareResourceId={childKey}
                                       />
                                     )}
                                   </div>

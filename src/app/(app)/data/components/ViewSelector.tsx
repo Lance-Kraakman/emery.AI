@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { ShareButton } from "@/components/permissions/ShareButton"
 import type { ViewDTO } from "@/app/mappers/view-mapper"
 
 interface ViewSelectorProps {
@@ -19,6 +20,7 @@ interface ViewSelectorProps {
   onSelectView: (viewId: number | undefined) => void
   onCreateView?: () => void
   className?: string
+  tableId?: number // For ShareButton - views inherit from table
 }
 
 export function ViewSelector({
@@ -26,7 +28,8 @@ export function ViewSelector({
   selectedViewId,
   onSelectView,
   onCreateView,
-  className
+  className,
+  tableId
 }: ViewSelectorProps) {
   const selectedView = views.find(v => v.id === selectedViewId)
   const displayName = selectedView?.name || "All Data"
@@ -91,6 +94,21 @@ export function ViewSelector({
                   </div>
                 )}
               </div>
+              {/* ShareButton for view - uses table inheritance */}
+              {tableId && (
+                <div className="ml-2">
+                  <ShareButton
+                    resourceType="view"
+                    resourceId={view.id}
+                    variant="ghost"
+                    size="icon"
+                    onShare={() => {
+                      // TODO: Open share dialog for view
+                      console.log('Share view:', view.id)
+                    }}
+                  />
+                </div>
+              )}
             </DropdownMenuItem>
           )
         })}

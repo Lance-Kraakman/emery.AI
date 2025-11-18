@@ -18,7 +18,7 @@ import { TableMapper, type TableDTO } from "@/app/mappers/table-mapper";
 
 export async function createTable(data: CreateTableData & { databaseId: number; description?: string }, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:create");
+    const session = await requirePermission("database:create");
     const currentOrg = await requireCurrentOrganization();
     const { name, databaseId, description } = data;
 
@@ -99,7 +99,7 @@ export async function createTableAction(formData: FormData) {
 
 export async function getTables(): Promise<TableDTO[]> {
   try {
-    const session = await requirePermission("data:view");
+    const session = await requirePermission("database:view");
     const currentOrg = await requireCurrentOrganization();
     const tableApplicationService = getTableApplicationService();
 
@@ -134,7 +134,7 @@ export async function updateTable(
       };
     }
 
-    await requireResourcePermission("data:manage", "table", tableId);
+    await requireResourcePermission("database:manage", "table", tableId);
     const currentOrg = await requireCurrentOrganization();
 
     const tableApplicationService = getTableApplicationService();
@@ -184,7 +184,7 @@ export async function deleteTable(tableId: number, revalidateUrl?: string): Prom
       };
     }
 
-    await requireResourcePermission("data:manage", "table", tableId);
+    await requireResourcePermission("database:manage", "table", tableId);
     const currentOrg = await requireCurrentOrganization();
 
     const tableApplicationService = getTableApplicationService();
@@ -245,9 +245,9 @@ export async function duplicateTable(tableId: number, revalidateUrl?: string): P
     }
 
     // Need to view the original table to duplicate it
-    await requireResourcePermission("data:view", "table", tableId);
+    await requireResourcePermission("database:view", "table", tableId);
     // Need create permission for the new table
-    const session = await requirePermission("data:create");
+    const session = await requirePermission("database:create");
     const currentOrg = await requireCurrentOrganization();
 
     const tableApplicationService = getTableApplicationService();
@@ -318,7 +318,7 @@ export async function searchTableRows(tableId: number, query: string, limit: num
       };
     }
 
-    await requireResourcePermission("data:view", "table", tableId);
+    await requireResourcePermission("database:view", "table", tableId);
     const currentOrg = await requireCurrentOrganization();
 
     // Use TableApplicationService for search

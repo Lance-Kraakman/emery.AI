@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
+import { ShareButton } from '@/components/permissions/ShareButton';
 
 interface PagesSectionProps {
   appId: number;
@@ -175,9 +176,10 @@ export function PagesSection({ appId, pages, loading, homePageId, onPagesChange 
           ) : (
             <div className="space-y-1">
               {pages.map((page) => (
-                <div
+                 <div
                   key={page.id}
-                  className="flex items-center justify-between p-2 border rounded hover:bg-secondary/50 transition-colors"
+                  className="flex items-center justify-between p-2 border rounded hover:bg-secondary/50 transition-colors cursor-pointer"
+                  onClick={() => handleEditPage(page)}
                 >
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     {homePageId === page.id ? (
@@ -206,7 +208,15 @@ export function PagesSection({ appId, pages, loading, homePageId, onPagesChange 
                       )}
                     </Badge>
                   </div>
-                  <DropdownMenu>
+                  <div className="flex items-center gap-1">
+                    <ShareButton
+                      resourceType="page"
+                      resourceId={page.id}
+                      variant="ghost"
+                      size="icon"
+                      onShare={() => console.log('Share page:', page.id)}
+                    />
+                    <DropdownMenu>
                     <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
                         <MoreVertical className="h-3.5 w-3.5" />
@@ -248,10 +258,10 @@ export function PagesSection({ appId, pages, loading, homePageId, onPagesChange 
                         onClick={() => setDeletingPage(page)}
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  </div>
                 </div>
               ))}
             </div>

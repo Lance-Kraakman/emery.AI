@@ -225,6 +225,13 @@
       "when": 1763336233191,
       "tag": "0031_boring_jigsaw",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1763421213176,
+      "tag": "0032_stale_grey_gargoyle",
+      "breakpoints": true
     }
   ]
 }

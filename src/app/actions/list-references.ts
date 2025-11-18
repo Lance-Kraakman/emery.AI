@@ -47,7 +47,7 @@ export async function listReferences(
   options: ListReferencesOptions = {}
 ): Promise<ReferenceListResult> {
   try {
-    await requirePermission("data:manage");
+    await requirePermission("table:manage");
     
     const {
       query = '',

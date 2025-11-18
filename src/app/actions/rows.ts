@@ -49,7 +49,7 @@ function convertFieldNamesToIds(
 
 export async function createRow(data: CreateRowCommand, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("table:manage");
     const { tableId, data: rowData } = data;
     
 
@@ -125,7 +125,7 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
  */
 export async function createRows(data: { tableId: number; rows: Record<string, any>[] }, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("table:manage");
     const { tableId, rows: rowsData } = data;
 
     if (!tableId) {
@@ -228,7 +228,7 @@ export async function createRowAction(formData: FormData) {
 
 export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("table:manage");
     const { tableId, rowId, data: rowData } = data;
 
     if (!tableId || !rowId) {
@@ -321,7 +321,7 @@ export async function updateRowsData(
   revalidateUrl?: string
 ): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("table:manage");
 
     if (!tableId || !updates || updates.length === 0) {
       return {
@@ -441,7 +441,7 @@ export async function updateRowAction(formData: FormData) {
 
 export async function deleteRowData(tableId: number, rowId: string, revalidateUrl?: string): Promise<Result> {
   try {
-    const session = await requirePermission("data:manage");
+    const session = await requirePermission("table:manage");
     
     if (!tableId || !rowId) {
       return {
@@ -500,7 +500,7 @@ export async function getRowsDSG(
   filters?: Array<{ field: string, operator: string, value: any }>
 ): Promise<{ rows: any[], hasMore: boolean, total: number }> {
   try {
-    await requirePermission("data:manage");
+    await requirePermission("table:manage");
 
     if (!tableId) {
       throw new Error("tableId is required");
@@ -590,7 +590,7 @@ export async function searchRowsDSG(
   limit = 100
 ): Promise<{ rows: any[], total: number }> {
   try {
-    await requirePermission("data:manage");
+    await requirePermission("table:manage");
 
     if (!tableId) {
       throw new Error("tableId is required");
@@ -681,7 +681,7 @@ export async function getSampleRow(tableId: number): Promise<Result<{
 }>> {
   return withAuthContext(async () => {
     try {
-      await requireResourcePermission("data:view", "table", tableId);
+      await requireResourcePermission("table:view", "table", tableId);
 
       const tableApplicationService = getTableApplicationService();
 

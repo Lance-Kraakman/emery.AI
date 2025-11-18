@@ -37,7 +37,7 @@ export async function createView(
   revalidateUrl?: string
 ): Promise<Result<ViewDTO>> {
   try {
-    const session = await requirePermission("data:create");
+    const session = await requirePermission("view:create");
     const currentOrg = await requireCurrentOrganization();
 
     const { tableId, name, description, fieldMappings, filters, sorting, viewType, viewConfig } = data;
@@ -344,7 +344,7 @@ export async function deleteView(
       };
     }
 
-    await requireResourcePermission("data:manage", "view", id);
+    await requireResourcePermission("view:manage", "view", id);
     await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();
@@ -388,7 +388,7 @@ export async function getView(id: number): Promise<ViewDTO | null> {
       return null;
     }
 
-    await requireResourcePermission("data:view", "view", id);
+    await requireResourcePermission("view:manage", "view", id);
     await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();
@@ -417,7 +417,7 @@ export async function getViewsForTable(
   tableId: number
 ): Promise<ViewDTO[]> {
   try {
-    await requirePermission("data:view");
+    await requirePermission("database:view");
     await requireCurrentOrganization();
 
     if (!tableId) {
@@ -446,7 +446,7 @@ export async function getViewsForTable(
  */
 export async function getViewsForOrganization(): Promise<ViewDTO[]> {
   try {
-    await requirePermission("data:view");
+    await requirePermission("database:view");
     const currentOrg = await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();

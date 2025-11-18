@@ -604,7 +604,7 @@ export async function buildNavigation(appId: number, publishedOnly: boolean = fa
   try {
     // Navigation is publicly accessible for published pages
     if (!publishedOnly) {
-      await requirePermission("data:view");
+      await requirePermission("app:view");
     }
 
     if (!appId) {

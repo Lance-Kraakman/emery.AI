@@ -46,7 +46,9 @@ async function seedSystemRoles() {
       Permission.TEAMS_VIEW, Permission.TEAMS_MANAGE, Permission.TEAMS_CREATE,
       Permission.AGENTS_VIEW, Permission.AGENTS_MANAGE, Permission.AGENTS_CREATE, Permission.AGENTS_EXECUTE,
       Permission.TASKS_VIEW, Permission.TASKS_MANAGE, Permission.TASKS_CREATE, Permission.TASKS_EXECUTE,
-      Permission.DATA_VIEW, Permission.DATA_MANAGE, Permission.DATA_CREATE,
+      Permission.DATABASE_VIEW, Permission.DATABASE_MANAGE, Permission.DATABASE_CREATE,
+      Permission.TABLE_VIEW, Permission.TABLE_MANAGE, Permission.TABLE_CREATE,
+      Permission.VIEW_VIEW, Permission.VIEW_MANAGE, Permission.VIEW_CREATE,
       Permission.SKILLS_VIEW, Permission.SKILLS_MANAGE, Permission.SKILLS_CREATE, Permission.SKILLS_EXECUTE,
       Permission.APPS_VIEW, Permission.APPS_CREATE, Permission.APPS_MANAGE, Permission.APPS_PUBLISH
     ],
@@ -58,7 +60,9 @@ async function seedSystemRoles() {
       Permission.TEAMS_VIEW, Permission.TEAMS_MANAGE, Permission.TEAMS_CREATE,
       Permission.AGENTS_VIEW, Permission.AGENTS_MANAGE, Permission.AGENTS_CREATE, Permission.AGENTS_EXECUTE,
       Permission.TASKS_VIEW, Permission.TASKS_MANAGE, Permission.TASKS_CREATE, Permission.TASKS_EXECUTE,
-      Permission.DATA_VIEW, Permission.DATA_MANAGE, Permission.DATA_CREATE,
+      Permission.DATABASE_VIEW, Permission.DATABASE_MANAGE, Permission.DATABASE_CREATE,
+      Permission.TABLE_VIEW, Permission.TABLE_MANAGE, Permission.TABLE_CREATE,
+      Permission.VIEW_VIEW, Permission.VIEW_MANAGE, Permission.VIEW_CREATE,
       Permission.SKILLS_VIEW, Permission.SKILLS_MANAGE, Permission.SKILLS_CREATE, Permission.SKILLS_EXECUTE,
       Permission.APPS_VIEW, Permission.APPS_CREATE, Permission.APPS_MANAGE, Permission.APPS_PUBLISH
     ],
@@ -69,7 +73,9 @@ async function seedSystemRoles() {
       Permission.TEAMS_VIEW, Permission.TEAMS_MANAGE,
       Permission.AGENTS_VIEW, Permission.AGENTS_MANAGE, Permission.AGENTS_CREATE, Permission.AGENTS_EXECUTE,
       Permission.TASKS_VIEW, Permission.TASKS_MANAGE, Permission.TASKS_CREATE, Permission.TASKS_EXECUTE,
-      Permission.DATA_VIEW, Permission.DATA_CREATE,
+      Permission.DATABASE_VIEW, Permission.DATABASE_MANAGE, Permission.DATABASE_CREATE,
+      Permission.TABLE_VIEW, Permission.TABLE_MANAGE, Permission.TABLE_CREATE,
+      Permission.VIEW_VIEW, Permission.VIEW_MANAGE, Permission.VIEW_CREATE,
       Permission.SKILLS_VIEW, Permission.SKILLS_MANAGE, Permission.SKILLS_CREATE, Permission.SKILLS_EXECUTE,
       Permission.APPS_VIEW, Permission.APPS_CREATE, Permission.APPS_MANAGE, Permission.APPS_PUBLISH
     ],
@@ -79,7 +85,9 @@ async function seedSystemRoles() {
       Permission.ORGANIZATIONS_VIEW, Permission.USERS_VIEW, Permission.TEAMS_VIEW,
       Permission.AGENTS_VIEW, Permission.AGENTS_CREATE, Permission.AGENTS_EXECUTE,
       Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EXECUTE,
-      Permission.DATA_VIEW, Permission.DATA_CREATE,
+      Permission.DATABASE_VIEW, Permission.DATABASE_CREATE,
+      Permission.TABLE_VIEW, Permission.TABLE_CREATE,
+      Permission.VIEW_VIEW, Permission.VIEW_CREATE,
       Permission.SKILLS_VIEW, Permission.SKILLS_EXECUTE,
       Permission.APPS_VIEW, Permission.APPS_CREATE
     ],
@@ -87,7 +95,8 @@ async function seedSystemRoles() {
     [SYSTEM_ROLES.VIEWER]: [
       // Read-only access
       Permission.ORGANIZATIONS_VIEW, Permission.USERS_VIEW, Permission.TEAMS_VIEW,
-      Permission.AGENTS_VIEW, Permission.TASKS_VIEW, Permission.DATA_VIEW,
+      Permission.AGENTS_VIEW, Permission.TASKS_VIEW, 
+      Permission.DATABASE_VIEW, Permission.TABLE_VIEW, Permission.VIEW_VIEW,
       Permission.SKILLS_VIEW, Permission.APPS_VIEW
     ],
     
@@ -97,7 +106,9 @@ async function seedSystemRoles() {
       Permission.AGENTS_VIEW, Permission.AGENTS_MANAGE, 
       Permission.TEAMS_VIEW, Permission.TEAMS_MANAGE,
       Permission.TASKS_VIEW, Permission.TASKS_MANAGE, Permission.TASKS_EXECUTE,
-      Permission.DATA_VIEW, Permission.DATA_MANAGE,
+      Permission.DATABASE_VIEW, Permission.DATABASE_MANAGE,
+      Permission.TABLE_VIEW, Permission.TABLE_MANAGE,
+      Permission.VIEW_VIEW, Permission.VIEW_MANAGE,
       Permission.USERS_VIEW // For indexing user data
     ]
   };
