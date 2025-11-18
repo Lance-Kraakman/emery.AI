@@ -32,28 +32,14 @@ export async function POST(request: NextRequest): Promise<Response> {
   // Extract tracking headers
   const callId = request.headers.get('x-call-id');
   const source = request.headers.get('x-source');
-  const threadId = request.headers.get('x-thread-id');
   
-  console.log(`[API_POST] START - request_id: ${requestId}, call_id: ${callId}, source: ${source}, thread_id: ${threadId}`);
-  console.log(`[API_POST] Headers:`, {
-    'x-call-id': callId,
-    'x-source': source,
-    'x-thread-id': threadId,
-    'authorization': request.headers.get('authorization') ? '[REDACTED]' : 'none',
-    'x-organization-id': request.headers.get('x-organization-id'),
-    'content-type': request.headers.get('content-type')
-  });
+  console.log(`[API_POST] ${requestId} - ${source || 'unknown'} - ${callId || 'no-call-id'}`);
   
   return withAuthenticatedRoute(request, async (user) => {
-    const authTime = Date.now();
-    console.log(`[API_POST] Authenticated - request_id: ${requestId}, user: ${user.id}, auth_time: ${authTime - startTime}ms`);
-    
     const body = await parseJsonBody(request);
-    const parseTime = Date.now();
-    console.log(`[API_POST] Body parsed - request_id: ${requestId}, parse_time: ${parseTime - authTime}ms`);
 
     if (!body) {
-      console.log(`[API_POST] Invalid body - request_id: ${requestId}`);
+      console.log(`[API_POST] ${requestId} - Invalid body`);
       return {
         success: false,
         error: 'Invalid request body',
@@ -65,16 +51,11 @@ export async function POST(request: NextRequest): Promise<Response> {
     
     // Check if this is from Python tool
     const isFromPythonTool = source === 'python_tool' || callId?.startsWith('http_');
-    console.log(`[API_POST] Request source analysis - request_id: ${requestId}, is_from_python_tool: ${isFromPythonTool}, call_id: ${callId}`);
-
+    
     // Validate required fields
     requireParam(tableId, 'tableId');
     requireParam(data, 'data');
     
-    console.log(`[API_POST] Validated params - request_id: ${requestId}, table_id: ${tableId}, data_keys: ${Object.keys(data || {})}`);
-
-    // Use server action function to avoid duplication
-    console.log(`[API_POST] Calling createRow server action - request_id: ${requestId}`);
     const actionStart = Date.now();
     
     const result = await createRow({ tableId, data });
@@ -93,7 +74,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
 
     const totalTime = Date.now() - startTime;
-    console.log(`[API_POST] ✅ SUCCESS - request_id: ${requestId}, total_time: ${totalTime}ms, is_from_python_tool: ${isFromPythonTool}`);
+    console.log(`[API_POST] ✅ ${requestId} - Row created (${totalTime}ms)`);
     
     return {
       success: true,

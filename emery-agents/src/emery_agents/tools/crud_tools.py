@@ -153,13 +153,13 @@ class BaseCrudTool(Tool):
         import threading
         
         # Generate unique call ID for tracking
-        call_id = f"async_http_{int(time.time())}_{str(uuid.uuid4())[:8]}_{threading.get_ident()}"
+        call_id = f"{str(uuid.uuid4())[:8]}"
         start_time = time.time()
         
-        logger.info(f"[ASYNC_HTTP] START - call_id: {call_id}, endpoint: {endpoint}, method: {method}")
+        logger.debug(f"[ASYNC_HTTP] START - call_id: {call_id}, endpoint: {endpoint}, method: {method}")
         
         if deadline_ms:
-            logger.info(f"[ASYNC_HTTP] Deadline provided - call_id: {call_id}, deadline_ms: {deadline_ms}")
+            logger.debug(f"[ASYNC_HTTP] Deadline provided - call_id: {call_id}, deadline_ms: {deadline_ms}")
         
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         headers = {}
@@ -189,7 +189,7 @@ class BaseCrudTool(Tool):
             headers["Content-Type"] = "application/json"
 
         try:
-            logger.info(f"[ASYNC_HTTP] Making async request - call_id: {call_id}, timeout: {timeout}s")
+            logger.debug(f"[ASYNC_HTTP] Making async request - call_id: {call_id}, timeout: {timeout}s")
             request_start = time.time()
             
             async with httpx.AsyncClient(timeout=timeout) as client:
@@ -200,10 +200,7 @@ class BaseCrudTool(Tool):
                     json=data if data else None
                 )
                 
-                request_time = time.time() - request_start
                 total_time = time.time() - start_time
-                
-                logger.info(f"[ASYNC_HTTP] Response received - call_id: {call_id}, status: {response.status_code}, request_time: {request_time:.2f}s, total_time: {total_time:.2f}s")
                 
                 # Handle HTTP errors
                 if response.status_code >= 400:
@@ -228,7 +225,7 @@ class BaseCrudTool(Tool):
 
                 # Parse JSON response
                 try:
-                    logger.info(f"[ASYNC_HTTP] ✅ SUCCESS - call_id: {call_id}, status: {response.status_code}, total_time: {total_time:.2f}s")
+                    logger.info(f"[ASYNC_HTTP] ✅ {method} {endpoint} - {response.status_code} ({total_time:.2f}s)")
                     return {
                         "success": True,
                         "data": response.json(),
@@ -237,7 +234,7 @@ class BaseCrudTool(Tool):
                         "total_time": total_time
                     }
                 except json.JSONDecodeError:
-                    logger.info(f"[ASYNC_HTTP] ✅ SUCCESS (text response) - call_id: {call_id}, status: {response.status_code}, total_time: {total_time:.2f}s")
+                    logger.info(f"[ASYNC_HTTP] ✅ {method} {endpoint} - {response.status_code} ({total_time:.2f}s)")
                     return {
                         "success": True,
                         "data": response.text,
@@ -299,7 +296,8 @@ class BaseCrudTool(Tool):
                 timeout = 30.0  # Default timeout
                 if deadline_ms:
                     timeout = deadline_ms / 1000.0
-                return asyncio.wait_for(task, timeout=timeout)
+                result = asyncio.wait_for(task, timeout=timeout)
+                return result
                 
             except RuntimeError:
                 # No running loop, safe to use asyncio.run()
