@@ -22,14 +22,14 @@ logger = logging.getLogger(__name__)
 
 class AsyncHTTPManager:
     """Manages non-blocking HTTP operations with shared event loop."""
-    
+
     def __init__(self):
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
         self._client: Optional[httpx.AsyncClient] = None
         self._ready = threading.Event()
         self._start_event_loop_thread()
-    
+
     def _start_event_loop_thread(self):
         """Start event loop in dedicated thread for non-blocking operations."""
         def run_loop():
@@ -38,10 +38,23 @@ class AsyncHTTPManager:
             self._client = httpx.AsyncClient(timeout=30.0)
             self._ready.set()
             self._loop.run_forever()
-        
+
         self._thread = threading.Thread(target=run_loop, daemon=True)
         self._thread.start()
         self._ready.wait()
+
+    def cleanup(self):
+        """Cleanup HTTP manager resources."""
+        if self._client and not self._client.is_closed:
+            # Schedule client close in event loop
+            if self._loop and self._loop.is_running():
+                asyncio.run_coroutine_threadsafe(self._client.aclose(), self._loop)
+
+        if self._loop and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._loop.stop)
+
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=5.0)
     
     def make_request(self, endpoint: str, method: str, data: Optional[Dict],
                     auth_token: Optional[str], organization_id: Optional[str],
@@ -68,27 +81,24 @@ class AsyncHTTPManager:
         """Core async HTTP method with deadline propagation."""
         call_id = str(uuid.uuid4())[:8]
         start_time = time.time()
-        from datetime import datetime
-        timestamp = datetime.now().isoformat()
-        
-        logger.info(f"[{timestamp}] [TOOL-HTTP] Request START - call_id: {call_id}, endpoint: {endpoint}, method: {method}")
-        logger.debug(f"[{timestamp}] [TOOL-HTTP] Request details - call_id: {call_id}, data_preview: {str(data)[:100] if data else 'None'}")
-        
+
+        logger.info(f"[TOOL-HTTP] {method} {endpoint} - call_id: {call_id}")
+        logger.debug(f"[TOOL-HTTP] Request details - call_id: {call_id}, data_preview: {str(data)[:100] if data else 'None'}")
+
         url = f"{base_url}/{endpoint.lstrip('/')}"
         headers = {}
-        
+
         # Add authentication headers
         if auth_token:
             headers["Authorization"] = f"Bearer {auth_token}"
-        
+
         # Add organization context for RLS
         if organization_id:
             headers["X-Organization-ID"] = str(organization_id)
-        
+
         # Add tracking headers
         headers["X-Call-ID"] = call_id
         headers["X-Source"] = "async_manager"
-        headers["X-Thread-ID"] = str(threading.get_ident())
         if deadline_ms:
             headers["X-Deadline-MS"] = str(deadline_ms)
         
@@ -114,9 +124,7 @@ class AsyncHTTPManager:
             )
             
             total_time = time.time() - start_time
-            from datetime import datetime
-            response_timestamp = datetime.now().isoformat()
-            
+
             # Handle HTTP errors
             if response.status_code >= 400:
                 error_detail = f"HTTP {response.status_code}"
@@ -128,8 +136,8 @@ class AsyncHTTPManager:
                         error_detail = error_body["message"]
                 except:
                     error_detail = response.text[:200] if response.text else error_detail
-                
-                logger.error(f"[{response_timestamp}] [TOOL-HTTP] ❌ HTTP error - call_id: {call_id}, status: {response.status_code}, duration: {total_time:.2f}s")
+
+                logger.error(f"[TOOL-HTTP] ❌ {method} {endpoint} - call_id: {call_id}, status: {response.status_code}, duration: {total_time:.2f}s")
                 return {
                     "success": False,
                     "error": f"API request failed: {error_detail}",
@@ -137,10 +145,10 @@ class AsyncHTTPManager:
                     "call_id": call_id,
                     "total_time": total_time
                 }
-            
+
             # Parse JSON response
             try:
-                logger.info(f"[{response_timestamp}] [TOOL-HTTP] ✅ Response received - call_id: {call_id}, status: {response.status_code}, duration: {total_time:.2f}s")
+                logger.info(f"[TOOL-HTTP] ✅ {method} {endpoint} - call_id: {call_id}, status: {response.status_code}, duration: {total_time:.2f}s")
                 return {
                     "success": True,
                     "data": response.json(),
@@ -188,6 +196,15 @@ class AsyncHTTPManager:
 
 # Global AsyncHTTPManager instance
 _async_manager = AsyncHTTPManager()
+
+# Register cleanup handler for graceful shutdown
+import atexit
+def _cleanup_async_manager():
+    """Cleanup handler for AsyncHTTPManager shutdown."""
+    _async_manager.cleanup()
+    logger.info("AsyncHTTPManager shut down")
+
+atexit.register(_cleanup_async_manager)
 
 class BaseCrudTool(Tool):
     """Base class for all CRUD tools with common functionality."""

@@ -230,8 +230,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
     def CreateRows(self, request: table_service_pb2.CreateRowsRequest, context: ServicerContext) -> table_service_pb2.CreateRowsResponse:
         """Efficiently create multiple rows in a Delta table."""
         from datetime import datetime
-        start_time = datetime.now()
-        logger.info(f"[{start_time.isoformat()}] [TABLE-SERVICE] CreateRows START - table_id: {request.table_id}, organization_id: {request.organization_id}, rows_count: {len(request.rows_data)}")
         try:
             # Compact logging
             self._log_request("CreateRows", table_id=request.table_id, organization_id=request.organization_id,
@@ -282,10 +280,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 for row_data in request.rows_data
             ]
 
-            end_time = datetime.now()
-            total_duration = (end_time - start_time).total_seconds() * 1000
-            logger.info(f"[{end_time.isoformat()}] [TABLE-SERVICE] CreateRows ✅ Created {len(df)} rows in '{request.table_id}' - operation_duration: {total_duration:.2f}ms")
-            logger.info(f"[{end_time.isoformat()}] [TABLE-SERVICE] CreateRows END - total_duration: {total_duration:.2f}ms")
+            logger.info(f"CreateRows ✅ Created {len(df)} rows in table '{request.table_id}'")
             return table_service_pb2.CreateRowsResponse(
                 success=True,
                 rows=rows,
@@ -294,10 +289,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             )
 
         except Exception as e:
-            end_time = datetime.now()
-            total_duration = (end_time - start_time).total_seconds() * 1000
-            logger.error(f"[{end_time.isoformat()}] [TABLE-SERVICE] CreateRows ❌ ERROR - error: {type(e).__name__}: {e}, duration: {total_duration:.2f}ms", exc_info=True)
-            logger.info(f"[{end_time.isoformat()}] [TABLE-SERVICE] CreateRows END (with error) - duration: {total_duration:.2f}ms")
+            logger.error(f"CreateRows ❌ Failed to create rows in table '{request.table_id}': {type(e).__name__}: {e}", exc_info=True)
             return table_service_pb2.CreateRowsResponse(
                 success=False,
                 message=f"Failed to create rows: {str(e)}"
