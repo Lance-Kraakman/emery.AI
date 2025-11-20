@@ -123,7 +123,6 @@ services:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
       PYTHONPATH: /usr/src/app/src
       GRPC_TOOLS_ADDRESS: agent-table-integration:50052    # Table service (internal network)
-      # MinIO S3 configuration for Delta Lake storage (internal container network)
       AWS_ENDPOINT_URL: http://minio-integration:9000
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
