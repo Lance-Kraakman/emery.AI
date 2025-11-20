@@ -18,7 +18,8 @@ const CONTAINERS = [
   { name: 'emery-integration-db', timeout: 60000 },
   { name: 'emery-integration-minio', timeout: 60000 },
   { name: 'emery-integration-app', timeout: 120000 },
-  { name: 'emery-integration-agent', timeout: 90000 }
+  { name: 'emery-integration-chat-agent', timeout: 90000 },
+  { name: 'emery-integration-table-agent', timeout: 90000 }
 ];
 
 /**
@@ -67,10 +68,11 @@ export async function startTestContainers(): Promise<void> {
   console.log('🪣 Setting up S3 bucket...');
   await setupS3();
   
-  // Set environment variables for tests
+  // Set environment variables for tests (host machine access)
   process.env.TEST_DATABASE_URL = 'postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test';
   process.env.TEST_APP_URL = 'http://localhost:3002';
   process.env.TEST_GRPC_URL = 'localhost:50053';
+  // Note: GRPC_TOOLS_ADDRESS is set by docker-compose for container-to-container communication
   
   console.log('✅ Integration test infrastructure ready!');
   showStatus();
@@ -271,4 +273,5 @@ function showStatus(): void {
   console.log('   🪣  S3 (MinIO): http://localhost:9005 (emery-files bucket)');
   console.log('   🌐  App Server: http://localhost:3002');
   console.log('   🤖  gRPC Agent: localhost:50053');
+  console.log('   📊 gRPC Table: localhost:50054');
 }

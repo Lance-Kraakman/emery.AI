@@ -57,8 +57,9 @@ export function registerDatabaseServices(deps: DatabaseDependencies): DatabaseSe
   const fileStorageRepository = new S3FileStorageRepository();
 
   // Create gRPC client and data lake service
+  // Use tools port to avoid circular dependency with Python tools
   const grpcClient = new GrpcTableClient({
-    address: process.env.WORKER_ADDRESS || 'localhost:50051',
+    address: process.env.GRPC_TOOLS_ADDRESS || 'localhost:50052',
     timeout: 30000
   });
   const datalake = new DynamicTableDataLake(grpcClient);

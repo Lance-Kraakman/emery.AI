@@ -30,7 +30,7 @@ from .types import (
 )
 
 # Export gRPC server for main entry point
-from .grpc.server import serve as grpc_serve
+from .grpc.server import main as grpc_serve
 
 __all__ = [
     # Entities

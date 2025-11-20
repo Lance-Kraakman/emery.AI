@@ -192,7 +192,7 @@ export async function updateView(
       };
     }
 
-    await requireResourcePermission("data:manage", "view", id);
+    await requireResourcePermission("view:manage", "view", id);
     await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();
@@ -497,7 +497,7 @@ export async function executeView(
       return null;
     }
 
-    await requireResourcePermission("data:view", "view", dataSourceId);
+    await requireResourcePermission("view:view", "view", dataSourceId);
     await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();
@@ -584,7 +584,7 @@ export async function executeViewAggregations(
       return null;
     }
 
-    await requireResourcePermission("data:view", "view", viewId);
+    await requireResourcePermission("view:view", "view", viewId);
     await requireCurrentOrganization();
 
     const viewService = getViewApplicationService();
@@ -633,7 +633,7 @@ export async function executeChartView(
       return null;
     }
 
-    await requireResourcePermission("data:view", "view", viewId);
+    await requireResourcePermission("view:view", "view", viewId);
     await requireCurrentOrganization();
 
     const viewService = getViewApplicationService();
@@ -675,7 +675,7 @@ export async function getFormViewConfiguration(
       return null;
     }
 
-    await requireResourcePermission("data:view", "view", viewId);
+    await requireResourcePermission("view:view", "view", viewId);
     await requireCurrentOrganization();
 
     const viewService = getViewApplicationService();
@@ -721,9 +721,9 @@ export async function submitFormView(
     }
 
     // Need to view the form configuration
-    await requireResourcePermission("data:view", "view", viewId);
+    await requireResourcePermission("view:view", "view", viewId);
     // Need create permission to create a new row
-    const session = await requirePermission("data:create");
+    const session = await requirePermission("table:create");
     await requireCurrentOrganization();
 
     if (!formData || Object.keys(formData).length === 0) {

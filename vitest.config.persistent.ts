@@ -37,6 +37,7 @@ export default defineConfig({
       TEST_APP_URL: 'http://localhost:3002',
       TEST_GRPC_URL: 'localhost:50053',
       WORKER_ADDRESS: 'localhost:50053',
+      GRPC_TOOLS_ADDRESS: 'localhost:50054',
       NODE_ENV: 'test',
       // AI/ML API Keys  
       HF_TOKEN: '***REMOVED***',
