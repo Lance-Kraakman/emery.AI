@@ -73,10 +73,11 @@ export class RowMapper {
       case 'boolean':
         return value as BooleanFieldValue;
       case 'date':
-        // Ensure dates are ISO strings for JSON serialization
-        return typeof value === 'string' ? value : 
-               value instanceof Date ? value.toISOString() : 
-               new Date(value).toISOString();
+        // Keep as Date object for protobuf serialization (gRPC handles timestamps natively)
+        if (value === null || value === undefined) return null;
+        if (value instanceof Date) return value;
+        if (typeof value === 'string') return new Date(value);
+        return new Date(value);
       case 'file':
         // CRITICAL FIX: Handle "[object Object]" strings from bad serialization
         if (typeof value === 'string' && value === '[object Object]') {
