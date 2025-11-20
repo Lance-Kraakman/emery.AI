@@ -141,21 +141,41 @@ def _populate_protobuf_map(proto_map, data: Dict[str, str]) -> None:
 # Shared thread pool for async operations to prevent deadlock
 _async_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=10, thread_name_prefix="grpc-async")
 
+# Register cleanup handler for thread pool shutdown
+import atexit
+def _cleanup_thread_pool():
+    """Cleanup handler for graceful thread pool shutdown."""
+    _async_thread_pool.shutdown(wait=True, cancel_futures=False)
+    logger.info("Chat processing thread pool shut down")
+
+atexit.register(_cleanup_thread_pool)
+
 def _run_async_in_thread(coro: Coroutine[Any, Any, T]) -> T:
     """
     Run async coroutine in a shared thread pool to prevent deadlock.
 
     This uses a shared thread pool instead of creating new ThreadPoolExecutor
     for each call, and uses asyncio.run() to create fresh event loop in thread.
-    
+
     Args:
         coro: Coroutine to run (with generic return type T)
 
     Returns:
         Result of the coroutine (type T)
+
+    Raises:
+        TimeoutError: If operation exceeds 30 second timeout
+        Exception: If async operation fails
     """
-    future = _async_thread_pool.submit(asyncio.run, coro)
-    return future.result()
+    try:
+        future = _async_thread_pool.submit(asyncio.run, coro)
+        return future.result(timeout=30.0)
+    except concurrent.futures.TimeoutError:
+        logger.error("Async operation timed out after 30 seconds")
+        raise TimeoutError("Operation exceeded 30 second timeout")
+    except Exception as e:
+        logger.error(f"Async operation failed: {e}")
+        raise
 
 
 async def _process_skill_content_async(content_parts: List['agent_worker_pb2.MessagePart']) -> tuple[List[Image.Image], List[str]]:
@@ -232,8 +252,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         # Initialize AI processing services - no database dependencies
         logger.info("Initializing ChatProcessingService with shared utilities")
-        logger.info(f"HF_TOKEN present: YES")
-        logger.info(f"HF_TOKEN value: {hf_token[:10]}...")
 
         # Import services at runtime to avoid circular dependencies
         try:

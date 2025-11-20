@@ -34,9 +34,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         self.active_tasks: Dict[str, Any] = {}
 
         logger.info(f"AgentWorkerServiceImplementation initialized")
-        logger.info(f"HF_TOKEN present: YES")
-        logger.info(f"HF_TOKEN value: {hf_token[:10]}...")
-        
+
         # Initialize all services (HF_TOKEN is guaranteed to exist)
         self.agent_executor = AgentExecutor()
         self.tool_loader = UnifiedToolLoader()
@@ -207,8 +205,10 @@ def register_table_services(server):
 async def serve_chat_server(port: int):
     """Chat processing server (port 50051) - AgentWorker + ChatProcessing only."""
     # Create dedicated thread pool for chat server to prevent resource contention
+    # Configurable via GRPC_CHAT_MAX_WORKERS environment variable
+    chat_max_workers = int(os.getenv("GRPC_CHAT_MAX_WORKERS", "20"))
     chat_thread_pool = concurrent.futures.ThreadPoolExecutor(
-        max_workers=20, 
+        max_workers=chat_max_workers,
         thread_name_prefix="grpc-chat-server"
     )
     
@@ -242,8 +242,10 @@ async def serve_chat_server(port: int):
 async def serve_table_server(port: int):
     """Table operations server (port 50052) - Table service only."""
     # Create dedicated thread pool for table server to prevent resource contention
+    # Configurable via GRPC_TABLE_MAX_WORKERS environment variable
+    table_max_workers = int(os.getenv("GRPC_TABLE_MAX_WORKERS", "15"))
     table_thread_pool = concurrent.futures.ThreadPoolExecutor(
-        max_workers=15, 
+        max_workers=table_max_workers,
         thread_name_prefix="grpc-table-server"
     )
     
