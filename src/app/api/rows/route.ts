@@ -28,18 +28,19 @@ import { createRow, updateRowData, deleteRowData, getRowsDSG } from '@/app/actio
 export async function POST(request: NextRequest): Promise<Response> {
   const requestId = crypto.randomUUID();
   const startTime = Date.now();
+  const timestamp = new Date().toISOString();
   
   // Extract tracking headers
   const callId = request.headers.get('x-call-id');
   const source = request.headers.get('x-source');
   
-  console.log(`[API_POST] ${requestId} - ${source || 'unknown'} - ${callId || 'no-call-id'}`);
+  console.log(`[${timestamp}] [ROWS-API] POST request started - requestId: ${requestId}, tableId: ${request.headers.get('x-table-id') || 'unknown'}, source: ${source || 'unknown'}, callId: ${callId || 'no-call-id'}`);
   
   return withAuthenticatedRoute(request, async (user) => {
     const body = await parseJsonBody(request);
 
     if (!body) {
-      console.log(`[API_POST] ${requestId} - Invalid body`);
+      console.log(`[${new Date().toISOString()}] [ROWS-API] Invalid body - requestId: ${requestId}`);
       return {
         success: false,
         error: 'Invalid request body',
@@ -57,15 +58,16 @@ export async function POST(request: NextRequest): Promise<Response> {
     requireParam(data, 'data');
     
     const actionStart = Date.now();
+    console.log(`[${new Date().toISOString()}] [ROWS-API] Making server action call - requestId: ${requestId}, tableId: ${tableId}`);
     
     const result = await createRow({ tableId, data });
     
     const actionTime = Date.now() - actionStart;
-    console.log(`[API_POST] Server action completed - request_id: ${requestId}, success: ${result.success}, action_time: ${actionTime}ms`);
+    const totalTime = Date.now() - startTime;
+    console.log(`[${new Date().toISOString()}] [ROWS-API] Server action completed - requestId: ${requestId}, success: ${result.success}, action_time: ${actionTime}ms, total_time: ${totalTime}ms`);
 
     if (!result.success) {
-      const totalTime = Date.now() - startTime;
-      console.log(`[API_POST] Server action failed - request_id: ${requestId}, error: ${result.error}, total_time: ${totalTime}ms`);
+      console.log(`[${new Date().toISOString()}] [ROWS-API] Server action failed - requestId: ${requestId}, error: ${result.error}, total_time: ${totalTime}ms`);
       return {
         success: false,
         error: result.error || 'Failed to create row',
@@ -73,8 +75,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       };
     }
 
-    const totalTime = Date.now() - startTime;
-    console.log(`[API_POST] ✅ ${requestId} - Row created (${totalTime}ms)`);
+    console.log(`[${new Date().toISOString()}] [ROWS-API] ✅ Request completed - requestId: ${requestId}, row created, total_duration: ${totalTime}ms`);
     
     return {
       success: true,

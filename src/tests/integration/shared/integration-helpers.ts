@@ -354,7 +354,7 @@ export class IntegrationTestClient {
   // Agent/gRPC operations (placeholder for future implementation)
   async executeAgentTask(request: any): Promise<any> {
     // TODO: Implement gRPC client for agent task execution
-    // This would connect to the agent container on port 50053
+    // This would connect to the agent container on port 50053 (agent) and 50054 (table services)
     throw new Error('Agent task execution not yet implemented');
   }
   

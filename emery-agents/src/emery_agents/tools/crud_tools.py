@@ -11,17 +11,183 @@ import json
 import httpx
 import asyncio
 import logging
-from typing import Any, Dict, Optional
-from concurrent.futures import ThreadPoolExecutor
+import threading
+import time
+import uuid
+from typing import Any, Dict, Optional, Union
 from smolagents import Tool
 from ..grpc.generated.agent_worker_pb2 import ToolConfig
 
 logger = logging.getLogger(__name__)
 
-# AIDEV-NOTE: Shared thread pool for HTTP requests to prevent blocking gRPC event loop
-# This allows HTTP calls to run in background threads while gRPC server remains responsive
-_http_thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="http-client")
+class AsyncHTTPManager:
+    """Manages non-blocking HTTP operations with shared event loop."""
+    
+    def __init__(self):
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._thread: Optional[threading.Thread] = None
+        self._client: Optional[httpx.AsyncClient] = None
+        self._ready = threading.Event()
+        self._start_event_loop_thread()
+    
+    def _start_event_loop_thread(self):
+        """Start event loop in dedicated thread for non-blocking operations."""
+        def run_loop():
+            self._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
+            self._client = httpx.AsyncClient(timeout=30.0)
+            self._ready.set()
+            self._loop.run_forever()
+        
+        self._thread = threading.Thread(target=run_loop, daemon=True)
+        self._thread.start()
+        self._ready.wait()
+    
+    def make_request(self, endpoint: str, method: str, data: Optional[Dict],
+                    auth_token: Optional[str], organization_id: Optional[str],
+                    deadline_ms: Optional[int], base_url: str) -> Dict[str, Any]:
+        """Thread-safe entry point using asyncio.run_coroutine_threadsafe."""
+        if not self._loop or not self._client:
+            return {"success": False, "error": "AsyncHTTPManager not initialized"}
+        
+        coro = self._make_request(endpoint, method, data, auth_token, organization_id, deadline_ms, base_url)
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        
+        timeout = 30.0
+        if deadline_ms:
+            timeout = min(deadline_ms / 1000.0, 30.0)
+        
+        try:
+            return future.result(timeout=timeout)
+        except Exception as e:
+            return {"success": False, "error": f"Request failed: {str(e)}"}
+    
+    async def _make_request(self, endpoint: str, method: str, data: Optional[Dict],
+                           auth_token: Optional[str], organization_id: Optional[str],
+                           deadline_ms: Optional[int], base_url: str) -> Dict[str, Any]:
+        """Core async HTTP method with deadline propagation."""
+        call_id = str(uuid.uuid4())[:8]
+        start_time = time.time()
+        from datetime import datetime
+        timestamp = datetime.now().isoformat()
+        
+        logger.info(f"[{timestamp}] [TOOL-HTTP] Request START - call_id: {call_id}, endpoint: {endpoint}, method: {method}")
+        logger.debug(f"[{timestamp}] [TOOL-HTTP] Request details - call_id: {call_id}, data_preview: {str(data)[:100] if data else 'None'}")
+        
+        url = f"{base_url}/{endpoint.lstrip('/')}"
+        headers = {}
+        
+        # Add authentication headers
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
+        
+        # Add organization context for RLS
+        if organization_id:
+            headers["X-Organization-ID"] = str(organization_id)
+        
+        # Add tracking headers
+        headers["X-Call-ID"] = call_id
+        headers["X-Source"] = "async_manager"
+        headers["X-Thread-ID"] = str(threading.get_ident())
+        if deadline_ms:
+            headers["X-Deadline-MS"] = str(deadline_ms)
+        
+        # Calculate timeout from deadline
+        timeout = 25.0
+        if deadline_ms:
+            timeout = min(deadline_ms / 1000 - 5, 25.0)
+        
+        # Add content type for JSON requests
+        if data is not None:
+            headers["Content-Type"] = "application/json"
+        
+        try:
+            if self._client is None:
+                return {"success": False, "error": "HTTP client not initialized"}
+                
+            response = await self._client.request(
+                method=method,
+                url=url,
+                headers=headers,
+                json=data if data else None,
+                timeout=timeout
+            )
+            
+            total_time = time.time() - start_time
+            from datetime import datetime
+            response_timestamp = datetime.now().isoformat()
+            
+            # Handle HTTP errors
+            if response.status_code >= 400:
+                error_detail = f"HTTP {response.status_code}"
+                try:
+                    error_body = response.json()
+                    if "error" in error_body:
+                        error_detail = error_body["error"]
+                    elif "message" in error_body:
+                        error_detail = error_body["message"]
+                except:
+                    error_detail = response.text[:200] if response.text else error_detail
+                
+                logger.error(f"[{response_timestamp}] [TOOL-HTTP] ❌ HTTP error - call_id: {call_id}, status: {response.status_code}, duration: {total_time:.2f}s")
+                return {
+                    "success": False,
+                    "error": f"API request failed: {error_detail}",
+                    "status_code": response.status_code,
+                    "call_id": call_id,
+                    "total_time": total_time
+                }
+            
+            # Parse JSON response
+            try:
+                logger.info(f"[{response_timestamp}] [TOOL-HTTP] ✅ Response received - call_id: {call_id}, status: {response.status_code}, duration: {total_time:.2f}s")
+                return {
+                    "success": True,
+                    "data": response.json(),
+                    "status_code": response.status_code,
+                    "call_id": call_id,
+                    "total_time": total_time
+                }
+            except json.JSONDecodeError:
+                logger.info(f"[ASYNC_MANAGER] ✅ {method} {endpoint} - {response.status_code} ({total_time:.2f}s)")
+                return {
+                    "success": True,
+                    "data": response.text,
+                    "status_code": response.status_code,
+                    "call_id": call_id,
+                    "total_time": total_time
+                }
+                
+        except httpx.TimeoutException:
+            total_time = time.time() - start_time
+            logger.error(f"[ASYNC_MANAGER] ❌ TIMEOUT - call_id: {call_id}, timeout: {timeout}s")
+            return {
+                "success": False,
+                "error": f"Request timeout after {timeout} seconds",
+                "call_id": call_id,
+                "total_time": total_time
+            }
+        except httpx.RequestError as e:
+            total_time = time.time() - start_time
+            logger.error(f"[ASYNC_MANAGER] ❌ REQUEST ERROR - call_id: {call_id}, error: {str(e)}")
+            return {
+                "success": False,
+                "error": f"HTTP request failed: {str(e)}",
+                "call_id": call_id,
+                "total_time": total_time
+            }
+        except Exception as e:
+            total_time = time.time() - start_time
+            logger.error(f"[ASYNC_MANAGER] ❌ UNEXPECTED ERROR - call_id: {call_id}, error: {str(e)}")
+            return {
+                "success": False,
+                "error": f"Unexpected error: {str(e)}",
+                "call_id": call_id,
+                "total_time": total_time
+            }
 
+# Global AsyncHTTPManager instance
+_async_manager = AsyncHTTPManager()
 
 class BaseCrudTool(Tool):
     """Base class for all CRUD tools with common functionality."""
@@ -37,10 +203,7 @@ class BaseCrudTool(Tool):
     def _make_api_request(self, endpoint: str, method: str = "GET", data: Optional[Dict] = None,
                          auth_token: Optional[str] = None, organization_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Make authenticated API request to emery-api with RLS context.
-
-        AIDEV-NOTE: Uses ThreadPoolExecutor to prevent blocking gRPC event loop.
-        HTTP call runs in background thread, allowing gRPC server to handle callbacks.
+        Make authenticated API request to emery-api with RLS context using AsyncHTTPManager.
 
         Args:
             endpoint: API endpoint path
@@ -52,95 +215,15 @@ class BaseCrudTool(Tool):
         Returns:
             API response as dictionary
         """
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        headers = {}
-
-        # AIDEV-NOTE: Add internal authentication header
-        if auth_token:
-            headers["Authorization"] = f"Bearer {auth_token}"
-
-        # AIDEV-NOTE: Add organization context for RLS (Row Level Security)
-        if organization_id:
-            headers["X-Organization-ID"] = str(organization_id)
-
-        # Add content type for JSON requests
-        if data is not None:
-            headers["Content-Type"] = "application/json"
-
-        def _http_call():
-            """Execute HTTP call in thread pool to avoid blocking event loop."""
-            with httpx.Client(timeout=60.0) as client:  # Increased timeout for slow operations
-                return client.request(
-                    method=method,
-                    url=url,
-                    headers=headers,
-                    json=data if data else None
-                )
-
-        try:
-            # Submit HTTP call to thread pool and wait for result
-            # This prevents blocking the gRPC event loop
-            future = _http_thread_pool.submit(_http_call)
-            response = future.result(timeout=65.0)  # Slightly longer than httpx timeout
-
-            # Handle HTTP errors
-            if response.status_code >= 400:
-                error_detail = f"HTTP {response.status_code}"
-                try:
-                    error_body = response.json()
-                    if "error" in error_body:
-                        error_detail = error_body["error"]
-                    elif "message" in error_body:
-                        error_detail = error_body["message"]
-                except:
-                    error_detail = response.text[:200] if response.text else error_detail
-
-                return {
-                    "success": False,
-                    "error": f"API request failed: {error_detail}",
-                    "status_code": response.status_code
-                }
-
-            # Parse JSON response
-            try:
-                return {
-                    "success": True,
-                    "data": response.json(),
-                    "status_code": response.status_code
-                }
-            except json.JSONDecodeError:
-                return {
-                    "success": True,
-                    "data": response.text,
-                    "status_code": response.status_code
-                }
-
-        except TimeoutError:
-            # Timeout from ThreadPoolExecutor.result()
-            return {
-                "success": False,
-                "error": f"Request timeout after 65 seconds",
-                "endpoint": endpoint
-            }
-        except httpx.TimeoutException:
-            # Timeout from httpx client
-            return {
-                "success": False,
-                "error": f"Request timeout after 60 seconds",
-                "endpoint": endpoint
-            }
-        except httpx.RequestError as e:
-            return {
-                "success": False,
-                "error": f"Request error: {str(e)}",
-                "endpoint": endpoint
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Unexpected error: {str(e)}",
-                "endpoint": endpoint
-            }
+        return _async_manager.make_request(
+            endpoint=endpoint,
+            method=method,
+            data=data,
+            auth_token=auth_token,
+            organization_id=organization_id,
+            deadline_ms=None,
+            base_url=self.base_url
+        )
 
     async def _make_async_api_request(self, endpoint: str, method: str = "GET", data: Optional[Dict] = None,
                                     auth_token: Optional[str] = None, organization_id: Optional[str] = None,
@@ -272,52 +355,20 @@ class BaseCrudTool(Tool):
             }
 
     def _make_api_request_with_deadline(self, endpoint: str, method: str = "GET", data: Optional[Dict] = None,
-                                       auth_token: Optional[str] = None, organization_id: Optional[str] = None,
-                                       deadline_ms: Optional[int] = None) -> Dict[str, Any]:
+                                    auth_token: Optional[str] = None, organization_id: Optional[str] = None,
+                                    deadline_ms: Optional[int] = None) -> Dict[str, Any]:
         """
-        Wrapper to make async HTTP calls from sync context with deadline propagation.
+        Execute async HTTP request using AsyncHTTPManager with deadline propagation.
         """
-        try:
-            # Check if there's already a running loop
-            try:
-                loop = asyncio.get_running_loop()
-                # Create task and wait for it in existing loop
-                task = loop.create_task(
-                    self._make_async_api_request(
-                        endpoint=endpoint,
-                        method=method,
-                        data=data,
-                        auth_token=auth_token,
-                        organization_id=organization_id,
-                        deadline_ms=deadline_ms
-                    )
-                )
-                # Wait with timeout
-                timeout = 30.0  # Default timeout
-                if deadline_ms:
-                    timeout = deadline_ms / 1000.0
-                result = asyncio.wait_for(task, timeout=timeout)
-                return result
-                
-            except RuntimeError:
-                # No running loop, safe to use asyncio.run()
-                return asyncio.run(
-                    self._make_async_api_request(
-                        endpoint=endpoint,
-                        method=method,
-                        data=data,
-                        auth_token=auth_token,
-                        organization_id=organization_id,
-                        deadline_ms=deadline_ms
-                    )
-                )
-        except Exception as e:
-            logger.error(f"[ASYNC_HTTP_WRAPPER] Error running async call: {str(e)}")
-            return {
-                "success": False,
-                "error": f"Async call failed: {str(e)}",
-                "call_id": "unknown"
-            }
+        return _async_manager.make_request(
+            endpoint=endpoint,
+            method=method,
+            data=data,
+            auth_token=auth_token,
+            organization_id=organization_id,
+            deadline_ms=deadline_ms,
+            base_url=self.base_url
+        )
 
 
 def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:

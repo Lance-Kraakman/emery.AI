@@ -25,13 +25,14 @@ echo "=========================================="
 # Port allocation:
 # Main containers:     5433 (DB), 3000 (App), 50051 (Agent)  
 # RLS tests:          5434 (DB only)
-# Integration tests:  5436 (DB), 3002 (App), 50053 (Agent)
+# Integration tests:  5436 (DB), 3002 (App), 50053 (Agent), 50054 (Table Services)
 
 all_ports_available=true
 
 check_port 5436 "Integration Test PostgreSQL" || all_ports_available=false
 check_port 3002 "Integration Test Next.js App" || all_ports_available=false  
 check_port 50053 "Integration Test gRPC Agent" || all_ports_available=false
+check_port 50054 "Integration Test gRPC Table Services" || all_ports_available=false
 
 echo ""
 
