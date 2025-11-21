@@ -397,7 +397,7 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
 
         // Create map of updated rows by ID for quick lookup
         const updatedRowsMap = new Map(
-          data.data.map((row: any) => [row.id, row])
+          data.data.map((row: DSGRow) => [row.id, row])
         )
 
         queryClient.setQueryData(queryKey, (old: any) => {
