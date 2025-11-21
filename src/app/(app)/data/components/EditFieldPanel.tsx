@@ -26,6 +26,8 @@ interface EditFieldPanelProps {
 const FIELD_TYPES: Array<{ value: FieldType; label: string }> = [
   { value: "text", label: "Text" },
   { value: "number", label: "Number" },
+  { value: "email", label: "Email Address" },
+  { value: "phone", label: "Phone Number" },
   { value: "boolean", label: "Boolean" },
   { value: "date", label: "Date" },
   { value: "single-select", label: "Single Select" },

@@ -46,6 +46,10 @@ export enum FieldType {
   FIELD_TYPE_LAST_UPDATED = 12,
   /** FIELD_TYPE_CREATED_AT - Auto-set timestamp on creation */
   FIELD_TYPE_CREATED_AT = 13,
+  /** FIELD_TYPE_EMAIL - Email address with validation */
+  FIELD_TYPE_EMAIL = 14,
+  /** FIELD_TYPE_PHONE - Phone number in E.164 format */
+  FIELD_TYPE_PHONE = 15,
   UNRECOGNIZED = -1,
 }
 
@@ -93,6 +97,12 @@ export function fieldTypeFromJSON(object: any): FieldType {
     case 13:
     case "FIELD_TYPE_CREATED_AT":
       return FieldType.FIELD_TYPE_CREATED_AT;
+    case 14:
+    case "FIELD_TYPE_EMAIL":
+      return FieldType.FIELD_TYPE_EMAIL;
+    case 15:
+    case "FIELD_TYPE_PHONE":
+      return FieldType.FIELD_TYPE_PHONE;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -130,6 +140,10 @@ export function fieldTypeToJSON(object: FieldType): string {
       return "FIELD_TYPE_LAST_UPDATED";
     case FieldType.FIELD_TYPE_CREATED_AT:
       return "FIELD_TYPE_CREATED_AT";
+    case FieldType.FIELD_TYPE_EMAIL:
+      return "FIELD_TYPE_EMAIL";
+    case FieldType.FIELD_TYPE_PHONE:
+      return "FIELD_TYPE_PHONE";
     case FieldType.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
