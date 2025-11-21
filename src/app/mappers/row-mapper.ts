@@ -73,6 +73,8 @@ export class RowMapper {
       case 'boolean':
         return value as BooleanFieldValue;
       case 'date':
+      case 'last-updated':
+      case 'created-at':
         // Keep as Date object for protobuf serialization (gRPC handles timestamps natively)
         if (value === null || value === undefined) return null;
         if (value instanceof Date) return value;

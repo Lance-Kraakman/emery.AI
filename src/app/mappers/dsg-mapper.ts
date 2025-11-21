@@ -43,6 +43,8 @@ const REQUIRED_FIELD_DEFAULTS: Record<string, FieldValue> = {
   number: 0,                  // NumberFieldValue - valid number
   boolean: false,             // BooleanFieldValue
   date: new Date(),           // DateFieldValue
+  'last-updated': new Date(), // DateFieldValue - auto-managed timestamp
+  'created-at': new Date(),   // DateFieldValue - auto-managed timestamp
   file: [],                   // FileArrayFieldValue - empty array is valid
   relation: [],               // RelationArrayFieldValue - empty array is valid
   document: [],               // DocumentArrayFieldValue - empty array is valid
@@ -61,6 +63,8 @@ const OPTIONAL_FIELD_DEFAULTS: Record<string, FieldValue> = {
   number: null,               // NumberFieldValue - null allowed for optional
   boolean: false,             // BooleanFieldValue
   date: null,                 // DateFieldValue - null allowed for optional
+  'last-updated': null,       // DateFieldValue - null allowed for optional
+  'created-at': null,         // DateFieldValue - null allowed for optional
   file: [],                   // FileArrayFieldValue - empty array
   relation: [],               // RelationArrayFieldValue - empty array
   document: [],               // DocumentArrayFieldValue - empty array
