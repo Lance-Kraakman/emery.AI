@@ -62,8 +62,9 @@ function convertDateStringsInRows(rows: DSGRow[], fields: FieldDTO[]): DSGRow[] 
         valueType: typeof value,
         isDate: value instanceof Date,
         isString: typeof value === 'string',
+        isNumber: typeof value === 'number',
         isEmpty: value === '',
-        willConvert: typeof value === 'string' && value !== ''
+        willConvert: (typeof value === 'string' && value !== '') || typeof value === 'number'
       });
 
       if (typeof value === 'string') {
@@ -79,6 +80,14 @@ function convertDateStringsInRows(rows: DSGRow[], fields: FieldDTO[]): DSGRow[] 
           } catch (e) {
             console.error(`[DATE CONVERSION] ❌ Failed to convert "${field.name}":`, e);
           }
+        }
+      } else if (typeof value === 'number') {
+        // Handle number timestamps (milliseconds since epoch from gRPC)
+        try {
+          convertedRow[field.name] = new Date(value);
+          console.log(`[DATE CONVERSION] ✅ Converted "${field.name}" from number timestamp to Date`, new Date(value));
+        } catch (e) {
+          console.error(`[DATE CONVERSION] ❌ Failed to convert number timestamp "${field.name}":`, e);
         }
       }
     }
@@ -320,12 +329,7 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
       hasInfiniteData: !!infiniteRowsQuery.data
     });
 
-    // Don't process if fields aren't loaded yet
-    if (!fieldsQuery.data || fieldsQuery.data.length === 0) {
-      console.log('[ROWS USEMEMO] ⚠️ Early return - no fields data');
-      return []
-    }
-
+    // Get raw rows first
     let rawRows: DSGRow[] = []
 
     if (searchTerm && searchQuery.data?.rows) {
@@ -338,13 +342,19 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
 
     console.log('[ROWS USEMEMO] Raw rows sample (first row):', rawRows[0]);
 
+    // Only convert dates if we have field metadata
+    if (!fieldsQuery.data || fieldsQuery.data.length === 0) {
+      console.log('[ROWS USEMEMO] ⚠️ No fields data - skipping date conversion, returning raw rows');
+      return rawRows;
+    }
+
     // Convert date strings to Date objects for dateColumn compatibility
     const converted = convertDateStringsInRows(rawRows, fieldsQuery.data);
 
     console.log('[ROWS USEMEMO] ✅ Conversion complete. Converted rows sample (first row):', converted[0]);
 
     return converted;
-  }, [searchTerm, searchQuery.data, infiniteRowsQuery.data, fieldsQuery.data])
+  }, [searchTerm, searchQuery.data, infiniteRowsQuery.data, fieldsQuery.data, fieldsQuery.isSuccess])
 
   // Get total count - from search results or from first page of infinite query
   const totalCount = useMemo(() => {
