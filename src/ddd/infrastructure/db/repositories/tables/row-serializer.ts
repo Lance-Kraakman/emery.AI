@@ -481,7 +481,7 @@ export class RowSerializer {
    *
    * This ensures consistent, predictable behavior matching spreadsheet UX.
    */
-  private static applyExcelLikeDefaults(value: any, field: TableField): string | number | boolean | Date {
+  private static applyExcelLikeDefaults(value: any, field: TableField): string | number | boolean | Date | null {
     if (value === null || value === undefined) {
       switch (field.type) {
         case 'boolean':
@@ -499,6 +499,12 @@ export class RowSerializer {
           // Select fields: Empty = no selection
           // Auto-fields: Empty until managed by AutoFieldProcessor
           return '';
+
+        case 'email':
+        case 'phone':
+          // Email/phone: Empty = null (not empty string)
+          // Validation rejects empty strings but accepts null
+          return null;
 
         default:
           return '';
