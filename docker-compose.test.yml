@@ -29,9 +29,11 @@ services:
     image: emery-agents:${AGENT_WORKER_VERSION:-v1.0.0}
     restart: unless-stopped
     ports:
-      - "127.0.0.1:50053:50051"  # Port 50053 to match .env.local.test
+      - "127.0.0.1:50053:50051"  # Agent execution
+      - "127.0.0.1:50054:50052"  # Table operations
     environment:
       - WORKER_ADDRESS=50051
+      - GRPC_TOOLS_ADDRESS=50052
       - ORGANIZATION_ID=${TEST_ORGANIZATION_ID:-test-org}
       - HF_TOKEN=${HF_TOKEN:-}
       - DATABASE_URL=postgresql://postgres:integration_test_password@test-db:5432/emery_integration_test
@@ -89,7 +91,8 @@ except Exception as e:
     environment:
       - DATABASE_URL=postgresql://postgres:integration_test_password@test-db:5432/emery_integration_test
       - WORKER_HOST=test-agent-worker
-      - WORKER_ADDRESS=50051
+      - WORKER_ADDRESS=50053
+      - GRPC_TOOLS_ADDRESS=50054
       - NEXTAUTH_URL=http://localhost:3002
       - NEXTAUTH_SECRET=test-secret-key-for-testing-only
       - HF_TOKEN=${HF_TOKEN:-}

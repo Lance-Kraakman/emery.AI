@@ -11,6 +11,7 @@ import type { Result, CreateRowCommand, UpdateRowCommand } from "./types";
 import { Row, RowId } from "@/ddd/domain/tables/value-objects/row";
 import { TableId, UserId } from "@/ddd/domain/shared/value-objects";
 import { RowMapper, type RowDTO } from "@/app/mappers/row-mapper";
+import type { DSGRow } from "@/app/mappers/dsg-mapper";
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field";
 
 /**
@@ -401,12 +402,15 @@ export async function updateRowsData(
       revalidatePath(revalidateUrl);
     }
 
-    // Convert Domain objects to DTOs for serialization
-    const rowDTOs = result.data?.map(row => RowMapper.toDTO(row)) || [];
+    // Convert Domain objects to DSG format for grid display
+    const dsgRows = result.data?.map(row => ({
+      id: row.id.value,
+      ...row.toNamedObject(table.fields)
+    })) || [];
 
     return {
       success: true,
-      data: rowDTOs,
+      data: dsgRows,
     };
   } catch (error) {
     console.error("Error bulk updating rows:", error);

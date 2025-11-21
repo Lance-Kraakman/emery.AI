@@ -125,13 +125,9 @@ export class Row {
       // fieldValue.fieldId already contains the numeric field ID!
       const value = fieldValue.value;
 
-      // Convert Date objects to ISO strings for JSON serialization
-      if (fieldValue.fieldType === 'date' && value instanceof Date) {
-        obj[fieldValue.fieldId] = value.toISOString();
-      } else {
-        // All other types: return value as-is (arrays, objects, strings, primitives)
-        obj[fieldValue.fieldId] = value;
-      }
+      // Keep Date objects for protobuf serialization (gRPC handles timestamps natively)
+      // All types returned as-is (arrays, objects, strings, primitives, Dates)
+      obj[fieldValue.fieldId] = value;
     }
 
     return obj;
@@ -162,13 +158,9 @@ export class Row {
 
       const value = fieldValue.value;
 
-      // Convert Date objects to ISO strings for JSON serialization
-      if (fieldValue.fieldType === 'date' && value instanceof Date) {
-        obj[field.name] = value.toISOString();
-      } else {
-        // All other types: return value as-is (arrays, objects, strings, primitives)
-        obj[field.name] = value;
-      }
+      // Keep Date objects for protobuf serialization (gRPC handles timestamps natively)
+      // All types returned as-is (arrays, objects, strings, primitives, Dates)
+      obj[field.name] = value;
     }
 
     return obj;

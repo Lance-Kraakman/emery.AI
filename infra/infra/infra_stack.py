@@ -188,26 +188,40 @@ class InfraStack(Stack):
         # Allow bastion to connect to database
         db_instance.connections.allow_default_port_from(bastion_host, "Allow bastion host access")
 
-        # Create security group for agent gRPC service
-        agent_grpc_sg = ec2.SecurityGroup(
-            self, f"{prefix}AgentGrpcSg",
-            vpc=vpc,
-            description="Security group for agent gRPC service"
-        )
+        # AIDEV-NOTE: Create security groups for dual-port gRPC architecture
+        # Chat service on port 50051, Table service on port 50052
 
-        # Allow inbound traffic on port 50051 for gRPC service
-        agent_grpc_sg.add_ingress_rule(
+        # Create security group for chat gRPC service (port 50051)
+        chat_grpc_sg = ec2.SecurityGroup(
+            self, f"{prefix}ChatGrpcSg",
+            vpc=vpc,
+            description="Security group for chat gRPC service (port 50051)"
+        )
+        chat_grpc_sg.add_ingress_rule(
             peer=ec2.Peer.any_ipv4(),
             connection=ec2.Port.tcp(50051),
             description="Allow gRPC traffic on port 50051"
         )
-
-        # Allow gRPC traffic from frontend and scheduler services (which use db_client_sg)
-        # AIDEV-NOTE: NLB preserves source IPs, so agent service sees ECS task IPs
-        # These tasks have db_client_sg, so we allow traffic from that security group
-        agent_grpc_sg.add_ingress_rule(
+        chat_grpc_sg.add_ingress_rule(
             peer=db_client_sg,
             connection=ec2.Port.tcp(50051),
+            description="Allow gRPC traffic from frontend and scheduler services"
+        )
+
+        # Create security group for table gRPC service (port 50052)
+        table_grpc_sg = ec2.SecurityGroup(
+            self, f"{prefix}TableGrpcSg",
+            vpc=vpc,
+            description="Security group for table gRPC service (port 50052)"
+        )
+        table_grpc_sg.add_ingress_rule(
+            peer=ec2.Peer.any_ipv4(),
+            connection=ec2.Port.tcp(50052),
+            description="Allow gRPC traffic on port 50052"
+        )
+        table_grpc_sg.add_ingress_rule(
+            peer=db_client_sg,
+            connection=ec2.Port.tcp(50052),
             description="Allow gRPC traffic from frontend and scheduler services"
         )
 
@@ -502,19 +516,24 @@ class InfraStack(Stack):
             description="Internal service discovery for Emery application"
         )
 
-        # Create the Fargate service for the Python gRPC backend
-        # AIDEV-NOTE: Changed construct ID to AgentServiceV2 to force CloudFormation replacement
-        # when switching from public to internal NLB (old resources manually deleted)
-        agent_service = ecs_patterns.NetworkLoadBalancedFargateService(
-            self, f"{prefix}AgentServiceV2",
+        # AIDEV-NOTE: Dual-port gRPC architecture to prevent circular dependency deadlocks
+        # Chat service (port 50051): AgentWorker + ChatProcessingService
+        # Table service (port 50052): TableService only
+
+        # ========== CHAT SERVICE (Port 50051) ==========
+        agent_chat_service = ecs_patterns.NetworkLoadBalancedFargateService(
+            self, f"{prefix}AgentChatService",
             cluster=cluster,
-            service_name=f"{prefix}-Agent-Internal",
-            cpu=1024,  # AIDEV-NOTE: 1 vCPU for better gRPC performance
-            memory_limit_mib=2048,  # AIDEV-NOTE: 2 GB for AI processing and table operations
-            desired_count=2,  # AIDEV-NOTE: Run 2 tasks for redundancy and better availability
+            service_name=f"{prefix}-Agent-Chat",
+            cpu=1024,  # 1 vCPU for AI processing
+            memory_limit_mib=2048,  # 2 GB for chat and agent execution
+            desired_count=1,  # Start with 1 task, scale up as needed
             task_image_options=ecs_patterns.NetworkLoadBalancedTaskImageOptions(
                 image=self._get_agent_image(),
                 container_port=50051,
+                environment={
+                    "GRPC_CHAT_MAX_WORKERS": "20",
+                },
                 secrets={
                     **app_secrets_map
                 }
@@ -523,28 +542,26 @@ class InfraStack(Stack):
                 cpu_architecture=ecs.CpuArchitecture.X86_64,
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
-            # AIDEV-NOTE: Internal NLB for VPC-only access from frontend/scheduler
-            # Frontend and scheduler are in private subnets and cannot reach public IPs within same VPC
             public_load_balancer=False,
-            security_groups=[db_client_sg, agent_grpc_sg],
-            # AIDEV-NOTE: Critical fix for ECS service stability
-            # Increased grace period to allow for gRPC service startup and target registration
-            health_check_grace_period=Duration.seconds(300),  # 5 minutes
-            # AIDEV-NOTE: Add Cloud Map service discovery for reliable internal communication
+            security_groups=[db_client_sg, chat_grpc_sg],
+            health_check_grace_period=Duration.seconds(300),
             cloud_map_options=ecs.CloudMapOptions(
-                name="agent-service",
+                name="agent-chat",
                 cloud_map_namespace=namespace,
                 dns_record_type=servicediscovery.DnsRecordType.A,
                 dns_ttl=Duration.seconds(60)
             ),
         )
 
-        # AIDEV-NOTE: Agent service doesn't need database migrations
+        # Set custom command for chat service container
+        cfn_chat_task_def = agent_chat_service.task_definition.node.default_child
+        cfn_chat_task_def.add_property_override(
+            "ContainerDefinitions.0.Command",
+            ["python", "-m", "emery_agents.grpc.server", "--mode=chat", "--port=50051"]
+        )
 
-        # AIDEV-NOTE: Configure TCP health check for NLB target group
-        # TCP health checks verify port connectivity without interfering with gRPC application logic
-        # This is required for the NLB to stabilize and register healthy targets
-        agent_service.target_group.configure_health_check(
+        # Configure TCP health check for chat service
+        agent_chat_service.target_group.configure_health_check(
             port="50051",
             protocol=elbv2.Protocol.TCP,
             interval=Duration.seconds(30),
@@ -553,18 +570,16 @@ class InfraStack(Stack):
             unhealthy_threshold_count=2,
         )
 
-        # AIDEV-NOTE: Add ECR permissions to agent task execution role for pulling images
-        agent_image_uri = os.environ.get('AGENT_IMAGE_URI')
-        agent_service.task_definition.execution_role.add_managed_policy(
+        # Add ECR permissions for chat service
+        agent_chat_service.task_definition.execution_role.add_managed_policy(
             iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
         )
-        # Add specific ECR permissions
-        agent_service.task_definition.execution_role.add_to_policy(
+        agent_chat_service.task_definition.execution_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
                     "ecr:GetAuthorizationToken",
-                    "ecr:BatchCheckLayerAvailability", 
+                    "ecr:BatchCheckLayerAvailability",
                     "ecr:GetDownloadUrlForLayer",
                     "ecr:BatchGetImage"
                 ],
@@ -572,36 +587,121 @@ class InfraStack(Stack):
             )
         )
 
-        # AIDEV-NOTE: Configure deployment settings for agent service stability
-        cfn_agent_service = agent_service.service.node.default_child
-        cfn_agent_service.deployment_configuration = {
-            "minimumHealthyPercent": 0,   # Allow stopping old tasks before starting new ones
-            "maximumPercent": 100        # Prevent resource contention during deployment
+        # Configure deployment settings for chat service
+        cfn_chat_service = agent_chat_service.service.node.default_child
+        cfn_chat_service.deployment_configuration = {
+            "minimumHealthyPercent": 0,
+            "maximumPercent": 100
         }
-        
-        # AIDEV-NOTE: ECS health checks should be configured in container definition, not added afterwards
-        # For agent gRPC service, we rely on ECS service health monitoring
 
-        # AIDEV-NOTE: Configure auto-scaling for agent service
-        # Heavy AI processing workload that needs to scale based on CPU utilization
-        agent_scaling = agent_service.service.auto_scale_task_count(
-            min_capacity=2,  # Already running 2 tasks for redundancy
-            max_capacity=10  # Can scale up to 10 tasks during high AI workload
+        # Configure auto-scaling for chat service
+        chat_scaling = agent_chat_service.service.auto_scale_task_count(
+            min_capacity=1,  # Start with 1 task
+            max_capacity=10  # Scale up to 10 for heavy AI workload
+        )
+        chat_scaling.scale_on_cpu_utilization(
+            "ChatCpuScaling",
+            target_utilization_percent=70,
+            scale_in_cooldown=Duration.seconds(180),
+            scale_out_cooldown=Duration.seconds(60)
         )
 
-        agent_scaling.scale_on_cpu_utilization(
-            "AgentCpuScaling",
-            target_utilization_percent=70,  # Target 70% CPU utilization
-            scale_in_cooldown=Duration.seconds(180),  # Conservative scale-in (AI tasks can be long)
-            scale_out_cooldown=Duration.seconds(60)   # Fast scale-out for AI workload spikes
+        # ========== TABLE SERVICE (Port 50052) ==========
+        agent_table_service = ecs_patterns.NetworkLoadBalancedFargateService(
+            self, f"{prefix}AgentTableService",
+            cluster=cluster,
+            service_name=f"{prefix}-Agent-Table",
+            cpu=1024,  # 1 vCPU for table operations
+            memory_limit_mib=2048,  # 2 GB for Delta Lake operations
+            desired_count=1,  # Start with 1 task
+            task_image_options=ecs_patterns.NetworkLoadBalancedTaskImageOptions(
+                image=self._get_agent_image(),
+                container_port=50052,
+                environment={
+                    "GRPC_TABLE_MAX_WORKERS": "15",
+                },
+                secrets={
+                    **app_secrets_map
+                }
+            ),
+            runtime_platform=ecs.RuntimePlatform(
+                cpu_architecture=ecs.CpuArchitecture.X86_64,
+                operating_system_family=ecs.OperatingSystemFamily.LINUX
+            ),
+            public_load_balancer=False,
+            security_groups=[db_client_sg, table_grpc_sg],
+            health_check_grace_period=Duration.seconds(300),
+            cloud_map_options=ecs.CloudMapOptions(
+                name="agent-table",
+                cloud_map_namespace=namespace,
+                dns_record_type=servicediscovery.DnsRecordType.A,
+                dns_ttl=Duration.seconds(60)
+            ),
         )
 
-        # Update environment variables to use Cloud Map DNS instead of NLB DNS
-        # This provides reliable internal service-to-service communication
+        # Set custom command for table service container
+        cfn_table_task_def = agent_table_service.task_definition.node.default_child
+        cfn_table_task_def.add_property_override(
+            "ContainerDefinitions.0.Command",
+            ["python", "-m", "emery_agents.grpc.server", "--mode=table", "--port=50052"]
+        )
+
+        # Configure TCP health check for table service
+        agent_table_service.target_group.configure_health_check(
+            port="50052",
+            protocol=elbv2.Protocol.TCP,
+            interval=Duration.seconds(30),
+            timeout=Duration.seconds(10),
+            healthy_threshold_count=2,
+            unhealthy_threshold_count=2,
+        )
+
+        # Add ECR permissions for table service
+        agent_table_service.task_definition.execution_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
+        )
+        agent_table_service.task_definition.execution_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ecr:GetAuthorizationToken",
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchGetImage"
+                ],
+                resources=["*"]
+            )
+        )
+
+        # Configure deployment settings for table service
+        cfn_table_service = agent_table_service.service.node.default_child
+        cfn_table_service.deployment_configuration = {
+            "minimumHealthyPercent": 0,
+            "maximumPercent": 100
+        }
+
+        # Configure auto-scaling for table service
+        table_scaling = agent_table_service.service.auto_scale_task_count(
+            min_capacity=1,  # Start with 1 task
+            max_capacity=5  # Scale up to 5 for table operations
+        )
+        table_scaling.scale_on_cpu_utilization(
+            "TableCpuScaling",
+            target_utilization_percent=75,
+            scale_in_cooldown=Duration.seconds(180),
+            scale_out_cooldown=Duration.seconds(90)
+        )
+
+        # Update environment variables to use Cloud Map DNS for dual-port architecture
+        # Chat service on port 50051, Table service on port 50052
         if frontend_service.task_definition.default_container:
             frontend_service.task_definition.default_container.add_environment(
                 "WORKER_ADDRESS",
-                "agent-service.emery.local:50051"
+                "agent-chat.emery.local:50051"
+            )
+            frontend_service.task_definition.default_container.add_environment(
+                "GRPC_TOOLS_ADDRESS",
+                "agent-table.emery.local:50052"
             )
 
             # Also inject the frontend's own public URL for NextAuth (use CloudFront URL)
@@ -612,10 +712,14 @@ class InfraStack(Stack):
 
 
 
-        # Update scheduler environment variable to use Cloud Map DNS
+        # Update scheduler environment variables for dual-port architecture
         scheduler_container.add_environment(
             "WORKER_ADDRESS",
-            "agent-service.emery.local:50051"
+            "agent-chat.emery.local:50051"
+        )
+        scheduler_container.add_environment(
+            "GRPC_TOOLS_ADDRESS",
+            "agent-table.emery.local:50052"
         )
         # Add AWS S3 configuration to override MinIO defaults
         aws_endpoint_url = f"https://s3.{aws_region}.amazonaws.com"
@@ -640,7 +744,8 @@ class InfraStack(Stack):
 
         # Grant all services read/write access to the bucket
         storage_bucket.grant_read_write(frontend_service.task_definition.task_role)
-        storage_bucket.grant_read_write(agent_service.task_definition.task_role)
+        storage_bucket.grant_read_write(agent_chat_service.task_definition.task_role)
+        storage_bucket.grant_read_write(agent_table_service.task_definition.task_role)
         storage_bucket.grant_read_write(scheduler_task_definition.task_role)
 
         # Inject the bucket name as an environment variable into both services
@@ -660,25 +765,39 @@ class InfraStack(Stack):
                 "ap-southeast-2"  # AWS region for deployment
             )
         
-        if agent_service.task_definition.default_container:
-            agent_service.task_definition.default_container.add_environment(
+        # Add S3 and AWS configuration to chat service
+        if agent_chat_service.task_definition.default_container:
+            agent_chat_service.task_definition.default_container.add_environment(
                 "S3_BUCKET_NAME",
                 storage_bucket.bucket_name
             )
-            # Add AWS S3 configuration to override MinIO defaults
             agent_aws_endpoint_url = f"https://s3.{aws_region}.amazonaws.com"
-            agent_service.task_definition.default_container.add_environment(
+            agent_chat_service.task_definition.default_container.add_environment(
                 "AWS_ENDPOINT_URL",
-                agent_aws_endpoint_url  # Dynamic AWS S3 endpoint
+                agent_aws_endpoint_url
             )
-            agent_service.task_definition.default_container.add_environment(
+            agent_chat_service.task_definition.default_container.add_environment(
                 "AWS_REGION",
-                aws_region  # Use dynamic AWS region
+                aws_region
             )
-            # AWS credentials will be automatically provided by the task execution role
-            # No need to hardcode AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
             # Add NextJS base URL for agent callbacks to API routes
-            agent_service.task_definition.default_container.add_environment(
+            agent_chat_service.task_definition.default_container.add_environment(
                 "NEXTJS_BASE_URL",
                 f"https://{cloudfront_distribution.distribution_domain_name}"
+            )
+
+        # Add S3 and AWS configuration to table service
+        if agent_table_service.task_definition.default_container:
+            agent_table_service.task_definition.default_container.add_environment(
+                "S3_BUCKET_NAME",
+                storage_bucket.bucket_name
+            )
+            agent_table_aws_endpoint_url = f"https://s3.{aws_region}.amazonaws.com"
+            agent_table_service.task_definition.default_container.add_environment(
+                "AWS_ENDPOINT_URL",
+                agent_table_aws_endpoint_url
+            )
+            agent_table_service.task_definition.default_container.add_environment(
+                "AWS_REGION",
+                aws_region
             )

@@ -26,7 +26,7 @@ pnpm test:all
 ## Architecture
 
 ### Container Isolation
-- **Separate ports**: `5436` (DB), `3002` (App), `50053` (Agent)
+- **Separate ports**: `5436` (DB), `3002` (App), `50053` (Agent), `50054` (Table Services)
 - **Isolated network**: `integration-test-network`
 - **Clean volumes**: Dropped between test runs
 - **Environment**: Uses `.env.local.test` for configuration
@@ -92,7 +92,7 @@ export async function teardown() {
 ### Port Allocation
 - **Main Dev**: `5433` (DB), `3000` (App), `50051` (Agent)
 - **RLS Tests**: `5434` (DB only)
-- **Integration**: `5436` (DB), `3002` (App), `50053` (Agent)
+- **Integration**: `5436` (DB), `3002` (App), `50053` (Agent), `50054` (Table Services)
 
 ## Test Patterns
 
