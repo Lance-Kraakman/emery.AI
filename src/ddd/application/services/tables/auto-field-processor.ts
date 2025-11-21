@@ -47,7 +47,7 @@ export class AutoFieldProcessor {
     existingRow?: Record<string | number, any>
   ): Record<string | number, any> {
     const processed = { ...rowData };
-    const now = new Date().toISOString();
+    const now = new Date();
 
     for (const field of table.fields) {
       const fieldKey = field.id.value; // Use numeric field ID as key
@@ -121,17 +121,17 @@ export class AutoFieldProcessor {
   /**
    * Format timestamp according to field configuration
    */
-  private formatTimestamp(isoString: string, field: TableField): string {
+  private formatTimestamp(date: Date, field: TableField): Date | string {
     const config = field.metadata as TimestampFieldConfig | undefined;
 
-    // If includeTime is false, return date only
+    // If includeTime is false, return date-only string
     if (config?.includeTime === false) {
-      return isoString.split('T')[0]; // "2025-01-09"
+      return date.toISOString().split('T')[0]; // "2025-01-09"
     }
 
     // TODO: Add timezone conversion if config.timezone is specified
-    // For now, always return UTC ISO string
-    return isoString;
+    // For now, return Date object (will be converted to timestamp by gRPC mapper)
+    return date;
   }
 
   /**

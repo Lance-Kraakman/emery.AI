@@ -17,12 +17,20 @@ ALLOWED_TYPE_CONVERSIONS: Set[Tuple[int, int]] = {
     # Text conversions
     (table_service_pb2.FIELD_TYPE_TEXT, table_service_pb2.FIELD_TYPE_NUMBER),
     (table_service_pb2.FIELD_TYPE_TEXT, table_service_pb2.FIELD_TYPE_BOOLEAN),
+    (table_service_pb2.FIELD_TYPE_TEXT, table_service_pb2.FIELD_TYPE_EMAIL),
+    (table_service_pb2.FIELD_TYPE_TEXT, table_service_pb2.FIELD_TYPE_PHONE),
 
     # Number conversions
     (table_service_pb2.FIELD_TYPE_NUMBER, table_service_pb2.FIELD_TYPE_TEXT),
 
     # Boolean conversions
     (table_service_pb2.FIELD_TYPE_BOOLEAN, table_service_pb2.FIELD_TYPE_TEXT),
+
+    # Email conversions
+    (table_service_pb2.FIELD_TYPE_EMAIL, table_service_pb2.FIELD_TYPE_TEXT),
+
+    # Phone conversions
+    (table_service_pb2.FIELD_TYPE_PHONE, table_service_pb2.FIELD_TYPE_TEXT),
 
     # Date/Timestamp conversions
     (table_service_pb2.FIELD_TYPE_DATE, table_service_pb2.FIELD_TYPE_LAST_UPDATED),
@@ -58,6 +66,8 @@ FIELD_TYPE_NAMES = {
     table_service_pb2.FIELD_TYPE_AUTONUMBER: "AUTONUMBER",
     table_service_pb2.FIELD_TYPE_LAST_UPDATED: "LAST_UPDATED",
     table_service_pb2.FIELD_TYPE_CREATED_AT: "CREATED_AT",
+    table_service_pb2.FIELD_TYPE_EMAIL: "EMAIL",
+    table_service_pb2.FIELD_TYPE_PHONE: "PHONE",
 }
 
 

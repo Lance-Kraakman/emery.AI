@@ -321,6 +321,59 @@ export class Row {
           }
         }
         break;
+
+      case 'email':
+        // If field is a TableField instance, use its validation method
+        if ('validateEmail' in field && typeof field.validateEmail === 'function') {
+          field.validateEmail(value);
+        } else {
+          // Fallback for FieldDTO - inline validation
+          if (value !== null && value !== undefined) {
+            if (typeof value !== 'string') {
+              throw new Error(`${field.name} must be a string`);
+            }
+            const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+            if (!emailRegex.test(value) || value.length > 320) {
+              throw new Error(`${field.name} must be a valid email address`);
+            }
+          }
+        }
+        break;
+
+      case 'phone':
+        // If field is a TableField instance, use its validation method
+        if ('validatePhone' in field && typeof field.validatePhone === 'function') {
+          field.validatePhone(value);
+        } else {
+          // Fallback for FieldDTO - inline validation
+          if (value !== null && value !== undefined) {
+            if (typeof value !== 'string') {
+              throw new Error(`${field.name} must be a string`);
+            }
+            const normalized = value.replace(/[\s\-\(\)]/g, '');
+            const e164Regex = /^\+?[1-9]\d{1,14}$/;
+            if (!e164Regex.test(normalized)) {
+              throw new Error(`${field.name} must be a valid phone number (E.164 format)`);
+            }
+          }
+        }
+        break;
+
+      case 'single-select':
+        // If field is a TableField instance, use its validation method
+        if ('validateSingleSelect' in field && typeof field.validateSingleSelect === 'function') {
+          field.validateSingleSelect(value);
+        }
+        // Note: No fallback validation for FieldDTO - requires field config
+        break;
+
+      case 'multi-select':
+        // If field is a TableField instance, use its validation method
+        if ('validateMultiSelect' in field && typeof field.validateMultiSelect === 'function') {
+          field.validateMultiSelect(value);
+        }
+        // Note: No fallback validation for FieldDTO - requires field config
+        break;
     }
   }
 }

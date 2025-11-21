@@ -23,7 +23,9 @@ export type FieldType =
   | 'multi-select'
   | 'autonumber'
   | 'last-updated'
-  | 'created-at';
+  | 'created-at'
+  | 'email'
+  | 'phone';
 
 export interface EmbeddingFieldMetadata {
   embeddingSize: 384 | 768 | 1536 | 3072;
@@ -74,6 +76,10 @@ export interface FileFieldConfig {
   allowedTypes?: string[];
   maxSize?: number;
   multiple?: boolean;
+}
+
+export interface PhoneFieldConfig {
+  defaultCountryCode?: string; // e.g., "+1", "+44"
 }
 
 // AIDEV-NOTE: Field metadata stored as flexible Record for JSON compatibility
@@ -272,7 +278,9 @@ export class TableField {
       'multi-select': 'JSONB',  // Store array of option values
       'autonumber': 'TEXT',     // Allow prefix/suffix formatting (e.g., "INV-00001")
       'last-updated': 'TIMESTAMP WITH TIME ZONE',
-      'created-at': 'TIMESTAMP WITH TIME ZONE'
+      'created-at': 'TIMESTAMP WITH TIME ZONE',
+      'email': 'TEXT',
+      'phone': 'TEXT'
     };
 
     return typeMapping[this._type];
@@ -417,14 +425,14 @@ export class TableField {
   }
 
   // AIDEV-NOTE: Validation for new Baserow-inspired field types
-  private validateSingleSelect(value: unknown): { valid: boolean; error?: string } {
+  public validateSingleSelect(value: unknown): void {
     // Allow null/undefined for optional fields
     if (value === null || value === undefined) {
-      return { valid: true };
+      return;
     }
 
     if (typeof value !== 'string' && typeof value !== 'number') {
-      return { valid: false, error: `${this._name} must be a string or number` };
+      throw new Error(`${this._name} must be a string or number`);
     }
 
     const config = this._metadata as SingleSelectFieldConfig | undefined;
@@ -437,34 +445,26 @@ export class TableField {
                       (typeof value === 'number' && validIds.includes(value));
 
       if (!isValid) {
-        return {
-          valid: false,
-          error: `${this._name} must be one of: ${validValues.join(', ')}`
-        };
+        throw new Error(`${this._name} must be one of: ${validValues.join(', ')}`);
       }
     }
-
-    return { valid: true };
   }
 
-  private validateMultiSelect(value: unknown): { valid: boolean; error?: string } {
+  public validateMultiSelect(value: unknown): void {
     // Allow null/undefined for optional fields
     if (value === null || value === undefined) {
-      return { valid: true };
+      return;
     }
 
     if (!Array.isArray(value)) {
-      return { valid: false, error: `${this._name} must be an array` };
+      throw new Error(`${this._name} must be an array`);
     }
 
     const config = this._metadata as MultiSelectFieldConfig | undefined;
 
     // Check max selections limit
     if (config?.maxSelections && value.length > config.maxSelections) {
-      return {
-        valid: false,
-        error: `${this._name} can have maximum ${config.maxSelections} selections`
-      };
+      throw new Error(`${this._name} can have maximum ${config.maxSelections} selections`);
     }
 
     // Validate each value is a valid option
@@ -477,15 +477,42 @@ export class TableField {
                         (typeof val === 'number' && validIds.includes(val));
 
         if (!isValid) {
-          return {
-            valid: false,
-            error: `${this._name} contains invalid option: ${val}. Valid options: ${validValues.join(', ')}`
-          };
+          throw new Error(`${this._name} contains invalid option: ${val}. Valid options: ${validValues.join(', ')}`);
         }
       }
     }
+  }
 
-    return { valid: true };
+  public validateEmail(value: unknown): void {
+    if (value === null || value === undefined) return;
+
+    if (typeof value !== 'string') {
+      throw new Error(`${this._name} must be a string`);
+    }
+
+    // RFC 5322 compliant email regex
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+
+    if (!emailRegex.test(value) || value.length > 320) {
+      throw new Error(`${this._name} must be a valid email address (RFC 5322, max 320 chars)`);
+    }
+  }
+
+  public validatePhone(value: unknown): void {
+    if (value === null || value === undefined) return;
+
+    if (typeof value !== 'string') {
+      throw new Error(`${this._name} must be a string`);
+    }
+
+    // E.164 format validation: +[country code][number] (max 15 digits)
+    // Normalize by removing spaces, dashes, parentheses
+    const normalized = value.replace(/[\s\-\(\)]/g, '');
+    const e164Regex = /^\+?[1-9]\d{1,14}$/;
+
+    if (!e164Regex.test(normalized)) {
+      throw new Error(`${this._name} must be a valid phone number in E.164 format (+[country code][number], max 15 digits)`);
+    }
   }
 
   // Persistence conversion

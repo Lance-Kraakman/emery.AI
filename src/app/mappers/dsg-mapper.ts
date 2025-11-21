@@ -58,8 +58,9 @@ const REQUIRED_FIELD_DEFAULTS: Record<string, FieldValue> = {
  */
 const OPTIONAL_FIELD_DEFAULTS: Record<string, FieldValue> = {
   text: '',                   // TextFieldValue - empty allowed for optional
-  email: '',                  // TextFieldValue - empty allowed for optional
-  url: '',                    // TextFieldValue - empty allowed for optional
+  email: null,                // EmailFieldValue - null required (empty string fails validation)
+  phone: null,                // PhoneFieldValue - null required (empty string fails validation)
+  url: null,                  // URLFieldValue - null required (empty string fails validation)
   number: null,               // NumberFieldValue - null allowed for optional
   boolean: false,             // BooleanFieldValue
   date: null,                 // DateFieldValue - null allowed for optional

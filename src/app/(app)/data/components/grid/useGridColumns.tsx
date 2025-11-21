@@ -149,7 +149,10 @@ export function useGridColumns({
 
       switch (field.type) {
         case 'text':
+        case 'email':
+        case 'phone':
           // Use built-in textColumn - handles all text editing automatically
+          // Email and phone validation happens at domain layer
           columnConfig = textColumn
           break
 

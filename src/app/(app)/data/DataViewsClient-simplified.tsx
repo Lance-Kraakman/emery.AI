@@ -37,6 +37,8 @@ const logger = createDebugLogger('DataViewsClient')
  * convert them back after retrieval from cache
  */
 function convertDateStringsInRows(rows: DSGRow[], fields: FieldDTO[]): DSGRow[] {
+  console.log('[convertRows] Input:', rows.length, 'rows');
+
   const dateFields = fields.filter(f =>
     f.type === 'date' || f.type === 'last-updated' || f.type === 'created-at'
   );
@@ -60,8 +62,9 @@ function convertDateStringsInRows(rows: DSGRow[], fields: FieldDTO[]): DSGRow[] 
         valueType: typeof value,
         isDate: value instanceof Date,
         isString: typeof value === 'string',
+        isNumber: typeof value === 'number',
         isEmpty: value === '',
-        willConvert: typeof value === 'string' && value !== ''
+        willConvert: (typeof value === 'string' && value !== '') || typeof value === 'number'
       });
 
       if (typeof value === 'string') {
@@ -78,10 +81,46 @@ function convertDateStringsInRows(rows: DSGRow[], fields: FieldDTO[]): DSGRow[] 
             console.error(`[DATE CONVERSION] ❌ Failed to convert "${field.name}":`, e);
           }
         }
+      } else if (typeof value === 'number') {
+        // Handle number timestamps (milliseconds since epoch from gRPC)
+        try {
+          convertedRow[field.name] = new Date(value);
+          console.log(`[DATE CONVERSION] ✅ Converted "${field.name}" from number timestamp to Date`, new Date(value));
+        } catch (e) {
+          console.error(`[DATE CONVERSION] ❌ Failed to convert number timestamp "${field.name}":`, e);
+        }
       }
     }
     return convertedRow;
   });
+}
+
+/**
+ * Convert date strings to Date objects in a single row (optimized with Set)
+ * Used after UPDATE mutations to convert server-serialized ISO strings back to Date objects
+ */
+function convertDateStringsInRow(row: DSGRow, fields: FieldDTO[]): DSGRow {
+  // Create Set of date field names for O(1) lookup
+  const dateFieldNames = new Set(
+    fields
+      .filter(f => f.type === 'date' || f.type === 'last-updated' || f.type === 'created-at')
+      .map(f => f.name)
+  );
+
+  if (dateFieldNames.size === 0) return row;
+
+  const converted = { ...row };
+  for (const [key, value] of Object.entries(converted)) {
+    if (dateFieldNames.has(key) && typeof value === 'string' && value) {
+      try {
+        converted[key] = new Date(value);
+        console.log('[convertRow]', key, ':', value, '→', converted[key]);
+      } catch {
+        // Keep original if parse fails
+      }
+    }
+  }
+  return converted;
 }
 
 interface DataViewsClientSimplifiedProps {
@@ -290,12 +329,7 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
       hasInfiniteData: !!infiniteRowsQuery.data
     });
 
-    // Don't process if fields aren't loaded yet
-    if (!fieldsQuery.data || fieldsQuery.data.length === 0) {
-      console.log('[ROWS USEMEMO] ⚠️ Early return - no fields data');
-      return []
-    }
-
+    // Get raw rows first
     let rawRows: DSGRow[] = []
 
     if (searchTerm && searchQuery.data?.rows) {
@@ -308,13 +342,19 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
 
     console.log('[ROWS USEMEMO] Raw rows sample (first row):', rawRows[0]);
 
+    // Only convert dates if we have field metadata
+    if (!fieldsQuery.data || fieldsQuery.data.length === 0) {
+      console.log('[ROWS USEMEMO] ⚠️ No fields data - skipping date conversion, returning raw rows');
+      return rawRows;
+    }
+
     // Convert date strings to Date objects for dateColumn compatibility
     const converted = convertDateStringsInRows(rawRows, fieldsQuery.data);
 
     console.log('[ROWS USEMEMO] ✅ Conversion complete. Converted rows sample (first row):', converted[0]);
 
     return converted;
-  }, [searchTerm, searchQuery.data, infiniteRowsQuery.data, fieldsQuery.data])
+  }, [searchTerm, searchQuery.data, infiniteRowsQuery.data, fieldsQuery.data, fieldsQuery.isSuccess])
 
   // Get total count - from search results or from first page of infinite query
   const totalCount = useMemo(() => {
@@ -409,8 +449,12 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
               ...page,
               rows: page.rows.map((row: DSGRow) => {
                 const updatedRow = updatedRowsMap.get(row.id)
-                // If this row was updated, merge server data to get auto-fields
-                return updatedRow ? { ...row, ...updatedRow } : row
+                // If this row was updated, merge server data and convert date strings to Date objects
+                if (updatedRow) {
+                  const mergedRow = { ...row, ...updatedRow };
+                  return convertDateStringsInRow(mergedRow, fieldsQuery.data || []);
+                }
+                return row;
               })
             }))
           }

@@ -407,7 +407,10 @@ export function AppSidebar({
           getChildKey={(page) => page.id}
           getChildName={(page) => page.name}
           getChildHref={(page, app) => `/apps/${app.id}/pages/${page.id}/edit`}
-          isChildActive={(page, app, path) => path?.includes(`/apps/${app.id}/pages/${page.id}`) ?? false}
+          isChildActive={(page, app, path) => {
+            const pattern = new RegExp(`/apps/${app.id}/pages/${page.id}(/|$)`)
+            return pattern.test(path ?? '')
+          }}
           onAddParent={handleCreateApp}
           onAddChild={handleCreatePage}
           addParentLabel="Add App"
@@ -479,11 +482,13 @@ export function AppSidebar({
               ? `/agents/${skill.agentId}/skills/${skill.id}`
               : `/skills/${skill.id}`
           }
-          isItemActive={(skill, path) =>
-            skill.agentId
-              ? path?.includes(`/agents/${skill.agentId}/skills/${skill.id}`) ?? false
-              : path?.startsWith(`/skills/${skill.id}`) ?? false
-          }
+          isItemActive={(skill, path) => {
+            if (skill.agentId) {
+              const pattern = new RegExp(`/agents/${skill.agentId}/skills/${skill.id}(/|$)`)
+              return pattern.test(path ?? '')
+            }
+            return path?.startsWith(`/skills/${skill.id}`) ?? false
+          }}
           getGroupKey={(skill) => skill.agentId}
           getGroupName={(skill) => skill.agentName}
           isUngroupedItem={(skill) => skill.agentId === null}
@@ -511,13 +516,19 @@ export function AppSidebar({
           isParentActive={(db, path) => {
             // Database is active if any of its tables are selected
             const tables = db.tables || []
-            return tables.some(table => path?.includes(`/data/${table.id}`))
+            return tables.some(table => {
+              const pattern = new RegExp(`/data/${table.id}(/|$)`)
+              return pattern.test(path ?? '')
+            })
           }}
           getChildren={(db) => db.tables}
           getChildKey={(table) => table.id}
           getChildName={(table) => table.name}
           getChildHref={(table) => `/data/${table.id}`}
-          isChildActive={(table, _, path) => path?.includes(`/data/${table.id}`) ?? false}
+          isChildActive={(table, _, path) => {
+            const pattern = new RegExp(`/data/${table.id}(/|$)`)
+            return pattern.test(path ?? '')
+          }}
           onAddParent={handleCreateDatabase}
           onAddChild={handleCreateTable}
           addParentLabel="Add Database"
