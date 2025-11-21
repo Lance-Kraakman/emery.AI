@@ -59,10 +59,11 @@ export async function setup() {
     }
   }
   
-  // Set environment variables for tests
+  // Set environment variables for tests (host machine access)
   process.env.TEST_DATABASE_URL = 'postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test';
   process.env.TEST_APP_URL = 'http://localhost:3002'; // Won't be used in infrastructure tests
   process.env.TEST_GRPC_URL = 'localhost:50053'; // Won't be used in infrastructure tests
+  // Note: GRPC_TOOLS_ADDRESS is set by docker-compose for container-to-container communication
   
   console.log('✅ Infrastructure test environment ready (database only)');
   console.log('   📊 Database: localhost:5436');

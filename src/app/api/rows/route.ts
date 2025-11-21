@@ -26,10 +26,20 @@ import { createRow, updateRowData, deleteRowData, getRowsDSG } from '@/app/actio
  * }
  */
 export async function POST(request: NextRequest): Promise<Response> {
+  const requestId = crypto.randomUUID();
+  const startTime = Date.now();
+
+  // Extract tracking headers
+  const callId = request.headers.get('x-call-id');
+  const source = request.headers.get('x-source');
+
+  console.log(`[ROWS-API] POST - requestId: ${requestId}, callId: ${callId || 'none'}`);
+
   return withAuthenticatedRoute(request, async (user) => {
     const body = await parseJsonBody(request);
 
     if (!body) {
+      console.log(`[ROWS-API] Invalid body - requestId: ${requestId}`);
       return {
         success: false,
         error: 'Invalid request body',
@@ -39,14 +49,21 @@ export async function POST(request: NextRequest): Promise<Response> {
 
     const { tableId, data } = body;
 
+    // Check if this is from Python tool
+    const isFromPythonTool = source === 'python_tool' || callId?.startsWith('http_');
+
     // Validate required fields
     requireParam(tableId, 'tableId');
     requireParam(data, 'data');
 
-    // Use server action function to avoid duplication
+    const actionStart = Date.now();
     const result = await createRow({ tableId, data });
 
+    const actionTime = Date.now() - actionStart;
+    const totalTime = Date.now() - startTime;
+
     if (!result.success) {
+      console.log(`[ROWS-API] ❌ Create row failed - requestId: ${requestId}, error: ${result.error}, duration: ${totalTime}ms`);
       return {
         success: false,
         error: result.error || 'Failed to create row',
@@ -54,6 +71,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       };
     }
 
+    console.log(`[ROWS-API] ✅ Create row success - requestId: ${requestId}, duration: ${totalTime}ms`);
+    
     return {
       success: true,
       data: result.data,

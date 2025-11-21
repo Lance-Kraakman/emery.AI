@@ -22,7 +22,8 @@ from PIL import Image
 
 from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode, AgentId, OrganizationId
-from ..grpc.generated.agent_worker_pb2 import TaskRequest, SkillConfig, ToolConfig, TokenUsage as TokenUsageProto, ImageAttachment
+from ..grpc.generated.agent_worker_pb2 import SkillConfig, ToolConfig, TokenUsage as TokenUsageProto, ImageAttachment
+from ..entities.task import TaskRequest
 from .model_provider import SmolagentsModelProvider
 from .tool_loader import UnifiedToolLoader
 from .image_processor import ImageProcessor
@@ -87,7 +88,9 @@ class AgentExecutor:
     def _create_skill_context(self, request: TaskRequest) -> ExecutionContext:
         """Create execution context for skill-based execution."""
         # Find skill in agent config
-        skill = self._find_skill_by_name(request.agent_config.skills, request.skill_name)
+        if not request.skill_name:
+            raise ValueError("Skill name is required for skill-based execution")
+        skill = self._find_skill_by_name(list(request.agent_config.skills), request.skill_name)
 
         if not skill:
             raise ValueError(f"Skill '{request.skill_name}' not found in agent configuration")
@@ -261,7 +264,7 @@ class AgentExecutor:
 
                 yield {
                     "status": "completed",
-                    "output": json.dumps({"result": str(result.output) if hasattr(result, 'output') else str(result)}),
+                    "output": json.dumps({"result": str(result)}),
                     "error_message": "",
                     "timestamp_ms": int(time.time() * 1000),
                     "progress_percent": 100.0,
@@ -318,7 +321,7 @@ class AgentExecutor:
                 yield {
                     "status": "completed",
                     "output": json.dumps({
-                        "result": str(result.output) if hasattr(result, 'output') else str(result),
+                        "result": str(result),
                         "message": "Task completed successfully",
                         "duration_ms": duration_ms,
                         "skill": skill.name
@@ -377,7 +380,7 @@ class AgentExecutor:
         tools = []
         if skill.tools:
             try:
-                tools = self.tool_loader.load_tools(skill.tools)
+                tools = self.tool_loader.load_tools(list(skill.tools))
                 logger.info(f"Loaded {len(tools)} tools for skill '{skill.name}'")
             except Exception as e:
                 logger.warning(f"Failed to load some tools for skill {skill.name}: {e}")
@@ -425,7 +428,7 @@ class AgentExecutor:
 
     async def get_available_tools(self) -> List[str]:
         """Get list of available tool names."""
-        return self.tool_loader.list_available_tools()
+        return self.tool_loader.get_available_tools()
 
     async def health_check(self) -> Dict[str, Any]:
         """Check health of execution system."""

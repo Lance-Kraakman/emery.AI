@@ -50,7 +50,9 @@ export class GrpcTableClient {
   constructor(config: GrpcClientConfig) {
     this.config = {
       timeout: 30000, // 30 seconds default
-      ...config
+      ...config,
+      // Use tools port for application operations to avoid circular dependency
+      address: config.address || process.env.GRPC_TOOLS_ADDRESS || 'localhost:50052'
     };
     
     this.client = new TableServiceClient(
@@ -59,6 +61,7 @@ export class GrpcTableClient {
       {
         'grpc.max_receive_message_length': 4 * 1024 * 1024, // 4MB
         'grpc.max_send_message_length': 4 * 1024 * 1024, // 4MB
+        'grpc.max_concurrent_streams': 1000
       }
     );
   }
@@ -141,17 +144,36 @@ export class GrpcTableClient {
   /**
    * Create multiple rows in a table
    */
+/**
+   * Create multiple rows in a table
+   */
   async createRows(request: CreateRowsRequest): Promise<CreateRowsResponse> {
+    const callId = `grpc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const startTime = Date.now();
+
+    console.log(`[TABLE-GRPC-CLIENT] CreateRows - call_id: ${callId}, table_id: ${request.tableId}, rows_count: ${request.rowsData.length}`);
+
     return new Promise((resolve, reject) => {
       const timeout = this.config.timeout || 30000;
       const deadline = new Date(Date.now() + timeout);
       const metadata = new grpc.Metadata();
+
+      // Add tracking metadata
+      metadata.add('x-call-id', callId);
+      metadata.add('x-source', 'nextjs_repository');
+      metadata.add('x-timeout', timeout.toString());
+
       this.client.createRows(request, metadata, { deadline }, (error, response) => {
+        const totalTime = Date.now() - startTime;
+
         if (error) {
+          console.error(`[TABLE-GRPC-CLIENT] ❌ CreateRows failed - call_id: ${callId}, duration: ${totalTime}ms, error: ${error.message}`);
           reject(error);
         } else if (response) {
+          console.log(`[TABLE-GRPC-CLIENT] ✅ CreateRows success - call_id: ${callId}, duration: ${totalTime}ms, rows_created: ${response.rowsCreated}`);
           resolve(response);
         } else {
+          console.error(`[TABLE-GRPC-CLIENT] ❌ CreateRows no response - call_id: ${callId}, duration: ${totalTime}ms`);
           reject(new Error('No response received from gRPC service'));
         }
       });

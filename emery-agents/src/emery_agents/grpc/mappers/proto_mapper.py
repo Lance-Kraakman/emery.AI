@@ -67,6 +67,16 @@ class ProtoMapper:
         if proto.HasField("skill_name"):
             skill_name = proto.skill_name
 
+        # Convert instruction config to dict if present
+        instruction_config = None
+        if proto.HasField("instruction_config"):
+            instruction_config = {
+                'task': proto.instruction_config.task,
+                'tools': list(proto.instruction_config.tools),
+                'servers': list(proto.instruction_config.servers),
+                'model': proto.instruction_config.model
+            }
+
         return TaskRequest(
             task_id=proto.task_id,
             agent_id=proto.agent_id,
@@ -77,7 +87,9 @@ class ProtoMapper:
             timeout_seconds=proto.timeout_seconds,
             name=proto.name,
             skill_name=skill_name,
-            instruction_config=proto.instruction_config
+            instruction_config=instruction_config,
+            organization_model=proto.organization_model if proto.HasField("organization_model") else None,
+            agent_model=proto.agent_model if proto.HasField("agent_model") else None
         )
 
     def task_progress_to_proto(self, progress: TaskProgressDict) -> agent_worker_pb2.TaskProgress:

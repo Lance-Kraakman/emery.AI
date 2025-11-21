@@ -357,9 +357,10 @@ def create_dataframe_with_schema(
                 elif value.HasField('boolean_value'):
                     record[field_name] = value.boolean_value
                 elif value.HasField('date_value'):
-                    # Convert timestamp to datetime
-                    timestamp = value.date_value
-                    record[field_name] = timestamp
+                    # Convert timestamp milliseconds to datetime
+                    from datetime import datetime, timezone
+                    timestamp_ms = value.date_value
+                    record[field_name] = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
                 elif value.HasField('json_value'):
                     record[field_name] = value.json_value
                 elif value.HasField('embedding_value'):

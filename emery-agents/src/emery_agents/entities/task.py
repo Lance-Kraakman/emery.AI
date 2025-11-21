@@ -32,6 +32,7 @@ class TaskRequest:
     skill_name: Optional[str] = None
     instruction_config: Optional[Dict[str, Any]] = None  # Simplified from protobuf
     organization_model: Optional[str] = None  # For model selection
+    agent_model: Optional[str] = None  # For model selection
 
 
 @dataclass

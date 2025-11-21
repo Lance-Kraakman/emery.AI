@@ -138,22 +138,44 @@ def _populate_protobuf_map(proto_map, data: Dict[str, str]) -> None:
         proto_map[key] = str(value)
 
 
+# Shared thread pool for async operations to prevent deadlock
+_async_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=10, thread_name_prefix="grpc-async")
+
+# Register cleanup handler for thread pool shutdown
+import atexit
+def _cleanup_thread_pool():
+    """Cleanup handler for graceful thread pool shutdown."""
+    _async_thread_pool.shutdown(wait=True, cancel_futures=False)
+    logger.info("Chat processing thread pool shut down")
+
+atexit.register(_cleanup_thread_pool)
+
 def _run_async_in_thread(coro: Coroutine[Any, Any, T]) -> T:
     """
-    Run async coroutine in a separate thread with its own event loop.
+    Run async coroutine in a shared thread pool to prevent deadlock.
 
-    This is necessary when calling async code from sync code within an existing event loop.
-    The gRPC service runs in an async context, but skill execution callbacks are sync.
+    This uses a shared thread pool instead of creating new ThreadPoolExecutor
+    for each call, and uses asyncio.run() to create fresh event loop in thread.
 
     Args:
         coro: Coroutine to run (with generic return type T)
 
     Returns:
         Result of the coroutine (type T)
+
+    Raises:
+        TimeoutError: If operation exceeds 30 second timeout
+        Exception: If async operation fails
     """
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        future = executor.submit(asyncio.run, coro)
-        return future.result()
+    try:
+        future = _async_thread_pool.submit(asyncio.run, coro)
+        return future.result(timeout=30.0)
+    except concurrent.futures.TimeoutError:
+        logger.error("Async operation timed out after 30 seconds")
+        raise TimeoutError("Operation exceeded 30 second timeout")
+    except Exception as e:
+        logger.error(f"Async operation failed: {e}")
+        raise
 
 
 async def _process_skill_content_async(content_parts: List['agent_worker_pb2.MessagePart']) -> tuple[List[Image.Image], List[str]]:
@@ -205,8 +227,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
     - User authentication (Next.js)
     """
     
-    def __init__(self, organization_id: str):
-        self.organization_id = organization_id
+    def __init__(self, organization_id: str = ""):
+        # Fail fast if HF_TOKEN is not provided
+        import os
+        hf_token = os.getenv("HF_TOKEN")
+        if not hf_token:
+            raise EnvironmentError(
+                "HF_TOKEN environment variable is required for ChatProcessingService. "
+                "Get your token from https://huggingface.co/settings/tokens"
+            )
+        
+        self.organization_id = organization_id  # Multi-tenant: org from request context
         self.proto_mapper = ProtoMapper()
         self.last_token_usage = None  # Store token usage from last agent execution
         self.active_streams: Dict[str, bool] = {}  # Track active message streams for cancellation

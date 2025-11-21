@@ -87,7 +87,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             **fields: Key-value pairs to log
         """
         field_str = ", ".join(f"{k}='{v}'" for k, v in fields.items())
-        logger.info(f"[{method}] Request: {field_str}")
+        logger.debug(f"[{method}] Request: {field_str}")
 
     def _log_dataframe(self, df: pl.DataFrame, context: str, show_sample: bool = True) -> None:
         """Log DataFrame details in compact format.
@@ -98,7 +98,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             show_sample: Whether to show sample row
         """
         sample = f", sample={df.head(1).to_dicts()[0]}" if show_sample and len(df) > 0 else ""
-        logger.info(f"[{context}] DataFrame: shape={df.shape}, cols={df.columns}{sample}")
+        logger.debug(f"[{context}] DataFrame: shape={df.shape}, cols={df.columns}{sample}")
 
     def _log_delta_state(self, delta_table: DeltaTable, context: str) -> None:
         """Log Delta table state in compact format.
@@ -107,7 +107,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             delta_table: Delta table instance
             context: Context string for logging
         """
-        logger.info(f"[{context}] Delta: version={delta_table.version()}, files={len(delta_table.files())}")
+        logger.debug(f"[{context}] Delta: version={delta_table.version()}, files={len(delta_table.files())}")
 
     def _log_field_mismatch(self, input_fields: set, schema_fields: set, context: str) -> None:
         """Log field mismatches between input and schema.
@@ -229,7 +229,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
     def CreateRows(self, request: table_service_pb2.CreateRowsRequest, context: ServicerContext) -> table_service_pb2.CreateRowsResponse:
         """Efficiently create multiple rows in a Delta table."""
-        logger.info("[CreateRows] START")
+        from datetime import datetime
         try:
             # Compact logging
             self._log_request("CreateRows", table_id=request.table_id, organization_id=request.organization_id,
@@ -280,8 +280,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 for row_data in request.rows_data
             ]
 
-            logger.info(f"[CreateRows] ✅ Created {len(df)} rows in '{request.table_id}'")
-            logger.info("[CreateRows] END")
+            logger.info(f"CreateRows ✅ Created {len(df)} rows in table '{request.table_id}'")
             return table_service_pb2.CreateRowsResponse(
                 success=True,
                 rows=rows,
@@ -290,8 +289,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             )
 
         except Exception as e:
-            logger.error(f"[CreateRows] Error: {type(e).__name__}: {e}", exc_info=True)
-            logger.info("[CreateRows] END (with error)")
+            logger.error(f"CreateRows ❌ Failed to create rows in table '{request.table_id}': {type(e).__name__}: {e}", exc_info=True)
             return table_service_pb2.CreateRowsResponse(
                 success=False,
                 message=f"Failed to create rows: {str(e)}"

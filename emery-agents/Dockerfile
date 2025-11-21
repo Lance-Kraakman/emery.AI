@@ -28,7 +28,6 @@ COPY ./src ./src
 # Set environment variables
 ENV PYTHONPATH=/usr/src/app/src
 ENV WORKER_ADDRESS=50051
-ENV ORGANIZATION_ID=default
 
 # The port your gRPC server listens on
 EXPOSE 50051
@@ -37,4 +36,4 @@ EXPOSE 50051
 # Removed HEALTHCHECK to avoid conflicts with ECS container health checks
 
 # Command to run the gRPC server
-CMD ["python", "-m", "emery_agents.grpc.main"]
+CMD ["python", "-m", "emery_agents.grpc.server", "--mode=chat", "--port=50051"]
