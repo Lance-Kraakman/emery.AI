@@ -530,6 +530,10 @@ export class TableGrpcMapper {
         return FieldType.FIELD_TYPE_LAST_UPDATED;
       case 'created-at':
         return FieldType.FIELD_TYPE_CREATED_AT;
+      case 'email':
+        return FieldType.FIELD_TYPE_EMAIL;
+      case 'phone':
+        return FieldType.FIELD_TYPE_PHONE;
       default:
         return FieldType.FIELD_TYPE_UNSPECIFIED;
     }
@@ -566,6 +570,10 @@ export class TableGrpcMapper {
         return 'last-updated';
       case FieldType.FIELD_TYPE_CREATED_AT:
         return 'created-at';
+      case FieldType.FIELD_TYPE_EMAIL:
+        return 'email';
+      case FieldType.FIELD_TYPE_PHONE:
+        return 'phone';
       default:
         return 'text';
     }

@@ -23,7 +23,9 @@ export type FieldType =
   | 'multi-select'
   | 'autonumber'
   | 'last-updated'
-  | 'created-at';
+  | 'created-at'
+  | 'email'
+  | 'phone';
 
 export interface EmbeddingFieldMetadata {
   embeddingSize: 384 | 768 | 1536 | 3072;
@@ -74,6 +76,10 @@ export interface FileFieldConfig {
   allowedTypes?: string[];
   maxSize?: number;
   multiple?: boolean;
+}
+
+export interface PhoneFieldConfig {
+  defaultCountryCode?: string; // e.g., "+1", "+44"
 }
 
 // AIDEV-NOTE: Field metadata stored as flexible Record for JSON compatibility
@@ -272,7 +278,9 @@ export class TableField {
       'multi-select': 'JSONB',  // Store array of option values
       'autonumber': 'TEXT',     // Allow prefix/suffix formatting (e.g., "INV-00001")
       'last-updated': 'TIMESTAMP WITH TIME ZONE',
-      'created-at': 'TIMESTAMP WITH TIME ZONE'
+      'created-at': 'TIMESTAMP WITH TIME ZONE',
+      'email': 'TEXT',
+      'phone': 'TEXT'
     };
 
     return typeMapping[this._type];
@@ -483,6 +491,48 @@ export class TableField {
           };
         }
       }
+    }
+
+    return { valid: true };
+  }
+
+  private validateEmail(value: unknown): { valid: boolean; error?: string } {
+    if (value === null || value === undefined) return { valid: true };
+
+    if (typeof value !== 'string') {
+      return { valid: false, error: `${this._name} must be a string` };
+    }
+
+    // RFC 5322 compliant email regex
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+
+    if (!emailRegex.test(value) || value.length > 320) {
+      return {
+        valid: false,
+        error: `${this._name} must be a valid email address (RFC 5322, max 320 chars)`
+      };
+    }
+
+    return { valid: true };
+  }
+
+  private validatePhone(value: unknown): { valid: boolean; error?: string } {
+    if (value === null || value === undefined) return { valid: true };
+
+    if (typeof value !== 'string') {
+      return { valid: false, error: `${this._name} must be a string` };
+    }
+
+    // E.164 format validation: +[country code][number] (max 15 digits)
+    // Normalize by removing spaces, dashes, parentheses
+    const normalized = value.replace(/[\s\-\(\)]/g, '');
+    const e164Regex = /^\+?[1-9]\d{1,14}$/;
+
+    if (!e164Regex.test(normalized)) {
+      return {
+        valid: false,
+        error: `${this._name} must be a valid phone number in E.164 format (+[country code][number], max 15 digits)`
+      };
     }
 
     return { valid: true };

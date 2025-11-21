@@ -51,6 +51,8 @@ def convert_protobuf_field_to_arrow(field: table_service_pb2.TableField) -> pa.D
         table_service_pb2.FIELD_TYPE_AUTONUMBER: pa.large_string(),
         table_service_pb2.FIELD_TYPE_LAST_UPDATED: pa.timestamp('us'),
         table_service_pb2.FIELD_TYPE_CREATED_AT: pa.timestamp('us'),
+        table_service_pb2.FIELD_TYPE_EMAIL: pa.large_string(),
+        table_service_pb2.FIELD_TYPE_PHONE: pa.large_string(),
     }
 
     # Handle embedding fields with dynamic sizing
