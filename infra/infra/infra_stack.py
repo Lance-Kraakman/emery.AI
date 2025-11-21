@@ -535,6 +535,7 @@ class InfraStack(Stack):
                     "GRPC_CHAT_MAX_WORKERS": "20",
                 },
                 secrets={
+                    "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
                     **app_secrets_map
                 }
             ),
@@ -621,6 +622,7 @@ class InfraStack(Stack):
                     "GRPC_TABLE_MAX_WORKERS": "15",
                 },
                 secrets={
+                    "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
                     **app_secrets_map
                 }
             ),

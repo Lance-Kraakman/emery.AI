@@ -21,6 +21,7 @@ export { DelegationId } from './delegation-id';
 
 // Authentication & Security Value Objects
 export { EmailAddress } from './email-address';
+export { PhoneNumber } from './phone-number';
 export { ApiKey } from './api-key';
 export { InvitationToken } from './invitation-token';
 

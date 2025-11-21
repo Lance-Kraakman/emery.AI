@@ -23,6 +23,8 @@ class FieldType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     FIELD_TYPE_AUTONUMBER: _ClassVar[FieldType]
     FIELD_TYPE_LAST_UPDATED: _ClassVar[FieldType]
     FIELD_TYPE_CREATED_AT: _ClassVar[FieldType]
+    FIELD_TYPE_EMAIL: _ClassVar[FieldType]
+    FIELD_TYPE_PHONE: _ClassVar[FieldType]
 
 class FilterOperator(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -68,6 +70,8 @@ FIELD_TYPE_MULTI_SELECT: FieldType
 FIELD_TYPE_AUTONUMBER: FieldType
 FIELD_TYPE_LAST_UPDATED: FieldType
 FIELD_TYPE_CREATED_AT: FieldType
+FIELD_TYPE_EMAIL: FieldType
+FIELD_TYPE_PHONE: FieldType
 FILTER_OP_UNSPECIFIED: FilterOperator
 FILTER_OP_EQ: FilterOperator
 FILTER_OP_NE: FilterOperator
