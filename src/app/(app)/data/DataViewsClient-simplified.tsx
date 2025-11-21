@@ -37,6 +37,8 @@ const logger = createDebugLogger('DataViewsClient')
  * convert them back after retrieval from cache
  */
 function convertDateStringsInRows(rows: DSGRow[], fields: FieldDTO[]): DSGRow[] {
+  console.log('[convertRows] Input:', rows.length, 'rows');
+
   const dateFields = fields.filter(f =>
     f.type === 'date' || f.type === 'last-updated' || f.type === 'created-at'
   );
@@ -103,6 +105,7 @@ function convertDateStringsInRow(row: DSGRow, fields: FieldDTO[]): DSGRow {
     if (dateFieldNames.has(key) && typeof value === 'string' && value) {
       try {
         converted[key] = new Date(value);
+        console.log('[convertRow]', key, ':', value, '→', converted[key]);
       } catch {
         // Keep original if parse fails
       }
