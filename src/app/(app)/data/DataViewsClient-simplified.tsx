@@ -84,6 +84,33 @@ function convertDateStringsInRows(rows: DSGRow[], fields: FieldDTO[]): DSGRow[] 
   });
 }
 
+/**
+ * Convert date strings to Date objects in a single row (optimized with Set)
+ * Used after UPDATE mutations to convert server-serialized ISO strings back to Date objects
+ */
+function convertDateStringsInRow(row: DSGRow, fields: FieldDTO[]): DSGRow {
+  // Create Set of date field names for O(1) lookup
+  const dateFieldNames = new Set(
+    fields
+      .filter(f => f.type === 'date' || f.type === 'last-updated' || f.type === 'created-at')
+      .map(f => f.name)
+  );
+
+  if (dateFieldNames.size === 0) return row;
+
+  const converted = { ...row };
+  for (const [key, value] of Object.entries(converted)) {
+    if (dateFieldNames.has(key) && typeof value === 'string' && value) {
+      try {
+        converted[key] = new Date(value);
+      } catch {
+        // Keep original if parse fails
+      }
+    }
+  }
+  return converted;
+}
+
 interface DataViewsClientSimplifiedProps {
   tableId?: number
 }
@@ -409,8 +436,12 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
               ...page,
               rows: page.rows.map((row: DSGRow) => {
                 const updatedRow = updatedRowsMap.get(row.id)
-                // If this row was updated, merge server data to get auto-fields
-                return updatedRow ? { ...row, ...updatedRow } : row
+                // If this row was updated, merge server data and convert date strings to Date objects
+                if (updatedRow) {
+                  const mergedRow = { ...row, ...updatedRow };
+                  return convertDateStringsInRow(mergedRow, fieldsQuery.data || []);
+                }
+                return row;
               })
             }))
           }
