@@ -85,8 +85,8 @@ export function SetupForm() {
       const result = await createOrganization(formData);
 
       if (result.success) {
-        router.push("/mission-control");
-        window.location.reload(); // hardcore
+        router.push("/settings/billing?welcome=true");
+        window.location.reload(); // hardcore - reload to update session with new org
       } else {
         setError(result.error || "Setup failed");
       }

@@ -5,7 +5,8 @@
  */
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BillingOverviewCard } from '@/components/billing/BillingOverviewCard';
 import { TierGrid } from '@/components/billing/TierCard';
@@ -17,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, AlertCircle, CreditCard, TrendingUp } from 'lucide-react';
+import { ExternalLink, AlertCircle, CreditCard, TrendingUp, Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { createCheckoutSession, createPortalSession, setSpendingLimit } from '@/app/actions/billing';
 import type { TierName } from '@/lib/stripe/config';
@@ -39,8 +40,39 @@ export function BillingSettingsClient({
   invoices,
   organizationId,
 }: BillingSettingsClientProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [loadingAction, setLoadingAction] = useState(false);
   const [selectedTab, setSelectedTab] = useState('overview');
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  // Check for welcome query param and session storage
+  useEffect(() => {
+    const isWelcome = searchParams?.get('welcome') === 'true';
+    const hasSeenWelcome = sessionStorage.getItem('billing-welcome-seen') === 'true';
+
+    if (isWelcome && !hasSeenWelcome) {
+      setShowWelcome(true);
+    }
+  }, [searchParams]);
+
+  // Handle welcome banner dismissal
+  const handleDismissWelcome = () => {
+    setShowWelcome(false);
+    sessionStorage.setItem('billing-welcome-seen', 'true');
+  };
+
+  // Handle "Start Building" button
+  const handleStartBuilding = () => {
+    handleDismissWelcome();
+    router.push('/mission-control');
+  };
+
+  // Handle "Explore Plans" button
+  const handleExplorePlans = () => {
+    handleDismissWelcome();
+    setSelectedTab('plans');
+  };
 
   // Parse billing status
   const tier: TierName = (billingStatus?.tier || 'free') as TierName;
@@ -142,8 +174,49 @@ export function BillingSettingsClient({
 
   return (
     <div className="space-y-8">
+      {/* Welcome Banner for New Organizations */}
+      {showWelcome && (
+        <Alert className="relative border-green-500 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950 dark:to-blue-950">
+          <Sparkles className="h-5 w-5 text-green-600" />
+          <AlertDescription className="pr-8">
+            <div className="flex flex-col gap-3">
+              <div className="text-base font-semibold text-green-900 dark:text-green-100">
+                🎉 Welcome! Your workspace is ready on the Free plan
+              </div>
+              <div className="text-sm text-green-800 dark:text-green-200">
+                <strong>Free Plan includes:</strong> 1GB storage • 3 team members • Basic features
+              </div>
+              <div className="flex gap-3 mt-2">
+                <Button
+                  onClick={handleExplorePlans}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  size="sm"
+                >
+                  Explore Pro Plans
+                </Button>
+                <Button
+                  onClick={handleStartBuilding}
+                  variant="outline"
+                  size="sm"
+                >
+                  Start Building
+                </Button>
+              </div>
+            </div>
+          </AlertDescription>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-2 right-2 h-6 w-6"
+            onClick={handleDismissWelcome}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </Alert>
+      )}
+
       {/* Alert for Free Tier */}
-      {tier === 'free' && (
+      {tier === 'free' && !showWelcome && (
         <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950">
           <TrendingUp className="h-4 w-4 text-blue-600" />
           <AlertDescription className="text-blue-800 dark:text-blue-200">
