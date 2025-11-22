@@ -14,6 +14,13 @@ export interface IOrganizationRepository {
   findByUserId(userId: UserId): Promise<Organization[]>;
 
   /**
+   * Find all organizations (admin/system use only)
+   * WARNING: Returns all organizations. Use with caution in production.
+   * Intended for background jobs, admin tools, and system operations.
+   */
+  findAll(): Promise<Organization[]>;
+
+  /**
    * Find organization with member information
    */
   findByIdWithMembers(id: OrganizationId): Promise<OrganizationWithMembers | null>;

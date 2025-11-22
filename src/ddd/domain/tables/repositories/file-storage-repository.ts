@@ -10,6 +10,15 @@ import type {
   FileKey,
 } from '../entities/file-storage';
 
+export interface StorageBreakdown {
+  totalBytes: number;
+  databaseStorageBytes: number;
+  chatStorageBytes: number;
+  skillStorageBytes: number;
+  fileCount: number;
+  scannedAt: Date;
+}
+
 export interface IFileStorageRepository {
   // Core file storage operations - abstracts storage provider (S3, Azure Blob, etc.)
   uploadFile(request: FileUploadRequest): Promise<StoredFile>;
@@ -20,4 +29,7 @@ export interface IFileStorageRepository {
 
   // File content retrieval for processing (e.g., RAG indexing)
   downloadFile(key: FileKey): Promise<Buffer>;
+
+  // Storage scanning for quota recalculation
+  getOrganizationStorageBreakdown(organizationId: number): Promise<StorageBreakdown>;
 }

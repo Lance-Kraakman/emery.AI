@@ -52,6 +52,7 @@ import type { TokenUsageApplicationService } from '@/ddd/application/services/bi
 import type { CreditUsageApplicationService } from '@/ddd/application/services/billing/credit-usage-application-service';
 import type { InvoiceApplicationService } from '@/ddd/application/services/billing/invoice-application-service';
 import type { StorageQuotaApplicationService } from '@/ddd/application/services/billing/storage-quota-application-service';
+import type { StorageRecalculationApplicationService } from '@/ddd/application/services/billing/storage-recalculation-application-service';
 
 import { DIContainer } from './container';
 
@@ -118,6 +119,7 @@ type ServiceMap = {
   CreditUsageApplicationService: CreditUsageApplicationService;
   InvoiceApplicationService: InvoiceApplicationService;
   StorageQuotaApplicationService: StorageQuotaApplicationService;
+  StorageRecalculationApplicationService: StorageRecalculationApplicationService;
 };
 
 /**
@@ -255,3 +257,4 @@ export const getTokenUsageApplicationService = createGetter('TokenUsageApplicati
 export const getCreditUsageApplicationService = createGetter('CreditUsageApplicationService');
 export const getInvoiceApplicationService = createGetter('InvoiceApplicationService');
 export const getStorageQuotaApplicationService = createGetter('StorageQuotaApplicationService');
+export const getStorageRecalculationApplicationService = createGetter('StorageRecalculationApplicationService');
