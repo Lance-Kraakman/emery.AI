@@ -226,7 +226,7 @@ export function ViewConfigurationForm({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation(); // Prevent event bubbling
 
@@ -349,7 +349,7 @@ export function ViewConfigurationForm({
             sorting: viewType === 'grid' ? gridSorting : undefined,
             fieldMappings: viewType === 'grid' && gridFieldMappings.length > 0 ? gridFieldMappings : undefined,
             pagination: viewType === 'grid' ? { pageSize: gridDefaultPageSize } : undefined,
-          })
+          }) // No revalidateUrl = no page reload
         : await createView({
             tableId,
             name: name.trim(),
@@ -359,7 +359,7 @@ export function ViewConfigurationForm({
             fieldMappings: viewType === 'grid' && gridFieldMappings.length > 0 ? gridFieldMappings : undefined,
             viewType: viewTypeVO,
             viewConfig: viewConfigVO,
-          });
+          }); // No revalidateUrl = no page reload
 
       if (!result.success) {
         setError(result.error || 'Failed to save view');
@@ -385,7 +385,7 @@ export function ViewConfigurationForm({
   const showViewTypeSelector = !isEditMode && (!supportedViewTypes || supportedViewTypes.length > 1);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <div className="space-y-3">
       <Accordion type="multiple" defaultValue={["basic", "config"]} className="w-full space-y-2">
         {/* Basic Info Section */}
         <AccordionItem value="basic" className="border rounded-md px-3">
@@ -558,7 +558,7 @@ export function ViewConfigurationForm({
 
       {/* Action Buttons - Stack Vertically */}
       <div className="flex flex-col gap-2 pt-2">
-        <Button type="submit" disabled={isSubmitting} className="w-full h-8 text-sm">
+        <Button type="button" onClick={handleSubmit} disabled={isSubmitting} className="w-full h-8 text-sm">
           {isSubmitting && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
           {isEditMode ? 'Save Changes' : 'Create View'}
         </Button>
@@ -574,6 +574,6 @@ export function ViewConfigurationForm({
           </Button>
         )}
       </div>
-    </form>
+    </div>
   );
 }
