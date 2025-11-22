@@ -1,13 +1,14 @@
-import { 
-  PutObjectCommand, 
-  GetObjectCommand, 
+import {
+  PutObjectCommand,
+  GetObjectCommand,
   DeleteObjectCommand,
+  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { FileUploadRequest, StoredFile, FileStorageError, FileKey, FileUrlOptions, FileValidationRule, FileValidationResult } from '@/ddd/domain/tables/entities/file-storage';
-import { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
+import { IFileStorageRepository, type StorageBreakdown } from '@/ddd/domain/tables/repositories/file-storage-repository';
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
 
 export class S3FileStorageRepository implements IFileStorageRepository {
@@ -250,25 +251,122 @@ export class S3FileStorageRepository implements IFileStorageRepository {
   // Helper method to generate S3 key
   private generateS3Key(request: FileUploadRequest, fileId: string): string {
     const parts: string[] = [];
-    
+
     if (request.organizationId) {
       parts.push(`org_${request.organizationId}`);
     }
-    
+
     if (request.tableId) {
       parts.push(`table_${request.tableId}`);
     }
-    
+
     if (request.fieldId) {
       parts.push(`field_${request.fieldId}`);
     }
-    
+
     // Remove date-based partitioning for cleaner paths
-    
+
     // Add file ID and sanitized filename
     const sanitizedFilename = request.filename.replace(/[^a-zA-Z0-9.-]/g, '_');
     parts.push(`${fileId}_${sanitizedFilename}`);
-    
+
     return parts.join('/');
+  }
+
+  /**
+   * Scan S3 storage for an organization and calculate actual usage breakdown
+   * Used for periodic storage quota validation to detect drift from incremental counters
+   */
+  async getOrganizationStorageBreakdown(organizationId: number): Promise<StorageBreakdown> {
+    const prefix = `org_${organizationId}/`;
+
+    const breakdown: StorageBreakdown = {
+      totalBytes: 0,
+      databaseStorageBytes: 0,
+      chatStorageBytes: 0,
+      skillStorageBytes: 0,
+      fileCount: 0,
+      scannedAt: new Date(),
+    };
+
+    let continuationToken: string | undefined;
+
+    try {
+      // Paginate through all objects with this organization prefix
+      do {
+        const command = new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+          MaxKeys: 1000, // S3 max per request
+        });
+
+        const response = await this.s3.send(command);
+
+        if (response.Contents && response.Contents.length > 0) {
+          for (const object of response.Contents) {
+            if (!object.Key || !object.Size) continue;
+
+            const size = object.Size;
+            const category = this.categorizeFileByKey(object.Key);
+
+            breakdown.totalBytes += size;
+            breakdown.fileCount++;
+
+            switch (category) {
+              case 'database':
+                breakdown.databaseStorageBytes += size;
+                break;
+              case 'chat':
+                breakdown.chatStorageBytes += size;
+                break;
+              case 'skill':
+                breakdown.skillStorageBytes += size;
+                break;
+            }
+          }
+        }
+
+        continuationToken = response.NextContinuationToken;
+      } while (continuationToken);
+
+      return breakdown;
+    } catch (error) {
+      throw new FileStorageError(
+        `Failed to scan storage for organization ${organizationId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'NETWORK_ERROR',
+        { organizationId, prefix }
+      );
+    }
+  }
+
+  /**
+   * Categorize file by S3 key pattern for storage breakdown
+   *
+   * Patterns:
+   * - org_{id}/table_{id}/... -> database
+   * - org_{id}/chat_{id}/... -> chat
+   * - org_{id}/skill_{id}/... -> skill
+   * - org_{id}/... -> database (default for uncategorized)
+   */
+  private categorizeFileByKey(key: string): 'database' | 'chat' | 'skill' {
+    // Extract the path after org_{id}/
+    const match = key.match(/^org_\d+\/(.+)/);
+    if (!match) {
+      return 'database'; // Default to database if no match
+    }
+
+    const path = match[1];
+
+    if (path.startsWith('table_')) {
+      return 'database';
+    } else if (path.startsWith('chat_') || path.includes('/chat/')) {
+      return 'chat';
+    } else if (path.startsWith('skill_') || path.includes('/skill/')) {
+      return 'skill';
+    }
+
+    // Default to database for backward compatibility
+    return 'database';
   }
 }

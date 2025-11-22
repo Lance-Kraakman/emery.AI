@@ -85,8 +85,9 @@ export function SetupForm() {
       const result = await createOrganization(formData);
 
       if (result.success) {
-        router.push("/mission-control");
-        window.location.reload(); // hardcore
+        // Use window.location.href to navigate and reload in one action
+        // This ensures session is updated with new organization before rendering billing page
+        window.location.href = "/settings/billing?welcome=true";
       } else {
         setError(result.error || "Setup failed");
       }

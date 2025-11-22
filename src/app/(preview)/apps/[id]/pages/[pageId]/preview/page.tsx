@@ -12,14 +12,17 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { resolveAllData, type Data } from "@measured/puck";
 import { config } from "@/components/puck/config";
-import { getPage } from "@/app/actions/puck-pages";
+import { getPage, getPages } from "@/app/actions/puck-pages";
 import { getApp } from "@/app/actions/puck-apps";
+import { getCurrentOrganization } from "@/app/actions/user-organizations";
 import { PreviewClient } from "./preview-client";
 import { Loading } from "@/components/ui/loading";
 import { ThemeConfig } from "@/ddd/domain/puck/value-objects/theme-config";
 import { ThemeProvider } from "@/components/puck/theme-context";
+import { LinkContextProvider } from "@/components/puck/link-context";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
+import type { OrganizationDTO } from "@/app/mappers/organization-mapper";
 import { PuckSession } from "@/lib/puck/session-storage";
 
 export default function PreviewPage() {
@@ -30,6 +33,9 @@ export default function PreviewPage() {
   const [resolvedData, setResolvedData] = useState<Data | null>(null);
   const [pageName, setPageName] = useState<string>("");
   const [effectiveTheme, setEffectiveTheme] = useState<ThemeConfig | null>(null);
+  const [app, setApp] = useState<AppDTO | null>(null);
+  const [organization, setOrganization] = useState<OrganizationDTO | null>(null);
+  const [pages, setPages] = useState<PageDTO[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,12 +43,20 @@ export default function PreviewPage() {
       try {
         setLoading(true);
 
-        // 1. Fetch app for theme
-        const appResult = await getApp(appId);
+        // 1. Fetch app, organization, and pages for link resolution
+        const [appResult, orgResult, pagesResult] = await Promise.all([
+          getApp(appId),
+          getCurrentOrganization(),
+          getPages(appId)
+        ]);
+
         if (!appResult.success || !appResult.data) {
           throw new Error("Failed to load app");
         }
-        const app = appResult.data;
+        const appData = appResult.data;
+        setApp(appData);
+        setOrganization(orgResult);
+        setPages(pagesResult.success && pagesResult.data ? pagesResult.data : []);
 
         // 2. Check sessionStorage first (unsaved changes from editor)
         const savedData = PuckSession.getData(pageId);
@@ -72,8 +86,8 @@ export default function PreviewPage() {
         }
 
         // 4. Compute effective theme (page overrides app)
-        const appTheme = app.themeConfig
-          ? ThemeConfig.create(app.themeConfig)
+        const appTheme = appData.themeConfig
+          ? ThemeConfig.create(appData.themeConfig)
           : ThemeConfig.default();
 
         const computedTheme = page.themeConfig
@@ -106,7 +120,7 @@ export default function PreviewPage() {
     );
   }
 
-  if (!resolvedData || !effectiveTheme) {
+  if (!resolvedData || !effectiveTheme || !app) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-white gap-4">
         <h1 className="text-2xl font-bold">No preview data</h1>
@@ -115,11 +129,22 @@ export default function PreviewPage() {
   }
 
   return (
-    <ThemeProvider value={effectiveTheme}>
-      <PreviewClient
-        resolvedData={resolvedData}
-        pageName={pageName}
-      />
-    </ThemeProvider>
+    <LinkContextProvider
+      value={{
+        orgSlug: organization?.slug ?? undefined,
+        appSlug: app.slug,
+        appId: app.id,
+        pages,
+        isEditing: false,
+        isPreview: true,
+      }}
+    >
+      <ThemeProvider value={effectiveTheme}>
+        <PreviewClient
+          resolvedData={resolvedData}
+          pageName={pageName}
+        />
+      </ThemeProvider>
+    </LinkContextProvider>
   );
 }

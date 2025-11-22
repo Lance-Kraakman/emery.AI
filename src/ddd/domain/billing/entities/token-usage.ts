@@ -28,6 +28,7 @@ export interface CreateTokenUsageData {
   outputTokens: number;
   totalTokens: number;
   costUsd: number;
+  creditsUsed?: number; // User-facing billing credits (for invoicing)
   processingTimeMs?: number;
   metadata?: TokenUsageMetadata;
 }
@@ -44,6 +45,7 @@ export interface TokenUsage {
   outputTokens: number;
   totalTokens: number;
   costUsd: number;
+  creditsUsed?: number; // User-facing billing credits
   processingTimeMs?: number;
   metadata?: TokenUsageMetadata;
   createdAt: Date;

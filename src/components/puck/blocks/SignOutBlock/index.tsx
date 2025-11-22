@@ -10,12 +10,13 @@ import {
   borderRadiusField
 } from "@/components/puck/fields/standard-fields";
 import { withLayout, WithLayout } from "../../components/Layout";
+import { createLinkActionField, type LinkActionConfig } from "@/components/puck/custom-fields";
 
 export type SignOutBlockProps = WithLayout<{
   buttonText: string;
   showUserInfo: boolean;
   showAvatar: boolean;
-  redirectAfterSignOut: string;
+  redirectAction: LinkActionConfig;
   variant: "default" | "destructive" | "outline" | "secondary" | "ghost";
   popoverSide: "top" | "bottom" | "left" | "right";
   popoverAlign: "start" | "center" | "end";
@@ -62,10 +63,11 @@ const SignOutBlockInternal: ComponentConfig<SignOutBlockProps> = {
         { label: "Ghost", value: "ghost" },
       ],
     },
-    redirectAfterSignOut: {
-      type: "text",
-      label: "Redirect URL after sign out",
-    },
+    redirectAction: createLinkActionField({
+      label: "Redirect After Sign Out",
+      allowedActionTypes: ['none', 'page', 'url'],
+      defaultActionType: 'none',
+    }),
     popoverSide: {
       type: "select",
       label: "Popover Position",
@@ -102,7 +104,9 @@ const SignOutBlockInternal: ComponentConfig<SignOutBlockProps> = {
     buttonText: "Sign Out",
     showUserInfo: true,
     showAvatar: true,
-    redirectAfterSignOut: "",
+    redirectAction: {
+      actionType: 'none',
+    },
     variant: "outline",
     popoverSide: "bottom",
     popoverAlign: "center",

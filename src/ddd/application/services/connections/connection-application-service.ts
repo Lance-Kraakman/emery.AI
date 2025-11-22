@@ -4,15 +4,18 @@
 import { IConnectionRepository } from '@/ddd/domain/connections/repositories/connection-repository';
 import { Connection, ConnectionStatus } from '@/ddd/domain/connections/entities/connection';
 import { ConnectionId, AppName, ConnectionPaginationOptions, PaginatedResult } from '@/ddd/domain/connections/value-objects';
-import { UserId } from '@/ddd/domain/shared/value-objects';
+import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
+import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import { getTierConfig } from '@/lib/stripe/config';
 
 const logger = createDebugLogger('ConnectionService');
 
 export class ConnectionApplicationService {
   constructor(
-    private readonly connectionRepository: IConnectionRepository
+    private readonly connectionRepository: IConnectionRepository,
+    private readonly organizationRepository: IOrganizationRepository
   ) {}
 
   /**
@@ -238,6 +241,7 @@ export class ConnectionApplicationService {
    */
   async initiateConnection(
     userId: UserId,
+    organizationId: OrganizationId,
     appName: AppName,
     redirectUrl?: string,
     options: { forceNew?: boolean; reconnectExisting?: boolean } = {}
@@ -250,10 +254,32 @@ export class ConnectionApplicationService {
     try {
       logger.debug('Initiating connection', {
         userId: userId.value,
+        organizationId: organizationId.value,
         appName: appName.value,
         forceNew: options.forceNew,
         reconnectExisting: options.reconnectExisting
       });
+
+      // Check if organization tier allows connectors
+      const organization = await this.organizationRepository.findById(organizationId);
+      if (!organization) {
+        return {
+          success: false,
+          error: 'Organization not found'
+        };
+      }
+
+      const tierConfig = getTierConfig(organization.tier || 'free');
+      if (!tierConfig.connectorsAllowed) {
+        logger.debug('Connectors not allowed for tier', {
+          tier: organization.tier,
+          appName: appName.value
+        });
+        return {
+          success: false,
+          error: 'Connectors are not available on the Free tier. Upgrade to Pro to unlock unlimited connectors.'
+        };
+      }
 
       // Business rule: Check if already connected and provide smart recommendations
       const existing = await this.connectionRepository.findByUserAndApp(userId, appName);

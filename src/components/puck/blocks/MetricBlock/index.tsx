@@ -17,79 +17,22 @@
 
 import type { ComponentConfig } from "@measured/puck";
 import MetricBlock, { type MetricBlockProps } from "./MetricBlock";
-import { getView, executeViewAggregations, getViewsForOrganization } from "@/app/actions/views";
+import { getView, executeViewAggregations } from "@/app/actions/views";
 import { getTables } from "@/app/actions/tables";
 import { typographySizeField, backgroundColorField, textColorField, fontFamilyField, fontWeightField, borderRadiusField, borderWidthField, paddingField } from "../../fields/standard-fields";
+import { createViewManagementField } from "../../custom-fields";
 
 export const MetricBlockConfig: ComponentConfig<MetricBlockProps> = {
   label: "Metric",
 
   fields: {
-    // View Selection - Filtered to only show metric-type views
-    viewId: {
-      label: "Metric View",
-      type: "external",
-      placeholder: "Select a metric view",
-      showSearch: true,
-      fetchList: async ({ query }: { query: string }) => {
-        console.log('[MetricBlock viewId fetchList] Fetching metric views');
-
-        // Get all views and filter to metric-type only
-        const [views, tables] = await Promise.all([
-          getViewsForOrganization(),
-          getTables()
-        ]);
-
-        console.log('[MetricBlock viewId fetchList] Found views:', views.length, 'tables:', tables.length);
-
-        // Filter to metric views only
-        const metricViews = views.filter(v => v.viewType === 'metric');
-
-        console.log('[MetricBlock viewId fetchList] Metric views:', metricViews.length);
-
-        // Create a table lookup map
-        const tableMap = new Map(tables.map(t => [t.id, t.name]));
-
-        // Filter by query if provided
-        const filteredViews = query
-          ? metricViews.filter((v) =>
-              v.name.toLowerCase().includes(query.toLowerCase()) ||
-              tableMap.get(v.tableId)?.toLowerCase().includes(query.toLowerCase())
-            )
-          : metricViews;
-
-        const result = filteredViews.map((v) => {
-          // Extract aggregation info from viewConfig for better display
-          const config = v.viewConfig as any;
-          const aggType = config?.aggregation?.aggregationType || 'unknown';
-
-          return {
-            id: v.id,
-            name: v.name,
-            tableId: v.tableId,
-            tableName: tableMap.get(v.tableId) || `Table ${v.tableId}`,
-            title: `${v.name}`,
-            description: `Table: ${tableMap.get(v.tableId) || v.tableId} | Aggregation: ${aggType}`,
-          };
-        });
-
-        console.log('[MetricBlock viewId fetchList] Returning options:', result.length);
-        return result;
-      },
-      mapProp: (item: any) => item?.id || null,
-      getItemSummary: (item: any, context: any) => {
-        const viewId = typeof item === 'number' ? item : item?.id;
-        const viewName = context?.props?._viewName;
-        const metricLabel = context?.props?._metricLabel;
-
-        if (viewName) {
-          return metricLabel ? `${viewName} - ${metricLabel}` : viewName;
-        } else if (viewId) {
-          return `Metric View ID: ${viewId}`;
-        }
-        return "No metric view selected";
-      },
-    } as any,
+    // View Selection - Inline creation and editing support
+    // AIDEV-NOTE: Using custom view management field for inline metric view creation.
+    // Users can create/edit metric views directly from the Puck sidebar.
+    viewId: createViewManagementField({
+      supportedViewTypes: ['metric'],
+      label: 'Metric View',
+    }),
 
     // Hidden fields populated by resolveData
     _viewName: {

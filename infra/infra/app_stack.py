@@ -1,30 +1,34 @@
 from aws_cdk import (
     Stack,
-    RemovalPolicy,
     aws_ec2 as ec2,
     aws_ecs as ecs,
     aws_ecs_patterns as ecs_patterns,
     aws_elasticloadbalancingv2 as elbv2,
     aws_logs as logs,
-    aws_rds as rds,
-    aws_s3 as s3,
-    aws_secretsmanager as secretsmanager,
     aws_iam as iam,
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as origins,
-    aws_servicediscovery as servicediscovery,
     custom_resources,
     Aws,
     Duration,
     CfnOutput,
 )
 from constructs import Construct
+from .data_stack import DataStack
 import os
 import time
 import hashlib
 import glob
 
-class InfraStack(Stack):
+
+class AppStack(Stack):
+    """
+    Application Stack - Contains frequently-changing application resources:
+    - ECS Cluster and Services (frontend, scheduler, agent-chat, agent-table)
+    - Load Balancers (ALB for frontend, NLBs for agents)
+    - CloudFront distribution
+    - Auto-scaling configurations
+    """
 
     def _get_migration_hash(self) -> str:
         """Generate hash of migration files to force migration trigger on schema changes"""
@@ -70,159 +74,20 @@ class InfraStack(Stack):
             print("Building agent image from source")
             return ecs.ContainerImage.from_asset("../emery-agents")
 
-    def __init__(self, scope: Construct, construct_id: str, env_name: str, **kwargs) -> None:
+    def __init__(self, scope: Construct, construct_id: str, data_stack: DataStack, env_name: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         prefix = env_name.capitalize()
-        
+
         # Default AWS region - can be overridden by CDK context
         aws_region = 'ap-southeast-2'
 
-        # Create a new VPC for our application
-        # This will create public and private subnets across 2 Availability Zones by default
-        vpc = ec2.Vpc(
-            self, f"{prefix}EmeryVpc",
-            max_azs=2,
-            nat_gateways=1,
-        )
-
-        # Create an ECS cluster to host our services
+        # ========== ECS CLUSTER ==========
+        # Create an ECS cluster in the VPC from data stack
         cluster = ecs.Cluster(
             self, f"{prefix}EmeryCluster",
-            vpc=vpc,
+            vpc=data_stack.vpc,
             cluster_name=f"{prefix}EmeryCluster"
-        )
-
-        # Create parameter group to allow non-SSL connections and preload extensions
-        db_parameter_group = rds.ParameterGroup(
-            self, f"{prefix}PostgresParams",
-            engine=rds.DatabaseInstanceEngine.postgres(
-                version=rds.PostgresEngineVersion.VER_16_9
-            ),
-            parameters={
-                "rds.force_ssl": "0"  # Allow non-SSL connections for development
-            }
-        )
-
-        # Create a PostgreSQL database instance in RDS
-        # This will be placed in the private subnets of our VPC
-        db_instance = rds.DatabaseInstance(
-            self, f"{prefix}PostgresDB",
-            engine=rds.DatabaseInstanceEngine.postgres(
-                version=rds.PostgresEngineVersion.VER_16_9
-            ),
-            instance_type=ec2.InstanceType.of(
-                ec2.InstanceClass.BURSTABLE4_GRAVITON, ec2.InstanceSize.MICRO
-            ),
-            vpc=vpc,
-            vpc_subnets=ec2.SubnetSelection(
-                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
-            ),
-            database_name=f"emery_{env_name}",
-            # The secret will be automatically created and stored in AWS Secrets Manager
-            credentials=rds.Credentials.from_generated_secret(f"db_master_user_{env_name}"),
-            parameter_group=db_parameter_group,  # Use custom parameter group
-            multi_az=False, # For cost-effectiveness in dev/staging. Set to True for production.
-            allocated_storage=20, # 20 GB
-            max_allocated_storage=100,
-            allow_major_version_upgrade=False,
-            auto_minor_version_upgrade=True,
-            delete_automated_backups=True, # For dev/staging. Set to False for production.
-            enable_performance_insights=True, # Enable Performance Insights for database monitoring
-            backup_retention=Duration.days(7), # Enable backups for better data management
-        )
-
-        # Create a shared security group for DB clients
-        db_client_sg = ec2.SecurityGroup(
-            self, f"{prefix}DbClientSg",
-            vpc=vpc,
-            description="Security group for clients connecting to the RDS database"
-        )
-
-        # Allow traffic from the shared SG to the database
-        db_instance.connections.allow_default_port_from(db_client_sg)
-
-        # Create security group for bastion host
-        bastion_sg = ec2.SecurityGroup(
-            self, f"{prefix}BastionSecurityGroup",
-            vpc=vpc,
-            description="Security group for bastion host",
-            allow_all_outbound=True
-        )
-        
-        # Allow SSH access from anywhere (for development)
-        bastion_sg.add_ingress_rule(
-            ec2.Peer.any_ipv4(),
-            ec2.Port.tcp(22),
-            "Allow SSH access"
-        )
-
-        # Create bastion host for secure database access
-        bastion_host = ec2.Instance(
-            self, f"{prefix}DatabaseBastion",
-            vpc=vpc,
-            instance_type=ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO),
-            machine_image=ec2.MachineImage.latest_amazon_linux2(),
-            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
-            security_group=bastion_sg,
-            key_pair=ec2.KeyPair.from_key_pair_name(
-                self, f"{prefix}BastionKeyPair",
-                f"{env_name}-bastion-machine"  # Environment-specific key pair
-            ),
-            user_data=ec2.UserData.for_linux()
-        )
-        
-        # Add user data to install PostgreSQL 14 client for SCRAM authentication support
-        bastion_host.user_data.add_commands(
-            "# Enable PostgreSQL 14 from Amazon Linux Extras",
-            "amazon-linux-extras enable postgresql14",
-            "yum clean metadata",
-            "# Install PostgreSQL 14 client",
-            "yum install -y postgresql",
-            "# Install AWS CLI v2 for secrets management",
-            "yum install -y awscli",
-            "# Verify PostgreSQL 14 installation",
-            "psql --version > /home/ec2-user/psql-version.txt"
-        )
-        
-        # Allow bastion to connect to database
-        db_instance.connections.allow_default_port_from(bastion_host, "Allow bastion host access")
-
-        # AIDEV-NOTE: Create security groups for dual-port gRPC architecture
-        # Chat service on port 50051, Table service on port 50052
-
-        # Create security group for chat gRPC service (port 50051)
-        chat_grpc_sg = ec2.SecurityGroup(
-            self, f"{prefix}ChatGrpcSg",
-            vpc=vpc,
-            description="Security group for chat gRPC service (port 50051)"
-        )
-        chat_grpc_sg.add_ingress_rule(
-            peer=ec2.Peer.any_ipv4(),
-            connection=ec2.Port.tcp(50051),
-            description="Allow gRPC traffic on port 50051"
-        )
-        chat_grpc_sg.add_ingress_rule(
-            peer=db_client_sg,
-            connection=ec2.Port.tcp(50051),
-            description="Allow gRPC traffic from frontend and scheduler services"
-        )
-
-        # Create security group for table gRPC service (port 50052)
-        table_grpc_sg = ec2.SecurityGroup(
-            self, f"{prefix}TableGrpcSg",
-            vpc=vpc,
-            description="Security group for table gRPC service (port 50052)"
-        )
-        table_grpc_sg.add_ingress_rule(
-            peer=ec2.Peer.any_ipv4(),
-            connection=ec2.Port.tcp(50052),
-            description="Allow gRPC traffic on port 50052"
-        )
-        table_grpc_sg.add_ingress_rule(
-            peer=db_client_sg,
-            connection=ec2.Port.tcp(50052),
-            description="Allow gRPC traffic from frontend and scheduler services"
         )
 
         # Define the Docker image for the frontend, scheduler, and migration
@@ -231,30 +96,6 @@ class InfraStack(Stack):
 
         # AIDEV-NOTE: Migration now handled by init containers in each service
         # No separate migration task needed - migrations run before each service starts
-
-
-        # Look up the application secrets from AWS Secrets Manager
-        app_secrets_object = secretsmanager.Secret.from_secret_name_v2(
-            self, "AppSecretsObject",
-            secret_name=f"emery-app-secrets/{env_name}"
-        )
-
-        # Define the secrets mapping for the ECS task definition
-        app_secrets_map = {
-            "NEXTAUTH_SECRET": ecs.Secret.from_secrets_manager(app_secrets_object, "NEXTAUTH_SECRET"),
-            "GITHUB_CLIENT_ID": ecs.Secret.from_secrets_manager(app_secrets_object, "GITHUB_CLIENT_ID"),
-            "GITHUB_CLIENT_SECRET": ecs.Secret.from_secrets_manager(app_secrets_object, "GITHUB_CLIENT_SECRET"),
-            "PIPEDREAM_PROJECT_ID": ecs.Secret.from_secrets_manager(app_secrets_object, "PIPEDREAM_PROJECT_ID"),
-            "PIPEDREAM_CLIENT_ID": ecs.Secret.from_secrets_manager(app_secrets_object, "PIPEDREAM_CLIENT_ID"),
-            "PIPEDREAM_CLIENT_SECRET": ecs.Secret.from_secrets_manager(app_secrets_object, "PIPEDREAM_CLIENT_SECRET"),
-            "PIPEDREAM_API_KEY": ecs.Secret.from_secrets_manager(app_secrets_object, "PIPEDREAM_API_KEY"),
-            "OPENAI_API_KEY": ecs.Secret.from_secrets_manager(app_secrets_object, "OPENAI_API_KEY"),
-            "HF_TOKEN": ecs.Secret.from_secrets_manager(app_secrets_object, "HF_TOKEN"),
-            "RESEND_API_KEY": ecs.Secret.from_secrets_manager(app_secrets_object, "RESEND_API_KEY"),
-            # AWS S3 credentials for cloud deployment
-            "AWS_ACCESS_KEY_ID": ecs.Secret.from_secrets_manager(app_secrets_object, "AWS_ACCESS_KEY_ID"),
-            "AWS_SECRET_ACCESS_KEY": ecs.Secret.from_secrets_manager(app_secrets_object, "AWS_SECRET_ACCESS_KEY"),
-        }
 
 
         # Create custom task definition with init container for migrations
@@ -278,8 +119,8 @@ class InfraStack(Stack):
                 "NODE_ENV": "production",
             },
             secrets={
-                "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
-                **app_secrets_map  # Seeds need access to Pipedream, OpenAI, etc.
+                "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.data_stack.db_instance.secret),
+                **data_stack.data_stack.app_secrets_map  # Seeds need access to Pipedream, OpenAI, etc.
             },
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix=f"{prefix}-Migration-Init",
@@ -293,8 +134,8 @@ class InfraStack(Stack):
             image=app_image,
             port_mappings=[ecs.PortMapping(container_port=3000)],
             secrets={
-                "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
-                **app_secrets_map
+                "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
+                **data_stack.app_secrets_map
             },
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix=f"{prefix}-Frontend",
@@ -318,7 +159,7 @@ class InfraStack(Stack):
             task_definition=frontend_task_definition,
             desired_count=1,
             public_load_balancer=True,
-            security_groups=[db_client_sg],
+            security_groups=[data_stack.db_client_sg],
         )
 
         # Configure the health check for the frontend service
@@ -412,7 +253,7 @@ class InfraStack(Stack):
         # Output database connection details
         CfnOutput(
             self, f"{prefix}DatabaseEndpoint",
-            value=db_instance.instance_endpoint.hostname,
+            value=data_stack.db_instance.instance_endpoint.hostname,
             description="Database endpoint for SSH tunnel connection"
         )
 
@@ -436,8 +277,8 @@ class InfraStack(Stack):
             image=app_image,
             command=["scheduler"],
             secrets={
-                "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
-                **app_secrets_map
+                "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
+                **data_stack.app_secrets_map
             },
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix=f"{prefix}-Scheduler",
@@ -458,7 +299,7 @@ class InfraStack(Stack):
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
-            security_groups=[db_client_sg],
+            security_groups=[data_stack.db_client_sg],
         )
         
         # AIDEV-NOTE: Add ECR permissions to scheduler task execution role for pulling images
@@ -508,14 +349,6 @@ class InfraStack(Stack):
         # AIDEV-NOTE: Add WORKER_ADDRESS to scheduler after agent service is created
         # This will be done after agent_service definition below
 
-        # Create Cloud Map namespace for service discovery
-        namespace = servicediscovery.PrivateDnsNamespace(
-            self, f"{prefix}ServiceNamespace",
-            vpc=vpc,
-            name="emery.local",
-            description="Internal service discovery for Emery application"
-        )
-
         # AIDEV-NOTE: Dual-port gRPC architecture to prevent circular dependency deadlocks
         # Chat service (port 50051): AgentWorker + ChatProcessingService
         # Table service (port 50052): TableService only
@@ -535,8 +368,8 @@ class InfraStack(Stack):
                     "GRPC_CHAT_MAX_WORKERS": "20",
                 },
                 secrets={
-                    "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
-                    **app_secrets_map
+                    "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
+                    **data_stack.app_secrets_map
                 }
             ),
             runtime_platform=ecs.RuntimePlatform(
@@ -544,11 +377,11 @@ class InfraStack(Stack):
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
             public_load_balancer=False,
-            security_groups=[db_client_sg, chat_grpc_sg],
+            security_groups=[data_stack.db_client_sg, data_stack.chat_grpc_sg],
             health_check_grace_period=Duration.seconds(300),
             cloud_map_options=ecs.CloudMapOptions(
                 name="agent-chat",
-                cloud_map_namespace=namespace,
+                cloud_map_namespace=data_stack.namespace,
                 dns_record_type=servicediscovery.DnsRecordType.A,
                 dns_ttl=Duration.seconds(60)
             ),
@@ -622,8 +455,8 @@ class InfraStack(Stack):
                     "GRPC_TABLE_MAX_WORKERS": "15",
                 },
                 secrets={
-                    "DATABASE_URL": ecs.Secret.from_secrets_manager(db_instance.secret),
-                    **app_secrets_map
+                    "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
+                    **data_stack.app_secrets_map
                 }
             ),
             runtime_platform=ecs.RuntimePlatform(
@@ -631,11 +464,11 @@ class InfraStack(Stack):
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
             public_load_balancer=False,
-            security_groups=[db_client_sg, table_grpc_sg],
+            security_groups=[data_stack.db_client_sg, data_stack.table_grpc_sg],
             health_check_grace_period=Duration.seconds(300),
             cloud_map_options=ecs.CloudMapOptions(
                 name="agent-table",
-                cloud_map_namespace=namespace,
+                cloud_map_namespace=data_stack.namespace,
                 dns_record_type=servicediscovery.DnsRecordType.A,
                 dns_ttl=Duration.seconds(60)
             ),
@@ -734,27 +567,18 @@ class InfraStack(Stack):
             aws_region  # Use dynamic AWS region
         )
 
-        # Create an S3 bucket for file storage
-        storage_bucket = s3.Bucket(
-            self, f"{prefix}StorageBucket",
-            bucket_name=f"{prefix.lower()}-emery-storage-{self.account}",
-            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
-            encryption=s3.BucketEncryption.S3_MANAGED,
-            enforce_ssl=True,
-            versioned=True, # Good practice for production
-        )
-
-        # Grant all services read/write access to the bucket
-        storage_bucket.grant_read_write(frontend_service.task_definition.task_role)
-        storage_bucket.grant_read_write(agent_chat_service.task_definition.task_role)
-        storage_bucket.grant_read_write(agent_table_service.task_definition.task_role)
-        storage_bucket.grant_read_write(scheduler_task_definition.task_role)
+        # ========== S3 BUCKET PERMISSIONS ==========
+        # Grant all services read/write access to the S3 bucket from data stack
+        data_stack.storage_bucket.grant_read_write(frontend_service.task_definition.task_role)
+        data_stack.storage_bucket.grant_read_write(agent_chat_service.task_definition.task_role)
+        data_stack.storage_bucket.grant_read_write(agent_table_service.task_definition.task_role)
+        data_stack.storage_bucket.grant_read_write(scheduler_task_definition.task_role)
 
         # Inject the bucket name as an environment variable into both services
         if frontend_service.task_definition.default_container:
             frontend_service.task_definition.default_container.add_environment(
                 "S3_BUCKET_NAME",
-                storage_bucket.bucket_name
+                data_stack.storage_bucket.bucket_name
             )
             # Add AWS S3 configuration to override MinIO defaults
             frontend_aws_endpoint_url = f"https://s3.{aws_region}.amazonaws.com"
@@ -771,7 +595,7 @@ class InfraStack(Stack):
         if agent_chat_service.task_definition.default_container:
             agent_chat_service.task_definition.default_container.add_environment(
                 "S3_BUCKET_NAME",
-                storage_bucket.bucket_name
+                data_stack.storage_bucket.bucket_name
             )
             agent_aws_endpoint_url = f"https://s3.{aws_region}.amazonaws.com"
             agent_chat_service.task_definition.default_container.add_environment(
@@ -792,7 +616,7 @@ class InfraStack(Stack):
         if agent_table_service.task_definition.default_container:
             agent_table_service.task_definition.default_container.add_environment(
                 "S3_BUCKET_NAME",
-                storage_bucket.bucket_name
+                data_stack.storage_bucket.bucket_name
             )
             agent_table_aws_endpoint_url = f"https://s3.{aws_region}.amazonaws.com"
             agent_table_service.task_definition.default_container.add_environment(

@@ -47,8 +47,12 @@ import type { PuckPageApplicationService } from '@/ddd/application/services/puck
 import type { ViewRepository as IViewRepository } from '@/ddd/domain/views/repositories/view-repository';
 import type { ViewApplicationService } from '@/ddd/application/services/views/view-application-service';
 import type { ITokenUsageRepository } from '@/ddd/domain/billing/repositories/token-usage-repository';
+import type { IInvoiceRepository } from '@/ddd/domain/billing/repositories/invoice-repository';
 import type { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import type { CreditUsageApplicationService } from '@/ddd/application/services/billing/credit-usage-application-service';
+import type { InvoiceApplicationService } from '@/ddd/application/services/billing/invoice-application-service';
+import type { StorageQuotaApplicationService } from '@/ddd/application/services/billing/storage-quota-application-service';
+import type { StorageRecalculationApplicationService } from '@/ddd/application/services/billing/storage-recalculation-application-service';
 
 import { DIContainer } from './container';
 
@@ -110,8 +114,12 @@ type ServiceMap = {
 
   // Billing Services
   TokenUsageRepository: ITokenUsageRepository;
+  InvoiceRepository: IInvoiceRepository;
   TokenUsageApplicationService: TokenUsageApplicationService;
   CreditUsageApplicationService: CreditUsageApplicationService;
+  InvoiceApplicationService: InvoiceApplicationService;
+  StorageQuotaApplicationService: StorageQuotaApplicationService;
+  StorageRecalculationApplicationService: StorageRecalculationApplicationService;
 };
 
 /**
@@ -130,6 +138,7 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
     'PuckPageRepository': 'IPuckPageRepository',
     'ViewRepository': 'ViewRepository',
     'TokenUsageRepository': 'ITokenUsageRepository',
+    'InvoiceRepository': 'IInvoiceRepository',
     'IToolRegistryService': 'IToolRegistryService',
   };
 
@@ -241,7 +250,11 @@ export const getViewApplicationService = createGetter('ViewApplicationService');
 
 // Billing domain repository getters
 export const getTokenUsageRepository = createGetter('TokenUsageRepository');
+export const getInvoiceRepository = createGetter('InvoiceRepository');
 
 // Billing application service getters
 export const getTokenUsageApplicationService = createGetter('TokenUsageApplicationService');
 export const getCreditUsageApplicationService = createGetter('CreditUsageApplicationService');
+export const getInvoiceApplicationService = createGetter('InvoiceApplicationService');
+export const getStorageQuotaApplicationService = createGetter('StorageQuotaApplicationService');
+export const getStorageRecalculationApplicationService = createGetter('StorageRecalculationApplicationService');
