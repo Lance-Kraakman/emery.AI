@@ -243,20 +243,7 @@ class AppStack(Stack):
             description="Direct Application Load Balancer URL"
         )
 
-        # Output bastion host information for SSH tunnel
-        CfnOutput(
-            self, f"{prefix}BastionHostIP",
-            value=bastion_host.instance_public_ip,
-            description="Bastion host public IP for SSH tunnel to database"
-        )
-
-        # Output database connection details
-        CfnOutput(
-            self, f"{prefix}DatabaseEndpoint",
-            value=data_stack.db_instance.instance_endpoint.hostname,
-            description="Database endpoint for SSH tunnel connection"
-        )
-
+        # AIDEV-NOTE: Bastion and database outputs are in DataStack
         # AIDEV-NOTE: Migration logs available in frontend init container log stream:
         # /aws/ecs/{prefix}-Migration-Init (frontend only - scheduler does not run migrations)
 
