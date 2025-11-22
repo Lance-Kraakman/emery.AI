@@ -349,7 +349,7 @@ export function ViewConfigurationForm({
             sorting: viewType === 'grid' ? gridSorting : undefined,
             fieldMappings: viewType === 'grid' && gridFieldMappings.length > 0 ? gridFieldMappings : undefined,
             pagination: viewType === 'grid' ? { pageSize: gridDefaultPageSize } : undefined,
-          })
+          }) // No revalidateUrl = no page reload
         : await createView({
             tableId,
             name: name.trim(),
@@ -359,7 +359,7 @@ export function ViewConfigurationForm({
             fieldMappings: viewType === 'grid' && gridFieldMappings.length > 0 ? gridFieldMappings : undefined,
             viewType: viewTypeVO,
             viewConfig: viewConfigVO,
-          });
+          }); // No revalidateUrl = no page reload
 
       if (!result.success) {
         setError(result.error || 'Failed to save view');
