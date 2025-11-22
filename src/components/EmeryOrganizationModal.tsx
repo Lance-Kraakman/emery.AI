@@ -110,7 +110,8 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
         setOrgName('')
         setOrgSlug('')
         setSlugManuallyEdited(false)
-        window.location.reload() // Refresh to show new org
+        // Redirect to billing page with welcome banner for new organizations
+        window.location.href = '/settings/billing?welcome=true'
       } else {
         setCreateError(result.error || 'Failed to create organization')
       }

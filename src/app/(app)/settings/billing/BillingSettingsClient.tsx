@@ -14,6 +14,8 @@ import { StorageUsageCard } from '@/components/billing/StorageUsageCard';
 import { CreditUsageCard } from '@/components/billing/CreditUsageCard';
 import { SpendingLimitControl } from '@/components/billing/SpendingLimitControl';
 import { InvoiceList } from '@/components/billing/InvoiceList';
+import { CreditBreakdownTabs } from '@/components/billing/CreditBreakdownTabs';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
@@ -26,12 +28,17 @@ import type { StorageUsage } from '@/components/billing/StorageUsageCard';
 import type { CreditUsage } from '@/components/billing/CreditUsageCard';
 import type { BillingOverview } from '@/components/billing/BillingOverviewCard';
 import type { Invoice } from '@/components/billing/InvoiceList';
+import type { BreakdownItem } from '@/components/billing/CreditBreakdownTabs';
 
 export interface BillingSettingsClientProps {
   billingStatus: any; // From getBillingStatus action
   storageUsage: StorageUsage | null;
   invoices: Invoice[];
   organizationId: number;
+  modelBreakdown: BreakdownItem[];
+  agentBreakdown: BreakdownItem[];
+  userBreakdown: BreakdownItem[];
+  typeBreakdown: BreakdownItem[];
 }
 
 export function BillingSettingsClient({
@@ -39,6 +46,10 @@ export function BillingSettingsClient({
   storageUsage,
   invoices,
   organizationId,
+  modelBreakdown,
+  agentBreakdown,
+  userBreakdown,
+  typeBreakdown,
 }: BillingSettingsClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -173,20 +184,20 @@ export function BillingSettingsClient({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       {/* Welcome Banner for New Organizations */}
       {showWelcome && (
         <Alert className="relative border-green-500 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950 dark:to-blue-950">
           <Sparkles className="h-5 w-5 text-green-600" />
           <AlertDescription className="pr-8">
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
               <div className="text-base font-semibold text-green-900 dark:text-green-100">
                 🎉 Welcome! Your workspace is ready on the Free plan
               </div>
               <div className="text-sm text-green-800 dark:text-green-200">
                 <strong>Free Plan includes:</strong> 1GB storage • 3 team members • Basic features
               </div>
-              <div className="flex gap-3 mt-2">
+              <div className="flex gap-3 mt-1">
                 <Button
                   onClick={handleExplorePlans}
                   className="bg-green-600 hover:bg-green-700 text-white"
@@ -233,7 +244,7 @@ export function BillingSettingsClient({
       )}
 
       {/* Main Content Tabs */}
-      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
+      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="usage">Usage & Limits</TabsTrigger>
@@ -242,7 +253,7 @@ export function BillingSettingsClient({
         </TabsList>
 
         {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
+        <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Billing Overview */}
             <BillingOverviewCard
@@ -298,23 +309,51 @@ export function BillingSettingsClient({
         </TabsContent>
 
         {/* Usage & Limits Tab */}
-        <TabsContent value="usage" className="space-y-6">
-          {storageUsage && (
-            <StorageUsageCard
-              usage={storageUsage}
-              tierName={tier}
-              onUpgrade={() => handleSelectTier('pro')}
-            />
-          )}
+        <TabsContent value="usage" className="space-y-4">
+          {/* Two-column grid: Credit (LHS) + Storage (RHS) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* LEFT: Credit Usage & Breakdown */}
+            <div className="space-y-4">
+              {creditUsage && (
+                <CreditUsageCard
+                  usage={creditUsage}
+                  tierName={tier}
+                  showOverage={true}
+                />
+              )}
 
-          {creditUsage && (
-            <CreditUsageCard
-              usage={creditUsage}
-              tierName={tier}
-              showOverage={true}
-            />
-          )}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Usage Breakdown</CardTitle>
+                  <CardDescription className="text-xs">
+                    View credit usage by different dimensions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <CreditBreakdownTabs
+                    organizationId={organizationId}
+                    modelBreakdown={modelBreakdown}
+                    agentBreakdown={agentBreakdown}
+                    userBreakdown={userBreakdown}
+                    typeBreakdown={typeBreakdown}
+                  />
+                </CardContent>
+              </Card>
+            </div>
 
+            {/* RIGHT: Storage Usage */}
+            <div>
+              {storageUsage && (
+                <StorageUsageCard
+                  usage={storageUsage}
+                  tierName={tier}
+                  onUpgrade={() => handleSelectTier('pro')}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Full-width: Spending Limit */}
           {hasActiveSubscription && (
             <SpendingLimitControl
               currentLimit={billingStatus?.spendingLimitUsd ? parseFloat(billingStatus.spendingLimitUsd) : null}
@@ -324,10 +363,10 @@ export function BillingSettingsClient({
         </TabsContent>
 
         {/* Plans & Pricing Tab */}
-        <TabsContent value="plans" className="space-y-6">
+        <TabsContent value="plans" className="space-y-4">
           <div>
-            <h3 className="text-lg font-semibold mb-2">Choose Your Plan</h3>
-            <p className="text-muted-foreground text-sm mb-6">
+            <h3 className="text-lg font-semibold mb-1">Choose Your Plan</h3>
+            <p className="text-muted-foreground text-sm mb-4">
               Select the plan that best fits your needs. All plans include core features with increasing limits.
             </p>
           </div>
@@ -353,7 +392,7 @@ export function BillingSettingsClient({
         </TabsContent>
 
         {/* Invoices Tab */}
-        <TabsContent value="invoices" className="space-y-6">
+        <TabsContent value="invoices" className="space-y-4">
           <InvoiceList
             invoices={invoices}
             emptyMessage={
