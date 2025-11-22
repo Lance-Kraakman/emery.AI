@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { Result } from "./types";
 import { OrganizationName, UserId } from "@/ddd/domain/shared/value-objects";
+import { stripe } from "@/lib/stripe/client";
 
 export async function createOrganization(formData: FormData): Promise<Result> {
   const session = await auth();
@@ -47,13 +48,45 @@ export async function createOrganization(formData: FormData): Promise<Result> {
 
     // Use the repository's createWithOwner method which handles:
     // - Organization creation
-    // - Default role creation  
+    // - Default role creation
     // - User-organization relationship
     // - Setting user's current organization
     // All in a single atomic transaction
     const newOrg = await orgRepo.createWithOwner(orgData, UserId.fromString(user.id));
 
     console.log("Created organization with owner:", newOrg.id);
+
+    // Auto-create Stripe customer for new organization
+    // AIDEV-NOTE: This is non-blocking - we log errors but don't fail signup
+    try {
+      if (stripe && !newOrg.stripeCustomerId) {
+        console.log("Creating Stripe customer for organization:", newOrg.id.value);
+
+        const customer = await stripe.customers.create({
+          email: user.email!,
+          name: newOrg.name.value,
+          metadata: {
+            organizationId: newOrg.id.value.toString(),
+            organizationName: newOrg.name.value,
+            userId: user.id,
+          },
+        });
+
+        console.log("Created Stripe customer:", customer.id);
+
+        // Update organization with Stripe customer ID
+        await orgRepo.update(newOrg.id, {
+          stripeCustomerId: customer.id
+        });
+
+        // Update local object for serialization
+        newOrg.stripeCustomerId = customer.id;
+      }
+    } catch (stripeError) {
+      // Log error but don't block organization creation
+      console.error("Failed to create Stripe customer (non-blocking):", stripeError);
+      // TODO: Consider adding to a retry queue for production
+    }
 
     // Serialize Value Objects for client components
     const serializedOrg = {

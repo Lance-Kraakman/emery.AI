@@ -17,6 +17,7 @@ import {
   SlidersHorizontal,
   Activity,
   FileText,
+  CreditCard,
 } from "lucide-react"
 
 import {
@@ -581,7 +582,15 @@ export function AppSidebar({
                     <SidebarMenuButton asChild isActive={pathname === "/settings/usage"} className="h-6">
                       <Link href="/settings/usage">
                         <Activity className="h-4 w-4" />
-                        <span className="group-data-[collapsible=icon]:hidden">Usage & Billing</span>
+                        <span className="group-data-[collapsible=icon]:hidden">Usage</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={pathname === "/settings/billing"} className="h-6">
+                      <Link href="/settings/billing">
+                        <CreditCard className="h-4 w-4" />
+                        <span className="group-data-[collapsible=icon]:hidden">Billing</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

@@ -15,22 +15,23 @@ import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-reposi
 import { OrganizationId, UserId, EmailAddress, InvitationId, InvitationToken } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 import type { Result } from '@/ddd/domain/shared/result';
-import type { 
-  Invitation, 
-  CreateInvitationData, 
+import type {
+  Invitation,
+  CreateInvitationData,
   BulkInvitationData,
   BulkInvitationResult,
   InvitationStats,
   InvitationAcceptanceResult,
   InvitationEmailContext
 } from '@/ddd/domain/invitations/entities/invitation';
-import { 
+import {
   isValidInvitationRole,
   createInvitationExpiry,
   isInvitationExpired
 } from '@/ddd/domain/invitations/entities/invitation';
 import type { CreateUserData, CreateUserOrganizationData } from '@/ddd/domain/users/entities/user';
 import { sendInvitationEmail } from '@/lib/email';
+import { getTierConfig } from '@/lib/stripe/config';
 
 export interface SendInvitationCommand {
   organizationId: number;
@@ -146,6 +147,20 @@ export class InvitationApplicationService {
           success: false,
           error: "An invitation for this email already exists. Please revoke the existing invitation first."
         };
+      }
+
+      // Check member limit for Free tier
+      const tierConfig = getTierConfig(organization.tier || 'free');
+      if (tierConfig.maxTeamMembers !== null) {
+        const orgWithMembers = await this.organizationRepository.findByIdWithMembers(OrganizationId.fromNumber(command.organizationId));
+        const currentMemberCount = orgWithMembers?.memberCount || 0;
+
+        if (currentMemberCount >= tierConfig.maxTeamMembers) {
+          return {
+            success: false,
+            error: `${tierConfig.displayName} tier is limited to ${tierConfig.maxTeamMembers} team members. Upgrade to Pro for unlimited members.`
+          };
+        }
       }
 
       // Create invitation
