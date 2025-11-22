@@ -15,73 +15,21 @@
 
 import type { ComponentConfig } from "@measured/puck";
 import TableBlock, { type TableBlockProps } from "./TableBlock";
-import { getView, executeView, getViewsForOrganization } from "@/app/actions/views";
+import { getView, executeView } from "@/app/actions/views";
 import { getTables } from "@/app/actions/tables";
+import { createViewManagementField } from "../../custom-fields";
 
 export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
   label: "Table",
 
   fields: {
-    // View Selection - Single required field showing "ViewName (TableName)"
-    // AIDEV-NOTE: Simplified from table+view to just view selection.
-    // Users select a view, which automatically determines the table.
-    viewId: {
-      label: "View",
-      type: "external",
-      placeholder: "Select a view",
-      showSearch: true,
-      fetchList: async ({ query }: { query: string }) => {
-        console.log('[viewId fetchList] Fetching all views for organization');
-
-        // Get all views and tables to build "ViewName (TableName)" format
-        const [views, tables] = await Promise.all([
-          getViewsForOrganization(),
-          getTables()
-        ]);
-
-        console.log('[viewId fetchList] Found views:', views.length, 'tables:', tables.length);
-
-        // Create a table lookup map
-        const tableMap = new Map(tables.map(t => [t.id, t.name]));
-
-        // Filter by query if provided
-        const filteredViews = query
-          ? views.filter((v) =>
-              v.name.toLowerCase().includes(query.toLowerCase()) ||
-              tableMap.get(v.tableId)?.toLowerCase().includes(query.toLowerCase())
-            )
-          : views;
-
-        const result = filteredViews.map((v) => ({
-          id: v.id,
-          name: v.name,
-          tableId: v.tableId,
-          tableName: tableMap.get(v.tableId) || `Table ${v.tableId}`,
-          title: `${v.name}`,
-          description: `Table: ${tableMap.get(v.tableId) || v.tableId} | ${v.filters.length} filters, ${v.sorting.length} sorts`,
-        }));
-
-        console.log('[viewId fetchList] Returning options:', result.length);
-        return result;
-      },
-      mapProp: (item: any) => item?.id || null,
-      getItemSummary: (item: any, context: any) => {
-        // item is the viewId (number)
-        // Try to get view name from context if available
-        const viewId = typeof item === 'number' ? item : item?.id;
-        const viewName = context?.props?._viewName;
-        const tableName = context?.props?._tableName;
-
-        if (viewName && tableName) {
-          return `${viewName} (${tableName})`;
-        } else if (viewName) {
-          return viewName;
-        } else if (viewId) {
-          return `View ID: ${viewId}`;
-        }
-        return "No view selected";
-      },
-    } as any,
+    // View Selection - Inline creation and editing support
+    // AIDEV-NOTE: Using custom view management field for inline view creation.
+    // Users can create/edit grid views directly from the Puck sidebar.
+    viewId: createViewManagementField({
+      supportedViewTypes: ['grid'],
+      label: 'Grid View',
+    }),
 
     // Hidden fields populated by resolveData
     _viewName: {
