@@ -335,7 +335,7 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
             sorting: viewType === 'grid' ? gridSorting : undefined,
             fieldMappings: viewType === 'grid' && gridFieldMappings.length > 0 ? gridFieldMappings : undefined,
             pagination: viewType === 'grid' ? { pageSize: gridDefaultPageSize } : undefined,
-          })
+          }, '/data') // Revalidate to refresh apps page
         : await createView({
             tableId,
             name: name.trim(),
@@ -345,7 +345,7 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
             fieldMappings: viewType === 'grid' && gridFieldMappings.length > 0 ? gridFieldMappings : undefined,
             viewType: viewTypeVO,
             viewConfig: viewConfigVO,
-          });
+          }, '/data'); // Revalidate to refresh apps page
 
       if (!result.success) {
         setError(result.error || 'Failed to save view');

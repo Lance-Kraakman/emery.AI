@@ -8,6 +8,7 @@ from aws_cdk import (
     aws_iam as iam,
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as origins,
+    aws_servicediscovery as servicediscovery,
     custom_resources,
     Aws,
     Duration,
