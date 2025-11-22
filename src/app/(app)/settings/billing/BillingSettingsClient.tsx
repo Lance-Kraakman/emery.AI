@@ -14,6 +14,8 @@ import { StorageUsageCard } from '@/components/billing/StorageUsageCard';
 import { CreditUsageCard } from '@/components/billing/CreditUsageCard';
 import { SpendingLimitControl } from '@/components/billing/SpendingLimitControl';
 import { InvoiceList } from '@/components/billing/InvoiceList';
+import { CreditBreakdownTabs } from '@/components/billing/CreditBreakdownTabs';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
@@ -26,12 +28,17 @@ import type { StorageUsage } from '@/components/billing/StorageUsageCard';
 import type { CreditUsage } from '@/components/billing/CreditUsageCard';
 import type { BillingOverview } from '@/components/billing/BillingOverviewCard';
 import type { Invoice } from '@/components/billing/InvoiceList';
+import type { BreakdownItem } from '@/components/billing/CreditBreakdownTabs';
 
 export interface BillingSettingsClientProps {
   billingStatus: any; // From getBillingStatus action
   storageUsage: StorageUsage | null;
   invoices: Invoice[];
   organizationId: number;
+  modelBreakdown: BreakdownItem[];
+  agentBreakdown: BreakdownItem[];
+  userBreakdown: BreakdownItem[];
+  typeBreakdown: BreakdownItem[];
 }
 
 export function BillingSettingsClient({
@@ -39,6 +46,10 @@ export function BillingSettingsClient({
   storageUsage,
   invoices,
   organizationId,
+  modelBreakdown,
+  agentBreakdown,
+  userBreakdown,
+  typeBreakdown,
 }: BillingSettingsClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -299,22 +310,50 @@ export function BillingSettingsClient({
 
         {/* Usage & Limits Tab */}
         <TabsContent value="usage" className="space-y-4">
-          {storageUsage && (
-            <StorageUsageCard
-              usage={storageUsage}
-              tierName={tier}
-              onUpgrade={() => handleSelectTier('pro')}
-            />
-          )}
+          {/* Two-column grid: Credit (LHS) + Storage (RHS) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* LEFT: Credit Usage & Breakdown */}
+            <div className="space-y-4">
+              {creditUsage && (
+                <CreditUsageCard
+                  usage={creditUsage}
+                  tierName={tier}
+                  showOverage={true}
+                />
+              )}
 
-          {creditUsage && (
-            <CreditUsageCard
-              usage={creditUsage}
-              tierName={tier}
-              showOverage={true}
-            />
-          )}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Usage Breakdown</CardTitle>
+                  <CardDescription className="text-xs">
+                    View credit usage by different dimensions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <CreditBreakdownTabs
+                    organizationId={organizationId}
+                    modelBreakdown={modelBreakdown}
+                    agentBreakdown={agentBreakdown}
+                    userBreakdown={userBreakdown}
+                    typeBreakdown={typeBreakdown}
+                  />
+                </CardContent>
+              </Card>
+            </div>
 
+            {/* RIGHT: Storage Usage */}
+            <div>
+              {storageUsage && (
+                <StorageUsageCard
+                  usage={storageUsage}
+                  tierName={tier}
+                  onUpgrade={() => handleSelectTier('pro')}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Full-width: Spending Limit */}
           {hasActiveSubscription && (
             <SpendingLimitControl
               currentLimit={billingStatus?.spendingLimitUsd ? parseFloat(billingStatus.spendingLimitUsd) : null}

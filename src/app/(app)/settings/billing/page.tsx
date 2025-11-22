@@ -10,12 +10,19 @@ import { redirect } from 'next/navigation';
 import { getStorageQuotaApplicationService } from '@/ddd/application/di/container';
 import { getBillingStatus } from '@/app/actions/billing';
 import { getOrganizationInvoices } from '@/app/actions/invoices';
+import {
+  getCreditBreakdownByModel,
+  getCreditBreakdownByAgent,
+  getCreditBreakdownByUser,
+  getCreditBreakdownByType,
+} from '@/app/actions/credits';
 import { BillingSettingsClient } from './BillingSettingsClient';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Invoice } from '@/components/billing/InvoiceList';
 import type { StorageUsage } from '@/components/billing/StorageUsageCard';
 import type { InvoiceDTO } from '@/ddd/application/services/billing/invoice-application-service';
 import type { StorageUsageBreakdown } from '@/ddd/application/services/billing/storage-quota-application-service';
+import type { BreakdownItem } from '@/components/billing/CreditBreakdownTabs';
 
 export const metadata: Metadata = {
   title: 'Billing Settings',
@@ -34,11 +41,23 @@ export default async function BillingSettingsPage() {
     redirect('/setup');
   }
 
-  // Fetch billing data
-  const [billingStatusResult, storageUsageResult, invoicesResult] = await Promise.all([
+  // Fetch billing data and credit breakdowns
+  const [
+    billingStatusResult,
+    storageUsageResult,
+    invoicesResult,
+    modelBreakdownResult,
+    agentBreakdownResult,
+    userBreakdownResult,
+    typeBreakdownResult,
+  ] = await Promise.all([
     getBillingStatus(),
     getStorageQuotaApplicationService().getUsageBreakdown(organizationId),
     getOrganizationInvoices(10, 0),
+    getCreditBreakdownByModel(organizationId),
+    getCreditBreakdownByAgent(organizationId),
+    getCreditBreakdownByUser(organizationId),
+    getCreditBreakdownByType(organizationId),
   ]);
 
   // Handle errors gracefully
@@ -64,6 +83,12 @@ export default async function BillingSettingsPage() {
     invoicePdf: null, // Not available in InvoiceDTO
   }));
 
+  // Extract credit breakdown data
+  const modelBreakdown: BreakdownItem[] = modelBreakdownResult.success && modelBreakdownResult.data ? modelBreakdownResult.data : [];
+  const agentBreakdown: BreakdownItem[] = agentBreakdownResult.success && agentBreakdownResult.data ? agentBreakdownResult.data : [];
+  const userBreakdown: BreakdownItem[] = userBreakdownResult.success && userBreakdownResult.data ? userBreakdownResult.data : [];
+  const typeBreakdown: BreakdownItem[] = typeBreakdownResult.success && typeBreakdownResult.data ? typeBreakdownResult.data : [];
+
   return (
     <div className="container mx-auto py-4 px-4">
       <div className="max-w-5xl mx-auto space-y-4">
@@ -79,6 +104,10 @@ export default async function BillingSettingsPage() {
             storageUsage={storageUsage}
             invoices={invoices}
             organizationId={organizationId}
+            modelBreakdown={modelBreakdown}
+            agentBreakdown={agentBreakdown}
+            userBreakdown={userBreakdown}
+            typeBreakdown={typeBreakdown}
           />
         </Suspense>
       </div>

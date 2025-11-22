@@ -60,8 +60,8 @@ export async function updateOrganizationSettings(data: {
         }
       );
 
-      // Revalidate the usage settings page
-      revalidatePath('/settings/usage');
+      // Revalidate the system settings page
+      revalidatePath('/settings/system');
 
       return {
         success: true,

@@ -1,30 +1,67 @@
-"use client"
+import { Suspense } from 'react';
+import { Metadata } from 'next';
+import { auth } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+import { SystemSettingsClient } from './SystemSettingsClient';
+import { getOrganizationRepository } from '@/ddd/application/di/getters';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { Skeleton } from '@/components/ui/skeleton';
 
-import React from "react"
-import { ThemeToggle } from "./ThemeToggle"
+export const metadata: Metadata = {
+  title: 'System Settings',
+  description: 'Manage system-wide settings and organization configuration',
+};
 
-export default function SystemSettingsPage() {
+export default async function SystemSettingsPage() {
+  const session = await auth();
+
+  if (!session?.user?.currentOrganizationId) {
+    redirect('/login');
+  }
+
+  // Fetch organization data
+  const orgRepo = getOrganizationRepository();
+  const organization = await orgRepo.findById(
+    OrganizationId.fromNumber(session.user.currentOrganizationId)
+  );
+
+  if (!organization) {
+    redirect('/login');
+  }
+
   return (
-    <div className="flex justify-center items-center h-full">
-      <div className="w-full max-w-md space-y-6">
+    <div className="container mx-auto py-4 px-4">
+      <div className="max-w-3xl mx-auto space-y-4">
+        {/* Header */}
         <div>
-          <h3 className="text-lg font-medium">System</h3>
-          <p className="text-sm text-muted-foreground">
-            Manage system-wide settings.
+          <h1 className="text-2xl font-bold tracking-tight">System Settings</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Manage system-wide settings and organization configuration
           </p>
         </div>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="font-medium">Appearance</h4>
-              <p className="text-sm text-muted-foreground">
-                Toggle between light and dark mode.
-              </p>
-            </div>
-            <ThemeToggle />
-          </div>
-        </div>
+
+        {/* Settings Content */}
+        <Suspense fallback={<SystemSettingsSkeleton />}>
+          <SystemSettingsClient
+            organizationId={session.user.currentOrganizationId}
+            organizationTier={organization.tier || 'free'}
+            currentModel={organization.defaultModel || null}
+            availableModels={organization.availableModels || []}
+          />
+        </Suspense>
       </div>
     </div>
-  )
+  );
+}
+
+/**
+ * Loading skeleton for system settings
+ */
+function SystemSettingsSkeleton() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-[120px]" />
+      <Skeleton className="h-[200px]" />
+    </div>
+  );
 }
