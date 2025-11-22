@@ -40,6 +40,9 @@ export interface LinkActionConfig {
   /** For actionType: 'signIn' | 'signOut' - URL to redirect to after auth action */
   redirectAfter?: string;
 
+  /** Optional anchor ID to link to specific section (e.g., #hero-section) */
+  anchorId?: string;
+
   /** Custom HREF override - takes precedence over all other settings */
   customHref?: string;
 }
