@@ -173,20 +173,20 @@ export function BillingSettingsClient({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       {/* Welcome Banner for New Organizations */}
       {showWelcome && (
         <Alert className="relative border-green-500 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950 dark:to-blue-950">
           <Sparkles className="h-5 w-5 text-green-600" />
           <AlertDescription className="pr-8">
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
               <div className="text-base font-semibold text-green-900 dark:text-green-100">
                 🎉 Welcome! Your workspace is ready on the Free plan
               </div>
               <div className="text-sm text-green-800 dark:text-green-200">
                 <strong>Free Plan includes:</strong> 1GB storage • 3 team members • Basic features
               </div>
-              <div className="flex gap-3 mt-2">
+              <div className="flex gap-3 mt-1">
                 <Button
                   onClick={handleExplorePlans}
                   className="bg-green-600 hover:bg-green-700 text-white"
@@ -233,7 +233,7 @@ export function BillingSettingsClient({
       )}
 
       {/* Main Content Tabs */}
-      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
+      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="usage">Usage & Limits</TabsTrigger>
@@ -242,7 +242,7 @@ export function BillingSettingsClient({
         </TabsList>
 
         {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
+        <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Billing Overview */}
             <BillingOverviewCard
@@ -298,7 +298,7 @@ export function BillingSettingsClient({
         </TabsContent>
 
         {/* Usage & Limits Tab */}
-        <TabsContent value="usage" className="space-y-6">
+        <TabsContent value="usage" className="space-y-4">
           {storageUsage && (
             <StorageUsageCard
               usage={storageUsage}
@@ -324,10 +324,10 @@ export function BillingSettingsClient({
         </TabsContent>
 
         {/* Plans & Pricing Tab */}
-        <TabsContent value="plans" className="space-y-6">
+        <TabsContent value="plans" className="space-y-4">
           <div>
-            <h3 className="text-lg font-semibold mb-2">Choose Your Plan</h3>
-            <p className="text-muted-foreground text-sm mb-6">
+            <h3 className="text-lg font-semibold mb-1">Choose Your Plan</h3>
+            <p className="text-muted-foreground text-sm mb-4">
               Select the plan that best fits your needs. All plans include core features with increasing limits.
             </p>
           </div>
@@ -353,7 +353,7 @@ export function BillingSettingsClient({
         </TabsContent>
 
         {/* Invoices Tab */}
-        <TabsContent value="invoices" className="space-y-6">
+        <TabsContent value="invoices" className="space-y-4">
           <InvoiceList
             invoices={invoices}
             emptyMessage={
