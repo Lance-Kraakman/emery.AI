@@ -28,6 +28,7 @@ export class DrizzleTokenUsageRepository implements ITokenUsageRepository {
         outputTokens: data.outputTokens,
         totalTokens: data.totalTokens,
         costUsd: data.costUsd,
+        creditsUsed: data.creditsUsed || 0, // CRITICAL: Populate for billing
         processingTimeMs: data.processingTimeMs,
         metadata: data.metadata as any,
       })
@@ -159,10 +160,14 @@ export class DrizzleTokenUsageRepository implements ITokenUsageRepository {
     organizationId: OrganizationId,
     totalTokens: number
   ): Promise<void> {
+    // CRITICAL: Update both token usage AND credit usage for billing
+    // creditsUsed is populated in tokenUsageLogs during create()
+    // Here we update the monthly counter for quota/limit enforcement
     await this.db
       .update(organizations)
       .set({
         tokenUsageCurrentMonth: sql`${organizations.tokenUsageCurrentMonth} + ${totalTokens}`,
+        creditsUsedCurrentMonth: sql`${organizations.creditsUsedCurrentMonth} + ${totalTokens}`,
       })
       .where(eq(organizations.id, organizationId.value));
   }

@@ -232,6 +232,27 @@
       "when": 1763421213176,
       "tag": "0032_stale_grey_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1763775676950,
+      "tag": "0033_sour_expediter",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1763778558943,
+      "tag": "0034_opposite_reavers",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1763791337573,
+      "tag": "0035_known_taskmaster",
+      "breakpoints": true
     }
   ]
 }

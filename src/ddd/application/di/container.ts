@@ -150,9 +150,10 @@ export class DIContainer {
     this.registerServices('puck', puckServices);
 
     // Phase 9: Register connection services (optional - Pipedream)
-    // Depends on: agent repository, delegation service (for security)
+    // Depends on: agent repository, organization repository, delegation service (for security)
     const connectionServices = registerConnectionServices({
       agentRepository: agentServices.agentRepository,
+      organizationRepository: coreServices.organizationRepository,
       delegationApplicationService: delegationServices.delegationApplicationService
     });
     this.registerServices('connection', connectionServices);
@@ -333,6 +334,8 @@ export {
   // Billing application services
   getTokenUsageApplicationService,
   getCreditUsageApplicationService,
+  getStorageQuotaApplicationService,
+  getInvoiceApplicationService,
 
   // Domain services
   getDynamicTableService,

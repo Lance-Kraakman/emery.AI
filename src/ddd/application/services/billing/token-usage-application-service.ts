@@ -12,6 +12,7 @@ import { calculateTokenCost } from '@/lib/ai/model-registry';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
+import { PRICE_PER_CREDIT_USD } from '@/lib/stripe/config';
 
 const logger = createDebugLogger('TokenUsageService');
 
@@ -34,6 +35,18 @@ export interface QuotaCheckResult {
   monthlyQuota?: number;
   percentageUsed?: number;
   quotaExceeded: boolean;
+}
+
+export interface SpendingLimitCheckResult {
+  allowed: boolean;
+  reason?: string;
+  currentAllowanceUsed: number; // Credits used from subscription allowance
+  allowanceLimit: number; // Total subscription allowance
+  currentOverageUsed: number; // Credits used beyond allowance
+  currentOverageCostUsd: number; // Cost of overage usage
+  spendingLimitUsd: number; // Maximum overage spending allowed
+  spendingLimitExceeded: boolean;
+  allowanceExceeded: boolean;
 }
 
 export interface UsageStatisticsDTO {
@@ -183,6 +196,113 @@ export class TokenUsageApplicationService {
         allowed: false,
         currentUsage: 0,
         quotaExceeded: true,
+      };
+    }
+  }
+
+  /**
+   * Check spending limits with subscription allowance and overage enforcement
+   *
+   * New billing model:
+   * 1. First consume subscription allowance (usageAllowanceCredits)
+   * 2. After allowance exhausted, check spending limit for overage
+   * 3. Block if overage would exceed spending limit (default $0)
+   *
+   * @param organizationId - Organization to check
+   * @param additionalCredits - Credits about to be consumed
+   */
+  async checkSpendingLimit(
+    organizationId: number,
+    additionalCredits: number = 0
+  ): Promise<SpendingLimitCheckResult> {
+    try {
+      const orgId = OrganizationId.fromNumber(organizationId);
+      const organization = await this.organizationRepository.findById(orgId);
+
+      if (!organization) {
+        logger.error('Organization not found for spending limit check', { organizationId });
+        return {
+          allowed: false,
+          reason: 'Organization not found',
+          currentAllowanceUsed: 0,
+          allowanceLimit: 0,
+          currentOverageUsed: 0,
+          currentOverageCostUsd: 0,
+          spendingLimitUsd: 0,
+          spendingLimitExceeded: true,
+          allowanceExceeded: true,
+        };
+      }
+
+      const allowanceLimit = organization.usageAllowanceCredits ?? 0;
+      const currentUsage = organization.creditsUsedCurrentMonth ?? 0;
+      const spendingLimitUsd = organization.spendingLimitUsd ? parseFloat(organization.spendingLimitUsd.toString()) : 0;
+
+      // Calculate current state
+      const currentAllowanceUsed = Math.min(currentUsage, allowanceLimit);
+      const currentOverageUsed = Math.max(0, currentUsage - allowanceLimit);
+      const currentOverageCostUsd = currentOverageUsed * PRICE_PER_CREDIT_USD;
+
+      // Calculate projected state after additional credits
+      const projectedUsage = currentUsage + additionalCredits;
+      const projectedOverageUsed = Math.max(0, projectedUsage - allowanceLimit);
+      const projectedOverageCostUsd = projectedOverageUsed * PRICE_PER_CREDIT_USD;
+
+      const allowanceExceeded = projectedUsage > allowanceLimit;
+      const spendingLimitExceeded = projectedOverageCostUsd > spendingLimitUsd;
+
+      // Determine if usage is allowed
+      let allowed = true;
+      let reason: string | undefined;
+
+      if (allowanceExceeded && spendingLimitExceeded) {
+        allowed = false;
+        if (spendingLimitUsd === 0) {
+          reason = `Monthly allowance of ${allowanceLimit.toLocaleString()} credits exhausted. Raise spending limit to enable overage usage.`;
+        } else {
+          reason = `Spending limit of $${spendingLimitUsd.toFixed(2)} would be exceeded (projected: $${projectedOverageCostUsd.toFixed(2)}). Raise limit to continue.`;
+        }
+      }
+
+      logger.debug('Spending limit check', {
+        organizationId,
+        allowanceLimit,
+        currentUsage,
+        currentAllowanceUsed,
+        currentOverageUsed,
+        currentOverageCostUsd: currentOverageCostUsd.toFixed(4),
+        spendingLimitUsd: spendingLimitUsd.toFixed(2),
+        additionalCredits,
+        projectedUsage,
+        projectedOverageCostUsd: projectedOverageCostUsd.toFixed(4),
+        allowed,
+        reason,
+      });
+
+      return {
+        allowed,
+        reason,
+        currentAllowanceUsed,
+        allowanceLimit,
+        currentOverageUsed,
+        currentOverageCostUsd,
+        spendingLimitUsd,
+        spendingLimitExceeded,
+        allowanceExceeded,
+      };
+    } catch (error) {
+      logger.error('Failed to check spending limit', { error, organizationId });
+      // Fail safe - deny access on error
+      return {
+        allowed: false,
+        reason: 'System error during spending limit check',
+        currentAllowanceUsed: 0,
+        allowanceLimit: 0,
+        currentOverageUsed: 0,
+        currentOverageCostUsd: 0,
+        spendingLimitUsd: 0,
+        spendingLimitExceeded: true,
+        allowanceExceeded: true,
       };
     }
   }

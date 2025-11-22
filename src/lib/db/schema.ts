@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, serial, bigserial, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole, index, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, serial, bigserial, bigint, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole, index, doublePrecision, numeric } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
@@ -436,8 +436,29 @@ export const organizations = pgTable("organizations", {
   creditsUsedCurrentMonth: integer("credits_used_current_month").default(0).notNull(), // Credits used this month
   creditsResetAt: timestamp("credits_reset_at"), // When credits were last reset (for monthly free tier)
 
+  // Pay-as-you-go subscription billing fields (Free/Pro/Max/Enterprise tiers)
+  // AIDEV-NOTE: All tiers include monthly credit allowance. Overage billed at end of billing cycle.
+  usageAllowanceCredits: integer("usage_allowance_credits").default(0).notNull(), // Credits included in subscription per month
+  spendingLimitUsd: numeric("spending_limit_usd", { precision: 10, scale: 2 }).default("0").notNull(), // Overage spending cap (default $0 = allowance-only)
+  customPriceId: text("custom_price_id"), // Stripe custom price ID for Enterprise customers (null for standard tiers)
+  billingEmail: text("billing_email"), // Email for billing notifications (if different from org owner)
+  currentPeriodStart: timestamp("current_period_start"), // Start of current billing period
+  currentPeriodEnd: timestamp("current_period_end"), // End of current billing period
+
+  // Storage tracking fields (for billing and quota enforcement)
+  // AIDEV-NOTE: Storage quota based on tier (Free: 1GB, Pro: 10GB, Enterprise: 30GB+)
+  storageQuotaBytes: bigint("storage_quota_bytes", { mode: "number" }).default(sql`1073741824`).notNull(), // Storage quota in bytes (default 1GB)
+  storageUsedBytes: bigint("storage_used_bytes", { mode: "number" }).default(sql`0`).notNull(), // Total storage used in bytes
+  databaseStorageBytes: bigint("database_storage_bytes", { mode: "number" }).default(sql`0`).notNull(), // Storage used by database files/docs
+  chatStorageBytes: bigint("chat_storage_bytes", { mode: "number" }).default(sql`0`).notNull(), // Storage used by chat attachments
+  skillStorageBytes: bigint("skill_storage_bytes", { mode: "number" }).default(sql`0`).notNull(), // Storage used by skill attachments
+  storageOverageNotifiedAt: timestamp("storage_overage_notified_at"), // Last time user was notified about storage overage
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
+  // Index for webhook lookups by Stripe customer ID
+  index("organizations_stripe_customer_idx").on(table.stripeCustomerId),
+
   // RBAC-based policy for viewing organizations
   pgPolicy("organizations_view_permission", {
     as: "permissive",
@@ -1322,6 +1343,65 @@ export const creditPurchases = pgTable("credit_purchases", {
 
   // RBAC policy: only organization managers can view credit purchases
   pgPolicy("credit_purchases_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'organizations:manage',
+        organization_id
+      )`
+  }),
+]);
+
+// AIDEV-NOTE: Invoices table - tracks monthly billing cycles and pay-as-you-go overage charges
+export const invoices = pgTable("invoices", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+
+  // Stripe references
+  stripeInvoiceId: text("stripe_invoice_id").unique(), // Stripe invoice ID (null for draft/proforma invoices)
+  stripeSubscriptionId: text("stripe_subscription_id"), // Associated subscription if applicable
+
+  // Billing period
+  periodStart: timestamp("period_start").notNull(), // Start of billing period
+  periodEnd: timestamp("period_end").notNull(), // End of billing period
+
+  // Usage breakdown (credits)
+  includedCreditsUsed: integer("included_credits_used").default(0).notNull(), // Credits used from subscription allowance
+  overageCreditsUsed: integer("overage_credits_used").default(0).notNull(), // Credits used beyond allowance
+  totalCreditsUsed: integer("total_credits_used").default(0).notNull(), // Total credits consumed in period
+
+  // Amounts (all in USD)
+  subscriptionAmountUsd: numeric("subscription_amount_usd", { precision: 10, scale: 2 }).default("0").notNull(), // Base subscription fee
+  overageAmountUsd: numeric("overage_amount_usd", { precision: 10, scale: 2 }).default("0").notNull(), // Pay-as-you-go overage charges
+  totalAmountUsd: numeric("total_amount_usd", { precision: 10, scale: 2 }).notNull(), // Total invoice amount
+
+  // Status tracking
+  status: text("status").notNull().default("draft"), // 'draft', 'open', 'paid', 'void', 'uncollectible'
+
+  // Timestamps
+  invoicedAt: timestamp("invoiced_at"), // When invoice was finalized
+  paidAt: timestamp("paid_at"), // When payment was received
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+
+  // Metadata for additional context
+  metadata: jsonb("metadata").$type<{
+    tier?: string; // Subscription tier at time of invoice
+    paymentMethod?: string;
+    failureReason?: string;
+    notes?: string;
+  }>(),
+}, (table) => [
+  // Indexes for efficient querying
+  index("invoices_organization_idx").on(table.organizationId),
+  index("invoices_stripe_invoice_idx").on(table.stripeInvoiceId),
+  index("invoices_period_idx").on(table.periodStart, table.periodEnd),
+  index("invoices_status_idx").on(table.status),
+
+  // RBAC policy: only organization managers can view invoices
+  pgPolicy("invoices_view_permission", {
     as: "permissive",
     for: "select",
     to: "public",

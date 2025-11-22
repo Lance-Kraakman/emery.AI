@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, hasPermission } from "@/lib/auth";
-import { getFileApplicationService, getTableApplicationService, getDocumentApplicationService } from "@/ddd/application/di/container";
+import { getFileApplicationService, getTableApplicationService, getDocumentApplicationService, getStorageQuotaApplicationService } from "@/ddd/application/di/container";
 import { OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
 import type { UploadFileCommand } from "@/ddd/application/services/tables/file-application-service";
 import type { CreateTiptapDocumentCommand } from "@/ddd/application/services/tables/document-application-service";
@@ -73,6 +73,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check storage quota before upload
+    const storageQuotaService = getStorageQuotaApplicationService();
+
+    // Calculate upload size (actual file size or estimated for TipTap documents)
+    const uploadSizeBytes = file ? file.size : (initialContent ? new Blob([initialContent]).size : 1024); // 1KB estimate for empty docs
+
+    const quotaCheckResult = await storageQuotaService.checkQuota({
+      organizationId,
+      uploadSizeBytes,
+      category: 'database' // Table uploads are categorized as database storage
+    });
+
+    if (!quotaCheckResult.success) {
+      return NextResponse.json(
+        { error: quotaCheckResult.error || 'Failed to check storage quota' },
+        { status: 500 }
+      );
+    }
+
+    if (!quotaCheckResult.data?.allowed) {
+      return NextResponse.json(
+        {
+          error: quotaCheckResult.data?.reason || 'Storage quota exceeded',
+          quotaInfo: {
+            currentUsageBytes: quotaCheckResult.data?.currentUsageBytes,
+            quotaBytes: quotaCheckResult.data?.quotaBytes,
+            percentageUsed: quotaCheckResult.data?.percentageUsed
+          }
+        },
+        { status: 413 } // 413 Payload Too Large
+      );
+    }
+
     // Route to appropriate service based on request type
     if (isTiptapDocumentRequest) {
       // Use DocumentApplicationService for TipTap document creation
@@ -102,6 +135,13 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
+
+      // Increment storage usage after successful document creation
+      await storageQuotaService.incrementUsage({
+        organizationId,
+        uploadSizeBytes,
+        category: 'database'
+      });
 
       return NextResponse.json({
         data: result.data,
@@ -139,6 +179,13 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
+
+      // Increment storage usage after successful file upload
+      await storageQuotaService.incrementUsage({
+        organizationId,
+        uploadSizeBytes,
+        category: 'database'
+      });
 
       return NextResponse.json({
         data: result.data,
