@@ -6,6 +6,9 @@ import { SignInButton } from "@/components/auth/SignInButton";
 import { EmailSignInForm } from "@/components/auth/EmailSignInForm";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle } from "lucide-react";
+import { useLinkContext } from "@/components/puck/link-context";
+import { resolveLinkAction } from "@/components/puck/utils/resolve-link-action";
+import type { LinkActionConfig } from "@/components/puck/custom-fields/link-action-field";
 
 export interface LoginBlockProps {
   title: string;
@@ -13,7 +16,7 @@ export interface LoginBlockProps {
   showGithub: boolean;
   showGoogle: boolean;
   showEmail: boolean;
-  redirectAfterLogin: string;
+  redirectAction: LinkActionConfig;
   backgroundColor?: string;
   textColor?: string;
   buttonColor?: string;
@@ -28,7 +31,7 @@ export function LoginBlock({
   showGithub,
   showGoogle,
   showEmail,
-  redirectAfterLogin,
+  redirectAction,
   backgroundColor,
   textColor,
   buttonColor,
@@ -38,6 +41,7 @@ export function LoginBlock({
 }: LoginBlockProps) {
   const { isAuthenticated, isLoading, user, appId } = usePublicAppAuth();
   const isPreviewMode = appId === 0;
+  const linkContext = useLinkContext();
 
   // Show loading state (but not in preview mode)
   if (isLoading && !isPreviewMode) {
@@ -83,8 +87,11 @@ export function LoginBlock({
     );
   }
 
-  // Determine callback URL
-  const callbackUrl = redirectAfterLogin || (typeof window !== 'undefined' ? window.location.pathname : '/');
+  // Resolve the redirect action to get the callback URL
+  const resolvedAction = resolveLinkAction(redirectAction, linkContext);
+  const callbackUrl = resolvedAction.href !== '#'
+    ? resolvedAction.href
+    : (typeof window !== 'undefined' ? window.location.pathname : '/');
 
   return (
     <div className="flex items-center justify-center">

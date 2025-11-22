@@ -73,15 +73,7 @@ export class DIContainer {
     const coreServices = registerCoreServices({ db });
     this.registerServices('core', coreServices);
 
-    // Phase 2: Register billing services (token usage tracking)
-    // Depends on: organization repository
-    const billingServices = registerBillingServices({
-      db,
-      organizationRepository: coreServices.organizationRepository
-    });
-    this.registerServices('billing', billingServices);
-
-    // Phase 3: Register agent services
+    // Phase 2: Register agent services
     // Depends on: team repository
     const agentServices = registerAgentServices({
       db,
@@ -107,6 +99,15 @@ export class DIContainer {
       taskRepository: agentServices.taskRepository
     });
     this.registerServices('database', databaseServices);
+
+    // Phase 4.5: Register billing services (token usage, invoices, storage)
+    // Depends on: organization repository, file storage repository
+    const billingServices = registerBillingServices({
+      db,
+      organizationRepository: coreServices.organizationRepository,
+      fileStorageRepository: databaseServices.fileStorageRepository
+    });
+    this.registerServices('billing', billingServices);
 
     // Phase 4.5: Register view services (Puck integration)
     // Depends on: table application service
@@ -150,9 +151,10 @@ export class DIContainer {
     this.registerServices('puck', puckServices);
 
     // Phase 9: Register connection services (optional - Pipedream)
-    // Depends on: agent repository, delegation service (for security)
+    // Depends on: agent repository, organization repository, delegation service (for security)
     const connectionServices = registerConnectionServices({
       agentRepository: agentServices.agentRepository,
+      organizationRepository: coreServices.organizationRepository,
       delegationApplicationService: delegationServices.delegationApplicationService
     });
     this.registerServices('connection', connectionServices);
@@ -188,8 +190,12 @@ export class DIContainer {
 
       // Billing domain
       'tokenUsageRepository': 'ITokenUsageRepository',
+      'invoiceRepository': 'IInvoiceRepository',
       'tokenUsageApplicationService': 'TokenUsageApplicationService',
       'creditUsageApplicationService': 'CreditUsageApplicationService',
+      'invoiceApplicationService': 'InvoiceApplicationService',
+      'storageQuotaApplicationService': 'StorageQuotaApplicationService',
+      'storageRecalculationApplicationService': 'StorageRecalculationApplicationService',
 
       // Agent domain
       'agentRepository': 'IAgentRepository',
@@ -333,6 +339,9 @@ export {
   // Billing application services
   getTokenUsageApplicationService,
   getCreditUsageApplicationService,
+  getStorageQuotaApplicationService,
+  getStorageRecalculationApplicationService,
+  getInvoiceApplicationService,
 
   // Domain services
   getDynamicTableService,

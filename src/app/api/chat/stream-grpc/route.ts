@@ -23,7 +23,7 @@ import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
-import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository, getSkillApplicationService } from '@/ddd/application/di/container';
+import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository, getSkillApplicationService, getStorageQuotaApplicationService } from '@/ddd/application/di/container';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 import type { CreateChatDTO, SendMessageDTO, ExecutionStep, ExecutionStepMetadata } from '@/app/dtos/chat.dto';
@@ -273,6 +273,20 @@ export async function POST(req: NextRequest) {
     if (uploadedFiles.length > 0 && currentChatId) {
       console.log('[CHAT-GRPC-API] Uploading attachments to S3');
 
+      // Check storage quota before uploading chat attachments
+      const storageQuotaService = getStorageQuotaApplicationService();
+      const totalUploadSize = uploadedFiles.reduce((sum, file) => sum + file.size, 0);
+
+      const quotaCheckResult = await storageQuotaService.checkQuota({
+        organizationId,
+        uploadSizeBytes: totalUploadSize,
+        category: 'chat'
+      });
+
+      if (!quotaCheckResult.success || !quotaCheckResult.data?.allowed) {
+        throw new Error(quotaCheckResult.data?.reason || 'Storage quota exceeded. Unable to upload attachments.');
+      }
+
       for (const file of uploadedFiles) {
         try {
           // Determine attachment type from MIME type
@@ -304,6 +318,15 @@ export async function POST(req: NextRequest) {
           console.error('[CHAT-GRPC-API] Failed to upload attachment:', file.name, error);
           // Continue with other files even if one fails
         }
+      }
+
+      // Increment storage usage after successful uploads
+      if (attachmentMetadata.length > 0) {
+        await storageQuotaService.incrementUsage({
+          organizationId,
+          uploadSizeBytes: totalUploadSize,
+          category: 'chat'
+        });
       }
     }
 

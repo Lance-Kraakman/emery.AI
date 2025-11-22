@@ -9,6 +9,7 @@ import {
   borderColorField,
   borderRadiusField
 } from "@/components/puck/fields/standard-fields";
+import { createLinkActionField, type LinkActionConfig } from "@/components/puck/custom-fields";
 
 export type LoginBlockProps = {
   title: string;
@@ -16,7 +17,7 @@ export type LoginBlockProps = {
   showGithub: boolean;
   showGoogle: boolean;
   showEmail: boolean;
-  redirectAfterLogin: string;
+  redirectAction: LinkActionConfig;
   // Theme fields
   backgroundColor?: string;
   textColor?: string;
@@ -61,10 +62,11 @@ export const LoginBlock: ComponentConfig<LoginBlockProps> = {
         { label: "No", value: false },
       ],
     },
-    redirectAfterLogin: {
-      type: "text",
-      label: "Redirect URL after login",
-    },
+    redirectAction: createLinkActionField({
+      label: "Redirect After Login",
+      allowedActionTypes: ['none', 'page', 'url'],
+      defaultActionType: 'none',
+    }),
     backgroundColor: backgroundColorField,
     textColor: textColorField,
     buttonColor: {
@@ -84,7 +86,9 @@ export const LoginBlock: ComponentConfig<LoginBlockProps> = {
     showGithub: true,
     showGoogle: true,
     showEmail: true,
-    redirectAfterLogin: "",
+    redirectAction: {
+      actionType: 'none',
+    },
     backgroundColor: undefined,
     textColor: undefined,
     buttonColor: undefined,

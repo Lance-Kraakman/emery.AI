@@ -4,6 +4,7 @@
 import { Metadata } from "next"
 import { notFound, redirect } from "next/navigation"
 import { getPublicApp, getPublicPage, checkPageAccess } from "@/app/actions/public-pages"
+import { getPublishedPages } from "@/app/actions/puck-pages"
 import { PublicPageRenderer } from "./PublicPageRenderer"
 import { auth } from "@/lib/auth"
 
@@ -43,7 +44,7 @@ export async function generateMetadata({
 export default async function PublicPage({ params }: PublicPageProps) {
   const { orgSlug, appSlug, pageSlug } = await params
 
-  // Fetch app and page data
+  // Fetch app, page, and all published pages for link resolution
   const [appResult, pageResult] = await Promise.all([
     getPublicApp(orgSlug, appSlug),
     getPublicPage(orgSlug, appSlug, pageSlug)
@@ -55,6 +56,10 @@ export default async function PublicPage({ params }: PublicPageProps) {
 
   const app = appResult.data
   const page = pageResult.data
+
+  // Fetch published pages for link resolution
+  const pagesResult = await getPublishedPages(app.id)
+  const pages = pagesResult.success && pagesResult.data ? pagesResult.data : []
 
   // Check authentication and access control
   const session = await auth()
@@ -93,6 +98,9 @@ export default async function PublicPage({ params }: PublicPageProps) {
     <PublicPageRenderer
       page={page}
       app={app}
+      orgSlug={orgSlug}
+      appSlug={appSlug}
+      pages={pages}
     />
   )
 }

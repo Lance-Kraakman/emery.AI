@@ -12,76 +12,21 @@
 
 import type { ComponentConfig } from "@measured/puck";
 import FormBlock, { type FormBlockProps } from "./FormBlock";
-import { getFormViewConfiguration, getViewsForOrganization } from "@/app/actions/views";
+import { getFormViewConfiguration } from "@/app/actions/views";
 import { getTables } from "@/app/actions/tables";
+import { createViewManagementField } from "../../custom-fields";
 
 export const FormBlockConfig: ComponentConfig<FormBlockProps> = {
   label: "Form",
 
   fields: {
-    // View Selection - Single required field showing "ViewName (TableName)"
-    viewId: {
-      label: "Form View",
-      type: "external",
-      placeholder: "Select a form view",
-      showSearch: true,
-      fetchList: async ({ query }: { query: string }) => {
-        console.log('[FormBlock.viewId fetchList] Fetching all views for organization');
-
-        // Get all views and tables
-        const [views, tables] = await Promise.all([
-          getViewsForOrganization(),
-          getTables()
-        ]);
-
-        console.log('[FormBlock.viewId fetchList] Found views:', views.length, 'tables:', tables.length);
-
-        // Filter to only form views
-        // AIDEV-NOTE: ViewMapper ensures viewType is always a string in DTOs
-        const formViews = views.filter(v => v.viewType === 'form');
-
-        console.log('[FormBlock.viewId fetchList] Found form views:', formViews.length);
-
-        // Create a table lookup map
-        const tableMap = new Map(tables.map(t => [t.id, t.name]));
-
-        // Filter by query if provided
-        const filteredViews = query
-          ? formViews.filter((v) =>
-              v.name.toLowerCase().includes(query.toLowerCase()) ||
-              tableMap.get(v.tableId)?.toLowerCase().includes(query.toLowerCase())
-            )
-          : formViews;
-
-        const result = filteredViews.map((v) => ({
-          id: v.id,
-          name: v.name,
-          tableId: v.tableId,
-          tableName: tableMap.get(v.tableId) || `Table ${v.tableId}`,
-          title: `${v.name}`,
-          description: `Table: ${tableMap.get(v.tableId) || v.tableId}`,
-        }));
-
-        console.log('[FormBlock.viewId fetchList] Returning options:', result.length);
-        return result;
-      },
-      mapProp: (item: any) => item?.id || null,
-      getItemSummary: (item: any, context: any) => {
-        // item is the viewId (number)
-        const viewId = typeof item === 'number' ? item : item?.id;
-        const viewName = context?.props?._viewName;
-        const tableName = context?.props?._tableName;
-
-        if (viewName && tableName) {
-          return `${viewName} (${tableName})`;
-        } else if (viewName) {
-          return viewName;
-        } else if (viewId) {
-          return `View ID: ${viewId}`;
-        }
-        return "No form view selected";
-      },
-    },
+    // View Selection - Inline creation and editing support
+    // AIDEV-NOTE: Using custom view management field for inline form view creation.
+    // Users can create/edit form views directly from the Puck sidebar.
+    viewId: createViewManagementField({
+      supportedViewTypes: ['form'],
+      label: 'Form View',
+    }),
   },
 
   /**

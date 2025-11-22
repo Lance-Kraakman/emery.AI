@@ -63,6 +63,14 @@ export class DrizzleOrganizationRepository
     return result.map((org: OrganizationRow) => this.fromPersistence(org));
   }
 
+  async findAll(): Promise<Organization[]> {
+    const result = await this.db
+      .select()
+      .from(organizations);
+
+    return result.map((org: OrganizationRow) => this.fromPersistence(org));
+  }
+
   async findByIdWithMembers(id: OrganizationId): Promise<OrganizationWithMembers | null> {
     const org = await this.findById(id);
     if (!org) return null;

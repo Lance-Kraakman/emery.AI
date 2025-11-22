@@ -36,6 +36,20 @@ export interface Organization {
   creditBalance?: number;
   creditsUsedCurrentMonth?: number;
   creditsResetAt?: Date | null;
+  // Pay-as-you-go subscription billing fields
+  usageAllowanceCredits?: number;
+  spendingLimitUsd?: string | null;
+  customPriceId?: string | null;
+  billingEmail?: string | null;
+  currentPeriodStart?: Date | null;
+  currentPeriodEnd?: Date | null;
+  // Storage quota and tracking fields (for tier-based storage limits)
+  storageQuotaBytes?: number;
+  storageUsedBytes?: number;
+  databaseStorageBytes?: number;
+  chatStorageBytes?: number;
+  skillStorageBytes?: number;
+  storageOverageNotifiedAt?: Date | null;
   createdAt?: Date | null;
   // Note: No updatedAt field - not present in organizations table schema
 }
@@ -61,6 +75,18 @@ export interface UpdateOrganizationData extends Partial<CreateOrganizationData> 
   creditBalance?: number;
   creditsUsedCurrentMonth?: number;
   creditsResetAt?: Date | null;
+  // Stripe fields
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripeSubscriptionStatus?: string | null;
+  billingEmail?: string | null;
+  // Storage tracking fields
+  storageQuotaBytes?: number;
+  storageUsedBytes?: number;
+  databaseStorageBytes?: number;
+  chatStorageBytes?: number;
+  skillStorageBytes?: number;
+  storageOverageNotifiedAt?: Date | null;
 }
 
 export interface OrganizationWithMembers extends Organization {

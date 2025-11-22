@@ -30,6 +30,7 @@ ENV NEXTAUTH_URL="http://localhost:3000"
 ENV GITHUB_CLIENT_ID="build-dummy-client-id"
 ENV GITHUB_CLIENT_SECRET="build-dummy-client-secret"
 ENV RESEND_API_KEY="build-dummy-resend-key"
+ENV STRIPE_SECRET_KEY="sk_test_build_dummy_key"
 ENV NODE_ENV=production
 RUN pnpm run build
 

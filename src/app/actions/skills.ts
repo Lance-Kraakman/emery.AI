@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getSkillApplicationService, getAgentApplicationService } from '@/ddd/application/di/container';
+import { getSkillApplicationService, getAgentApplicationService, getStorageQuotaApplicationService } from '@/ddd/application/di/container';
 import { SkillMapper } from '@/app/mappers/skill-mapper';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { getServerSession } from 'next-auth';
@@ -641,12 +641,38 @@ export async function uploadSkillAttachment(
 
     const skill = skillResult.data;
 
+    // Check storage quota before upload
+    const storageQuotaService = getStorageQuotaApplicationService();
+    const quotaCheckResult = await storageQuotaService.checkQuota({
+      organizationId: skill.organizationId.value,
+      uploadSizeBytes: file.size,
+      category: 'skill'
+    });
+
+    if (!quotaCheckResult.success) {
+      return { success: false, error: quotaCheckResult.error || 'Failed to check storage quota' };
+    }
+
+    if (!quotaCheckResult.data?.allowed) {
+      return {
+        success: false,
+        error: quotaCheckResult.data?.reason || 'Storage quota exceeded'
+      };
+    }
+
     // Upload to S3
     const uploadResult = await s3SkillAttachmentService.uploadAttachment({
       file,
       organizationId: skill.organizationId.value,
       skillId,
       type: attachmentType
+    });
+
+    // Increment storage usage after successful upload
+    await storageQuotaService.incrementUsage({
+      organizationId: skill.organizationId.value,
+      uploadSizeBytes: file.size,
+      category: 'skill'
     });
 
     return {

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 
-import { 
+import {
   getTaskRepository,
   getTaskQueueService,
   getSchedulerService,
@@ -8,6 +8,7 @@ import {
 } from "@/ddd/application/di/scheduling-container";
 import {
   getAgentTaskApplicationService,
+  getStorageRecalculationApplicationService,
   initializeDI
 } from "@/ddd/application/di/container";
 import { createNotificationClient, rawClient } from "@/lib/db/client";
@@ -19,6 +20,7 @@ import type { TaskEvent } from "@/ddd/domain/scheduling";
 import { DatabaseEventTriggerConfig, TriggerConfigFromJSON } from "@/ddd/domain/scheduling/value-objects/trigger-config";
 import { getAgentRepository } from "@/ddd/application/di/container";
 import postgres from "postgres";
+import * as cron from "node-cron";
 
 /**
  * Event-Driven Scheduler
@@ -28,12 +30,14 @@ class EventDrivenScheduler {
   private notificationClient: postgres.Sql | null = null;
   private isShuttingDown = false;
   private fallbackTimer: NodeJS.Timeout | null = null;
+  private storageRecalculationCron: cron.ScheduledTask | null = null;
 
   constructor(
     private agentTaskService = getAgentTaskApplicationService(),
     private schedulerService = getSchedulerService(),
     private taskRepository = getTaskRepository(),
-    private taskQueueService = getTaskQueueService()
+    private taskQueueService = getTaskQueueService(),
+    private storageRecalculationService = getStorageRecalculationApplicationService()
   ) {}
 
   async start(): Promise<void> {
@@ -46,11 +50,15 @@ class EventDrivenScheduler {
       await this.setupEventListeners();
       console.log('✅ PostgreSQL event listeners configured');
 
-      // 2. Start fallback timer for scheduled tasks (30 second)
+      // 2. Start fallback timer for scheduled tasks (5 minutes)
       this.startFallbackTimer();
-      console.log('⏰ Fallback timer started (30 second intervals)');
+      console.log('⏰ Fallback timer started (5 minute intervals)');
 
-      // 3. Process any existing queued tasks on startup
+      // 3. Start hourly storage recalculation
+      this.startStorageRecalculationCron();
+      console.log('💾 Storage recalculation cron started (hourly)');
+
+      // 4. Process any existing queued tasks on startup
       await this.processQueuedTasks();
       console.log('📋 Initial queue processed');
 
@@ -179,7 +187,7 @@ class EventDrivenScheduler {
 
   private async processRetries(): Promise<void> {
     const retryTasks = await this.taskQueueService.getRetryableTasks(3);
-    
+
     for (const task of retryTasks) {
       await withSystemContext(task.organizationId, async () => {
         try {
@@ -192,6 +200,52 @@ class EventDrivenScheduler {
     }
   }
 
+  /**
+   * Start hourly storage recalculation cron job
+   * Runs every hour at minute 0 to validate storage counters against actual S3 usage
+   */
+  private startStorageRecalculationCron(): void {
+    // Run every hour at minute 0: '0 * * * *'
+    this.storageRecalculationCron = cron.schedule('0 * * * *', async () => {
+      if (this.isShuttingDown) return;
+
+      try {
+        console.log('💾 Starting hourly storage recalculation...');
+
+        const result = await this.storageRecalculationService.recalculateAllOrganizations();
+
+        if (result.success && result.data) {
+          const { successCount, errorCount, discrepanciesFound, totalBytesRecalculated } = result.data;
+
+          console.log(
+            `✅ Storage recalculation complete: ` +
+            `${successCount} organizations processed, ` +
+            `${errorCount} errors, ` +
+            `${discrepanciesFound} discrepancies found, ` +
+            `${(totalBytesRecalculated / (1024 * 1024 * 1024)).toFixed(2)} GB total`
+          );
+
+          // Log errors if any
+          if (result.data.errors.length > 0) {
+            console.error(
+              `⚠️ Storage recalculation had ${result.data.errors.length} errors:`,
+              result.data.errors
+            );
+          }
+
+          // Log top discrepancies
+          if (discrepanciesFound > 0) {
+            console.warn(`⚠️ Found ${discrepanciesFound} organizations with storage drift`);
+          }
+        } else {
+          console.error('❌ Storage recalculation failed:', result.error);
+        }
+      } catch (error) {
+        console.error('❌ Error in storage recalculation cron:', error);
+      }
+    });
+  }
+
   async shutdown(): Promise<void> {
     console.log('🛑 Shutting down Event-Driven Scheduler...');
     this.isShuttingDown = true;
@@ -199,6 +253,11 @@ class EventDrivenScheduler {
     // Clear timers
     if (this.fallbackTimer) {
       clearInterval(this.fallbackTimer);
+    }
+
+    // Stop cron jobs
+    if (this.storageRecalculationCron) {
+      this.storageRecalculationCron.stop();
     }
 
     // Close notification client

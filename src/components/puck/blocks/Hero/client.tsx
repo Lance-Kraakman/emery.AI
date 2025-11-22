@@ -6,6 +6,7 @@ import { AutoField, FieldLabel } from "@measured/puck";
 import { Link2 } from "lucide-react";
 import HeroComponent, { HeroProps } from "./Hero";
 import { backgroundColorField, textColorField, fontFamilyField, fontWeightField } from "../../fields/standard-fields";
+import { createLinkActionField } from "../../custom-fields";
 
 export const Hero: ComponentConfig<HeroProps> = {
   fields: {
@@ -82,7 +83,9 @@ export const Hero: ComponentConfig<HeroProps> = {
       getItemSummary: (item) => item.label || "Button",
       arrayFields: {
         label: { type: "text", contentEditable: true },
-        href: { type: "text" },
+        action: createLinkActionField({
+          label: "Button Action",
+        }),
         variant: {
           type: "select",
           options: [
@@ -93,7 +96,9 @@ export const Hero: ComponentConfig<HeroProps> = {
       },
       defaultItemProps: {
         label: "Button",
-        href: "#",
+        action: {
+          actionType: "none",
+        },
       },
     },
     align: {
@@ -164,7 +169,7 @@ export const Hero: ComponentConfig<HeroProps> = {
     title: "Hero",
     align: "left",
     description: "Description",
-    buttons: [{ label: "Learn more", href: "#" }],
+    buttons: [{ label: "Learn more", action: { actionType: "none" } }],
     padding: "64px",
     titleColor: undefined,
     subtitleColor: undefined,
