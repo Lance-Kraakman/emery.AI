@@ -198,6 +198,16 @@ class DataStack(Stack):
             # AWS S3 credentials for cloud deployment
             "AWS_ACCESS_KEY_ID": ecs.Secret.from_secrets_manager(self.app_secrets_object, "AWS_ACCESS_KEY_ID"),
             "AWS_SECRET_ACCESS_KEY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "AWS_SECRET_ACCESS_KEY"),
+            # Stripe billing configuration
+            "STRIPE_SECRET_KEY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "STRIPE_SECRET_KEY"),
+            "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY"),
+            "STRIPE_PRO_PRODUCT_ID": ecs.Secret.from_secrets_manager(self.app_secrets_object, "STRIPE_PRO_PRODUCT_ID"),
+            "STRIPE_PRO_PRICE_ID_MONTHLY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "STRIPE_PRO_PRICE_ID_MONTHLY"),
+            "STRIPE_PRO_PRICE_ID_YEARLY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "STRIPE_PRO_PRICE_ID_YEARLY"),
+            "STRIPE_MAX_PRODUCT_ID": ecs.Secret.from_secrets_manager(self.app_secrets_object, "STRIPE_MAX_PRODUCT_ID"),
+            "STRIPE_MAX_PRICE_ID_MONTHLY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "STRIPE_MAX_PRICE_ID_MONTHLY"),
+            "STRIPE_MAX_PRICE_ID_YEARLY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "STRIPE_MAX_PRICE_ID_YEARLY"),
+            "STRIPE_ENTERPRISE_PRODUCT_ID": ecs.Secret.from_secrets_manager(self.app_secrets_object, "STRIPE_ENTERPRISE_PRODUCT_ID"),
         }
 
         # ========== CLOUD MAP ==========
