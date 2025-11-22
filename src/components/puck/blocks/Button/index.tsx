@@ -1,10 +1,11 @@
 import React from "react";
 import { ComponentConfig } from "@measured/puck";
 import { Button as _Button } from "@/components/puck/components/Button";
+import { createLinkActionField, type LinkActionConfig } from "@/components/puck/custom-fields";
 
 export type ButtonProps = {
   label: string;
-  href: string;
+  action: LinkActionConfig;
   variant: "primary" | "secondary";
 };
 
@@ -13,10 +14,12 @@ export const Button: ComponentConfig<ButtonProps> = {
   fields: {
     label: {
       type: "text",
-      placeholder: "Lorem ipsum...",
+      placeholder: "Button text",
       contentEditable: true,
     },
-    href: { type: "text" },
+    action: createLinkActionField({
+      label: "Button Action",
+    }),
     variant: {
       type: "radio",
       options: [
@@ -27,16 +30,19 @@ export const Button: ComponentConfig<ButtonProps> = {
   },
   defaultProps: {
     label: "Button",
-    href: "#",
+    action: {
+      actionType: "none",
+    },
     variant: "primary",
   },
-  render: ({ href, variant, label, puck }) => {
+  render: ({ action, variant, label, puck }) => {
     return (
       <div>
         <_Button
-          href={puck.isEditing ? "#" : href}
+          action={action}
           variant={variant}
           size="large"
+          isEditing={puck.isEditing}
           tabIndex={puck.isEditing ? -1 : undefined}
         >
           {label}
