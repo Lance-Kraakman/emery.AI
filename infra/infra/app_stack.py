@@ -119,8 +119,8 @@ class AppStack(Stack):
                 "NODE_ENV": "production",
             },
             secrets={
-                "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.data_stack.db_instance.secret),
-                **data_stack.data_stack.app_secrets_map  # Seeds need access to Pipedream, OpenAI, etc.
+                "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
+                **data_stack.app_secrets_map  # Seeds need access to Pipedream, OpenAI, etc.
             },
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix=f"{prefix}-Migration-Init",
