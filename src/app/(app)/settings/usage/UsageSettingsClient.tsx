@@ -147,42 +147,34 @@ export function UsageSettingsClient({
   return (
     <div className="space-y-3 sm:space-y-4">
       {/* Top Section - Responsive grid */}
-      <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {/* Credit Balance - Full width on md, 1/3 on lg */}
-        <Card className="md:col-span-2 lg:col-span-1">
+      <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2">
+        {/* Usage Overview */}
+        <Card>
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Coins className="h-4 w-4" />
-                <CardTitle className="text-sm font-medium">Credit Balance</CardTitle>
-              </div>
-              {/* Buy Credits button - only show on large screens in header */}
-              <Button variant="outline" size="sm" className="hidden h-7 text-xs lg:flex">
-                Buy Credits
-              </Button>
+            <div className="flex items-center gap-2">
+              <Coins className="h-4 w-4" />
+              <CardTitle className="text-sm font-medium">Usage Overview</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            <div>
-              <p className="text-3xl font-bold">{creditBalance.toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground">credits available</p>
-            </div>
             {creditStats && (
-              <div className="flex gap-2 pt-2 text-xs">
+              <div className="flex gap-2 text-xs">
                 <div className="flex-1 rounded-md bg-muted/50 p-2">
-                  <p className="text-muted-foreground">Used</p>
-                  <p className="font-semibold">{creditStats.creditsUsedCurrentMonth?.toLocaleString() || 0}</p>
+                  <p className="text-muted-foreground">Credits Used</p>
+                  <p className="font-semibold text-xl">{creditStats.creditsUsedCurrentMonth?.toLocaleString() || 0}</p>
                 </div>
                 <div className="flex-1 rounded-md bg-muted/50 p-2">
-                  <p className="text-muted-foreground">Runs</p>
-                  <p className="font-semibold">{creditStats.totalExecutions?.toLocaleString() || 0}</p>
+                  <p className="text-muted-foreground">Total Runs</p>
+                  <p className="font-semibold text-xl">{creditStats.totalExecutions?.toLocaleString() || 0}</p>
                 </div>
               </div>
             )}
-            {/* Buy Credits button - show on mobile/tablet */}
-            <Button variant="outline" size="sm" className="h-8 w-full text-xs lg:hidden">
-              Buy Credits
-            </Button>
+            <p className="text-xs text-muted-foreground pt-1">
+              View billing details and manage your plan in{' '}
+              <a href="/settings/billing" className="underline hover:text-foreground">
+                Billing Settings
+              </a>
+            </p>
           </CardContent>
         </Card>
 
@@ -220,23 +212,6 @@ export function UsageSettingsClient({
                   <span className="sm:hidden">Save</span>
                 </>
               )}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Current Plan */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Current Plan</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="space-y-1">
-              <p className="text-sm font-medium capitalize">{organizationTier} Tier</p>
-              <p className="text-xs text-muted-foreground">Upgrade for more credits and features</p>
-            </div>
-            <Button variant="outline" size="sm" className="h-8 w-full">
-              <span className="hidden sm:inline">Upgrade Plan</span>
-              <span className="sm:hidden">Upgrade</span>
             </Button>
           </CardContent>
         </Card>

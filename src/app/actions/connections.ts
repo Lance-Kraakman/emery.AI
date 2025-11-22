@@ -158,6 +158,7 @@ export async function getAppConnectionUrl(data: {
 
     const result = await connectionService.initiateConnection(
       UserId.fromString(session.user.id),
+      OrganizationId.fromNumber(session.user.currentOrganizationId),
       appName,
       data.redirectUrl,
       {
