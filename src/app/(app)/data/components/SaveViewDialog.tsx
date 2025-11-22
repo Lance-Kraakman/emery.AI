@@ -74,7 +74,7 @@ export function SaveViewDialog({
           sorting,
           viewType: ViewType.grid(),
           viewConfig: ViewConfig.createGrid({ defaultPageSize: 50 })
-        })
+        }, '/data') // Revalidate to refresh data page views
 
         if (result.success && result.data) {
           toast.success("View created successfully")

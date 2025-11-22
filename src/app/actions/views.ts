@@ -153,11 +153,9 @@ export async function createView(
       };
     }
 
-    // Revalidate the appropriate path
+    // Only revalidate if explicitly requested (prevents unwanted page reloads)
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
-    } else {
-      revalidatePath("/data");
     }
 
     return {
@@ -309,11 +307,9 @@ export async function updateView(
     const dataSourceRepository = (dataSourceService as any).dataSourceRepository;
     const savedView = await dataSourceRepository.save(dataSource);
 
-    // Revalidate the appropriate path
+    // Only revalidate if explicitly requested (prevents unwanted page reloads)
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
-    } else {
-      revalidatePath("/data");
     }
 
     return {
@@ -360,11 +356,9 @@ export async function deleteView(
       };
     }
 
-    // Revalidate the appropriate path
+    // Only revalidate if explicitly requested (prevents unwanted page reloads)
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
-    } else {
-      revalidatePath("/data");
     }
 
     return {
