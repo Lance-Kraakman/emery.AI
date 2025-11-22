@@ -15,89 +15,21 @@
 
 import type { ComponentConfig } from "@measured/puck";
 import ChartBlock, { type ChartBlockProps } from "./ChartBlock";
-import { getView, executeChartView, getViewsForOrganization } from "@/app/actions/views";
+import { getView, executeChartView } from "@/app/actions/views";
 import { getTables } from "@/app/actions/tables";
-
-// Type for chart view list items
-interface ChartViewListItem {
-  id: number;
-  name: string;
-  tableId: number;
-  tableName: string;
-  title: string;
-  description: string;
-}
+import { createViewManagementField } from "../../custom-fields";
 
 export const ChartBlockConfig: ComponentConfig<ChartBlockProps> = {
   label: "Chart",
 
   fields: {
-    // View Selection - Filtered to only show chart-type views
-    viewId: {
-      label: "Chart View",
-      type: "external",
-      placeholder: "Select a chart view",
-      showSearch: true,
-      fetchList: async ({ query }: { query: string }) => {
-        console.log('[ChartBlock viewId fetchList] Fetching chart views');
-
-        // Get all views and filter to chart-type only
-        const [views, tables] = await Promise.all([
-          getViewsForOrganization(),
-          getTables()
-        ]);
-
-        console.log('[ChartBlock viewId fetchList] Found views:', views.length, 'tables:', tables.length);
-
-        // Filter to chart views only
-        const chartViews = views.filter(v => v.viewType === 'chart');
-
-        console.log('[ChartBlock viewId fetchList] Chart views:', chartViews.length);
-
-        // Create a table lookup map
-        const tableMap = new Map(tables.map(t => [t.id, t.name]));
-
-        // Filter by query if provided
-        const filteredViews = query
-          ? chartViews.filter((v) =>
-              v.name.toLowerCase().includes(query.toLowerCase()) ||
-              tableMap.get(v.tableId)?.toLowerCase().includes(query.toLowerCase())
-            )
-          : chartViews;
-
-        const result = filteredViews.map((v) => {
-          // Extract chart info from viewConfig for better display
-          const config = v.viewConfig as Record<string, unknown> | undefined;
-          const chartType = (config?.chartType as string) || 'unknown';
-          const dataMode = (config?.dataMode as string) || 'unknown';
-
-          return {
-            id: v.id,
-            name: v.name,
-            tableId: v.tableId,
-            tableName: tableMap.get(v.tableId) || `Table ${v.tableId}`,
-            title: `${v.name}`,
-            description: `Table: ${tableMap.get(v.tableId) || v.tableId} | Type: ${chartType} | Mode: ${dataMode}`,
-          };
-        });
-
-        console.log('[ChartBlock viewId fetchList] Returning options:', result.length);
-        return result;
-      },
-      mapProp: (item: ChartViewListItem | null) => item?.id || null,
-      getItemSummary: (item: number | ChartViewListItem, context: { props?: ChartBlockProps }) => {
-        const viewId = typeof item === 'number' ? item : item?.id;
-        const viewName = context?.props?._viewName;
-        const chartType = context?.props?._chartType;
-
-        if (viewName) {
-          return chartType ? `${viewName} (${chartType})` : viewName;
-        } else if (viewId) {
-          return `Chart View ID: ${viewId}`;
-        }
-        return "No chart view selected";
-      },
-    } as any,
+    // View Selection - Inline creation and editing support
+    // AIDEV-NOTE: Using custom view management field for inline chart view creation.
+    // Users can create/edit chart views directly from the Puck sidebar.
+    viewId: createViewManagementField({
+      supportedViewTypes: ['chart'],
+      label: 'Chart View',
+    }),
 
     // Hidden fields populated by resolveData
     _viewName: {
