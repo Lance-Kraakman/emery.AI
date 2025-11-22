@@ -85,8 +85,9 @@ export function SetupForm() {
       const result = await createOrganization(formData);
 
       if (result.success) {
-        router.push("/settings/billing?welcome=true");
-        window.location.reload(); // hardcore - reload to update session with new org
+        // Use window.location.href to navigate and reload in one action
+        // This ensures session is updated with new organization before rendering billing page
+        window.location.href = "/settings/billing?welcome=true";
       } else {
         setError(result.error || "Setup failed");
       }
