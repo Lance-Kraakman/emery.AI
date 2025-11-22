@@ -7,12 +7,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { LogOut, ChevronDown } from "lucide-react";
+import { useLinkContext } from "@/components/puck/link-context";
+import { resolveLinkAction } from "@/components/puck/utils/resolve-link-action";
+import type { LinkActionConfig } from "@/components/puck/custom-fields/link-action-field";
 
 export interface SignOutBlockProps {
   buttonText: string;
   showUserInfo: boolean;
   showAvatar: boolean;
-  redirectAfterSignOut: string;
+  redirectAction: LinkActionConfig;
   variant: "default" | "destructive" | "outline" | "secondary" | "ghost";
   popoverSide: "top" | "bottom" | "left" | "right";
   popoverAlign: "start" | "center" | "end";
@@ -28,7 +31,7 @@ export function SignOutBlock({
   buttonText,
   showUserInfo,
   showAvatar,
-  redirectAfterSignOut,
+  redirectAction,
   variant,
   popoverSide,
   popoverAlign,
@@ -42,6 +45,7 @@ export function SignOutBlock({
   const { isAuthenticated, isLoading, user, appId } = usePublicAppAuth();
   const { data: sessionData } = useSession();
   const isPreviewMode = appId === 0;
+  const linkContext = useLinkContext();
 
   // In preview mode, always show sign out button with mock data
   const previewUser = {
@@ -90,8 +94,11 @@ export function SignOutBlock({
     );
   }
 
-  // Determine callback URL
-  const callbackUrl = redirectAfterSignOut || (typeof window !== 'undefined' ? window.location.pathname : '/');
+  // Resolve the redirect action to get the callback URL
+  const resolvedAction = resolveLinkAction(redirectAction, linkContext);
+  const callbackUrl = resolvedAction.href !== '#'
+    ? resolvedAction.href
+    : (typeof window !== 'undefined' ? window.location.pathname : '/');
 
   const handleSignOut = async () => {
     await signOut({ callbackUrl });
