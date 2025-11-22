@@ -33,3 +33,13 @@ export {
   createSingleSortField,
   type SortRule,
 } from "./sort-builder-field";
+
+// View Management
+export { createViewManagementField } from "./view-management-field";
+
+// Link Action (Button/Link configuration)
+export {
+  createLinkActionField,
+  type LinkActionConfig,
+  type LinkActionType,
+} from "./link-action-field";

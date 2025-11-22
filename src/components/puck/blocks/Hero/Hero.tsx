@@ -5,6 +5,7 @@ import { getClassNameFactory } from "@/components/puck/lib";
 import { Button } from "@/components/puck/components/Button";
 import { Section } from "../../components/Section";
 import { PuckComponent, Slot } from "@measured/puck";
+import type { LinkActionConfig } from "../../custom-fields/link-action-field";
 
 const getClassName = getClassNameFactory("Hero", styles);
 
@@ -21,7 +22,7 @@ export type HeroProps = {
   };
   buttons: {
     label: string;
-    href: string;
+    action: LinkActionConfig;
     variant?: "primary" | "secondary";
   }[];
   titleColor?: string;
@@ -100,9 +101,10 @@ export const Hero: PuckComponent<HeroProps> = ({
             {buttons.map((button, i) => (
               <Button
                 key={i}
-                href={button.href}
+                action={button.action}
                 variant={button.variant}
                 size="large"
+                isEditing={puck.isEditing}
                 tabIndex={puck.isEditing ? -1 : undefined}
               >
                 {button.label}

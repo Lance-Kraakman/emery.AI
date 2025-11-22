@@ -97,17 +97,17 @@ export const HeaderBlock: ComponentConfig<HeaderBlockProps> = {
     const navigation = [
       await createComponent("Button", {
         label: "Home",
-        href: "/",
+        action: { actionType: "url", url: "/" },
         variant: "secondary",
       }),
       await createComponent("Button", {
         label: "About",
-        href: "/about",
+        action: { actionType: "url", url: "/about" },
         variant: "secondary",
       }),
       await createComponent("Button", {
         label: "Contact",
-        href: "/contact",
+        action: { actionType: "url", url: "/contact" },
         variant: "secondary",
       }),
     ];
@@ -115,7 +115,7 @@ export const HeaderBlock: ComponentConfig<HeaderBlockProps> = {
     const actions = [
       await createComponent("Button", {
         label: "Get Started",
-        href: "#",
+        action: { actionType: "none" },
         variant: "primary",
       }),
     ];
