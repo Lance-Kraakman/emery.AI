@@ -6,7 +6,7 @@ import { Puck, Data, usePuck, resolveAllData, Button as PuckButton } from "@meas
 import "@measured/puck/puck.css";
 import "@/styles/puck-theme.css";
 import { config } from "@/components/puck/config";
-import { getPage, updatePage, updatePageContent, publishPage, unpublishPage } from "@/app/actions/puck-pages";
+import { getPage, getPages, updatePage, updatePageContent, publishPage, unpublishPage } from "@/app/actions/puck-pages";
 import { getApp } from "@/app/actions/puck-apps";
 import { getCurrentOrganization } from "@/app/actions/user-organizations";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
@@ -17,6 +17,7 @@ import { ArrowLeft, Globe, Eye, ExternalLink, Copy, Check } from "lucide-react";
 import { Loading } from "@/components/ui/loading";
 import { toast } from "sonner";
 import { ThemeProvider } from "@/components/puck/theme-context";
+import { LinkContextProvider } from "@/components/puck/link-context";
 import { PuckEditorThemeProvider, usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 import { createPuckUIOverrides } from "@/components/puck/overrides";
 import { PuckSession } from "@/lib/puck/session-storage";
@@ -236,6 +237,7 @@ export default function PageEditPage() {
   const [page, setPage] = useState<PageDTO | null>(null);
   const [app, setApp] = useState<AppDTO | null>(null);
   const [organization, setOrganization] = useState<OrganizationDTO | null>(null);
+  const [pages, setPages] = useState<PageDTO[]>([]);
   const [initialData, setInitialData] = useState<Data>({ content: [], root: {}, zones: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -246,10 +248,11 @@ export default function PageEditPage() {
       try {
         setLoading(true);
 
-        // Fetch app, page, and organization
-        const [appResult, pageResult, orgResult] = await Promise.all([
+        // Fetch app, page, pages, and organization
+        const [appResult, pageResult, pagesResult, orgResult] = await Promise.all([
           getApp(appId),
           getPage(pageId),
+          getPages(appId),
           getCurrentOrganization()
         ]);
 
@@ -261,6 +264,7 @@ export default function PageEditPage() {
 
         setApp(appResult.data);
         setPage(pageResult.data);
+        setPages(pagesResult.success && pagesResult.data ? pagesResult.data : []);
         setOrganization(orgResult);
 
         // Check for unsaved changes in sessionStorage
@@ -387,9 +391,19 @@ export default function PageEditPage() {
 
   return (
     <PuckEditorThemeProvider pageId={pageId} page={page} app={app}>
-      <ThemeProviderWrapper>
-        <div className="h-screen">
-          <Puck
+      <LinkContextProvider
+        value={{
+          orgSlug: organization?.slug ?? undefined,
+          appSlug: app.slug,
+          appId: app.id,
+          pages: pages,
+          isEditing: true,
+          isPreview: false,
+        }}
+      >
+        <ThemeProviderWrapper>
+          <div className="h-screen">
+            <Puck
             config={config}
             data={initialData}
             ui={{
@@ -421,7 +435,7 @@ export default function PageEditPage() {
                 <div className="bg-transparent">{children}</div>
               ),
               puck: ({ children }) => (
-                <div className="puck-themed-wrapper">
+                <div>
                   <SidebarStatePersistence pageId={pageId} />
                   {children}
                 </div>
@@ -444,6 +458,7 @@ export default function PageEditPage() {
           />
         </div>
       </ThemeProviderWrapper>
+      </LinkContextProvider>
     </PuckEditorThemeProvider>
   );
 }

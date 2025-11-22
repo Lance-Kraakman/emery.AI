@@ -30,11 +30,17 @@ export interface LinkResolutionContext {
   /** App slug (for constructing public page URLs) */
   appSlug?: string;
 
+  /** App ID (for constructing preview URLs) */
+  appId?: number;
+
   /** Map of page IDs to page data (for resolving page links) */
   pages?: Map<number, PageDTO> | PageDTO[];
 
   /** Whether we're in the Puck editor (to prevent navigation) */
   isEditing?: boolean;
+
+  /** Whether we're in preview mode (affects URL generation) */
+  isPreview?: boolean;
 }
 
 /**
@@ -53,6 +59,16 @@ function findPage(pageId: number, pages?: Map<number, PageDTO> | PageDTO[]): Pag
 /**
  * Resolve a LinkActionConfig to an actual link/button action
  */
+/**
+ * Helper to append anchor ID to URL if provided
+ */
+function appendAnchor(href: string, anchorId?: string): string {
+  if (!anchorId) return href;
+  // Remove leading # if user included it
+  const cleanAnchor = anchorId.startsWith('#') ? anchorId.slice(1) : anchorId;
+  return cleanAnchor ? `${href}#${cleanAnchor}` : href;
+}
+
 export function resolveLinkAction(
   config: LinkActionConfig | undefined,
   context: LinkResolutionContext = {}
@@ -65,7 +81,7 @@ export function resolveLinkAction(
   // Custom href always takes precedence
   if (config.customHref) {
     return {
-      href: config.customHref,
+      href: appendAnchor(config.customHref, config.anchorId),
       target: config.openInNewTab ? '_blank' : undefined,
       rel: config.openInNewTab ? 'noopener noreferrer' : undefined,
     };
@@ -85,22 +101,30 @@ export function resolveLinkAction(
         return { href: `#page-${config.pageId}` };
       }
 
-      // Construct public page URL
+      // In preview mode, link to preview URLs instead of public URLs
+      // This allows previewing unpublished pages
+      if (context.isPreview && context.appId) {
+        return {
+          href: appendAnchor(`/apps/${context.appId}/pages/${config.pageId}/preview`, config.anchorId),
+        };
+      }
+
+      // In editor or public mode with published pages, use public URLs
       if (context.orgSlug && context.appSlug) {
         return {
-          href: `/public/${context.orgSlug}/${context.appSlug}/${page.slug}`,
+          href: appendAnchor(`/public/${context.orgSlug}/${context.appSlug}/${page.slug}`, config.anchorId),
         };
       }
 
       // Fallback if we don't have org/app context
-      return { href: `#${page.slug}` };
+      return { href: appendAnchor(`#${page.slug}`, config.anchorId) };
     }
 
     case 'url': {
       // External/custom URL
       const url = config.url || '#';
       return {
-        href: url,
+        href: appendAnchor(url, config.anchorId),
         target: config.openInNewTab ? '_blank' : undefined,
         rel: config.openInNewTab ? 'noopener noreferrer' : undefined,
       };

@@ -105,32 +105,37 @@ export function LinkActionFieldRenderer({
       url: undefined,
       openInNewTab: undefined,
       redirectAfter: undefined,
+      anchorId: currentValue.anchorId, // Preserve anchor ID
       customHref: currentValue.customHref, // Preserve custom href
     });
   };
 
   // Generate preview text
   const getPreviewText = (): string => {
+    const anchor = currentValue.anchorId ? `#${currentValue.anchorId}` : '';
+
     if (currentValue.customHref) {
-      return currentValue.customHref;
+      return currentValue.customHref + anchor;
     }
 
     switch (currentValue.actionType) {
       case 'page':
         if (currentValue.pageId) {
           const page = pages.find(p => p.id === currentValue.pageId);
-          return page ? `Page: ${page.name} (${page.slug})` : `Page ID: ${currentValue.pageId}`;
+          const baseText = page ? `Page: ${page.name} (${page.slug})` : `Page ID: ${currentValue.pageId}`;
+          return baseText + anchor;
         }
         return 'No page selected';
 
       case 'url':
-        return currentValue.url || 'No URL specified';
+        const baseUrl = currentValue.url || 'No URL specified';
+        return baseUrl + anchor;
 
       case 'signIn':
-        return `Sign in${currentValue.redirectAfter ? ` → ${currentValue.redirectAfter}` : ''}`;
+        return `Sign in${currentValue.redirectAfter ? ` → ${currentValue.redirectAfter}` : ''}${anchor}`;
 
       case 'signOut':
-        return `Sign out${currentValue.redirectAfter ? ` → ${currentValue.redirectAfter}` : ''}`;
+        return `Sign out${currentValue.redirectAfter ? ` → ${currentValue.redirectAfter}` : ''}${anchor}`;
 
       case 'none':
       default:
@@ -254,6 +259,23 @@ export function LinkActionFieldRenderer({
             />
             <p className="text-xs text-muted-foreground">
               Leave empty to stay on current page
+            </p>
+          </div>
+        )}
+
+        {/* Anchor ID - Optional for all action types */}
+        {currentValue.actionType !== 'none' && (
+          <div className="space-y-2">
+            <Label className="text-xs font-medium">Anchor ID (Optional)</Label>
+            <Input
+              type="text"
+              value={currentValue.anchorId || ''}
+              onChange={(e) => updateValue({ anchorId: e.target.value })}
+              placeholder="hero-section"
+              disabled={readOnly}
+            />
+            <p className="text-xs text-muted-foreground">
+              Link to a specific section on the page (e.g., #hero-section)
             </p>
           </div>
         )}

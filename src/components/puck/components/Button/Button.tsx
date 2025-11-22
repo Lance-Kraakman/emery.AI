@@ -7,6 +7,7 @@ import { Loader } from "../Loader";
 import { filterDataAttrs } from "../../lib/filter-data-attrs";
 import { resolveLinkAction, type LinkResolutionContext } from "../../utils/resolve-link-action";
 import type { LinkActionConfig } from "../../custom-fields/link-action-field";
+import { useLinkContext } from "../../link-context";
 
 const getClassName = getClassNameFactory("Button", styles);
 
@@ -45,19 +46,24 @@ export const Button = ({
   loading?: boolean;
 }) => {
   const [loading, setLoading] = useState(loadingProp);
+  const contextFromProvider = useLinkContext();
 
   useEffect(() => setLoading(loadingProp), [loadingProp]);
 
   // Resolve link action if provided
   const resolvedAction = useMemo(() => {
     if (action) {
-      return resolveLinkAction(action, {
+      // Merge context from provider with prop-based context (props take precedence)
+      const mergedContext: LinkResolutionContext = {
+        ...contextFromProvider,
         ...linkContext,
-        isEditing: isEditing || false,
-      });
+        isEditing: isEditing !== undefined ? isEditing : contextFromProvider.isEditing || false,
+      };
+
+      return resolveLinkAction(action, mergedContext);
     }
     return null;
-  }, [action, linkContext, isEditing]);
+  }, [action, linkContext, isEditing, contextFromProvider]);
 
   // Determine final href, onClick, target, and rel
   const finalHref = resolvedAction?.href || href;

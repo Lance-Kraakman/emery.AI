@@ -9,10 +9,14 @@ import { config } from "@/components/puck/config"
 import type { PageDTO } from "@/app/mappers/puck-page-mapper"
 import type { AppDTO } from "@/app/mappers/puck-app-mapper"
 import { ThemeConfig } from "@/ddd/domain/puck/value-objects/theme-config"
+import { LinkContextProvider } from "@/components/puck/link-context"
 
 interface PublicPageRendererProps {
   page: PageDTO
   app: AppDTO
+  orgSlug: string
+  appSlug: string
+  pages: PageDTO[]
 }
 
 /**
@@ -23,7 +27,7 @@ interface PublicPageRendererProps {
  * - Renders Puck template data
  * - No authentication or editing capabilities
  */
-export function PublicPageRenderer({ page, app }: PublicPageRendererProps) {
+export function PublicPageRenderer({ page, app, orgSlug, appSlug, pages }: PublicPageRendererProps) {
   // Determine effective theme (page theme overrides app theme)
   const appTheme = app.themeConfig ? ThemeConfig.fromJSON(app.themeConfig) : ThemeConfig.default()
   const pageTheme = page.themeConfig ? ThemeConfig.fromJSON(page.themeConfig) : undefined
@@ -57,14 +61,25 @@ export function PublicPageRenderer({ page, app }: PublicPageRendererProps) {
   }
 
   return (
-    <div
-      className="min-h-screen w-full"
-      style={themeStyles}
+    <LinkContextProvider
+      value={{
+        orgSlug,
+        appSlug,
+        appId: app.id,
+        pages,
+        isEditing: false,
+        isPreview: false,
+      }}
     >
-      <Render
-        config={config}
-        data={page.templateData}
-      />
-    </div>
+      <div
+        className="min-h-screen w-full"
+        style={themeStyles}
+      >
+        <Render
+          config={config}
+          data={page.templateData}
+        />
+      </div>
+    </LinkContextProvider>
   )
 }
