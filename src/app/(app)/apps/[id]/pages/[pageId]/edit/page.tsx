@@ -203,26 +203,26 @@ function CustomHeaderActions({
 
       {/* Custom Action Buttons using Puck's Button component */}
       <div className="flex gap-2 items-center flex-shrink-0">
-        <PuckButton
+        <Button
           onClick={handleSave}
           disabled={!hasUnsavedChanges}
         >
           {hasUnsavedChanges ? "Save Changes" : "Saved"}
-        </PuckButton>
+        </Button>
 
-        <PuckButton
+        <Button
           onClick={handlePreview}
         >
           <Eye size={16} className="mr-1" />
           Preview
-        </PuckButton>
+        </Button>
 
-        <PuckButton
+        <Button
           onClick={onPublish}
         >
           <Globe size={16} className="mr-1" />
           {page.isPublic ? "Make Private" : "Make Public"}
-        </PuckButton>
+        </Button>
       </div>
     </div>
   );
@@ -431,7 +431,7 @@ export default function PageEditPage() {
                 onSaveAccessSettings: handleSaveAccessSettings,
                 themeMode: "page",
               }),
-              header: ({ children, actions }) => (
+              header: ({ children }) => (
                 <div className="bg-transparent">{children}</div>
               ),
               puck: ({ children }) => (

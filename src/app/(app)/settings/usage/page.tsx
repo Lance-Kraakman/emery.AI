@@ -6,8 +6,8 @@ import { getOrganizationRepository } from '@/ddd/application/di/getters';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 export const metadata = {
-  title: 'Usage & Billing | Organization Settings',
-  description: 'Manage credit usage, view breakdowns, and configure AI models for your organization',
+  title: 'Usage | Organization Settings',
+  description: 'Monitor credit usage, view breakdowns, and configure AI models for your organization',
 };
 
 export default async function UsageSettingsPage() {
@@ -32,9 +32,9 @@ export default async function UsageSettingsPage() {
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Page Header */}
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">Usage & Billing</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Usage Analytics</h1>
           <p className="text-muted-foreground">
-            Monitor token usage, configure model access, and manage billing for your organization.
+            Monitor credit usage and configure model access for your organization.
           </p>
         </div>
 
