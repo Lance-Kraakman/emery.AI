@@ -153,11 +153,6 @@ class DataStack(Stack):
             connection=ec2.Port.tcp(50051),
             description="Allow gRPC traffic on port 50051"
         )
-        self.chat_grpc_sg.add_ingress_rule(
-            peer=self.db_client_sg,
-            connection=ec2.Port.tcp(50051),
-            description="Allow gRPC traffic from frontend and scheduler services"
-        )
 
         # Create security group for table gRPC service (port 50052)
         self.table_grpc_sg = ec2.SecurityGroup(
@@ -169,11 +164,6 @@ class DataStack(Stack):
             peer=ec2.Peer.any_ipv4(),
             connection=ec2.Port.tcp(50052),
             description="Allow gRPC traffic on port 50052"
-        )
-        self.table_grpc_sg.add_ingress_rule(
-            peer=self.db_client_sg,
-            connection=ec2.Port.tcp(50052),
-            description="Allow gRPC traffic from frontend and scheduler services"
         )
 
         # ========== SECRETS MANAGER ==========
