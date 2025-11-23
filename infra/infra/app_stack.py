@@ -162,9 +162,12 @@ class AppStack(Stack):
             public_load_balancer=True,
         )
 
-        # Add db_client_sg as additional security group for database access
-        # This avoids circular dependency by not passing it in constructor
-        frontend_service.service.connections.security_groups.append(data_stack.db_client_sg)
+        # Grant database access to frontend service
+        frontend_service.service.connections.allow_to(
+            data_stack.db_instance,
+            ec2.Port.tcp(5432),
+            "Allow frontend service to access database"
+        )
 
         # Configure the health check for the frontend service
         frontend_service.target_group.configure_health_check(
@@ -292,8 +295,12 @@ class AppStack(Stack):
             ),
         )
 
-        # Add db_client_sg as additional security group for database access
-        scheduler_service.connections.security_groups.append(data_stack.db_client_sg)
+        # Grant database access to scheduler service
+        scheduler_service.connections.allow_to(
+            data_stack.db_instance,
+            ec2.Port.tcp(5432),
+            "Allow scheduler service to access database"
+        )
 
         # AIDEV-NOTE: Add ECR permissions to scheduler task execution role for pulling images
         scheduler_task_definition.execution_role.add_managed_policy(
@@ -370,7 +377,6 @@ class AppStack(Stack):
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
             public_load_balancer=False,
-            security_groups=[data_stack.db_client_sg],
             health_check_grace_period=Duration.seconds(300),
             cloud_map_options=ecs.CloudMapOptions(
                 name="agent-chat",
@@ -378,6 +384,13 @@ class AppStack(Stack):
                 dns_record_type=servicediscovery.DnsRecordType.A,
                 dns_ttl=Duration.seconds(60)
             ),
+        )
+
+        # Grant database access to chat service
+        agent_chat_service.service.connections.allow_to(
+            data_stack.db_instance,
+            ec2.Port.tcp(5432),
+            "Allow agent chat service to access database"
         )
 
         # Set custom command for chat service container
@@ -457,7 +470,6 @@ class AppStack(Stack):
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
             public_load_balancer=False,
-            security_groups=[data_stack.db_client_sg],
             health_check_grace_period=Duration.seconds(300),
             cloud_map_options=ecs.CloudMapOptions(
                 name="agent-table",
@@ -465,6 +477,13 @@ class AppStack(Stack):
                 dns_record_type=servicediscovery.DnsRecordType.A,
                 dns_ttl=Duration.seconds(60)
             ),
+        )
+
+        # Grant database access to table service
+        agent_table_service.service.connections.allow_to(
+            data_stack.db_instance,
+            ec2.Port.tcp(5432),
+            "Allow agent table service to access database"
         )
 
         # Set custom command for table service container
