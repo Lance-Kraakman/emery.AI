@@ -160,8 +160,11 @@ class AppStack(Stack):
             task_definition=frontend_task_definition,
             desired_count=1,
             public_load_balancer=True,
-            security_groups=[data_stack.db_client_sg],
         )
+
+        # Add db_client_sg as additional security group for database access
+        # This avoids circular dependency by not passing it in constructor
+        frontend_service.service.connections.security_groups.append(data_stack.db_client_sg)
 
         # Configure the health check for the frontend service
         frontend_service.target_group.configure_health_check(
@@ -287,9 +290,11 @@ class AppStack(Stack):
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
-            security_groups=[data_stack.db_client_sg],
         )
-        
+
+        # Add db_client_sg as additional security group for database access
+        scheduler_service.connections.security_groups.append(data_stack.db_client_sg)
+
         # AIDEV-NOTE: Add ECR permissions to scheduler task execution role for pulling images
         scheduler_task_definition.execution_role.add_managed_policy(
             iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
