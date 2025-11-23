@@ -365,7 +365,7 @@ class AppStack(Stack):
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
             public_load_balancer=False,
-            security_groups=[data_stack.db_client_sg, data_stack.chat_grpc_sg],
+            security_groups=[data_stack.db_client_sg],
             health_check_grace_period=Duration.seconds(300),
             cloud_map_options=ecs.CloudMapOptions(
                 name="agent-chat",
@@ -452,7 +452,7 @@ class AppStack(Stack):
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
             public_load_balancer=False,
-            security_groups=[data_stack.db_client_sg, data_stack.table_grpc_sg],
+            security_groups=[data_stack.db_client_sg],
             health_check_grace_period=Duration.seconds(300),
             cloud_map_options=ecs.CloudMapOptions(
                 name="agent-table",
