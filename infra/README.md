@@ -16,10 +16,12 @@ The infrastructure deploys:
 
 ## AWS Account Configuration
 
-**Current AWS Account**: `463735866328`
-**Region**: `ap-southeast-2` (Sydney)
+**Multi-Account Strategy for Environment Isolation:**
+- **Development**: Account `463735866328` (Sydney, ap-southeast-2)
+- **Staging**: Account `772302459598` (Sydney, ap-southeast-2)
+- **Production**: Account `034165313651` (Sydney, ap-southeast-2)
 
-These values are configured in `cdk.json` under the `context` section.
+These values are configured per-environment using GitHub Environment secrets.
 
 ## Prerequisites
 
@@ -142,13 +144,18 @@ aws ecr create-repository --repository-name emery/agent --image-scanning-configu
 
 ## Environment Setup
 
-This project supports three environments:
+This project supports three environments with complete AWS account isolation:
 
-| Environment | Branch | Stack Name | Purpose |
-|------------|--------|------------|---------|
-| Development | `develop` | `Emery-Infra-Dev` | Development testing |
-| Staging | `staging` | `Emery-Infra-Staging` | Pre-production testing |
-| Production | `main` | `Emery-Infra-Production` | Live production |
+| Environment | Trigger | AWS Account | Stack Name | Purpose |
+|------------|---------|-------------|------------|---------|
+| Development | Push to `develop` | 463735866328 | `Emery-Infra-Dev` | Development testing |
+| Staging | Push to `main` | 772302459598 | `Emery-Infra-Staging` | Pre-production validation |
+| Production | Tag `v*.*.*` on `main` | 034165313651 | `Emery-Infra-Production` | Live production |
+
+**Branch Protection:**
+- `develop`: Requires 1 PR approval + status checks
+- `main`: Requires 2 PR approvals + status checks + restricted push access
+- **Production tags** (`v*.*.*`): Only maintainers can create
 
 ## Local Development
 
@@ -197,32 +204,176 @@ cdk deploy --require-approval never --all \
 
 ## CI/CD Deployment
 
-Deployments are automated via GitHub Actions:
+Deployments are fully automated via GitHub Actions with environment-based isolation.
 
 ### Workflow Triggers
 
-- **CI Quality Checks** (`.github/workflows/ci.yml`): Runs on push to `develop` branch
+- **CI Quality Checks** (`.github/workflows/ci.yml`): Runs on push to `develop` and PRs to `develop`/`main`
   - Linting
   - Type checking
 
-- **Build & Deploy** (`.github/workflows/docker-build-test.yml`): Runs on push to `main`, `staging`, `develop`
-  - Builds Docker images for frontend and agent
-  - Pushes images to ECR
-  - Deploys infrastructure via CDK
+- **Build & Deploy** (`.github/workflows/docker-build-test.yml`): Runs on:
+  - Push to `develop` → Auto-deploy to dev
+  - Push to `main` → Auto-deploy to staging
+  - Push tag `v*.*.*` → Deploy to production (requires approval)
+  - PRs to `develop`/`main` → Build and test only
 
 ### Deployment Flow
 
-1. **Push to branch** → Triggers workflow
-2. **Build images** → Frontend and agent Docker images built in parallel
-3. **Push to ECR** → Images tagged with branch name and commit SHA
-4. **Deploy CDK** → Infrastructure updated with new images
+**1. Feature Development:**
+```
+feature/my-feature
+  └─ PR to develop (requires 1 approval)
+    └─ Merge → Auto-deploy to DEV
+```
+
+**2. Staging Release:**
+```
+develop
+  └─ PR to main (requires 2 approvals)
+    └─ Merge → Auto-deploy to STAGING
+```
+
+**3. Production Release:**
+```
+main (when stable in staging)
+  └─ Create tag v1.2.3
+    └─ Push tag → Auto-deploy to PRODUCTION (requires approval)
+```
 
 ### Branch → Environment Mapping
 
 ```
-main     → production
-staging  → staging
-develop  → dev
+develop      → dev environment (account: 463735866328)
+main         → staging environment (account: 772302459598)
+v*.*.*       → production environment (account: 034165313651)
+```
+
+### Creating a Production Release
+
+After validating changes in staging:
+
+```bash
+# Ensure main is stable and ready
+git checkout main
+git pull origin main
+
+# Create annotated tag with semantic version
+git tag -a v1.2.3 -m "Release v1.2.3: Description of changes"
+
+# Push tag to trigger production deployment
+git push origin v1.2.3
+
+# Monitor deployment in GitHub Actions
+# Deployment requires approval from designated reviewer
+```
+
+**Semantic Versioning:**
+- `v1.0.0` → Major release (breaking changes)
+- `v1.1.0` → Minor release (new features, backward compatible)
+- `v1.0.1` → Patch release (bug fixes)
+
+## Production Deployment Process
+
+### Pre-Release Checklist
+- [ ] All features tested in staging environment
+- [ ] Database migrations tested and verified
+- [ ] Performance testing completed
+- [ ] Security review completed (if applicable)
+- [ ] Rollback plan documented
+
+### Release Steps
+
+1. **Prepare Release Notes**
+   - Document all changes since last release
+   - Note any breaking changes or migration requirements
+   - Include rollback instructions if needed
+
+2. **Create Release Tag**
+   ```bash
+   git checkout main
+   git pull origin main
+   git tag -a v1.2.3 -m "Release v1.2.3
+
+   Features:
+   - Feature 1 description
+   - Feature 2 description
+
+   Bug Fixes:
+   - Fix 1 description
+
+   Breaking Changes:
+   - None"
+
+   git push origin v1.2.3
+   ```
+
+3. **Monitor Deployment**
+   - Watch GitHub Actions workflow progress
+   - Approve deployment when prompted
+   - Monitor CloudWatch logs for errors
+   - Verify health checks passing
+
+4. **Post-Deployment Validation**
+   - Test critical user flows
+   - Verify database migrations applied
+   - Check service health endpoints
+   - Monitor error rates in CloudWatch
+
+### Rollback Procedure
+
+If issues are discovered post-deployment:
+
+**Option 1: Rollback via Previous Tag** (fastest)
+```bash
+# Identify last stable version
+git tag -l
+
+# Create new tag pointing to previous stable release
+git checkout v1.2.2
+git tag -a v1.2.4 -m "Rollback to v1.2.2 due to issue in v1.2.3"
+git push origin v1.2.4
+```
+
+**Option 2: Hotfix Release** (for critical bugs)
+```bash
+# Create hotfix branch from last stable tag
+git checkout v1.2.2
+git checkout -b hotfix/critical-bug
+
+# Apply fix
+git commit -m "fix: critical bug causing X"
+
+# Merge to main
+git checkout main
+git merge hotfix/critical-bug
+
+# Create patch release
+git tag -a v1.2.4 -m "Hotfix: critical bug"
+git push origin v1.2.4
+```
+
+## Deprecated Staging Branch
+
+The `staging` branch is **deprecated** and will be removed. Do not create new PRs targeting this branch.
+
+**Old Flow** (deprecated):
+```
+develop → staging → main
+```
+
+**New Flow** (current):
+```
+develop → main (staging env) → v*.*.* tag (production env)
+```
+
+**Migration:** All work should target `develop` for development changes, which gets promoted to `main` for staging validation.
+
+**Cleanup:** The staging branch can be manually deleted once all teams have migrated to the new flow:
+```bash
+# After confirming no active work on staging branch
+git push origin --delete staging
+git branch -d staging
 ```
 
 ## Migration and Seeding Strategy
