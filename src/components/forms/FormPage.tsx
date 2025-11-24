@@ -9,16 +9,9 @@
  */
 
 import { useMemo } from 'react';
-import {
-  TextFieldInput,
-  NumberFieldInput,
-  BooleanFieldInput,
-  DateFieldInput,
-  SingleSelectFieldInput,
-  MultiSelectFieldInput,
-} from './field-inputs';
 import { cn } from '@/lib/utils';
-import type { SelectOption } from '@/ddd/domain/tables/value-objects/table-field';
+import { getInputComponentForField, getDefaultValueForField } from './input-mapper';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
 
 // Types matching the domain layer FormViewConfig
 export interface FormPageField {
@@ -126,7 +119,7 @@ export function FormPage({
   };
 
   /**
-   * Render a field based on its type
+   * Render a field based on its type using input mapper
    */
   const renderField = (fieldConfig: FormPageField) => {
     const tableField = tableFieldMap.get(fieldConfig.fieldId);
@@ -136,7 +129,7 @@ export function FormPage({
     if (!isFieldVisible(fieldConfig)) return null;
 
     const fieldName = tableField.name;
-    const fieldValue = formData[fieldName];
+    const fieldValue = formData[fieldName] ?? getDefaultValueForField(tableField as FieldDTO);
     const fieldError = errors[fieldName];
 
     // Determine if field is required (form config overrides table field)
@@ -144,94 +137,27 @@ export function FormPage({
       ? fieldConfig.required
       : (tableField.required ?? false);
 
-    // Common props for all field types
-    const commonProps = {
-      fieldId: tableField.id,
-      name: fieldName,
-      label: fieldConfig.label,
-      helpText: fieldConfig.helpText,
-      placeholder: fieldConfig.placeholder,
-      required: isRequired,
-      error: fieldError,
-      className: "w-full",
-    };
+    // Get the appropriate input component for this field type
+    const InputComponent = getInputComponentForField(tableField as FieldDTO);
 
-    // Render based on field type
-    switch (tableField.type) {
-      case 'text':
-        return (
-          <TextFieldInput
-            key={tableField.id}
-            {...commonProps}
-            value={fieldValue || ''}
-            onChange={(value) => onChange(fieldName, value)}
-          />
-        );
-
-      case 'number':
-        return (
-          <NumberFieldInput
-            key={tableField.id}
-            {...commonProps}
-            value={fieldValue ?? null}
-            onChange={(value) => onChange(fieldName, value)}
-          />
-        );
-
-      case 'boolean':
-        return (
-          <BooleanFieldInput
-            key={tableField.id}
-            {...commonProps}
-            value={fieldValue ?? false}
-            onChange={(value) => onChange(fieldName, value)}
-          />
-        );
-
-      case 'date':
-        return (
-          <DateFieldInput
-            key={tableField.id}
-            {...commonProps}
-            value={fieldValue || null}
-            onChange={(value) => onChange(fieldName, value)}
-          />
-        );
-
-      case 'single-select':
-        return (
-          <SingleSelectFieldInput
-            key={tableField.id}
-            {...commonProps}
-            value={fieldValue ?? null}
-            onChange={(value) => onChange(fieldName, value)}
-            options={(tableField.metadata?.options as SelectOption[] | undefined) || []}
-          />
-        );
-
-      case 'multi-select':
-        return (
-          <MultiSelectFieldInput
-            key={tableField.id}
-            {...commonProps}
-            value={fieldValue ?? null}
-            onChange={(value) => onChange(fieldName, value)}
-            options={(tableField.metadata?.options as SelectOption[] | undefined) || []}
-            maxSelections={tableField.metadata?.maxSelections as number | undefined}
-          />
-        );
-
-      default:
-        // For unsupported field types, render text input as fallback
-        return (
-          <TextFieldInput
-            key={tableField.id}
-            {...commonProps}
-            value={fieldValue || ''}
-            onChange={(value) => onChange(fieldName, value)}
-          />
-        );
-    }
+    return (
+      <div key={tableField.id} className="w-full">
+        <InputComponent
+          field={tableField as FieldDTO}
+          value={fieldValue}
+          onChange={(value) => onChange(fieldName, value)}
+          label={fieldConfig.label || tableField.name}
+          placeholder={fieldConfig.placeholder}
+          required={isRequired}
+        />
+        {fieldError && (
+          <p className="text-sm text-destructive mt-1">{fieldError}</p>
+        )}
+        {fieldConfig.helpText && !fieldError && (
+          <p className="text-sm text-muted-foreground mt-1">{fieldConfig.helpText}</p>
+        )}
+      </div>
+    );
   };
 
   return (
