@@ -377,7 +377,7 @@ class AppStack(Stack):
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
             public_load_balancer=False,
-            health_check_grace_period=Duration.seconds(300),
+            health_check_grace_period=Duration.seconds(600),  # Increased from 300s to allow for large image download
             cloud_map_options=ecs.CloudMapOptions(
                 name="agent-chat",
                 cloud_map_namespace=data_stack.namespace,
@@ -402,12 +402,12 @@ class AppStack(Stack):
 
         # Configure TCP health check for chat service
         agent_chat_service.target_group.configure_health_check(
-            port="50051",
+            port="traffic-port",  # Use the container's traffic port (50051)
             protocol=elbv2.Protocol.TCP,
             interval=Duration.seconds(30),
             timeout=Duration.seconds(10),
-            healthy_threshold_count=2,
-            unhealthy_threshold_count=2,
+            healthy_threshold_count=3,  # Increased from 2 for more lenient checks
+            unhealthy_threshold_count=3,  # Increased from 2 to avoid premature task kills
         )
 
         # Add ECR permissions for chat service
@@ -430,8 +430,8 @@ class AppStack(Stack):
         # Configure deployment settings for chat service
         cfn_chat_service = agent_chat_service.service.node.default_child
         cfn_chat_service.deployment_configuration = {
-            "minimumHealthyPercent": 0,
-            "maximumPercent": 100
+            "minimumHealthyPercent": 100,  # Keep existing task running during deployment
+            "maximumPercent": 200  # Allow new task to start before old one stops
         }
 
         # Configure auto-scaling for chat service
@@ -470,7 +470,7 @@ class AppStack(Stack):
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
             public_load_balancer=False,
-            health_check_grace_period=Duration.seconds(300),
+            health_check_grace_period=Duration.seconds(600),  # Increased from 300s to allow for large image download
             cloud_map_options=ecs.CloudMapOptions(
                 name="agent-table",
                 cloud_map_namespace=data_stack.namespace,
@@ -495,12 +495,12 @@ class AppStack(Stack):
 
         # Configure TCP health check for table service
         agent_table_service.target_group.configure_health_check(
-            port="50052",
+            port="traffic-port",  # Use the container's traffic port (50052)
             protocol=elbv2.Protocol.TCP,
             interval=Duration.seconds(30),
             timeout=Duration.seconds(10),
-            healthy_threshold_count=2,
-            unhealthy_threshold_count=2,
+            healthy_threshold_count=3,  # Increased from 2 for more lenient checks
+            unhealthy_threshold_count=3,  # Increased from 2 to avoid premature task kills
         )
 
         # Add ECR permissions for table service
@@ -523,8 +523,8 @@ class AppStack(Stack):
         # Configure deployment settings for table service
         cfn_table_service = agent_table_service.service.node.default_child
         cfn_table_service.deployment_configuration = {
-            "minimumHealthyPercent": 0,
-            "maximumPercent": 100
+            "minimumHealthyPercent": 100,  # Keep existing task running during deployment
+            "maximumPercent": 200  # Allow new task to start before old one stops
         }
 
         # Configure auto-scaling for table service
