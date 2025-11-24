@@ -115,13 +115,12 @@ jobs:
       - name: Test container functionality
         if: github.event_name == 'pull_request'
         run: |
-          IMAGE_TAG=$(echo "${{ github.head_ref }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
           docker run --rm \
             -e DATABASE_URL="postgresql://test:test@localhost:5432/test" \
             -e NEXTAUTH_SECRET="test-secret" \
             -e NODE_ENV="test" \
             --entrypoint="" \
-            ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${IMAGE_TAG} \
+            ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:pr-${{ github.event.pull_request.number }} \
             sh -c "echo '✅ Frontend container test passed'"
 
   build-agent:
@@ -181,11 +180,10 @@ jobs:
       - name: Test container functionality
         if: github.event_name == 'pull_request'
         run: |
-          IMAGE_TAG=$(echo "${{ github.head_ref }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
           docker run --rm \
             -e HF_TOKEN="test-token" \
             --entrypoint="" \
-            ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:${IMAGE_TAG} \
+            ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:pr-${{ github.event.pull_request.number }} \
             sh -c "python -c 'import emery_agents; print(\"✅ Agent container test passed\")'"
 
   # Deploy job - runs after successful build
