@@ -1,0 +1,29 @@
+/* LinkBlock Styles */
+
+.inlineLink {
+  color: hsl(var(--primary));
+  transition: color 0.2s ease;
+  cursor: pointer;
+}
+
+.inlineLink:hover {
+  color: hsl(var(--primary) / 0.8);
+}
+
+.underline {
+  text-decoration: underline;
+}
+
+.navLink {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  color: hsl(var(--foreground));
+  transition: color 0.2s ease, background-color 0.2s ease;
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+
+.navLink:hover {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}

@@ -9,7 +9,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { resolveAllData, type Data } from "@measured/puck";
 import { config } from "@/components/puck/config";
 import { getPage, getPages } from "@/app/actions/puck-pages";
@@ -20,6 +20,7 @@ import { Loading } from "@/components/ui/loading";
 import { ThemeConfig } from "@/ddd/domain/puck/value-objects/theme-config";
 import { ThemeProvider } from "@/components/puck/theme-context";
 import { LinkContextProvider } from "@/components/puck/link-context";
+import { QueryParamProvider } from "@/components/puck/contexts/QueryParamContext";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
 import type { OrganizationDTO } from "@/app/mappers/organization-mapper";
@@ -27,6 +28,7 @@ import { PuckSession } from "@/lib/puck/session-storage";
 
 export default function PreviewPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const pageId = parseInt(params.pageId as string);
   const appId = parseInt(params.id as string);
 
@@ -37,6 +39,22 @@ export default function PreviewPage() {
   const [organization, setOrganization] = useState<OrganizationDTO | null>(null);
   const [pages, setPages] = useState<PageDTO[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Convert URLSearchParams to Record for QueryParamContext
+  const queryParamsObject: Record<string, string | string[]> = {};
+  searchParams.forEach((value, key) => {
+    const existing = queryParamsObject[key];
+    if (existing) {
+      // Multiple values for same key - convert to array
+      if (Array.isArray(existing)) {
+        existing.push(value);
+      } else {
+        queryParamsObject[key] = [existing, value];
+      }
+    } else {
+      queryParamsObject[key] = value;
+    }
+  });
 
   useEffect(() => {
     async function loadAndResolveData() {
@@ -97,8 +115,8 @@ export default function PreviewPage() {
         setEffectiveTheme(computedTheme);
 
         // 5. Resolve all component data (calls resolveData functions)
-        console.log('[PreviewPage] Resolving component data...');
-        const resolved = await resolveAllData(rawData, config, {});
+        console.log('[PreviewPage] Resolving component data with query params:', queryParamsObject);
+        const resolved = await resolveAllData(rawData, config, queryParamsObject);
         console.log('[PreviewPage] Data resolved, rendering...');
 
         setResolvedData(resolved);
@@ -110,7 +128,7 @@ export default function PreviewPage() {
     }
 
     loadAndResolveData();
-  }, [pageId, appId]);
+  }, [pageId, appId, searchParams]);
 
   if (loading) {
     return (
@@ -129,22 +147,24 @@ export default function PreviewPage() {
   }
 
   return (
-    <LinkContextProvider
-      value={{
-        orgSlug: organization?.slug ?? undefined,
-        appSlug: app.slug,
-        appId: app.id,
-        pages,
-        isEditing: false,
-        isPreview: true,
-      }}
-    >
-      <ThemeProvider value={effectiveTheme}>
-        <PreviewClient
-          resolvedData={resolvedData}
-          pageName={pageName}
-        />
-      </ThemeProvider>
-    </LinkContextProvider>
+    <QueryParamProvider params={queryParamsObject}>
+      <LinkContextProvider
+        value={{
+          orgSlug: organization?.slug ?? undefined,
+          appSlug: app.slug,
+          appId: app.id,
+          pages,
+          isEditing: false,
+          isPreview: true,
+        }}
+      >
+        <ThemeProvider value={effectiveTheme}>
+          <PreviewClient
+            resolvedData={resolvedData}
+            pageName={pageName}
+          />
+        </ThemeProvider>
+      </LinkContextProvider>
+    </QueryParamProvider>
   );
 }

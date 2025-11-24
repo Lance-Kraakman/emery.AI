@@ -17,6 +17,13 @@ import ChartBlockConfig from "./blocks/ChartBlock";
 import { FormBlockConfig } from "./blocks/FormBlock";
 import { LoginBlock } from "./blocks/LoginBlock";
 import { SignOutBlock } from "./blocks/SignOutBlock";
+import { RepeatBlockConfig } from "./blocks/RepeatBlock";
+import { LinkBlockConfig } from "./blocks/LinkBlock";
+import DataContextBlockConfig from "./blocks/DataContextBlock";
+import TextFieldConfig from "./blocks/TextField";
+import ImageFieldConfig from "./blocks/ImageField";
+import DateFieldConfig from "./blocks/DateField";
+import SelectFieldConfig from "./blocks/SelectField";
 
 import Root from "./root";
 import { UserConfig } from "./types";
@@ -25,14 +32,14 @@ export const config: UserConfig = {
   root: Root,
   categories: {
     layout: {
-      components: ["HeaderBlock", "Grid", "Flex", "Space", "FooterBlock"],
+      components: ["HeaderBlock", "Grid", "Flex", "Space", "FooterBlock", "DataContextBlock"],
     },
     typography: {
       components: ["Heading", "Text"],
     },
     interactive: {
       title: "Actions",
-      components: ["Button"],
+      components: ["Button", "LinkBlock"],
     },
     authentication: {
       title: "Authentication",
@@ -40,7 +47,11 @@ export const config: UserConfig = {
     },
     data: {
       title: "Data",
-      components: ["TableBlock", "MetricBlock", "ChartBlock", "FormBlock"],
+      components: ["TableBlock", "RepeatBlock", "MetricBlock", "ChartBlock", "FormBlock"],
+    },
+    fields: {
+      title: "Fields",
+      components: ["TextField", "ImageField", "DateField", "SelectField"],
     },
     other: {
       title: "Other",
@@ -61,10 +72,17 @@ export const config: UserConfig = {
     Space,
     HeaderBlock,
     FooterBlock,
+    DataContextBlock: DataContextBlockConfig,
     TableBlock: TableBlockConfig,
+    RepeatBlock: RepeatBlockConfig,
     MetricBlock: MetricBlockConfig,
     ChartBlock: ChartBlockConfig,
     FormBlock: FormBlockConfig,
+    LinkBlock: LinkBlockConfig,
+    TextField: TextFieldConfig,
+    ImageField: ImageFieldConfig,
+    DateField: DateFieldConfig,
+    SelectField: SelectFieldConfig,
     LoginBlock,
     SignOutBlock,
   },
