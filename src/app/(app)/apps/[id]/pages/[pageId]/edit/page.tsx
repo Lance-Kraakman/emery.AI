@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, type ReactNode } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Puck, Data, usePuck, resolveAllData, Button as PuckButton } from "@measured/puck";
 import "@measured/puck/puck.css";
 import "@/styles/puck-theme.css";
@@ -18,6 +18,7 @@ import { Loading } from "@/components/ui/loading";
 import { toast } from "sonner";
 import { ThemeProvider } from "@/components/puck/theme-context";
 import { LinkContextProvider } from "@/components/puck/link-context";
+import { QueryParamProvider } from "@/components/puck/contexts/QueryParamContext";
 import { PuckEditorThemeProvider, usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 import { createPuckUIOverrides } from "@/components/puck/overrides";
 import { PuckSession } from "@/lib/puck/session-storage";
@@ -231,6 +232,7 @@ function CustomHeaderActions({
 export default function PageEditPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const appId = parseInt(params.id as string);
   const pageId = parseInt(params.pageId as string);
 
@@ -242,6 +244,21 @@ export default function PageEditPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loadedFromSessionStorage, setLoadedFromSessionStorage] = useState(false);
+
+  // Convert URLSearchParams to Record for QueryParamContext
+  const queryParamsObject: Record<string, string | string[]> = {};
+  searchParams.forEach((value, key) => {
+    const existing = queryParamsObject[key];
+    if (existing) {
+      if (Array.isArray(existing)) {
+        existing.push(value);
+      } else {
+        queryParamsObject[key] = [existing, value];
+      }
+    } else {
+      queryParamsObject[key] = value;
+    }
+  });
 
   useEffect(() => {
     async function loadPage() {
@@ -271,7 +288,7 @@ export default function PageEditPage() {
         const savedData = PuckSession.getData(pageId);
         if (savedData) {
           try {
-            const resolvedData = await resolveAllData(savedData, config, {});
+            const resolvedData = await resolveAllData(savedData, config, queryParamsObject);
             setInitialData(resolvedData);
             setLoadedFromSessionStorage(true);
             setLoading(false);
@@ -284,7 +301,7 @@ export default function PageEditPage() {
 
         // Load from database
         const rawData = pageResult.data.templateData || { content: [], root: {}, zones: {} };
-        const resolvedData = await resolveAllData(rawData, config, {});
+        const resolvedData = await resolveAllData(rawData, config, queryParamsObject);
         setInitialData(resolvedData);
       } catch (err) {
         console.error('Error loading page:', err);
@@ -297,7 +314,7 @@ export default function PageEditPage() {
     if (pageId && appId) {
       loadPage();
     }
-  }, [pageId, appId]);
+  }, [pageId, appId, searchParams]);
 
   const handlePublish = async () => {
     if (!page) return;
@@ -390,20 +407,21 @@ export default function PageEditPage() {
   }
 
   return (
-    <PuckEditorThemeProvider pageId={pageId} page={page} app={app}>
-      <LinkContextProvider
-        value={{
-          orgSlug: organization?.slug ?? undefined,
-          appSlug: app.slug,
-          appId: app.id,
-          pages: pages,
-          isEditing: true,
-          isPreview: false,
-        }}
-      >
-        <ThemeProviderWrapper>
-          <div className="h-screen">
-            <Puck
+    <QueryParamProvider params={queryParamsObject}>
+      <PuckEditorThemeProvider pageId={pageId} page={page} app={app}>
+        <LinkContextProvider
+          value={{
+            orgSlug: organization?.slug ?? undefined,
+            appSlug: app.slug,
+            appId: app.id,
+            pages: pages,
+            isEditing: true,
+            isPreview: false,
+          }}
+        >
+          <ThemeProviderWrapper>
+            <div className="h-screen">
+              <Puck
             config={config}
             data={initialData}
             ui={{
@@ -460,6 +478,7 @@ export default function PageEditPage() {
       </ThemeProviderWrapper>
       </LinkContextProvider>
     </PuckEditorThemeProvider>
+    </QueryParamProvider>
   );
 }
 

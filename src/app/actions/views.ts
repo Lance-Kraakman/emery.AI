@@ -476,9 +476,15 @@ export async function getViewsForOrganization(): Promise<ViewDTO[]> {
  *
  * Used by TableBlock to fetch and render data.
  * Returns plain serializable objects (not domain entities).
+ *
+ * @param dataSourceId - The view ID to execute
+ * @param context - Optional context for dynamic filtering (query params, etc.)
+ *                  TODO: Implement parameter substitution in view filters using context
+ *                  Example: filter "user_id = {userId}" would use context.userId
  */
 export async function executeView(
-  dataSourceId: number
+  dataSourceId: number,
+  context?: import('@/components/puck/types/puck-context').PuckResolveContext
 ): Promise<{
   rows: Array<Record<string, any>>;
   fields: Array<{ id: number; name: string; type: string }>;

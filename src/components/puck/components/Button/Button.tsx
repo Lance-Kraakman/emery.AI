@@ -7,7 +7,10 @@ import { Loader } from "../Loader";
 import { filterDataAttrs } from "../../lib/filter-data-attrs";
 import { resolveLinkAction, type LinkResolutionContext } from "../../utils/resolve-link-action";
 import type { LinkActionConfig } from "../../custom-fields/link-action-field";
+import type { Action } from "../../types/actions";
 import { useLinkContext } from "../../link-context";
+import { useActionContext } from "../../contexts/ActionContext";
+import { executeActions } from "../../actions/execute-action";
 
 const getClassName = getClassNameFactory("Button", styles);
 
@@ -16,6 +19,7 @@ export const Button = ({
   href,
   onClick,
   action,
+  actions,
   linkContext,
   isEditing,
   variant = "primary",
@@ -33,6 +37,7 @@ export const Button = ({
   href?: string;
   onClick?: (e: any) => void | Promise<void>;
   action?: LinkActionConfig;
+  actions?: Action[]; // New actions system
   linkContext?: LinkResolutionContext;
   isEditing?: boolean;
   variant?: "primary" | "secondary";
@@ -47,6 +52,7 @@ export const Button = ({
 }) => {
   const [loading, setLoading] = useState(loadingProp);
   const contextFromProvider = useLinkContext();
+  const buildActionContext = useActionContext();
 
   useEffect(() => setLoading(loadingProp), [loadingProp]);
 
@@ -83,7 +89,22 @@ export const Button = ({
         fullWidth,
         [size]: true,
       })}
-      onClick={(e) => {
+      onClick={async (e) => {
+        // Execute new actions system if provided
+        if (actions && actions.length > 0) {
+          setLoading(true);
+          try {
+            const context = buildActionContext();
+            await executeActions(actions, context);
+          } catch (error) {
+            console.error('[Button] Error executing actions:', error);
+          } finally {
+            setLoading(false);
+          }
+          return;
+        }
+
+        // Fallback to legacy onClick handler
         if (!finalOnClick) return;
 
         setLoading(true);
