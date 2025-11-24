@@ -1,11 +1,13 @@
 import React from "react";
 import { ComponentConfig } from "@measured/puck";
 import { Button as _Button } from "@/components/puck/components/Button";
-import { createLinkActionField, type LinkActionConfig } from "@/components/puck/custom-fields";
+import { createLinkActionField, createActionsField, type LinkActionConfig } from "@/components/puck/custom-fields";
+import type { Action } from "../../types/actions";
 
 export type ButtonProps = {
   label: string;
-  action: LinkActionConfig;
+  action: LinkActionConfig; // Legacy action system (kept for backwards compatibility)
+  actions?: Action[]; // New actions system
   variant: "primary" | "secondary";
 };
 
@@ -18,8 +20,9 @@ export const Button: ComponentConfig<ButtonProps> = {
       contentEditable: true,
     },
     action: createLinkActionField({
-      label: "Button Action",
+      label: "Button Action (Legacy)",
     }),
+    actions: createActionsField(), // New actions system
     variant: {
       type: "radio",
       options: [
@@ -33,13 +36,15 @@ export const Button: ComponentConfig<ButtonProps> = {
     action: {
       actionType: "none",
     },
+    actions: [],
     variant: "primary",
   },
-  render: ({ action, variant, label, puck }) => {
+  render: ({ action, actions, variant, label, puck }) => {
     return (
       <div>
         <_Button
           action={action}
+          actions={actions}
           variant={variant}
           size="large"
           isEditing={puck.isEditing}

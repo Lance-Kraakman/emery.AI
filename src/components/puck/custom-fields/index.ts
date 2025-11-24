@@ -43,3 +43,6 @@ export {
   type LinkActionConfig,
   type LinkActionType,
 } from "./link-action-field";
+
+// Actions (for Button, Link blocks)
+export { createActionsField } from "./actions-field";
