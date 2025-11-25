@@ -403,7 +403,7 @@ class AppStack(Stack):
         # Configure TCP health check for chat service
         agent_chat_service.target_group.configure_health_check(
             protocol=elbv2.Protocol.TCP,
-            port=50051,  # Use integer port number for NLB
+            port="50051",  # Port as string (CDK requirement)
             interval=Duration.seconds(30),
             timeout=Duration.seconds(10),
             healthy_threshold_count=3,  # Increased from 2 for more lenient checks
@@ -496,7 +496,7 @@ class AppStack(Stack):
         # Configure TCP health check for table service
         agent_table_service.target_group.configure_health_check(
             protocol=elbv2.Protocol.TCP,
-            port=50052,  # Use integer port number for NLB
+            port="50052",  # Port as string (CDK requirement)
             interval=Duration.seconds(30),
             timeout=Duration.seconds(10),
             healthy_threshold_count=3,  # Increased from 2 for more lenient checks
