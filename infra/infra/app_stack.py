@@ -402,8 +402,8 @@ class AppStack(Stack):
 
         # Configure TCP health check for chat service
         agent_chat_service.target_group.configure_health_check(
-            port="traffic-port",  # Use the container's traffic port (50051)
             protocol=elbv2.Protocol.TCP,
+            port=50051,  # Use integer port number for NLB
             interval=Duration.seconds(30),
             timeout=Duration.seconds(10),
             healthy_threshold_count=3,  # Increased from 2 for more lenient checks
@@ -495,8 +495,8 @@ class AppStack(Stack):
 
         # Configure TCP health check for table service
         agent_table_service.target_group.configure_health_check(
-            port="traffic-port",  # Use the container's traffic port (50052)
             protocol=elbv2.Protocol.TCP,
+            port=50052,  # Use integer port number for NLB
             interval=Duration.seconds(30),
             timeout=Duration.seconds(10),
             healthy_threshold_count=3,  # Increased from 2 for more lenient checks
