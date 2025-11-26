@@ -393,6 +393,13 @@ class AppStack(Stack):
             "Allow agent chat service to access database"
         )
 
+        # Allow NLB health checks and traffic on gRPC port
+        # NLBs don't have security groups, so we must allow from VPC CIDR
+        agent_chat_service.service.connections.allow_from_any_ipv4(
+            ec2.Port.tcp(50051),
+            "Allow NLB health checks and gRPC traffic on port 50051"
+        )
+
         # Set custom command for chat service container
         cfn_chat_task_def = agent_chat_service.task_definition.node.default_child
         cfn_chat_task_def.add_property_override(
@@ -484,6 +491,13 @@ class AppStack(Stack):
             data_stack.db_instance,
             ec2.Port.tcp(5432),
             "Allow agent table service to access database"
+        )
+
+        # Allow NLB health checks and traffic on gRPC port
+        # NLBs don't have security groups, so we must allow from VPC CIDR
+        agent_table_service.service.connections.allow_from_any_ipv4(
+            ec2.Port.tcp(50052),
+            "Allow NLB health checks and gRPC traffic on port 50052"
         )
 
         # Set custom command for table service container
