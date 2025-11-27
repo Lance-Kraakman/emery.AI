@@ -7,32 +7,38 @@
 
 import type { ComponentConfig } from "@measured/puck";
 import TextField, { type TextFieldProps } from "./TextField";
+import { createFieldSelectorField } from "../../custom-fields";
+import {
+  typographySizeField,
+  textColorField,
+  fontFamilyField,
+  fontWeightField,
+  labelPositionField,
+} from "../../fields/standard-fields";
 
 export const TextFieldConfig: ComponentConfig<TextFieldProps> = {
   label: "Text Field",
 
   fields: {
-    fieldId: {
-      type: "number",
-      label: "Field ID",
-      // TODO: Replace with custom field selector that shows field names
-    },
+    fieldId: createFieldSelectorField({
+      label: "Field",
+      filterTypes: ["text", "email", "phone"],
+    }),
 
     label: {
       type: "text",
       label: "Label (optional)",
     },
 
-    style: {
-      type: "select",
-      label: "Style",
-      options: [
-        { label: "Default", value: "default" },
-        { label: "Bold", value: "bold" },
-        { label: "Muted", value: "muted" },
-        { label: "Heading", value: "heading" },
-      ],
-    },
+    labelPosition: labelPositionField,
+
+    size: typographySizeField,
+
+    textColor: textColorField,
+
+    fontFamily: fontFamilyField,
+
+    fontWeight: fontWeightField,
 
     maxLength: {
       type: "number",
@@ -46,8 +52,8 @@ export const TextFieldConfig: ComponentConfig<TextFieldProps> = {
   },
 
   defaultProps: {
-    fieldId: 0,
-    style: "default",
+    labelPosition: "top",
+    size: "base",
     fallback: "",
   },
 
