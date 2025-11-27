@@ -264,3 +264,31 @@ jobs:
             -c env=${ENV_NAME} \
             -c aws_account_id=${{ env.AWS_ACCOUNT_ID }} \
             -c region=${{ env.AWS_REGION }}
+
+      - name: Blue/Green Deployment Info
+        if: success()
+        env:
+          ENV_NAME: ${{ steps.deploy_config.outputs.env_name }}
+        run: |
+          # Capitalize first letter for prefix
+          PREFIX="$(echo ${ENV_NAME} | sed 's/./\U&/')"
+          APP_NAME="${PREFIX}-Frontend-BlueGreen"
+
+          echo "🔵🟢 Blue/Green Deployment Created"
+          echo "=================================="
+          echo ""
+          echo "📋 CodeDeploy Application: ${APP_NAME}"
+          echo "📋 Deployment Group: ${PREFIX}-Frontend-DeploymentGroup"
+          echo ""
+          echo "🔗 View deployment in AWS Console:"
+          echo "   https://ap-southeast-2.console.aws.amazon.com/codesuite/codedeploy/deployments"
+          echo ""
+          echo "⏳ The deployment is waiting for manual approval (1 hour timeout)"
+          echo ""
+          echo "✅ To APPROVE the deployment:"
+          echo "   aws deploy continue-deployment --deployment-id <DEPLOYMENT_ID> --deployment-wait-type READY_WAIT"
+          echo ""
+          echo "❌ To REJECT/ROLLBACK:"
+          echo "   aws deploy stop-deployment --deployment-id <DEPLOYMENT_ID> --auto-rollback-enabled"
+          echo ""
+          echo "🧪 Test the green environment at port 3001 before approving"
