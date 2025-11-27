@@ -266,19 +266,13 @@ jobs:
             -c region=${{ env.AWS_REGION }}
 
       - name: Blue/Green Deployment Info
-        if: success()
-        env:
-          ENV_NAME: ${{ steps.deploy_config.outputs.env_name }}
+        if: success() && startsWith(github.ref, 'refs/tags/v')
         run: |
-          # Capitalize first letter for prefix
-          PREFIX="$(echo ${ENV_NAME} | sed 's/./\U&/')"
-          APP_NAME="${PREFIX}-Frontend-BlueGreen"
-
           echo "🔵🟢 Blue/Green Deployment Created"
           echo "=================================="
           echo ""
-          echo "📋 CodeDeploy Application: ${APP_NAME}"
-          echo "📋 Deployment Group: ${PREFIX}-Frontend-DeploymentGroup"
+          echo "📋 CodeDeploy Application: Production-Frontend-BlueGreen"
+          echo "📋 Deployment Group: Production-Frontend-DeploymentGroup"
           echo ""
           echo "🔗 View deployment in AWS Console:"
           echo "   https://ap-southeast-2.console.aws.amazon.com/codesuite/codedeploy/deployments"
