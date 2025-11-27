@@ -1,14 +1,11 @@
 "use client";
 
-import { ReactNode, useEffect, useState, useMemo } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import styles from "./Button.module.css";
 import getClassNameFactory from "../../lib/get-class-name-factory";
 import { Loader } from "../Loader";
 import { filterDataAttrs } from "../../lib/filter-data-attrs";
-import { resolveLinkAction, type LinkResolutionContext } from "../../utils/resolve-link-action";
-import type { LinkActionConfig } from "../../custom-fields/link-action-field";
 import type { Action } from "../../types/actions";
-import { useLinkContext } from "../../link-context";
 import { useActionContext } from "../../contexts/ActionContext";
 import { executeActions } from "../../actions/execute-action";
 
@@ -18,9 +15,7 @@ export const Button = ({
   children,
   href,
   onClick,
-  action,
   actions,
-  linkContext,
   isEditing,
   variant = "primary",
   type,
@@ -36,9 +31,7 @@ export const Button = ({
   children: ReactNode;
   href?: string;
   onClick?: (e: any) => void | Promise<void>;
-  action?: LinkActionConfig;
-  actions?: Action[]; // New actions system
-  linkContext?: LinkResolutionContext;
+  actions?: Action[];
   isEditing?: boolean;
   variant?: "primary" | "secondary";
   type?: "button" | "submit" | "reset";
@@ -51,33 +44,14 @@ export const Button = ({
   loading?: boolean;
 }) => {
   const [loading, setLoading] = useState(loadingProp);
-  const contextFromProvider = useLinkContext();
   const buildActionContext = useActionContext();
 
   useEffect(() => setLoading(loadingProp), [loadingProp]);
 
-  // Resolve link action if provided
-  const resolvedAction = useMemo(() => {
-    if (action) {
-      // Merge context from provider with prop-based context (props take precedence)
-      const mergedContext: LinkResolutionContext = {
-        ...contextFromProvider,
-        ...linkContext,
-        isEditing: isEditing !== undefined ? isEditing : contextFromProvider.isEditing || false,
-      };
+  const finalTarget = newTab ? "_blank" : undefined;
+  const finalRel = newTab ? "noreferrer" : undefined;
 
-      return resolveLinkAction(action, mergedContext);
-    }
-    return null;
-  }, [action, linkContext, isEditing, contextFromProvider]);
-
-  // Determine final href, onClick, target, and rel
-  const finalHref = resolvedAction?.href || href;
-  const finalTarget = resolvedAction?.target || (newTab ? "_blank" : undefined);
-  const finalRel = resolvedAction?.rel || (newTab ? "noreferrer" : undefined);
-  const finalOnClick = resolvedAction?.onClick || onClick;
-
-  const ElementType = finalHref ? "a" : type ? "button" : "span";
+  const ElementType = href ? "a" : type ? "button" : "span";
   const dataAttrs = filterDataAttrs(props);
 
   const el = (
@@ -90,7 +64,7 @@ export const Button = ({
         [size]: true,
       })}
       onClick={async (e) => {
-        // Execute new actions system if provided
+        // Execute actions if provided
         if (actions && actions.length > 0) {
           setLoading(true);
           try {
@@ -104,11 +78,11 @@ export const Button = ({
           return;
         }
 
-        // Fallback to legacy onClick handler
-        if (!finalOnClick) return;
+        // Fallback to onClick handler
+        if (!onClick) return;
 
         setLoading(true);
-        Promise.resolve(finalOnClick(e)).then(() => {
+        Promise.resolve(onClick(e)).then(() => {
           setLoading(false);
         });
       }}
@@ -117,7 +91,7 @@ export const Button = ({
       tabIndex={tabIndex}
       target={finalTarget}
       rel={finalRel}
-      href={finalHref}
+      href={href}
       {...dataAttrs}
     >
       {icon && <div className={getClassName("icon")}>{icon}</div>}
