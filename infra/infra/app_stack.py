@@ -154,7 +154,9 @@ class AppStack(Stack):
         )
 
         # Create the Fargate service using custom task definition
-        # Using CODE_DEPLOY deployment controller for blue/green deployments
+        # Production uses CODE_DEPLOY for blue/green, dev/staging use rolling deployments
+        is_production = env_name == "production"
+
         frontend_service = ecs_patterns.ApplicationLoadBalancedFargateService(
             self, f"{prefix}FrontendService",
             cluster=cluster,
@@ -164,7 +166,7 @@ class AppStack(Stack):
             public_load_balancer=True,
             deployment_controller=ecs.DeploymentController(
                 type=ecs.DeploymentControllerType.CODE_DEPLOY
-            ),
+            ) if is_production else None,
         )
 
         # Grant database access to frontend service
@@ -183,33 +185,14 @@ class AppStack(Stack):
             interval=Duration.seconds(30),
         )
 
-        # AIDEV-NOTE: Blue/Green deployment - deployment_configuration not used with CODE_DEPLOY controller
-        # CodeDeploy manages the deployment process instead of ECS rolling updates
-
-        # Create Green target group for blue/green deployments
-        green_target_group = elbv2.ApplicationTargetGroup(
-            self, f"{prefix}FrontendGreenTG",
-            vpc=data_stack.vpc,
-            port=3000,
-            protocol=elbv2.ApplicationProtocol.HTTP,
-            target_type=elbv2.TargetType.IP,
-            health_check=elbv2.HealthCheck(
-                path="/api/health",
-                timeout=Duration.seconds(10),
-                healthy_threshold_count=2,
-                unhealthy_threshold_count=3,
-                interval=Duration.seconds(30),
-            ),
-        )
-
-        # Create test listener for green environment (port 3001)
-        # Allows testing new deployment before switching traffic
-        test_listener = frontend_service.load_balancer.add_listener(
-            f"{prefix}FrontendTestListener",
-            port=3001,
-            protocol=elbv2.ApplicationProtocol.HTTP,
-            default_target_groups=[green_target_group],
-        )
+        # AIDEV-NOTE: Production uses blue/green (CodeDeploy), dev/staging use rolling deployments
+        if not is_production:
+            # Dev/Staging: Configure deployment settings for rolling updates
+            cfn_frontend_service = frontend_service.service.node.default_child
+            cfn_frontend_service.deployment_configuration = {
+                "minimumHealthyPercent": 50,
+                "maximumPercent": 200
+            }
         
         # AIDEV-NOTE: Add ECR permissions to task execution role for pulling images
         frontend_service.task_definition.execution_role.add_managed_policy(
@@ -243,49 +226,75 @@ class AppStack(Stack):
             scale_out_cooldown=Duration.seconds(60)   # Fast scale-out for user traffic
         )
 
-        # ========== BLUE/GREEN DEPLOYMENT WITH CODEDEPLOY ==========
-        # CodeDeploy manages traffic shifting between blue (current) and green (new) target groups
+        # ========== BLUE/GREEN DEPLOYMENT WITH CODEDEPLOY (Production Only) ==========
+        if is_production:
+            # CodeDeploy manages traffic shifting between blue (current) and green (new) target groups
 
-        codedeploy_app = codedeploy.EcsApplication(
-            self, f"{prefix}FrontendCodeDeployApp",
-            application_name=f"{prefix}-Frontend-BlueGreen",
-        )
+            # Create Green target group for blue/green deployments
+            green_target_group = elbv2.ApplicationTargetGroup(
+                self, f"{prefix}FrontendGreenTG",
+                vpc=data_stack.vpc,
+                port=3000,
+                protocol=elbv2.ApplicationProtocol.HTTP,
+                target_type=elbv2.TargetType.IP,
+                health_check=elbv2.HealthCheck(
+                    path="/api/health",
+                    timeout=Duration.seconds(10),
+                    healthy_threshold_count=2,
+                    unhealthy_threshold_count=3,
+                    interval=Duration.seconds(30),
+                ),
+            )
 
-        deployment_group = codedeploy.EcsDeploymentGroup(
-            self, f"{prefix}FrontendDeploymentGroup",
-            application=codedeploy_app,
-            deployment_group_name=f"{prefix}-Frontend-DeploymentGroup",
-            service=frontend_service.service,
-            blue_green_deployment_config=codedeploy.EcsBlueGreenDeploymentConfig(
-                blue_target_group=frontend_service.target_group,
-                green_target_group=green_target_group,
-                listener=frontend_service.listener,
-                test_listener=test_listener,
-                deployment_approval_wait_time=Duration.hours(1),  # Manual approval timeout
-            ),
-            deployment_config=codedeploy.EcsDeploymentConfig.ALL_AT_ONCE,
-            auto_rollback=codedeploy.AutoRollbackConfig(
-                failed_deployment=True,
-                stopped_deployment=True,
-            ),
-        )
+            # Create test listener for green environment (port 3001)
+            # Allows testing new deployment before switching traffic
+            test_listener = frontend_service.load_balancer.add_listener(
+                f"{prefix}FrontendTestListener",
+                port=3001,
+                protocol=elbv2.ApplicationProtocol.HTTP,
+                default_target_groups=[green_target_group],
+            )
 
-        # Output CodeDeploy info for easy access
-        CfnOutput(
-            self, f"{prefix}CodeDeployApp",
-            value=codedeploy_app.application_name,
-            description="CodeDeploy application name for blue/green deployments"
-        )
-        CfnOutput(
-            self, f"{prefix}CodeDeployGroup",
-            value=deployment_group.deployment_group_name,
-            description="CodeDeploy deployment group name"
-        )
-        CfnOutput(
-            self, f"{prefix}TestListenerURL",
-            value=f"http://{frontend_service.load_balancer.load_balancer_dns_name}:3001",
-            description="Test listener URL for green environment (use to test before approving deployment)"
-        )
+            codedeploy_app = codedeploy.EcsApplication(
+                self, f"{prefix}FrontendCodeDeployApp",
+                application_name=f"{prefix}-Frontend-BlueGreen",
+            )
+
+            deployment_group = codedeploy.EcsDeploymentGroup(
+                self, f"{prefix}FrontendDeploymentGroup",
+                application=codedeploy_app,
+                deployment_group_name=f"{prefix}-Frontend-DeploymentGroup",
+                service=frontend_service.service,
+                blue_green_deployment_config=codedeploy.EcsBlueGreenDeploymentConfig(
+                    blue_target_group=frontend_service.target_group,
+                    green_target_group=green_target_group,
+                    listener=frontend_service.listener,
+                    test_listener=test_listener,
+                    deployment_approval_wait_time=Duration.hours(1),  # Manual approval timeout
+                ),
+                deployment_config=codedeploy.EcsDeploymentConfig.ALL_AT_ONCE,
+                auto_rollback=codedeploy.AutoRollbackConfig(
+                    failed_deployment=True,
+                    stopped_deployment=True,
+                ),
+            )
+
+            # Output CodeDeploy info for easy access
+            CfnOutput(
+                self, f"{prefix}CodeDeployApp",
+                value=codedeploy_app.application_name,
+                description="CodeDeploy application name for blue/green deployments"
+            )
+            CfnOutput(
+                self, f"{prefix}CodeDeployGroup",
+                value=deployment_group.deployment_group_name,
+                description="CodeDeploy deployment group name"
+            )
+            CfnOutput(
+                self, f"{prefix}TestListenerURL",
+                value=f"http://{frontend_service.load_balancer.load_balancer_dns_name}:3001",
+                description="Test listener URL for green environment (use to test before approving deployment)"
+            )
 
         # Create CloudFront distribution for static URL routing
         cloudfront_distribution = cloudfront.Distribution(
