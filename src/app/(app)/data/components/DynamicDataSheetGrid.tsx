@@ -59,6 +59,7 @@ import { createField, updateField, deleteField } from '@/app/actions/fields'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { GridContext, GridHeaderBar, type GridContextValue } from './grid'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const logger = createDebugLogger('DynamicDataSheetGrid')
 import type {
@@ -690,56 +691,58 @@ export function DynamicDataSheetGrid({
   }
 
   return (
-    <GridContext.Provider value={gridValue}>
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Custom Header Bar - integrated with grid */}
-      <div className="flex-shrink-0">
-        <GridHeaderBar />
-      </div>
-
-      {/* DataSheetGrid - fills remaining space, includes built-in "+ Add" button */}
-      <div className="flex-1 min-h-0 border border-t-0 border-border rounded-b-md overflow-hidden dsg-grid-wrapper">
-        {fields.length === 0 ? (
-          // Empty state with access to header controls
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground bg-background">
-            <div className="text-sm mb-2">No fields defined</div>
-            <div className="text-xs">Use the settings menu above to add fields</div>
+    <TooltipProvider delayDuration={300}>
+      <GridContext.Provider value={gridValue}>
+        <div className="h-full flex flex-col overflow-hidden">
+          {/* Custom Header Bar - integrated with grid */}
+          <div className="flex-shrink-0">
+            <GridHeaderBar />
           </div>
-        ) : (
-          <DataSheetGrid
-            key={`grid-${tableId}-${columns.length}-${currentView?.id || 'no-view'}`}  // CRITICAL: Remount on visible column count change or view change, but stable during data updates to preserve scroll position
-            value={state.data}
-            onChange={handleChange}
-            columns={columns}
-            createRow={() => createEmptyDSGRow(fields)}  // ✅ CRITICAL: Preserves IDs
-            duplicateRow={({ rowData }) => ({ ...rowData, id: crypto.randomUUID() })}  // Enable context menu with row duplication
-            lockRows={false}
-            rowKey="id"
-            rowHeight={30}  // Increased to 30 for better readability
-            headerRowHeight={32}  // Reduced from 50 (proportionally smaller)
-            autoAddRow={false}
-            gutterColumn={{   // Enable gutter for row numbers
-              basis: 60,
-              component: RowNumberCell
-            }}
-            onScroll={onScroll}  // Enable infinite scroll
-            style={{ height: '100%' }}  // CRITICAL: Create scrollable container for mouse wheel events
-            className="datasheet-grid"
-          />
-        )}
-      </div>
 
-      {/* Edit Field Dialog */}
-      <EditFieldPanel
-        field={editingField}
-        isOpen={isEditFieldOpen}
-        onClose={() => setIsEditFieldOpen(false)}
-        onSave={handleSaveField}
-        availableTables={availableTables}
-        tableId={tableId}
-      />
-    </div>
-    </GridContext.Provider>
+          {/* DataSheetGrid - fills remaining space, includes built-in "+ Add" button */}
+          <div className="flex-1 min-h-0 border border-t-0 border-border rounded-b-md overflow-hidden dsg-grid-wrapper">
+            {fields.length === 0 ? (
+              // Empty state with access to header controls
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground bg-background">
+                <div className="text-sm mb-2">No fields defined</div>
+                <div className="text-xs">Use the settings menu above to add fields</div>
+              </div>
+            ) : (
+              <DataSheetGrid
+                key={`grid-${tableId}-${columns.length}-${currentView?.id || 'no-view'}`}  // CRITICAL: Remount on visible column count change or view change, but stable during data updates to preserve scroll position
+                value={state.data}
+                onChange={handleChange}
+                columns={columns}
+                createRow={() => createEmptyDSGRow(fields)}  // ✅ CRITICAL: Preserves IDs
+                duplicateRow={({ rowData }) => ({ ...rowData, id: crypto.randomUUID() })}  // Enable context menu with row duplication
+                lockRows={false}
+                rowKey="id"
+                rowHeight={30}  // Increased to 30 for better readability
+                headerRowHeight={32}  // Reduced from 50 (proportionally smaller)
+                autoAddRow={false}
+                gutterColumn={{   // Enable gutter for row numbers
+                  basis: 60,
+                  component: RowNumberCell
+                }}
+                onScroll={onScroll}  // Enable infinite scroll
+                style={{ height: '100%' }}  // CRITICAL: Create scrollable container for mouse wheel events
+                className="datasheet-grid"
+              />
+            )}
+          </div>
+
+          {/* Edit Field Dialog */}
+          <EditFieldPanel
+            field={editingField}
+            isOpen={isEditFieldOpen}
+            onClose={() => setIsEditFieldOpen(false)}
+            onSave={handleSaveField}
+            availableTables={availableTables}
+            tableId={tableId}
+          />
+        </div>
+      </GridContext.Provider>
+    </TooltipProvider>
   )
 }
 

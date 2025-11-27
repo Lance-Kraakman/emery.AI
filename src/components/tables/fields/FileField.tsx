@@ -129,6 +129,7 @@ export function FileField({
           onAdd={onChange && !readOnly ? handleAddClick : undefined}
           onRemove={isEditMode ? handleRemoveFile : undefined}
           onItemClick={!isEditMode ? handleFileClick : undefined}
+          onItemOpen={onFileOpen ? handleFileClick : undefined}
           disabled={disabled || isUploading || !canAddMore}
           emptyMessage={compact ? undefined : `No ${fieldName?.toLowerCase() || 'files'}`}
         />
