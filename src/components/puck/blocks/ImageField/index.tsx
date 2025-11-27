@@ -7,20 +7,24 @@
 
 import type { ComponentConfig } from "@measured/puck";
 import ImageField, { type ImageFieldProps } from "./ImageField";
+import { createFieldSelectorField } from "../../custom-fields";
+import { labelPositionField } from "../../fields/standard-fields";
 
 export const ImageFieldConfig: ComponentConfig<ImageFieldProps> = {
   label: "Image Field",
 
   fields: {
-    fieldId: {
-      type: "number",
-      label: "Field ID",
-    },
+    fieldId: createFieldSelectorField({
+      label: "Field",
+      filterTypes: ["file"],
+    }),
 
     label: {
       type: "text",
       label: "Label (optional)",
     },
+
+    labelPosition: labelPositionField,
 
     size: {
       type: "select",
@@ -55,7 +59,7 @@ export const ImageFieldConfig: ComponentConfig<ImageFieldProps> = {
   },
 
   defaultProps: {
-    fieldId: 0,
+    labelPosition: "top",
     size: "medium",
     shape: "rounded",
     alt: "Image",

@@ -10,21 +10,37 @@
  */
 
 import { useFieldValue, useIsInDataContext } from '@/components/puck/hooks/useFieldValue';
+import { cn } from '@/lib/utils';
 import styles from './styles.module.css';
 
 export interface SelectFieldProps {
-  fieldId: number;
+  fieldId?: number;
   label?: string;
+  labelPosition?: 'top' | 'inline';
+  size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
   fallback?: string;
 }
 
 export default function SelectField({
   fieldId,
   label,
+  labelPosition = 'top',
+  size = 'sm',
   fallback = '',
 }: SelectFieldProps) {
+  // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
-  const value = useFieldValue(fieldId);
+  const value = useFieldValue(fieldId ?? 0);
+
+  // No field selected
+  if (fieldId === undefined) {
+    return (
+      <div className={styles.warning}>
+        <span className={styles.warningIcon}>⚠️</span>
+        <span className={styles.warningText}>Please select a field</span>
+      </div>
+    );
+  }
 
   // Not in data context - show warning
   if (!isInContext) {
@@ -32,7 +48,7 @@ export default function SelectField({
       <div className={styles.warning}>
         <span className={styles.warningIcon}>⚠️</span>
         <span className={styles.warningText}>
-          SelectField must be inside a DataContextBlock or RepeatBlock
+          SelectField must be inside a Data block
         </span>
       </div>
     );
@@ -72,10 +88,15 @@ export default function SelectField({
     options = [{ value: String(value) }];
   }
 
+  const containerClass = cn(
+    styles.selectField,
+    labelPosition === 'inline' && styles.inline
+  );
+
   return (
-    <div className={styles.selectField}>
+    <div className={containerClass}>
       {label && <label className={styles.label}>{label}</label>}
-      <div className={styles.badges}>
+      <div className={styles.badges} data-size={size}>
         {options.map((option, index) => (
           <span
             key={index}

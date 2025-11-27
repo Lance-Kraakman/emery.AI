@@ -15,9 +15,13 @@ import { cn } from '@/lib/utils';
 import styles from './styles.module.css';
 
 export interface TextFieldProps {
-  fieldId: number;
+  fieldId?: number;
   label?: string;
-  style?: 'default' | 'bold' | 'muted' | 'heading';
+  labelPosition?: 'top' | 'inline';
+  size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
+  textColor?: string;
+  fontFamily?: string;
+  fontWeight?: string;
   maxLength?: number;
   fallback?: string;
 }
@@ -25,12 +29,27 @@ export interface TextFieldProps {
 export default function TextField({
   fieldId,
   label,
-  style = 'default',
+  labelPosition = 'top',
+  size = 'base',
+  textColor,
+  fontFamily,
+  fontWeight,
   maxLength,
   fallback = '',
 }: TextFieldProps) {
+  // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
-  const value = useFieldValue(fieldId);
+  const value = useFieldValue(fieldId ?? 0);
+
+  // No field selected
+  if (fieldId === undefined) {
+    return (
+      <div className={styles.warning}>
+        <span className={styles.warningIcon}>⚠️</span>
+        <span>Please select a field</span>
+      </div>
+    );
+  }
 
   // Not in data context - show warning
   if (!isInContext) {
@@ -38,7 +57,7 @@ export default function TextField({
       <div className={styles.warning}>
         <span className={styles.warningIcon}>⚠️</span>
         <span className={styles.warningText}>
-          TextField must be inside a DataContextBlock or RepeatBlock
+          TextField must be inside a Data block
         </span>
       </div>
     );
@@ -61,19 +80,24 @@ export default function TextField({
     displayValue = displayValue.substring(0, maxLength) + '...';
   }
 
-  const textClass = cn(
-    styles.text,
-    {
-      [styles.bold]: style === 'bold',
-      [styles.muted]: style === 'muted',
-      [styles.heading]: style === 'heading',
-    }
+  const containerClass = cn(
+    styles.textField,
+    labelPosition === 'inline' && styles.inline
   );
 
+  // Build inline styles from standard fields
+  const textStyle: React.CSSProperties = {
+    ...(textColor && { color: textColor }),
+    ...(fontFamily && { fontFamily }),
+    ...(fontWeight && { fontWeight }),
+  };
+
   return (
-    <div className={styles.textField}>
+    <div className={containerClass}>
       {label && <label className={styles.label}>{label}</label>}
-      <span className={textClass}>{displayValue}</span>
+      <span className={styles.text} data-size={size} style={textStyle}>
+        {displayValue}
+      </span>
     </div>
   );
 }

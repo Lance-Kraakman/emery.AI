@@ -181,3 +181,16 @@ export const fontWeightField = {
     { value: "900", label: "Black (900)" },
   ],
 };
+
+/**
+ * Standard label position field
+ * Controls whether form field labels appear above or inline with the field
+ */
+export const labelPositionField = {
+  type: "radio" as const,
+  label: "Label Position",
+  options: [
+    { value: "top", label: "Top" },
+    { value: "inline", label: "Inline" },
+  ],
+};
