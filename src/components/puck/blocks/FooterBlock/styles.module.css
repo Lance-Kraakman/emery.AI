@@ -1,0 +1,87 @@
+.FooterBlock {
+  padding: 48px 16px 32px;
+}
+
+@media (min-width: 768px) {
+  .FooterBlock {
+    padding: 64px 24px 32px;
+  }
+}
+
+.FooterBlock-inner {
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Layout: Columns (dynamic grid) */
+.FooterBlock--columns .FooterBlock-columns {
+  display: grid;
+  gap: 32px;
+  padding-bottom: 32px;
+  border-bottom: var(--theme-border-width, 1px) solid var(--theme-border, rgba(0, 0, 0, 0.1));
+}
+
+.FooterBlock[style*="1f2937"] .FooterBlock-columns,
+.FooterBlock[style*="111827"] .FooterBlock-columns {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.FooterBlock-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 150px;
+}
+
+/* Layout: Centered */
+.FooterBlock--centered .FooterBlock-columns {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 24px;
+  padding-bottom: 32px;
+  border-bottom: var(--theme-border-width, 1px) solid var(--theme-border, rgba(0, 0, 0, 0.1));
+}
+
+.FooterBlock--centered[style*="1f2937"] .FooterBlock-columns,
+.FooterBlock--centered[style*="111827"] .FooterBlock-columns {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Layout: Minimal */
+.FooterBlock--minimal .FooterBlock-columns {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  padding-bottom: 24px;
+  border-bottom: var(--theme-border-width, 1px) solid var(--theme-border, rgba(0, 0, 0, 0.1));
+}
+
+.FooterBlock--minimal[style*="1f2937"] .FooterBlock-columns,
+.FooterBlock--minimal[style*="111827"] .FooterBlock-columns {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Bottom Bar */
+.FooterBlock-bottomBar {
+  padding-top: 32px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .FooterBlock--columns .FooterBlock-columns {
+    grid-template-columns: 1fr !important;
+  }
+
+  .FooterBlock--minimal .FooterBlock-columns {
+    flex-direction: column;
+  }
+}

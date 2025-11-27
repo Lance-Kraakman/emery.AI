@@ -1,0 +1,194 @@
+import { eq, and, isNull } from 'drizzle-orm';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
+import { Skill, CreateSkillProps, UpdateSkillProps } from '@/ddd/domain/skills/entities/skill';
+import { SkillId } from '@/ddd/domain/skills/value-objects/skill-id';
+import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
+import { skills } from '@/lib/db/schema';
+
+/**
+ * Drizzle ORM implementation of SkillRepository
+ *
+ * AIDEV-NOTE: Simplified to handle single-instruction skills with organization skills support
+ * Removed: IStepRepository dependency and all step-related methods
+ * Added: inputs, outputs, instructions, tools fields
+ * Added: Organization skills support (organizationId, nullable agentId)
+ *
+ * Handles persistence of Skill aggregates using PostgreSQL via Drizzle.
+ * Supports both agent-scoped skills (agentId set) and organization skills (agentId null).
+ */
+export class DrizzleSkillRepository implements ISkillRepository {
+  constructor(
+    private db: NodePgDatabase<any>
+  ) {}
+
+  async findById(id: SkillId): Promise<Skill | null> {
+    const result = await this.db
+      .select()
+      .from(skills)
+      .where(eq(skills.id, id.value))
+      .limit(1);
+
+    if (result.length === 0) return null;
+
+    return this.toDomain(result[0]);
+  }
+
+  async findByAgentId(agentId: AgentId): Promise<Skill[]> {
+    const results = await this.db
+      .select()
+      .from(skills)
+      .where(eq(skills.agentId, agentId.value));
+
+    return results.map(record => this.toDomain(record));
+  }
+
+  async findOrganizationSkills(organizationId: OrganizationId): Promise<Skill[]> {
+    const results = await this.db
+      .select()
+      .from(skills)
+      .where(
+        and(
+          eq(skills.organizationId, organizationId.value),
+          isNull(skills.agentId)
+        )
+      );
+
+    return results.map(record => this.toDomain(record));
+  }
+
+  async findByOrganizationId(organizationId: OrganizationId): Promise<Skill[]> {
+    const results = await this.db
+      .select()
+      .from(skills)
+      .where(eq(skills.organizationId, organizationId.value));
+
+    return results.map(record => this.toDomain(record));
+  }
+
+  async create(props: CreateSkillProps): Promise<Skill> {
+    const now = new Date();
+    const result = await this.db
+      .insert(skills)
+      .values({
+        organizationId: props.organizationId.value,
+        agentId: props.agentId?.value || null, // null for organization skills
+        name: props.name,
+        description: props.description || '',
+        inputs: props.inputs || [],
+        outputs: props.outputs || [],
+        instructions: props.instructions,
+        tools: props.tools || [],
+        content: props.content || null,
+        createdAt: now,
+        updatedAt: now
+      })
+      .returning();
+
+    return this.toDomain(result[0]);
+  }
+
+  async update(id: SkillId, updates: UpdateSkillProps): Promise<Skill> {
+    const updateData: any = { updatedAt: new Date() };
+
+    if (updates.name !== undefined) {
+      updateData.name = updates.name;
+    }
+    if (updates.description !== undefined) {
+      updateData.description = updates.description;
+    }
+    if (updates.inputs !== undefined) {
+      updateData.inputs = updates.inputs;
+    }
+    if (updates.outputs !== undefined) {
+      updateData.outputs = updates.outputs;
+    }
+    if (updates.instructions !== undefined) {
+      updateData.instructions = updates.instructions;
+    }
+    if (updates.tools !== undefined) {
+      updateData.tools = updates.tools;
+    }
+    if (updates.content !== undefined) {
+      updateData.content = updates.content;
+    }
+
+    const result = await this.db
+      .update(skills)
+      .set(updateData)
+      .where(eq(skills.id, id.value))
+      .returning();
+
+    if (result.length === 0) {
+      throw new Error(`Skill ${id.value} not found`);
+    }
+
+    return this.toDomain(result[0]);
+  }
+
+  async delete(id: SkillId): Promise<void> {
+    await this.db
+      .delete(skills)
+      .where(eq(skills.id, id.value));
+  }
+
+  async deleteByAgentId(agentId: AgentId): Promise<void> {
+    await this.db
+      .delete(skills)
+      .where(eq(skills.agentId, agentId.value));
+  }
+
+  async exists(id: SkillId): Promise<boolean> {
+    const result = await this.db
+      .select({ id: skills.id })
+      .from(skills)
+      .where(eq(skills.id, id.value))
+      .limit(1);
+
+    return result.length > 0;
+  }
+
+  async countByAgentId(agentId: AgentId): Promise<number> {
+    const results = await this.db
+      .select()
+      .from(skills)
+      .where(eq(skills.agentId, agentId.value));
+
+    return results.length;
+  }
+
+  async countOrganizationSkills(organizationId: OrganizationId): Promise<number> {
+    const results = await this.db
+      .select()
+      .from(skills)
+      .where(
+        and(
+          eq(skills.organizationId, organizationId.value),
+          isNull(skills.agentId)
+        )
+      );
+
+    return results.length;
+  }
+
+  /**
+   * Convert database record to domain Skill entity
+   */
+  private toDomain(record: any): Skill {
+    return {
+      id: SkillId.fromNumber(record.id),
+      organizationId: OrganizationId.fromNumber(record.organizationId),
+      agentId: record.agentId ? AgentId.fromNumber(record.agentId) : null,
+      name: record.name,
+      description: record.description || '',
+      inputs: record.inputs || [],
+      outputs: record.outputs || [],
+      instructions: record.instructions || '',
+      tools: record.tools || [],
+      content: record.content || undefined,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt
+    };
+  }
+}

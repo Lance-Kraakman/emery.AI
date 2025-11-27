@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, master, develop, "*" ]
+    branches: [develop]
   pull_request:
+    branches: [develop, main]
 
 jobs:
   quality:
@@ -24,6 +25,9 @@ jobs:
           node-version: 20
           cache: 'pnpm'
 
+      - name: Use HTTPS for Git dependencies
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -32,4 +36,3 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
-

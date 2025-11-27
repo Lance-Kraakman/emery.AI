@@ -1,0 +1,160 @@
+/**
+ * MetricBlock Styles
+ *
+ * AIDEV-NOTE: Styles for metric display with support for different sizes and formats.
+ */
+
+/* Placeholder - shown when no view is selected */
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  border: 2px dashed var(--theme-border, #ddd);
+  border-radius: var(--theme-border-radius, 8px);
+  background: var(--theme-background, #f9f9f9);
+  min-height: 150px;
+}
+
+.placeholderIcon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.placeholderText {
+  color: var(--theme-text-muted, #666);
+  font-size: 1rem;
+  margin: 0;
+}
+
+/* Empty state - shown when view is selected but no data */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  border: var(--theme-border-width, 1px) solid var(--theme-border, #ddd);
+  border-radius: var(--theme-border-radius, 8px);
+  background: var(--theme-surface, #fff);
+  min-height: 150px;
+}
+
+.emptyIcon {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.4;
+}
+
+.emptyText {
+  color: var(--theme-text-muted, #666);
+  font-size: 0.9375rem;
+  margin: 0;
+  text-align: center;
+}
+
+/* Metric block container */
+.metricBlock {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  border: var(--theme-border-width, 1px) solid var(--theme-border, #e5e7eb);
+  border-radius: var(--theme-border-radius, 8px);
+  background: var(--theme-surface, #ffffff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s ease;
+}
+
+.metricBlock:hover {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+}
+
+/* Label - uses data-size attribute for theme-aware sizing */
+.label {
+  font-family: var(--theme-font-family, inherit);
+  font-weight: 500;
+  color: var(--theme-text-muted, #6b7280);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Label size variants */
+.label[data-size="xs"] { font-size: var(--theme-font-xs, 12px); }
+.label[data-size="sm"] { font-size: var(--theme-font-sm, 14px); }
+.label[data-size="base"] { font-size: var(--theme-font-base, 16px); }
+.label[data-size="lg"] { font-size: var(--theme-font-lg, 18px); }
+.label[data-size="xl"] { font-size: var(--theme-font-xl, 20px); }
+.label[data-size="2xl"] { font-size: var(--theme-font-2xl, 24px); }
+.label[data-size="3xl"] { font-size: var(--theme-font-3xl, 30px); }
+.label[data-size="4xl"] { font-size: var(--theme-font-4xl, 36px); }
+.label[data-size="5xl"] { font-size: var(--theme-font-5xl, 48px); }
+
+.metricType {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--theme-text-muted, #9ca3af);
+}
+
+/* Value - uses data-size attribute for theme-aware sizing */
+.value {
+  font-family: var(--theme-font-family, inherit);
+  font-weight: 700;
+  color: var(--theme-text, #111827);
+  line-height: 1.2;
+}
+
+/* Value size variants - uses larger sizes for impact */
+.value[data-size="xs"] { font-size: var(--theme-font-lg, 18px); }
+.value[data-size="sm"] { font-size: var(--theme-font-xl, 20px); }
+.value[data-size="base"] { font-size: var(--theme-font-2xl, 24px); }
+.value[data-size="lg"] { font-size: var(--theme-font-3xl, 30px); }
+.value[data-size="xl"] { font-size: var(--theme-font-4xl, 36px); }
+.value[data-size="2xl"] { font-size: var(--theme-font-5xl, 48px); }
+.value[data-size="3xl"] { font-size: calc(var(--theme-font-5xl, 48px) * 1.25); }
+.value[data-size="4xl"] { font-size: calc(var(--theme-font-5xl, 48px) * 1.5); }
+.value[data-size="5xl"] { font-size: calc(var(--theme-font-5xl, 48px) * 2); }
+
+/* Change indicator */
+.change {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.changeText {
+  color: var(--theme-text-muted, #9ca3af);
+  font-style: italic;
+}
+
+.changePositive {
+  color: var(--theme-success, #10b981);
+}
+
+.changeNegative {
+  color: var(--theme-error, #ef4444);
+}
+
+/* Size-based padding variants */
+.metricBlock[data-size="xs"],
+.metricBlock[data-size="sm"] {
+  padding: 1rem;
+}
+
+.metricBlock[data-size="base"],
+.metricBlock[data-size="lg"],
+.metricBlock[data-size="xl"],
+.metricBlock[data-size="2xl"] {
+  padding: 1.5rem;
+}
+
+.metricBlock[data-size="3xl"],
+.metricBlock[data-size="4xl"],
+.metricBlock[data-size="5xl"] {
+  padding: 2rem;
+}

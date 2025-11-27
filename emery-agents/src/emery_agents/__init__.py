@@ -1,49 +1,58 @@
 """
-Emery Agents - Agent execution system for Emery.
+Emery Agents - Simplified Agent Execution Service
 
-This package provides:
-- Multi-step agent workflow execution
-- Integration with smolagents for AI capabilities  
-- MCP server integration via Pipedream Connect
-- Execution tracking and reporting
+Simplified architecture without DDD overhead:
+- entities/ - Simple dataclasses with validation
+- services/ - Business logic (executor, model provider, tool loader)
+- grpc/ - gRPC services and protobuf
+- types.py - Consolidated enums and type aliases
+- No DDD: No value objects, interfaces, or DI container
+
 """
 
-from .core.types import (
-    Agent, AgentStep, StepExecution,
-    StepType, TriggerType, TaskStatus, Task,
-    Capability, Trigger, ExecutionContext,
-    ToolConfig, ServerConfig
-    # AIDEV-NOTE: Updated to new Task-based model - removed TaskExecution
-)
-from .core.runner import AgentRunner
-from .integrations.smolagents import SmolAgentsIntegration
-from .integrations.mcp_servers import MCPServerIntegration
-from .integrations.emery_client import EmeryClientIntegration
+__version__ = "3.0.0-simplified"
 
-__version__ = "0.1.0"
-__author__ = "Lance Kraakman"
-__email__ = "lance@aifactory.nz"
+# Export simplified entities
+from .entities import Agent, AgentConfig, Task, TaskConfig, TaskInstructions, ExecutionContext
+
+# Export services
+from .services import AgentExecutor, SmolagentsModelProvider, UnifiedToolLoader, TokenUsage
+
+# Export types
+from .types import (
+    ExecutionMode,
+    TaskStatus,
+    WorkerStatus,
+    ModelType,
+    AgentId,
+    OrganizationId,
+    TaskId,
+)
+
+# Export gRPC server for main entry point
+from .grpc.server import main as grpc_serve
 
 __all__ = [
-    # Core types
+    # Entities
     "Agent",
-    "AgentStep", 
-    "StepExecution",
-    "StepType",
-    "TriggerType",
-    "TaskStatus",
+    "AgentConfig",
     "Task",
-    "Capability",
-    "Trigger",
+    "TaskConfig",
+    "TaskInstructions",
     "ExecutionContext",
-    "ToolConfig",
-    "ServerConfig",
-    
-    # Core runner
-    "AgentRunner",
-    
-    # Integrations
-    "SmolAgentsIntegration",
-    "MCPServerIntegration", 
-    "EmeryClientIntegration",
+    # Services
+    "AgentExecutor",
+    "SmolagentsModelProvider",
+    "UnifiedToolLoader",
+    "TokenUsage",
+    # Types
+    "ExecutionMode",
+    "TaskStatus",
+    "WorkerStatus",
+    "ModelType",
+    "AgentId",
+    "OrganizationId",
+    "TaskId",
+    # gRPC
+    "grpc_serve",
 ]

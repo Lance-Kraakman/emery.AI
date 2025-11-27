@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Debug: Pytest Smol-Agents",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "pytest",
+        "args": [
+          "tests/test_grpc.py",
+        ],
+        "env": {
+          "HF_TOKEN": "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"
+        },
+        "console": "integratedTerminal",
+        "justMyCode": false
+      }
+    ]
+  }
+  

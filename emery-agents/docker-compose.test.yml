@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  emery-chat-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    ports:
+      - "50053:50051"  # Chat processing service
+    command: ["python", "-m", "emery_agents.grpc.server", "--mode=chat", "--port=50051"]
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+      - PYTHONPATH=/usr/src/app/src
+      - USE_PIPEDREAM_TOOLS=true
+    volumes:
+      # Mount source code for development testing
+      - ./src:/usr/src/app/src:ro
+      - ./tests:/usr/src/app/tests:ro
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import grpc; grpc.insecure_channel('localhost:50051').unary_unary('emery.agents.AgentWorker/GetWorkerInfo', request_serializer=lambda x: b'', response_deserializer=lambda x: x)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  emery-table-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    ports:
+      - "50054:50052"  # Table operations service
+    command: ["python", "-m", "emery_agents.grpc.server", "--mode=table", "--port=50052"]
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+      - PYTHONPATH=/usr/src/app/src
+      - USE_PIPEDREAM_TOOLS=true
+    volumes:
+      # Mount source code for development testing
+      - ./src:/usr/src/app/src:ro
+      - ./tests:/usr/src/app/tests:ro
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import grpc; grpc.insecure_channel('localhost:50052').unary_unary('emery.tables.TableService/GetTableStats', request_serializer=lambda x: b'', response_deserializer=lambda x: x)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Test database if needed for integration tests
+  test-postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      - POSTGRES_DB=emery_test
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=testpass
+    ports:
+      - "5434:5432"
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge

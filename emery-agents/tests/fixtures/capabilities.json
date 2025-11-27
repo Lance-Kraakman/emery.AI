@@ -1,0 +1,236 @@
+[
+  {
+    "name": "code_generation",
+    "description": "Generate clean, efficient code in multiple programming languages",
+    "steps": [
+      {
+        "id": "analyze_requirements",
+        "type": "CODE_STEP",
+        "instructions": "Analyze the requirements and plan the code structure",
+        "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
+      },
+      {
+        "id": "generate_code",
+        "type": "CODE_STEP", 
+        "instructions": "Generate the actual code implementation",
+        "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
+      },
+      {
+        "id": "test_code",
+        "type": "CODE_STEP",
+        "instructions": "Create comprehensive tests for the generated code",
+        "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
+      }
+    ]
+  },
+  {
+    "name": "data_processing",
+    "description": "Process and transform data from various sources",
+    "steps": [
+      {
+        "id": "validate_input",
+        "type": "TOOL_STEP",
+        "instructions": "Validate and clean input data",
+        "tools": [{"name": "data_validator"}]
+      },
+      {
+        "id": "transform_data",
+        "type": "CODE_STEP",
+        "instructions": "Apply necessary transformations to the data",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "output_results",
+        "type": "TOOL_STEP",
+        "instructions": "Export processed data to specified format",
+        "tools": [{"name": "data_exporter"}]
+      }
+    ]
+  },
+  {
+    "name": "api_integration",
+    "description": "Integrate with external APIs and services",
+    "steps": [
+      {
+        "id": "authenticate",
+        "type": "TOOL_STEP",
+        "instructions": "Handle API authentication and token management",
+        "servers": [{"name": "oauth_server"}]
+      },
+      {
+        "id": "make_requests",
+        "type": "TOOL_STEP",
+        "instructions": "Make API requests and handle responses",
+        "tools": [{"name": "http_client"}]
+      },
+      {
+        "id": "process_responses",
+        "type": "CODE_STEP",
+        "instructions": "Process and format API responses",
+        "model": "Qwen/Qwen2.5-Coder-7B-Instruct"
+      }
+    ]
+  },
+  {
+    "name": "content_creation",
+    "description": "Create various types of content including text, documentation, and reports",
+    "steps": [
+      {
+        "id": "research_topic",
+        "type": "TOOL_STEP",
+        "instructions": "Research the topic and gather relevant information",
+        "tools": [{"name": "web_search"}, {"name": "knowledge_base"}]
+      },
+      {
+        "id": "structure_content",
+        "type": "CODE_STEP",
+        "instructions": "Structure and organize the content logically",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "write_content",
+        "type": "CODE_STEP",
+        "instructions": "Write the final content with proper formatting",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "review_quality",
+        "type": "CODE_STEP",
+        "instructions": "Review and improve content quality",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      }
+    ]
+  },
+  {
+    "name": "residential_aged_care_report",
+    "description": "Generate comprehensive residential aged care placement reports using approved templates",
+    "steps": [
+      {
+        "id": "analyze_client_data",
+        "type": "CODE_STEP",
+        "instructions": "Analyze client demographics, health status, care needs, and preferences for aged care placement",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "assess_care_requirements",
+        "type": "CODE_STEP",
+        "instructions": "Assess specific care requirements including medical needs, mobility, dietary restrictions, and social preferences",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "match_facilities",
+        "type": "CODE_STEP",
+        "instructions": "Match client needs with appropriate aged care facilities based on care level, location, and preferences",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "generate_care_report",
+        "type": "CODE_STEP",
+        "instructions": "Generate professional aged care placement report with recommendations, facility matching, and care level assessment based on approved DRCare template structure",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "format_final_document",
+        "type": "TOOL_STEP",
+        "instructions": "Format the report according to DRCare standards with proper sections: Executive Summary, Client Profile, Care Assessment, Facility Recommendations, Implementation Plan",
+        "tools": [{"name": "document_generator"}]
+      },
+      {
+        "id": "save_report_to_file",
+        "type": "TOOL_STEP",
+        "instructions": "Save the generated aged care placement report to the filesystem with proper naming convention and client organization",
+        "tools": [{"name": "file_writer"}]
+      }
+    ]
+  },
+  {
+    "name": "life_plan_report",
+    "description": "Create detailed life planning documents for healthcare and aged care transitions",
+    "steps": [
+      {
+        "id": "assess_current_situation",
+        "type": "CODE_STEP",
+        "instructions": "Assess client's current health, financial, and social situation as baseline for life planning",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "project_future_needs",
+        "type": "CODE_STEP",
+        "instructions": "Project future healthcare needs, care requirements, and potential challenges based on current assessment",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "develop_financial_strategy",
+        "type": "CODE_STEP",
+        "instructions": "Develop financial strategies for healthcare costs, aged care funding, and estate planning considerations",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "create_care_pathway",
+        "type": "CODE_STEP",
+        "instructions": "Create step-by-step care pathway including home care options, transition planning, and facility placement timeline",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "develop_life_plan_strategy",
+        "type": "CODE_STEP",
+        "instructions": "Develop comprehensive life plan including healthcare pathways, financial strategies, accommodation options, and care progression stages",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "create_life_plan_document",
+        "type": "TOOL_STEP",
+        "instructions": "Create structured life plan document with sections: Current Situation, Future Projections, Healthcare Pathway, Financial Planning, Accommodation Strategy, Implementation Timeline",
+        "tools": [{"name": "document_generator"}]
+      },
+      {
+        "id": "save_life_plan_to_file", 
+        "type": "TOOL_STEP",
+        "instructions": "Save the generated life plan report to the filesystem with proper naming convention and client organization",
+        "tools": [{"name": "file_writer"}]
+      }
+    ]
+  },
+  {
+    "name": "executive_summary_report",
+    "description": "Produce concise executive summaries for healthcare assessments and recommendations",
+    "steps": [
+      {
+        "id": "extract_key_findings",
+        "type": "CODE_STEP",
+        "instructions": "Extract key findings, critical decisions, and priority recommendations from detailed healthcare assessments",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "prioritize_actions",
+        "type": "CODE_STEP",
+        "instructions": "Prioritize immediate actions, short-term goals, and long-term strategic recommendations based on urgency and impact",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "identify_decision_points",
+        "type": "CODE_STEP",
+        "instructions": "Identify critical decision points that require stakeholder input or approval",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "create_executive_summary",
+        "type": "CODE_STEP",
+        "instructions": "Create concise executive summary highlighting critical points, immediate actions required, and strategic recommendations for decision makers",
+        "model": "Qwen/Qwen2.5-14B-Instruct"
+      },
+      {
+        "id": "finalize_summary_document",
+        "type": "TOOL_STEP",
+        "instructions": "Format executive summary with professional presentation: Key Points, Critical Decisions, Immediate Actions, Strategic Recommendations, Next Steps",
+        "tools": [{"name": "document_generator"}]
+      },
+      {
+        "id": "save_executive_summary_to_file",
+        "type": "TOOL_STEP", 
+        "instructions": "Save the generated executive summary to the filesystem with proper naming convention and client organization",
+        "tools": [{"name": "file_writer"}]
+      }
+    ]
+  }
+]

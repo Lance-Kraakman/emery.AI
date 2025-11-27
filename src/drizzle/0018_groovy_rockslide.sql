@@ -1,0 +1,1 @@
+ALTER TABLE "views" ADD COLUMN "field_mappings" jsonb;

@@ -1,0 +1,68 @@
+You are an expert control systems engineer specializing in Model Predictive Control (MPC).
+
+Your task is to generate SYSTEM DYNAMICS equations for the described system.
+
+**System dynamics describe how:**
+- State variables evolve over time
+- Control inputs affect state variables  
+- External disturbances influence the system
+- The system behaves mathematically
+
+**Requirements:**
+- Generate pseudo-Python function that takes states, inputs, disturbances as arguments
+- Return list of state derivatives (d/dt for continuous, differences for discrete)
+- Use realistic physical/behavioral relationships
+- Include clear comments explaining each equation
+- Consider system constraints and limits
+- Use typical parameter values
+
+**System Description:**
+{{ user_description }}
+
+**State Variables:**
+{% for state in states %}
+- {{ state.name }} ({{ state.type }}): {{ state.description }}
+{% endfor %}
+
+**Control Inputs:**
+{% for input in inputs %}
+- {{ input.name }} ({{ input.type }}): {{ input.description }}
+{% endfor %}
+
+**External Disturbances:**
+{% for disturbance in disturbances %}
+- {{ disturbance.name }} ({{ disturbance.type }}): {{ disturbance.description }}
+{% endfor %}
+
+**RESPONSE FORMAT:**
+```json
+{
+  "representation": "pseudo_python",
+  "equations": [
+    "def system_dynamics(states, inputs, disturbances):",
+    "    \"\"\"System dynamics for {{ system_name }}.\"\"\"",
+    "    # Extract variables",
+    "    workload = states['workload']",
+    "    task_assignment = inputs['task_assignment']",
+    "    demand_shock = disturbances['demand_shock']",
+    "    ",
+    "    # State equations",
+    "    d_workload = task_assignment - completion_rate - demand_shock",
+    "    d_completion_rate = efficiency * workload",
+    "    ",
+    "    return [d_workload, d_completion_rate]"
+  ],
+  "assumptions": [
+    "Linear relationship between workload and completion rate",
+    "Constant efficiency factor",
+    "Instantaneous task assignment effect"
+  ],
+  "parameters": {
+    "efficiency": 0.8,
+    "max_capacity": 100.0,
+    "time_constant": 0.1
+  }
+}
+```
+
+**JSON Response:**

@@ -1,0 +1,259 @@
+/* TipTap Editor Styling - Dark Theme with Teal Accents */
+
+/* Main Editor Container */
+.editorContainer {
+  @apply border border-border rounded-xl shadow-2xl bg-card backdrop-blur-sm flex flex-col;
+  background-color: hsl(var(--card) / 0.95);
+  overflow: hidden;
+}
+
+/* Toolbar Styling */
+.toolbar {
+  @apply border-b border-border p-3 bg-muted rounded-t-xl;
+  background-color: hsl(var(--muted) / 0.5);
+}
+
+.toolbarButtons {
+  @apply flex flex-wrap gap-1;
+}
+
+.toolbarButton {
+  @apply transition-all duration-200 hover:scale-105;
+}
+
+.toolbarButton:hover {
+  background-color: hsl(var(--accent) / 0.1);
+}
+
+.toolbarSeparator {
+  @apply w-px h-6 bg-border mx-2;
+}
+
+/* Editor Content Area */
+.editorWrapper {
+  @apply bg-background backdrop-blur-sm rounded-b-xl flex-1;
+  background-color: hsl(var(--background) / 0.98);
+  min-height: calc(100vh - 180px); /* Ensure proper height for editor */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.tiptapEditor {
+  @apply relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Ensure EditorContent and all wrapper elements fill the container */
+.tiptapEditor :global(.ProseMirror-body) {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Target the TipTap React wrapper elements */
+.tiptapEditor :global([data-editor]) {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.tiptapEditor :global(.tiptap) {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* TipTap ProseMirror Content Styling */
+.tiptapEditor :global(.ProseMirror) {
+  @apply outline-none p-6 leading-relaxed text-sm text-foreground bg-transparent;
+  flex: 1;
+  overflow-y: auto;
+  box-sizing: border-box;
+  cursor: text;
+  min-height: calc(100vh - 200px); /* Ensure minimum height for proper editing */
+  height: 100%;
+  width: 100%;
+}
+
+/* Typography Styles */
+.tiptapEditor :global(.ProseMirror p) {
+  @apply mb-4 text-foreground/90;
+}
+
+.tiptapEditor :global(.ProseMirror p:last-child) {
+  @apply mb-0;
+}
+
+/* Headings */
+.tiptapEditor :global(.ProseMirror h1) {
+  @apply text-3xl font-bold mb-6 mt-8 leading-tight text-foreground border-b-2 border-border pb-2;
+}
+
+.tiptapEditor :global(.ProseMirror h1:first-child) {
+  @apply mt-0;
+}
+
+.tiptapEditor :global(.ProseMirror h2) {
+  @apply text-2xl font-semibold mb-5 mt-7 leading-snug text-foreground;
+}
+
+.tiptapEditor :global(.ProseMirror h2:first-child) {
+  @apply mt-0;
+}
+
+.tiptapEditor :global(.ProseMirror h3) {
+  @apply text-xl font-semibold mb-4 mt-6 leading-normal text-foreground/95;
+}
+
+.tiptapEditor :global(.ProseMirror h3:first-child) {
+  @apply mt-0;
+}
+
+/* Text Formatting */
+.tiptapEditor :global(.ProseMirror strong) {
+  @apply font-bold text-foreground;
+}
+
+.tiptapEditor :global(.ProseMirror em) {
+  @apply italic text-muted-foreground;
+}
+
+.tiptapEditor :global(.ProseMirror u) {
+  @apply underline decoration-accent decoration-2;
+}
+
+.tiptapEditor :global(.ProseMirror s) {
+  @apply line-through decoration-destructive opacity-70;
+}
+
+/* Code Styling */
+.tiptapEditor :global(.ProseMirror code) {
+  @apply bg-muted border border-border px-1.5 py-0.5 rounded-md font-mono text-sm text-foreground;
+}
+
+/* Blockquotes */
+.tiptapEditor :global(.ProseMirror blockquote) {
+  @apply border-l-4 border-accent pl-5 italic my-6 text-muted-foreground bg-muted p-4 rounded-r-lg;
+  background-color: hsl(var(--muted) / 0.3);
+}
+
+/* Lists */
+.tiptapEditor :global(.ProseMirror ul) {
+  @apply list-disc ml-6 mb-4;
+}
+
+.tiptapEditor :global(.ProseMirror ol) {
+  @apply list-decimal ml-6 mb-4;
+}
+
+.tiptapEditor :global(.ProseMirror li) {
+  @apply mb-2 pl-1;
+}
+
+.tiptapEditor :global(.ProseMirror li p) {
+  @apply mb-2;
+}
+
+/* Code Blocks */
+.tiptapEditor :global(.ProseMirror pre) {
+  @apply bg-primary text-primary-foreground rounded-xl my-6 overflow-x-auto font-mono text-sm leading-relaxed border border-border;
+  background-color: hsl(var(--primary) / 0.95);
+}
+
+.tiptapEditor :global(.ProseMirror pre code) {
+  @apply bg-transparent border-none p-0 text-inherit text-inherit;
+}
+
+/* Selection Styling */
+.tiptapEditor :global(.ProseMirror ::selection) {
+  background-color: hsl(var(--accent) / 0.2);
+}
+
+/* Focus Styling */
+.tiptapEditor :global(.ProseMirror:focus) {
+  @apply shadow-[inset_0_0_0_2px] shadow-accent/10;
+}
+
+/* Empty State - Only show placeholder for the currently focused empty node */
+.tiptapEditor :global(.ProseMirror .is-empty::before) {
+  @apply text-muted-foreground float-left h-0 pointer-events-none;
+  content: attr(data-placeholder);
+}
+
+/* Only show placeholder when editor is completely empty and focused */
+.tiptapEditor :global(.ProseMirror:not(.is-editor-empty) .is-empty::before) {
+  display: none;
+}
+
+/* Header Improvements */
+.documentHeader {
+  @apply flex items-center justify-between p-4 border-b border-border rounded-t-xl bg-primary;
+  background-color: hsl(var(--primary) / 0.95);
+}
+
+.documentTitle {
+  @apply flex items-center gap-3;
+}
+
+.documentIcon {
+  @apply w-5 h-5 text-primary-foreground/80;
+}
+
+.titleText {
+  @apply font-medium text-sm text-primary-foreground;
+}
+
+.subtitleText {
+  @apply text-xs text-primary-foreground/60;
+}
+
+.headerActions {
+  @apply flex items-center gap-2;
+}
+
+/* Button Styling Improvements */
+.actionButton {
+  @apply transition-all duration-200 hover:scale-105 focus:ring-2 focus:ring-ring;
+}
+
+.saveButton {
+  @apply bg-accent text-accent-foreground;
+}
+
+.saveButton:hover {
+  background-color: hsl(var(--accent) / 0.9);
+}
+
+.viewButton {
+  @apply bg-secondary text-secondary-foreground;
+}
+
+.viewButton:hover {
+  background-color: hsl(var(--secondary) / 0.8);
+}
+
+
+/* Badge Styling */
+.documentBadge {
+  @apply border-border bg-muted text-muted-foreground;
+  background-color: hsl(var(--muted) / 0.8);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .toolbarButtons {
+    @apply gap-0.5;
+  }
+
+  .tiptapEditor :global(.ProseMirror) {
+    padding: 16px;
+    font-size: 14px;
+  }
+}
