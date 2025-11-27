@@ -6,7 +6,7 @@ on:
     tags:
       - 'v*.*.*'
   pull_request:
-    branches: [main, develop]
+    branches: [develop]  # Only run PR builds for develop (main PRs come from develop, already tested)
 
 env:
   AWS_REGION: ap-southeast-2
