@@ -65,3 +65,29 @@ export function isTiptapMimeType(mimeType: string): boolean {
 export function isValidFileViewerType(type: string): type is FileViewerType {
   return Object.values(FILE_VIEWER_TYPES).includes(type as FileViewerType)
 }
+
+/**
+ * Determine the appropriate viewer type based on MIME type
+ */
+export function determineViewerType(mimeType: string): FileViewerType {
+  if (!mimeType) return FILE_VIEWER_TYPES.GENERIC
+
+  // Check each viewer type's MIME patterns
+  for (const [viewerType, patterns] of Object.entries(FILE_TYPE_MIME_PATTERNS)) {
+    for (const pattern of patterns) {
+      // Handle prefix patterns (e.g., 'image/' matches 'image/png')
+      if (pattern.endsWith('/')) {
+        if (mimeType.startsWith(pattern)) {
+          return viewerType as FileViewerType
+        }
+      } else {
+        // Exact match or startsWith for patterns like 'application/vnd.openxmlformats-officedocument'
+        if (mimeType === pattern || mimeType.startsWith(pattern)) {
+          return viewerType as FileViewerType
+        }
+      }
+    }
+  }
+
+  return FILE_VIEWER_TYPES.GENERIC
+}
