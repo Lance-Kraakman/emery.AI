@@ -1,0 +1,95 @@
+import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '../entities/organization';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { SystemRoleType } from '@/ddd/domain/rbac/entities/role';
+
+export interface IOrganizationRepository {
+  /**
+   * Find organization by ID
+   */
+  findById(id: OrganizationId): Promise<Organization | null>;
+
+  /**
+   * Find all organizations a user is a member of
+   */
+  findByUserId(userId: UserId): Promise<Organization[]>;
+
+  /**
+   * Find all organizations (admin/system use only)
+   * WARNING: Returns all organizations. Use with caution in production.
+   * Intended for background jobs, admin tools, and system operations.
+   */
+  findAll(): Promise<Organization[]>;
+
+  /**
+   * Find organization with member information
+   */
+  findByIdWithMembers(id: OrganizationId): Promise<OrganizationWithMembers | null>;
+
+  /**
+   * Get all members of an organization
+   */
+  getMembers(organizationId: OrganizationId): Promise<OrganizationMember[]>;
+
+  /**
+   * Create a new organization
+   */
+  create(data: CreateOrganizationData): Promise<Organization>;
+
+  /**
+   * Create organization with owner and default roles
+   * This is a common business operation that should be atomic
+   */
+  createWithOwner(data: CreateOrganizationData, ownerId: UserId): Promise<Organization>;
+
+  /**
+   * Update organization
+   */
+  update(id: OrganizationId, data: UpdateOrganizationData): Promise<Organization>;
+
+  /**
+   * Delete organization (and cascade related data)
+   */
+  delete(id: OrganizationId): Promise<void>;
+
+  /**
+   * Add a member to organization
+   */
+  addMember(organizationId: OrganizationId, userId: UserId, systemRole?: SystemRoleType): Promise<void>;
+
+  /**
+   * Remove a member from organization
+   */
+  removeMember(organizationId: OrganizationId, userId: UserId): Promise<void>;
+
+  /**
+   * Update member role in organization
+   */
+  updateMemberRole(organizationId: OrganizationId, userId: UserId, systemRole: SystemRoleType): Promise<void>;
+
+  /**
+   * Check if user is member of organization
+   */
+  isMember(organizationId: OrganizationId, userId: UserId): Promise<boolean>;
+
+  /**
+   * Get user's role in organization
+   */
+  getUserRole(organizationId: OrganizationId, userId: UserId): Promise<SystemRoleType | null>;
+
+  /**
+   * Find organizations by name (for search/autocomplete)
+   */
+  findByName(name: string, limit?: number): Promise<Organization[]>;
+
+  /**
+   * Check if an organization with the given slug exists
+   * Used for slug uniqueness validation before creation
+   */
+  existsBySlug(slug: string): Promise<boolean>;
+
+  /**
+   * Find organization by slug
+   * Used for public app routing
+   */
+  findBySlug(slug: string): Promise<Organization | null>;
+}

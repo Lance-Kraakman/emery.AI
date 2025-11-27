@@ -1,0 +1,117 @@
+# AIDEV-NOTE: Test environment using fixed versions of emery-agents worker
+# This ensures consistent testing environment with pinned package versions
+version: '3.8'
+
+services:
+  # Test database - matches .env.local.test configuration
+  test-db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5436:5432"  # Port 5436 to match .env.local.test
+    environment:
+      POSTGRES_PASSWORD: integration_test_password
+      POSTGRES_DB: emery_integration_test
+      POSTGRES_USER: postgres
+    volumes:
+      - test_db:/var/lib/postgresql/data
+      - ./initdb.d:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d emery_integration_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # Fixed version agent worker for testing - matches .env.local.test
+  test-agent-worker:
+    image: emery-agents:${AGENT_WORKER_VERSION:-v1.0.0}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:50053:50051"  # Agent execution
+      - "127.0.0.1:50054:50052"  # Table operations
+    environment:
+      - WORKER_ADDRESS=50051
+      - GRPC_TOOLS_ADDRESS=50052
+      - ORGANIZATION_ID=${TEST_ORGANIZATION_ID:-test-org}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - DATABASE_URL=postgresql://postgres:integration_test_password@test-db:5432/emery_integration_test
+      - PYTHONPATH=/usr/src/app/src
+      - S3_BUCKET_NAME=emery-test
+      - ENVIRONMENT=test
+    depends_on:
+      test-db:
+        condition: service_healthy
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "
+import grpc
+from emery_agents.grpc.generated import agent_worker_pb2, agent_worker_pb2_grpc
+try:
+    channel = grpc.insecure_channel('localhost:50051')
+    stub = agent_worker_pb2_grpc.AgentWorkerStub(channel)
+    response = stub.GetWorkerInfo(agent_worker_pb2.Empty(), timeout=5)
+    print(f'Worker healthy: {response.worker_id}')
+    exit(0)
+except Exception as e:
+    print(f'Worker unhealthy: {e}')
+    exit(1)
+      "]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Test MinIO for S3-compatible storage testing - matches .env.local.test
+  test-minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9005:9000"  # Port 9005 to match .env.local.test
+      - "127.0.0.1:9006:9001"  # Console port
+    environment:
+      MINIO_ROOT_USER: minioadmin  # Match .env.local.test
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - test_minio:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - test-network
+
+  # Frontend test service (optional - for full integration testing)
+  test-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:3000"  # Port 3002 to match .env.local.test
+    environment:
+      - DATABASE_URL=postgresql://postgres:integration_test_password@test-db:5432/emery_integration_test
+      - WORKER_HOST=test-agent-worker
+      - WORKER_ADDRESS=50053
+      - GRPC_TOOLS_ADDRESS=50054
+      - NEXTAUTH_URL=http://localhost:3002
+      - NEXTAUTH_SECRET=test-secret-key-for-testing-only
+      - HF_TOKEN=${HF_TOKEN:-}
+      - NODE_ENV=test
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-agent-worker:
+        condition: service_healthy
+    networks:
+      - test-network
+    profiles:
+      - full-integration  # Only start with --profile full-integration
+
+volumes:
+  test_db:
+  test_minio:
+
+networks:
+  test-network:
+    driver: bridge
+    name: emery-test-network

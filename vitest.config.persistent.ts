@@ -1,0 +1,64 @@
+/// <reference types="vitest" />
+import { defineConfig } from 'vitest/config'
+import path from 'path'
+ 
+export default defineConfig({
+  test: {
+    name: 'persistent-integration',
+    environment: 'node',
+    setupFiles: ['./src/tests/integration/setup.ts'],
+    // NO globalSetup - assumes containers are already running
+    testTimeout: 60000,  // Increased timeout for embedding API calls
+    hookTimeout: 10000,  // Much shorter since no container startup
+    poolOptions: {
+      threads: {
+        singleThread: false // Can run in parallel since server is persistent
+      }
+    },
+    // Don't isolate tests as aggressively - server is persistent
+    isolate: false,
+    // No retry needed - more stable with persistent server
+    retry: 0,
+    // Include integration tests only
+    include: ['src/tests/integration/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // Exclude unit test patterns
+    exclude: ['__tests__/**/*', 'src/tests/rls/**/*', 'src/tests/unit/**/*'],
+    // More concise reporter for faster dev feedback
+    reporters: ['basic'],
+    // No coverage for fast development testing
+    coverage: {
+      enabled: false
+    },
+    // Environment variables for persistent server
+    env: {
+      // AIDEV-NOTE: Set DATABASE_URL so application services use test database
+      DATABASE_URL: 'postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test',
+      TEST_DATABASE_URL: 'postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test',
+      TEST_APP_URL: 'http://localhost:3002',
+      TEST_GRPC_URL: 'localhost:50053',
+      WORKER_ADDRESS: 'localhost:50053',
+      GRPC_TOOLS_ADDRESS: 'localhost:50054',
+      NODE_ENV: 'test',
+      // AI/ML API Keys  
+      HF_TOKEN: '***REMOVED***',
+      OPENAI_API_KEY: '***REMOVED***',
+      // AI/ML API Keys for real functionality (not mocked)
+      // S3 Configuration (MinIO for integration tests - matches .env.local.test)
+      AWS_ACCESS_KEY_ID: 'minioadmin',
+      AWS_SECRET_ACCESS_KEY: 'minioadmin',
+      AWS_REGION: 'us-east-1',
+      S3_BUCKET_NAME: 'emery-files',
+      AWS_ENDPOINT_URL: 'http://localhost:9005',
+      S3_ENDPOINT_URL: 'http://localhost:9005',  // AIDEV-NOTE: Both AWS_ENDPOINT_URL and S3_ENDPOINT_URL needed for different clients
+      S3_FORCE_PATH_STYLE: 'true',
+      // Skip container management in setup files
+      PERSISTENT_TEST_SERVER: 'true'
+    }
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      '~': path.resolve(__dirname, './src')
+    }
+  }
+})

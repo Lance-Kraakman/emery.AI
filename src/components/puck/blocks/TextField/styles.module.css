@@ -1,0 +1,54 @@
+/* TextField Styles */
+
+.textField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+
+.text {
+  font-size: 1rem;
+  color: hsl(var(--foreground));
+  line-height: 1.5;
+}
+
+.text.bold {
+  font-weight: 600;
+}
+
+.text.muted {
+  color: hsl(var(--muted-foreground));
+}
+
+.text.heading {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* Warning state (not in context) */
+.warning {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  background-color: hsl(var(--destructive) / 0.1);
+  border: 1px solid hsl(var(--destructive) / 0.3);
+}
+
+.warningIcon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.warningText {
+  font-size: 0.875rem;
+  color: hsl(var(--destructive));
+}

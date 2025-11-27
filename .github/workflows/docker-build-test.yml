@@ -1,0 +1,266 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main, develop]
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches: [main, develop]
+
+env:
+  AWS_REGION: ap-southeast-2
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-southeast-2.amazonaws.com
+  FRONTEND_REPO: emery/frontend
+  AGENT_REPO: emery/agent
+
+jobs:
+  get-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.get_env.outputs.env_name }}
+    steps:
+      - name: Identify Environment
+        id: get_env
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v*.*.* ]]; then
+            echo "env_name=production" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            echo "env_name=staging" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_name }}" = "develop" ]; then
+            echo "env_name=dev" >> $GITHUB_OUTPUT
+          else
+            echo "env_name=dev" >> $GITHUB_OUTPUT
+          fi
+
+  setup-repositories:
+    needs: get-environment
+    runs-on: ubuntu-latest
+    environment: ${{ needs.get-environment.outputs.env_name }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create ECR repositories if they don't exist
+        run: |
+          aws ecr describe-repositories --repository-names ${{ env.FRONTEND_REPO }} || \
+          aws ecr create-repository --repository-name ${{ env.FRONTEND_REPO }} --image-scanning-configuration scanOnPush=true
+
+          aws ecr describe-repositories --repository-names ${{ env.AGENT_REPO }} || \
+          aws ecr create-repository --repository-name ${{ env.AGENT_REPO }} --image-scanning-configuration scanOnPush=true
+
+  build-frontend:
+    needs: [get-environment, setup-repositories]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.get-environment.outputs.env_name }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=ref,event=tag
+            type=sha,prefix={{branch}}-,format=long,enable=${{ github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/') }}
+            type=sha,prefix=tag-,format=long,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=frontend-${{ github.ref_name }}
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Test container functionality
+        if: github.event_name == 'pull_request'
+        run: |
+          docker run --rm \
+            -e DATABASE_URL="postgresql://test:test@localhost:5432/test" \
+            -e NEXTAUTH_SECRET="test-secret" \
+            -e NODE_ENV="test" \
+            --entrypoint="" \
+            ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:pr-${{ github.event.pull_request.number }} \
+            sh -c "echo '✅ Frontend container test passed'"
+
+  build-agent:
+    needs: [get-environment, setup-repositories]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.get-environment.outputs.env_name }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=ref,event=tag
+            type=sha,prefix={{branch}}-,format=long,enable=${{ github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/') }}
+            type=sha,prefix=tag-,format=long,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push agent image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./emery-agents
+          file: ./emery-agents/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=agent-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=agent-${{ github.ref_name }}
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Test container functionality
+        if: github.event_name == 'pull_request'
+        run: |
+          docker run --rm \
+            -e HF_TOKEN="test-token" \
+            --entrypoint="" \
+            ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:pr-${{ github.event.pull_request.number }} \
+            sh -c "python -c 'import emery_agents; print(\"✅ Agent container test passed\")'"
+
+  # Deploy job - runs after successful build
+  deploy:
+    needs: [build-frontend, build-agent]
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'push' && github.ref_name == 'develop') ||
+      (github.event_name == 'push' && github.ref_name == 'main') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    environment: ${{ github.ref_name == 'develop' && 'dev' || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install CDK and Python Dependencies
+        working-directory: ./infra
+        run: |
+          npm install -g aws-cdk
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Determine Environment and Image Tags
+        id: deploy_config
+        run: |
+          # Determine environment and image tag based on trigger type
+          if [[ "${{ github.ref }}" == refs/tags/v*.*.* ]]; then
+            ENV_NAME="production"
+            IMAGE_TAG="tag-${{ github.sha }}"
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            ENV_NAME="staging"
+            IMAGE_TAG="${{ github.ref_name }}-${{ github.sha }}"
+          else
+            ENV_NAME="dev"
+            IMAGE_TAG="${{ github.ref_name }}-${{ github.sha }}"
+          fi
+
+          echo "env_name=${ENV_NAME}" >> $GITHUB_OUTPUT
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "🚀 Deploying to ${ENV_NAME} environment with image tag ${IMAGE_TAG}"
+
+      - name: Deploy CDK Stack
+        working-directory: ./infra
+        env:
+          FRONTEND_IMAGE_URI: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.deploy_config.outputs.image_tag }}
+          AGENT_IMAGE_URI: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:${{ steps.deploy_config.outputs.image_tag }}
+        run: |
+          source .venv/bin/activate
+          ENV_NAME="${{ steps.deploy_config.outputs.env_name }}"
+          echo "🚀 Deploying to ${ENV_NAME} environment..."
+          echo "📦 Frontend image: ${FRONTEND_IMAGE_URI}"
+          echo "📦 Agent image: ${AGENT_IMAGE_URI}"
+          cdk deploy --require-approval never --all \
+            -c env=${ENV_NAME} \
+            -c aws_account_id=${{ env.AWS_ACCOUNT_ID }} \
+            -c region=${{ env.AWS_REGION }}

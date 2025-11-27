@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "emery-agents"
+		},
+		{
+			"path": "infra"
+		}
+	],
+	"settings": {}
+}

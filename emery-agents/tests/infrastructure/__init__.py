@@ -1,0 +1,1 @@
+"""Infrastructure layer tests - focus on concrete implementations and external integrations."""

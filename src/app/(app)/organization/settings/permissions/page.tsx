@@ -1,0 +1,44 @@
+import React from "react";
+import { auth } from "@/lib/auth";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PermissionsManager } from "./components/PermissionsManager";
+import { CanvasBase } from "@/components/canvas";
+
+export default async function PermissionsPage() {
+  const session = await auth();
+
+  if (!session?.user?.currentOrganizationId) {
+    return (
+      <CanvasBase>
+        <Card>
+          <CardHeader>
+            <CardTitle>No Organization Selected</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>Please select an organization to manage permissions.</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              You can switch or create organizations using the switcher in the sidebar.
+            </p>
+          </CardContent>
+        </Card>
+      </CanvasBase>
+    );
+  }
+
+  return (
+    <CanvasBase>
+      <div className="container mx-auto p-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-4">
+            <h1 className="text-2xl font-bold">Users & Permissions</h1>
+            <p className="text-muted-foreground mt-1">
+              Manage user roles, agent task permissions, and team access controls for your organization.
+            </p>
+          </div>
+
+          <PermissionsManager />
+        </div>
+      </div>
+    </CanvasBase>
+  );
+}

@@ -1,0 +1,389 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { BaseModal } from './BaseModal';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Loader2, Save, X, User, Pencil, Sparkles } from 'lucide-react';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import { updateAgentFromClient } from '@/app/actions/agents';
+import { UserSelect } from '@/components/ui/UserSelect';
+import { getOrganizationMembers } from '@/app/actions/invitations';
+import { checkPermission } from '@/app/actions/permissions';
+import { useSession } from 'next-auth/react';
+import { AgentAvatar } from '@/components/agents/AgentAvatar';
+import type { AvatarConfigV1 } from '@/lib/avatars';
+import { AvatarCustomizationModal } from './AvatarCustomizationModal';
+import { ModelSelector } from '@/components/ai/ModelSelector';
+
+interface BasicInfoModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  agent: AgentDTO;
+  onUpdate?: () => void;
+}
+
+interface FormData {
+  name: string;
+  role: string;
+  description: string;
+  status: string;
+  ownerId: string;
+  avatarConfig?: AvatarConfigV1 | null;
+  defaultModel?: string | null;
+}
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  systemRole?: string;
+}
+
+export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoModalProps) {
+  const { data: session } = useSession();
+  const [formData, setFormData] = useState<FormData>({
+    name: '',
+    role: '',
+    description: '',
+    status: 'active',
+    ownerId: '',
+    avatarConfig: null,
+    defaultModel: null
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [canManageAgents, setCanManageAgents] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [currentOwnerName, setCurrentOwnerName] = useState<string>('Unknown User');
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+
+  // Load users and permissions when modal opens
+  useEffect(() => {
+    if (isOpen && session?.user) {
+      loadUsersAndPermissions();
+    }
+  }, [isOpen, session]);
+
+  // Initialize form data when modal opens
+  useEffect(() => {
+    if (isOpen && agent) {
+      const initialData = {
+        name: agent.name || '',
+        role: agent.role || '',
+        description: agent.description || '',
+        status: agent.status || 'active',
+        ownerId: agent.ownerId || '',
+        avatarConfig: agent.avatarConfig || null,
+        defaultModel: agent.defaultModel || null
+      };
+      setFormData(initialData);
+      setHasChanges(false);
+
+      // Find current owner name
+      if (users.length > 0) {
+        const owner = users.find(u => u.id === agent.ownerId);
+        setCurrentOwnerName(owner?.name || 'Unknown User');
+      }
+    }
+  }, [isOpen, agent, users]);
+
+  const loadUsersAndPermissions = async () => {
+    if (!session?.user?.id || !session?.user?.currentOrganizationId) return;
+
+    try {
+      setLoadingUsers(true);
+
+      // Check permissions using server action
+      const permissionResult = await checkPermission('agents:manage');
+      setCanManageAgents(permissionResult.success && permissionResult.data === true);
+
+      // Load organization members
+      const members = await getOrganizationMembers();
+      setUsers(members || []);
+
+    } catch (error) {
+      console.error('Error loading users and permissions:', error);
+      setUsers([]);
+      setCanManageAgents(false);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  // Track changes
+  useEffect(() => {
+    if (agent) {
+      const hasChanged = (
+        formData.name !== (agent.name || '') ||
+        formData.role !== (agent.role || '') ||
+        formData.description !== (agent.description || '') ||
+        formData.status !== (agent.status || 'active') ||
+        formData.ownerId !== (agent.ownerId || '') ||
+        JSON.stringify(formData.avatarConfig) !== JSON.stringify(agent.avatarConfig) ||
+        formData.defaultModel !== (agent.defaultModel || null)
+      );
+      setHasChanges(hasChanged);
+    }
+  }, [formData, agent]);
+
+  const handleInputChange = (field: keyof FormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+
+      const result = await updateAgentFromClient(agent.id, {
+        name: formData.name.trim(),
+        role: formData.role.trim(),
+        description: formData.description.trim(),
+        status: formData.status as 'active' | 'inactive' | 'archived',
+        avatarConfig: formData.avatarConfig,
+        defaultModel: formData.defaultModel,
+        ...(canManageAgents && formData.ownerId && { ownerId: formData.ownerId })
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update agent');
+      }
+
+      // Call onUpdate to refresh the parent component
+      onUpdate?.();
+      onClose();
+    } catch (error) {
+      console.error('Error updating agent:', error);
+      // TODO: Add proper error handling/toast notification
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    if (hasChanges) {
+      // TODO: Add confirmation dialog for unsaved changes
+      const shouldDiscard = window.confirm('You have unsaved changes. Are you sure you want to discard them?');
+      if (!shouldDiscard) return;
+    }
+    onClose();
+  };
+
+  const handleAvatarEdit = () => {
+    setIsAvatarModalOpen(true);
+  };
+
+  const handleAvatarSave = (config: AvatarConfigV1) => {
+    setFormData(prev => ({ ...prev, avatarConfig: config }));
+    setIsAvatarModalOpen(false);
+  };
+
+  const footer = (
+    <div className="flex items-center justify-between">
+      <div className="text-sm text-muted-foreground">
+        {hasChanges && 'You have unsaved changes'}
+      </div>
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={handleCancel} disabled={isSaving}>
+          <X className="h-4 w-4 mr-2" />
+          Cancel
+        </Button>
+        <Button
+          onClick={handleSave}
+          disabled={!hasChanges || isSaving || !formData.name.trim()}
+        >
+          {isSaving ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Save className="h-4 w-4 mr-2" />
+          )}
+          Save Changes
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <BaseModal
+      isOpen={isOpen}
+      onClose={handleCancel}
+      title="Edit Agent Information"
+      description="Update the basic information for this agent"
+      size="lg"
+      footer={footer}
+      closeOnEscape={!hasChanges}
+      closeOnOutsideClick={!hasChanges}
+    >
+      <div className="p-6 space-y-6">
+        {/* Profile Header Section */}
+        <div className="flex items-start gap-6 pb-6 border-b">
+          {/* Avatar with Edit Button */}
+          <div className="relative group">
+            <AgentAvatar
+              avatarConfig={formData.avatarConfig}
+              agentId={agent.id}
+              size="lg"
+              className="w-24 h-24"
+            />
+            <button
+              onClick={handleAvatarEdit}
+              className="absolute -bottom-2 -right-2 w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-primary/90 transition-all hover:scale-110"
+              title="Edit avatar"
+              type="button"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Name and Role */}
+          <div className="flex-1 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-sm font-medium">
+                Agent Name *
+              </Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => handleInputChange('name', e.target.value)}
+                placeholder="Enter agent name"
+                disabled={isSaving}
+                className="text-lg font-semibold"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="role" className="text-sm font-medium">
+                Role
+              </Label>
+              <Input
+                id="role"
+                value={formData.role}
+                onChange={(e) => handleInputChange('role', e.target.value)}
+                placeholder="e.g., Data Analyst, Customer Support, Content Writer"
+                disabled={isSaving}
+              />
+              <p className="text-xs text-muted-foreground">
+                Describe what this agent does or its primary function
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Status */}
+        <div className="space-y-2">
+          <Label htmlFor="status" className="text-sm font-medium">
+            Status
+          </Label>
+          <Select
+            value={formData.status}
+            onValueChange={(value) => handleInputChange('status', value)}
+            disabled={isSaving}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Active agents can be executed, inactive agents are paused
+          </p>
+        </div>
+
+        {/* Description */}
+        {/* Owner Selection */}
+        <div className="space-y-2">
+          <Label htmlFor="owner" className="text-sm font-medium">
+            Agent Owner
+          </Label>
+          {loadingUsers ? (
+            <div className="flex items-center gap-2 p-2 border rounded">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm text-muted-foreground">Loading users...</span>
+            </div>
+          ) : canManageAgents ? (
+            <UserSelect
+              value={formData.ownerId}
+              onValueChange={(value) => handleInputChange('ownerId', value)}
+              users={users}
+              placeholder="Select agent owner..."
+              disabled={isSaving}
+              showCurrentOwnerBadge={true}
+              currentOwnerId={agent?.ownerId}
+            />
+          ) : (
+            <div className="flex items-center gap-2 p-2 border rounded bg-muted">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">{currentOwnerName}</span>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {canManageAgents
+              ? "Tools will use this user's OAuth connections. Only users with 'agents:manage' permission can change ownership."
+              : "You don't have permission to change the agent owner. Tools will use the current owner's OAuth connections."}
+          </p>
+        </div>
+
+        {/* Description */}
+        <div className="space-y-2">
+          <Label htmlFor="description" className="text-sm font-medium">
+            Description
+          </Label>
+          <Textarea
+            id="description"
+            value={formData.description}
+            onChange={(e) => handleInputChange('description', e.target.value)}
+            placeholder="Describe what this agent does, its purpose, and how it should be used..."
+            rows={4}
+            disabled={isSaving}
+          />
+          <p className="text-xs text-muted-foreground">
+            Optional: Provide details about the agent's purpose and skills
+          </p>
+        </div>
+
+        {/* AI Configuration */}
+        <div className="space-y-2 pt-4 border-t">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="h-4 w-4 text-muted-foreground" />
+            <Label className="text-sm font-medium m-0">AI Configuration</Label>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="model" className="text-sm font-medium">
+              Default Model
+            </Label>
+            <ModelSelector
+              value={formData.defaultModel || null}
+              onChange={(model) => setFormData(prev => ({ ...prev, defaultModel: model }))}
+              organizationTier="free"
+              showInherit={true}
+              inheritLabel="Inherit from organization"
+              requiredCapabilities={['toolCalling']}
+              disabled={isSaving}
+            />
+            <p className="text-xs text-muted-foreground">
+              Set the default AI model for this agent. Leave unset to inherit from organization settings.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Avatar Customization Modal - Rendered as child to prevent closing parent */}
+      {isAvatarModalOpen && (
+        <AvatarCustomizationModal
+          isOpen={isAvatarModalOpen}
+          onClose={() => setIsAvatarModalOpen(false)}
+          initialConfig={formData.avatarConfig}
+          onSave={handleAvatarSave}
+        />
+      )}
+    </BaseModal>
+  );
+}

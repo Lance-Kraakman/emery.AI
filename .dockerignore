@@ -1,0 +1,34 @@
+# Lambda-specific dockerignore - allows infra/
+node_modules
+.next
+.DS_Store
+.git
+.gitignore
+
+# Python agents (not needed for migration)
+emery-agents/
+
+# Build artifacts
+dist/
+*.tsbuildinfo
+
+# Infrastructure directory (not needed for frontend)
+infra/
+
+# Development files
+.env.local
+.env.development
+.env.test
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
