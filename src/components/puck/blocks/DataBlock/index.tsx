@@ -192,12 +192,8 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
    * Fetches data and field metadata from the selected view
    */
   resolveData: async ({ props }, { metadata }) => {
-    console.log('[DataBlock.resolveData] Starting resolution');
-    console.log('[DataBlock.resolveData] Props:', props);
-
     // No view selected
     if (!props.viewId || isNaN(props.viewId)) {
-      console.log('[DataBlock.resolveData] No valid viewId provided');
       return {
         props: {
           ...props,
@@ -227,7 +223,6 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
 
       // Get fields for the table (for field selector)
       const fields = await getFields(view.tableId);
-      console.log('[DataBlock.resolveData] Fetched fields:', fields.length);
 
       // Execute view to get rows with server-side pagination for list mode
       const pageSize = props.mode === 'list' ? (props.itemsPerPage || 10) : undefined;
@@ -252,8 +247,6 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         };
       }
 
-      console.log('[DataBlock.resolveData] View executed, rows:', result.rows.length);
-
       // ============================================
       // SINGLE MODE: Find specific row
       // ============================================
@@ -263,7 +256,6 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         if (props.rowSelectionMode === 'param') {
           // Get row ID from query param
           if (!isPuckResolveContext(metadata)) {
-            console.warn('[DataBlock.resolveData] Invalid metadata/context shape');
             return {
               props: {
                 ...props,
@@ -279,9 +271,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
           const paramValue = getContextValue(metadata, props.rowParam || 'id');
           if (paramValue) {
             targetRowId = Number(paramValue);
-            console.log(`[DataBlock.resolveData] Row ID from param "${props.rowParam}":`, targetRowId);
           } else {
-            console.log(`[DataBlock.resolveData] Query param "${props.rowParam}" not found`);
             return {
               props: {
                 ...props,
@@ -295,7 +285,6 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
           }
         } else if (props.rowSelectionMode === 'static') {
           targetRowId = props.rowId;
-          console.log('[DataBlock.resolveData] Using static row ID:', targetRowId);
         }
 
         if (!targetRowId) {
@@ -315,7 +304,6 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         const targetRow = result.rows.find(row => row.id === targetRowId);
 
         if (!targetRow) {
-          console.log('[DataBlock.resolveData] Row not found:', targetRowId);
           return {
             props: {
               ...props,
@@ -328,7 +316,6 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
           };
         }
 
-        console.log('[DataBlock.resolveData] Single mode - row found');
         return {
           props: {
             ...props,
@@ -341,10 +328,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         };
       }
 
-      // ============================================
       // LIST MODE: Return rows (server already paginated)
-      // ============================================
-      console.log('[DataBlock.resolveData] List mode - returning', result.rows.length, 'rows, total:', result.totalCount);
       return {
         props: {
           ...props,
