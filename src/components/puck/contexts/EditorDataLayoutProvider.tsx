@@ -13,10 +13,11 @@
  */
 
 import React, { useState, useEffect, type ReactNode } from 'react';
-import { createUsePuck, type Data } from '@measured/puck';
+import { createUsePuck } from '@measured/puck';
 import { DataLayoutProvider } from './DataLayoutContext';
 import { getFieldsForView } from '@/app/actions/fields';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
+import { FIELD_BLOCK_TYPES_SET } from '@/components/puck/constants';
 
 const usePuck = createUsePuck();
 
@@ -26,11 +27,13 @@ const usePuck = createUsePuck();
  */
 function EditorDataLayoutProviderInner({ children }: { children: ReactNode }) {
   const selectedItem = usePuck((s) => s.selectedItem);
-  const data = usePuck((s) => s.appState.data);
+  const itemSelector = usePuck((s) => s.appState.ui.itemSelector);
+  // Get Puck API methods for component lookup
+  const getItemById = usePuck((s) => s.getItemById);
+  const getSelectorForId = usePuck((s) => s.getSelectorForId);
 
   const [fields, setFields] = useState<FieldDTO[]>([]);
   const [currentViewId, setCurrentViewId] = useState<number | undefined>();
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     // No selection - clear fields
@@ -40,8 +43,13 @@ function EditorDataLayoutProviderInner({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Find parent DataBlock for selected item
-    const parentViewId = findParentDataBlockViewId(data, selectedItem.props?.id);
+    // Find parent DataBlock's viewId using Puck's built-in APIs
+    const parentViewId = findParentDataBlockViewId(
+      selectedItem,
+      itemSelector,
+      getItemById,
+      getSelectorForId
+    );
 
     // If same viewId, no need to refetch
     if (parentViewId === currentViewId) {
@@ -57,7 +65,6 @@ function EditorDataLayoutProviderInner({ children }: { children: ReactNode }) {
 
     // Fetch fields for the new viewId
     setCurrentViewId(parentViewId);
-    setLoading(true);
 
     getFieldsForView(parentViewId)
       .then((fetchedFields) => {
@@ -66,11 +73,8 @@ function EditorDataLayoutProviderInner({ children }: { children: ReactNode }) {
       .catch((error) => {
         console.error('[EditorDataLayoutProvider] Error fetching fields:', error);
         setFields([]);
-      })
-      .finally(() => {
-        setLoading(false);
       });
-  }, [selectedItem, data, currentViewId]);
+  }, [selectedItem, itemSelector, getItemById, getSelectorForId, currentViewId]);
 
   return (
     <DataLayoutProvider viewId={currentViewId} fields={fields}>
@@ -79,115 +83,80 @@ function EditorDataLayoutProviderInner({ children }: { children: ReactNode }) {
   );
 }
 
+// Type for Puck's getItemById function
+type GetItemById = (id: string) => { type: string; props: Record<string, unknown> } | undefined;
+// Type for Puck's getSelectorForId function
+type GetSelectorForId = (id: string) => { zone?: string; index: number } | undefined;
+
 /**
- * Find the viewId of the parent DataBlock for a given component ID
+ * Find the viewId of the parent DataBlock for the selected item.
  *
- * Puck stores components in zones with names like:
- * - "root" for top-level content
- * - "DataBlock-abc123:content" for zones inside a DataBlock
- * - "DataBlock-abc123:item-0" for list item zones
+ * Uses Puck's built-in getItemById and getSelectorForId APIs to traverse the
+ * component tree. These APIs work correctly for unsaved components.
+ *
+ * Zone names follow the pattern: "ComponentId:slotName"
+ * E.g., "DataBlock-abc123:children" or "Grid-abc123:items"
  */
 function findParentDataBlockViewId(
-  data: Data,
-  selectedId: string | undefined
+  selectedItem: { type: string; props: Record<string, unknown> },
+  itemSelector: { zone?: string; index: number } | null,
+  getItemById: GetItemById,
+  getSelectorForId: GetSelectorForId
 ): number | undefined {
-  if (!selectedId || !data) {
+  // If the selected item IS a DataBlock, return its viewId
+  if (selectedItem.type === 'DataBlock' && selectedItem.props?.viewId) {
+    return selectedItem.props.viewId as number;
+  }
+
+  // Only field blocks need DataLayoutContext - skip lookup for other components
+  if (!FIELD_BLOCK_TYPES_SET.has(selectedItem.type)) {
     return undefined;
   }
 
-  // First check if the selected item IS a DataBlock
-  const selectedComponent = findComponentById(data, selectedId);
-  if (selectedComponent?.type === 'DataBlock' && selectedComponent.props?.viewId) {
-    return selectedComponent.props.viewId as number;
+  // No item selector means we can't determine the zone
+  if (!itemSelector?.zone) {
+    return undefined;
   }
 
-  // Check all zones to find which contains the selected item
-  const zones = data.zones || {};
+  // Traverse up the component tree via zone chain
+  let currentZone = itemSelector.zone;
+  const visited = new Set<string>();
 
-  for (const [zoneName, zoneContent] of Object.entries(zones)) {
-    if (!Array.isArray(zoneContent)) continue;
+  while (currentZone && !visited.has(currentZone)) {
+    visited.add(currentZone);
 
-    const hasSelected = zoneContent.some((item) => item.props?.id === selectedId);
-
-    if (hasSelected) {
-      // Parse zone name to find parent component
-      // Zone names are like "DataBlock-abc123:content" or "DataBlock-abc123:item-0"
-      const colonIndex = zoneName.indexOf(':');
-
-      if (colonIndex > 0) {
-        const parentPart = zoneName.substring(0, colonIndex);
-        // parentPart is like "DataBlock-abc123"
-
-        // Find the parent component in the data
-        const parent = findComponentInData(data, (comp) => {
-          const compId = comp.props?.id as string | undefined;
-          return compId ? parentPart.endsWith(compId) : false;
-        });
-
-        if (parent?.type === 'DataBlock' && parent.props?.viewId) {
-          return parent.props.viewId as number;
-        }
-
-        // If parent is not a DataBlock, recurse to find its parent
-        const parentId = parent?.props?.id as string | undefined;
-        if (parentId) {
-          const grandparentViewId = findParentDataBlockViewId(data, parentId);
-          if (grandparentViewId) {
-            return grandparentViewId;
-          }
-        }
-      }
-    }
-  }
-
-  // Also check root content
-  if (Array.isArray(data.content)) {
-    const hasSelected = data.content.some((item) => item.props?.id === selectedId);
-    if (hasSelected) {
-      // Selected item is at root level, no parent DataBlock
+    // Parse zone name to get parent component ID
+    // Zone format: "parentId:slotName"
+    const colonIndex = currentZone.indexOf(':');
+    if (colonIndex === -1) {
+      // Root zone, no parent component
       return undefined;
     }
-  }
 
-  return undefined;
-}
+    const parentId = currentZone.substring(0, colonIndex);
 
-/**
- * Find a component by ID in the Puck data structure
- */
-function findComponentById(
-  data: Data,
-  id: string
-): { type: string; props: Record<string, unknown> } | undefined {
-  return findComponentInData(data, (comp) => comp.props?.id === id);
-}
+    // Use Puck's API to get the parent component
+    const parent = getItemById(parentId);
 
-/**
- * Find a component in data that matches a predicate
- */
-function findComponentInData(
-  data: Data,
-  predicate: (comp: { type: string; props: Record<string, unknown> }) => boolean
-): { type: string; props: Record<string, unknown> } | undefined {
-  // Check root content
-  if (Array.isArray(data.content)) {
-    for (const item of data.content) {
-      if (predicate(item)) {
-        return item;
-      }
+    if (parent?.type === 'DataBlock' && parent.props?.viewId) {
+      return parent.props.viewId as number;
     }
-  }
 
-  // Check all zones
-  const zones = data.zones || {};
-  for (const zoneContent of Object.values(zones)) {
-    if (!Array.isArray(zoneContent)) continue;
-
-    for (const item of zoneContent) {
-      if (predicate(item)) {
-        return item;
-      }
+    // Get parent's zone to continue traversal up the tree
+    // getSelectorForId can throw for root-level components
+    let parentSelector: { zone?: string; index: number } | undefined;
+    try {
+      parentSelector = getSelectorForId(parentId);
+    } catch {
+      // Parent is at root level or invalid, no DataBlock ancestor
+      return undefined;
     }
+    if (!parentSelector?.zone) {
+      // Parent is at root level, no DataBlock ancestor
+      return undefined;
+    }
+
+    currentZone = parentSelector.zone;
   }
 
   return undefined;

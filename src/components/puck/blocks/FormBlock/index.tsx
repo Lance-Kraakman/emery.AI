@@ -29,6 +29,8 @@ export const FormBlockConfig: ComponentConfig<FormBlockProps> = {
     }),
   },
 
+  defaultProps: {},
+
   /**
    * Resolve data on the server
    *
@@ -38,8 +40,8 @@ export const FormBlockConfig: ComponentConfig<FormBlockProps> = {
   resolveData: async ({ props }) => {
     console.log('[FormBlock.resolveData] Starting resolution for view:', props.viewId);
 
-    if (!props.viewId) {
-      console.log('[FormBlock.resolveData] No viewId provided');
+    if (!props.viewId || isNaN(props.viewId)) {
+      console.log('[FormBlock.resolveData] No valid viewId provided');
       return {
         props: {
           ...props,

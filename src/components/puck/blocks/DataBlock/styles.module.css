@@ -168,3 +168,85 @@
   font-size: 0.875rem;
   text-align: center;
 }
+
+/* Preview container - dotted border around all preview content */
+.previewContainer {
+  border: 2px dashed hsl(var(--border));
+  border-radius: 0.5rem;
+  padding: 1rem;
+  pointer-events: none;
+}
+
+/* Preview rows container */
+.previewRows {
+  /* Inherits pointer-events: none from .previewContainer */
+}
+
+/* Scroll container */
+.scrollContainer {
+  width: 100%;
+  overflow-y: auto;
+}
+
+/* Pagination controls */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.pageInfo {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+  min-width: 120px;
+  text-align: center;
+}
+
+/* Pagination preview (editor mode) */
+.paginationPreview {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+  padding: 0.5rem;
+  background-color: hsl(var(--muted) / 0.3);
+  border-radius: 0.25rem;
+}
+
+.paginationPreviewText {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+
+/* Carousel layout */
+.carouselWrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.carouselScroll {
+  display: flex;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  flex: 1;
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.carouselScroll::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari, Opera */
+}
+
+.carouselItem {
+  flex-shrink: 0;
+}
+
+.carouselButton {
+  flex-shrink: 0;
+}
