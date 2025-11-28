@@ -129,20 +129,6 @@ export default function DataBlock({
     }
   }, [isEditingTemplate, isEditing]);
 
-  // Debug logging
-  console.log('[DataBlock] Render:', {
-    mode,
-    viewId,
-    _tableId,
-    fieldsCount: _fields.length,
-    rowsCount: pagination.displayedRows.length,
-    hasResolvedRow: !!_resolvedRow,
-    isEditing,
-    isEditingTemplate,
-    paginationStyle,
-    hasChildren: !!Children,
-  });
-
   const hasTemplate = Children !== undefined;
 
   // Carousel scroll helper
