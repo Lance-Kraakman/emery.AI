@@ -31,9 +31,6 @@ import type { FieldDTO } from '@/app/mappers/field-mapper';
 import styles from './styles.module.css';
 
 export interface DataBlockProps {
-  // Puck component ID (used for zone naming)
-  id?: string;
-
   // Mode
   mode: 'single' | 'list';
 
@@ -58,8 +55,8 @@ export interface DataBlockProps {
   _viewName?: string;
   _tableId?: number;
   _fields?: FieldDTO[];
-  _rows?: Record<string, any>[];
-  _resolvedRow?: Record<string, any>;
+  _rows?: Record<string, unknown>[];
+  _resolvedRow?: Record<string, unknown>;
   _totalCount?: number;
   _error?: string;
 
@@ -73,7 +70,6 @@ export interface DataBlockProps {
 }
 
 export default function DataBlock({
-  id,
   mode = 'single',
   viewId,
   rowSelectionMode = 'param',
