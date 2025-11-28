@@ -93,3 +93,10 @@
   font-size: 0.875rem;
   color: hsl(var(--destructive));
 }
+
+/* Grid for multiple images */
+.imageGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

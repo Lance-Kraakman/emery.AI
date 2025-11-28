@@ -19,6 +19,27 @@ export interface ImageFieldProps {
   shape?: 'square' | 'circle' | 'rounded';
   alt?: string;
   fallbackUrl?: string;
+  maxItems?: number;
+}
+
+/**
+ * Get image URL from file value
+ * Files have s3Key which we use to construct the streaming URL
+ */
+function getImageUrl(file: unknown, fallback: string): string {
+  if (!file || typeof file !== 'object') return fallback;
+
+  const f = file as { s3Key?: string; url?: string; name?: string };
+
+  // Use s3Key to construct streaming URL
+  if (f.s3Key) {
+    return `/api/files/stream?s3Key=${encodeURIComponent(f.s3Key)}`;
+  }
+
+  // Fallback to url property if exists (legacy support)
+  if (f.url) return f.url;
+
+  return fallback;
 }
 
 export default function ImageField({
@@ -29,6 +50,7 @@ export default function ImageField({
   shape = 'rounded',
   alt = 'Image',
   fallbackUrl = '/placeholder-image.png',
+  maxItems = 1,
 }: ImageFieldProps) {
   // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
@@ -56,18 +78,21 @@ export default function ImageField({
     );
   }
 
-  // Get image URL
-  let imageUrl = value;
+  // Get files to display
+  let files: unknown[] = [];
 
-  // Handle different value types
-  if (Array.isArray(imageUrl) && imageUrl.length > 0) {
-    // File field returns array of objects
-    imageUrl = imageUrl[0]?.url || imageUrl[0]?.name || fallbackUrl;
-  } else if (typeof imageUrl === 'object' && imageUrl !== null) {
-    // File object
-    imageUrl = imageUrl.url || imageUrl.name || fallbackUrl;
-  } else if (!imageUrl || typeof imageUrl !== 'string') {
-    imageUrl = fallbackUrl;
+  if (Array.isArray(value)) {
+    files = value.slice(0, maxItems);
+  } else if (value && typeof value === 'object') {
+    files = [value];
+  } else if (typeof value === 'string' && value) {
+    // Direct URL string
+    files = [{ url: value }];
+  }
+
+  // No files - show fallback
+  if (files.length === 0) {
+    files = [{ url: fallbackUrl }];
   }
 
   const imageWrapperClass = cn(
@@ -84,12 +109,16 @@ export default function ImageField({
   return (
     <div className={containerClass}>
       {label && <label className={styles.label}>{label}</label>}
-      <div className={imageWrapperClass}>
-        <img
-          src={imageUrl}
-          alt={alt}
-          className={styles.image}
-        />
+      <div className={files.length > 1 ? styles.imageGrid : undefined}>
+        {files.map((file, index) => (
+          <div key={index} className={imageWrapperClass}>
+            <img
+              src={getImageUrl(file, fallbackUrl)}
+              alt={`${alt}${files.length > 1 ? ` ${index + 1}` : ''}`}
+              className={styles.image}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );

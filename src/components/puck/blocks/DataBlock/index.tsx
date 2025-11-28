@@ -70,6 +70,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       options: [
         { label: "Vertical (Stack)", value: "vertical" },
         { label: "Grid", value: "grid" },
+        { label: "Horizontal (Carousel)", value: "horizontal" },
       ],
     },
 
@@ -81,17 +82,11 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       max: 6,
     },
 
-    // List mode: Gap
+    // List mode: Gap (in pixels)
     gap: {
-      type: "select",
-      label: "Gap Between Items",
-      options: [
-        { label: "None", value: "0" },
-        { label: "Small", value: "2" },
-        { label: "Medium", value: "4" },
-        { label: "Large", value: "6" },
-        { label: "XL", value: "8" },
-      ],
+      type: "number",
+      label: "Gap (px)",
+      min: 0,
     },
 
     // List mode: Items per page
@@ -102,21 +97,43 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       max: 100,
     },
 
-    // List mode: Show load more
-    showLoadMore: {
+    // List mode: Pagination style
+    paginationStyle: {
       type: "radio",
-      label: "Show 'Load More' Button",
+      label: "Pagination",
+      options: [
+        { label: "None", value: "none" },
+        { label: "Load More", value: "load-more" },
+        { label: "Page Numbers", value: "pages" },
+      ],
+    },
+
+    // List mode: Max height for scroll container
+    maxHeight: {
+      type: "number",
+      label: "Max Height (px)",
+      min: 100,
+    },
+
+    // List mode: Carousel arrows (horizontal layout)
+    showCarouselArrows: {
+      type: "radio",
+      label: "Show Carousel Arrows",
       options: [
         { label: "Yes", value: true },
         { label: "No", value: false },
       ],
     },
 
+    // Slot for item template content
+    children: {
+      type: "slot",
+    },
+
     // Hidden fields populated by resolveData
     _viewName: { type: "text", label: "View Name", visible: false },
     _tableId: { type: "number", label: "Table ID", visible: false },
     _error: { type: "text", label: "Error", visible: false },
-    // Note: _defaultTemplate is managed via action bar and stored in props but has no field definition
   },
 
   defaultProps: {
@@ -125,9 +142,10 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     rowParam: "id",
     layout: "vertical",
     columns: 2,
-    gap: "4",
+    gap: 16,
     itemsPerPage: 10,
-    showLoadMore: true,
+    paginationStyle: "none",
+    showCarouselArrows: false,
   },
 
   /**
@@ -151,6 +169,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         rowSelectionMode: fields.rowSelectionMode,
         ...(rowSelectionMode === 'param' && { rowParam: fields.rowParam }),
         ...(rowSelectionMode === 'static' && { rowId: fields.rowId }),
+        children: fields.children,
       };
     }
 
@@ -161,7 +180,10 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       ...(layout === 'grid' && { columns: fields.columns }),
       gap: fields.gap,
       itemsPerPage: fields.itemsPerPage,
-      showLoadMore: fields.showLoadMore,
+      paginationStyle: fields.paginationStyle,
+      maxHeight: fields.maxHeight,
+      ...(layout === 'horizontal' && { showCarouselArrows: fields.showCarouselArrows }),
+      children: fields.children,
     };
   },
 
@@ -207,8 +229,13 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       const fields = await getFields(view.tableId);
       console.log('[DataBlock.resolveData] Fetched fields:', fields.length);
 
-      // Execute view to get rows
-      const result = await executeView(props.viewId, metadata);
+      // Execute view to get rows with server-side pagination for list mode
+      const pageSize = props.mode === 'list' ? (props.itemsPerPage || 10) : undefined;
+      const result = await executeView(
+        props.viewId,
+        metadata,
+        pageSize ? { pageSize, offset: 0 } : undefined
+      );
       if (!result) {
         console.error('[DataBlock.resolveData] Failed to execute view');
         return {
@@ -315,9 +342,9 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       }
 
       // ============================================
-      // LIST MODE: Return all rows
+      // LIST MODE: Return rows (server already paginated)
       // ============================================
-      console.log('[DataBlock.resolveData] List mode - returning rows');
+      console.log('[DataBlock.resolveData] List mode - returning', result.rows.length, 'rows, total:', result.totalCount);
       return {
         props: {
           ...props,

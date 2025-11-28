@@ -249,7 +249,12 @@ export function ViewManagementFieldRenderer({
         {/* View Selector */}
         <Select
           value={value?.toString()}
-          onValueChange={(val) => onChange(parseInt(val))}
+          onValueChange={(val) => {
+            const parsed = parseInt(val);
+            if (!isNaN(parsed)) {
+              onChange(parsed);
+            }
+          }}
           disabled={readOnly || loadingViews}
         >
           <SelectTrigger className="h-8 text-sm">

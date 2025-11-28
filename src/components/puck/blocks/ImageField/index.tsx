@@ -56,6 +56,12 @@ export const ImageFieldConfig: ComponentConfig<ImageFieldProps> = {
       type: "text",
       label: "Fallback Image URL",
     },
+
+    maxItems: {
+      type: "number",
+      label: "Max Images to Display",
+      min: 1,
+    },
   },
 
   defaultProps: {
@@ -64,6 +70,7 @@ export const ImageFieldConfig: ComponentConfig<ImageFieldProps> = {
     shape: "rounded",
     alt: "Image",
     fallbackUrl: "",
+    maxItems: 1,
   },
 
   render: ImageField,

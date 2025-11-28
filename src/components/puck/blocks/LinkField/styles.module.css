@@ -1,0 +1,187 @@
+/* LinkField Styles */
+
+.linkField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* Inline label position */
+.linkField.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+
+/* When inline, don't let label grow */
+.linkField.inline .label {
+  flex-shrink: 0;
+}
+
+/* Empty state */
+.empty {
+  color: hsl(var(--muted-foreground));
+}
+
+.empty.sm {
+  font-size: 0.875rem;
+}
+
+.empty.base {
+  font-size: 1rem;
+}
+
+.empty.lg {
+  font-size: 1.125rem;
+}
+
+/* Text link display */
+.textLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: hsl(var(--primary));
+  text-decoration: none;
+  transition: color 0.2s;
+  width: fit-content;
+}
+
+.textLink:hover {
+  color: hsl(var(--primary) / 0.8);
+  text-decoration: underline;
+}
+
+.textLink.sm {
+  font-size: 0.875rem;
+}
+
+.textLink.base {
+  font-size: 1rem;
+}
+
+.textLink.lg {
+  font-size: 1.125rem;
+}
+
+.linkIcon {
+  width: 0.875em;
+  height: 0.875em;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.linkText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+}
+
+/* Button link display */
+.buttonLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  font-weight: 500;
+  border-radius: 0.375rem;
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  text-decoration: none;
+  transition: background-color 0.2s;
+  width: fit-content;
+}
+
+.buttonLink:hover {
+  background-color: hsl(var(--primary) / 0.9);
+}
+
+.buttonLink.sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.buttonLink.base {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+.buttonLink.lg {
+  padding: 0.625rem 1.25rem;
+  font-size: 1rem;
+}
+
+.buttonIcon {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+}
+
+/* Icon only display */
+.iconLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--muted-foreground));
+  border-radius: 0.25rem;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.iconLink:hover {
+  color: hsl(var(--primary));
+  background-color: hsl(var(--muted));
+}
+
+.iconLink.sm {
+  padding: 0.375rem;
+}
+
+.iconLink.base {
+  padding: 0.5rem;
+}
+
+.iconLink.lg {
+  padding: 0.625rem;
+}
+
+.iconOnly {
+  width: 1.25em;
+  height: 1.25em;
+}
+
+.iconLink.sm .iconOnly {
+  width: 1rem;
+  height: 1rem;
+}
+
+.iconLink.lg .iconOnly {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/* Warning state (not in context) */
+.warning {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  background-color: hsl(var(--destructive) / 0.1);
+  border: 1px solid hsl(var(--destructive) / 0.3);
+}
+
+.warningIcon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.warningText {
+  font-size: 0.875rem;
+  color: hsl(var(--destructive));
+}
