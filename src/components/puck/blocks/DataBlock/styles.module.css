@@ -1,0 +1,252 @@
+/* DataBlock Styles - Unified data block for single and list modes */
+
+.dataBlock {
+  width: 100%;
+  min-height: 200px;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: hsl(var(--primary-foreground));
+  background-color: hsl(var(--primary));
+  border-radius: 0.25rem;
+}
+
+.viewName {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.count {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.applyAllButton {
+  font-size: 0.75rem;
+  height: auto;
+  padding: 0.25rem 0.5rem;
+}
+
+/* Content area for single mode */
+.content {
+  width: 100%;
+  min-height: 150px;
+}
+
+/* Repeat container for list mode */
+.repeatContainer {
+  width: 100%;
+}
+
+.vertical {
+  display: flex;
+  flex-direction: column;
+}
+
+.horizontal {
+  display: grid;
+}
+
+.item {
+  width: 100%;
+  position: relative;
+}
+
+/* Template placeholder */
+.templatePlaceholder {
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 2px dashed hsl(var(--border));
+  border-radius: 0.5rem;
+  background-color: hsl(var(--muted) / 0.3);
+  padding: 2rem;
+}
+
+.templatePlaceholderText {
+  color: hsl(var(--foreground));
+  font-size: 0.875rem;
+  text-align: center;
+  font-weight: 500;
+}
+
+.hint {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+/* Load more button */
+.loadMoreContainer {
+  margin-top: 1.5rem;
+  display: flex;
+  justify-content: center;
+}
+
+.loadMoreButton {
+  min-width: 200px;
+}
+
+/* Placeholder state (no view selected) */
+.placeholder {
+  min-height: 12rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed hsl(var(--border));
+  border-radius: 0.5rem;
+  background-color: hsl(var(--muted) / 0.1);
+  padding: 3rem;
+}
+
+.placeholderText {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* Error state */
+.error {
+  min-height: 8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  background-color: hsl(var(--destructive) / 0.1);
+  border: 1px solid hsl(var(--destructive) / 0.3);
+  padding: 2rem;
+}
+
+.errorText {
+  color: hsl(var(--destructive));
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* Empty state */
+.empty {
+  min-height: 8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  background-color: hsl(var(--muted) / 0.1);
+  padding: 2rem;
+}
+
+.emptyText {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* Preview container - dotted border around all preview content */
+.previewContainer {
+  border: 2px dashed hsl(var(--border));
+  border-radius: 0.5rem;
+  padding: 1rem;
+  pointer-events: none;
+}
+
+/* Preview rows container */
+.previewRows {
+  /* Inherits pointer-events: none from .previewContainer */
+}
+
+/* Scroll container */
+.scrollContainer {
+  width: 100%;
+  overflow-y: auto;
+}
+
+/* Pagination controls */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.pageInfo {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+  min-width: 120px;
+  text-align: center;
+}
+
+/* Pagination preview (editor mode) */
+.paginationPreview {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+  padding: 0.5rem;
+  background-color: hsl(var(--muted) / 0.3);
+  border-radius: 0.25rem;
+}
+
+.paginationPreviewText {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+
+/* Carousel layout */
+.carouselWrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.carouselScroll {
+  display: flex;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  flex: 1;
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.carouselScroll::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari, Opera */
+}
+
+.carouselItem {
+  flex-shrink: 0;
+}
+
+.carouselButton {
+  flex-shrink: 0;
+}

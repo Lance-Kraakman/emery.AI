@@ -1,4 +1,3 @@
-import { ReactNode } from "react";
 import type { Overrides } from "@measured/puck";
 import { ThemeSidebarPanel } from "@/app/(app)/apps/components/ThemeEditorSheet";
 import { PageSettingsPanel } from "@/app/(app)/apps/components/PageSettingsPanel";
@@ -76,7 +75,7 @@ export const createPuckUIOverrides = (
   },
   drawer: ({ children }) => {
     return <div className="bg-transparent">{children}</div>;
-  }
+  },
 });
 
 // Backward compatibility export

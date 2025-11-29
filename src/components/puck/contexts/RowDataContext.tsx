@@ -3,18 +3,16 @@
 /**
  * RowDataContext
  *
- * Provides row data from RepeatBlock to child blocks.
- * When a block is rendered inside a Repeat element, it can access
+ * Provides row data from DataBlock to child blocks.
+ * When a block is rendered inside a DataBlock, it can access
  * the current row's data via this context.
- *
- * AIDEV-NOTE: Used by RepeatBlock to pass row data down to children
  */
 
 import React, { createContext, useContext, type ReactNode } from 'react';
 
 interface RowDataContextValue {
-  /** Current row data from the Repeat element */
-  rowData: Record<string, any> | null;
+  /** Current row data from the DataBlock */
+  rowData: Record<string, unknown> | null;
 
   /** Index of the current row in the iteration */
   rowIndex: number;
@@ -24,12 +22,12 @@ const RowDataContext = createContext<RowDataContextValue | undefined>(undefined)
 
 interface RowDataProviderProps {
   children: ReactNode;
-  rowData: Record<string, any>;
+  rowData: Record<string, unknown>;
   rowIndex: number;
 }
 
 /**
- * Provider component that wraps each iteration in RepeatBlock
+ * Provider component that wraps each row in DataBlock
  * Makes row data available to all child blocks
  */
 export function RowDataProvider({ children, rowData, rowIndex }: RowDataProviderProps) {
@@ -61,7 +59,7 @@ export function RowDataProvider({ children, rowData, rowIndex }: RowDataProvider
 export function useRowData(): RowDataContextValue | null {
   const context = useContext(RowDataContext);
 
-  // Return null if not in a Repeat element (rather than throwing error)
+  // Return null if not in a DataBlock (rather than throwing error)
   if (context === undefined) {
     return null;
   }
@@ -70,8 +68,8 @@ export function useRowData(): RowDataContextValue | null {
 }
 
 /**
- * Hook to check if currently inside a Repeat element
+ * Hook to check if currently inside a DataBlock
  */
-export function useIsInRepeat(): boolean {
+export function useIsInDataBlock(): boolean {
   return useRowData() !== null;
 }

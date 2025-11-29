@@ -16,7 +16,7 @@ import { Button } from './Button';
 import { Progress } from './Progress';
 
 export interface FormBlockProps {
-  viewId: number;
+  viewId?: number;
 
   // Server-resolved data (populated by resolveData)
   _viewName?: string;
@@ -36,6 +36,12 @@ export default function FormBlock({
 }: FormBlockProps) {
   // Handle form submission
   const handleSubmit = useCallback(async (formData: Record<string, any>) => {
+    if (!viewId) {
+      return {
+        success: false,
+        error: 'No form view selected',
+      };
+    }
     try {
       const result = await submitFormView(viewId, formData);
       return result;

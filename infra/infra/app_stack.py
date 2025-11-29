@@ -4,11 +4,13 @@ from aws_cdk import (
     aws_ecs as ecs,
     aws_ecs_patterns as ecs_patterns,
     aws_elasticloadbalancingv2 as elbv2,
+    aws_codedeploy as codedeploy,
     aws_logs as logs,
     aws_iam as iam,
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as origins,
     aws_servicediscovery as servicediscovery,
+    aws_certificatemanager as acm,
     custom_resources,
     Aws,
     Duration,
@@ -83,6 +85,34 @@ class AppStack(Stack):
         # Default AWS region - can be overridden by CDK context
         aws_region = 'ap-southeast-2'
 
+        # ========== CUSTOM DOMAIN CONFIGURATION ==========
+        # Domain and certificate configuration per environment
+        domain_config = {
+            "production": {
+                "domain": "braintable.app",
+                "certificate_arn": "arn:aws:acm:us-east-1:034165313651:certificate/c95eb22e-f4d8-4874-b381-f7a2cdaecc1a"
+            },
+            "staging": {
+                "domain": "staging.braintable.app",
+                "certificate_arn": "arn:aws:acm:us-east-1:772302459598:certificate/3cb8f028-6cfc-404f-bd9c-315ee0f77a1d"
+            },
+            "dev": {
+                "domain": "dev.braintable.app",
+                "certificate_arn": "arn:aws:acm:us-east-1:463735866328:certificate/2d76beac-68ca-4e75-8cb2-29c4e61b195c"
+            },
+        }
+
+        custom_domain = domain_config.get(env_name, {}).get("domain")
+        certificate_arn = domain_config.get(env_name, {}).get("certificate_arn")
+
+        # Import the ACM certificate (created in us-east-1 for CloudFront)
+        certificate = None
+        if certificate_arn:
+            certificate = acm.Certificate.from_certificate_arn(
+                self, f"{prefix}Certificate",
+                certificate_arn=certificate_arn
+            )
+
         # ========== ECS CLUSTER ==========
         # Create an ECS cluster in the VPC from data stack
         cluster = ecs.Cluster(
@@ -153,6 +183,9 @@ class AppStack(Stack):
         )
 
         # Create the Fargate service using custom task definition
+        # Production uses CODE_DEPLOY for blue/green, dev/staging use rolling deployments
+        is_production = env_name == "production"
+
         frontend_service = ecs_patterns.ApplicationLoadBalancedFargateService(
             self, f"{prefix}FrontendService",
             cluster=cluster,
@@ -160,6 +193,9 @@ class AppStack(Stack):
             task_definition=frontend_task_definition,
             desired_count=1,
             public_load_balancer=True,
+            deployment_controller=ecs.DeploymentController(
+                type=ecs.DeploymentControllerType.CODE_DEPLOY
+            ) if is_production else None,
         )
 
         # Grant database access to frontend service
@@ -169,7 +205,7 @@ class AppStack(Stack):
             "Allow frontend service to access database"
         )
 
-        # Configure the health check for the frontend service
+        # Configure the health check for the frontend service (Blue target group)
         frontend_service.target_group.configure_health_check(
             path="/api/health",
             timeout=Duration.seconds(10),
@@ -177,13 +213,15 @@ class AppStack(Stack):
             unhealthy_threshold_count=3,
             interval=Duration.seconds(30),
         )
-        
-        # AIDEV-NOTE: Configure deployment settings for frontend service stability
-        cfn_frontend_service = frontend_service.service.node.default_child
-        cfn_frontend_service.deployment_configuration = {
-            "minimumHealthyPercent": 50,
-            "maximumPercent": 200
-        }
+
+        # AIDEV-NOTE: Production uses blue/green (CodeDeploy), dev/staging use rolling deployments
+        if not is_production:
+            # Dev/Staging: Configure deployment settings for rolling updates
+            cfn_frontend_service = frontend_service.service.node.default_child
+            cfn_frontend_service.deployment_configuration = {
+                "minimumHealthyPercent": 50,
+                "maximumPercent": 200
+            }
         
         # AIDEV-NOTE: Add ECR permissions to task execution role for pulling images
         frontend_service.task_definition.execution_role.add_managed_policy(
@@ -217,6 +255,76 @@ class AppStack(Stack):
             scale_out_cooldown=Duration.seconds(60)   # Fast scale-out for user traffic
         )
 
+        # ========== BLUE/GREEN DEPLOYMENT WITH CODEDEPLOY (Production Only) ==========
+        if is_production:
+            # CodeDeploy manages traffic shifting between blue (current) and green (new) target groups
+
+            # Create Green target group for blue/green deployments
+            green_target_group = elbv2.ApplicationTargetGroup(
+                self, f"{prefix}FrontendGreenTG",
+                vpc=data_stack.vpc,
+                port=3000,
+                protocol=elbv2.ApplicationProtocol.HTTP,
+                target_type=elbv2.TargetType.IP,
+                health_check=elbv2.HealthCheck(
+                    path="/api/health",
+                    timeout=Duration.seconds(10),
+                    healthy_threshold_count=2,
+                    unhealthy_threshold_count=3,
+                    interval=Duration.seconds(30),
+                ),
+            )
+
+            # Create test listener for green environment (port 3001)
+            # Allows testing new deployment before switching traffic
+            test_listener = frontend_service.load_balancer.add_listener(
+                f"{prefix}FrontendTestListener",
+                port=3001,
+                protocol=elbv2.ApplicationProtocol.HTTP,
+                default_target_groups=[green_target_group],
+            )
+
+            codedeploy_app = codedeploy.EcsApplication(
+                self, f"{prefix}FrontendCodeDeployApp",
+                application_name=f"{prefix}-Frontend-BlueGreen",
+            )
+
+            deployment_group = codedeploy.EcsDeploymentGroup(
+                self, f"{prefix}FrontendDeploymentGroup",
+                application=codedeploy_app,
+                deployment_group_name=f"{prefix}-Frontend-DeploymentGroup",
+                service=frontend_service.service,
+                blue_green_deployment_config=codedeploy.EcsBlueGreenDeploymentConfig(
+                    blue_target_group=frontend_service.target_group,
+                    green_target_group=green_target_group,
+                    listener=frontend_service.listener,
+                    test_listener=test_listener,
+                    deployment_approval_wait_time=Duration.hours(1),  # Manual approval timeout
+                ),
+                deployment_config=codedeploy.EcsDeploymentConfig.ALL_AT_ONCE,
+                auto_rollback=codedeploy.AutoRollbackConfig(
+                    failed_deployment=True,
+                    stopped_deployment=True,
+                ),
+            )
+
+            # Output CodeDeploy info for easy access
+            CfnOutput(
+                self, f"{prefix}CodeDeployApp",
+                value=codedeploy_app.application_name,
+                description="CodeDeploy application name for blue/green deployments"
+            )
+            CfnOutput(
+                self, f"{prefix}CodeDeployGroup",
+                value=deployment_group.deployment_group_name,
+                description="CodeDeploy deployment group name"
+            )
+            CfnOutput(
+                self, f"{prefix}TestListenerURL",
+                value=f"http://{frontend_service.load_balancer.load_balancer_dns_name}:3001",
+                description="Test listener URL for green environment (use to test before approving deployment)"
+            )
+
         # Create CloudFront distribution for static URL routing
         cloudfront_distribution = cloudfront.Distribution(
             self, f"{prefix}CloudFrontDistribution",
@@ -231,6 +339,9 @@ class AppStack(Stack):
                 compress=True,
                 origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER
             ),
+            # Custom domain configuration
+            domain_names=[custom_domain] if custom_domain else None,
+            certificate=certificate,
             comment=f"CloudFront distribution for {prefix} Emery application",
             enabled=True,
             price_class=cloudfront.PriceClass.PRICE_CLASS_100  # Use only North America and Europe for cost savings
@@ -242,6 +353,14 @@ class AppStack(Stack):
             value=f"https://{cloudfront_distribution.distribution_domain_name}",
             description="Static CloudFront URL for the application (never changes)"
         )
+
+        # Output custom domain URL if configured
+        if custom_domain:
+            CfnOutput(
+                self, f"{prefix}CustomDomainURL",
+                value=f"https://{custom_domain}",
+                description="Custom domain URL for the application"
+            )
 
         # Also output the direct ALB URL for comparison
         CfnOutput(
@@ -565,10 +684,11 @@ class AppStack(Stack):
                 "agent-table.emery.local:50052"
             )
 
-            # Also inject the frontend's own public URL for NextAuth (use CloudFront URL)
+            # Also inject the frontend's own public URL for NextAuth (use custom domain if available)
+            nextauth_url = f"https://{custom_domain}" if custom_domain else f"https://{cloudfront_distribution.distribution_domain_name}"
             frontend_service.task_definition.default_container.add_environment(
                 "NEXTAUTH_URL",
-                f"https://{cloudfront_distribution.distribution_domain_name}"
+                nextauth_url
             )
 
 
@@ -632,10 +752,11 @@ class AppStack(Stack):
                 "AWS_REGION",
                 aws_region
             )
-            # Add NextJS base URL for agent callbacks to API routes
+            # Add NextJS base URL for agent callbacks to API routes (use custom domain if available)
+            nextjs_base_url = f"https://{custom_domain}" if custom_domain else f"https://{cloudfront_distribution.distribution_domain_name}"
             agent_chat_service.task_definition.default_container.add_environment(
                 "NEXTJS_BASE_URL",
-                f"https://{cloudfront_distribution.distribution_domain_name}"
+                nextjs_base_url
             )
 
         # Add S3 and AWS configuration to table service
