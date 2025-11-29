@@ -251,12 +251,19 @@ export function useChatGRPC(
     const filesToAttach = attachments || pendingAttachments
 
     // Create message with text and any attachments
+    // Add file parts with blob URLs for optimistic UI display
     const userMessage = filesToAttach.length > 0
       ? createMultimodalMessage(
           [
             { type: 'text', text: messageContent },
-            // Note: Actual file parts will be created after S3 upload by API route
-            // For now, we just show pending files in UI
+            ...filesToAttach.map(file => ({
+              type: 'data-file' as const,
+              data: {
+                filename: file.name,
+                mediaType: file.type,
+                url: URL.createObjectURL(file)  // Temporary blob URL for preview
+              }
+            }))
           ],
           message.role as 'user' | 'assistant'
         )

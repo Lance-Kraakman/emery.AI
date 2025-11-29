@@ -140,6 +140,7 @@ export function DocumentField({
         showAddButton={false}
         onRemove={isEditMode ? handleRemoveDocument : undefined}
         onItemClick={!isEditMode ? handleDocumentClick : undefined}
+        onItemOpen={onDocumentOpen ? handleDocumentClick : undefined}
         disabled={disabled || isCreating}
         emptyMessage={compact ? undefined : `No ${(field?.name || 'documents').toLowerCase()}`}
       />

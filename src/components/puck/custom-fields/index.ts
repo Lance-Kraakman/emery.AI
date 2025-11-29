@@ -37,6 +37,12 @@ export {
 // View Management
 export { createViewManagementField } from "./view-management-field";
 
+// Field Selector
+export {
+  createFieldSelectorField,
+  type FieldSelectorFieldConfig,
+} from "./field-selector-field";
+
 // Link Action (Button/Link configuration)
 export {
   createLinkActionField,
