@@ -16,8 +16,9 @@ import React, { useState, useEffect, type ReactNode } from 'react';
 import { createUsePuck } from '@measured/puck';
 import { DataLayoutProvider } from './DataLayoutContext';
 import { getFieldsForView } from '@/app/actions/fields';
+import { executeView } from '@/app/actions/views';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
-import { FIELD_BLOCK_TYPES_SET } from '@/components/puck/constants';
+import { VARIABLE_AWARE_BLOCK_TYPES_SET } from '@/components/puck/constants';
 
 const usePuck = createUsePuck();
 
@@ -33,12 +34,14 @@ function EditorDataLayoutProviderInner({ children }: { children: ReactNode }) {
   const getSelectorForId = usePuck((s) => s.getSelectorForId);
 
   const [fields, setFields] = useState<FieldDTO[]>([]);
+  const [sampleRow, setSampleRow] = useState<Record<string, unknown> | undefined>();
   const [currentViewId, setCurrentViewId] = useState<number | undefined>();
 
   useEffect(() => {
     // No selection - clear fields
     if (!selectedItem) {
       setFields([]);
+      setSampleRow(undefined);
       setCurrentViewId(undefined);
       return;
     }
@@ -59,13 +62,15 @@ function EditorDataLayoutProviderInner({ children }: { children: ReactNode }) {
     // No parent DataBlock found - clear fields
     if (!parentViewId) {
       setFields([]);
+      setSampleRow(undefined);
       setCurrentViewId(undefined);
       return;
     }
 
-    // Fetch fields for the new viewId
+    // Fetch fields and sample row for the new viewId
     setCurrentViewId(parentViewId);
 
+    // Fetch fields
     getFieldsForView(parentViewId)
       .then((fetchedFields) => {
         setFields(fetchedFields);
@@ -74,10 +79,24 @@ function EditorDataLayoutProviderInner({ children }: { children: ReactNode }) {
         console.error('[EditorDataLayoutProvider] Error fetching fields:', error);
         setFields([]);
       });
+
+    // Fetch sample row (first row from view)
+    executeView(parentViewId, undefined, { pageSize: 1, offset: 0 })
+      .then((result) => {
+        if (result?.rows?.[0]) {
+          setSampleRow(result.rows[0]);
+        } else {
+          setSampleRow(undefined);
+        }
+      })
+      .catch((error) => {
+        console.error('[EditorDataLayoutProvider] Error fetching sample row:', error);
+        setSampleRow(undefined);
+      });
   }, [selectedItem, itemSelector, getItemById, getSelectorForId, currentViewId]);
 
   return (
-    <DataLayoutProvider viewId={currentViewId} fields={fields}>
+    <DataLayoutProvider viewId={currentViewId} fields={fields} sampleRow={sampleRow}>
       {children}
     </DataLayoutProvider>
   );
@@ -108,8 +127,8 @@ function findParentDataBlockViewId(
     return selectedItem.props.viewId as number;
   }
 
-  // Only field blocks need DataLayoutContext - skip lookup for other components
-  if (!FIELD_BLOCK_TYPES_SET.has(selectedItem.type)) {
+  // Only variable-aware blocks need DataLayoutContext - skip lookup for other components
+  if (!VARIABLE_AWARE_BLOCK_TYPES_SET.has(selectedItem.type)) {
     return undefined;
   }
 

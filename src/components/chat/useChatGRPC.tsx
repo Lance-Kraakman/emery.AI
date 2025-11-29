@@ -329,7 +329,32 @@ export function useChatGRPC(
             }
           }
         }
-        // Regular tool - use existing config
+
+        // For reference tools (tables, documents, agents, etc.), include the actual IDs
+        // These are at root level of ToolDTO, not in config
+        if (tool.type === 'reference') {
+          return {
+            name: tool.name,
+            version: tool.version || '',
+            config: {
+              ...tool.config,
+              // Include reference-specific IDs from ToolDTO root
+              ...(tool.tableId !== undefined && { table_id: tool.tableId }),
+              ...(tool.documentId !== undefined && { document_id: tool.documentId }),
+              ...(tool.fileId !== undefined && { file_id: tool.fileId }),
+              ...(tool.agentId !== undefined && { agent_id: tool.agentId }),
+              ...(tool.databaseId !== undefined && { database_id: tool.databaseId }),
+              ...(tool.organizationId !== undefined && { organization_id: tool.organizationId }),
+              ...(tool.tableName !== undefined && { table_name: tool.tableName }),
+              ...(tool.filename !== undefined && { filename: tool.filename }),
+              ...(tool.mimeType !== undefined && { mime_type: tool.mimeType }),
+              ...(tool.fieldId !== undefined && { field_id: tool.fieldId }),
+              ...(tool.rowId !== undefined && { row_id: tool.rowId }),
+            }
+          }
+        }
+
+        // Regular system tool - use existing config
         return {
           name: tool.name,
           version: tool.version,

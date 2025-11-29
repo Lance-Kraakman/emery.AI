@@ -8,6 +8,7 @@ import type { PageOrder } from '../value-objects/page-order';
 import type { PuckData } from '../value-objects/puck-data';
 import { UserId } from '@/ddd/domain/shared/value-objects';
 import { ThemeConfig, type ThemeConfigProps } from '../value-objects/theme-config';
+import type { PageVariable } from '@/components/puck/types';
 
 export class PuckPage {
   private constructor(
@@ -22,6 +23,7 @@ export class PuckPage {
     private _isPublic: boolean,
     private _requiresAuth: boolean,
     private _allowedRoles: string[] | undefined,
+    private _pageVariables: PageVariable[] | undefined,
     private readonly _ownerId: UserId,
     private readonly _createdAt: Date,
     private _updatedAt: Date
@@ -66,6 +68,10 @@ export class PuckPage {
 
   get allowedRoles(): string[] | undefined {
     return this._allowedRoles ? [...this._allowedRoles] : undefined;
+  }
+
+  get pageVariables(): PageVariable[] | undefined {
+    return this._pageVariables ? [...this._pageVariables] : undefined;
   }
 
   get ownerId(): UserId {
@@ -208,6 +214,14 @@ export class PuckPage {
   }
 
   /**
+   * Update page variables (expected query parameters)
+   */
+  setPageVariables(variables: PageVariable[] | undefined): void {
+    this._pageVariables = variables && variables.length > 0 ? [...variables] : undefined;
+    this._updatedAt = new Date();
+  }
+
+  /**
    * Check if a user with specific roles can access this page
    */
   canBeAccessedByRoles(userRoles: string[]): boolean {
@@ -263,6 +277,7 @@ export class PuckPage {
     isPublic: boolean;
     requiresAuth: boolean;
     allowedRoles?: string[];
+    pageVariables?: PageVariable[];
     ownerId: string;
     createdAt: Date;
     updatedAt: Date;
@@ -304,6 +319,7 @@ export class PuckPage {
       data.isPublic,
       data.requiresAuth,
       data.allowedRoles,
+      data.pageVariables,
       UserId.fromString(data.ownerId),
       data.createdAt,
       data.updatedAt
@@ -325,6 +341,7 @@ export class PuckPage {
     isPublic: boolean;
     requiresAuth: boolean;
     allowedRoles: string[] | undefined;
+    pageVariables: PageVariable[] | undefined;
     ownerId: string;
     createdAt: Date;
     updatedAt: Date;
@@ -341,6 +358,7 @@ export class PuckPage {
       isPublic: this._isPublic,
       requiresAuth: this._requiresAuth,
       allowedRoles: this._allowedRoles,
+      pageVariables: this._pageVariables,
       ownerId: this._ownerId.value,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt

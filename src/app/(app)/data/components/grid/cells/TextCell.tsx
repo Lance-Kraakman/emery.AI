@@ -1,97 +1,79 @@
 'use client';
 
-import React, { useCallback, useRef, useEffect, useState } from 'react';
+import React, { useRef, useLayoutEffect, useState, useEffect } from 'react';
 import type { CellProps } from 'react-datasheet-grid';
-import { CellWithTooltip } from '../CellWithTooltip';
-
-/**
- * TextCell - Custom cell component for text, email, and phone fields
- *
- * Features:
- * - Displays text with truncation
- * - Shows tooltip on hover when content overflows
- * - Supports inline editing when focused
- */
+import { Popover, PopoverContent, PopoverAnchor } from '@/components/ui/popover';
+import { Textarea } from '@/components/ui/textarea';
 
 export type TextValue = string | null | undefined;
-
-export interface TextCellConfiguration {
-  placeholder?: string;
-}
-
+export interface TextCellConfiguration { placeholder?: string; }
 export type TextCellProps = CellProps<TextValue, TextCellConfiguration>;
 
-export function TextCell({
-  rowData,
-  setRowData,
-  focus,
-  stopEditing,
-  active,
-  columnData,
-}: TextCellProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [inputValue, setInputValue] = useState(rowData ?? '');
+export function TextCell({ focus, active, rowData, setRowData, columnData }: TextCellProps) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [localValue, setLocalValue] = useState(rowData ?? '');
 
-  // Sync input value when rowData changes externally
+  // Sync local state when rowData changes externally (e.g., undo, external update)
   useEffect(() => {
-    if (!focus) {
-      setInputValue(rowData ?? '');
-    }
-  }, [rowData, focus]);
+    setLocalValue(rowData ?? '');
+  }, [rowData]);
 
-  // Focus input when cell becomes active
+  // Listen for Cmd+Enter when cell is active (selected but not necessarily focused)
   useEffect(() => {
-    if (focus && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [focus]);
+    if (!active) return;
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
-  }, []);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        setPopoverOpen(true);
+      }
+      if (e.key === 'Escape' && popoverOpen) {
+        setPopoverOpen(false);
+      }
+    };
 
-  const handleBlur = useCallback(() => {
-    // Commit value on blur
-    setRowData(inputValue || null);
-  }, [inputValue, setRowData]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [active, popoverOpen]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      // Commit and stop editing
-      setRowData(inputValue || null);
-      stopEditing({ nextRow: true });
-    } else if (e.key === 'Escape') {
-      // Cancel edit
-      setInputValue(rowData ?? '');
-      stopEditing({ nextRow: false });
-    } else if (e.key === 'Tab') {
-      // Commit on tab
-      setRowData(inputValue || null);
-    }
-  }, [inputValue, rowData, setRowData, stopEditing]);
+  useLayoutEffect(() => {
+    if (focus && !popoverOpen) ref.current?.focus();
+  }, [focus, popoverOpen]);
 
-  // When focused/editing, show input
-  if (focus) {
-    return (
-      <input
-        ref={inputRef}
-        type="text"
-        value={inputValue}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        className="w-full h-full bg-transparent outline-none border-none px-0"
-        placeholder={columnData?.placeholder}
-      />
-    );
-  }
+  const handleChange = (value: string) => {
+    setLocalValue(value);
+    setRowData(value || null);
+  };
 
-  // When not focused, show display with tooltip
   return (
-    <CellWithTooltip value={rowData}>
-      {rowData || <span className="text-muted-foreground">{columnData?.placeholder ?? ''}</span>}
-    </CellWithTooltip>
+    <Popover open={popoverOpen} onOpenChange={(open) => !open && setPopoverOpen(false)}>
+      <PopoverAnchor asChild>
+        <input
+          ref={ref}
+          value={localValue}
+          onChange={(e) => handleChange(e.target.value)}
+          onDoubleClick={() => setPopoverOpen(true)}
+          placeholder={active ? columnData?.placeholder : undefined}
+          className="w-full h-full bg-transparent outline-none border-none px-2"
+          style={{ pointerEvents: focus ? 'auto' : 'none' }}
+        />
+      </PopoverAnchor>
+      <PopoverContent className="w-[300px] p-2" align="start">
+        <Textarea
+          value={localValue}
+          onChange={(e) => handleChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setPopoverOpen(false);
+          }}
+          className="min-h-[120px] resize-none"
+          autoFocus
+        />
+        <div className="text-xs text-muted-foreground mt-1">
+          Esc to close
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

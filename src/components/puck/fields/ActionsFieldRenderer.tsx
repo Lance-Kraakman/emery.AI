@@ -32,6 +32,7 @@ import type { AgentDTO } from '@/app/dtos/agent.dto';
 import { getPages } from '@/app/actions/puck-pages';
 import { getAgents } from '@/app/actions/agents';
 import { TaskInstructionsDialog } from './TaskInstructionsDialog';
+import { VariableAutocompleteInput } from './VariableAutocompleteInput';
 
 type ActionType = 'assignTask' | 'navigateToPage' | 'openUrl';
 
@@ -53,6 +54,101 @@ interface ActionsFieldProps {
   field: { label?: string };
   name: string;
   readOnly?: boolean;
+}
+
+/**
+ * QueryParamsEditor - Mini editor for key-value query parameters
+ * Each value supports variable autocomplete
+ */
+function QueryParamsEditor({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: Record<string, string | number | string[]>;
+  onChange: (value: Record<string, string | number | string[]>) => void;
+  disabled?: boolean;
+}) {
+  const entries = Object.entries(value);
+
+  const addParam = () => {
+    const newKey = `param${entries.length + 1}`;
+    onChange({ ...value, [newKey]: '' });
+  };
+
+  const updateKey = (oldKey: string, newKey: string) => {
+    if (oldKey === newKey) return;
+    const newValue = { ...value };
+    delete newValue[oldKey];
+    newValue[newKey] = value[oldKey];
+    onChange(newValue);
+  };
+
+  const updateValue = (key: string, newVal: string) => {
+    onChange({ ...value, [key]: newVal });
+  };
+
+  const removeParam = (key: string) => {
+    const newValue = { ...value };
+    delete newValue[key];
+    onChange(newValue);
+  };
+
+  return (
+    <div className="space-y-2">
+      {entries.length === 0 && (
+        <p className="text-xs text-muted-foreground italic">
+          No query parameters
+        </p>
+      )}
+
+      {entries.map(([key, val]) => (
+        <div key={key} className="flex items-center gap-2">
+          <Input
+            value={key}
+            onChange={(e) => updateKey(key, e.target.value)}
+            placeholder="param"
+            className="w-24 text-xs"
+            disabled={disabled}
+          />
+          <span className="text-muted-foreground">=</span>
+          <VariableAutocompleteInput
+            value={String(val)}
+            onChange={(newVal) => updateValue(key, newVal)}
+            placeholder="{id}"
+            className="flex-1 text-xs"
+            disabled={disabled}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => removeParam(key)}
+            disabled={disabled}
+            className="h-8 w-8 p-0"
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      ))}
+
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={addParam}
+        disabled={disabled}
+        className="w-full text-xs"
+      >
+        <Plus className="h-3 w-3 mr-1" />
+        Add Parameter
+      </Button>
+
+      <p className="text-xs text-muted-foreground">
+        Type {"{"} in values to insert row data or query parameters
+      </p>
+    </div>
+  );
 }
 
 function ActionItem({
@@ -235,7 +331,7 @@ function ActionItem({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Tip: Use {"${rowData.fieldName}"} to include data from the current row
+              Tip: Use {"{fieldName}"} to include data from the current row
             </p>
           </div>
         </>
@@ -243,39 +339,51 @@ function ActionItem({
 
       {/* Navigate to Page Fields */}
       {action.type === 'navigateToPage' && (
-        <div className="space-y-2">
-          <Label className="text-xs font-medium">Select Page</Label>
-          <Select
-            value={action.pageId?.toString() || ''}
-            onValueChange={(val) => onChange({ ...action, pageId: val })}
-            disabled={readOnly || loadingPages}
-          >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={
-                  loadingPages
-                    ? 'Loading pages...'
-                    : pages.length === 0
-                    ? 'No pages available'
-                    : 'Select a page'
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {pages.map((page) => (
-                <SelectItem key={page.id} value={page.id.toString()}>
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span>{page.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      ({page.slug})
-                    </span>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <>
+          <div className="space-y-2">
+            <Label className="text-xs font-medium">Select Page</Label>
+            <Select
+              value={action.pageId?.toString() || ''}
+              onValueChange={(val) => onChange({ ...action, pageId: val })}
+              disabled={readOnly || loadingPages}
+            >
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={
+                    loadingPages
+                      ? 'Loading pages...'
+                      : pages.length === 0
+                      ? 'No pages available'
+                      : 'Select a page'
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {pages.map((page) => (
+                  <SelectItem key={page.id} value={page.id.toString()}>
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span>{page.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({page.slug})
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Query Parameters */}
+          <div className="space-y-2">
+            <Label className="text-xs font-medium">Query Parameters</Label>
+            <QueryParamsEditor
+              value={action.queryParams || {}}
+              onChange={(queryParams) => onChange({ ...action, queryParams })}
+              disabled={readOnly}
+            />
+          </div>
+        </>
       )}
 
       {/* Open URL Fields */}
@@ -283,13 +391,15 @@ function ActionItem({
         <>
           <div className="space-y-2">
             <Label className="text-xs font-medium">URL</Label>
-            <Input
-              type="url"
+            <VariableAutocompleteInput
               value={action.url || ''}
-              onChange={(e) => onChange({ ...action, url: e.target.value })}
-              placeholder="https://example.com"
+              onChange={(url) => onChange({ ...action, url })}
+              placeholder="https://example.com/{id}"
               disabled={readOnly}
             />
+            <p className="text-xs text-muted-foreground">
+              Type {"{"} to insert row data or query parameters
+            </p>
           </div>
           <div className="flex items-center space-x-2">
             <Checkbox

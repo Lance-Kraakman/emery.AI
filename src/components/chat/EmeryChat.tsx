@@ -39,6 +39,10 @@ import type { ChatMessage as EmeryChatMessage } from './types/extended-chat-hand
 
 const logger = createDebugLogger('EmeryChat')
 
+// Chat panel width constants - shared across chat components
+export const CHAT_COLLAPSED_WIDTH = 'w-12'  // 48px
+export const CHAT_HISTORY_EXPANDED_WIDTH = 'w-80'  // 320px
+
 /**
  * EmeryChat - Main chat component with LlamaIndex integration
  *
@@ -249,7 +253,14 @@ function ChatContentWithCanvas({
 
         // Create artifact and open in canvas using LlamaIndex ChatCanvas
         const viewerType = determineViewerType(tool.mimeType!)
-        const artifact = createFileArtifact(fileResult.data, tool.tableId as number, tool.fieldId!, viewerType, downloadUrl)
+        const artifact = createFileArtifact(
+          fileResult.data,
+          tool.tableId as number,
+          tool.fieldId!,
+          viewerType,
+          downloadUrl,
+          tool.rowId  // Pass rowId for save functionality
+        )
         openArtifactInCanvas(artifact)
         logger.debug('File artifact opened', { fileId: tool.fileId, filename: tool.filename })
       } else {
@@ -504,19 +515,19 @@ export function EmeryChat() {
     }
   }
   
-  // Collapsed state - show minimal icon strip with dashlet logo
+  // Collapsed state - show minimal icon strip with braintable logo
   if (chatState === 'collapsed') {
     return (
-      <div className="w-12 h-full flex flex-col bg-card flex-shrink-0 items-center py-4 gap-4">
-        {/* Dashlet logo */}
+      <div className={`${CHAT_COLLAPSED_WIDTH} h-full flex flex-col bg-card flex-shrink-0 items-center py-4 gap-4`}>
+        {/* Braintable logo */}
         <button
           onClick={() => uiStateActions.toggleChat()}
           className="flex items-center justify-center hover:opacity-80 transition-opacity"
           title="Expand chat"
         >
           <img
-            src="/assets/dashlet/logo_icon.svg"
-            alt="Dashlet"
+            src="/assets/braintable/logo_logo.svg"
+            alt="Braintable"
             className="h-6 w-6"
           />
         </button>

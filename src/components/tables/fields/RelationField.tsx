@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { FieldBadgeList } from './FieldBadgeList';
 import type { FieldBadgeItem } from './FieldBadgeList';
 import type { RelationArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverAnchor } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,9 @@ interface RelationFieldProps {
   fieldName?: string;
   required?: boolean;
   readOnly?: boolean;
+  // DSG cell focus state - when true, show expanded dialog
+  focus?: boolean;
+  onClose?: () => void;
 }
 
 /**
@@ -56,14 +59,44 @@ export function RelationField({
   disabled = false,
   fieldName,
   required,
-  readOnly = false
+  readOnly = false,
+  focus = false,
+  onClose
 }: RelationFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [tableData, setTableData] = useState<{ fields: FieldDTO[]; rows: any[] } | null>(null);
   const [tableDataLoading, setTableDataLoading] = useState(false);
+  const hasOpenedForFocus = useRef(false);
 
   const relations = Array.isArray(value) ? value : [];
+
+  // Listen for Cmd+Enter when focused (DSG integration)
+  useEffect(() => {
+    if (!focus) {
+      hasOpenedForFocus.current = false;
+      return;
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && relatedTableId) {
+        e.preventDefault();
+        setIsOpen(true);
+      }
+      if (e.key === 'Escape' && isOpen) {
+        setIsOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [focus, isOpen, relatedTableId]);
+
+  // Handle dialog close - also notify DSG
+  const handleDialogClose = useCallback(() => {
+    setIsOpen(false);
+    onClose?.();
+  }, [onClose]);
 
   // Convert relations to badge items
   const badgeItems: FieldBadgeItem[] = relations.map((relation) => ({
@@ -172,7 +205,7 @@ export function RelationField({
       }
     } else {
       onChange([newRelation]);
-      setIsOpen(false);
+      handleDialogClose();
     }
   }, [relations, onChange, multiple, tableData]);
 
@@ -210,30 +243,28 @@ export function RelationField({
         emptyMessage={compact ? undefined : `No ${fieldName?.toLowerCase() || 'relations'}`}
       />
 
-      {/* Relation selector dialog */}
-      <Dialog open={isOpen && !!relatedTableId} onOpenChange={setIsOpen}>
-        <DialogContent
-          className="max-w-6xl max-h-[90vh] overflow-y-auto"
-          onDoubleClick={(e) => e.stopPropagation()}
+      {/* Relation selector popover */}
+      <Popover open={isOpen && !!relatedTableId} onOpenChange={(open) => !open && handleDialogClose()}>
+        <PopoverAnchor />
+        <PopoverContent
+          className="w-[450px] p-3"
+          align="start"
+          side="bottom"
         >
-          <DialogHeader>
-            <DialogTitle>Select Related Record</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
+          <div className="space-y-3">
             {/* Currently selected relations */}
             {relations.length > 0 && (
-              <div className="space-y-2">
-                <div className="text-sm font-medium text-muted-foreground">
-                  Currently Selected:
+              <div className="space-y-1.5">
+                <div className="text-xs font-medium text-muted-foreground">
+                  Selected:
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {badgeItems.map((item, index) => (
                     <div
                       key={item.id}
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground rounded-md text-sm"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs"
                     >
-                      <span>{item.label}</span>
+                      <span className="truncate max-w-[100px]">{item.label}</span>
                       <button
                         onClick={() => handleRemoveRelation(index)}
                         className="text-muted-foreground hover:text-foreground"
@@ -248,112 +279,94 @@ export function RelationField({
 
             {/* Search input */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 placeholder="Search records..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                className="pl-8 h-8 text-sm"
                 autoFocus
               />
             </div>
 
             {/* Table data */}
-            <div className="border rounded-md overflow-auto max-h-[500px]">
+            <div className="border rounded overflow-auto max-h-[250px]">
               {tableDataLoading && (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                  <span className="ml-2">Loading table data...</span>
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="ml-2 text-sm">Loading...</span>
                 </div>
               )}
 
               {!tableDataLoading && tableData && (
-                <>
-                  <div className="sticky top-0 left-2 z-10 bg-blue-600 text-white px-3 py-1 rounded-md text-sm mb-2">
-                    Click any row to select it
-                  </div>
-
-                  <Table className="text-sm">
-                    <TableHeader className="sticky top-0 bg-muted/50 backdrop-blur-sm">
+                <Table className="text-xs">
+                  <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                    <TableRow>
+                      <TableHead className="w-12 px-2 py-1.5">ID</TableHead>
+                      {tableData.fields.slice(0, 3).map((field) => (
+                        <TableHead key={field.id} className="min-w-[80px] px-2 py-1.5">
+                          {field.name}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRows.length === 0 ? (
                       <TableRow>
-                        <TableHead className="w-20 px-2">ID</TableHead>
-                        {tableData.fields.slice(0, 8).map((field) => (
-                          <TableHead key={field.id} className="min-w-[120px] p-2">
-                            {field.name}
-                          </TableHead>
-                        ))}
-                        <TableHead className="w-24 px-2">Status</TableHead>
+                        <TableCell colSpan={tableData.fields.slice(0, 3).length + 1} className="text-center h-16 text-muted-foreground">
+                          {searchTerm ? `No records for "${searchTerm}"` : 'No records'}
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredRows.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={tableData.fields.slice(0, 8).length + 2} className="text-center h-24 text-muted-foreground">
-                            {searchTerm ? `No records found for "${searchTerm}"` : 'No records found'}
+                    ) : (
+                      filteredRows.slice(0, 20).map((row) => (
+                        <TableRow
+                          key={row.id}
+                          className={`hover:bg-muted/30 cursor-pointer ${
+                            relations.some(r => r.id.toString() === row.id.toString())
+                              ? "bg-blue-50 dark:bg-blue-950/20"
+                              : ""
+                          }`}
+                          onClick={() => handleRowSelect(row.id, row)}
+                        >
+                          <TableCell className="px-2 py-1.5 font-medium text-muted-foreground">
+                            {row.id}
                           </TableCell>
+                          {tableData.fields.slice(0, 3).map((field) => {
+                            const fieldValue = row[field.name];
+                            return (
+                              <TableCell key={field.id} className="px-2 py-1.5 truncate max-w-[100px]">
+                                {renderCellValue(field, fieldValue)}
+                              </TableCell>
+                            );
+                          })}
                         </TableRow>
-                      ) : (
-                        filteredRows.map((row) => (
-                          <TableRow
-                            key={row.id}
-                            className={`hover:bg-muted/30 cursor-pointer ${
-                              relations.some(r => r.id.toString() === row.id.toString())
-                                ? "bg-blue-50 dark:bg-blue-950/20"
-                                : ""
-                            }`}
-                            onClick={() => handleRowSelect(row.id, row)}
-                          >
-                            <TableCell className="px-2 font-medium text-xs text-muted-foreground">
-                              {row.id}
-                            </TableCell>
-                            {tableData.fields.slice(0, 8).map((field) => {
-                              const fieldValue = row[field.name]; // DSG format: direct access
-
-                              return (
-                                <TableCell key={field.id} className="p-2 truncate">
-                                  {renderCellValue(field, fieldValue)}
-                                </TableCell>
-                              );
-                            })}
-                            <TableCell className="px-2">
-                              {relations.some(r => r.id.toString() === row.id.toString()) && (
-                                <Badge variant="secondary" className="text-xs">Selected</Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               )}
 
               {!tableDataLoading && (!tableData || tableData.rows.length === 0) && (
-                <div className="text-center py-8 text-muted-foreground">
-                  No records found in this table
+                <div className="text-center py-6 text-muted-foreground text-sm">
+                  No records found
                 </div>
               )}
             </div>
 
             {/* Footer */}
-            <div className="flex justify-between items-center text-sm text-muted-foreground">
+            <div className="flex justify-between items-center text-xs text-muted-foreground pt-1">
               <span>
-                {tableData ? `${tableData.rows.length} record${tableData.rows.length === 1 ? '' : 's'} available` : 'Loading...'}
+                {tableData ? `${Math.min(filteredRows.length, 20)} of ${tableData.rows.length}` : '...'}
               </span>
-              <div className="flex items-center gap-2">
-                {multiple && (
-                  <span>{relations.length} selected</span>
-                )}
-                {multiple && relations.length > 0 && (
-                  <Button type="button" size="sm" onClick={() => setIsOpen(false)}>
-                    Done
-                  </Button>
-                )}
-              </div>
+              {multiple && relations.length > 0 && (
+                <Button type="button" size="sm" className="h-7 text-xs" onClick={handleDialogClose}>
+                  Done
+                </Button>
+              )}
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

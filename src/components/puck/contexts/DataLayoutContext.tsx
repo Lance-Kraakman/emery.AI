@@ -23,6 +23,9 @@ interface DataLayoutContextValue {
 
   /** Available fields from the table */
   fields: FieldDTO[];
+
+  /** Sample row data for variable previews in editor */
+  sampleRow?: Record<string, unknown>;
 }
 
 const DataLayoutContext = createContext<DataLayoutContextValue | undefined>(undefined);
@@ -32,15 +35,16 @@ interface DataLayoutProviderProps {
   tableId?: number;
   viewId?: number;
   fields: FieldDTO[];
+  sampleRow?: Record<string, unknown>;
 }
 
 /**
  * Provider component that wraps content in DataBlock
  * Makes field metadata available to all child field blocks
  */
-export function DataLayoutProvider({ children, tableId, viewId, fields }: DataLayoutProviderProps) {
+export function DataLayoutProvider({ children, tableId, viewId, fields, sampleRow }: DataLayoutProviderProps) {
   return (
-    <DataLayoutContext.Provider value={{ tableId, viewId, fields }}>
+    <DataLayoutContext.Provider value={{ tableId, viewId, fields, sampleRow }}>
       {children}
     </DataLayoutContext.Provider>
   );

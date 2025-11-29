@@ -14,6 +14,7 @@ import { PageId } from "@/ddd/domain/puck/value-objects/page-id"
 import { AppId } from "@/ddd/domain/puck/value-objects/app-id"
 import { PuckPageMapper, type PageDTO } from "@/app/mappers/puck-page-mapper"
 import type { ThemeConfigProps } from "@/ddd/domain/puck/value-objects/theme-config"
+import type { PageVariable } from "@/components/puck/types"
 
 const createPageSchema = z.object({
   appId: z.number(),
@@ -850,6 +851,59 @@ export async function updatePageTheme(
     return {
       success: false,
       error: ActionError.database('update page theme'),
+      errorCode: 'DATABASE'
+    };
+  }
+}
+
+/**
+ * Update page variables (expected query parameters)
+ * Pass undefined/empty array to clear variables
+ */
+export async function updatePageVariables(
+  pageId: number,
+  pageVariables: PageVariable[] | undefined
+): Promise<Result<PageDTO>> {
+  try {
+    await requirePermission("apps:manage");
+
+    if (!pageId) {
+      return {
+        success: false,
+        error: ActionError.validation(['ID required']),
+        errorCode: 'VALIDATION'
+      };
+    }
+
+    const pageService = getPuckPageApplicationService();
+
+    // Get the page
+    const page = await pageService.getPage(PageId.fromNumber(pageId));
+    if (!page) {
+      return {
+        success: false,
+        error: ActionError.notFound('Page', pageId),
+        errorCode: 'NOT_FOUND'
+      };
+    }
+
+    // Update page variables
+    page.setPageVariables(pageVariables);
+
+    // Save the page using repository
+    const { getPuckPageRepository } = await import("@/ddd/application/di/container");
+    const pageRepository = getPuckPageRepository();
+    const updatedPage = await pageRepository.update(page);
+
+    return {
+      success: true,
+      data: PuckPageMapper.toDTO(updatedPage)
+    };
+  } catch (error) {
+    console.error('[updatePageVariables] Error:', error);
+    return {
+      success: false,
+      error: ActionError.database('update page variables'),
       errorCode: 'DATABASE'
     };
   }

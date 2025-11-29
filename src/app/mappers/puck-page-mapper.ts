@@ -4,6 +4,7 @@
 import type { PuckPage } from '@/ddd/domain/puck/entities/puck-page';
 import type { PuckDataStructure } from '@/ddd/domain/puck/value-objects/puck-data';
 import type { ThemeConfigProps } from '@/ddd/domain/puck/value-objects/theme-config';
+import type { PageVariable } from '@/components/puck/types';
 
 export interface PageDTO {
   id: number;
@@ -17,6 +18,7 @@ export interface PageDTO {
   isPublic: boolean;
   requiresAuth: boolean;
   allowedRoles?: string[];
+  pageVariables?: PageVariable[];
   ownerId: string;
   createdAt: string;
   updatedAt: string;
@@ -39,6 +41,7 @@ export class PuckPageMapper {
       isPublic: page.isPublic,
       requiresAuth: page.requiresAuth,
       allowedRoles: page.allowedRoles,
+      pageVariables: page.pageVariables,
       ownerId: page.ownerId.value,
       createdAt: page.createdAt.toISOString(),
       updatedAt: page.updatedAt.toISOString()
