@@ -17,7 +17,13 @@ interface ColumnHeaderProps {
   onClearSort?: () => void
 }
 
-export function ColumnHeader({ field, onEdit, onDelete, onSort, onClearSort }: ColumnHeaderProps) {
+export function ColumnHeader({
+  field,
+  onEdit,
+  onDelete,
+  onSort,
+  onClearSort
+}: ColumnHeaderProps) {
   // DIAGNOSTIC: Log component mount and props
   React.useEffect(() => {
     console.log('[ColumnHeader] MOUNTED', {
