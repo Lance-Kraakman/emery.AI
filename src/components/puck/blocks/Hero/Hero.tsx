@@ -6,8 +6,29 @@ import { Button } from "@/components/puck/components/Button";
 import { Section } from "../../components/Section";
 import { PuckComponent, Slot } from "@measured/puck";
 import type { LinkActionConfig } from "../../custom-fields/link-action-field";
+import type { Action } from "../../types/actions";
 
 const getClassName = getClassNameFactory("Hero", styles);
+
+// Convert legacy LinkActionConfig to new Action array format
+function convertLegacyAction(action: LinkActionConfig): Action[] {
+  if (!action || action.actionType === 'none') {
+    return [];
+  }
+
+  switch (action.actionType) {
+    case 'page':
+      return action.pageId
+        ? [{ type: 'navigateToPage', pageId: action.pageId.toString() }]
+        : [];
+    case 'url':
+      return action.url
+        ? [{ type: 'openUrl', url: action.url, newTab: action.openInNewTab || false }]
+        : [];
+    default:
+      return [];
+  }
+}
 
 export type HeroProps = {
   quote?: { index: number; label: string };
@@ -101,7 +122,7 @@ export const Hero: PuckComponent<HeroProps> = ({
             {buttons.map((button, i) => (
               <Button
                 key={i}
-                action={button.action}
+                actions={convertLegacyAction(button.action)}
                 variant={button.variant}
                 size="large"
                 isEditing={puck.isEditing}

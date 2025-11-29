@@ -29,6 +29,9 @@ import type {
   MultiSelectValue,
   MultiSelectCellConfiguration,
 } from './cell-types'
+import { TextCell } from './cells/TextCell'
+import { NumberCell } from './cells/NumberCell'
+import { DateCell } from './cells/DateCell'
 import {
   ID_COLUMN_WIDTH,
   ADD_COLUMN_BUTTON_WIDTH,
@@ -151,28 +154,39 @@ export function useGridColumns({
         case 'text':
         case 'email':
         case 'phone':
-          // Use built-in textColumn - handles all text editing automatically
-          // Email and phone validation happens at domain layer
-          columnConfig = textColumn
+          // Custom TextCell with tooltip support
+          columnConfig = {
+            ...textColumn,
+            component: TextCell,
+            columnData: { placeholder: '' }
+          }
           break
 
         case 'number':
-          // Use built-in floatColumn - handles number parsing/formatting
-          columnConfig = floatColumn
+          // Custom NumberCell with tooltip support
+          columnConfig = {
+            ...floatColumn,
+            component: NumberCell,
+            columnData: { placeholder: '' }
+          }
           basis = MEDIUM_COLUMN_BASIS
           minWidth = MEDIUM_COLUMN_MIN_WIDTH
           break
 
         case 'boolean':
-          // Use built-in checkboxColumn - handles boolean rendering
+          // Use built-in checkboxColumn - no overflow possible
           columnConfig = checkboxColumn
           basis = SMALL_COLUMN_BASIS
           minWidth = SMALL_COLUMN_MIN_WIDTH
           break
 
         case 'date':
-          // Use built-in dateColumn - handles date formatting
-          columnConfig = dateColumn
+          // Custom DateCell with tooltip support
+          columnConfig = {
+            ...dateColumn,
+            component: DateCell,
+            columnData: { format: 'date' }
+          }
           break
 
         case 'relation':

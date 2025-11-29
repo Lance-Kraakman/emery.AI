@@ -7,20 +7,29 @@
 
 import type { ComponentConfig } from "@measured/puck";
 import SelectField, { type SelectFieldProps } from "./SelectField";
+import { createFieldSelectorField } from "../../custom-fields";
+import {
+  typographySizeField,
+  labelPositionField,
+} from "../../fields/standard-fields";
 
 export const SelectFieldConfig: ComponentConfig<SelectFieldProps> = {
   label: "Select Field",
 
   fields: {
-    fieldId: {
-      type: "number",
-      label: "Field ID",
-    },
+    fieldId: createFieldSelectorField({
+      label: "Field",
+      filterTypes: ["single-select", "multi-select"],
+    }),
 
     label: {
       type: "text",
       label: "Label (optional)",
     },
+
+    labelPosition: labelPositionField,
+
+    size: typographySizeField,
 
     fallback: {
       type: "text",
@@ -29,7 +38,8 @@ export const SelectFieldConfig: ComponentConfig<SelectFieldProps> = {
   },
 
   defaultProps: {
-    fieldId: 0,
+    labelPosition: "top",
+    size: "sm",
     fallback: "",
   },
 

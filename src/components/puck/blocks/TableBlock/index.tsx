@@ -105,8 +105,8 @@ export const TableBlockConfig: ComponentConfig<TableBlockProps> = {
       });
 
       // If no view selected, return props as-is
-      if (!props.viewId) {
-        console.log('[TableBlock resolveData] No view selected, returning empty');
+      if (!props.viewId || isNaN(props.viewId)) {
+        console.log('[TableBlock resolveData] No valid viewId provided');
         return { props };
       }
 

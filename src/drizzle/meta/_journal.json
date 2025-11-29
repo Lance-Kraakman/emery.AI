@@ -253,6 +253,13 @@
       "when": 1763791337573,
       "tag": "0035_known_taskmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1764374765382,
+      "tag": "0036_fancy_shiver_man",
+      "breakpoints": true
     }
   ]
 }

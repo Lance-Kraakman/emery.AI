@@ -1,4 +1,15 @@
 import { Config, Data, Slot } from "@measured/puck";
+
+/**
+ * Page Variable - defines expected query parameters for a page
+ * These are shown in the variable autocomplete and used for navigation actions
+ */
+export interface PageVariable {
+  name: string;           // e.g., "user_id", "product_id"
+  type: 'string' | 'number';
+  required: boolean;
+  description?: string;
+}
 import { ButtonProps } from "./blocks/Button";
 import { CardProps } from "./blocks/Card";
 import { GridProps } from "./blocks/Grid";
@@ -14,13 +25,18 @@ import { TableBlockProps } from "./blocks/TableBlock/TableBlock";
 import { MetricBlockProps } from "./blocks/MetricBlock/MetricBlock";
 import { ChartBlockProps } from "./blocks/ChartBlock/ChartBlock";
 import { FormBlockProps } from "./blocks/FormBlock/FormBlock";
-import { RepeatBlockProps } from "./blocks/RepeatBlock/RepeatBlock";
+import { DataBlockProps } from "./blocks/DataBlock/DataBlock";
 import { LinkBlockProps } from "./blocks/LinkBlock/LinkBlock";
-import { DataContextBlockProps } from "./blocks/DataContextBlock/DataContextBlock";
 import { TextFieldProps } from "./blocks/TextField/TextField";
+import { NumberFieldProps } from "./blocks/NumberField/NumberField";
+import { BooleanFieldProps } from "./blocks/BooleanField/BooleanField";
 import { ImageFieldProps } from "./blocks/ImageField/ImageField";
 import { DateFieldProps } from "./blocks/DateField/DateField";
 import { SelectFieldProps } from "./blocks/SelectField/SelectField";
+import { FileFieldProps } from "./blocks/FileField/FileField";
+import { DocumentFieldProps } from "./blocks/DocumentField/DocumentField";
+import { RelationFieldProps } from "./blocks/RelationField/RelationField";
+import { LinkFieldProps } from "./blocks/LinkField/LinkField";
 import type { LoginBlockProps } from "./blocks/LoginBlock";
 import type { SignOutBlockProps } from "./blocks/SignOutBlock";
 
@@ -63,17 +79,22 @@ export type Components = {
   Space: SpaceProps;
   HeaderBlock: HeaderBlockProps;
   FooterBlock: FooterBlockProps;
-  DataContextBlock: DataContextBlockProps;
+  DataBlock: DataBlockProps;
   TableBlock: TableBlockProps;
-  RepeatBlock: RepeatBlockProps;
   MetricBlock: MetricBlockProps;
   ChartBlock: ChartBlockProps;
   FormBlock: FormBlockProps;
   LinkBlock: LinkBlockProps;
   TextField: TextFieldProps;
+  NumberField: NumberFieldProps;
+  BooleanField: BooleanFieldProps;
   ImageField: ImageFieldProps;
   DateField: DateFieldProps;
   SelectField: SelectFieldProps;
+  FileField: FileFieldProps;
+  DocumentField: DocumentFieldProps;
+  RelationField: RelationFieldProps;
+  LinkField: LinkFieldProps;
   LoginBlock: LoginBlockProps;
   SignOutBlock: SignOutBlockProps;
 };

@@ -8,23 +8,45 @@
  */
 
 import { useFieldValue, useIsInDataContext } from '@/components/puck/hooks/useFieldValue';
+import { cn } from '@/lib/utils';
 import styles from './styles.module.css';
 
 export interface DateFieldProps {
-  fieldId: number;
+  fieldId?: number;
   label?: string;
+  labelPosition?: 'top' | 'inline';
   format?: 'short' | 'long' | 'relative' | 'time';
+  size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
+  textColor?: string;
+  fontFamily?: string;
+  fontWeight?: string;
   fallback?: string;
 }
 
 export default function DateField({
   fieldId,
   label,
+  labelPosition = 'top',
   format = 'short',
+  size = 'base',
+  textColor,
+  fontFamily,
+  fontWeight,
   fallback = '',
 }: DateFieldProps) {
+  // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
-  const value = useFieldValue(fieldId);
+  const value = useFieldValue(fieldId ?? 0);
+
+  // No field selected
+  if (fieldId === undefined) {
+    return (
+      <div className={styles.warning}>
+        <span className={styles.warningIcon}>⚠️</span>
+        <span className={styles.warningText}>Please select a field</span>
+      </div>
+    );
+  }
 
   // Not in data context - show warning
   if (!isInContext) {
@@ -32,7 +54,7 @@ export default function DateField({
       <div className={styles.warning}>
         <span className={styles.warningIcon}>⚠️</span>
         <span className={styles.warningText}>
-          DateField must be inside a DataContextBlock or RepeatBlock
+          DateField must be inside a Data block
         </span>
       </div>
     );
@@ -73,10 +95,24 @@ export default function DateField({
     }
   }
 
+  const containerClass = cn(
+    styles.dateField,
+    labelPosition === 'inline' && styles.inline
+  );
+
+  // Build inline styles from standard fields
+  const dateStyle: React.CSSProperties = {
+    ...(textColor && { color: textColor }),
+    ...(fontFamily && { fontFamily }),
+    ...(fontWeight && { fontWeight }),
+  };
+
   return (
-    <div className={styles.dateField}>
+    <div className={containerClass}>
       {label && <label className={styles.label}>{label}</label>}
-      <span className={styles.date}>{displayValue}</span>
+      <span className={styles.date} data-size={size} style={dateStyle}>
+        {displayValue}
+      </span>
     </div>
   );
 }

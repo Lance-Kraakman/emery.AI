@@ -37,6 +37,12 @@ export {
 // View Management
 export { createViewManagementField } from "./view-management-field";
 
+// Field Selector
+export {
+  createFieldSelectorField,
+  type FieldSelectorFieldConfig,
+} from "./field-selector-field";
+
 // Link Action (Button/Link configuration)
 export {
   createLinkActionField,
@@ -46,3 +52,6 @@ export {
 
 // Actions (for Button, Link blocks)
 export { createActionsField } from "./actions-field";
+
+// Variable Label (for dynamic labels with {fieldName} support)
+export { createVariableLabelField } from "./variable-label-field";

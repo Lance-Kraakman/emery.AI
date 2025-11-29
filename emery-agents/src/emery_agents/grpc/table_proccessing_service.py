@@ -627,7 +627,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
     def UpdateField(self, request: table_service_pb2.UpdateFieldRequest, context) -> table_service_pb2.FieldResponse:
         """Update an existing field in a Delta table with validation and optimized paths."""
         try:
-            self._log_request("UpdateField", table_id=request.table_id, field_name=request.field_name,
+            self._log_request("UpdateField", table_id=request.table_id, field_id=request.field_id,
                             new_field_name=request.updated_field.name, migrate_data=request.migrate_data,
                             organization_id=request.organization_id, s3_path=request.s3_path)
 

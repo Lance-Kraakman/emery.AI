@@ -15,8 +15,9 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { getViewApplicationService } from "@/ddd/application/di/container";
-import { OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
+import { getViewApplicationService, getFileApplicationService } from "@/ddd/application/di/container";
+import { OrganizationId, TableId, UserId, FieldId } from "@/ddd/domain/shared/value-objects";
+import type { FileFieldValue } from "@/ddd/domain/tables/value-objects/field-values";
 import { ViewId } from "@/ddd/domain/views/value-objects/view-id";
 import { FilterConfig } from "@/ddd/domain/views/value-objects/filter-config";
 import { SortConfig } from "@/ddd/domain/views/value-objects/sort-config";
@@ -472,6 +473,52 @@ export async function getViewsForOrganization(): Promise<ViewDTO[]> {
 }
 
 /**
+ * Substitutes page variable placeholders in filter values
+ *
+ * @param value - Filter value that may contain {params.varName} placeholders
+ * @param context - Context containing params from URL query parameters
+ * @returns Value with variables substituted
+ *
+ * @example
+ * substituteVariables("{params.product_id}", { product_id: "123" }) // returns "123"
+ * substituteVariables("static_value", { product_id: "123" }) // returns "static_value"
+ */
+function substituteFilterVariable(
+  value: string | number | boolean | null | undefined,
+  context?: import('@/components/puck/types/puck-context').PuckResolveContext
+): string | number | boolean | null | undefined {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  // Match {params.varName} pattern
+  const paramMatch = value.match(/^\{params\.(\w+)\}$/);
+  if (paramMatch && context) {
+    const paramName = paramMatch[1];
+    const paramValue = context[paramName];
+    if (paramValue !== undefined) {
+      // Return the param value, handling arrays by taking first element
+      if (Array.isArray(paramValue)) {
+        return paramValue[0] ?? '';
+      }
+      return paramValue;
+    }
+    // Variable not found in context - return empty string to avoid matching everything
+    return '';
+  }
+
+  // For partial substitutions (e.g., "prefix_{params.id}_suffix"), do inline replacement
+  if (value.includes('{params.') && context) {
+    return value.replace(/\{params\.(\w+)\}/g, (_, name) => {
+      const paramValue = context[name];
+      return paramValue !== undefined ? String(paramValue) : '';
+    });
+  }
+
+  return value;
+}
+
+/**
  * Execute a view and return rows as DTOs
  *
  * Used by TableBlock to fetch and render data.
@@ -479,12 +526,15 @@ export async function getViewsForOrganization(): Promise<ViewDTO[]> {
  *
  * @param dataSourceId - The view ID to execute
  * @param context - Optional context for dynamic filtering (query params, etc.)
- *                  TODO: Implement parameter substitution in view filters using context
- *                  Example: filter "user_id = {userId}" would use context.userId
+ *                  Variables like {params.product_id} are substituted from context
+ * @param pagination - Optional pagination override (pageSize and offset)
+ * @param additionalFilters - Optional runtime filters with variable substitution support
  */
 export async function executeView(
   dataSourceId: number,
-  context?: import('@/components/puck/types/puck-context').PuckResolveContext
+  context?: import('@/components/puck/types/puck-context').PuckResolveContext,
+  pagination?: { pageSize: number; offset: number },
+  additionalFilters?: Array<{ field: string; operator: string; value: any }>
 ): Promise<{
   rows: Array<Record<string, any>>;
   fields: Array<{ id: number; name: string; type: string }>;
@@ -502,9 +552,72 @@ export async function executeView(
 
     const dataSourceService = getViewApplicationService();
 
-    // Execute the view
+    // Get the view first to access its tableId for field lookup
+    const viewResult = await dataSourceService.getView(ViewId.fromNumber(dataSourceId));
+    if (!viewResult.success || !viewResult.data) {
+      console.error("Failed to get view:", viewResult.error);
+      return null;
+    }
+    const view = viewResult.data;
+
+    // Build additional filter configs if provided
+    let runtimeFilters: FilterConfig[] | undefined;
+    if (additionalFilters && additionalFilters.length > 0) {
+      // Fetch fields to convert field names to IDs
+      const { getFields } = await import('./fields');
+      const fields = await getFields(view.tableId.value);
+      const fieldNameToIdMap = new Map(fields.map(f => [f.name, f.id]));
+
+      // Operator mapping (same as createView/updateView)
+      const uiToDomainOperatorMap: Record<string, string> = {
+        'eq': 'equals',
+        'ne': 'not_equals',
+        'ilike': 'contains',
+        'like': 'contains',
+        'gt': 'greater_than',
+        'gte': 'greater_than_or_equal',
+        'lt': 'less_than',
+        'lte': 'less_than_or_equal',
+        'is_null': 'is_empty',
+        'is_not_null': 'is_not_empty',
+      };
+
+      runtimeFilters = [];
+      for (const filter of additionalFilters) {
+        const fieldId = fieldNameToIdMap.get(filter.field);
+        if (!fieldId) {
+          console.warn(`Field "${filter.field}" not found, skipping filter`);
+          continue;
+        }
+
+        // Substitute variables in the filter value
+        const substitutedValue = substituteFilterVariable(filter.value, context);
+
+        // Skip filters where variable wasn't found (empty string)
+        if (substitutedValue === '') {
+          console.warn(`Variable in filter for field "${filter.field}" not found in context, skipping`);
+          continue;
+        }
+
+        const domainOperator = uiToDomainOperatorMap[filter.operator] || filter.operator;
+
+        runtimeFilters.push(
+          FilterConfig.create({
+            fieldId,
+            operator: domainOperator as any,
+            value: substitutedValue,
+          })
+        );
+      }
+    }
+
+    // Execute the view with optional pagination override and runtime filters
     const result = await dataSourceService.executeView({
       dataSourceId: ViewId.fromNumber(dataSourceId),
+      overridePagination: pagination
+        ? PaginationConfig.create(pagination)
+        : undefined,
+      additionalFilters: runtimeFilters,
     });
 
     if (!result.success || !result.data) {
@@ -724,7 +837,7 @@ export async function submitFormView(
     await requireResourcePermission("view:view", "view", viewId);
     // Need create permission to create a new row
     const session = await requirePermission("table:create");
-    await requireCurrentOrganization();
+    const currentOrg = await requireCurrentOrganization();
 
     if (!formData || Object.keys(formData).length === 0) {
       return {
@@ -820,6 +933,54 @@ export async function submitFormView(
     }
 
     console.log('[submitFormView] Final convertedData:', convertedData);
+
+    // 3.5. Upload files for file/document fields and replace with FileFieldValue
+    const fileApplicationService = getFileApplicationService();
+
+    for (const field of tableFields) {
+      const fieldKey = field.id.toString();
+      const value = convertedData[fieldKey];
+
+      // Check if this is a file field with File objects
+      if ((field.type === 'file' || field.type === 'document') && value) {
+        // Handle single File or array of Files
+        const files = Array.isArray(value) ? value : [value];
+        const fileValues: FileFieldValue[] = [];
+
+        for (const file of files) {
+          if (file instanceof File) {
+            const buffer = Buffer.from(await file.arrayBuffer());
+
+            const uploadResult = await fileApplicationService.uploadFile({
+              organizationId: OrganizationId.fromNumber(currentOrg.id),
+              tableId: TableId.fromNumber(tableId),
+              fieldId: FieldId.fromNumber(field.id),
+              file: {
+                buffer,
+                filename: file.name,
+                mimeType: file.type,
+              },
+            });
+
+            if (uploadResult.success && uploadResult.data) {
+              fileValues.push(uploadResult.data);
+            } else {
+              console.error(`Failed to upload file ${file.name}:`, uploadResult.error);
+              return {
+                success: false,
+                error: `Failed to upload file: ${file.name}`,
+              };
+            }
+          } else if (typeof file === 'object' && file !== null && 's3Key' in file) {
+            // Already a FileFieldValue (shouldn't happen in form submit, but handle gracefully)
+            fileValues.push(file as FileFieldValue);
+          }
+        }
+
+        // Replace File objects with FileFieldValue array
+        convertedData[fieldKey] = fileValues;
+      }
+    }
 
     // 4. Create Row entity from converted data
     const { Row } = await import("@/ddd/domain/tables/value-objects/row");

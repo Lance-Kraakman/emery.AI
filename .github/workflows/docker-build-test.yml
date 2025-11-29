@@ -6,7 +6,7 @@ on:
     tags:
       - 'v*.*.*'
   pull_request:
-    branches: [main, develop]
+    branches: [develop]  # Only run PR builds for develop (main PRs come from develop, already tested)
 
 env:
   AWS_REGION: ap-southeast-2
@@ -264,3 +264,25 @@ jobs:
             -c env=${ENV_NAME} \
             -c aws_account_id=${{ env.AWS_ACCOUNT_ID }} \
             -c region=${{ env.AWS_REGION }}
+
+      - name: Blue/Green Deployment Info
+        if: success() && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo "🔵🟢 Blue/Green Deployment Created"
+          echo "=================================="
+          echo ""
+          echo "📋 CodeDeploy Application: Production-Frontend-BlueGreen"
+          echo "📋 Deployment Group: Production-Frontend-DeploymentGroup"
+          echo ""
+          echo "🔗 View deployment in AWS Console:"
+          echo "   https://ap-southeast-2.console.aws.amazon.com/codesuite/codedeploy/deployments"
+          echo ""
+          echo "⏳ The deployment is waiting for manual approval (1 hour timeout)"
+          echo ""
+          echo "✅ To APPROVE the deployment:"
+          echo "   aws deploy continue-deployment --deployment-id <DEPLOYMENT_ID> --deployment-wait-type READY_WAIT"
+          echo ""
+          echo "❌ To REJECT/ROLLBACK:"
+          echo "   aws deploy stop-deployment --deployment-id <DEPLOYMENT_ID> --auto-rollback-enabled"
+          echo ""
+          echo "🧪 Test the green environment at port 3001 before approving"

@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
 import type { ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
 import type { PuckDataStructure } from '@/ddd/domain/puck/value-objects/puck-data';
+import type { PageVariable } from '@/components/puck/types';
 import type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 import type { SkillParameterType, SkillInputFileConfig } from '@/ddd/domain/skills/entities/skill';
@@ -1612,6 +1613,7 @@ export const pages = pgTable("pages", {
   isPublic: boolean("is_public").default(false).notNull(),
   requiresAuth: boolean("requires_auth").default(false).notNull(),
   allowedRoles: text("allowed_roles").array(),
+  pageVariables: jsonb("page_variables").$type<PageVariable[]>(), // Expected query parameters for this page
   ownerId: uuid("owner_id")
     .notNull()
     .references(() => users.id), // Page owner - used for 'owned' scope permissions
