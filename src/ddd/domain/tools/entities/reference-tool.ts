@@ -77,7 +77,7 @@ export class ReferenceTool extends Tool {
    * Create a ReferenceTool from a Table
    */
   static fromTable(
-    tableId: string,
+    tableId: number,
     organizationId: number,
     tableName: string,
     databaseName: string,
@@ -90,7 +90,8 @@ export class ReferenceTool extends Tool {
       description || `Table in ${databaseName}`,
       ['table', 'data', 'database']
     )
-    const reference = Reference.table(tableId, tableName, databaseName, description)
+    // Reference uses string ID for insertText display
+    const reference = Reference.table(tableId.toString(), tableName, databaseName, description)
 
     return new ReferenceTool(toolConfig, toolMetadata, reference)
   }
@@ -365,7 +366,7 @@ export function toolToReferenceTool(
   } else if (toolConfig.isTableTool()) {
     const config = toolConfig.getTableConfig()!
     // We'd need database name from somewhere - this is a limitation of the current design
-    reference = Reference.table(config.tableId, config.tableName || toolMetadata.displayName, 'unknown-db', toolMetadata.description)
+    reference = Reference.table(config.tableId.toString(), config.tableName || toolMetadata.displayName, 'unknown-db', toolMetadata.description)
   } else if (toolConfig.isDocumentTool()) {
     const config = toolConfig.getDocumentConfig()!
     // We'd need table/database info from somewhere

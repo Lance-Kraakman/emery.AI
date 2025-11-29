@@ -87,38 +87,38 @@ export class ToolResolverService {
 
   /**
    * Reference pattern mappings to CRUD tools
-   * Maps @-patterns to new CRUD routing system
-   * Updated from reference-mapper.ts to use document_crud instead of document_read
+   * Maps @-patterns to emery-read-* tools that exist in database and Python CRUD_TOOL_ROUTING
+   * AIDEV-NOTE: Tool names must match database tool IDs and Python tool_loader.py routing
    */
   private readonly referenceMappings: ReferenceMapping[] = [
     {
       pattern: /@doc:([^@\s]+)/g,
-      toolName: 'document_crud',
+      toolName: 'emery-read-document',
       parameterName: 'document_id'
     },
     {
       pattern: /@document:([^@\s]+)/g,
-      toolName: 'document_crud',
+      toolName: 'emery-read-document',
       parameterName: 'document_id'
     },
     {
       pattern: /@table:([^@\s]+)/g,
-      toolName: 'table_crud',
+      toolName: 'emery-read-table',
       parameterName: 'table_id'
     },
     {
       pattern: /@file:([^@\s]+)/g,
-      toolName: 'file_crud',
+      toolName: 'emery-read-file',
       parameterName: 'file_id'
     },
     {
       pattern: /@agent:([^@\s]+)/g,
-      toolName: 'agent_crud',
+      toolName: 'emery-read-agent',
       parameterName: 'agent_id'
     },
     {
       pattern: /@database:([^@\s]+)/g,
-      toolName: 'database_crud',
+      toolName: 'emery-read-database',
       parameterName: 'database_id'
     }
   ]

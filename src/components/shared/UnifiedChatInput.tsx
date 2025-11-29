@@ -104,7 +104,8 @@ export function UnifiedChatInput<T = ToolDTO>({
   const [dropdownType, setDropdownType] = useState<'tools' | 'variables'>('tools');
   const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number; maxHeight?: number }>({ left: 0 });
   const [selectedIndex, setSelectedIndex] = useState(0); // For keyboard navigation in variable dropdown
-  const [selectedTools, setSelectedTools] = useState<T[]>(tools || []);
+  // Use tools prop directly - no local state to avoid sync issues
+  const selectedTools = tools || [];
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -116,12 +117,7 @@ export function UnifiedChatInput<T = ToolDTO>({
   });
   const isSingleLine = mode === 'chat' ? chatInputState.isSingleLine : false;
 
-  // Sync selected tools with prop
-  useEffect(() => {
-    if (tools) {
-      setSelectedTools(tools);
-    }
-  }, [tools]);
+  // selectedTools now derived directly from props - no sync needed
 
   // Reset selected index when dropdown query changes
   useEffect(() => {
@@ -244,8 +240,7 @@ export function UnifiedChatInput<T = ToolDTO>({
       setInputValue(newValue);
 
       // Add to selected tools (cast ToolDTO to T for generic compatibility)
-      const updatedTools = [...selectedTools, tool as T];
-      setSelectedTools(updatedTools);
+      const updatedTools = [...(tools || []), tool as T];
       onToolsChange?.(updatedTools);
 
       // Position cursor after inserted text

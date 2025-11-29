@@ -55,6 +55,8 @@ export interface UpdateViewCommand {
 export interface ExecuteViewCommand {
   dataSourceId: ViewId;
   overridePagination?: PaginationConfig;
+  /** Additional runtime filters (e.g., from page variables) - merged with view's stored filters */
+  additionalFilters?: FilterConfig[];
 }
 
 export interface ExecuteAggregationCommand {
@@ -448,9 +450,15 @@ export class ViewApplicationService {
         offset: pagination.offset,
       };
 
+      // Combine view filters with additional runtime filters
+      const allFilters = [
+        ...dataSource.filters,
+        ...(command.additionalFilters || []),
+      ];
+
       // Add filters if present
-      if (dataSource.hasFilters()) {
-        queryOptions.filters = this.convertFilterConfigToRowFilter(dataSource.filters, tableFields);
+      if (allFilters.length > 0) {
+        queryOptions.filters = this.convertFilterConfigToRowFilter(allFilters, tableFields);
       }
 
       // Add sorting if present

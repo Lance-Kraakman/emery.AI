@@ -32,7 +32,7 @@ export interface AgentToolConfig extends BaseToolConfig {
  * Table tool configuration - references a dynamic table
  */
 export interface TableToolConfig extends BaseToolConfig {
-  tableId: string
+  tableId: number
   organizationId: number
   tableName?: string
   hasHeaders?: boolean
@@ -176,7 +176,7 @@ export class ToolConfig {
    */
   static table(
     name: string,
-    tableId: string,
+    tableId: number,
     organizationId: number,
     tableName?: string,
     version: string = '1.0'
@@ -339,7 +339,7 @@ export class ToolConfig {
   }
 
   isTableTool(): this is ToolConfig & { config: TableToolConfig } {
-    return 'tableId' in this.config && typeof this.config.tableId === 'string'
+    return 'tableId' in this.config && typeof this.config.tableId === 'number'
   }
 
   isDocumentTool(): this is ToolConfig & { config: DocumentToolConfig } {

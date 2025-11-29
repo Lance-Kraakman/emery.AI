@@ -491,14 +491,18 @@ export class RowSerializer {
         case 'text':
         case 'number':
         case 'date':
-        case 'single-select':
         case 'autonumber':
         case 'last-updated':
         case 'created-at':
           // Excel: Empty cell = empty string (NOT zero for numbers)
-          // Select fields: Empty = no selection
           // Auto-fields: Empty until managed by AutoFieldProcessor
           return '';
+
+        case 'single-select':
+        case 'multi-select':
+          // Select fields: Empty = null (not empty string)
+          // Validation rejects empty strings but accepts null
+          return null;
 
         case 'email':
         case 'phone':

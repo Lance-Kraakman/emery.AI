@@ -28,6 +28,7 @@ import { Section } from '@/components/puck/components/Section';
 import { Pencil, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { SingleRowFilterConfig } from '../../fields/SingleRowFilterField';
 import styles from './styles.module.css';
 
 export interface DataBlockProps {
@@ -37,10 +38,8 @@ export interface DataBlockProps {
   // View selection
   viewId?: number;
 
-  // Single mode options
-  rowSelectionMode?: 'param' | 'static';
-  rowParam?: string;
-  rowId?: number;
+  // Single mode: Filter-based row selection
+  singleRowFilter?: SingleRowFilterConfig;
 
   // List mode options
   layout?: 'vertical' | 'grid' | 'horizontal';
@@ -72,9 +71,7 @@ export interface DataBlockProps {
 export default function DataBlock({
   mode = 'single',
   viewId,
-  rowSelectionMode = 'param',
-  rowParam = 'id',
-  rowId,
+  singleRowFilter,
   layout = 'vertical',
   columns = 2,
   gap = 16,
@@ -170,37 +167,26 @@ export default function DataBlock({
   // SINGLE MODE: Show one record
   // ============================================
   if (mode === 'single') {
-    // Validation for single mode
-    if (rowSelectionMode === 'param' && !rowParam) {
+    // No filter configured - show help message
+    if (!singleRowFilter?.field || !singleRowFilter?.value) {
       return (
         <Section>
-          <div className={styles.error}>
-            <p className={styles.errorText}>
-              Please specify which query parameter contains the row ID
+          <div className={styles.empty}>
+            <p className={styles.emptyText}>
+              Configure a filter to select a row (e.g., id equals {'{params.id}'})
             </p>
           </div>
         </Section>
       );
     }
 
-    if (rowSelectionMode === 'static' && !rowId) {
-      return (
-        <Section>
-          <div className={styles.error}>
-            <p className={styles.errorText}>Please specify a row ID</p>
-          </div>
-        </Section>
-      );
-    }
-
-    // No data loaded
+    // No data loaded - could be editor mode where variable isn't available
     if (!_resolvedRow) {
       return (
         <Section>
           <div className={styles.empty}>
             <p className={styles.emptyText}>
-              No data found
-              {rowSelectionMode === 'param' && rowParam && ` (query param "${rowParam}" not provided or row not found)`}
+              No data found for filter: {singleRowFilter.field} {singleRowFilter.operator || 'equals'} {singleRowFilter.value}
             </p>
           </div>
         </Section>

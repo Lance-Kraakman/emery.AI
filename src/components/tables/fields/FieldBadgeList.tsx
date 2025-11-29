@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { PlusCircle, X, ExternalLink } from 'lucide-react';
 import {
   Tooltip,
@@ -104,7 +104,7 @@ export function FieldBadgeList({
       <div className={`flex flex-nowrap items-center overflow-hidden ${compact ? 'gap-1' : 'gap-1.5'}`}>
         {/* Render visible badges */}
         {itemsArray.slice(0, maxVisible).map((item, index) => (
-          <div key={item.id || index} className="group relative flex-shrink-0">
+          <div key={item.id || index} className="group flex-shrink-0">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Badge
@@ -122,62 +122,34 @@ export function FieldBadgeList({
                     }
                   }}
                 >
-                  <span className="truncate max-w-[100px]">{item.label}</span>
+                  <span className="truncate max-w-[80px]">{item.label}</span>
+
+                  {/* Action buttons inside badge (visible on hover) */}
+                  {(onItemOpen || (isEditMode && onRemove)) && !disabled && (
+                    <span className="hidden group-hover:flex items-center gap-0.5 ml-0.5">
+                      {onItemOpen && (
+                        <ExternalLink
+                          className={`${compact ? 'h-2.5 w-2.5' : 'h-3 w-3'} cursor-pointer hover:text-primary transition-colors`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onItemOpen(item, index);
+                          }}
+                        />
+                      )}
+                      {isEditMode && onRemove && (
+                        <X
+                          className={`${compact ? 'h-2.5 w-2.5' : 'h-3 w-3'} cursor-pointer hover:text-destructive transition-colors`}
+                          onClick={(e) => handleRemoveClick(index, e)}
+                        />
+                      )}
+                    </span>
+                  )}
                 </Badge>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs break-words">
                 {item.label}
               </TooltipContent>
             </Tooltip>
-
-            {/* Action buttons container (shows on hover) */}
-            <div className={`
-              absolute -right-1 -top-1
-              flex items-center gap-0.5
-              opacity-0 group-hover:opacity-100
-              transition-opacity
-            `}>
-              {/* Open button (always available when onItemOpen provided) */}
-              {onItemOpen && !disabled && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onItemOpen(item, index);
-                  }}
-                  className={`
-                    ${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'}
-                    p-0
-                    bg-background border rounded-full shadow-sm
-                    hover:bg-primary hover:text-primary-foreground
-                  `}
-                  title="Open"
-                >
-                  <ExternalLink className={compact ? 'h-2 w-2' : 'h-2.5 w-2.5'} />
-                </Button>
-              )}
-
-              {/* Remove button (edit mode only) */}
-              {isEditMode && onRemove && !disabled && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => handleRemoveClick(index, e)}
-                  className={`
-                    ${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'}
-                    p-0
-                    bg-background border rounded-full shadow-sm
-                    hover:bg-destructive hover:text-destructive-foreground
-                  `}
-                  title="Remove"
-                >
-                  <X className={compact ? 'h-2 w-2' : 'h-2.5 w-2.5'} />
-                </Button>
-              )}
-            </div>
           </div>
         ))}
 

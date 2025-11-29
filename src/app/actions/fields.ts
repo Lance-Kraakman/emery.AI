@@ -490,3 +490,28 @@ export async function resetAutonumberCounter(
     };
   }
 }
+
+/**
+ * Get fields for a view by viewId
+ * Used by EditorDataLayoutProvider to fetch fields for field selector in sidebar
+ */
+export async function getFieldsForView(viewId: number): Promise<FieldDTO[]> {
+  try {
+    if (!viewId) {
+      return [];
+    }
+
+    // Import getView to avoid circular dependency
+    const { getView } = await import('./views');
+    const view = await getView(viewId);
+
+    if (!view) {
+      return [];
+    }
+
+    return await getFields(view.tableId);
+  } catch (error) {
+    logger.error('Error getting fields for view', error);
+    return [];
+  }
+}

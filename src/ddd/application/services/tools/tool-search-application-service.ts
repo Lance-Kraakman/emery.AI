@@ -407,7 +407,7 @@ export class ToolSearchApplicationService {
         )
         .map(table => {
           return ReferenceTool.fromTable(
-            table.id.value.toString(),
+            table.id.value,
             organizationId.value,
             table.name,
             database.name,

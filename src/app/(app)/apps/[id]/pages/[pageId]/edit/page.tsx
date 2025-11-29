@@ -23,6 +23,10 @@ import { PuckEditorThemeProvider, usePuckEditorTheme } from "@/components/puck/p
 import { createPuckUIOverrides } from "@/components/puck/overrides";
 import { PuckSession } from "@/lib/puck/session-storage";
 import { PublicUrlDisplay } from "./components/PublicUrlDisplay";
+import { EditorDataLayoutProvider } from "@/components/puck/contexts/EditorDataLayoutProvider";
+import { PageVariablesProvider } from "@/components/puck/contexts/PageVariablesContext";
+import { updatePageVariables } from "@/app/actions/puck-pages";
+import type { PageVariable } from "@/components/puck/types";
 
 // Sidebar state persistence component
 // AIDEV-NOTE: This component handles saving/restoring Puck's sidebar state to sessionStorage
@@ -385,6 +389,23 @@ export default function PageEditPage() {
     }
   };
 
+  const handleSavePageVariables = async (variables: PageVariable[]) => {
+    try {
+      const result = await updatePageVariables(pageId, variables);
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update page variables");
+        return;
+      }
+
+      // Update local state to reflect changes
+      setPage(prev => prev ? { ...prev, pageVariables: variables } : null);
+    } catch (error) {
+      console.error('Error updating page variables:', error);
+      toast.error("Failed to update page variables");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -445,18 +466,30 @@ export default function PageEditPage() {
                 pageIsPublic: page.isPublic,
                 pageRequiresAuth: page.requiresAuth,
                 pageAllowedRoles: page.allowedRoles || [],
+                pageVariables: page.pageVariables || [],
                 onSavePageSettings: handleSavePageSettings,
                 onSaveAccessSettings: handleSaveAccessSettings,
+                onSavePageVariables: handleSavePageVariables,
                 themeMode: "page",
               }),
               header: ({ children }) => (
                 <div className="bg-transparent">{children}</div>
               ),
               puck: ({ children }) => (
-                <div>
-                  <SidebarStatePersistence pageId={pageId} />
-                  {children}
-                </div>
+                <PageVariablesProvider
+                  pageVariables={page.pageVariables || []}
+                  pageId={pageId}
+                  onAddPageVariable={async (variable) => {
+                    // Add to existing variables and save
+                    const updatedVariables = [...(page.pageVariables || []), variable];
+                    await handleSavePageVariables(updatedVariables);
+                  }}
+                >
+                  <EditorDataLayoutProvider>
+                    <SidebarStatePersistence pageId={pageId} />
+                    {children}
+                  </EditorDataLayoutProvider>
+                </PageVariablesProvider>
               ),
               headerActions: ({ children }) => (
                 <CustomHeaderActions

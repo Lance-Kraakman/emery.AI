@@ -3,23 +3,31 @@
  *
  * Unified data block that replaces DataContextBlock and RepeatBlock.
  * Supports two modes:
- * - single: Single record context (detail pages)
+ * - single: Single record context (detail pages) - uses filter to select row
  * - list: Repeating items with layout options (list/grid)
  *
  * Flow:
  * 1. User selects a view and mode in Puck editor
- * 2. resolveData fetches data and field metadata
- * 3. DataBlock provides DataLayoutContext (fields) + RowDataContext (data) to children
- * 4. Child field blocks use useDataLayoutContext for field selection
- * 5. Child field blocks use useRowData for data access
+ * 2. For single mode: user configures filter to select row (e.g., id = {params.product_id})
+ * 3. resolveData fetches data with backend filtering and field metadata
+ * 4. DataBlock provides DataLayoutContext (fields) + RowDataContext (data) to children
+ * 5. Child field blocks use useDataLayoutContext for field selection
+ * 6. Child field blocks use useRowData for data access
+ *
+ * Single Mode Row Selection:
+ * - Uses filter-based approach: user defines a filter like "id equals {params.product_id}"
+ * - Variables like {params.varName} are substituted from URL query parameters
+ * - Static values work too: "id equals 123"
+ * - Filtering happens at database level for efficiency
  */
 
 import type { ComponentConfig } from "@measured/puck";
 import DataBlock, { type DataBlockProps } from "./DataBlock";
 import { executeView, getView } from "@/app/actions/views";
 import { getFields } from "@/app/actions/fields";
-import { isPuckResolveContext, getContextValue } from "../../types/puck-context";
+import { isPuckResolveContext } from "../../types/puck-context";
 import { createViewManagementField } from "../../custom-fields";
+import { SingleRowFilterField, type SingleRowFilterConfig } from "../../fields/SingleRowFilterField";
 
 export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
   label: "Data",
@@ -41,26 +49,16 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       label: 'Data Source (Grid View)',
     }),
 
-    // Single mode: Row Selection Mode
-    rowSelectionMode: {
-      type: "radio",
-      label: "Row Selection",
-      options: [
-        { label: "From Query Parameter", value: "param" },
-        { label: "Static Row ID", value: "static" },
-      ],
-    },
-
-    // Single mode: Query Parameter Name
-    rowParam: {
-      type: "text",
-      label: "Query Parameter Name",
-    },
-
-    // Single mode: Static Row ID
-    rowId: {
-      type: "number",
-      label: "Row ID",
+    // Single mode: Unified row filter configuration
+    singleRowFilter: {
+      type: "custom",
+      label: "Row Filter",
+      render: ({ value, onChange }) => (
+        <SingleRowFilterField
+          value={value as SingleRowFilterConfig | undefined}
+          onChange={onChange}
+        />
+      ),
     },
 
     // List mode: Layout
@@ -138,8 +136,12 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
 
   defaultProps: {
     mode: "single",
-    rowSelectionMode: "param",
-    rowParam: "id",
+    singleRowFilter: {
+      field: "id",
+      operator: "eq",
+      valueType: "variable",
+      value: "{params.id}",
+    },
     layout: "vertical",
     columns: 2,
     gap: 16,
@@ -153,7 +155,6 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
    */
   resolveFields: (data, { fields }) => {
     const mode = data.props.mode;
-    const rowSelectionMode = data.props.rowSelectionMode;
     const layout = data.props.layout;
 
     // Base fields always shown
@@ -163,12 +164,10 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     };
 
     if (mode === 'single') {
-      // Single mode fields
+      // Single mode: show unified row filter field
       return {
         ...baseFields,
-        rowSelectionMode: fields.rowSelectionMode,
-        ...(rowSelectionMode === 'param' && { rowParam: fields.rowParam }),
-        ...(rowSelectionMode === 'static' && { rowId: fields.rowId }),
+        singleRowFilter: fields.singleRowFilter,
         children: fields.children,
       };
     }
@@ -190,6 +189,10 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
   /**
    * Server-side data resolution
    * Fetches data and field metadata from the selected view
+   *
+   * Single mode: Uses filter-based row selection with variable substitution
+   * - Filter is passed to executeView with context for {params.x} substitution
+   * - Filtering happens at database level for efficiency
    */
   resolveData: async ({ props }, { metadata }) => {
     // No view selected
@@ -224,70 +227,14 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       // Get fields for the table (for field selector)
       const fields = await getFields(view.tableId);
 
-      // Execute view to get rows with server-side pagination for list mode
-      const pageSize = props.mode === 'list' ? (props.itemsPerPage || 10) : undefined;
-      const result = await executeView(
-        props.viewId,
-        metadata,
-        pageSize ? { pageSize, offset: 0 } : undefined
-      );
-      if (!result) {
-        console.error('[DataBlock.resolveData] Failed to execute view');
-        return {
-          props: {
-            ...props,
-            _viewName: view.name,
-            _tableId: view.tableId,
-            _fields: fields,
-            _rows: [],
-            _resolvedRow: undefined,
-            _totalCount: 0,
-            _error: 'Failed to execute view',
-          },
-        };
-      }
-
       // ============================================
-      // SINGLE MODE: Find specific row
+      // SINGLE MODE: Filter-based row selection
       // ============================================
       if (props.mode === 'single') {
-        let targetRowId: number | undefined;
+        const filter = props.singleRowFilter;
 
-        if (props.rowSelectionMode === 'param') {
-          // Get row ID from query param
-          if (!isPuckResolveContext(metadata)) {
-            return {
-              props: {
-                ...props,
-                _viewName: view.name,
-                _tableId: view.tableId,
-                _fields: fields,
-                _resolvedRow: undefined,
-                _error: undefined,
-              },
-            };
-          }
-
-          const paramValue = getContextValue(metadata, props.rowParam || 'id');
-          if (paramValue) {
-            targetRowId = Number(paramValue);
-          } else {
-            return {
-              props: {
-                ...props,
-                _viewName: view.name,
-                _tableId: view.tableId,
-                _fields: fields,
-                _resolvedRow: undefined,
-                _error: undefined,
-              },
-            };
-          }
-        } else if (props.rowSelectionMode === 'static') {
-          targetRowId = props.rowId;
-        }
-
-        if (!targetRowId) {
+        // Validate filter configuration
+        if (!filter?.field || !filter?.value) {
           return {
             props: {
               ...props,
@@ -295,15 +242,29 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
               _tableId: view.tableId,
               _fields: fields,
               _resolvedRow: undefined,
-              _error: undefined,
+              _error: undefined, // No error, just not configured yet
             },
           };
         }
 
-        // Find the specific row
-        const targetRow = result.rows.find(row => row.id === targetRowId);
+        // Build the filter for single row selection
+        // Variables like {params.product_id} are substituted in executeView
+        const singleRowFilter = [{
+          field: filter.field,
+          operator: filter.operator || 'eq',
+          value: filter.value,
+        }];
 
-        if (!targetRow) {
+        // Execute view with filter - fetch only 1 row
+        const result = await executeView(
+          props.viewId,
+          isPuckResolveContext(metadata) ? metadata : undefined,
+          { pageSize: 1, offset: 0 },
+          singleRowFilter
+        );
+
+        if (!result) {
+          console.error('[DataBlock.resolveData] Failed to execute view for single mode');
           return {
             props: {
               ...props,
@@ -311,7 +272,25 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
               _tableId: view.tableId,
               _fields: fields,
               _resolvedRow: undefined,
-              _error: `Row ${targetRowId} not found`,
+              _error: 'Failed to execute view',
+            },
+          };
+        }
+
+        // Get the first (and only) row
+        const targetRow = result.rows[0];
+
+        if (!targetRow) {
+          // No row found - could be because variable wasn't in context (editor mode)
+          // or the filter genuinely matched nothing
+          return {
+            props: {
+              ...props,
+              _viewName: view.name,
+              _tableId: view.tableId,
+              _fields: fields,
+              _resolvedRow: undefined,
+              _error: undefined, // Don't show error in editor when variable isn't available
             },
           };
         }
@@ -328,7 +307,31 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         };
       }
 
-      // LIST MODE: Return rows (server already paginated)
+      // ============================================
+      // LIST MODE: Return paginated rows
+      // ============================================
+      const pageSize = props.itemsPerPage || 10;
+      const result = await executeView(
+        props.viewId,
+        isPuckResolveContext(metadata) ? metadata : undefined,
+        { pageSize, offset: 0 }
+      );
+
+      if (!result) {
+        console.error('[DataBlock.resolveData] Failed to execute view for list mode');
+        return {
+          props: {
+            ...props,
+            _viewName: view.name,
+            _tableId: view.tableId,
+            _fields: fields,
+            _rows: [],
+            _totalCount: 0,
+            _error: 'Failed to execute view',
+          },
+        };
+      }
+
       return {
         props: {
           ...props,

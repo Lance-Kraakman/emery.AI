@@ -16,6 +16,7 @@ import { ChatSessionItem } from './ChatSessionItem'
 import { getChatSessions, createNewChatSession } from '@/app/actions/chat-history'
 import type { ChatSessionDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
 import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
+import { CHAT_COLLAPSED_WIDTH, CHAT_HISTORY_EXPANDED_WIDTH } from './EmeryChat'
 
 interface ChatHistoryPanelProps {
   isCollapsed: boolean
@@ -141,7 +142,7 @@ export function ChatHistoryPanel({
   // Collapsed view
   if (isCollapsed) {
     return (
-      <div className="w-12 h-full flex flex-col bg-card border-r border-border">
+      <div className={`${CHAT_COLLAPSED_WIDTH} h-full flex flex-col bg-card border-r border-border`}>
         <div className="p-2">
           <Button
             variant="ghost"
@@ -165,7 +166,7 @@ export function ChatHistoryPanel({
 
   // Expanded view
   return (
-    <div className="w-80 h-full flex flex-col bg-card border-r border-border">
+    <div className={`${CHAT_HISTORY_EXPANDED_WIDTH} h-full flex flex-col bg-card border-r border-border`}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-border">
         <div className="flex items-center gap-2 min-w-0 flex-1">

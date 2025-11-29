@@ -22,11 +22,24 @@ export default function CellRenderer({ field, value, readOnly = false, organizat
   if (value === null || value === undefined) return <span className="text-gray-500">-</span>;
 
   // Handle file/document opening logic
-  const handleFileOpen = (file: any) => {
+  const handleFileOpen = async (file: any) => {
     try {
       const fileName = file.name || file.filename || 'Unknown File'
-      const fileUrl = file.url || file.downloadUrl
+      let fileUrl = file.url || file.downloadUrl
       const mimeType = file.mimeType || file.contentType
+
+      // If no URL, generate one from s3Key
+      if (!fileUrl && file.s3Key) {
+        try {
+          const response = await fetch(`/api/files/download-url?s3Key=${encodeURIComponent(file.s3Key)}`)
+          const result = await response.json()
+          if (result.success && result.data?.downloadUrl) {
+            fileUrl = result.data.downloadUrl
+          }
+        } catch (urlError) {
+          console.error('Failed to get download URL:', urlError)
+        }
+      }
 
       console.log('Opening file:', { fileName, fileUrl, mimeType, file })
 
