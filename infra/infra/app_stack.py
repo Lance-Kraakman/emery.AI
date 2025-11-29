@@ -10,6 +10,7 @@ from aws_cdk import (
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as origins,
     aws_servicediscovery as servicediscovery,
+    aws_certificatemanager as acm,
     custom_resources,
     Aws,
     Duration,
@@ -83,6 +84,34 @@ class AppStack(Stack):
 
         # Default AWS region - can be overridden by CDK context
         aws_region = 'ap-southeast-2'
+
+        # ========== CUSTOM DOMAIN CONFIGURATION ==========
+        # Domain and certificate configuration per environment
+        domain_config = {
+            "production": {
+                "domain": "braintable.app",
+                "certificate_arn": "arn:aws:acm:us-east-1:034165313651:certificate/c95eb22e-f4d8-4874-b381-f7a2cdaecc1a"
+            },
+            "staging": {
+                "domain": "staging.braintable.app",
+                "certificate_arn": "arn:aws:acm:us-east-1:772302459598:certificate/3cb8f028-6cfc-404f-bd9c-315ee0f77a1d"
+            },
+            "dev": {
+                "domain": "dev.braintable.app",
+                "certificate_arn": "arn:aws:acm:us-east-1:463735866328:certificate/2d76beac-68ca-4e75-8cb2-29c4e61b195c"
+            },
+        }
+
+        custom_domain = domain_config.get(env_name, {}).get("domain")
+        certificate_arn = domain_config.get(env_name, {}).get("certificate_arn")
+
+        # Import the ACM certificate (created in us-east-1 for CloudFront)
+        certificate = None
+        if certificate_arn:
+            certificate = acm.Certificate.from_certificate_arn(
+                self, f"{prefix}Certificate",
+                certificate_arn=certificate_arn
+            )
 
         # ========== ECS CLUSTER ==========
         # Create an ECS cluster in the VPC from data stack
@@ -310,6 +339,9 @@ class AppStack(Stack):
                 compress=True,
                 origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER
             ),
+            # Custom domain configuration
+            domain_names=[custom_domain] if custom_domain else None,
+            certificate=certificate,
             comment=f"CloudFront distribution for {prefix} Emery application",
             enabled=True,
             price_class=cloudfront.PriceClass.PRICE_CLASS_100  # Use only North America and Europe for cost savings
@@ -321,6 +353,14 @@ class AppStack(Stack):
             value=f"https://{cloudfront_distribution.distribution_domain_name}",
             description="Static CloudFront URL for the application (never changes)"
         )
+
+        # Output custom domain URL if configured
+        if custom_domain:
+            CfnOutput(
+                self, f"{prefix}CustomDomainURL",
+                value=f"https://{custom_domain}",
+                description="Custom domain URL for the application"
+            )
 
         # Also output the direct ALB URL for comparison
         CfnOutput(
@@ -644,10 +684,11 @@ class AppStack(Stack):
                 "agent-table.emery.local:50052"
             )
 
-            # Also inject the frontend's own public URL for NextAuth (use CloudFront URL)
+            # Also inject the frontend's own public URL for NextAuth (use custom domain if available)
+            nextauth_url = f"https://{custom_domain}" if custom_domain else f"https://{cloudfront_distribution.distribution_domain_name}"
             frontend_service.task_definition.default_container.add_environment(
                 "NEXTAUTH_URL",
-                f"https://{cloudfront_distribution.distribution_domain_name}"
+                nextauth_url
             )
 
 
@@ -711,10 +752,11 @@ class AppStack(Stack):
                 "AWS_REGION",
                 aws_region
             )
-            # Add NextJS base URL for agent callbacks to API routes
+            # Add NextJS base URL for agent callbacks to API routes (use custom domain if available)
+            nextjs_base_url = f"https://{custom_domain}" if custom_domain else f"https://{cloudfront_distribution.distribution_domain_name}"
             agent_chat_service.task_definition.default_container.add_environment(
                 "NEXTJS_BASE_URL",
-                f"https://{cloudfront_distribution.distribution_domain_name}"
+                nextjs_base_url
             )
 
         # Add S3 and AWS configuration to table service
