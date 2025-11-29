@@ -5,6 +5,7 @@
  *
  * AIDEV-NOTE: Renders a link with different style variants.
  * Supports action execution before navigation (onClick handlers).
+ * Supports variable templates in labels like {fieldName}.
  */
 
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,7 @@ import { cn } from '@/lib/utils';
 import type { Action } from '@/components/puck/types/actions';
 import { useActionContext } from '@/components/puck/contexts/ActionContext';
 import { executeActions } from '@/components/puck/actions/execute-action';
+import { useResolveVariables } from '@/components/puck/hooks/useResolveVariables';
 import styles from './styles.module.css';
 
 export interface LinkBlockProps {
@@ -37,6 +39,10 @@ export default function LinkBlock({
   actions = [],
 }: LinkBlockProps) {
   const buildActionContext = useActionContext();
+  const resolveVariables = useResolveVariables();
+
+  // Resolve variable templates in label
+  const resolvedLabel = resolveVariables(label);
 
   const handleClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
     // If there are actions, execute them first
@@ -77,7 +83,7 @@ export default function LinkBlock({
             underline && styles.underline
           )}
         >
-          {label}
+          {resolvedLabel}
         </a>
       </Section>
     );
@@ -94,7 +100,7 @@ export default function LinkBlock({
           rel={openInNewTab ? 'noopener noreferrer' : undefined}
           className={styles.navLink}
         >
-          {label}
+          {resolvedLabel}
         </a>
       </Section>
     );
@@ -114,7 +120,7 @@ export default function LinkBlock({
           target={openInNewTab ? '_blank' : undefined}
           rel={openInNewTab ? 'noopener noreferrer' : undefined}
         >
-          {label}
+          {resolvedLabel}
         </a>
       </Button>
     </Section>

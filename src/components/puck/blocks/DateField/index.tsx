@@ -7,20 +7,30 @@
 
 import type { ComponentConfig } from "@measured/puck";
 import DateField, { type DateFieldProps } from "./DateField";
+import { createFieldSelectorField } from "../../custom-fields";
+import {
+  typographySizeField,
+  textColorField,
+  fontFamilyField,
+  fontWeightField,
+  labelPositionField,
+} from "../../fields/standard-fields";
 
 export const DateFieldConfig: ComponentConfig<DateFieldProps> = {
   label: "Date Field",
 
   fields: {
-    fieldId: {
-      type: "number",
-      label: "Field ID",
-    },
+    fieldId: createFieldSelectorField({
+      label: "Field",
+      filterTypes: ["date", "last-updated", "created-at"],
+    }),
 
     label: {
       type: "text",
       label: "Label (optional)",
     },
+
+    labelPosition: labelPositionField,
 
     format: {
       type: "select",
@@ -33,6 +43,14 @@ export const DateFieldConfig: ComponentConfig<DateFieldProps> = {
       ],
     },
 
+    size: typographySizeField,
+
+    textColor: textColorField,
+
+    fontFamily: fontFamilyField,
+
+    fontWeight: fontWeightField,
+
     fallback: {
       type: "text",
       label: "Fallback Text",
@@ -40,8 +58,9 @@ export const DateFieldConfig: ComponentConfig<DateFieldProps> = {
   },
 
   defaultProps: {
-    fieldId: 0,
+    labelPosition: "top",
     format: "short",
+    size: "base",
     fallback: "",
   },
 

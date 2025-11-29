@@ -7,17 +7,17 @@
 
 import type { ComponentConfig } from "@measured/puck";
 import LinkBlock, { type LinkBlockProps } from "./LinkBlock";
-import { createActionsField } from "../../custom-fields";
+import { createActionsField, createVariableLabelField } from "../../custom-fields";
 
 export const LinkBlockConfig: ComponentConfig<LinkBlockProps> = {
   label: "Link",
 
   fields: {
     // Link properties
-    label: {
+    label: createVariableLabelField({
       label: "Link Text",
-      type: "text",
-    },
+      placeholder: "Link text (use {fieldName} for dynamic values)"
+    }),
 
     href: {
       label: "URL",

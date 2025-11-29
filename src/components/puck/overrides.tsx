@@ -1,8 +1,9 @@
-import { ReactNode } from "react";
 import type { Overrides } from "@measured/puck";
 import { ThemeSidebarPanel } from "@/app/(app)/apps/components/ThemeEditorSheet";
 import { PageSettingsPanel } from "@/app/(app)/apps/components/PageSettingsPanel";
 import { PageAccessSettings } from "@/app/(app)/apps/components/PageAccessSettings";
+import { PageVariablesPanel } from "@/app/(app)/apps/components/PageVariablesPanel";
+import type { PageVariable } from "@/components/puck/types";
 
 /**
  * Puck UI Overrides for Transparent Theme
@@ -20,8 +21,10 @@ interface PuckUIOverridesOptions {
   pageIsPublic?: boolean;
   pageRequiresAuth?: boolean;
   pageAllowedRoles?: string[];
+  pageVariables?: PageVariable[];
   onSavePageSettings?: (data: { name: string; slug: string }) => Promise<void>;
   onSaveAccessSettings?: (data: { requiresAuth: boolean; allowedRoles: string[] }) => Promise<void>;
+  onSavePageVariables?: (variables: PageVariable[]) => Promise<void>;
   themeMode?: "app" | "page";
 }
 
@@ -64,6 +67,16 @@ export const createPuckUIOverrides = (
             />
           </div>
         )}
+        {/* Page Variables Panel */}
+        {isRootLevel && options?.onSavePageVariables && options?.pageId !== undefined && (
+          <div className="border-b border-border">
+            <PageVariablesPanel
+              pageId={options.pageId}
+              initialVariables={options.pageVariables || []}
+              onSave={options.onSavePageVariables}
+            />
+          </div>
+        )}
         {/* Theme Panel - uses context for all operations */}
         {isRootLevel && options?.themeMode && (
           <div className="border-b border-border">
@@ -76,7 +89,7 @@ export const createPuckUIOverrides = (
   },
   drawer: ({ children }) => {
     return <div className="bg-transparent">{children}</div>;
-  }
+  },
 });
 
 // Backward compatibility export

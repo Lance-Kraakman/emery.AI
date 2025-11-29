@@ -17,22 +17,28 @@ import ChartBlockConfig from "./blocks/ChartBlock";
 import { FormBlockConfig } from "./blocks/FormBlock";
 import { LoginBlock } from "./blocks/LoginBlock";
 import { SignOutBlock } from "./blocks/SignOutBlock";
-import { RepeatBlockConfig } from "./blocks/RepeatBlock";
 import { LinkBlockConfig } from "./blocks/LinkBlock";
-import DataContextBlockConfig from "./blocks/DataContextBlock";
+import { DataBlockConfig } from "./blocks/DataBlock";
 import TextFieldConfig from "./blocks/TextField";
 import ImageFieldConfig from "./blocks/ImageField";
 import DateFieldConfig from "./blocks/DateField";
 import SelectFieldConfig from "./blocks/SelectField";
+import NumberFieldConfig from "./blocks/NumberField";
+import BooleanFieldConfig from "./blocks/BooleanField";
+import RelationFieldConfig from "./blocks/RelationField";
+import FileFieldConfig from "./blocks/FileField";
+import DocumentFieldConfig from "./blocks/DocumentField";
+import LinkFieldConfig from "./blocks/LinkField";
 
 import Root from "./root";
 import { UserConfig } from "./types";
+import { FIELD_BLOCK_TYPES } from "./constants";
 
 export const config: UserConfig = {
   root: Root,
   categories: {
     layout: {
-      components: ["HeaderBlock", "Grid", "Flex", "Space", "FooterBlock", "DataContextBlock"],
+      components: ["HeaderBlock", "Grid", "Flex", "Space", "FooterBlock"],
     },
     typography: {
       components: ["Heading", "Text"],
@@ -47,11 +53,11 @@ export const config: UserConfig = {
     },
     data: {
       title: "Data",
-      components: ["TableBlock", "RepeatBlock", "MetricBlock", "ChartBlock", "FormBlock"],
+      components: ["DataBlock", "TableBlock", "MetricBlock", "ChartBlock", "FormBlock"],
     },
     fields: {
       title: "Fields",
-      components: ["TextField", "ImageField", "DateField", "SelectField"],
+      components: [...FIELD_BLOCK_TYPES],
     },
     other: {
       title: "Other",
@@ -72,17 +78,22 @@ export const config: UserConfig = {
     Space,
     HeaderBlock,
     FooterBlock,
-    DataContextBlock: DataContextBlockConfig,
+    DataBlock: DataBlockConfig,
     TableBlock: TableBlockConfig,
-    RepeatBlock: RepeatBlockConfig,
     MetricBlock: MetricBlockConfig,
     ChartBlock: ChartBlockConfig,
     FormBlock: FormBlockConfig,
     LinkBlock: LinkBlockConfig,
     TextField: TextFieldConfig,
-    ImageField: ImageFieldConfig,
+    NumberField: NumberFieldConfig,
+    BooleanField: BooleanFieldConfig,
     DateField: DateFieldConfig,
     SelectField: SelectFieldConfig,
+    ImageField: ImageFieldConfig,
+    FileField: FileFieldConfig,
+    DocumentField: DocumentFieldConfig,
+    RelationField: RelationFieldConfig,
+    LinkField: LinkFieldConfig,
     LoginBlock,
     SignOutBlock,
   },

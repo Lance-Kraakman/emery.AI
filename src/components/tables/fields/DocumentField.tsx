@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { FieldBadgeList } from './FieldBadgeList';
 import type { FieldBadgeItem } from './FieldBadgeList';
 import type { DocumentArrayFieldValue, DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { Edit3, Upload, PlusCircle } from 'lucide-react';
+import { Edit3, Upload, PlusCircle, X, ExternalLink } from 'lucide-react';
 import { DocumentCreationDialog } from '@/components/tables/dialogs/DocumentCreationDialog';
+import { Popover, PopoverContent, PopoverAnchor } from '@/components/ui/popover';
 
 interface DocumentFieldProps {
   value: DocumentArrayFieldValue;
@@ -21,6 +22,9 @@ interface DocumentFieldProps {
   compact?: boolean;
   disabled?: boolean;
   readOnly?: boolean;
+  // DSG cell focus state - when true, show expanded dialog
+  focus?: boolean;
+  onClose?: () => void;
 }
 
 /**
@@ -49,12 +53,38 @@ export function DocumentField({
   tableId = 1,
   compact = false,
   disabled = false,
-  readOnly = false
+  readOnly = false,
+  focus = false,
+  onClose
 }: DocumentFieldProps) {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isExpandedDialogOpen, setIsExpandedDialogOpen] = useState(false);
 
   const documents = Array.isArray(value) ? value : [];
+
+  // Listen for Cmd+Enter when focused (DSG integration)
+  useEffect(() => {
+    if (!focus) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        setIsExpandedDialogOpen(true);
+      }
+      if (e.key === 'Escape' && isExpandedDialogOpen) {
+        setIsExpandedDialogOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [focus, isExpandedDialogOpen]);
+
+  const handleExpandedDialogClose = useCallback(() => {
+    setIsExpandedDialogOpen(false);
+    onClose?.();
+  }, [onClose]);
 
   // Convert documents to badge items
   const badgeItems: FieldBadgeItem[] = documents.map((doc: any) => ({
@@ -140,6 +170,7 @@ export function DocumentField({
         showAddButton={false}
         onRemove={isEditMode ? handleRemoveDocument : undefined}
         onItemClick={!isEditMode ? handleDocumentClick : undefined}
+        onItemOpen={onDocumentOpen ? handleDocumentClick : undefined}
         disabled={disabled || isCreating}
         emptyMessage={compact ? undefined : `No ${(field?.name || 'documents').toLowerCase()}`}
       />
@@ -210,6 +241,102 @@ export function DocumentField({
           onDocumentCreated={handleDocumentCreated}
         />
       )}
+
+      {/* Expanded document manager popover (shown when DSG cell is focused) */}
+      <Popover open={isExpandedDialogOpen} onOpenChange={(open) => !open && handleExpandedDialogClose()}>
+        <PopoverAnchor />
+        <PopoverContent
+          className="w-[350px] p-3"
+          align="start"
+          side="bottom"
+        >
+          <div className="space-y-3">
+            {/* Document list */}
+            <div className="space-y-1.5 max-h-[250px] overflow-y-auto">
+              {documents.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground text-sm">
+                  No documents attached
+                </div>
+              ) : (
+                documents.map((doc: any, index: number) => (
+                  <div
+                    key={doc.id || doc.name || index}
+                    className="flex items-center justify-between p-2 border rounded hover:bg-muted/50"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm truncate">
+                        {doc.documentMetadata?.title || doc.name || 'Untitled Document'}
+                      </div>
+                      {doc.documentMetadata?.documentType && (
+                        <div className="text-xs text-muted-foreground">
+                          {doc.documentMetadata.documentType}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 ml-2">
+                      {onDocumentOpen && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => onDocumentOpen(doc)}
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {!readOnly && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={() => handleRemoveDocument(index)}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Add document actions */}
+            {!readOnly && (
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setShowCreateDialog(true)}
+                  disabled={isCreating || !field}
+                >
+                  <Edit3 className="h-3.5 w-3.5 mr-1.5" />
+                  Create
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => document.getElementById(`doc-upload-${field?.id || 'unknown'}`)?.click()}
+                  disabled={isCreating}
+                >
+                  <Upload className="h-3.5 w-3.5 mr-1.5" />
+                  Upload
+                </Button>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="flex justify-between items-center text-xs text-muted-foreground pt-2 border-t">
+              <span>{documents.length} document{documents.length !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
