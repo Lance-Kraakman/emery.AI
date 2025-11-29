@@ -344,7 +344,23 @@ function ActionItem({
             <Label className="text-xs font-medium">Select Page</Label>
             <Select
               value={action.pageId?.toString() || ''}
-              onValueChange={(val) => onChange({ ...action, pageId: val })}
+              onValueChange={(val) => {
+                const selectedPage = pages.find(p => p.id.toString() === val);
+                const queryParams: Record<string, string> = {};
+
+                // Auto-populate from page's required variables
+                // Try to match variable name to a field (case-insensitive), else leave empty
+                if (selectedPage?.pageVariables) {
+                  for (const pv of selectedPage.pageVariables) {
+                    const varNameLower = pv.name.toLowerCase();
+                    // Check if there's a matching field name (e.g., "id" -> "{id}")
+                    // This handles common cases like id, client_id, etc.
+                    queryParams[pv.name] = `{${varNameLower}}`;
+                  }
+                }
+
+                onChange({ ...action, pageId: val, queryParams });
+              }}
               disabled={readOnly || loadingPages}
             >
               <SelectTrigger>
@@ -527,7 +543,11 @@ export function ActionsFieldRenderer({
 
   return (
     <FieldLabel label={field.label || 'Actions'}>
-      <div className="space-y-3">
+      <div
+        className="space-y-3"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
         {actions.length === 0 && (
           <p className="text-xs text-muted-foreground py-2">
             No actions configured. Add an action to define what happens on click.
