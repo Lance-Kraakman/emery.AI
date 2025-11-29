@@ -254,14 +254,6 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-list-files": {
-    id: "emery-list-files",
-    app: "emery",
-    name: "List Files",
-    description: "List all files in the organization",
-    type: "action",
-    inputs: {}
-  },
 
   // Table Operations
   "emery-create-table": {

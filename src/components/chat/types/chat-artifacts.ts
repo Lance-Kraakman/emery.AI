@@ -53,8 +53,10 @@ export interface FileArtifactData {
   tableId: number
   /** Field context for file */
   fieldId: number
+  /** Row context for file - needed for save functionality */
+  rowId?: string
   /** Detected viewer type for appropriate rendering */
-  viewerType: 'pdf' | 'image' | 'text' | 'office' | 'generic'
+  viewerType: 'pdf' | 'image' | 'text' | 'code' | 'markdown' | 'office' | 'audio' | 'video' | 'generic'
   /** Display filename */
   fileName: string
   /** File URL for viewing/downloading */
@@ -136,7 +138,8 @@ export function createFileArtifact(
   tableId: number,
   fieldId: number,
   viewerType: FileArtifactData['viewerType'],
-  fileUrl: string
+  fileUrl: string,
+  rowId?: string
 ): FileArtifact {
   // Create artifact-like object for LlamaIndex integration
   // AIDEV-NOTE: Simplified structure that matches expected patterns
@@ -147,6 +150,7 @@ export function createFileArtifact(
       fileField,
       tableId,
       fieldId,
+      rowId,
       viewerType,
       fileName: fileField.name,
       fileUrl

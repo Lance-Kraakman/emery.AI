@@ -112,7 +112,7 @@ const RowNumberCell = ({ rowIndex }: { rowIndex: number }) => {
 }
 
 // Direct field components for DataSheetGrid
-const RelationCell = ({ rowData, setRowData, columnData }: RelationCellProps) => {
+const RelationCell = ({ rowData, setRowData, columnData, focus, active, stopEditing }: RelationCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
   const { field } = columnData
 
@@ -127,19 +127,50 @@ const RelationCell = ({ rowData, setRowData, columnData }: RelationCellProps) =>
       relatedTableId={field.relatedTableId ?? undefined}  // Convert null to undefined
       multiple={false}
       required={field.required || false}
+      focus={focus}
+      onClose={() => stopEditing?.({ nextRow: false })}
     />
   )
 }
 
-const FileCell = ({ rowData, setRowData, columnData }: FileCellProps) => {
+const FileCell = ({ rowData, setRowData, columnData, focus, active, stopEditing }: FileCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
   const { field, organizationId, tableId } = columnData
 
-  const handleFileOpen = (file: any) => {
+  const handleFileOpen = async (file: any) => {
     try {
       const fileName = file.name || file.filename || 'Unknown File'
-      const fileUrl = file.url || file.downloadUrl
       const mimeType = file.mimeType || file.contentType
+
+      // Check for temp:// keys - these are pending uploads that can't be previewed yet
+      if (file.s3Key?.startsWith('temp://')) {
+        alert('This file is pending upload. Please save the row first to enable preview.')
+        return
+      }
+
+      // Generate presigned download URL from S3
+      let fileUrl = file.url || file.downloadUrl
+
+      // If no URL, generate one from s3Key using the download-url API
+      if (!fileUrl && file.s3Key) {
+        try {
+          const response = await fetch(`/api/files/download-url?s3Key=${encodeURIComponent(file.s3Key)}`)
+          const result = await response.json()
+          if (result.success && result.data?.downloadUrl) {
+            fileUrl = result.data.downloadUrl
+          } else {
+            console.error('Failed to get download URL - API returned:', result)
+          }
+        } catch (urlError) {
+          console.error('Failed to get download URL:', urlError)
+        }
+      }
+
+      // If we still don't have a fileUrl, show error
+      if (!fileUrl) {
+        alert('Unable to preview file - no download URL available. The file may not have been uploaded yet.')
+        return
+      }
 
       // Create appropriate artifact using LlamaIndex chat-ui system
       if (FileTypeDetector.isTiptapDocument(mimeType)) {
@@ -199,11 +230,17 @@ const FileCell = ({ rowData, setRowData, columnData }: FileCellProps) => {
       compact={true}
       onFileOpen={handleFileOpen}
       maxFiles={10}
+      // Upload context for S3 upload
+      organizationId={organizationId}
+      tableId={tableId}
+      fieldId={field.id}
+      focus={focus}
+      onClose={() => stopEditing?.({ nextRow: false })}
     />
   )
 }
 
-const DocumentCell = ({ rowData, setRowData, columnData }: DocumentCellProps) => {
+const DocumentCell = ({ rowData, setRowData, columnData, focus, active, stopEditing }: DocumentCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
   const { field, organizationId, tableId } = columnData
 
@@ -273,6 +310,8 @@ const DocumentCell = ({ rowData, setRowData, columnData }: DocumentCellProps) =>
       organizationId={organizationId}
       tableId={tableId}
       onDocumentOpen={handleDocumentOpen}
+      focus={focus}
+      onClose={() => stopEditing?.({ nextRow: false })}
     />
   )
 }

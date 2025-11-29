@@ -440,9 +440,11 @@ export class TableField {
       const validValues = config.options.map(o => o.value);
       const validIds = config.options.map(o => o.id);
 
-      // Accept either option value (string) or option ID (number)
+      // Accept either option value (string) or option ID (number or string)
+      // Delta Lake stores IDs as strings, so we need to accept string IDs too
       const isValid = validValues.includes(String(value)) ||
-                      (typeof value === 'number' && validIds.includes(value));
+                      (typeof value === 'number' && validIds.includes(value)) ||
+                      validIds.map(String).includes(String(value));
 
       if (!isValid) {
         throw new Error(`${this._name} must be one of: ${validValues.join(', ')}`);
@@ -473,8 +475,11 @@ export class TableField {
       const validIds = config.options.map(o => o.id);
 
       for (const val of value) {
+        // Accept either option value (string) or option ID (number or string)
+        // Delta Lake stores IDs as strings, so we need to accept string IDs too
         const isValid = validValues.includes(String(val)) ||
-                        (typeof val === 'number' && validIds.includes(val));
+                        (typeof val === 'number' && validIds.includes(val)) ||
+                        validIds.map(String).includes(String(val));
 
         if (!isValid) {
           throw new Error(`${this._name} contains invalid option: ${val}. Valid options: ${validValues.join(', ')}`);

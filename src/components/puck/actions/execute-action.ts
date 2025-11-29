@@ -13,7 +13,12 @@ import type { Action, ActionContext } from '../types/actions';
 
 /**
  * Resolve dynamic values from action context
- * Supports templates like: {rowData.fieldName}, {formData.fieldName}, {userId}
+ * Supports templates like:
+ * - {fieldName} - Shorthand for row data (equivalent to {rowData.fieldName})
+ * - {rowData.fieldName} - Explicit row data access
+ * - {formData.fieldName} - Form data access
+ * - {params.name} - Query parameter access
+ * - {userId} - Direct context property
  *
  * @param value - The value to resolve (can contain templates)
  * @param context - Action context with available data
@@ -28,15 +33,27 @@ function resolveDynamicValue(
     return value;
   }
 
-  // Replace template variables: {rowData.id}, {formData.email}, etc.
+  // Replace template variables: {rowData.id}, {formData.email}, {fieldName}, etc.
   return value.replace(/\{([^}]+)\}/g, (match, path) => {
-    const parts = path.split('.');
+    // Check for shorthand notation (no dots = assume rowData)
+    // e.g., {name} -> {rowData.name}
+    const effectivePath = path.includes('.') ? path : `rowData.${path}`;
+
+    const parts = effectivePath.split('.');
     let current: any = context;
 
     for (const part of parts) {
       if (current && typeof current === 'object' && part in current) {
         current = current[part];
       } else {
+        // If shorthand failed, try direct context access as fallback
+        // e.g., {userId} should still work directly
+        if (!path.includes('.')) {
+          const directValue = (context as any)[path];
+          if (directValue !== undefined) {
+            return String(directValue);
+          }
+        }
         console.warn(`[resolveDynamicValue] Path not found: ${path}`);
         return match; // Return original if path not found
       }

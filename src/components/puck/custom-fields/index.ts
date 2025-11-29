@@ -52,3 +52,6 @@ export {
 
 // Actions (for Button, Link blocks)
 export { createActionsField } from "./actions-field";
+
+// Variable Label (for dynamic labels with {fieldName} support)
+export { createVariableLabelField } from "./variable-label-field";
