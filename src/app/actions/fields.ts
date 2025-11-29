@@ -169,9 +169,21 @@ export async function getFields(tableId: number): Promise<FieldDTO[]> {
       });
     }
 
-    logger.summary('Loaded fields', { tableId, count: dtoFields.length });
+    // Prepend id system field (always exists on all rows, but not in user-defined fields)
+    // Note: useGridColumns filters this out since it has its own ID column implementation
+    const idField: FieldDTO = {
+      id: 0,
+      name: 'id',
+      type: 'number',
+      required: true,
+      metadata: {},
+      orderIndex: -1,
+      createdAt: null,
+    };
 
-    return dtoFields;
+    logger.summary('Loaded fields', { tableId, count: dtoFields.length + 1 });
+
+    return [idField, ...dtoFields];
   } catch (error) {
     logger.error("Error fetching fields", error);
     throw new Error("Failed to fetch fields");

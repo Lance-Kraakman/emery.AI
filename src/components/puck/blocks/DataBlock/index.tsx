@@ -49,17 +49,8 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       label: 'Data Source (Grid View)',
     }),
 
-    // Single mode: Unified row filter configuration
-    singleRowFilter: {
-      type: "custom",
-      label: "Row Filter",
-      render: ({ value, onChange }) => (
-        <SingleRowFilterField
-          value={value as SingleRowFilterConfig | undefined}
-          onChange={onChange}
-        />
-      ),
-    },
+    // NOTE: singleRowFilter is dynamically created in resolveFields
+    // to capture viewId in a closure for the custom field render
 
     // List mode: Layout
     layout: {
@@ -152,10 +143,12 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
 
   /**
    * Conditional field visibility based on mode
+   * Also dynamically creates singleRowFilter field with viewId in closure
    */
   resolveFields: (data, { fields }) => {
     const mode = data.props.mode;
     const layout = data.props.layout;
+    const viewId = data.props.viewId;
 
     // Base fields always shown
     const baseFields = {
@@ -164,10 +157,21 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     };
 
     if (mode === 'single') {
-      // Single mode: show unified row filter field
+      // Single mode: dynamically create singleRowFilter with viewId in closure
       return {
         ...baseFields,
-        singleRowFilter: fields.singleRowFilter,
+        singleRowFilter: {
+          type: "custom" as const,
+          label: "Row Filter",
+          render: ({ value, onChange }: { value: SingleRowFilterConfig | undefined; onChange: (v: SingleRowFilterConfig) => void }) => (
+            <SingleRowFilterField
+              key={viewId}  // Force remount when viewId changes
+              value={value}
+              onChange={onChange}
+              viewId={viewId}
+            />
+          ),
+        },
         children: fields.children,
       };
     }

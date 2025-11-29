@@ -13,7 +13,6 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { usePuck } from '@measured/puck';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import {
@@ -66,11 +65,14 @@ export interface SingleRowFilterConfig {
 interface SingleRowFilterFieldProps {
   value?: SingleRowFilterConfig;
   onChange: (value: SingleRowFilterConfig) => void;
+  /** viewId passed from resolveFields closure */
+  viewId?: number;
 }
 
 export function SingleRowFilterField({
   value,
   onChange,
+  viewId,
 }: SingleRowFilterFieldProps) {
   const [fields, setFields] = useState<FieldDTO[]>([]);
   const [loadingFields, setLoadingFields] = useState(false);
@@ -78,18 +80,6 @@ export function SingleRowFilterField({
   const [newVarInput, setNewVarInput] = useState('');
 
   const { pageVariables, addPageVariable } = usePageVariablesContext();
-
-  // Get viewId from Puck's selected component props
-  const { appState } = usePuck();
-  const selectedItem = appState.ui.itemSelector;
-  const viewId = useMemo(() => {
-    if (!selectedItem) return undefined;
-    // Get the selected component's data from Puck state
-    const { index, zone } = selectedItem;
-    const content = zone ? appState.data.zones?.[zone] : appState.data.content;
-    const component = content?.[index];
-    return component?.props?.viewId as number | undefined;
-  }, [selectedItem, appState.data]);
 
   // Initialize with defaults
   const filterValue: SingleRowFilterConfig = value ?? {
@@ -111,6 +101,7 @@ export function SingleRowFilterField({
       try {
         const view = await getView(viewId);
         if (view?.tableId) {
+          // getFields now includes id as the first field
           const tableFields = await getFields(view.tableId);
           setFields(tableFields);
         }
@@ -382,7 +373,7 @@ export function SingleRowFilterField({
       {/* Help text */}
       <p className="text-[10px] text-muted-foreground">
         {filterValue.valueType === 'variable'
-          ? 'Page variables are passed via URL query parameters (e.g., ?client_id=123)'
+          ? 'Uses a page variable defined in page settings'
           : 'Enter a fixed value to always filter by'}
       </p>
     </div>
