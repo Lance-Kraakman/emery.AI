@@ -57,10 +57,10 @@ interface ActionsFieldProps {
 }
 
 /**
- * QueryParamsEditor - Mini editor for key-value query parameters
+ * PageVariablesEditor - Mini editor for key-value page variables
  * Each value supports variable autocomplete
  */
-function QueryParamsEditor({
+function PageVariablesEditor({
   value,
   onChange,
   disabled,
@@ -71,8 +71,8 @@ function QueryParamsEditor({
 }) {
   const entries = Object.entries(value);
 
-  const addParam = () => {
-    const newKey = `param${entries.length + 1}`;
+  const addVariable = () => {
+    const newKey = `var${entries.length + 1}`;
     onChange({ ...value, [newKey]: '' });
   };
 
@@ -88,7 +88,7 @@ function QueryParamsEditor({
     onChange({ ...value, [key]: newVal });
   };
 
-  const removeParam = (key: string) => {
+  const removeVariable = (key: string) => {
     const newValue = { ...value };
     delete newValue[key];
     onChange(newValue);
@@ -98,7 +98,7 @@ function QueryParamsEditor({
     <div className="space-y-2">
       {entries.length === 0 && (
         <p className="text-xs text-muted-foreground italic">
-          No query parameters
+          No variables
         </p>
       )}
 
@@ -107,7 +107,7 @@ function QueryParamsEditor({
           <Input
             value={key}
             onChange={(e) => updateKey(key, e.target.value)}
-            placeholder="param"
+            placeholder="name"
             className="w-24 text-xs"
             disabled={disabled}
           />
@@ -123,7 +123,7 @@ function QueryParamsEditor({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => removeParam(key)}
+            onClick={() => removeVariable(key)}
             disabled={disabled}
             className="h-8 w-8 p-0"
           >
@@ -136,16 +136,16 @@ function QueryParamsEditor({
         type="button"
         variant="outline"
         size="sm"
-        onClick={addParam}
+        onClick={addVariable}
         disabled={disabled}
         className="w-full text-xs"
       >
         <Plus className="h-3 w-3 mr-1" />
-        Add Parameter
+        Add Variable
       </Button>
 
       <p className="text-xs text-muted-foreground">
-        Type {"{"} in values to insert row data or query parameters
+        Type {"{"} in values to insert row data or page variables
       </p>
     </div>
   );
@@ -374,10 +374,10 @@ function ActionItem({
             </Select>
           </div>
 
-          {/* Query Parameters */}
+          {/* Page Variables */}
           <div className="space-y-2">
-            <Label className="text-xs font-medium">Query Parameters</Label>
-            <QueryParamsEditor
+            <Label className="text-xs font-medium">Pass Variables</Label>
+            <PageVariablesEditor
               value={action.queryParams || {}}
               onChange={(queryParams) => onChange({ ...action, queryParams })}
               disabled={readOnly}
@@ -398,7 +398,7 @@ function ActionItem({
               disabled={readOnly}
             />
             <p className="text-xs text-muted-foreground">
-              Type {"{"} to insert row data or query parameters
+              Type {"{"} to insert row data or page variables
             </p>
           </div>
           <div className="flex items-center space-x-2">

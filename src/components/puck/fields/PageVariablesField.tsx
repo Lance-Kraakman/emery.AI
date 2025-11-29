@@ -223,8 +223,7 @@ export function PageVariablesFieldRenderer({
 
         {/* Help Text */}
         <p className="text-xs text-muted-foreground">
-          Define expected URL parameters for this page. Use them in DataBlock filters
-          or navigation actions with {'{params.variable_name}'} syntax.
+          Variables can be used in filters and navigation actions.
         </p>
       </div>
     </FieldLabel>
