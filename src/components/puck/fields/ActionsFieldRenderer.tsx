@@ -10,9 +10,9 @@
  * - URL input with "Open in New Tab" checkbox
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { FieldLabel } from '@measured/puck';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,6 +33,9 @@ import { getPages } from '@/app/actions/puck-pages';
 import { getAgents } from '@/app/actions/agents';
 import { TaskInstructionsDialog } from './TaskInstructionsDialog';
 import { VariableAutocompleteInput } from './VariableAutocompleteInput';
+import { VariablesPanel, type Variable } from '@/components/shared/VariablesPanel';
+import { useDataLayoutContext } from '../contexts/DataLayoutContext';
+import { usePageVariables } from '../contexts/PageVariablesContext';
 
 type ActionType = 'assignTask' | 'navigateToPage' | 'openUrl';
 
@@ -57,10 +60,10 @@ interface ActionsFieldProps {
 }
 
 /**
- * QueryParamsEditor - Mini editor for key-value query parameters
- * Each value supports variable autocomplete
+ * PageVariablesEditor - Key-value editor with click-to-insert variables panel
+ * Uses the same UI pattern as TriggerConfigModal for consistency
  */
-function QueryParamsEditor({
+function PageVariablesEditor({
   value,
   onChange,
   disabled,
@@ -70,9 +73,58 @@ function QueryParamsEditor({
   disabled?: boolean;
 }) {
   const entries = Object.entries(value);
+  const dataContext = useDataLayoutContext();
+  const pageVariables = usePageVariables();
+  const searchParams = useSearchParams();
 
-  const addParam = () => {
-    const newKey = `param${entries.length + 1}`;
+  // Track which input was last focused for variable insertion
+  const lastFocusedKeyRef = useRef<string | null>(null);
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Build available variables list
+  const availableVariables: Variable[] = [];
+
+  // Add id field first if available
+  if (dataContext?.sampleRow?.id !== undefined) {
+    availableVariables.push({
+      name: 'id',
+      sampleValue: String(dataContext.sampleRow.id),
+    });
+  }
+
+  // Add row fields from DataLayoutContext (skip 'id' since we added it above)
+  if (dataContext?.fields) {
+    for (const field of dataContext.fields) {
+      if (field.name === 'id') continue; // Already added from sampleRow.id
+      const sampleValue = dataContext.sampleRow?.[field.name];
+      availableVariables.push({
+        name: field.name,
+        sampleValue: sampleValue !== undefined ? String(sampleValue) : undefined,
+      });
+    }
+  }
+
+  // Add page variables
+  for (const pv of pageVariables) {
+    availableVariables.push({
+      name: `params.${pv.name}`,
+      description: pv.description,
+    });
+  }
+
+  // Add URL query params (not already defined as page variables)
+  const addedPageVars = new Set(pageVariables.map(pv => pv.name));
+  searchParams.forEach((paramValue, paramName) => {
+    if (!addedPageVars.has(paramName)) {
+      availableVariables.push({
+        name: `params.${paramName}`,
+        sampleValue: paramValue,
+      });
+    }
+  });
+
+  const addVariable = () => {
+    const newKey = `var${entries.length + 1}`;
     onChange({ ...value, [newKey]: '' });
   };
 
@@ -88,65 +140,104 @@ function QueryParamsEditor({
     onChange({ ...value, [key]: newVal });
   };
 
-  const removeParam = (key: string) => {
+  const removeVariable = (key: string) => {
     const newValue = { ...value };
     delete newValue[key];
     onChange(newValue);
   };
 
+  // Insert variable into last focused input at cursor position
+  const handleInsertVariable = useCallback((formattedVar: string) => {
+    const key = lastFocusedKeyRef.current;
+    if (!key) return;
+
+    const input = inputRefs.current[key];
+    if (!input) return;
+
+    const currentValue = String(value[key] || '');
+    const start = input.selectionStart ?? currentValue.length;
+    const end = input.selectionEnd ?? currentValue.length;
+
+    const newValue = currentValue.slice(0, start) + formattedVar + currentValue.slice(end);
+    updateValue(key, newValue);
+
+    // Restore focus and set cursor after inserted variable
+    setTimeout(() => {
+      input.focus();
+      const newCursor = start + formattedVar.length;
+      input.setSelectionRange(newCursor, newCursor);
+    }, 0);
+  }, [value, updateValue]);
+
   return (
-    <div className="space-y-2">
-      {entries.length === 0 && (
-        <p className="text-xs text-muted-foreground italic">
-          No query parameters
-        </p>
-      )}
+    <div className="space-y-3">
+      {/* Variable entries */}
+      <div className="space-y-2">
+        {entries.length === 0 && (
+          <p className="text-xs text-muted-foreground italic">
+            No variables
+          </p>
+        )}
 
-      {entries.map(([key, val]) => (
-        <div key={key} className="flex items-center gap-2">
-          <Input
-            value={key}
-            onChange={(e) => updateKey(key, e.target.value)}
-            placeholder="param"
-            className="w-24 text-xs"
-            disabled={disabled}
+        {entries.map(([key, val]) => (
+          <div key={key} className="flex items-center gap-2">
+            <Input
+              value={key}
+              onChange={(e) => updateKey(key, e.target.value)}
+              placeholder="name"
+              className="w-24 text-xs"
+              disabled={disabled}
+            />
+            <span className="text-muted-foreground">=</span>
+            <Input
+              ref={(el) => { inputRefs.current[key] = el; }}
+              value={String(val)}
+              onChange={(e) => updateValue(key, e.target.value)}
+              onFocus={() => { lastFocusedKeyRef.current = key; }}
+              placeholder="{id}"
+              className="flex-1 text-xs font-mono"
+              disabled={disabled}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => removeVariable(key)}
+              disabled={disabled}
+              className="h-8 w-8 p-0"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        ))}
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addVariable}
+          disabled={disabled}
+          className="w-full text-xs"
+        >
+          <Plus className="h-3 w-3 mr-1" />
+          Add Variable
+        </Button>
+      </div>
+
+      {/* Clickable variables panel */}
+      {entries.length > 0 && availableVariables.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs text-muted-foreground">
+            Click to insert into focused value field:
+          </p>
+          <VariablesPanel
+            variables={availableVariables}
+            onInsert={handleInsertVariable}
+            maxHeight="120px"
+            emptyMessage="No variables available"
           />
-          <span className="text-muted-foreground">=</span>
-          <VariableAutocompleteInput
-            value={String(val)}
-            onChange={(newVal) => updateValue(key, newVal)}
-            placeholder="{id}"
-            className="flex-1 text-xs"
-            disabled={disabled}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => removeParam(key)}
-            disabled={disabled}
-            className="h-8 w-8 p-0"
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
         </div>
-      ))}
-
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={addParam}
-        disabled={disabled}
-        className="w-full text-xs"
-      >
-        <Plus className="h-3 w-3 mr-1" />
-        Add Parameter
-      </Button>
-
-      <p className="text-xs text-muted-foreground">
-        Type {"{"} in values to insert row data or query parameters
-      </p>
+      )}
     </div>
   );
 }
@@ -344,7 +435,23 @@ function ActionItem({
             <Label className="text-xs font-medium">Select Page</Label>
             <Select
               value={action.pageId?.toString() || ''}
-              onValueChange={(val) => onChange({ ...action, pageId: val })}
+              onValueChange={(val) => {
+                const selectedPage = pages.find(p => p.id.toString() === val);
+                const queryParams: Record<string, string> = {};
+
+                // Auto-populate from page's required variables
+                // Try to match variable name to a field (case-insensitive), else leave empty
+                if (selectedPage?.pageVariables) {
+                  for (const pv of selectedPage.pageVariables) {
+                    const varNameLower = pv.name.toLowerCase();
+                    // Check if there's a matching field name (e.g., "id" -> "{id}")
+                    // This handles common cases like id, client_id, etc.
+                    queryParams[pv.name] = `{${varNameLower}}`;
+                  }
+                }
+
+                onChange({ ...action, pageId: val, queryParams });
+              }}
               disabled={readOnly || loadingPages}
             >
               <SelectTrigger>
@@ -374,10 +481,10 @@ function ActionItem({
             </Select>
           </div>
 
-          {/* Query Parameters */}
+          {/* Page Variables */}
           <div className="space-y-2">
-            <Label className="text-xs font-medium">Query Parameters</Label>
-            <QueryParamsEditor
+            <Label className="text-xs font-medium">Pass Variables</Label>
+            <PageVariablesEditor
               value={action.queryParams || {}}
               onChange={(queryParams) => onChange({ ...action, queryParams })}
               disabled={readOnly}
@@ -398,7 +505,7 @@ function ActionItem({
               disabled={readOnly}
             />
             <p className="text-xs text-muted-foreground">
-              Type {"{"} to insert row data or query parameters
+              Type {"{"} to insert row data or page variables
             </p>
           </div>
           <div className="flex items-center space-x-2">
@@ -527,7 +634,11 @@ export function ActionsFieldRenderer({
 
   return (
     <FieldLabel label={field.label || 'Actions'}>
-      <div className="space-y-3">
+      <div
+        className="space-y-3"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
         {actions.length === 0 && (
           <p className="text-xs text-muted-foreground py-2">
             No actions configured. Add an action to define what happens on click.

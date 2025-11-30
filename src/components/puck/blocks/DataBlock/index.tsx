@@ -24,6 +24,7 @@
 import type { ComponentConfig } from "@measured/puck";
 import DataBlock, { type DataBlockProps } from "./DataBlock";
 import { executeView, getView } from "@/app/actions/views";
+import { executePublicView } from "@/app/actions/public-pages";
 import { getFields } from "@/app/actions/fields";
 import { isPuckResolveContext } from "../../types/puck-context";
 import { createViewManagementField } from "../../custom-fields";
@@ -49,17 +50,8 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       label: 'Data Source (Grid View)',
     }),
 
-    // Single mode: Unified row filter configuration
-    singleRowFilter: {
-      type: "custom",
-      label: "Row Filter",
-      render: ({ value, onChange }) => (
-        <SingleRowFilterField
-          value={value as SingleRowFilterConfig | undefined}
-          onChange={onChange}
-        />
-      ),
-    },
+    // NOTE: singleRowFilter is dynamically created in resolveFields
+    // to capture viewId in a closure for the custom field render
 
     // List mode: Layout
     layout: {
@@ -152,10 +144,12 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
 
   /**
    * Conditional field visibility based on mode
+   * Also dynamically creates singleRowFilter field with viewId in closure
    */
   resolveFields: (data, { fields }) => {
     const mode = data.props.mode;
     const layout = data.props.layout;
+    const viewId = data.props.viewId;
 
     // Base fields always shown
     const baseFields = {
@@ -164,10 +158,21 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     };
 
     if (mode === 'single') {
-      // Single mode: show unified row filter field
+      // Single mode: dynamically create singleRowFilter with viewId in closure
       return {
         ...baseFields,
-        singleRowFilter: fields.singleRowFilter,
+        singleRowFilter: {
+          type: "custom" as const,
+          label: "Row Filter",
+          render: ({ value, onChange }: { value: SingleRowFilterConfig | undefined; onChange: (v: SingleRowFilterConfig) => void }) => (
+            <SingleRowFilterField
+              key={viewId}  // Force remount when viewId changes
+              value={value}
+              onChange={onChange}
+              viewId={viewId}
+            />
+          ),
+        },
         children: fields.children,
       };
     }
@@ -193,6 +198,10 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
    * Single mode: Uses filter-based row selection with variable substitution
    * - Filter is passed to executeView with context for {params.x} substitution
    * - Filtering happens at database level for efficiency
+   *
+   * Public page support:
+   * - When metadata.isPublicPage is true, uses executePublicView (no auth required)
+   * - metadata.pageId must be provided for public page validation
    */
   resolveData: async ({ props }, { metadata }) => {
     // No view selected
@@ -212,6 +221,11 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     }
 
     try {
+      // Check if we're in a public page context
+      const context = isPuckResolveContext(metadata) ? metadata : undefined;
+      const isPublicPage = context?.isPublicPage === true;
+      const pageId = context?.pageId as number | undefined;
+
       // Get view details for tableId
       const view = await getView(props.viewId);
       if (!view) {
@@ -226,6 +240,31 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
 
       // Get fields for the table (for field selector)
       const fields = await getFields(view.tableId);
+
+      // Helper to execute view (uses public or authenticated based on context)
+      const doExecuteView = async (
+        pagination: { pageSize: number; offset: number },
+        additionalFilters?: Array<{ field: string; operator: string; value: unknown }>
+      ) => {
+        if (isPublicPage && pageId) {
+          // Public page context - use public execution (no auth required)
+          return executePublicView(
+            props.viewId!,
+            pageId,
+            context,
+            pagination,
+            additionalFilters
+          );
+        } else {
+          // Editor/preview context - use authenticated execution
+          return executeView(
+            props.viewId!,
+            context,
+            pagination,
+            additionalFilters
+          );
+        }
+      };
 
       // ============================================
       // SINGLE MODE: Filter-based row selection
@@ -248,7 +287,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         }
 
         // Build the filter for single row selection
-        // Variables like {params.product_id} are substituted in executeView
+        // Variables like {params.product_id} are substituted in executeView/executePublicView
         const singleRowFilter = [{
           field: filter.field,
           operator: filter.operator || 'eq',
@@ -256,9 +295,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         }];
 
         // Execute view with filter - fetch only 1 row
-        const result = await executeView(
-          props.viewId,
-          isPuckResolveContext(metadata) ? metadata : undefined,
+        const result = await doExecuteView(
           { pageSize: 1, offset: 0 },
           singleRowFilter
         );
@@ -311,11 +348,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       // LIST MODE: Return paginated rows
       // ============================================
       const pageSize = props.itemsPerPage || 10;
-      const result = await executeView(
-        props.viewId,
-        isPuckResolveContext(metadata) ? metadata : undefined,
-        { pageSize, offset: 0 }
-      );
+      const result = await doExecuteView({ pageSize, offset: 0 });
 
       if (!result) {
         console.error('[DataBlock.resolveData] Failed to execute view for list mode');
