@@ -62,6 +62,28 @@ export interface SingleRowFilterConfig {
   value: string;
 }
 
+/** Default filter configuration */
+const DEFAULT_FILTER_CONFIG: SingleRowFilterConfig = {
+  field: '',
+  operator: 'eq',
+  valueType: 'variable',
+  value: '',
+};
+
+/** Regex to extract variable name from {params.varName} format */
+const PARAMS_VAR_REGEX = /\{params\.(\w+)\}/;
+
+/** Parse variable name from {params.varName} format */
+function parseParamVariable(value: string): string {
+  const match = value.match(PARAMS_VAR_REGEX);
+  return match?.[1] || '';
+}
+
+/** Format variable name to {params.varName} format */
+function formatParamVariable(varName: string): string {
+  return `{params.${varName}}`;
+}
+
 interface SingleRowFilterFieldProps {
   value?: SingleRowFilterConfig;
   onChange: (value: SingleRowFilterConfig) => void;
@@ -82,12 +104,7 @@ export function SingleRowFilterField({
   const { pageVariables, addPageVariable } = usePageVariablesContext();
 
   // Initialize with defaults
-  const filterValue: SingleRowFilterConfig = value ?? {
-    field: '',
-    operator: 'eq',
-    valueType: 'variable',
-    value: '',
-  };
+  const filterValue: SingleRowFilterConfig = value ?? DEFAULT_FILTER_CONFIG;
 
   // Load fields when viewId changes
   useEffect(() => {
@@ -163,7 +180,7 @@ export function SingleRowFilterField({
     onChange({
       ...filterValue,
       valueType: 'variable',
-      value: `{params.${varName}}`,
+      value: formatParamVariable(varName),
     });
     setVarComboOpen(false);
     setNewVarInput('');
@@ -184,11 +201,9 @@ export function SingleRowFilterField({
   };
 
   // Extract variable name from value (e.g., "{params.client_id}" -> "client_id")
-  const currentVarName = useMemo(() => {
-    if (filterValue.valueType !== 'variable') return '';
-    const match = filterValue.value.match(/\{params\.(\w+)\}/);
-    return match?.[1] || '';
-  }, [filterValue.valueType, filterValue.value]);
+  const currentVarName = filterValue.valueType === 'variable'
+    ? parseParamVariable(filterValue.value)
+    : '';
 
   if (!viewId) {
     return (
@@ -288,7 +303,7 @@ export function SingleRowFilterField({
                     aria-expanded={varComboOpen}
                     className="w-full justify-between h-8 text-xs font-normal"
                   >
-                    {currentVarName ? `{params.${currentVarName}}` : 'Select or create variable...'}
+                    {currentVarName ? formatParamVariable(currentVarName) : 'Select or create variable...'}
                     <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -330,7 +345,7 @@ export function SingleRowFilterField({
                                 currentVarName === pv.name ? 'opacity-100' : 'opacity-0'
                               )}
                             />
-                            {`{params.${pv.name}}`}
+                            {formatParamVariable(pv.name)}
                             {pv.description && (
                               <span className="ml-2 text-muted-foreground truncate">
                                 {pv.description}

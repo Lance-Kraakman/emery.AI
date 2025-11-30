@@ -57,6 +57,11 @@ export interface ExecuteViewCommand {
   overridePagination?: PaginationConfig;
   /** Additional runtime filters (e.g., from page variables) - merged with view's stored filters */
   additionalFilters?: FilterConfig[];
+  /**
+   * Direct row ID filter - bypasses FilterConfig validation for the synthetic 'id' field
+   * Used when filtering by row ID (e.g., {params.user_id}) since the 'id' field has fieldId=0
+   */
+  rowIdFilter?: { operator: 'eq' | 'ne'; value: string };
 }
 
 export interface ExecuteAggregationCommand {
@@ -459,6 +464,16 @@ export class ViewApplicationService {
       // Add filters if present
       if (allFilters.length > 0) {
         queryOptions.filters = this.convertFilterConfigToRowFilter(allFilters, tableFields);
+      }
+
+      // Handle direct row ID filter (bypasses FilterConfig for synthetic 'id' field)
+      if (command.rowIdFilter) {
+        const idFilter: RowFilter = {
+          field: 'id',
+          operator: command.rowIdFilter.operator,
+          value: command.rowIdFilter.value,
+        };
+        queryOptions.filters = [...(queryOptions.filters || []), idFilter];
       }
 
       // Add sorting if present

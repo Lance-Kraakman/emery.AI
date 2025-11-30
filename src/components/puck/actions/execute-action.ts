@@ -9,7 +9,7 @@
 
 import { toast } from 'sonner';
 import { createTask } from '@/app/actions/tasks';
-import type { Action, ActionContext } from '../types/actions';
+import type { Action, ActionContext, ActionLinkContext } from '../types/actions';
 
 /**
  * Resolve dynamic values from action context
@@ -105,6 +105,72 @@ function buildUrlWithParams(
 }
 
 /**
+ * Build navigation path based on route context
+ * - Public routes: /public/{orgSlug}/{appSlug}/{pageSlug}
+ * - Internal routes: /apps/{appId}/pages/{pageId}
+ * - Fallback: /pages/{pageId}
+ */
+function buildPagePath(
+  pageId: string,
+  linkContext?: ActionLinkContext,
+  customPath?: string
+): string {
+  console.log('[buildPagePath] Input:', {
+    pageId,
+    linkContext: linkContext ? {
+      orgSlug: linkContext.orgSlug,
+      appSlug: linkContext.appSlug,
+      appId: linkContext.appId,
+      pagesType: linkContext.pages instanceof Map ? 'Map' : Array.isArray(linkContext.pages) ? 'Array' : typeof linkContext.pages,
+      pagesLength: linkContext.pages instanceof Map ? linkContext.pages.size : Array.isArray(linkContext.pages) ? linkContext.pages.length : 0,
+      pages: linkContext.pages instanceof Map
+        ? Array.from(linkContext.pages.entries()).map(([k, v]) => ({ id: k, slug: v.slug }))
+        : Array.isArray(linkContext.pages)
+          ? linkContext.pages.map(p => ({ id: p.id, slug: p.slug }))
+          : null,
+      isEditing: linkContext.isEditing,
+      isPreview: linkContext.isPreview,
+    } : null,
+    customPath,
+  });
+
+  // Custom path override takes precedence
+  if (customPath) {
+    return customPath;
+  }
+
+  // Public route - use slugs
+  if (linkContext?.orgSlug && linkContext?.appSlug) {
+    const pages = linkContext.pages;
+    let pageSlug: string | undefined;
+
+    if (pages) {
+      if (pages instanceof Map) {
+        const page = pages.get(Number(pageId));
+        pageSlug = page?.slug;
+      } else if (Array.isArray(pages)) {
+        const page = pages.find(p => String(p.id) === pageId);
+        pageSlug = page?.slug;
+      }
+    }
+
+    if (pageSlug) {
+      return `/public/${linkContext.orgSlug}/${linkContext.appSlug}/${pageSlug}`;
+    }
+
+    console.warn(`[buildPagePath] Could not find slug for pageId: ${pageId}`);
+  }
+
+  // Internal route - use IDs
+  if (linkContext?.appId) {
+    return `/apps/${linkContext.appId}/pages/${pageId}`;
+  }
+
+  // Fallback
+  return `/pages/${pageId}`;
+}
+
+/**
  * Execute a single action with the provided context
  *
  * @param action - The action to execute
@@ -137,7 +203,7 @@ export async function executeAction(
 
       case 'navigateToPage': {
         // Navigate to another page with optional query params
-        const basePath = action.path || `/pages/${action.pageId}`;
+        const basePath = buildPagePath(action.pageId, context.linkContext, action.path);
 
         // Resolve dynamic values in query params
         let resolvedParams: Record<string, string | number | string[]> | undefined;

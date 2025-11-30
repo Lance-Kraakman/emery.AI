@@ -83,9 +83,10 @@ export function VariableAutocompleteInput({
       });
     }
 
-    // Add field variables from DataLayoutContext
+    // Add field variables from DataLayoutContext (skip 'id' since we added it above)
     if (dataContext?.fields) {
       for (const field of dataContext.fields) {
+        if (field.name === 'id') continue; // Already added from sampleRow.id
         const sampleValue = dataContext.sampleRow?.[field.name];
         result.push({
           variable: field.name,
