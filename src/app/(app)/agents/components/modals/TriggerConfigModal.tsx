@@ -38,6 +38,7 @@ import { uploadTaskAttachment } from '@/app/actions/tasks';
 import type { ImageAttachment, FileAttachment } from '@/ddd/domain/tasks/entities/task';
 import { InstructionTemplateService } from '@/ddd/domain/tasks/services/instruction-template-service';
 import { getSampleRow } from '@/app/actions/rows';
+import { VariablesPanel, type Variable } from '@/components/shared/VariablesPanel';
 
 interface TriggerConfigModalProps {
   isOpen: boolean;
@@ -83,50 +84,51 @@ const triggerTypes: TriggerTypeOption[] = [
 /**
  * Generate sample values for all variables based on trigger type
  * Combines trigger metadata samples with actual table data for DATABASE_EVENT
+ * Returns Variable[] compatible with VariablesPanel component
  */
 function generateVariableSamples(
   triggerType: TriggerType,
   scheduleName: string,
   sampleRowData: Record<string, any> | null
-): Array<{ variable: string; sampleValue: string }> {
-  const samples: Array<{ variable: string; sampleValue: string }> = [];
+): Variable[] {
+  const samples: Variable[] = [];
 
   // Common trigger variables
-  samples.push({ variable: '$trigger.type', sampleValue: triggerType });
-  samples.push({ variable: '$trigger.scheduleName', sampleValue: scheduleName || 'Daily sync' });
+  samples.push({ name: '$trigger.type', sampleValue: triggerType });
+  samples.push({ name: '$trigger.scheduleName', sampleValue: scheduleName || 'Daily sync' });
 
   if (triggerType === 'CALENDAR') {
     // Calendar-specific variables
     const now = new Date();
     const scheduledTime = new Date(now.getTime() + 3600000); // 1 hour from now
-    samples.push({ variable: '$trigger.scheduledTime', sampleValue: scheduledTime.toISOString() });
-    samples.push({ variable: '$trigger.timezone', sampleValue: 'America/New_York' });
+    samples.push({ name: '$trigger.scheduledTime', sampleValue: scheduledTime.toISOString() });
+    samples.push({ name: '$trigger.timezone', sampleValue: 'America/New_York' });
   } else if (triggerType === 'DATABASE_EVENT') {
     // Database event variables
-    samples.push({ variable: '$table.id', sampleValue: '1' });
-    samples.push({ variable: '$table.name', sampleValue: 'customers' });
-    samples.push({ variable: '$event.operation', sampleValue: 'INSERT' });
-    samples.push({ variable: '$event.rowId', sampleValue: '6a0c5b17-d4dc-4c47-924b-8dc47b8f9c76' });
-    samples.push({ variable: '$event.timestamp', sampleValue: new Date().toISOString() });
+    samples.push({ name: '$table.id', sampleValue: '1' });
+    samples.push({ name: '$table.name', sampleValue: 'customers' });
+    samples.push({ name: '$event.operation', sampleValue: 'INSERT' });
+    samples.push({ name: '$event.rowId', sampleValue: '6a0c5b17-d4dc-4c47-924b-8dc47b8f9c76' });
+    samples.push({ name: '$event.timestamp', sampleValue: new Date().toISOString() });
 
     // Add actual row data if available
     if (sampleRowData) {
       Object.entries(sampleRowData).forEach(([fieldName, value]) => {
         const displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
-        samples.push({ variable: `$row.${fieldName}`, sampleValue: displayValue });
+        samples.push({ name: `$row.${fieldName}`, sampleValue: displayValue });
       });
 
       // Show previousRow example for one field
       const firstField = Object.keys(sampleRowData)[0];
       if (firstField) {
-        samples.push({ variable: `$previousRow.${firstField}`, sampleValue: '(previous value)' });
+        samples.push({ name: `$previousRow.${firstField}`, sampleValue: '(previous value)' });
       }
     }
   } else if (triggerType === 'WEBHOOK') {
     // Webhook-specific variables
-    samples.push({ variable: '$webhook.payload', sampleValue: '{"event": "user.created"}' });
-    samples.push({ variable: '$webhook.headers', sampleValue: '{"content-type": "application/json"}' });
-    samples.push({ variable: '$webhook.origin', sampleValue: 'https://example.com' });
+    samples.push({ name: '$webhook.payload', sampleValue: '{"event": "user.created"}' });
+    samples.push({ name: '$webhook.headers', sampleValue: '{"content-type": "application/json"}' });
+    samples.push({ name: '$webhook.origin', sampleValue: 'https://example.com' });
   }
 
   return samples;
@@ -814,49 +816,28 @@ export function TriggerConfigModal({
                   </div>
                 </div>
               </div>
-              {isLoadingSampleData && selectedType === 'DATABASE_EVENT' ? (
-                <div className="p-3 bg-muted/50 rounded-lg border flex items-center justify-center text-xs text-muted-foreground">
-                  Loading sample data...
-                </div>
-              ) : (
-                <div className="p-2.5 bg-muted/50 rounded-lg border max-h-[180px] overflow-y-auto">
-                  <div className="space-y-1">
-                    {generateVariableSamples(selectedType, scheduleName, sampleRowData).map((sample) => (
-                      <div
-                        key={sample.variable}
-                        className="flex items-start gap-2 text-xs cursor-pointer hover:bg-muted/80 p-1 rounded transition-colors"
-                        onClick={() => {
-                          // Insert variable at cursor position
-                          const input = document.getElementById('schedule-task-instructions') as HTMLTextAreaElement;
-                          if (input) {
-                            const start = input.selectionStart;
-                            const end = input.selectionEnd;
-                            const text = taskInstructions;
-                            const before = text.substring(0, start);
-                            const after = text.substring(end);
-                            const variableText = sample.variable.replace('$', '${') + '}';
-                            setTaskInstructions(before + variableText + after);
-                            // Set cursor position after inserted text
-                            setTimeout(() => {
-                              input.focus();
-                              input.setSelectionRange(start + variableText.length, start + variableText.length);
-                            }, 0);
-                          }
-                        }}
-                        title="Click to insert this variable"
-                      >
-                        <span className="font-mono text-muted-foreground min-w-[140px] flex-shrink-0">
-                          {sample.variable}
-                        </span>
-                        <span className="text-muted-foreground flex-shrink-0">→</span>
-                        <span className="font-mono text-foreground break-all">
-                          {sample.sampleValue}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <VariablesPanel
+                variables={generateVariableSamples(selectedType, scheduleName, sampleRowData)}
+                onInsert={(formattedVar) => {
+                  // Insert variable at cursor position in task instructions
+                  const input = document.getElementById('schedule-task-instructions') as HTMLTextAreaElement;
+                  if (input) {
+                    const start = input.selectionStart;
+                    const end = input.selectionEnd;
+                    const before = taskInstructions.substring(0, start);
+                    const after = taskInstructions.substring(end);
+                    // Convert {$var} format to ${var} format for trigger variables
+                    const variableText = formattedVar.replace('{$', '${');
+                    setTaskInstructions(before + variableText + after);
+                    setTimeout(() => {
+                      input.focus();
+                      input.setSelectionRange(start + variableText.length, start + variableText.length);
+                    }, 0);
+                  }
+                }}
+                loading={isLoadingSampleData && selectedType === 'DATABASE_EVENT'}
+                emptyMessage="No variables available"
+              />
             </div>
 
             {/* Task Instructions with @ Tool Mentions */}

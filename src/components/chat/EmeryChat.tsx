@@ -526,7 +526,7 @@ export function EmeryChat() {
           title="Expand chat"
         >
           <img
-            src="/assets/braintable/logo_logo.svg"
+            src="/assets/braintable/logo_logo.png"
             alt="Braintable"
             className="h-6 w-6"
           />

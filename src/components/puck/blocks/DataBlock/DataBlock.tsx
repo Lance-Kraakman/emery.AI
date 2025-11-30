@@ -405,7 +405,7 @@ export default function DataBlock({
           {/* Corner edit button - uses overlay portal */}
           <Button
             ref={editButtonRef}
-            variant="outline"
+            variant="secondary"
             className="absolute top-2 right-2 z-10"
             onClick={() => setIsEditingTemplate(true)}
           >

@@ -11,6 +11,11 @@ import { PuckPageMapper, type PageDTO } from "@/app/mappers/puck-page-mapper"
 import { AppMapper, type AppDTO } from "@/app/mappers/puck-app-mapper"
 import { PuckPage } from "@/ddd/domain/puck/entities/puck-page"
 import { App } from "@/ddd/domain/puck/entities/app"
+import { getViewApplicationService } from "@/ddd/application/di/container"
+import { ViewId } from "@/ddd/domain/views/value-objects/view-id"
+import { FilterConfig } from "@/ddd/domain/views/value-objects/filter-config"
+import { PaginationConfig } from "@/ddd/domain/views/value-objects/pagination-config"
+import type { PuckResolveContext } from "@/components/puck/types/puck-context"
 
 /**
  * Get a public app by organization slug and app slug
@@ -316,5 +321,209 @@ export async function checkPageAccess(
   } catch (error) {
     console.error('[checkPageAccess] Error:', error);
     return { allowed: false, redirectToLogin: false, reason: 'Internal error' };
+  }
+}
+
+/**
+ * Substitute filter variables like {params.user_id} with values from context
+ * Used by executePublicView for dynamic filtering
+ */
+function substituteFilterVariable(
+  value: string | number | boolean | null | undefined,
+  context?: PuckResolveContext
+): string | number | boolean | null | undefined {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  // Match {params.varName} pattern - full match
+  const paramMatch = value.match(/^\{params\.(\w+)\}$/);
+  if (paramMatch && context) {
+    const paramName = paramMatch[1];
+    const paramValue = context[paramName];
+    if (paramValue !== undefined) {
+      // Return the param value, handling arrays by taking first element
+      if (Array.isArray(paramValue)) {
+        return paramValue[0] ?? '';
+      }
+      return paramValue;
+    }
+    // Variable not found in context - return empty string
+    return '';
+  }
+
+  // For partial substitutions (e.g., "prefix_{params.id}_suffix"), do inline replacement
+  if (value.includes('{params.') && context) {
+    return value.replace(/\{params\.(\w+)\}/g, (_, name) => {
+      const paramValue = context[name];
+      return paramValue !== undefined ? String(paramValue) : '';
+    });
+  }
+
+  return value;
+}
+
+/**
+ * Execute a view for public pages without authentication
+ *
+ * SECURITY: This function validates that the page is published before executing.
+ * It's designed for public page rendering where user authentication may not be present.
+ *
+ * @param viewId - The view ID to execute
+ * @param pageId - The page ID (used to verify the page is published)
+ * @param context - Optional context for dynamic filtering (query params, etc.)
+ * @param pagination - Optional pagination override
+ * @param additionalFilters - Optional runtime filters with variable substitution support
+ */
+export async function executePublicView(
+  viewId: number,
+  pageId: number,
+  context?: PuckResolveContext,
+  pagination?: { pageSize: number; offset: number },
+  additionalFilters?: Array<{ field: string; operator: string; value: unknown }>
+): Promise<{
+  rows: Array<Record<string, unknown>>;
+  fields: Array<{ id: number; name: string; type: string }>;
+  totalCount: number;
+  pageSize: number;
+  offset: number;
+} | null> {
+  try {
+    if (!viewId || !pageId) {
+      console.warn('[executePublicView] Missing viewId or pageId');
+      return null;
+    }
+
+    // 1. Verify the page is published
+    const pageRecord = await db.query.pages.findFirst({
+      where: and(
+        eq(pages.id, pageId),
+        eq(pages.isPublic, true)
+      )
+    });
+
+    if (!pageRecord) {
+      console.warn('[executePublicView] Page not found or not published:', pageId);
+      return null;
+    }
+
+    // 2. Get view service and execute
+    const viewService = getViewApplicationService();
+
+    // Get the view first to access its tableId for field lookup
+    const viewResult = await viewService.getView(ViewId.fromNumber(viewId));
+    if (!viewResult.success || !viewResult.data) {
+      console.error('[executePublicView] Failed to get view:', viewResult.error);
+      return null;
+    }
+    const view = viewResult.data;
+
+    // 3. Build runtime filters if provided
+    let runtimeFilters: FilterConfig[] | undefined;
+    let rowIdFilter: { operator: 'eq' | 'ne'; value: string } | undefined;
+
+    if (additionalFilters && additionalFilters.length > 0) {
+      // Fetch fields to convert field names to IDs
+      const { getFields } = await import('./fields');
+      const fields = await getFields(view.tableId.value);
+      const fieldNameToIdMap = new Map(fields.map(f => [f.name, f.id]));
+
+      // Operator mapping
+      const uiToDomainOperatorMap: Record<string, string> = {
+        'eq': 'equals',
+        'ne': 'not_equals',
+        'ilike': 'contains',
+        'like': 'contains',
+        'gt': 'greater_than',
+        'gte': 'greater_than_or_equal',
+        'lt': 'less_than',
+        'lte': 'less_than_or_equal',
+        'is_null': 'is_empty',
+        'is_not_null': 'is_not_empty',
+      };
+
+      runtimeFilters = [];
+      for (const filter of additionalFilters) {
+        // Substitute variables in the filter value first
+        const substitutedValue = substituteFilterVariable(filter.value as string, context);
+
+        // Skip filters where variable wasn't found (empty string)
+        if (substitutedValue === '') {
+          console.warn(`[executePublicView] Variable in filter for field "${filter.field}" not found in context, skipping`);
+          continue;
+        }
+
+        // Handle 'id' field specially - bypass FilterConfig (which requires fieldId > 0)
+        // The synthetic 'id' field has fieldId=0, so we use rowIdFilter instead
+        if (filter.field === 'id') {
+          const op = filter.operator === 'ne' ? 'ne' : 'eq';
+          rowIdFilter = { operator: op, value: String(substitutedValue) };
+          continue;
+        }
+
+        const fieldId = fieldNameToIdMap.get(filter.field);
+        if (fieldId === undefined) {
+          console.warn(`[executePublicView] Field "${filter.field}" not found, skipping filter`);
+          continue;
+        }
+
+        const domainOperator = uiToDomainOperatorMap[filter.operator] || filter.operator;
+
+        runtimeFilters.push(
+          FilterConfig.create({
+            fieldId,
+            operator: domainOperator as Parameters<typeof FilterConfig.create>[0]['operator'],
+            value: substitutedValue,
+          })
+        );
+      }
+    }
+
+    // 4. Execute the view with optional pagination and filters
+    const result = await viewService.executeView({
+      dataSourceId: ViewId.fromNumber(viewId),
+      overridePagination: pagination
+        ? PaginationConfig.create(pagination)
+        : undefined,
+      additionalFilters: runtimeFilters,
+      rowIdFilter,
+    });
+
+    if (!result.success || !result.data) {
+      console.error('[executePublicView] Failed to execute view:', result.error);
+      return null;
+    }
+
+    // 5. Get the schema
+    const schemaResult = await viewService.getViewSchema(ViewId.fromNumber(viewId));
+
+    if (!schemaResult.success || !schemaResult.data) {
+      console.error('[executePublicView] Failed to get view schema:', schemaResult.error);
+      return null;
+    }
+
+    const fields = schemaResult.data;
+
+    // Convert Row entities to plain objects with field NAMES as keys
+    // (Required for variable resolution in templates like {Name})
+    const plainRows = result.data.rows.map((row) => row.toNamedObject(fields));
+
+    // Convert TableField VOs to plain objects
+    const plainFields = fields.map((field) => ({
+      id: field.id.value,
+      name: field.name,
+      type: field.type,
+    }));
+
+    return {
+      rows: plainRows,
+      fields: plainFields,
+      totalCount: result.data.totalCount,
+      pageSize: result.data.pageSize,
+      offset: result.data.offset,
+    };
+  } catch (error) {
+    console.error('[executePublicView] Error:', error);
+    return null;
   }
 }
