@@ -72,6 +72,24 @@ export type Action =
   | UpdateQueryParamsAction;
 
 /**
+ * Link context for URL construction in actions
+ */
+export interface ActionLinkContext {
+  /** Organization slug for constructing public URLs */
+  orgSlug?: string;
+  /** App slug for constructing public URLs */
+  appSlug?: string;
+  /** App ID for constructing internal URLs */
+  appId?: number;
+  /** Pages data for slug lookup */
+  pages?: Map<number, { id: number; slug: string }> | Array<{ id: number; slug: string }>;
+  /** Whether we're in the Puck editor */
+  isEditing?: boolean;
+  /** Whether we're in preview mode */
+  isPreview?: boolean;
+}
+
+/**
  * Context provided to actions during execution
  * Contains current state and data available to the action
  */
@@ -90,4 +108,7 @@ export interface ActionContext {
 
   /** Additional metadata */
   metadata?: Record<string, any>;
+
+  /** Link context for URL construction */
+  linkContext?: ActionLinkContext;
 }

@@ -562,6 +562,8 @@ export async function executeView(
 
     // Build additional filter configs if provided
     let runtimeFilters: FilterConfig[] | undefined;
+    let rowIdFilter: { operator: 'eq' | 'ne'; value: string } | undefined;
+
     if (additionalFilters && additionalFilters.length > 0) {
       // Fetch fields to convert field names to IDs
       const { getFields } = await import('./fields');
@@ -584,18 +586,26 @@ export async function executeView(
 
       runtimeFilters = [];
       for (const filter of additionalFilters) {
-        const fieldId = fieldNameToIdMap.get(filter.field);
-        if (!fieldId) {
-          console.warn(`Field "${filter.field}" not found, skipping filter`);
-          continue;
-        }
-
-        // Substitute variables in the filter value
+        // Substitute variables in the filter value first
         const substitutedValue = substituteFilterVariable(filter.value, context);
 
         // Skip filters where variable wasn't found (empty string)
         if (substitutedValue === '') {
           console.warn(`Variable in filter for field "${filter.field}" not found in context, skipping`);
+          continue;
+        }
+
+        // Handle 'id' field specially - bypass FilterConfig (which requires fieldId > 0)
+        // The synthetic 'id' field has fieldId=0, so we use rowIdFilter instead
+        if (filter.field === 'id') {
+          const op = filter.operator === 'ne' ? 'ne' : 'eq';
+          rowIdFilter = { operator: op, value: String(substitutedValue) };
+          continue;
+        }
+
+        const fieldId = fieldNameToIdMap.get(filter.field);
+        if (fieldId === undefined) {
+          console.warn(`Field "${filter.field}" not found, skipping filter`);
           continue;
         }
 
@@ -618,6 +628,7 @@ export async function executeView(
         ? PaginationConfig.create(pagination)
         : undefined,
       additionalFilters: runtimeFilters,
+      rowIdFilter,
     });
 
     if (!result.success || !result.data) {
@@ -647,8 +658,9 @@ export async function executeView(
     // Type-narrow the schema fields after null check
     const fields = schemaResult.data;
 
-    // Convert Row entities to plain objects with numeric field IDs as keys
-    const plainRows = result.data.rows.map((row) => row.toPlainObject(fields));
+    // Convert Row entities to plain objects with field NAMES as keys
+    // (Required for variable resolution in templates like {Name})
+    const plainRows = result.data.rows.map((row) => row.toNamedObject(fields));
 
     // Convert TableField VOs to plain objects
     const plainFields = fields.map((field) => ({

@@ -25,6 +25,14 @@ import { Label } from '@/components/ui/label';
 import { Plus, X, Variable } from 'lucide-react';
 import type { PageVariable } from '@/components/puck/types';
 
+/** Default empty variable for the add form */
+const EMPTY_VARIABLE: PageVariable = {
+  name: '',
+  type: 'string',
+  required: false,
+  description: '',
+};
+
 interface PageVariablesFieldProps {
   value?: PageVariable[];
   onChange: (value: PageVariable[]) => void;
@@ -37,12 +45,7 @@ export function PageVariablesFieldRenderer({
   readOnly = false,
 }: PageVariablesFieldProps) {
   const [isAdding, setIsAdding] = useState(false);
-  const [newVariable, setNewVariable] = useState<PageVariable>({
-    name: '',
-    type: 'string',
-    required: false,
-    description: '',
-  });
+  const [newVariable, setNewVariable] = useState<PageVariable>({ ...EMPTY_VARIABLE });
 
   const handleAddVariable = useCallback(() => {
     if (!newVariable.name.trim()) return;
@@ -58,7 +61,7 @@ export function PageVariablesFieldRenderer({
     }
 
     onChange([...value, { ...newVariable, name: newVariable.name.trim() }]);
-    setNewVariable({ name: '', type: 'string', required: false, description: '' });
+    setNewVariable({ ...EMPTY_VARIABLE });
     setIsAdding(false);
   }, [newVariable, value, onChange]);
 
@@ -198,7 +201,7 @@ export function PageVariablesFieldRenderer({
                 className="h-7 text-xs"
                 onClick={() => {
                   setIsAdding(false);
-                  setNewVariable({ name: '', type: 'string', required: false, description: '' });
+                  setNewVariable({ ...EMPTY_VARIABLE });
                 }}
               >
                 Cancel
@@ -223,8 +226,7 @@ export function PageVariablesFieldRenderer({
 
         {/* Help Text */}
         <p className="text-xs text-muted-foreground">
-          Define expected URL parameters for this page. Use them in DataBlock filters
-          or navigation actions with {'{params.variable_name}'} syntax.
+          Variables can be used in filters and navigation actions.
         </p>
       </div>
     </FieldLabel>

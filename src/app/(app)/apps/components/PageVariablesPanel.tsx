@@ -280,8 +280,8 @@ export function PageVariablesPanel({
 
       {/* Help Text */}
       <p className="text-[10px] text-muted-foreground pt-1">
-        Use variables in DataBlock filters or navigation with{" "}
-        <code className="bg-muted px-0.5 rounded">{"{params.name}"}</code> syntax
+        Use in filters and navigation with{" "}
+        <code className="bg-muted px-0.5 rounded">{"{params.name}"}</code>
       </p>
     </div>
   );
