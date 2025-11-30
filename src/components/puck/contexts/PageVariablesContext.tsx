@@ -11,7 +11,7 @@
  * page variables when used in DataBlock filters or navigation actions.
  */
 
-import React, { createContext, useContext, useCallback, useState, type ReactNode } from 'react';
+import React, { createContext, useContext, useCallback, useState, useMemo, type ReactNode } from 'react';
 import type { PageVariable } from '@/components/puck/types';
 
 interface PageVariablesContextValue {
@@ -50,23 +50,34 @@ export function PageVariablesProvider({
     setPageVariables(initialPageVariables);
   }, [initialPageVariables]);
 
+  // Use functional update pattern to avoid stale closure issues
   const addPageVariable = useCallback(async (variable: PageVariable) => {
-    // Check if already exists
-    if (pageVariables.some(v => v.name === variable.name)) {
-      return;
-    }
+    let alreadyExists = false;
 
-    // Update local state immediately for UI responsiveness
-    setPageVariables(prev => [...prev, variable]);
+    setPageVariables(prev => {
+      // Check if already exists using current state
+      if (prev.some(v => v.name === variable.name)) {
+        alreadyExists = true;
+        return prev;
+      }
+      return [...prev, variable];
+    });
 
-    // Persist to server via callback
-    if (onAddPageVariable) {
+    // Only persist if we actually added it
+    if (!alreadyExists && onAddPageVariable) {
       await onAddPageVariable(variable);
     }
-  }, [pageVariables, onAddPageVariable]);
+  }, [onAddPageVariable]);
+
+  // Memoize context value to prevent unnecessary re-renders
+  const contextValue = useMemo(() => ({
+    pageVariables,
+    pageId,
+    addPageVariable,
+  }), [pageVariables, pageId, addPageVariable]);
 
   return (
-    <PageVariablesContext.Provider value={{ pageVariables, pageId, addPageVariable }}>
+    <PageVariablesContext.Provider value={contextValue}>
       {children}
     </PageVariablesContext.Provider>
   );
