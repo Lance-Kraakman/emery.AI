@@ -13,6 +13,7 @@
 
 import React, { createContext, useContext, type ReactNode } from 'react';
 import { useRowData } from './RowDataContext';
+import { useLinkContext } from '../link-context';
 import type { ActionContext as ActionContextType } from '../types/actions';
 
 const ActionContext = createContext<Partial<ActionContextType>>({});
@@ -78,11 +79,28 @@ export function ActionProvider({
 export function useActionContext() {
   const actionContext = useContext(ActionContext);
   const rowContext = useRowData();
+  const linkContext = useLinkContext();
+
+  console.log('[useActionContext] linkContext from useLinkContext:', {
+    orgSlug: linkContext.orgSlug,
+    appSlug: linkContext.appSlug,
+    appId: linkContext.appId,
+    pagesPresent: !!linkContext.pages,
+    pagesType: linkContext.pages instanceof Map ? 'Map' : Array.isArray(linkContext.pages) ? 'Array' : typeof linkContext.pages,
+  });
 
   return (runtimeContext?: Partial<ActionContextType>): ActionContextType => {
     return {
       ...actionContext,
       rowData: rowContext?.rowData ?? undefined,
+      linkContext: {
+        orgSlug: linkContext.orgSlug,
+        appSlug: linkContext.appSlug,
+        appId: linkContext.appId,
+        pages: linkContext.pages,
+        isEditing: linkContext.isEditing,
+        isPreview: linkContext.isPreview,
+      },
       ...runtimeContext,
     };
   };
