@@ -96,6 +96,47 @@ export async function assignUserRole(userId: string, role: SystemRoleType): Prom
 //   }
 // }
 
+/**
+ * Get current session without throwing
+ * Returns null if not authenticated
+ *
+ * AIDEV-NOTE: Use this for public access patterns where you need to check
+ * if user is authenticated before deciding which code path to take.
+ */
+export async function getSessionSafe() {
+  try {
+    // Try NextAuth session first
+    const session = await auth();
+    if (session?.user) {
+      return session;
+    }
+
+    // If no session, try API key authentication
+    const headersList = await headers();
+    const authHeader = headersList.get('authorization');
+    const apiKey = extractApiKeyFromHeader(authHeader);
+
+    if (apiKey) {
+      const apiKeyAuth = await authenticateWithApiKey(apiKey);
+      if (apiKeyAuth.success && apiKeyAuth.user) {
+        return {
+          user: {
+            id: apiKeyAuth.user.id,
+            email: apiKeyAuth.user.email,
+            name: apiKeyAuth.user.name,
+            currentOrganizationId: apiKeyAuth.user.organizationId,
+            organizationRole: apiKeyAuth.user.organizationRole || 'member',
+          },
+        };
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function requireAuth() {
   // Try NextAuth session first
   const session = await auth();

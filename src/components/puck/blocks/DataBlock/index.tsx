@@ -239,7 +239,8 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       }
 
       // Get fields for the table (for field selector)
-      const fields = await getFields(view.tableId);
+      // Pass viewId so RLS can check public access via fields_public_via_view policy
+      const fields = await getFields(view.tableId, { viaViewId: props.viewId });
 
       // Helper to execute view (uses public or authenticated based on context)
       const doExecuteView = async (

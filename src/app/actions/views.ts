@@ -13,7 +13,7 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { requirePermission, requireResourcePermission } from "./permissions";
+import { requirePermission, requireResourcePermission, getSessionSafe } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { getViewApplicationService, getFileApplicationService } from "@/ddd/application/di/container";
 import { OrganizationId, TableId, UserId, FieldId } from "@/ddd/domain/shared/value-objects";
@@ -41,7 +41,7 @@ export async function createView(
     const session = await requirePermission("view:create");
     const currentOrg = await requireCurrentOrganization();
 
-    const { tableId, name, description, fieldMappings, filters, sorting, viewType, viewConfig } = data;
+    const { tableId, name, description, requiresAuth, fieldMappings, filters, sorting, viewType, viewConfig } = data;
 
     if (!name) {
       return {
@@ -139,6 +139,7 @@ export async function createView(
       organizationId: OrganizationId.fromNumber(currentOrg.id),
       name,
       description,
+      requiresAuth: requiresAuth ?? true, // Secure by default
       createdBy: UserId.fromString(session.user.id),
       filters: filterVOs,
       sorting: sortingVOs,
@@ -182,7 +183,7 @@ export async function updateView(
   revalidateUrl?: string
 ): Promise<Result<ViewDTO>> {
   try {
-    const { id, name, description, filters, sorting, pagination, fieldMappings } = data;
+    const { id, name, description, requiresAuth, filters, sorting, pagination, fieldMappings } = data;
 
     if (!id) {
       return {
@@ -225,6 +226,11 @@ export async function updateView(
 
     if (description !== undefined) {
       dataSource.updateDescription(description);
+    }
+
+    // Update requiresAuth if provided
+    if (requiresAuth !== undefined) {
+      dataSource.updateRequiresAuth(requiresAuth);
     }
 
     // Update filters if provided
@@ -376,6 +382,10 @@ export async function deleteView(
 
 /**
  * Get a view by ID
+ *
+ * AIDEV-NOTE: Supports public views via auth-first pattern.
+ * - If authenticated: use normal RLS-wrapped path with permission check
+ * - If unauthenticated: only allow public views (requiresAuth=false)
  */
 export async function getView(id: number): Promise<ViewDTO | null> {
   try {
@@ -383,20 +393,25 @@ export async function getView(id: number): Promise<ViewDTO | null> {
       return null;
     }
 
-    await requireResourcePermission("view:manage", "view", id);
-    await requireCurrentOrganization();
-
     const dataSourceService = getViewApplicationService();
+    const session = await getSessionSafe();
 
-    const result = await dataSourceService.getView(
-      ViewId.fromNumber(id)
-    );
-
-    if (!result.success || !result.data) {
-      return null;
+    if (session) {
+      // Authenticated user: use normal RLS-wrapped path
+      await requireResourcePermission("view:manage", "view", id);
+      const result = await dataSourceService.getView(ViewId.fromNumber(id));
+      if (!result.success || !result.data) {
+        return null;
+      }
+      return ViewMapper.toDTO(result.data);
+    } else {
+      // Unauthenticated: only allow public views
+      const publicResult = await dataSourceService.getPublicView(ViewId.fromNumber(id));
+      if (!publicResult.success || !publicResult.data) {
+        return null;
+      }
+      return ViewMapper.toDTO(publicResult.data);
     }
-
-    return ViewMapper.toDTO(result.data);
   } catch (error) {
     console.error("Error getting view:", error);
     return null;
@@ -521,8 +536,9 @@ function substituteFilterVariable(
 /**
  * Execute a view and return rows as DTOs
  *
- * Used by TableBlock to fetch and render data.
- * Returns plain serializable objects (not domain entities).
+ * AIDEV-NOTE: Supports public views via auth-first pattern.
+ * - If authenticated: use normal RLS-wrapped path with permission check
+ * - If unauthenticated: only allow public views (requiresAuth=false)
  *
  * @param dataSourceId - The view ID to execute
  * @param context - Optional context for dynamic filtering (query params, etc.)
@@ -547,18 +563,33 @@ export async function executeView(
       return null;
     }
 
-    await requireResourcePermission("view:view", "view", dataSourceId);
-    await requireCurrentOrganization();
-
     const dataSourceService = getViewApplicationService();
+    const session = await getSessionSafe();
 
-    // Get the view first to access its tableId for field lookup
-    const viewResult = await dataSourceService.getView(ViewId.fromNumber(dataSourceId));
-    if (!viewResult.success || !viewResult.data) {
-      console.error("Failed to get view:", viewResult.error);
-      return null;
+    // Get view using appropriate method based on auth state
+    let view;
+    let isPublicAccess = false;
+
+    if (session) {
+      // Authenticated user: use normal RLS-wrapped path
+      await requireResourcePermission("view:view", "view", dataSourceId);
+      await requireCurrentOrganization();
+      const viewResult = await dataSourceService.getView(ViewId.fromNumber(dataSourceId));
+      if (!viewResult.success || !viewResult.data) {
+        console.error("Failed to get view:", viewResult.error);
+        return null;
+      }
+      view = viewResult.data;
+    } else {
+      // Unauthenticated: only allow public views
+      const publicResult = await dataSourceService.getPublicView(ViewId.fromNumber(dataSourceId));
+      if (!publicResult.success || !publicResult.data) {
+        console.error("Failed to get public view:", publicResult.error);
+        return null;
+      }
+      view = publicResult.data;
+      isPublicAccess = true;
     }
-    const view = viewResult.data;
 
     // Build additional filter configs if provided
     let runtimeFilters: FilterConfig[] | undefined;
@@ -566,8 +597,9 @@ export async function executeView(
 
     if (additionalFilters && additionalFilters.length > 0) {
       // Fetch fields to convert field names to IDs
+      // Pass viaViewId for public access (allows getFields to work without auth)
       const { getFields } = await import('./fields');
-      const fields = await getFields(view.tableId.value);
+      const fields = await getFields(view.tableId.value, isPublicAccess ? { viaViewId: dataSourceId } : undefined);
       const fieldNameToIdMap = new Map(fields.map(f => [f.name, f.id]));
 
       // Operator mapping (same as createView/updateView)
@@ -636,27 +668,30 @@ export async function executeView(
       return null;
     }
 
-    // Get the schema
-    const dataSource = await dataSourceService.getView(
-      ViewId.fromNumber(dataSourceId)
-    );
-
-    if (!dataSource.success || !dataSource.data) {
-      console.error("Failed to get view:", dataSource.error);
-      return null;
-    }
-
-    const schemaResult = await dataSourceService.getViewSchema(
-      ViewId.fromNumber(dataSourceId)
-    );
-
-    if (!schemaResult.success || !schemaResult.data) {
-      console.error("Failed to get view schema:", schemaResult.error);
-      return null;
+    // Get the schema using appropriate method based on auth state
+    let schemaFields;
+    if (isPublicAccess) {
+      const schemaResult = await dataSourceService.getPublicViewSchema(
+        ViewId.fromNumber(dataSourceId)
+      );
+      if (!schemaResult.success || !schemaResult.data) {
+        console.error("Failed to get public view schema:", schemaResult.error);
+        return null;
+      }
+      schemaFields = schemaResult.data;
+    } else {
+      const schemaResult = await dataSourceService.getViewSchema(
+        ViewId.fromNumber(dataSourceId)
+      );
+      if (!schemaResult.success || !schemaResult.data) {
+        console.error("Failed to get view schema:", schemaResult.error);
+        return null;
+      }
+      schemaFields = schemaResult.data;
     }
 
     // Type-narrow the schema fields after null check
-    const fields = schemaResult.data;
+    const fields = schemaFields;
 
     // Convert Row entities to plain objects with field NAMES as keys
     // (Required for variable resolution in templates like {Name})
