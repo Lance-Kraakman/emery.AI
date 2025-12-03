@@ -4,13 +4,14 @@ import styles from "./styles.module.css";
 import { getClassNameFactory } from "@/components/puck/lib";
 import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
+import { spacingField } from "../../fields/standard-fields";
 
 const getClassName = getClassNameFactory("Flex", styles);
 
 export type FlexProps = WithLayout<{
   justifyContent: "start" | "center" | "end";
   direction: "row" | "column";
-  gap: number;
+  gap: string;
   wrap: "wrap" | "nowrap";
   items: Slot;
 }>;
@@ -34,11 +35,7 @@ const FlexInternal: ComponentConfig<FlexProps> = {
         { label: "End", value: "end" },
       ],
     },
-    gap: {
-      label: "Gap",
-      type: "number",
-      min: 0,
-    },
+    gap: spacingField,
     wrap: {
       label: "Wrap",
       type: "radio",
@@ -54,7 +51,7 @@ const FlexInternal: ComponentConfig<FlexProps> = {
   defaultProps: {
     justifyContent: "start",
     direction: "row",
-    gap: 24,
+    gap: "4",
     wrap: "wrap",
     layout: {
       grow: true,
@@ -69,7 +66,7 @@ const FlexInternal: ComponentConfig<FlexProps> = {
           style={{
             justifyContent,
             flexDirection: direction,
-            gap,
+            gap: `var(--spacing-${gap}, 24px)`,
             flexWrap: wrap,
           }}
           disallow={["Hero", "Stats"]}

@@ -22,6 +22,8 @@ export interface BooleanFieldProps {
   falseText?: string;
   iconStyle?: 'check' | 'circle';
   size?: 'sm' | 'base' | 'lg';
+  textColor?: string;
+  fontFamily?: string;
 }
 
 export default function BooleanField({
@@ -33,6 +35,8 @@ export default function BooleanField({
   falseText = 'No',
   iconStyle = 'check',
   size = 'base',
+  textColor,
+  fontFamily,
 }: BooleanFieldProps) {
   // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
@@ -108,8 +112,13 @@ export default function BooleanField({
     );
   };
 
+  const customStyles: React.CSSProperties = {
+    ...(textColor && { color: textColor }),
+    ...(fontFamily && { fontFamily }),
+  };
+
   return (
-    <div className={containerClass}>
+    <div className={containerClass} style={customStyles}>
       {label && <label className={styles.label}>{label}</label>}
       {renderValue()}
     </div>

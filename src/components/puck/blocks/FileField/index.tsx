@@ -8,7 +8,11 @@
 import type { ComponentConfig } from "@measured/puck";
 import FileField, { type FileFieldProps } from "./FileField";
 import { createFieldSelectorField } from "../../custom-fields";
-import { labelPositionField } from "../../fields/standard-fields";
+import {
+  labelPositionField,
+  textColorField,
+  fontFamilyField,
+} from "../../fields/standard-fields";
 
 export const FileFieldConfig: ComponentConfig<FileFieldProps> = {
   label: "File Field",
@@ -60,6 +64,9 @@ export const FileFieldConfig: ComponentConfig<FileFieldProps> = {
         { label: "No", value: false },
       ],
     },
+
+    textColor: textColorField,
+    fontFamily: fontFamilyField,
   },
 
   defaultProps: {

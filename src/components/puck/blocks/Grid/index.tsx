@@ -4,12 +4,13 @@ import styles from "./styles.module.css";
 import { getClassNameFactory } from "@/components/puck/lib";
 import { Section } from "../../components/Section";
 import { withLayout } from "../../components/Layout";
+import { spacingField } from "../../fields/standard-fields";
 
 const getClassName = getClassNameFactory("Grid", styles);
 
 export type GridProps = {
   numColumns: number;
-  gap: number;
+  gap: string;
   items: Slot;
 };
 
@@ -21,18 +22,14 @@ export const GridInternal: ComponentConfig<GridProps> = {
       min: 1,
       max: 12,
     },
-    gap: {
-      label: "Gap",
-      type: "number",
-      min: 0,
-    },
+    gap: spacingField,
     items: {
       type: "slot",
     },
   },
   defaultProps: {
     numColumns: 4,
-    gap: 24,
+    gap: "4",
     items: [],
   },
   render: ({ gap, numColumns, items: Items }) => {
@@ -42,7 +39,7 @@ export const GridInternal: ComponentConfig<GridProps> = {
           disallow={["Hero", "Stats"]}
           className={getClassName()}
           style={{
-            gap,
+            gap: `var(--spacing-${gap}, 24px)`,
             gridTemplateColumns: `repeat(${numColumns}, 1fr)`,
           }}
         />

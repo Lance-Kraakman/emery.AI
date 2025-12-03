@@ -72,11 +72,23 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       max: 6,
     },
 
-    // List mode: Gap (in pixels)
+    // List mode: Gap (spacing level)
     gap: {
-      type: "number",
-      label: "Gap (px)",
-      min: 0,
+      type: "select",
+      label: "Gap",
+      options: [
+        { value: "0", label: "None (0)" },
+        { value: "1", label: "XS (1)" },
+        { value: "2", label: "SM (2)" },
+        { value: "3", label: "MD (3)" },
+        { value: "4", label: "Base (4)" },
+        { value: "5", label: "LG (5)" },
+        { value: "6", label: "XL (6)" },
+        { value: "7", label: "2XL (7)" },
+        { value: "8", label: "3XL (8)" },
+        { value: "9", label: "4XL (9)" },
+        { value: "10", label: "5XL (10)" },
+      ],
     },
 
     // List mode: Items per page
@@ -136,7 +148,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     },
     layout: "vertical",
     columns: 2,
-    gap: 16,
+    gap: "4",
     itemsPerPage: 10,
     paginationStyle: "none",
     showCarouselArrows: false,

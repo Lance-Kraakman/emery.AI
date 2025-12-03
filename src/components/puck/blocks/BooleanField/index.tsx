@@ -8,7 +8,11 @@
 import type { ComponentConfig } from "@measured/puck";
 import BooleanField, { type BooleanFieldProps } from "./BooleanField";
 import { createFieldSelectorField } from "../../custom-fields";
-import { labelPositionField } from "../../fields/standard-fields";
+import {
+  labelPositionField,
+  textColorField,
+  fontFamilyField,
+} from "../../fields/standard-fields";
 
 export const BooleanFieldConfig: ComponentConfig<BooleanFieldProps> = {
   label: "Boolean Field",
@@ -64,6 +68,10 @@ export const BooleanFieldConfig: ComponentConfig<BooleanFieldProps> = {
         { label: "Large", value: "lg" },
       ],
     },
+
+    textColor: textColorField,
+
+    fontFamily: fontFamilyField,
   },
 
   defaultProps: {

@@ -35,7 +35,7 @@ export type HeroProps = {
   title: string | ReactNode;
   description: string;
   align?: string;
-  padding?: string;
+  paddingLevel?: string;
   image?: {
     content?: Slot;
     mode?: "inline" | "background" | "custom";
@@ -60,7 +60,7 @@ export const Hero: PuckComponent<HeroProps> = ({
   title,
   description,
   buttons,
-  padding = "48px",
+  paddingLevel = "6",
   image,
   titleColor,
   subtitleColor,
@@ -71,6 +71,8 @@ export const Hero: PuckComponent<HeroProps> = ({
   subtitleFontWeight,
   puck,
 }) => {
+  const paddingValue = `var(--spacing-${paddingLevel}, 48px)`;
+
   return (
     <Section
       className={getClassName({
@@ -79,8 +81,8 @@ export const Hero: PuckComponent<HeroProps> = ({
         hasImageBackground: image?.mode === "background",
       })}
       style={{
-        paddingTop: padding,
-        paddingBottom: padding,
+        paddingTop: paddingValue,
+        paddingBottom: paddingValue,
         ...(backgroundColor && { backgroundColor }),
       }}
     >
@@ -141,7 +143,7 @@ export const Hero: PuckComponent<HeroProps> = ({
               backgroundSize: "cover",
               backgroundRepeat: "no-repeat",
               backgroundPosition: "center",
-              borderRadius: 24,
+              borderRadius: "var(--theme-border-radius, 24px)",
               height: 356,
               marginLeft: "auto",
               width: "100%",

@@ -16,7 +16,7 @@
 .label {
   font-size: 0.875rem;
   font-weight: 500;
-  color: hsl(var(--foreground));
+  color: var(--theme-text, #1e293b);
 }
 
 /* When inline, don't let label grow */
@@ -35,8 +35,8 @@
   align-items: center;
   font-weight: 500;
   border-radius: 9999px;
-  background-color: hsl(var(--secondary));
-  color: hsl(var(--secondary-foreground));
+  background-color: var(--theme-secondary, #f1f5f9);
+  color: var(--theme-text, #1e293b);
   white-space: nowrap;
 }
 
