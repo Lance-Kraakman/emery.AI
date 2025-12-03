@@ -236,6 +236,20 @@ export const fields = pgTable("fields", {
       )
     )`,
   }),
+
+  // RLS: Allow public access to fields when ANY view on the table has requires_auth = false
+  // NOTE: This grants field access if ANY view on the table is public, not per-view.
+  // This is acceptable since views typically expose all fields anyway.
+  pgPolicy("fields_public_via_view", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM views v
+      WHERE v.table_id = table_id
+      AND v.requires_auth = false
+    )`,
+  }),
 ]);
 
 // AIDEV-NOTE: Views - Filtered/sorted table configurations (Baserow view pattern) with tables
@@ -246,6 +260,11 @@ export const views = pgTable("views", {
   tableId: integer("table_id").notNull().references(() => tables.id, { onDelete: 'cascade' }),
   name: text("name").notNull(),
   ownerId: uuid("owner_id").notNull().references(() => users.id), // View owner - used for 'owned' scope permissions
+
+  // Whether this view requires authentication to access
+  // AIDEV-NOTE: When false, the view data can be accessed without login (for public pages)
+  // Secure by default - new views require authentication
+  requiresAuth: boolean("requires_auth").notNull().default(true),
 
   // Filter configuration (array of filter conditions)
   filters: jsonb("filters").$type<Array<{
@@ -402,6 +421,15 @@ export const views = pgTable("views", {
       'view',
       id
     )`,
+  }),
+
+  // RLS: Allow public access to views marked as not requiring auth
+  // AIDEV-NOTE: This enables unauthenticated access to views used on public pages
+  pgPolicy("views_public_access", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`requires_auth = false`,
   }),
 ]);
 

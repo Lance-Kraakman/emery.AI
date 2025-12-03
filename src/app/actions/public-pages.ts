@@ -424,8 +424,9 @@ export async function executePublicView(
 
     if (additionalFilters && additionalFilters.length > 0) {
       // Fetch fields to convert field names to IDs
+      // Pass viaViewId so RLS can check public access via fields_public_via_view policy
       const { getFields } = await import('./fields');
-      const fields = await getFields(view.tableId.value);
+      const fields = await getFields(view.tableId.value, { viaViewId: viewId });
       const fieldNameToIdMap = new Map(fields.map(f => [f.name, f.id]));
 
       // Operator mapping
