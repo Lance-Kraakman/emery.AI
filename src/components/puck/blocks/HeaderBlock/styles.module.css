@@ -13,15 +13,15 @@
   max-width: 1280px;
   margin-left: auto;
   margin-right: auto;
-  padding: 16px;
+  padding: var(--spacing-3, 16px);
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: var(--spacing-4, 24px);
 }
 
 @media (min-width: 768px) {
   .HeaderBlock-inner {
-    padding: 24px;
+    padding: var(--spacing-4, 24px);
   }
 }
 
@@ -37,14 +37,14 @@
 .HeaderBlock--left-nav .HeaderBlock-navigationSlot {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--spacing-3, 16px);
   flex-wrap: wrap;
 }
 
 .HeaderBlock--left-nav .HeaderBlock-actionsSlot {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--spacing-2, 12px);
   margin-left: auto;
 }
 
@@ -54,17 +54,17 @@
   justify-content: center;
   align-items: center;
   text-align: center;
-  padding: 24px 16px;
+  padding: var(--spacing-4, 24px) var(--spacing-3, 16px);
 }
 
 .HeaderBlock--centered .HeaderBlock-logoSlot {
-  margin-bottom: 16px;
+  margin-bottom: var(--spacing-3, 16px);
 }
 
 .HeaderBlock--centered .HeaderBlock-navigationSlot {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--spacing-3, 16px);
   flex-wrap: wrap;
   justify-content: center;
 }
@@ -81,16 +81,16 @@
 .HeaderBlock--split .HeaderBlock-navigationSlot {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--spacing-3, 16px);
   flex-wrap: wrap;
   margin-left: auto;
-  margin-right: 16px;
+  margin-right: var(--spacing-3, 16px);
 }
 
 .HeaderBlock--split .HeaderBlock-actionsSlot {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--spacing-2, 12px);
   flex-shrink: 0;
 }
 
@@ -106,7 +106,7 @@
 .HeaderBlock--minimal .HeaderBlock-actionsSlot {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--spacing-2, 12px);
   margin-left: auto;
 }
 
@@ -120,14 +120,14 @@
 .HeaderBlock-navigationSlot {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--spacing-2, 12px);
   min-height: 40px;
 }
 
 .HeaderBlock-actionsSlot {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--spacing-2, 12px);
   min-height: 40px;
 }
 
@@ -141,7 +141,7 @@
   .HeaderBlock--split .HeaderBlock-navigationSlot {
     width: 100%;
     order: 3;
-    margin-top: 16px;
+    margin-top: var(--spacing-3, 16px);
     margin-left: 0;
   }
 

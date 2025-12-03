@@ -21,6 +21,8 @@ export interface DocumentFieldProps {
   maxItems?: number;
   showMetadata?: boolean;
   showStatus?: boolean;
+  textColor?: string;
+  fontFamily?: string;
 }
 
 interface DocumentItem {
@@ -76,6 +78,8 @@ export default function DocumentField({
   maxItems = 5,
   showMetadata = true,
   showStatus = true,
+  textColor,
+  fontFamily,
 }: DocumentFieldProps) {
   // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
@@ -122,6 +126,11 @@ export default function DocumentField({
     styles.documentField,
     labelPosition === 'inline' && styles.inline
   );
+
+  const customStyles: React.CSSProperties = {
+    ...(textColor && { color: textColor }),
+    ...(fontFamily && { fontFamily }),
+  };
 
   const renderList = () => (
     <ul className={styles.docList}>
@@ -232,7 +241,7 @@ export default function DocumentField({
   );
 
   return (
-    <div className={containerClass}>
+    <div className={containerClass} style={customStyles}>
       {label && <label className={styles.label}>{label}</label>}
       {displayStyle === 'list' && renderList()}
       {displayStyle === 'card' && renderCard()}

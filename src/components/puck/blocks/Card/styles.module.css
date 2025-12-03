@@ -12,24 +12,24 @@
 .Card-inner {
   align-items: center;
   display: flex;
-  gap: 16px;
+  gap: var(--spacing-3, 16px);
   flex-direction: column;
 }
 
 .Card--card .Card-inner {
   align-items: flex-start;
-  padding: 24px;
+  padding: var(--spacing-4, 24px);
 }
 
 .Card-icon {
   border-radius: 256px;
-  background: color-mix(in srgb, var(--theme-primary, var(--puck-color-azure-09)) 10%, transparent);
-  color: var(--theme-primary, var(--puck-color-azure-06));
+  background: color-mix(in srgb, var(--theme-primary, #2563eb) 10%, transparent);
+  color: var(--theme-primary, #2563eb);
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 64px;
-  height: 64px;
+  width: var(--spacing-7, 64px);
+  height: var(--spacing-7, 64px);
 }
 
 .Card-title {
@@ -48,7 +48,7 @@
   font-size: var(--theme-font-base, 16px);
   font-family: var(--theme-font-family, inherit);
   line-height: 1.5;
-  color: var(--theme-text-muted, var(--puck-color-grey-05));
+  color: var(--theme-text-muted, #64748b);
   text-align: center;
   font-weight: 300;
 }

@@ -21,6 +21,8 @@ export interface RelationFieldProps {
   maxItems?: number;
   size?: 'sm' | 'base' | 'lg';
   showIcon?: boolean;
+  textColor?: string;
+  fontFamily?: string;
 }
 
 interface RelationItem {
@@ -36,6 +38,8 @@ export default function RelationField({
   maxItems = 5,
   size = 'base',
   showIcon = true,
+  textColor,
+  fontFamily,
 }: RelationFieldProps) {
   // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
@@ -82,6 +86,11 @@ export default function RelationField({
     styles.relationField,
     labelPosition === 'inline' && styles.inline
   );
+
+  const customStyles: React.CSSProperties = {
+    ...(textColor && { color: textColor }),
+    ...(fontFamily && { fontFamily }),
+  };
 
   const renderBadges = () => (
     <div className={styles.badgeContainer}>
@@ -131,7 +140,7 @@ export default function RelationField({
   };
 
   return (
-    <div className={containerClass}>
+    <div className={containerClass} style={customStyles}>
       {label && <label className={styles.label}>{label}</label>}
       {displayStyle === 'badge' && renderBadges()}
       {displayStyle === 'list' && renderList()}

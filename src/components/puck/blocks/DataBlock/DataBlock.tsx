@@ -44,7 +44,7 @@ export interface DataBlockProps {
   // List mode options
   layout?: 'vertical' | 'grid' | 'horizontal';
   columns?: number;
-  gap?: number;
+  gap?: string;
   itemsPerPage?: number;
   paginationStyle?: 'none' | 'load-more' | 'pages';
   maxHeight?: number;
@@ -74,7 +74,7 @@ export default function DataBlock({
   singleRowFilter,
   layout = 'vertical',
   columns = 2,
-  gap = 16,
+  gap = "4",
   itemsPerPage = 10,
   paginationStyle = 'none',
   maxHeight,
@@ -221,7 +221,7 @@ export default function DataBlock({
     display: layout === 'grid' ? 'grid' : 'flex',
     flexDirection: layout === 'vertical' ? 'column' : 'row',
     gridTemplateColumns: layout === 'grid' ? `repeat(${columns}, 1fr)` : undefined,
-    gap: `${gap}px`,
+    gap: `var(--spacing-${gap}, 16px)`,
   };
 
   // Scroll container style
@@ -317,7 +317,7 @@ export default function DataBlock({
                   <div
                     ref={carouselRef}
                     className={styles.carouselScroll}
-                    style={{ gap: `${gap}px` }}
+                    style={{ gap: `var(--spacing-${gap}, 16px)` }}
                   >
                     {displayedRows.map((row, index) => (
                       <div key={(row.id as number) || index} className={styles.carouselItem}>

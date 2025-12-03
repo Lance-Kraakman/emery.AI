@@ -1,30 +1,30 @@
 .Stats-items {
   background-image: linear-gradient(
     120deg,
-    color-mix(in srgb, var(--theme-primary, var(--puck-color-azure-03)) 30%, transparent) 0%,
-    var(--theme-primary, var(--puck-color-azure-05)) 100%
+    color-mix(in srgb, var(--theme-primary, #2563eb) 30%, transparent) 0%,
+    var(--theme-primary, #2563eb) 100%
   );
   border-radius: var(--theme-border-radius, 24px);
   display: grid;
   grid-template-columns: 1fr;
-  grid-gap: 72px;
+  grid-gap: var(--spacing-7, 72px);
   align-items: center;
   justify-content: space-between;
   margin: 0 auto;
   max-width: 768px;
-  padding: 64px 16px;
+  padding: var(--spacing-7, 64px) var(--spacing-3, 16px);
 }
 
 @media (min-width: 768px) {
   .Stats-items {
-    padding: 64px 24px;
+    padding: var(--spacing-7, 64px) var(--spacing-4, 24px);
   }
 }
 
 @media (min-width: 1024px) {
   .Stats-items {
     grid-template-columns: 1fr 1fr;
-    padding: 128px 24px;
+    padding: var(--spacing-8, 128px) var(--spacing-4, 24px);
     max-width: 100%;
   }
 }
@@ -34,20 +34,20 @@
   flex-direction: column;
   align-items: center;
   color: var(--theme-text, white);
-  gap: 8px;
+  gap: var(--spacing-2, 8px);
   width: 100%;
   text-align: center;
 }
 
 .Stats-icon {
   border-radius: 256px;
-  background: color-mix(in srgb, var(--theme-primary, var(--puck-color-azure-09)) 10%, transparent);
-  color: var(--theme-primary, var(--puck-color-azure-06));
+  background: color-mix(in srgb, var(--theme-primary, #2563eb) 10%, transparent);
+  color: var(--theme-primary, #2563eb);
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 64px;
-  height: 64px;
+  width: var(--spacing-7, 64px);
+  height: var(--spacing-7, 64px);
 }
 
 .Stats-label {

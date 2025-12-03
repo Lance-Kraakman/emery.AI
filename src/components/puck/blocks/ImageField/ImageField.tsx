@@ -17,6 +17,9 @@ export interface ImageFieldProps {
   labelPosition?: 'top' | 'inline';
   size?: 'small' | 'medium' | 'large' | 'full';
   shape?: 'square' | 'circle' | 'rounded';
+  borderRadius?: string;
+  borderWidth?: string;
+  borderColor?: string;
   alt?: string;
   fallbackUrl?: string;
   maxItems?: number;
@@ -48,6 +51,9 @@ export default function ImageField({
   labelPosition = 'top',
   size = 'medium',
   shape = 'rounded',
+  borderRadius,
+  borderWidth,
+  borderColor,
   alt = 'Image',
   fallbackUrl = '/placeholder-image.png',
   maxItems = 1,
@@ -106,12 +112,19 @@ export default function ImageField({
     labelPosition === 'inline' && styles.inline
   );
 
+  // Custom border styles
+  const imageStyles: React.CSSProperties = {
+    ...(borderRadius && { borderRadius }),
+    ...(borderWidth && { borderWidth, borderStyle: 'solid' }),
+    ...(borderColor && { borderColor }),
+  };
+
   return (
     <div className={containerClass}>
       {label && <label className={styles.label}>{label}</label>}
       <div className={files.length > 1 ? styles.imageGrid : undefined}>
         {files.map((file, index) => (
-          <div key={index} className={imageWrapperClass}>
+          <div key={index} className={imageWrapperClass} style={imageStyles}>
             <img
               src={getImageUrl(file, fallbackUrl)}
               alt={`${alt}${files.length > 1 ? ` ${index + 1}` : ''}`}

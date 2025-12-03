@@ -18,6 +18,10 @@ export interface SelectFieldProps {
   label?: string;
   labelPosition?: 'top' | 'inline';
   size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
+  textColor?: string;
+  fontFamily?: string;
+  fontWeight?: string;
+  backgroundColor?: string;
   fallback?: string;
 }
 
@@ -26,6 +30,10 @@ export default function SelectField({
   label,
   labelPosition = 'top',
   size = 'sm',
+  textColor,
+  fontFamily,
+  fontWeight,
+  backgroundColor,
   fallback = '',
 }: SelectFieldProps) {
   // All hooks must be called before any conditionals (React hooks rules)
@@ -93,22 +101,37 @@ export default function SelectField({
     labelPosition === 'inline' && styles.inline
   );
 
+  // Build custom styles
+  const customStyles: React.CSSProperties = {
+    ...(fontFamily && { fontFamily }),
+    ...(fontWeight && { fontWeight }),
+  };
+
   return (
-    <div className={containerClass}>
+    <div className={containerClass} style={customStyles}>
       {label && <label className={styles.label}>{label}</label>}
       <div className={styles.badges} data-size={size}>
-        {options.map((option, index) => (
-          <span
-            key={index}
-            className={styles.badge}
-            style={option.color ? {
-              backgroundColor: option.color,
-              color: getContrastColor(option.color)
-            } : undefined}
-          >
-            {option.value}
-          </span>
-        ))}
+        {options.map((option, index) => {
+          // Priority: option.color > backgroundColor prop > default
+          const bgColor = option.color || backgroundColor;
+          const badgeStyle: React.CSSProperties = {
+            ...(bgColor && {
+              backgroundColor: bgColor,
+              color: textColor || getContrastColor(bgColor)
+            }),
+            ...(textColor && !bgColor && { color: textColor }),
+          };
+
+          return (
+            <span
+              key={index}
+              className={styles.badge}
+              style={Object.keys(badgeStyle).length > 0 ? badgeStyle : undefined}
+            >
+              {option.value}
+            </span>
+          );
+        })}
       </div>
     </div>
   );
