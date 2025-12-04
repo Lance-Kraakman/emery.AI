@@ -5,7 +5,7 @@ import { Puck, usePuck } from "@measured/puck";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { LayoutGrid, Settings, List, Globe, Eye, ExternalLink, Copy, Check } from "lucide-react";
+import { LayoutGrid, Settings, List, Globe, Eye, ExternalLink, Copy, Check, Undo2, Redo2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageSettingsPanel } from "@/app/(app)/apps/components/PageSettingsPanel";
 import { PageAccessSettings } from "@/app/(app)/apps/components/PageAccessSettings";
@@ -14,6 +14,8 @@ import { ThemeSidebarPanel } from "@/app/(app)/apps/components/ThemeEditorSheet"
 import { usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 import { PuckSession } from "@/lib/puck/session-storage";
 import { updatePageContent } from "@/app/actions/puck-pages";
+import { ComponentBreadcrumb } from "@/components/puck/ComponentBreadcrumb";
+import { EditorUIProvider, useEditorUI } from "@/components/puck/contexts/EditorUIContext";
 import type { PageVariable } from "@/components/puck/types";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
@@ -34,7 +36,7 @@ export interface PuckEditorLayoutProps {
   themeMode: "app" | "page";
 }
 
-export function PuckEditorLayout({
+function PuckEditorLayoutInner({
   pageId,
   appId,
   page,
@@ -51,8 +53,15 @@ export function PuckEditorLayout({
   const router = useRouter();
   const { appState, history } = usePuck();
   const themeContext = usePuckEditorTheme();
-  const [activeTab, setActiveTab] = useState<string>("blocks");
+  const { activeTab, navigateToTab } = useEditorUI();
   const [copiedUrl, setCopiedUrl] = useState(false);
+
+  // Wrapper for tabs onValueChange to ensure type safety
+  const handleTabChange = (value: string) => {
+    if (value === 'blocks' || value === 'fields' || value === 'outline') {
+      navigateToTab(value);
+    }
+  };
 
   // Get current item selector (null = root level, has value = component selected)
   const itemSelector = appState.ui.itemSelector;
@@ -61,9 +70,9 @@ export function PuckEditorLayout({
   // Auto-switch to Fields tab when a component is selected
   useEffect(() => {
     if (itemSelector !== null) {
-      setActiveTab("fields");
+      navigateToTab("fields");
     }
-  }, [itemSelector]);
+  }, [itemSelector, navigateToTab]);
 
   // Detect unsaved changes
   const hasUnsavedChanges = history.hasPast || loadedFromSessionStorage || themeContext.hasUnsavedChanges;
@@ -126,6 +135,14 @@ export function PuckEditorLayout({
     }
   };
 
+  const handleUndo = () => {
+    history.back();
+  };
+
+  const handleRedo = () => {
+    history.forward();
+  };
+
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Header */}
@@ -162,6 +179,25 @@ export function PuckEditorLayout({
 
         {/* Action Buttons */}
         <div className="flex gap-2 items-center">
+          <Button
+            onClick={handleUndo}
+            disabled={!history.hasPast}
+            size="icon"
+            variant="outline"
+            title="Undo"
+          >
+            <Undo2 size={16} />
+          </Button>
+          <Button
+            onClick={handleRedo}
+            disabled={!history.hasFuture}
+            size="icon"
+            variant="outline"
+            title="Redo"
+          >
+            <Redo2 size={16} />
+          </Button>
+          <div className="w-px h-6 bg-border mx-1" />
           <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
             {hasUnsavedChanges ? "Save Changes" : "Saved"}
           </Button>
@@ -180,7 +216,7 @@ export function PuckEditorLayout({
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar with Tabs */}
         <aside className="w-[280px] border-r border-border flex flex-col bg-transparent shrink-0">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col h-full">
             <TabsList className="grid w-full grid-cols-3 shrink-0 m-2" style={{ width: "calc(100% - 16px)" }}>
               <TabsTrigger value="blocks" className="text-xs gap-1 flex items-center justify-center">
                 <LayoutGrid className="h-3 w-3" />
@@ -203,6 +239,9 @@ export function PuckEditorLayout({
 
             {/* Fields Tab */}
             <TabsContent value="fields" className="flex-1 overflow-auto m-0 p-0">
+              {/* Component breadcrumb (shown when component selected) */}
+              {!isRootLevel && <ComponentBreadcrumb />}
+              
               {/* Page-level panels (shown when no component selected) */}
               {isRootLevel && (
                 <>
@@ -251,5 +290,13 @@ export function PuckEditorLayout({
         </main>
       </div>
     </div>
+  );
+}
+
+export function PuckEditorLayout(props: PuckEditorLayoutProps) {
+  return (
+    <EditorUIProvider>
+      <PuckEditorLayoutInner {...props} />
+    </EditorUIProvider>
   );
 }

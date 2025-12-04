@@ -100,9 +100,9 @@ export const GridHeaderBar = () => {
 
   return (
     <>
-    <div className="flex items-center justify-between h-[50px] px-4 border border-border border-b-0 bg-background rounded-t-md">
-      {/* Left: Table name and row count */}
-      <div className="flex items-center gap-3 min-w-0">
+    <div className="flex items-center h-[50px] px-4 border border-border border-b-0 bg-background rounded-t-md">
+      {/* Left: Table name and row count - minimum width to prevent squishing */}
+      <div className="flex items-center gap-3 min-w-[200px] shrink-0">
         <h2 className="text-base font-semibold truncate">{tableName}</h2>
         <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-2">
           {isLoading && (
@@ -113,8 +113,8 @@ export const GridHeaderBar = () => {
         </span>
       </div>
 
-      {/* Center: Search */}
-      <div className="flex-1 max-w-md mx-4">
+      {/* Center: Search - flexible but with constraints */}
+      <div className="flex-1 min-w-[200px] max-w-md mx-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -133,14 +133,14 @@ export const GridHeaderBar = () => {
         </div>
       </div>
 
-    {/* Right: View selector and Actions */}
-    <div className="flex items-center gap-2 flex-wrap">
-      {/* View Selector - compact, fixed width */}
+    {/* Right: View selector and Actions - minimum width to prevent squishing */}
+    <div className="flex items-center gap-2 min-w-[300px] shrink-0">
+      {/* View Selector - compact, better width constraints */}
       <ViewSelector
         views={availableViews.filter(v => v.viewType === 'grid')}
         selectedViewId={currentView?.id}
         onSelectView={onSelectView}
-        className="shrink-0 w-[120px]"
+        className="shrink-0 w-[120px] max-w-[150px]"
         tableId={tableId}
       />
 

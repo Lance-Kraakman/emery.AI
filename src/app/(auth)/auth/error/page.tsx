@@ -44,11 +44,11 @@ function AuthErrorContent() {
           </Button>
           
           <div className="mt-4 text-center">
-            <Link 
-              href="/mission-control" 
+            <Link
+              href="/apps"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
-              Go to dashboard
+              Go to apps
             </Link>
           </div>
         </div>

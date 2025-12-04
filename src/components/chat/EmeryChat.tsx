@@ -17,7 +17,6 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
-import { RightPanelResizeHandle } from '@/components/ui/right-panel-resize-handle'
 // import { ChatCanvas } from './ChatCanvas'
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
@@ -68,21 +67,19 @@ interface EmeryChatHeaderProps {
   organizationId: number
 }
 
-function EmeryChatHeader({ 
-  domainType, 
-  domainName, 
-  currentChatId, 
-  onChatSelect, 
-  onNewChat, 
+function EmeryChatHeader({
+  domainType,
+  domainName,
+  currentChatId,
+  onChatSelect,
+  onNewChat,
   onChatHistoryUpdate,
   userId,
   organizationId
 }: EmeryChatHeaderProps) {
   // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders
   const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
-  const canvasState = useStore(uiStateStore, uiStateSelectors.canvasState)
   const toggleChat = uiStateActions.toggleChat
-  const toggleCanvas = uiStateActions.toggleCanvas
   
   // Determine context subtitle based on domain
   const getSubtitle = () => {
@@ -123,19 +120,6 @@ function EmeryChatHeader({
       </div>
       
       <div className="flex items-center gap-1 flex-shrink-0">
-        {/* Canvas expand button (only when canvas collapsed) - points right > */}
-        {canvasState === 'collapsed' && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleCanvas}
-            className="h-7 w-7"
-            title="Expand canvas"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        )}
-
         {/* Chat collapse button (only show when expanded) - points right > */}
         {chatState === 'expanded' && (
           <Button
@@ -402,13 +386,9 @@ export function EmeryChat() {
 
   // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders
   const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
-  const chatWidth = useStore(uiStateStore, uiStateSelectors.chatWidth)
-  const canvasState = useStore(uiStateStore, uiStateSelectors.canvasState)
   const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
   const chatContext = useStore(uiStateStore, uiStateSelectors.chatContext)
-  const toggleCanvas = uiStateActions.toggleCanvas
   const setChatContext = uiStateActions.setChatContext
-  const setChatWidth = uiStateActions.setChatWidth
 
   const { data: emeryData } = useEmery()
 
@@ -591,27 +571,9 @@ export function EmeryChat() {
     logger.debug('Tool removed via handler', { tool: toolToRemove.name })
   }
 
-  // Determine layout based on canvas state
-  const isFullWidth = canvasState === 'collapsed'
-
   return (
-    <div
-      className={`relative flex bg-card h-full`}
-      style={{
-        width: isFullWidth ? '100%' : `${chatWidth}px`,
-        // CSS-based responsive constraints using shadcn's --sidebar-width variable
-        maxWidth: 'calc((100vw - var(--sidebar-width, 256px)) / 2)',  // 50% of available screen space
-        minWidth: 'max(280px, calc((100vw - var(--sidebar-width, 256px)) * 0.2))' // Larger of 280px or 20% of available space
-      }}
-    >
-      {/* Resize handle */}
-      {!isFullWidth && (
-        <RightPanelResizeHandle
-          onResize={setChatWidth}
-        />
-      )}
-
-      {/* Chat Section - now full width without sidebar */}
+    <div className="relative flex bg-card h-full w-96">
+      {/* Chat Section - fixed width */}
       <div className={`flex flex-col w-full h-full`}>
         <EmeryChatHeader 
           domainType={chatContext?.domainType}

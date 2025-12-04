@@ -12,9 +12,9 @@ export default async function SetupPage() {
 
   const { needsSetup, isFirstUser } = await checkSetupStatus();
 
-  // Redirect to dashboard if setup is already complete
+  // Redirect to apps if setup is already complete
   if (!needsSetup) {
-    redirect("/mission-control");
+    redirect("/apps");
   }
 
   return (

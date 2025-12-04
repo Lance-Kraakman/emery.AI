@@ -23,8 +23,6 @@ export interface UIState {
   // Layout state (from LayoutProvider)
   sidebarState: PanelState
   chatState: PanelState
-  chatWidth: number // Resizable chat panel width in pixels (CSS handles min/max constraints)
-  canvasState: PanelState
   canvasType: CanvasType
   breakpoint: LayoutBreakpoint
   isMobile: boolean
@@ -101,12 +99,9 @@ const initialState: UIState = {
   // Layout defaults
   sidebarState: 'expanded',
   chatState: 'collapsed',
-  chatWidth: 600, // Default chat panel width - CSS handles min/max constraints responsively
   canvasType: 'chat',
   breakpoint: 'desktop',
   isMobile: false,
-
-  canvasState: 'collapsed',
 
   // Canvas/Artifact state
   displayedArtifact: null,
@@ -192,7 +187,7 @@ if (typeof window !== 'undefined') {
     {
       key: 'emery-ui-state',
       enabled: true,
-      whitelist: ['sidebarState', 'chatState', 'chatWidth', 'canvasState', 'canvasType', 'openCollapsibles', 'isPanelCollapsed']
+      whitelist: ['sidebarState', 'chatState', 'canvasType', 'openCollapsibles', 'isPanelCollapsed']
     }
   )
 }
@@ -206,15 +201,6 @@ export const uiStateActions = {
 
   setChatState: (state: PanelState) => {
     uiStateStore.setState((currentState) => ({ ...currentState, chatState: state }))
-  },
-
-  setChatWidth: (width: number) => {
-    // CSS handles min/max constraints, just set the value
-    uiStateStore.setState((currentState) => ({ ...currentState, chatWidth: width }))
-  },
-
-  setCanvasState: (state: PanelState) => {
-    uiStateStore.setState((currentState) => ({ ...currentState, canvasState: state }))
   },
 
   setBreakpoint: (breakpoint: LayoutBreakpoint) => {
@@ -239,13 +225,6 @@ export const uiStateActions = {
     }))
   },
 
-  toggleCanvas: () => {
-    uiStateStore.setState((state) => ({
-      ...state,
-      canvasState: state.canvasState === 'expanded' ? 'collapsed' : 'expanded'
-    }))
-  },
-
   // Canvas type actions
   setCanvasType: (canvasType: CanvasType) => {
     uiStateStore.setState((state) => ({ ...state, canvasType }))
@@ -255,16 +234,14 @@ export const uiStateActions = {
   openArtifact: (artifact: Artifact) => {
     uiStateStore.setState((state) => ({
       ...state,
-      displayedArtifact: artifact,
-      canvasState: 'expanded' // Auto-expand canvas when artifact is opened
+      displayedArtifact: artifact
     }))
   },
 
   closeArtifact: () => {
     uiStateStore.setState((state) => ({
       ...state,
-      displayedArtifact: null,
-      canvasState: 'collapsed'
+      displayedArtifact: null
     }))
   },
 
@@ -355,8 +332,7 @@ export const uiStateActions = {
     uiStateStore.setState((state) => ({
       ...state,
       sidebarState: 'expanded',
-      chatState: 'collapsed',
-      canvasState: 'collapsed'
+      chatState: 'collapsed'
     }))
   },
 
@@ -370,8 +346,6 @@ export const uiStateSelectors = {
   // Layout selectors
   sidebarState: (state: UIState) => state.sidebarState,
   chatState: (state: UIState) => state.chatState,
-  chatWidth: (state: UIState) => state.chatWidth,
-  canvasState: (state: UIState) => state.canvasState,
   canvasType: (state: UIState) => state.canvasType,
   breakpoint: (state: UIState) => state.breakpoint,
   isMobile: (state: UIState) => state.isMobile,
