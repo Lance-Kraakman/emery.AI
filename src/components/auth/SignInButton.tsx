@@ -16,7 +16,7 @@ interface SignInButtonProps {
 
 export function SignInButton({
   provider,
-  callbackUrl = "/mission-control",
+  callbackUrl = "/apps",
   buttonColor,
   buttonTextColor,
   borderColor,

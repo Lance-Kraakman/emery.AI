@@ -18,10 +18,11 @@
  */
 
 import { useState, useRef, useEffect, type ComponentType } from 'react';
-import { registerOverlayPortal } from '@measured/puck';
+import { registerOverlayPortal, usePuck } from '@measured/puck';
 import { RowDataProvider } from '@/components/puck/contexts/RowDataContext';
 import { DataLayoutProvider } from '@/components/puck/contexts/DataLayoutContext';
 import { useLinkContext } from '@/components/puck/link-context';
+import { useEditorUI } from '@/components/puck/contexts/EditorUIContext';
 import { usePagination } from './usePagination';
 import { Button } from '@/components/ui/button';
 import { Section } from '@/components/puck/components/Section';
@@ -97,6 +98,21 @@ export default function DataBlock({
 
   // Get editing context
   const { isEditing } = useLinkContext();
+  
+  // Get UI navigation context and dispatch (only available in editor)
+  let navigateToTab: ((tab: 'blocks' | 'fields' | 'outline') => void) | null = null;
+  let dispatch: any = null;
+  try {
+    const editorUI = useEditorUI();
+    navigateToTab = editorUI.navigateToTab;
+    // Get dispatch from usePuck for category control
+    const { dispatch: puckDispatch } = usePuck();
+    dispatch = puckDispatch;
+  } catch {
+    // Context not available - we're not in the editor (preview/public)
+    navigateToTab = null;
+    dispatch = null;
+  }
 
   // Pagination hook (only used in list mode, but called unconditionally for hook rules)
   const pagination = usePagination({
@@ -130,6 +146,27 @@ export default function DataBlock({
       left: direction === 'left' ? -300 : 300,
       behavior: 'smooth',
     });
+  };
+
+  // Handle edit template action - switch to edit mode, navigate to Blocks tab, and expand Fields category
+  const handleEditTemplate = () => {
+    setIsEditingTemplate(true);
+    if (navigateToTab && dispatch) {
+      // Switch to blocks tab
+      navigateToTab('blocks');
+      
+      // Expand the fields category
+      dispatch({
+        type: "setUi",
+        ui: {
+          componentList: {
+            fields: {
+              expanded: true
+            }
+          }
+        }
+      });
+    }
   };
 
   // No view selected - show placeholder
@@ -364,7 +401,7 @@ export default function DataBlock({
     return (
       <Section>
         <div className="flex min-h-[200px] items-center justify-center border-2 border-dashed rounded-lg bg-muted/20">
-          <Button onClick={() => setIsEditingTemplate(true)}>
+          <Button onClick={handleEditTemplate}>
             <Pencil className="mr-2 h-4 w-4" />
             Edit Template
           </Button>
@@ -407,7 +444,7 @@ export default function DataBlock({
             ref={editButtonRef}
             variant="secondary"
             className="absolute top-2 right-2 z-10"
-            onClick={() => setIsEditingTemplate(true)}
+            onClick={handleEditTemplate}
           >
             <Pencil className="mr-2 h-4 w-4" />
             Edit Template
