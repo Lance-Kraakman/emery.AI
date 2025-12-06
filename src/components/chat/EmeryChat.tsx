@@ -9,9 +9,11 @@ import {
   ChatMessage,
   useChatCanvas,
 } from '@llamaindex/chat-ui'
-import { 
-  ChevronLeft, 
-  ChevronRight, 
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -79,7 +81,9 @@ function EmeryChatHeader({
 }: EmeryChatHeaderProps) {
   // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders
   const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
+  const chatWidthMode = useStore(uiStateStore, uiStateSelectors.chatWidthMode)
   const toggleChat = uiStateActions.toggleChat
+  const toggleChatWidthMode = uiStateActions.toggleChatWidthMode
   
   // Determine context subtitle based on domain
   const getSubtitle = () => {
@@ -120,6 +124,23 @@ function EmeryChatHeader({
       </div>
       
       <div className="flex items-center gap-1 flex-shrink-0">
+        {/* Width toggle button (only when chat is expanded) */}
+        {chatState === 'expanded' && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleChatWidthMode}
+            className="h-7 w-7"
+            title={chatWidthMode === 'normal' ? 'Expand to half width' : 'Shrink to normal width'}
+          >
+            {chatWidthMode === 'normal' ? (
+              <ChevronsLeft className="h-4 w-4" />
+            ) : (
+              <ChevronsRight className="h-4 w-4" />
+            )}
+          </Button>
+        )}
+
         {/* Chat collapse button (only show when expanded) - points right > */}
         {chatState === 'expanded' && (
           <Button
@@ -386,6 +407,7 @@ export function EmeryChat() {
 
   // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders
   const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
+  const chatWidthMode = useStore(uiStateStore, uiStateSelectors.chatWidthMode)
   const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
   const chatContext = useStore(uiStateStore, uiStateSelectors.chatContext)
   const setChatContext = uiStateActions.setChatContext
@@ -571,9 +593,21 @@ export function EmeryChat() {
     logger.debug('Tool removed via handler', { tool: toolToRemove.name })
   }
 
+  // Calculate if we should use full width (50% of available space)
+  const isFullWidth = chatWidthMode === 'full'
+
   return (
-    <div className="relative flex bg-card h-full w-96">
-      {/* Chat Section - fixed width */}
+    <div
+      className={cn(
+        "relative flex bg-card h-full",
+        !isFullWidth && "w-96"
+      )}
+      style={isFullWidth ? {
+        // 50% of available space (viewport minus sidebar)
+        width: 'calc((100vw - var(--sidebar-width, 256px)) / 2)'
+      } : undefined}
+    >
+      {/* Chat Section - dynamic width based on chatWidthMode */}
       <div className={`flex flex-col w-full h-full`}>
         <EmeryChatHeader 
           domainType={chatContext?.domainType}

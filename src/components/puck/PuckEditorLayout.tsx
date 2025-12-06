@@ -146,30 +146,34 @@ function PuckEditorLayoutInner({
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Header */}
-      <header className="flex items-center gap-2 px-4 py-2 border-b border-border bg-transparent shrink-0">
+      <header className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 border-b border-border bg-transparent shrink-0">
         {/* Public URL display */}
         {page.isPublic && publicUrl && (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-md border border-border">
-            <span className="text-xs text-muted-foreground font-mono truncate max-w-[150px] sm:max-w-[300px]" title={fullPublicUrl || undefined}>
+          <div className="flex items-center gap-1 px-1.5 sm:px-2 py-1 bg-muted/50 rounded-md border border-border min-w-0 shrink">
+            <span
+              className="text-xs text-muted-foreground font-mono truncate min-w-0"
+              style={{ direction: 'rtl', textAlign: 'left' }}
+              title={fullPublicUrl || undefined}
+            >
               {publicUrl}
             </span>
             <button
               onClick={handleCopyUrl}
-              className="p-1 hover:bg-background rounded transition-colors"
+              className="p-0.5 hover:bg-background rounded transition-colors shrink-0"
               title="Copy URL"
             >
               {copiedUrl ? (
-                <Check size={14} className="text-green-600" />
+                <Check size={12} className="text-green-600" />
               ) : (
-                <Copy size={14} className="text-muted-foreground" />
+                <Copy size={12} className="text-muted-foreground" />
               )}
             </button>
             <button
               onClick={handleOpenPublicPage}
-              className="p-1 hover:bg-background rounded transition-colors"
+              className="p-0.5 hover:bg-background rounded transition-colors shrink-0"
               title="Open in new tab"
             >
-              <ExternalLink size={14} className="text-muted-foreground" />
+              <ExternalLink size={12} className="text-muted-foreground" />
             </button>
           </div>
         )}
@@ -178,12 +182,13 @@ function PuckEditorLayoutInner({
         <div className="flex-1" />
 
         {/* Action Buttons */}
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-1 sm:gap-2 items-center">
           <Button
             onClick={handleUndo}
             disabled={!history.hasPast}
             size="icon"
             variant="outline"
+            className="h-8 w-8"
             title="Undo"
           >
             <Undo2 size={16} />
@@ -193,21 +198,26 @@ function PuckEditorLayoutInner({
             disabled={!history.hasFuture}
             size="icon"
             variant="outline"
+            className="h-8 w-8"
             title="Redo"
           >
             <Redo2 size={16} />
           </Button>
           <div className="w-px h-6 bg-border mx-1" />
-          <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
+          <Button onClick={handleSave} disabled={!hasUnsavedChanges} size="sm">
             {hasUnsavedChanges ? "Save Changes" : "Saved"}
           </Button>
-          <Button onClick={handlePreview}>
-            <Eye size={16} className="mr-1" />
-            Preview
+          <Button onClick={handlePreview} size="icon" variant="outline" className="h-8 w-8" title="Preview">
+            <Eye size={16} />
           </Button>
-          <Button onClick={onPublish}>
-            <Globe size={16} className="mr-1" />
-            {page.isPublic ? "Make Private" : "Make Public"}
+          <Button
+            onClick={onPublish}
+            size="icon"
+            variant={page.isPublic ? "default" : "outline"}
+            className="h-8 w-8"
+            title={page.isPublic ? "Make Private" : "Make Public"}
+          >
+            <Globe size={16} />
           </Button>
         </div>
       </header>

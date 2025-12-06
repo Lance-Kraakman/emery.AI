@@ -1,12 +1,14 @@
 "use client";
 
 import React, { createContext, useContext, useState, type ReactNode } from 'react';
+import { usePuck } from '@measured/puck';
 
 type TabType = 'blocks' | 'fields' | 'outline';
 
 interface EditorUIContextType {
   activeTab: TabType;
   navigateToTab: (tab: TabType) => void;
+  expandCategory: (category: string) => void;
 }
 
 const EditorUIContext = createContext<EditorUIContextType | null>(null);
@@ -17,13 +19,32 @@ interface EditorUIProviderProps {
 
 export function EditorUIProvider({ children }: EditorUIProviderProps) {
   const [activeTab, setActiveTab] = useState<TabType>('blocks');
+  const { dispatch, appState } = usePuck();
 
   const navigateToTab = (tab: TabType) => {
     setActiveTab(tab);
   };
 
+  const expandCategory = (category: string) => {
+    // Get existing componentList and merge with our change to preserve all categories
+    const existingComponentList = appState.ui.componentList || {};
+
+    dispatch({
+      type: "setUi",
+      ui: {
+        componentList: {
+          ...existingComponentList,
+          [category]: {
+            ...existingComponentList[category],
+            expanded: true
+          }
+        }
+      }
+    });
+  };
+
   return (
-    <EditorUIContext.Provider value={{ activeTab, navigateToTab }}>
+    <EditorUIContext.Provider value={{ activeTab, navigateToTab, expandCategory }}>
       {children}
     </EditorUIContext.Provider>
   );
