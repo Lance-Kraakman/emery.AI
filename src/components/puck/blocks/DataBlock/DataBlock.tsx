@@ -18,7 +18,7 @@
  */
 
 import { useState, useRef, useEffect, type ComponentType } from 'react';
-import { registerOverlayPortal, usePuck } from '@measured/puck';
+import { registerOverlayPortal } from '@measured/puck';
 import { RowDataProvider } from '@/components/puck/contexts/RowDataContext';
 import { DataLayoutProvider } from '@/components/puck/contexts/DataLayoutContext';
 import { useLinkContext } from '@/components/puck/link-context';
@@ -98,20 +98,18 @@ export default function DataBlock({
 
   // Get editing context
   const { isEditing } = useLinkContext();
-  
-  // Get UI navigation context and dispatch (only available in editor)
+
+  // Get UI navigation context (only available in editor)
   let navigateToTab: ((tab: 'blocks' | 'fields' | 'outline') => void) | null = null;
-  let dispatch: any = null;
+  let expandCategory: ((category: string) => void) | null = null;
   try {
     const editorUI = useEditorUI();
     navigateToTab = editorUI.navigateToTab;
-    // Get dispatch from usePuck for category control
-    const { dispatch: puckDispatch } = usePuck();
-    dispatch = puckDispatch;
+    expandCategory = editorUI.expandCategory;
   } catch {
     // Context not available - we're not in the editor (preview/public)
     navigateToTab = null;
-    dispatch = null;
+    expandCategory = null;
   }
 
   // Pagination hook (only used in list mode, but called unconditionally for hook rules)
@@ -151,21 +149,10 @@ export default function DataBlock({
   // Handle edit template action - switch to edit mode, navigate to Blocks tab, and expand Fields category
   const handleEditTemplate = () => {
     setIsEditingTemplate(true);
-    if (navigateToTab && dispatch) {
-      // Switch to blocks tab
+    if (navigateToTab && expandCategory) {
+      // Switch to blocks tab and expand the fields category
       navigateToTab('blocks');
-      
-      // Expand the fields category
-      dispatch({
-        type: "setUi",
-        ui: {
-          componentList: {
-            fields: {
-              expanded: true
-            }
-          }
-        }
-      });
+      expandCategory('fields');
     }
   };
 

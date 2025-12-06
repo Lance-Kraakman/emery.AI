@@ -13,6 +13,7 @@ import { persistence } from './utils'
 
 export type PanelState = 'expanded' | 'collapsed' | 'hidden'
 export type LayoutBreakpoint = 'mobile' | 'tablet' | 'desktop'
+export type ChatWidthMode = 'normal' | 'full' // 'full' = 50% of available space (excluding sidebar)
 
 // Import ChatContextConfig and canvas types from layout types to avoid duplication
 import type { ChatContextConfig, CanvasType } from '@/components/layout/types'
@@ -23,6 +24,7 @@ export interface UIState {
   // Layout state (from LayoutProvider)
   sidebarState: PanelState
   chatState: PanelState
+  chatWidthMode: ChatWidthMode // Width mode when chat is expanded
   canvasType: CanvasType
   breakpoint: LayoutBreakpoint
   isMobile: boolean
@@ -99,6 +101,7 @@ const initialState: UIState = {
   // Layout defaults
   sidebarState: 'expanded',
   chatState: 'collapsed',
+  chatWidthMode: 'normal',
   canvasType: 'chat',
   breakpoint: 'desktop',
   isMobile: false,
@@ -187,7 +190,7 @@ if (typeof window !== 'undefined') {
     {
       key: 'emery-ui-state',
       enabled: true,
-      whitelist: ['sidebarState', 'chatState', 'canvasType', 'openCollapsibles', 'isPanelCollapsed']
+      whitelist: ['sidebarState', 'chatState', 'chatWidthMode', 'canvasType', 'openCollapsibles', 'isPanelCollapsed']
     }
   )
 }
@@ -222,6 +225,17 @@ export const uiStateActions = {
     uiStateStore.setState((state) => ({
       ...state,
       chatState: state.chatState === 'expanded' ? 'collapsed' : 'expanded'
+    }))
+  },
+
+  setChatWidthMode: (mode: ChatWidthMode) => {
+    uiStateStore.setState((state) => ({ ...state, chatWidthMode: mode }))
+  },
+
+  toggleChatWidthMode: () => {
+    uiStateStore.setState((state) => ({
+      ...state,
+      chatWidthMode: state.chatWidthMode === 'normal' ? 'full' : 'normal'
     }))
   },
 
@@ -346,6 +360,7 @@ export const uiStateSelectors = {
   // Layout selectors
   sidebarState: (state: UIState) => state.sidebarState,
   chatState: (state: UIState) => state.chatState,
+  chatWidthMode: (state: UIState) => state.chatWidthMode,
   canvasType: (state: UIState) => state.canvasType,
   breakpoint: (state: UIState) => state.breakpoint,
   isMobile: (state: UIState) => state.isMobile,
