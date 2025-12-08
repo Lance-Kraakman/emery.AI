@@ -69,10 +69,6 @@ export const Button = ({
           setLoading(true);
           try {
             const context = buildActionContext();
-            console.log('[Button] Built action context:', {
-              linkContext: context.linkContext,
-              actions: actions.map(a => ({ type: a.type, pageId: (a as any).pageId })),
-            });
             await executeActions(actions, context);
           } catch (error) {
             console.error('[Button] Error executing actions:', error);

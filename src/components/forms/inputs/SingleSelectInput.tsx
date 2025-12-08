@@ -4,10 +4,11 @@
  * SingleSelectInput Component
  *
  * Form input for single-select field types
- * Uses SelectOption[] from field metadata
+ * Uses SelectOption[] from field metadata.
+ * Supports controlled and uncontrolled modes.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -21,8 +22,10 @@ import type { SelectOption } from '@/ddd/domain/tables/value-objects/table-field
 
 interface SingleSelectInputProps {
   field: FieldDTO;
-  value: number | null; // SelectOption ID
-  onChange: (value: number | null) => void;
+  name?: string;                    // For form collection
+  value?: number | null;            // Controlled mode - SelectOption ID
+  defaultValue?: number | null;     // Uncontrolled mode
+  onChange?: (value: number | null) => void;
   label?: string;
   placeholder?: string;
   required?: boolean;
@@ -31,7 +34,9 @@ interface SingleSelectInputProps {
 
 export function SingleSelectInput({
   field,
+  name,
   value,
+  defaultValue,
   onChange,
   label,
   placeholder,
@@ -41,8 +46,13 @@ export function SingleSelectInput({
   const inputLabel = label || field.name;
   const isRequired = required ?? field.required ?? false;
 
+  // For uncontrolled mode, use local state
+  const [localValue, setLocalValue] = useState<number | null>(defaultValue ?? null);
+  const isControlled = value !== undefined;
+  const currentValue = isControlled ? value : localValue;
+
   // Extract options from field metadata
-  const options = (field.metadata as any)?.options as SelectOption[] | undefined;
+  const options = (field.metadata as Record<string, unknown>)?.options as SelectOption[] | undefined;
 
   if (!options || options.length === 0) {
     return (
@@ -53,15 +63,27 @@ export function SingleSelectInput({
     );
   }
 
+  const handleChange = (val: string) => {
+    const newValue = val ? parseInt(val) : null;
+    if (!isControlled) {
+      setLocalValue(newValue);
+    }
+    onChange?.(newValue);
+  };
+
   return (
     <div className="space-y-2">
+      {/* Hidden input for form submission */}
+      {name && (
+        <input type="hidden" name={name} value={currentValue?.toString() ?? ''} />
+      )}
       <Label htmlFor={`field-${field.id}`}>
         {inputLabel}
         {isRequired && <span className="text-destructive ml-1">*</span>}
       </Label>
       <Select
-        value={value?.toString() || ''}
-        onValueChange={(val) => onChange(val ? parseInt(val) : null)}
+        value={currentValue?.toString() || ''}
+        onValueChange={handleChange}
         disabled={disabled}
       >
         <SelectTrigger id={`field-${field.id}`}>

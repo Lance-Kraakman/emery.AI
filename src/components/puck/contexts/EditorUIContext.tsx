@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, type ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import { usePuck } from '@measured/puck';
 
 type TabType = 'blocks' | 'fields' | 'outline';
@@ -21,11 +21,11 @@ export function EditorUIProvider({ children }: EditorUIProviderProps) {
   const [activeTab, setActiveTab] = useState<TabType>('blocks');
   const { dispatch, appState } = usePuck();
 
-  const navigateToTab = (tab: TabType) => {
+  const navigateToTab = useCallback((tab: TabType) => {
     setActiveTab(tab);
-  };
+  }, []);
 
-  const expandCategory = (category: string) => {
+  const expandCategory = useCallback((category: string) => {
     // Get existing componentList and merge with our change to preserve all categories
     const existingComponentList = appState.ui.componentList || {};
 
@@ -41,7 +41,7 @@ export function EditorUIProvider({ children }: EditorUIProviderProps) {
         }
       }
     });
-  };
+  }, [dispatch, appState.ui.componentList]);
 
   return (
     <EditorUIContext.Provider value={{ activeTab, navigateToTab, expandCategory }}>

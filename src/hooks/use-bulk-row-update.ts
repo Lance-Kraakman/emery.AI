@@ -173,7 +173,13 @@ export function useBulkRowUpdate({
 
     // Convert field ID to field name for cache update
     const fieldName = getFieldNameById(fieldId)
-    if (fieldName) {
+    const field = fieldsRef.current.find(f => f.id === fieldId)
+
+    // Skip optimistic update for read-only auto-fields
+    // These fields should only be updated by the server response
+    const isReadOnlyField = field && (field.type === 'created-at' || field.type === 'autonumber')
+
+    if (fieldName && !isReadOnlyField) {
       queryClient.setQueryData(queryKey, (old: any) => {
         if (!old?.pages) return old
         return {

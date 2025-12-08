@@ -414,9 +414,14 @@ export default function DataBlock({
 
         if (result.success) {
           console.log('[DataBlock] Save successful, updating local state');
-          // Optimistic update: convert field names to IDs and merge into local row data
-          const dataWithIds = convertFieldNamesToIds(data);
-          setLocalRowData(prev => prev ? { ...prev, ...dataWithIds } : prev);
+          // Use server response for complete row data (includes auto-fields like created_at)
+          if (result.data) {
+            const serverRowData: Record<string, unknown> = { id: result.data.id };
+            for (const fv of result.data.fieldValues) {
+              serverRowData[fv.fieldId] = fv.value;
+            }
+            setLocalRowData(serverRowData);
+          }
           setSingleEditState(initialEditState);
         } else {
           console.error('[DataBlock] Save failed:', result.error);
@@ -570,11 +575,16 @@ export default function DataBlock({
 
       if (result.success) {
         console.log('[DataBlock] Save successful, updating local state');
-        // Optimistic update: convert field names to IDs and update the specific row
-        const dataWithIds = convertFieldNamesToIds(data);
-        setLocalRows(prev => prev.map(row =>
-          String(row.id) === rowId ? { ...row, ...dataWithIds } : row
-        ));
+        // Use server response for complete row data (includes auto-fields like created_at)
+        if (result.data) {
+          const serverRowData: Record<string, unknown> = { id: result.data.id };
+          for (const fv of result.data.fieldValues) {
+            serverRowData[fv.fieldId] = fv.value;
+          }
+          setLocalRows(prev => prev.map(row =>
+            String(row.id) === rowId ? serverRowData : row
+          ));
+        }
         setRowEditState(rowId, initialEditState);
       } else {
         console.error('[DataBlock] Save failed:', result.error);
