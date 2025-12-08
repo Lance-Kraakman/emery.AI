@@ -6,11 +6,8 @@ import { usePathname } from "next/navigation"
 import {
   AppWindow,
   Bot,
-  Building2,
   Database,
-  LayoutDashboard,
   Settings,
-  Target,
   Users,
   Workflow,
   Plug,
@@ -347,48 +344,6 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        {/* Mission Control */}
-        <Collapsible defaultOpen={pathname?.startsWith("/mission-control")}>
-          <SidebarGroup>
-            <SidebarGroupLabel asChild>
-              <CollapsibleTrigger>
-                <Target className="h-4 w-4" />
-                <span className="group-data-[collapsible=icon]:hidden">Mission Control</span>
-              </CollapsibleTrigger>
-            </SidebarGroupLabel>
-            <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
-              <SidebarGroupContent>
-                <SidebarMenu className="gap-0.5">
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname === "/mission-control/dashboard"}
-                      className="h-6"
-                    >
-                      <Link href="/mission-control/dashboard">
-                        <LayoutDashboard className="h-4 w-4" />
-                        <span className="group-data-[collapsible=icon]:hidden">Dashboard</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname === "/mission-control/org-chart"}
-                      className="h-6"
-                    >
-                      <Link href="/mission-control/org-chart">
-                        <Building2 className="h-4 w-4" />
-                        <span className="group-data-[collapsible=icon]:hidden">Org Chart</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </SidebarGroup>
-        </Collapsible>
-
         {/* Apps */}
         <NestedSidebarSection<AppData, PageData>
           icon={FileText}

@@ -16,7 +16,7 @@
 .label {
   font-size: 0.875rem;
   font-weight: 500;
-  color: hsl(var(--foreground));
+  color: var(--theme-text, #1e293b);
 }
 
 /* When inline, don't let label grow */
@@ -25,7 +25,7 @@
 }
 
 .text {
-  color: hsl(var(--foreground));
+  color: var(--theme-text, #1e293b);
   line-height: 1.5;
 }
 
@@ -93,5 +93,26 @@
 
 .warningText {
   font-size: 0.875rem;
+  color: hsl(var(--destructive));
+}
+
+/* Edit mode container */
+.editContainer {
+  width: 100%;
+}
+
+/* Invisible element to capture blur events */
+.blurCapture {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* Validation error text */
+.error {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
   color: hsl(var(--destructive));
 }

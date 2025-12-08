@@ -9,7 +9,9 @@ const getClassName = getClassNameFactory("Template", styles);
 
 export type TemplateProps = {
   template: string;
+  selectedVariant?: string;
   children: Slot;
+  _expandedChildren?: any[];  // Persisted copy of system template data for saving
 };
 
 export const Template: PuckComponent<TemplateProps> = ({

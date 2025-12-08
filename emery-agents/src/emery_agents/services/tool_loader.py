@@ -160,6 +160,11 @@ class UnifiedToolLoader:
             "emery-update-database": self._load_database_crud_tool,
             "emery-delete-database": self._load_database_crud_tool,
             "emery-list-databases": self._load_database_crud_tool,
+
+            # Skill operations
+            "emery-read-skill": self._load_skill_crud_tool,
+            "emery-update-skill": self._load_skill_crud_tool,
+            "emery-list-skills": self._load_skill_crud_tool,
         }
 
         return CRUD_TOOL_ROUTING.get(tool_name)
@@ -335,6 +340,11 @@ class UnifiedToolLoader:
         """Load Database CRUD tool."""
         from ..tools.crud_tools import load_database_crud
         return load_database_crud(tool_config, api_key, organization_id)
+
+    def _load_skill_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
+        """Load Skill CRUD tool."""
+        from ..tools.crud_tools import load_skill_crud
+        return load_skill_crud(tool_config, api_key, organization_id)
 
     def _load_emery_database_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Emery Database tool."""

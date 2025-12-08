@@ -8,7 +8,11 @@
 import type { ComponentConfig } from "@measured/puck";
 import RelationField, { type RelationFieldProps } from "./RelationField";
 import { createFieldSelectorField } from "../../custom-fields";
-import { labelPositionField } from "../../fields/standard-fields";
+import {
+  labelPositionField,
+  textColorField,
+  fontFamilyField,
+} from "../../fields/standard-fields";
 
 export const RelationFieldConfig: ComponentConfig<RelationFieldProps> = {
   label: "Relation Field",
@@ -61,6 +65,9 @@ export const RelationFieldConfig: ComponentConfig<RelationFieldProps> = {
         { label: "No", value: false },
       ],
     },
+
+    textColor: textColorField,
+    fontFamily: fontFamilyField,
   },
 
   defaultProps: {

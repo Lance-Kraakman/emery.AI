@@ -6,9 +6,15 @@
  * Displays number field values from the nearest data context.
  * Must be used inside DataBlock.
  * Supports formatting options like decimal places, prefix, suffix.
+ *
+ * Edit Mode: When inside an EditableRowProvider with isEditMode=true,
+ * renders as a number input instead of display text.
  */
 
 import { useFieldValue, useIsInDataContext } from '@/components/puck/hooks/useFieldValue';
+import { useEditableRow } from '@/components/puck/contexts/EditableRowContext';
+import { useFieldMetadata } from '@/components/puck/hooks/useFieldMetadata';
+import { NumberInput } from '@/components/forms/inputs/NumberInput';
 import { cn } from '@/lib/utils';
 import styles from './styles.module.css';
 
@@ -44,6 +50,8 @@ export default function NumberField({
   // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
   const value = useFieldValue(fieldId ?? 0);
+  const editable = useEditableRow();
+  const field = useFieldMetadata(fieldId);
 
   // No field selected
   if (fieldId === undefined) {
@@ -66,6 +74,29 @@ export default function NumberField({
       </div>
     );
   }
+
+  // ============================================
+  // EDIT MODE: Render as uncontrolled input
+  // ============================================
+  if (editable?.isEditMode && field) {
+    const initialValue = value === '' || value === undefined || value === null ? null : Number(value);
+
+    return (
+      <div className={styles.editContainer}>
+        <NumberInput
+          field={field}
+          name={field.name}
+          defaultValue={initialValue}
+          label={label || field.name}
+          disabled={editable.isSaving}
+        />
+      </div>
+    );
+  }
+
+  // ============================================
+  // DISPLAY MODE: Render as formatted text
+  // ============================================
 
   // Get display value
   let displayValue: string;

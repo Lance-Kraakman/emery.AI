@@ -101,24 +101,21 @@ export const GridHeaderBar = () => {
   return (
     <>
     <div className="flex items-center justify-between h-[50px] px-4 border border-border border-b-0 bg-background rounded-t-md">
-      {/* Left: Table name and row count */}
-      <div className="flex items-center gap-3 min-w-0">
-        <h2 className="text-base font-semibold truncate">{tableName}</h2>
-        <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-2">
-          {isLoading && (
-            <RefreshCw className="h-3 w-3 animate-spin" />
-          )}
+      {/* Left: Table info - compact but always visible */}
+      <div className="flex items-center gap-2 shrink-0">
+        <h2 className="text-sm font-semibold truncate max-w-[140px]">{tableName}</h2>
+        <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-1">
+          {isLoading && <RefreshCw className="h-3 w-3 animate-spin" />}
           {rowCount} row{rowCount !== 1 ? 's' : ''}
-          {searchTerm && ` (filtered from ${totalRows})`}
         </span>
       </div>
 
-      {/* Center: Search */}
-      <div className="flex-1 max-w-md mx-4">
+      {/* Center: Search - flexible but constrained */}
+      <div className="flex-1 max-w-sm mx-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search in table... (press Enter)"
+            placeholder="Search..."
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -133,122 +130,111 @@ export const GridHeaderBar = () => {
         </div>
       </div>
 
-    {/* Right: View selector and Actions */}
-    <div className="flex items-center gap-2 flex-wrap">
-      {/* View Selector - compact, fixed width */}
-      <ViewSelector
-        views={availableViews.filter(v => v.viewType === 'grid')}
-        selectedViewId={currentView?.id}
-        onSelectView={onSelectView}
-        className="shrink-0 w-[120px]"
-        tableId={tableId}
-      />
-
-      {/* Save View Button - shown when filters/sorting are active */}
-      {(activeFilters.length > 0 || (sortState?.field && sortState?.order)) && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setIsSaveViewDialogOpen(true)}
-          className="h-9 gap-1"
-        >
-          <Save className="h-4 w-4" />
-          <span className="text-xs">Save View</span>
-        </Button>
-      )}
-
-      {/* Filter Popover + Active Filter Chips */}
-      {onAddFilter && (
-        <FilterPopover
-          trigger={
-            <Button
-              variant={activeFilters.length > 0 ? "default" : "ghost"}
-              size="sm"
-              className="h-9 gap-1"
-            >
-              <Filter className="h-4 w-4" />
-              <span className="text-xs">
-                Filter{activeFilters.length > 0 && ` (${activeFilters.length})`}
-              </span>
-            </Button>
-          }
-          fields={fields}
-          activeFilters={activeFilters}
-          onAddFilter={onAddFilter}
-          onRemoveFilter={onRemoveFilter!}
+      {/* Right: View selector and actions */}
+      <div className="flex items-center gap-1 shrink-0">
+        <ViewSelector
+          views={availableViews.filter(v => v.viewType === 'grid')}
+          selectedViewId={currentView?.id}
+          onSelectView={onSelectView}
+          className="w-[120px]"
+          tableId={tableId}
         />
-      )}
 
-      {/* Active Filter Chips */}
-      {activeFilters.map((filter, index) => (
-        <FilterChip
-          key={index}
-          filter={filter}
-          onRemove={() => onRemoveFilter?.(index)}
-        />
-      ))}
+        {/* Filter button with count */}
+        {onAddFilter && (
+          <FilterPopover
+            trigger={
+              <Button
+                variant={activeFilters.length > 0 ? "default" : "ghost"}
+                size="sm"
+                className="h-9 px-3 gap-1"
+              >
+                <Filter className="h-4 w-4" />
+                {activeFilters.length > 0 && (
+                  <span className="text-xs">{activeFilters.length}</span>
+                )}
+              </Button>
+            }
+            fields={fields}
+            activeFilters={activeFilters}
+            onAddFilter={onAddFilter}
+            onRemoveFilter={onRemoveFilter!}
+          />
+        )}
 
-      {/* Clear All Button - shown when filters or sort are active */}
-      {(activeFilters.length > 0 || (sortState?.field != null && sortState?.order != null)) && (
+        {/* Show active filter chips only if space allows */}
+        <div className="flex items-center gap-1 max-w-[200px] overflow-hidden">
+          {activeFilters.slice(0, 2).map((filter, index) => (
+            <FilterChip
+              key={index}
+              filter={filter}
+              onRemove={() => onRemoveFilter?.(index)}
+            />
+          ))}
+          {activeFilters.length > 2 && (
+            <span className="text-xs text-muted-foreground">+{activeFilters.length - 2}</span>
+          )}
+        </div>
+
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => {
-            // Clear both filters and sort independently
-            onClearFilters()
-            onClearSort()
-          }}
-          className="h-9 gap-1 text-muted-foreground hover:text-foreground"
-          title="Clear all filters and sorting"
+          onClick={onRefresh}
+          className="h-9 w-9 p-0"
+          title="Refresh"
         >
-          <X className="h-4 w-4" />
-          <span className="text-xs">Clear All</span>
+          <RefreshCw className="h-4 w-4" />
         </Button>
-      )}
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onRefresh}
-        className="h-9 w-9 p-0"
-      >
-        <RefreshCw className="h-4 w-4" />
-      </Button>
-
-      {/* Share Button */}
-      <ShareButton
-        resourceType="table"
-        resourceId={tableId}
-        onShare={() => setShareDialogOpen(true)}
-        variant="outline"
-        size="sm"
-      />
-
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-9 w-9 p-0">
-            <Settings className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={onManageFields}>
-            <Settings className="h-4 w-4 mr-2" />
-            Manage Fields
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleToggleIdColumn}>
-            <Check className={`h-4 w-4 mr-2 ${showIdColumn ? 'opacity-100' : 'opacity-0'}`} />
-            Show ID Column
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={onRefresh}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh Data
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-9 w-9 p-0">
+              <Settings className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {/* Save View - moved to menu when filters/sort active */}
+            {(activeFilters.length > 0 || (sortState?.field && sortState?.order)) && (
+              <>
+                <DropdownMenuItem onClick={() => setIsSaveViewDialogOpen(true)}>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save View
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            
+            {/* Clear All - moved to menu when active */}
+            {(activeFilters.length > 0 || (sortState?.field != null && sortState?.order != null)) && (
+              <>
+                <DropdownMenuItem onClick={() => {
+                  onClearFilters()
+                  onClearSort()
+                }}>
+                  <X className="h-4 w-4 mr-2" />
+                  Clear All
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            
+            <DropdownMenuItem onClick={onManageFields}>
+              <Settings className="h-4 w-4 mr-2" />
+              Manage Fields
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleToggleIdColumn}>
+              <Check className={`h-4 w-4 mr-2 ${showIdColumn ? 'opacity-100' : 'opacity-0'}`} />
+              Show ID Column
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShareDialogOpen(true)}>
+              <Settings className="h-4 w-4 mr-2" />
+              Share Table
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
-  </div>
 
   {/* Save View Dialog */}
   <SaveViewDialog

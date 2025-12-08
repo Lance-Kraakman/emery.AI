@@ -21,6 +21,8 @@ export interface FileFieldProps {
   maxItems?: number;
   showSize?: boolean;
   showDownload?: boolean;
+  textColor?: string;
+  fontFamily?: string;
 }
 
 interface FileItem {
@@ -65,6 +67,8 @@ export default function FileField({
   maxItems = 5,
   showSize = true,
   showDownload = true,
+  textColor,
+  fontFamily,
 }: FileFieldProps) {
   // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
@@ -111,6 +115,11 @@ export default function FileField({
     styles.fileField,
     labelPosition === 'inline' && styles.inline
   );
+
+  const customStyles: React.CSSProperties = {
+    ...(textColor && { color: textColor }),
+    ...(fontFamily && { fontFamily }),
+  };
 
   const renderList = () => (
     <ul className={styles.fileList}>
@@ -215,7 +224,7 @@ export default function FileField({
   );
 
   return (
-    <div className={containerClass}>
+    <div className={containerClass} style={customStyles}>
       {label && <label className={styles.label}>{label}</label>}
       {displayStyle === 'list' && renderList()}
       {displayStyle === 'compact' && renderCompact()}

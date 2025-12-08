@@ -614,9 +614,36 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         throw new Error('Table not found');
       }
 
-      // CRITICAL FIX: Pass options directly to datalake for server-side pagination
-      // This enables true pagination via gRPC Delta Lake instead of loading all rows
-      const result = await this.datalake.retrieveRows(table, options);
+      return this.getRowsWithParams(
+        {
+          tableId: table.id.value,
+          s3Path: table.storageLocation || `s3://emery-tables/${table.id.value}`,
+          organizationId: table.organizationId.value,
+        },
+        table.fields,
+        options
+      );
+
+    } catch (error) {
+      console.error('[DynamicTableRepository] Error getting rows:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get rows using raw table parameters
+   * Bypasses findById - used when table metadata is already available (e.g., public views)
+   */
+  async getRowsWithParams(
+    params: { tableId: number; s3Path: string; organizationId: number },
+    fields: readonly TableField[],
+    options: RowQueryOptions
+  ): Promise<Row[]> {
+    try {
+      const result = await this.datalake.retrieveRowsWithParams(
+        { ...params, fields },
+        options
+      );
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to retrieve rows');
@@ -625,7 +652,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       return result.data?.rows || [];
 
     } catch (error) {
-      console.error('[DynamicTableRepository] Error getting rows:', error);
+      console.error('[DynamicTableRepository] Error getting rows with params:', error);
       throw error;
     }
   }

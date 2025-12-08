@@ -4,9 +4,9 @@
 // Uses table application service for field operations as part of table aggregate
 
 import { revalidatePath } from "next/cache";
-import { requirePermission, requireResourcePermission } from "./permissions";
+import { requirePermission, requireResourcePermission, getSessionSafe } from "./permissions";
 import { withAuthContext } from '@/lib/auth/with-context';
-import { getTableApplicationService } from "@/ddd/application/di/container";
+import { getTableApplicationService, getViewApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateFieldData } from "./types";
 import type { FieldType, AutonumberFieldConfig } from "@/ddd/domain/tables/value-objects/table-field";
 import type { CreateFieldCommand } from "@/ddd/application/services/tables/table-application-service";
@@ -142,48 +142,95 @@ export async function createFieldAction(formData: FormData) {
   return result;
 }
 
-export async function getFields(tableId: number): Promise<FieldDTO[]> {
+/**
+ * Get fields for a table
+ *
+ * AIDEV-NOTE: Supports public access via view context with auth-first pattern.
+ * - If authenticated: use normal RLS-wrapped path with permission check
+ * - If unauthenticated with viaViewId: check if view is public, use view schema if so
+ * - If unauthenticated without viaViewId: throw auth error
+ *
+ * @param tableId - Table ID to get fields for
+ * @param options - Optional options
+ * @param options.viaViewId - View ID that provides context for public access
+ */
+export async function getFields(
+  tableId: number,
+  options?: { viaViewId?: number }
+): Promise<FieldDTO[]> {
   try {
     if (!tableId) {
       throw new Error("tableId is required");
     }
 
-    // Fields inherit permissions from their parent table
-    await requireResourcePermission("database:view", "table", tableId);
+    const session = await getSessionSafe();
 
-    const tableApplicationService = getTableApplicationService();
-    const fieldList = await tableApplicationService.getFieldsForTable(TableId.fromNumber(tableId));
-    const dtoFields = fieldList.map(FieldMapper.toDTO);
+    if (session) {
+      // Authenticated user: use normal RLS-wrapped path
+      await requireResourcePermission("database:view", "table", tableId);
 
-    // Log select fields with their options
-    const selectFields = dtoFields.filter(f => f.type === 'single-select' || f.type === 'multi-select');
-    if (selectFields.length > 0) {
-      logger.debug('Loaded select fields', {
-        tableId,
-        selectFieldCount: selectFields.length,
-        fields: selectFields.map(f => ({
-          name: f.name,
-          type: f.type,
-          optionCount: Array.isArray(f.metadata?.options) ? f.metadata.options.length : 0
-        }))
-      });
+      const tableApplicationService = getTableApplicationService();
+      const fieldList = await tableApplicationService.getFieldsForTable(TableId.fromNumber(tableId));
+      const dtoFields = fieldList.map(FieldMapper.toDTO);
+
+      // Log select fields with their options
+      const selectFields = dtoFields.filter(f => f.type === 'single-select' || f.type === 'multi-select');
+      if (selectFields.length > 0) {
+        logger.debug('Loaded select fields', {
+          tableId,
+          selectFieldCount: selectFields.length,
+          fields: selectFields.map(f => ({
+            name: f.name,
+            type: f.type,
+            optionCount: Array.isArray(f.metadata?.options) ? f.metadata.options.length : 0
+          }))
+        });
+      }
+
+      // Prepend id system field
+      const idField: FieldDTO = {
+        id: 0,
+        name: 'id',
+        type: 'number',
+        required: true,
+        metadata: {},
+        orderIndex: -1,
+        createdAt: null,
+      };
+
+      logger.summary('Loaded fields', { tableId, count: dtoFields.length + 1 });
+      return [idField, ...dtoFields];
+    } else {
+      // Unauthenticated: only allow via public view
+      if (!options?.viaViewId) {
+        throw new Error("Authentication required to access fields");
+      }
+
+      // Get schema via ViewApplicationService.getPublicViewSchema (uses rawDb, bypasses RLS)
+      const { ViewId } = await import("@/ddd/domain/views/value-objects/view-id");
+      const viewService = getViewApplicationService();
+      const schemaResult = await viewService.getPublicViewSchema(ViewId.fromNumber(options.viaViewId));
+
+      if (!schemaResult.success || !schemaResult.data) {
+        throw new Error("View not found or not public");
+      }
+
+      const dtoFields = schemaResult.data.map(FieldMapper.toDTO);
+
+      // Prepend id system field
+      const idField: FieldDTO = {
+        id: 0,
+        name: 'id',
+        type: 'number',
+        required: true,
+        metadata: {},
+        orderIndex: -1,
+        createdAt: null,
+      };
+
+      logger.summary('Loaded fields (public view)', { tableId, viewId: options.viaViewId, count: dtoFields.length + 1 });
+      return [idField, ...dtoFields];
     }
-
-    // Prepend id system field (always exists on all rows, but not in user-defined fields)
-    // Note: useGridColumns filters this out since it has its own ID column implementation
-    const idField: FieldDTO = {
-      id: 0,
-      name: 'id',
-      type: 'number',
-      required: true,
-      metadata: {},
-      orderIndex: -1,
-      createdAt: null,
-    };
-
-    logger.summary('Loaded fields', { tableId, count: dtoFields.length + 1 });
-
-    return [idField, ...dtoFields];
   } catch (error) {
     logger.error("Error fetching fields", error);
     throw new Error("Failed to fetch fields");
@@ -416,13 +463,16 @@ export async function reorderFields(data: {
     // Fields inherit permissions from their parent table
     await requireResourcePermission("database:manage", "table", tableId);
 
+    // Filter out system 'id' field - it's a synthetic field not stored in DB
+    const filteredFieldOrders = fieldOrders.filter(fo => fo.fieldName !== 'id');
+
     const tableApplicationService = getTableApplicationService();
 
-    logger.debug('Reordering fields', { tableId, fieldCount: fieldOrders.length });
+    logger.debug('Reordering fields', { tableId, fieldCount: filteredFieldOrders.length });
 
     const result = await tableApplicationService.reorderFields({
       tableId: TableId.fromNumber(tableId),
-      fieldOrders
+      fieldOrders: filteredFieldOrders
     });
 
     if (!result.success) {

@@ -4,12 +4,17 @@ import styles from "./styles.module.css";
 import { getClassNameFactory } from "@/components/puck/lib";
 import { Section } from "../../components/Section";
 import { withLayout } from "../../components/Layout";
+import { spacingField, paddingField } from "../../fields/standard-fields";
 
 const getClassName = getClassNameFactory("Grid", styles);
 
+export type ItemStyle = "none" | "card" | "bordered" | "subtle";
+
 export type GridProps = {
   numColumns: number;
-  gap: number;
+  gap: string;
+  itemStyle?: ItemStyle;
+  itemPadding?: string;
   items: Slot;
 };
 
@@ -21,10 +26,20 @@ export const GridInternal: ComponentConfig<GridProps> = {
       min: 1,
       max: 12,
     },
-    gap: {
-      label: "Gap",
-      type: "number",
-      min: 0,
+    gap: spacingField,
+    itemStyle: {
+      type: "select",
+      label: "Item Style",
+      options: [
+        { value: "none", label: "None" },
+        { value: "card", label: "Card" },
+        { value: "bordered", label: "Bordered" },
+        { value: "subtle", label: "Subtle" },
+      ],
+    },
+    itemPadding: {
+      ...paddingField,
+      label: "Item Padding",
     },
     items: {
       type: "slot",
@@ -32,19 +47,33 @@ export const GridInternal: ComponentConfig<GridProps> = {
   },
   defaultProps: {
     numColumns: 4,
-    gap: 24,
+    gap: "4",
+    itemStyle: "none",
+    itemPadding: undefined,
     items: [],
   },
-  render: ({ gap, numColumns, items: Items }) => {
+  render: ({ gap, numColumns, itemStyle, itemPadding, items: Items }) => {
+    const hasItemStyle = itemStyle && itemStyle !== "none";
+
+    const itemPaddingStyle = itemPadding
+      ? `calc(var(--theme-spacing-unit, 0.25rem) * ${itemPadding})`
+      : undefined;
+
     return (
       <Section>
         <Items
           disallow={["Hero", "Stats"]}
-          className={getClassName()}
+          className={getClassName({
+            hasItemStyle,
+            [`item-${itemStyle}`]: hasItemStyle,
+          })}
           style={{
-            gap,
+            gap: `var(--spacing-${gap}, 24px)`,
             gridTemplateColumns: `repeat(${numColumns}, 1fr)`,
-          }}
+            ...(itemPaddingStyle && {
+              "--grid-item-padding": itemPaddingStyle,
+            }),
+          } as React.CSSProperties}
         />
       </Section>
     );

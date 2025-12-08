@@ -7,3 +7,26 @@
 .Flex-item {
   flex: 1;
 }
+
+/* Item style variants - applied to direct children */
+.Flex--hasItemStyle > * {
+  padding: var(--flex-item-padding, var(--spacing-4, 1rem));
+  border-radius: var(--theme-border-radius, 0.5rem);
+}
+
+/* Card style for items */
+.Flex--item-card > * {
+  background: var(--theme-surface, #ffffff);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+/* Bordered style for items */
+.Flex--item-bordered > * {
+  background: transparent;
+  border: var(--theme-border-width, 1px) solid var(--theme-border, #e2e8f0);
+}
+
+/* Subtle style for items */
+.Flex--item-subtle > * {
+  background: color-mix(in srgb, var(--theme-surface, #ffffff) 50%, transparent);
+}

@@ -8,7 +8,12 @@
 import type { ComponentConfig } from "@measured/puck";
 import ImageField, { type ImageFieldProps } from "./ImageField";
 import { createFieldSelectorField } from "../../custom-fields";
-import { labelPositionField } from "../../fields/standard-fields";
+import {
+  labelPositionField,
+  borderRadiusField,
+  borderWidthField,
+  borderColorField,
+} from "../../fields/standard-fields";
 
 export const ImageFieldConfig: ComponentConfig<ImageFieldProps> = {
   label: "Image Field",
@@ -46,6 +51,12 @@ export const ImageFieldConfig: ComponentConfig<ImageFieldProps> = {
         { label: "Rounded", value: "rounded" },
       ],
     },
+
+    borderRadius: borderRadiusField,
+
+    borderWidth: borderWidthField,
+
+    borderColor: borderColorField,
 
     alt: {
       type: "text",

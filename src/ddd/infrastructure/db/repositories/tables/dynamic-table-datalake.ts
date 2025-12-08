@@ -276,13 +276,8 @@ export class DynamicTableDataLake {
   }
 
   /**
-   * Retrieve rows from a table using gRPC service
-   * Receives Arrow IPC bytes from Python service for zero-copy transfer
-   * Deserializes to Arrow Table and converts to domain entities
-   * Returns rows and totalCount from gRPC response
-   *
-   * AIDEV-NOTE: Extended to support aggregations for metric/dashboard views.
-   * When aggregations are provided, returns aggregated data instead of raw rows.
+   * Retrieve rows from a table using gRPC service (DynamicTable overload)
+   * Delegates to retrieveRows with raw params
    */
   async retrieveRows(
     table: DynamicTable,
@@ -300,7 +295,50 @@ export class DynamicTableDataLake {
       }>;
     } = {}
   ): Promise<Result<{ rows: Row[]; totalCount: number }>> {
+    return this.retrieveRowsWithParams(
+      {
+        tableId: table.id.value,
+        s3Path: table.storageLocation || `s3://emery-tables/${table.id.value}`,
+        organizationId: table.organizationId.value,
+        fields: table.fields,
+      },
+      options
+    );
+  }
+
+  /**
+   * Retrieve rows using raw table parameters
+   * Receives Arrow IPC bytes from Python service for zero-copy transfer
+   * Deserializes to Arrow Table and converts to domain entities
+   * Returns rows and totalCount from gRPC response
+   *
+   * AIDEV-NOTE: This method accepts raw params instead of DynamicTable entity.
+   * Used when full entity isn't available (e.g., public views with pre-fetched metadata).
+   * Extended to support aggregations for metric/dashboard views.
+   */
+  async retrieveRowsWithParams(
+    params: {
+      tableId: number;
+      s3Path: string;
+      organizationId: number;
+      fields: readonly TableField[];
+    },
+    options: {
+      limit?: number;
+      offset?: number;
+      filters?: Record<string, any>;
+      orderBy?: string;
+      orderDirection?: 'ASC' | 'DESC';
+      aggregations?: Array<{
+        fieldId: string;
+        type: string;
+        alias: string;
+        formatType?: string;
+      }>;
+    } = {}
+  ): Promise<Result<{ rows: Row[]; totalCount: number }>> {
     const startTime = Date.now();
+    const { tableId, s3Path, organizationId, fields } = params;
 
     try {
       const { limit = 1000, offset = 0, filters = {}, orderBy = '', orderDirection = 'ASC', aggregations } = options;
@@ -311,7 +349,7 @@ export class DynamicTableDataLake {
       const aggCount = aggregations?.length || 0;
 
       logger.debug('Query started', {
-        table: `${table.name}(${table.id.value})`,
+        tableId,
         limit,
         offset,
         orderBy: orderClause,
@@ -323,11 +361,11 @@ export class DynamicTableDataLake {
       // Delta Lake columns use numeric field IDs (79, 80), not field names ('test', 'name')
 
       // Convert orderBy from field name to field ID
-      const orderByFieldId = orderBy ? convertFieldNameToId(orderBy, table.fields) || '' : '';
+      const orderByFieldId = orderBy ? convertFieldNameToId(orderBy, fields) || '' : '';
 
       // Convert filter field names to field IDs
       const convertedFilters = Array.isArray(filters) && filters.length > 0
-        ? convertFiltersToFieldIds(filters, table.fields)
+        ? convertFiltersToFieldIds(filters, fields)
         : filters;
 
       // Create query request (with converted field IDs)
@@ -339,11 +377,16 @@ export class DynamicTableDataLake {
         filters: convertedFilters,
         aggregations
       };
+
+      // Import value objects for gRPC mapper
+      const { TableId } = await import('@/ddd/domain/shared/value-objects/table-id');
+      const { OrganizationId } = await import('@/ddd/domain/shared/value-objects/organization-id');
+
       const queryRequest = TableGrpcMapper.toQueryRowsRequest(
-        table.id,
-        table.storageLocation || `s3://emery-tables/${table.id.value}`,
+        TableId.fromNumber(tableId),
+        s3Path,
         queryOptions,
-        table.organizationId
+        OrganizationId.fromNumber(organizationId)
       );
 
       // 2. Send to gRPC service
@@ -355,7 +398,7 @@ export class DynamicTableDataLake {
         const totalCount = response.totalCount || 0;
 
         if (!arrowIpcBytes || arrowIpcBytes.length === 0) {
-          logger.summary('Query completed (empty)', { tableId: table.id.value, totalCount: 0 });
+          logger.summary('Query completed (empty)', { tableId, totalCount: 0 });
           return { success: true, data: { rows: [], totalCount } };
         }
 
@@ -382,23 +425,23 @@ export class DynamicTableDataLake {
 
           // Deserialize from Delta Lake storage (JSON strings → arrays/objects)
           // AIDEV-NOTE: RowSerializer handles complex field type deserialization
-          const deserializedData = RowSerializer.deserializeFromStorage(rowData, table.fields);
+          const deserializedData = RowSerializer.deserializeFromStorage(rowData, fields);
 
           // Convert to domain Row entity with clean deserialized data
-          const row = Row.fromPlainObject(deserializedData, table.id.value, table.fields as any);
+          const row = Row.fromPlainObject(deserializedData, tableId, fields as any);
           rows.push(row);
         }
 
         const elapsed = Date.now() - startTime;
         logger.summary('Query completed', {
-          tableId: table.id.value,
+          tableId,
           retrieved: rows.length,
           total: totalCount,
           time: `${elapsed}ms`
         });
 
         // Log sample row in debug mode only
-        logger.debug('Sample row', rows[0]?.toPlainObject(table.fields));
+        logger.debug('Sample row', rows[0]?.toPlainObject(fields));
 
         return { success: true, data: { rows, totalCount } };
       } else {

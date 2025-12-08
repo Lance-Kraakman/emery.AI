@@ -229,10 +229,13 @@ export async function createRowAction(formData: FormData) {
 
 export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: string): Promise<Result> {
   try {
+    console.log('[updateRowData] Called with:', { tableId: data.tableId, rowId: data.rowId, data: data.data });
+
     const session = await requirePermission("table:manage");
     const { tableId, rowId, data: rowData } = data;
 
     if (!tableId || !rowId) {
+      console.log('[updateRowData] Missing tableId or rowId');
       return {
         success: false,
         error: "tableId and rowId are required",
@@ -241,33 +244,55 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
 
     // Use table application service for row updates
     const tableAppService = getTableApplicationService();
-    
+
     // Get table to retrieve field information
     const table = await tableAppService.getTable(TableId.fromNumber(tableId));
-    
+
     if (!table) {
+      console.log('[updateRowData] Table not found');
       return {
         success: false,
         error: "Table not found"
       };
     }
 
-    // CRITICAL FIX: Fetch existing row data first to preserve all fields
+    console.log('[updateRowData] Table fields:', table.fields.map(f => ({ id: f.id.value, name: f.name })));
+
+    // Fetch existing row data to preserve all fields
     const existingRow = await tableAppService.getRow(
       TableId.fromNumber(tableId),
       RowId.fromString(rowId)
     );
 
-    let mergedData = { ...rowData, id: rowId };
+    // Form data comes with field NAMES as keys (e.g., { email: "test@example.com" })
+    // Use toNamedObject/fromNamedObject which both work with field names
+    let mergedData: Record<string, unknown> = { ...rowData, id: rowId };
 
     if (existingRow) {
-      const existingData = existingRow.toPlainObject(table.fields);
-      // MERGE: Start with existing data, then overlay the new changes
+      // toNamedObject returns field NAMES as keys
+      const existingData = existingRow.toNamedObject(table.fields);
+
+      // Debug: Find created_at field and log its value
+      const createdAtField = table.fields.find(f => f.type === 'created-at');
+      if (createdAtField) {
+        console.log('[updateRowData] DEBUG created_at:', {
+          fieldName: createdAtField.name,
+          fieldId: createdAtField.id.value,
+          existingValue: existingData[createdAtField.name],
+          existingValueType: typeof existingData[createdAtField.name],
+          inRowData: rowData[createdAtField.name],
+        });
+      }
+
+      console.log('[updateRowData] Existing data (field names):', existingData);
+      // Merge: existing + new changes (both use field names)
       mergedData = { ...existingData, ...rowData, id: rowId };
     }
 
-    // Convert merged data to Row entity using table field information
-    const row = Row.fromPlainObject(mergedData, tableId, table.fields);
+    console.log('[updateRowData] Merged data:', mergedData);
+
+    // fromNamedObject takes field NAMES directly - no conversion needed
+    const row = Row.fromNamedObject(mergedData, tableId, table.fields);
 
     // AIDEV-NOTE: Ensure we have a valid user ID
     if (!session.user?.id || typeof session.user.id !== 'string') {
@@ -277,12 +302,14 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       };
     }
 
+    console.log('[updateRowData] Calling tableAppService.updateRow...');
     const result = await tableAppService.updateRow({
       tableId: TableId.fromNumber(tableId),
       rowId: RowId.fromString(rowId),
       data: row,
       updatedBy: UserId.fromString(session.user.id)
     });
+    console.log('[updateRowData] Update result:', result.success, result.error);
 
     if (!result.success) {
       return {
