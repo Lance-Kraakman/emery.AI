@@ -463,13 +463,16 @@ export async function reorderFields(data: {
     // Fields inherit permissions from their parent table
     await requireResourcePermission("database:manage", "table", tableId);
 
+    // Filter out system 'id' field - it's a synthetic field not stored in DB
+    const filteredFieldOrders = fieldOrders.filter(fo => fo.fieldName !== 'id');
+
     const tableApplicationService = getTableApplicationService();
 
-    logger.debug('Reordering fields', { tableId, fieldCount: fieldOrders.length });
+    logger.debug('Reordering fields', { tableId, fieldCount: filteredFieldOrders.length });
 
     const result = await tableApplicationService.reorderFields({
       tableId: TableId.fromNumber(tableId),
-      fieldOrders
+      fieldOrders: filteredFieldOrders
     });
 
     if (!result.success) {

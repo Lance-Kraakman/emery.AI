@@ -16,9 +16,19 @@ export function ComponentBreadcrumb() {
   const itemSelector = appState.ui.itemSelector;
 
   const breadcrumbs = useMemo(() => {
-    if (!selectedItem || !itemSelector) return [];
-
+    // Always start with Page as the root
     const path: BreadcrumbItem[] = [];
+
+    // If nothing is selected, just return Page
+    if (!selectedItem || !itemSelector) {
+      return [{ id: 'root', label: 'Page', selector: { index: -1 } }];
+    }
+
+    // Early return with just Page if no content (prevents zone access errors during deletion)
+    if (!appState.data?.content || appState.data.content.length === 0) {
+      return [{ id: 'root', label: 'Page', selector: { index: -1 } }];
+    }
+
     const visited = new Set<string>();
 
     // Build path from current component up to root
@@ -33,7 +43,7 @@ export function ComponentBreadcrumb() {
       if (colonIndex !== -1) {
         const parentId = currentSelector.zone.substring(0, colonIndex);
         const parent = getItemById(parentId);
-        
+
         // Get the actual selected item from parent's zone
         if (parent && parent.props && typeof parent.props === 'object') {
           const slotName = currentSelector.zone.substring(colonIndex + 1);
@@ -82,20 +92,16 @@ export function ComponentBreadcrumb() {
       }
     }
 
-    // Add root if we're not already at root
-    if (!currentZone || currentZone === 'root') {
-      path.push({
-        id: 'root',
-        label: 'Page',
-        selector: { index: 0 },
-      });
-    }
+    // Always add Page as the root
+    path.push({
+      id: 'root',
+      label: 'Page',
+      selector: { index: -1 },
+    });
 
     // Reverse to show root -> current
     return path.reverse();
-  }, [selectedItem, itemSelector, getItemById, getSelectorForId]);
-
-  if (breadcrumbs.length === 0) return null;
+  }, [selectedItem, itemSelector, getItemById, getSelectorForId, appState.data?.content]);
 
   // Create display path with ellipsis if needed
   const displayPath = useMemo(() => {

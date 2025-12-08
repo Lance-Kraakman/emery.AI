@@ -81,14 +81,6 @@ export function useActionContext() {
   const rowContext = useRowData();
   const linkContext = useLinkContext();
 
-  console.log('[useActionContext] linkContext from useLinkContext:', {
-    orgSlug: linkContext.orgSlug,
-    appSlug: linkContext.appSlug,
-    appId: linkContext.appId,
-    pagesPresent: !!linkContext.pages,
-    pagesType: linkContext.pages instanceof Map ? 'Map' : Array.isArray(linkContext.pages) ? 'Array' : typeof linkContext.pages,
-  });
-
   return (runtimeContext?: Partial<ActionContextType>): ActionContextType => {
     return {
       ...actionContext,

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Settings, Zap, Calendar, Link2, Plus, ChevronRight, ClipboardList, Edit2, Trash2, MoreHorizontal } from 'lucide-react';
 import type { AgentDTO } from '@/app/dtos/agent.dto';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
@@ -42,9 +42,34 @@ export function CompactAgentHeader({
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const [isCompact, setIsCompact] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const activeSchedules = agent.schedules?.filter(s => s.enabled).length || 0;
   const totalSchedules = agent.schedules?.length || 0;
+
+  // Container-based responsive behavior
+  useEffect(() => {
+    const updateCompactMode = () => {
+      if (containerRef.current) {
+        const width = containerRef.current.offsetWidth;
+        // Switch to compact mode when container is less than 900px wide
+        // This accounts for chat panel reducing available space
+        setIsCompact(width < 900);
+      }
+    };
+
+    // Initial check
+    updateCompactMode();
+
+    // Set up ResizeObserver to watch container width changes
+    const resizeObserver = new ResizeObserver(updateCompactMode);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, []);
 
   const handleAddSkill = async () => {
     setSkillsOpen(false);
@@ -105,7 +130,7 @@ export function CompactAgentHeader({
   };
 
   return (
-    <div className={`flex items-center justify-between px-4 sm:px-6 py-3 border-b bg-card min-w-0 ${className}`}>
+    <div ref={containerRef} className={`flex items-center justify-between px-4 sm:px-6 py-3 border-b bg-card min-w-0 ${className}`}>
       {/* Left side - Agent info and status */}
       <div className="flex items-center gap-2 sm:gap-4 min-w-0">
         {/* Agent Icon and Name */}
@@ -146,64 +171,16 @@ export function CompactAgentHeader({
           <span className="hidden sm:inline">Assign Task</span>
         </button>
 
-        {/* Overflow Menu - Visible on medium screens and below */}
-        <Popover open={overflowOpen} onOpenChange={setOverflowOpen}>
-          <PopoverTrigger asChild>
-            <button
-              className="lg:hidden p-2 border rounded-md hover:bg-accent transition-colors"
-              title="More actions"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-64 p-0">
-            <div className="flex flex-col">
-              <button
-                onClick={() => { setSkillsOpen(true); setOverflowOpen(false); }}
-                className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-accent transition-colors text-left"
-              >
-                <Zap className="h-4 w-4" />
-                <span className="flex-1">Skills</span>
-                <span className={`${skills.length > 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'} 
-                  text-xs font-medium px-1.5 rounded-full min-w-[1.25rem] text-center`}>
-                  {skills.length}
-                </span>
-              </button>
-              <button
-                onClick={() => { setSchedulesOpen(true); setOverflowOpen(false); }}
-                className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-accent transition-colors text-left"
-              >
-                <Calendar className="h-4 w-4" />
-                <span className="flex-1">Schedules</span>
-                <span className={`${activeSchedules > 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'} 
-                  text-xs font-medium px-1.5 rounded-full min-w-[2.5rem] text-center`}>
-                  {activeSchedules}/{totalSchedules}
-                </span>
-              </button>
-              <button
-                onClick={() => { openModal('authorized-connections', { agent }); setOverflowOpen(false); }}
-                className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-accent transition-colors text-left"
-              >
-                <Link2 className="h-4 w-4" />
-                <span className="flex-1">Connections</span>
-                <span className={`${connections.length > 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'} 
-                  text-xs font-medium px-1.5 rounded-full min-w-[1.25rem] text-center`}>
-                  {connections.length}
-                </span>
-              </button>
-            </div>
-          </PopoverContent>
-        </Popover>
 
-        {/* Skills Dropdown - Hidden on medium screens and below */}
+        {/* Skills Dropdown - Always visible, text hidden when compact */}
         <Popover open={skillsOpen} onOpenChange={setSkillsOpen}>
           <PopoverTrigger asChild>
             <button
-              className="hidden lg:flex group relative items-center gap-1 px-2 xl:px-2.5 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
+              className="flex group relative items-center gap-1 px-2 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
               title={`${skills.length} skills`}
             >
               <Zap className="h-4 w-4 shrink-0" />
-              <span className="hidden lg:inline">Skills</span>
+              {!isCompact && <span>Skills</span>}
               <span className={`${skills.length > 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'} 
                 text-xs font-medium px-1.5 rounded-full min-w-[1.25rem] text-center`}>
                 {skills.length}
@@ -258,15 +235,15 @@ export function CompactAgentHeader({
           </PopoverContent>
         </Popover>
 
-        {/* Schedules Dropdown - Hidden on medium screens and below */}
+        {/* Schedules Dropdown - Always visible, text hidden when compact */}
         <Popover open={schedulesOpen} onOpenChange={setSchedulesOpen}>
           <PopoverTrigger asChild>
             <button
-              className="hidden lg:flex group relative items-center gap-1 px-2 xl:px-2.5 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
+              className="flex group relative items-center gap-1 px-2 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
               title={`${activeSchedules} active, ${totalSchedules} total schedules`}
             >
               <Calendar className="h-4 w-4 shrink-0" />
-              <span className="hidden lg:inline">Schedules</span>
+              {!isCompact && <span>Schedules</span>}
               <span className={`${activeSchedules > 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'} 
                 text-xs font-medium px-1.5 rounded-full min-w-[2.5rem] text-center`}>
                 {activeSchedules}/{totalSchedules}
@@ -353,14 +330,14 @@ export function CompactAgentHeader({
           </PopoverContent>
         </Popover>
 
-        {/* Connections Button - Hidden on medium screens and below */}
+        {/* Connections Button - Always visible, text hidden when compact */}
         <button
           onClick={() => openModal('authorized-connections', { agent })}
-          className="hidden lg:flex group relative items-center gap-1 px-2 xl:px-2.5 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
+          className="flex group relative items-center gap-1 px-2 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
           title={`${connections.length} connections`}
         >
           <Link2 className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline">Connections</span>
+          {!isCompact && <span>Connections</span>}
           <span className={`${connections.length > 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'} 
             text-xs font-medium px-1.5 rounded-full min-w-[1.25rem] text-center`}>
             {connections.length}

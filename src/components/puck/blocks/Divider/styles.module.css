@@ -1,0 +1,13 @@
+.Divider {
+  flex-shrink: 0;
+}
+
+.Divider--horizontal {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.Divider--vertical {
+  display: inline-block;
+}

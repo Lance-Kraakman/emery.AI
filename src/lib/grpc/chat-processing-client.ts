@@ -46,6 +46,7 @@ export interface ChatProcessingOptions {
   tools?: ToolConfig[];          // Available tools for the chat
   skills?: any[];                // Fully resolved skill definitions with instructions, tools, inputs, outputs, content
   defaultModel?: string | null;  // Organization's default AI model
+  userApiKey?: string;           // User API key for managed agents (skill_builder, etc.)
 }
 
 export interface StreamingChatResponse {
@@ -191,7 +192,8 @@ export class ChatProcessingClient {
       agentConfig: agentConfig,
       model: options.defaultModel || '', // Pass organization's default model or empty string for system default
       messageId: actualMessageId, // Add message ID for cancellation tracking
-      sessionId: actualSessionId // Session ID for stateful agent persistence
+      sessionId: actualSessionId, // Session ID for stateful agent persistence
+      userApiKey: options.userApiKey || '' // User API key for managed agents (skill_builder, etc.)
     };
 
     // Add context if provided

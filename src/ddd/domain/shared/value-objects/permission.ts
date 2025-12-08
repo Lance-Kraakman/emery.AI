@@ -21,7 +21,8 @@ export const RESOURCES = {
   VIEW: 'view',
   SKILLS: 'skills',
   APPS: 'apps',
-  PAGE: 'page'
+  PAGE: 'page',
+  TEMPLATES: 'templates'
 } as const;
 
 export type ActionType = typeof ACTIONS[keyof typeof ACTIONS];
@@ -89,6 +90,10 @@ export class Permission {
   static readonly PAGE_MANAGE = new Permission(RESOURCES.PAGE, ACTIONS.MANAGE);
   static readonly PAGE_CREATE = new Permission(RESOURCES.PAGE, ACTIONS.CREATE);
   static readonly PAGE_PUBLISH = new Permission(RESOURCES.PAGE, ACTIONS.PUBLISH);
+
+  static readonly TEMPLATES_VIEW = new Permission(RESOURCES.TEMPLATES, ACTIONS.VIEW);
+  static readonly TEMPLATES_MANAGE = new Permission(RESOURCES.TEMPLATES, ACTIONS.MANAGE);
+  static readonly TEMPLATES_CREATE = new Permission(RESOURCES.TEMPLATES, ACTIONS.CREATE);
 
   // Helper method to get all permissions for a resource
   static getAllForResource(resource: ResourceType): Permission[] {

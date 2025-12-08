@@ -1084,6 +1084,87 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
     return DatabaseCrudTool()
 
 
+def load_skill_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
+    """
+    Load Skill CRUD tool with method-specific routing.
+
+    AIDEV-NOTE: Supports read, update, list operations for skills.
+    Skills can be agent-scoped (agentId set) or organization-scoped (agentId null).
+    Auth is captured in closure variables - NOT exposed to LLM via inputs schema.
+    """
+    # Capture auth in closure - NOT exposed to LLM via inputs schema
+    _auth_token = api_key or ""
+    _org_id = str(organization_id) if organization_id else ""
+
+    class SkillCrudTool(BaseCrudTool):
+        """CRUD operations for Emery skills."""
+
+        name = "skill_crud"
+        description = "Read, update, and list skills. Skills have: name, description, instructions, inputs, outputs, tools, model. Use 'read' to get skill details, 'update' to modify a skill, 'list' to see all skills."
+        inputs = {
+            "method": {"type": "string", "description": "Operation: read, update, list"},
+            "skill_id": {"type": "string", "description": "Skill ID (required for read/update)", "nullable": True},
+            "agent_id": {"type": "string", "description": "Agent ID to filter skills (optional for list)", "nullable": True},
+            "data": {"type": "object", "description": "Skill data for update. Can include: name, description, instructions, inputs (array), outputs (array), tools (array), model", "nullable": True}
+        }
+        output_type = "object"
+
+        def __init__(self):
+            super().__init__("skill", "crud")
+
+        def forward(self, method: str, skill_id: Optional[Union[str, int]] = None,
+                   agent_id: Optional[Union[str, int]] = None, data: Optional[Dict] = None) -> Dict[str, Any]:
+            """Execute skill CRUD operation."""
+
+            # AIDEV-NOTE: Coerce skill_id and agent_id to strings - LLMs often pass integers
+            if skill_id is not None:
+                skill_id = str(skill_id)
+            if agent_id is not None:
+                agent_id = str(agent_id)
+
+            if method == "read":
+                if not skill_id:
+                    return {"success": False, "error": "Skill ID is required for read operation"}
+
+                return self._make_api_request_with_deadline(
+                    endpoint=f"skills/{skill_id}",
+                    method="GET",
+                    auth_token=_auth_token,
+                    organization_id=_org_id
+                )
+
+            elif method == "update":
+                if not skill_id:
+                    return {"success": False, "error": "Skill ID is required for update operation"}
+                if not data:
+                    return {"success": False, "error": "Skill data is required for update operation. Provide: name, description, instructions, inputs, outputs, tools, or model"}
+
+                return self._make_api_request_with_deadline(
+                    endpoint=f"skills/{skill_id}",
+                    method="PUT",
+                    data=data,
+                    auth_token=_auth_token,
+                    organization_id=_org_id
+                )
+
+            elif method == "list":
+                endpoint = "skills"
+                if agent_id:
+                    endpoint += f"?agent_id={agent_id}"
+
+                return self._make_api_request_with_deadline(
+                    endpoint=endpoint,
+                    method="GET",
+                    auth_token=_auth_token,
+                    organization_id=_org_id
+                )
+
+            else:
+                return {"success": False, "error": f"Unknown method: {method}. Supported: read, update, list"}
+
+    return SkillCrudTool()
+
+
 # Registry of CRUD tools
 # AIDEV-NOTE: Tool names match category names directly (agents, tables, etc.)
 # This eliminates need for complex category mapping in seeding
@@ -1094,4 +1175,5 @@ CRUD_TOOLS = {
     "tables": load_table_crud,
     "teams": load_team_crud,
     "databases": load_database_crud,
+    "skills": load_skill_crud,
 }

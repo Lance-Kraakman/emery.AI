@@ -5860,7 +5860,8 @@ proto.emery.agents.ProcessMessageRequest.toObject = function(includeInstance, ms
     agentConfig: (f = msg.getAgentConfig()) && proto.emery.agents.AgentConfig.toObject(includeInstance, f),
     model: jspb.Message.getFieldWithDefault(msg, 7, ""),
     messageId: jspb.Message.getFieldWithDefault(msg, 8, ""),
-    sessionId: jspb.Message.getFieldWithDefault(msg, 9, "")
+    sessionId: jspb.Message.getFieldWithDefault(msg, 9, ""),
+    userApiKey: jspb.Message.getFieldWithDefault(msg, 10, "")
   };
 
   if (includeInstance) {
@@ -5936,6 +5937,10 @@ proto.emery.agents.ProcessMessageRequest.deserializeBinaryFromReader = function(
     case 9:
       var value = /** @type {string} */ (reader.readString());
       msg.setSessionId(value);
+      break;
+    case 10:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setUserApiKey(value);
       break;
     default:
       reader.skipField();
@@ -6030,6 +6035,13 @@ proto.emery.agents.ProcessMessageRequest.serializeBinaryToWriter = function(mess
   if (f.length > 0) {
     writer.writeString(
       9,
+      f
+    );
+  }
+  f = message.getUserApiKey();
+  if (f.length > 0) {
+    writer.writeString(
+      10,
       f
     );
   }
@@ -6273,6 +6285,24 @@ proto.emery.agents.ProcessMessageRequest.prototype.getSessionId = function() {
  */
 proto.emery.agents.ProcessMessageRequest.prototype.setSessionId = function(value) {
   return jspb.Message.setProto3StringField(this, 9, value);
+};
+
+
+/**
+ * optional string user_api_key = 10;
+ * @return {string}
+ */
+proto.emery.agents.ProcessMessageRequest.prototype.getUserApiKey = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 10, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.agents.ProcessMessageRequest} returns this
+ */
+proto.emery.agents.ProcessMessageRequest.prototype.setUserApiKey = function(value) {
+  return jspb.Message.setProto3StringField(this, 10, value);
 };
 
 

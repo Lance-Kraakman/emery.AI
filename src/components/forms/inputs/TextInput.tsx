@@ -14,8 +14,10 @@ import type { FieldDTO } from '@/app/mappers/field-mapper';
 
 interface TextInputProps {
   field: FieldDTO;
-  value: string;
-  onChange: (value: string) => void;
+  name?: string;                    // For form collection
+  value?: string;                   // Controlled mode
+  defaultValue?: string;            // Uncontrolled mode
+  onChange?: (value: string) => void;
   label?: string;
   placeholder?: string;
   required?: boolean;
@@ -24,7 +26,9 @@ interface TextInputProps {
 
 export function TextInput({
   field,
+  name,
   value,
+  defaultValue,
   onChange,
   label,
   placeholder,
@@ -43,9 +47,11 @@ export function TextInput({
       </Label>
       <Input
         id={`field-${field.id}`}
+        name={name}
         type={inputType}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        defaultValue={defaultValue}
+        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         placeholder={placeholder || `Enter ${inputLabel.toLowerCase()}`}
         required={isRequired}
         disabled={disabled}

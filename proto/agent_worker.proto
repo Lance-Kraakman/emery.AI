@@ -232,6 +232,8 @@ message ProcessMessageRequest {
   string message_id = 8;             // Unique message identifier for cancellation
 
   string session_id = 9;             // Required: session identifier (chat_id from database)
+
+  string user_api_key = 10;          // User API key for internal service calls (skill_builder, etc.)
 }
 
 // Streaming response from AI processing

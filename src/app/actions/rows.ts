@@ -271,6 +271,19 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
     if (existingRow) {
       // toNamedObject returns field NAMES as keys
       const existingData = existingRow.toNamedObject(table.fields);
+
+      // Debug: Find created_at field and log its value
+      const createdAtField = table.fields.find(f => f.type === 'created-at');
+      if (createdAtField) {
+        console.log('[updateRowData] DEBUG created_at:', {
+          fieldName: createdAtField.name,
+          fieldId: createdAtField.id.value,
+          existingValue: existingData[createdAtField.name],
+          existingValueType: typeof existingData[createdAtField.name],
+          inRowData: rowData[createdAtField.name],
+        });
+      }
+
       console.log('[updateRowData] Existing data (field names):', existingData);
       // Merge: existing + new changes (both use field names)
       mergedData = { ...existingData, ...rowData, id: rowId };
