@@ -23,6 +23,8 @@ export interface LinkFieldProps {
   showIcon?: boolean;
   size?: 'sm' | 'base' | 'lg';
   fallback?: string;
+  textColor?: string;
+  fontFamily?: string;
 }
 
 function formatUrl(url: string): string {
@@ -47,6 +49,8 @@ export default function LinkField({
   showIcon = true,
   size = 'base',
   fallback = '',
+  textColor,
+  fontFamily,
 }: LinkFieldProps) {
   // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
@@ -94,6 +98,11 @@ export default function LinkField({
     labelPosition === 'inline' && styles.inline
   );
 
+  const customStyles: React.CSSProperties = {
+    ...(textColor && { color: textColor }),
+    ...(fontFamily && { fontFamily }),
+  };
+
   const href = ensureProtocol(url);
   const displayText = linkText || formatUrl(url);
   const linkProps = openInNewTab
@@ -121,7 +130,7 @@ export default function LinkField({
   );
 
   return (
-    <div className={containerClass}>
+    <div className={containerClass} style={customStyles}>
       {label && <label className={styles.label}>{label}</label>}
       {displayStyle === 'text' && renderText()}
       {displayStyle === 'button' && renderButton()}

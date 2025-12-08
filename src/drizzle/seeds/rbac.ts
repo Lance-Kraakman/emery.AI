@@ -50,7 +50,8 @@ async function seedSystemRoles() {
       Permission.TABLE_VIEW, Permission.TABLE_MANAGE, Permission.TABLE_CREATE,
       Permission.VIEW_VIEW, Permission.VIEW_MANAGE, Permission.VIEW_CREATE,
       Permission.SKILLS_VIEW, Permission.SKILLS_MANAGE, Permission.SKILLS_CREATE, Permission.SKILLS_EXECUTE,
-      Permission.APPS_VIEW, Permission.APPS_CREATE, Permission.APPS_MANAGE, Permission.APPS_PUBLISH
+      Permission.APPS_VIEW, Permission.APPS_CREATE, Permission.APPS_MANAGE, Permission.APPS_PUBLISH,
+      Permission.TEMPLATES_VIEW, Permission.TEMPLATES_MANAGE, Permission.TEMPLATES_CREATE
     ],
     
     [SYSTEM_ROLES.ORGANIZATION_ADMIN]: [
@@ -64,7 +65,8 @@ async function seedSystemRoles() {
       Permission.TABLE_VIEW, Permission.TABLE_MANAGE, Permission.TABLE_CREATE,
       Permission.VIEW_VIEW, Permission.VIEW_MANAGE, Permission.VIEW_CREATE,
       Permission.SKILLS_VIEW, Permission.SKILLS_MANAGE, Permission.SKILLS_CREATE, Permission.SKILLS_EXECUTE,
-      Permission.APPS_VIEW, Permission.APPS_CREATE, Permission.APPS_MANAGE, Permission.APPS_PUBLISH
+      Permission.APPS_VIEW, Permission.APPS_CREATE, Permission.APPS_MANAGE, Permission.APPS_PUBLISH,
+      Permission.TEMPLATES_VIEW, Permission.TEMPLATES_MANAGE, Permission.TEMPLATES_CREATE
     ],
     
     [SYSTEM_ROLES.TEAM_LEAD]: [
@@ -77,7 +79,8 @@ async function seedSystemRoles() {
       Permission.TABLE_VIEW, Permission.TABLE_MANAGE, Permission.TABLE_CREATE,
       Permission.VIEW_VIEW, Permission.VIEW_MANAGE, Permission.VIEW_CREATE,
       Permission.SKILLS_VIEW, Permission.SKILLS_MANAGE, Permission.SKILLS_CREATE, Permission.SKILLS_EXECUTE,
-      Permission.APPS_VIEW, Permission.APPS_CREATE, Permission.APPS_MANAGE, Permission.APPS_PUBLISH
+      Permission.APPS_VIEW, Permission.APPS_CREATE, Permission.APPS_MANAGE, Permission.APPS_PUBLISH,
+      Permission.TEMPLATES_VIEW, Permission.TEMPLATES_MANAGE, Permission.TEMPLATES_CREATE
     ],
     
     [SYSTEM_ROLES.MEMBER]: [
@@ -89,15 +92,16 @@ async function seedSystemRoles() {
       Permission.TABLE_VIEW, Permission.TABLE_CREATE,
       Permission.VIEW_VIEW, Permission.VIEW_CREATE,
       Permission.SKILLS_VIEW, Permission.SKILLS_EXECUTE,
-      Permission.APPS_VIEW, Permission.APPS_CREATE
+      Permission.APPS_VIEW, Permission.APPS_CREATE,
+      Permission.TEMPLATES_VIEW, Permission.TEMPLATES_CREATE
     ],
     
     [SYSTEM_ROLES.VIEWER]: [
       // Read-only access
       Permission.ORGANIZATIONS_VIEW, Permission.USERS_VIEW, Permission.TEAMS_VIEW,
-      Permission.AGENTS_VIEW, Permission.TASKS_VIEW, 
+      Permission.AGENTS_VIEW, Permission.TASKS_VIEW,
       Permission.DATABASE_VIEW, Permission.TABLE_VIEW, Permission.VIEW_VIEW,
-      Permission.SKILLS_VIEW, Permission.APPS_VIEW
+      Permission.SKILLS_VIEW, Permission.APPS_VIEW, Permission.TEMPLATES_VIEW
     ],
     
     [SYSTEM_ROLES.SYSTEM_SERVICE]: [

@@ -35,6 +35,7 @@ export interface ViewProps {
   viewConfig: ViewConfig;
   tableId: TableId;
   organizationId: OrganizationId;
+  requiresAuth?: boolean; // Whether this view requires authentication (default: true)
   filters?: FilterConfig[];
   sorting?: SortConfig[];
   pagination?: PaginationConfig;
@@ -52,6 +53,7 @@ export class View {
   private _viewConfig: ViewConfig;
   private readonly _tableId: TableId;
   private readonly _organizationId: OrganizationId;
+  private _requiresAuth: boolean;
   private _filters: FilterConfig[];
   private _sorting: SortConfig[];
   private _pagination: PaginationConfig;
@@ -68,6 +70,7 @@ export class View {
     this._viewConfig = props.viewConfig;
     this._tableId = props.tableId;
     this._organizationId = props.organizationId;
+    this._requiresAuth = props.requiresAuth ?? true; // Secure by default
     this._filters = props.filters ?? [];
     this._sorting = props.sorting ?? [];
     this._pagination = props.pagination ?? PaginationConfig.createDefault();
@@ -147,6 +150,10 @@ export class View {
     return this._organizationId;
   }
 
+  get requiresAuth(): boolean {
+    return this._requiresAuth;
+  }
+
   get filters(): readonly FilterConfig[] {
     return [...this._filters];
   }
@@ -200,6 +207,15 @@ export class View {
    */
   updateDescription(description?: string): void {
     this._description = description;
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Update whether authentication is required for this view
+   * SECURITY: Setting to false allows unauthenticated access via RLS policy
+   */
+  updateRequiresAuth(requiresAuth: boolean): void {
+    this._requiresAuth = requiresAuth;
     this._updatedAt = new Date();
   }
 
@@ -483,6 +499,7 @@ export class View {
       viewConfig: this._viewConfig.toJSON(),
       tableId: this._tableId.value,
       organizationId: this._organizationId.value,
+      requiresAuth: this._requiresAuth,
       filters: this._filters.map((f) => f.toJSON()),
       sorting: this._sorting.map((s) => s.toJSON()),
       pagination: this._pagination.toJSON(),
@@ -503,6 +520,7 @@ export class View {
     description?: string;
     viewType: string;
     viewConfig: ViewConfigData;
+    requiresAuth: boolean;
     filters: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>;
     sorting: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>;
     pagination: { pageSize: number; offset: number };
@@ -519,6 +537,7 @@ export class View {
       description: this._description,
       viewType: this._viewType.toString(),
       viewConfig: this._viewConfig.toJSON(),
+      requiresAuth: this._requiresAuth,
       filters: this._filters.map((f) => f.toJSON()),
       sorting: this._sorting.map((s) => ({
         fieldId: s.fieldId,
@@ -549,6 +568,7 @@ export class View {
     description?: string;
     viewType: string;
     viewConfig: ViewConfigData;
+    requiresAuth?: boolean;
     filters: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>;
     sorting: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>;
     pagination: { pageSize: number; offset: number };
@@ -565,6 +585,7 @@ export class View {
       description: data.description,
       viewType: ViewType.create(data.viewType as any), // Type cast string to ViewTypeValue
       viewConfig: ViewConfig.fromJSON(data.viewConfig),
+      requiresAuth: data.requiresAuth ?? true, // Secure by default
       filters: data.filters.map((f) => FilterConfig.create({
         fieldId: f.fieldId,
         operator: f.operator as any, // Type cast operator string to FilterOperator

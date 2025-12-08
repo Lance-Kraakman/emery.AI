@@ -6,7 +6,7 @@ import type { ViewDTO } from '@/app/mappers/view-mapper';
 import { getViewsForOrganization } from '@/app/actions/views';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit2 } from 'lucide-react';
+import { Plus, Edit2, Globe, Lock } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -32,11 +32,22 @@ function ViewDetailsDisplay({ view }: { view: ViewDTO }) {
         </AccordionTrigger>
         <AccordionContent className="text-xs space-y-2 pb-2">
           {/* Basic Info */}
-          <div>
+          <div className="flex items-center gap-2">
             <span className="font-medium">Type:</span>{' '}
             <Badge variant="secondary" className="text-xs capitalize">
               {view.viewType}
             </Badge>
+            {view.requiresAuth === false ? (
+              <Badge variant="outline" className="text-xs text-amber-600 border-amber-400">
+                <Globe className="h-3 w-3 mr-1" />
+                Public
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-xs text-muted-foreground">
+                <Lock className="h-3 w-3 mr-1" />
+                Private
+              </Badge>
+            )}
           </div>
 
           {view.description && (

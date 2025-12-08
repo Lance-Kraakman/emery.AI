@@ -115,25 +115,6 @@ function buildPagePath(
   linkContext?: ActionLinkContext,
   customPath?: string
 ): string {
-  console.log('[buildPagePath] Input:', {
-    pageId,
-    linkContext: linkContext ? {
-      orgSlug: linkContext.orgSlug,
-      appSlug: linkContext.appSlug,
-      appId: linkContext.appId,
-      pagesType: linkContext.pages instanceof Map ? 'Map' : Array.isArray(linkContext.pages) ? 'Array' : typeof linkContext.pages,
-      pagesLength: linkContext.pages instanceof Map ? linkContext.pages.size : Array.isArray(linkContext.pages) ? linkContext.pages.length : 0,
-      pages: linkContext.pages instanceof Map
-        ? Array.from(linkContext.pages.entries()).map(([k, v]) => ({ id: k, slug: v.slug }))
-        : Array.isArray(linkContext.pages)
-          ? linkContext.pages.map(p => ({ id: p.id, slug: p.slug }))
-          : null,
-      isEditing: linkContext.isEditing,
-      isPreview: linkContext.isPreview,
-    } : null,
-    customPath,
-  });
-
   // Custom path override takes precedence
   if (customPath) {
     return customPath;
@@ -332,8 +313,6 @@ export async function executeActions(
   if (!actions || actions.length === 0) {
     return;
   }
-
-  console.log(`[executeActions] Executing ${actions.length} action(s)`);
 
   for (const action of actions) {
     await executeAction(action, context);

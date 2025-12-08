@@ -16,18 +16,22 @@
 import { useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRowData } from '../contexts/RowDataContext';
+import { useDataLayoutContext } from '../contexts/DataLayoutContext';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
 
 /**
  * Resolve variable templates in a string
  *
  * @param template - String with {variable} templates
- * @param rowData - Row data for field resolution
+ * @param rowData - Row data for field resolution (keyed by field ID)
+ * @param fields - Field metadata for name→id conversion
  * @param params - Query parameters for param resolution
  * @returns Resolved string with variables replaced
  */
 function resolveTemplate(
   template: string,
   rowData: Record<string, unknown> | undefined,
+  fields: FieldDTO[] | undefined,
   params: URLSearchParams
 ): string {
   if (!template) return template;
@@ -43,15 +47,22 @@ function resolveTemplate(
     // Handle {rowData.fieldName} syntax (explicit)
     if (path.startsWith('rowData.')) {
       const fieldName = path.substring(8);
-      if (rowData && fieldName in rowData) {
-        return String(rowData[fieldName]);
+      // Convert field name to ID for lookup
+      const field = fields?.find(f => f.name === fieldName);
+      if (field && rowData) {
+        const value = rowData[String(field.id)];
+        if (value !== undefined) return String(value);
       }
       return match;
     }
 
-    // Handle {fieldName} shorthand (assumes row data)
-    if (!path.includes('.') && rowData && path in rowData) {
-      return String(rowData[path]);
+    // Handle {fieldName} shorthand - convert name to ID first
+    if (!path.includes('.') && rowData && fields) {
+      const field = fields.find(f => f.name === path);
+      if (field) {
+        const value = rowData[String(field.id)];
+        if (value !== undefined) return String(value);
+      }
     }
 
     // Return original if not resolved
@@ -64,13 +75,19 @@ function resolveTemplate(
  */
 export function useResolveVariables() {
   const rowContext = useRowData();
+  const dataContext = useDataLayoutContext();
   const searchParams = useSearchParams();
 
   return useCallback(
     (template: string): string => {
-      return resolveTemplate(template, rowContext?.rowData ?? undefined, searchParams);
+      return resolveTemplate(
+        template,
+        rowContext?.rowData ?? undefined,
+        dataContext?.fields,
+        searchParams
+      );
     },
-    [rowContext?.rowData, searchParams]
+    [rowContext?.rowData, dataContext?.fields, searchParams]
   );
 }
 

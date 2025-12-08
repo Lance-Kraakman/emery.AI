@@ -19,7 +19,7 @@ export function EmailSignInForm() {
       const result = await signIn("email", {
         email,
         redirect: false,
-        callbackUrl: "/mission-control",
+        callbackUrl: "/apps",
       })
 
       if (result?.ok) {

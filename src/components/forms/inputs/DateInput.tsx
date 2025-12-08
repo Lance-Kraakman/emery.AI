@@ -4,7 +4,7 @@
  * DateInput Component
  *
  * Form input for date field types
- * Uses native HTML date input for now
+ * Uses native HTML date input. Supports controlled and uncontrolled modes.
  */
 
 import React from 'react';
@@ -14,8 +14,10 @@ import type { FieldDTO } from '@/app/mappers/field-mapper';
 
 interface DateInputProps {
   field: FieldDTO;
-  value: Date | null;
-  onChange: (value: Date | null) => void;
+  name?: string;                    // For form collection
+  value?: Date | null;              // Controlled mode
+  defaultValue?: Date | null;       // Uncontrolled mode
+  onChange?: (value: Date | null) => void;
   label?: string;
   required?: boolean;
   disabled?: boolean;
@@ -23,7 +25,9 @@ interface DateInputProps {
 
 export function DateInput({
   field,
+  name,
   value,
+  defaultValue,
   onChange,
   label,
   required,
@@ -35,16 +39,20 @@ export function DateInput({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     if (val === '') {
-      onChange(null);
+      onChange?.(null);
     } else {
-      onChange(new Date(val));
+      onChange?.(new Date(val));
     }
   };
 
   // Format date to YYYY-MM-DD for input
-  const formattedValue = value
-    ? value.toISOString().split('T')[0]
-    : '';
+  const formatDate = (date: Date | null | undefined): string => {
+    if (!date) return '';
+    return date.toISOString().split('T')[0];
+  };
+
+  // Determine if controlled or uncontrolled
+  const isControlled = value !== undefined;
 
   return (
     <div className="space-y-2">
@@ -54,9 +62,11 @@ export function DateInput({
       </Label>
       <Input
         id={`field-${field.id}`}
+        name={name}
         type="date"
-        value={formattedValue}
-        onChange={handleChange}
+        value={isControlled ? formatDate(value) : undefined}
+        defaultValue={!isControlled ? formatDate(defaultValue) : undefined}
+        onChange={onChange ? handleChange : undefined}
         required={isRequired}
         disabled={disabled}
       />

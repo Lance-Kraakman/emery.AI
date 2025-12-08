@@ -1,5 +1,7 @@
 import { Button } from "./blocks/Button";
 import { Card } from "./blocks/Card";
+import { Container } from "./blocks/Container";
+import { Divider } from "./blocks/Divider";
 import { Grid } from "./blocks/Grid";
 import { Hero } from "./blocks/Hero";
 import { Heading } from "./blocks/Heading";
@@ -38,7 +40,8 @@ export const config: UserConfig = {
   root: Root,
   categories: {
     layout: {
-      components: ["HeaderBlock", "Grid", "Flex", "Space", "FooterBlock"],
+      // HeaderBlock and FooterBlock removed - now available as system templates
+      components: ["Grid", "Flex", "Container", "Space", "Divider"],
     },
     typography: {
       components: ["Heading", "Text"],
@@ -61,12 +64,15 @@ export const config: UserConfig = {
     },
     other: {
       title: "Other",
-      components: ["Card", "Hero", "Logos", "Stats", "Template"],
+      // Hero, Card, Logos, Stats removed - now available as system templates
+      components: ["Template"],
     },
   },
   components: {
     Button,
     Card,
+    Container,
+    Divider,
     Grid,
     Hero,
     Heading,

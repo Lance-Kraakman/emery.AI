@@ -8,9 +8,15 @@
  *
  * This is a specialized block for displaying text data - it's field-type aware
  * and automatically handles data binding through context.
+ *
+ * Edit Mode: When inside an EditableRowProvider with isEditMode=true,
+ * renders as an input instead of display text.
  */
 
 import { useFieldValue, useIsInDataContext } from '@/components/puck/hooks/useFieldValue';
+import { useEditableRow } from '@/components/puck/contexts/EditableRowContext';
+import { useFieldMetadata } from '@/components/puck/hooks/useFieldMetadata';
+import { TextInput } from '@/components/forms/inputs/TextInput';
 import { cn } from '@/lib/utils';
 import styles from './styles.module.css';
 
@@ -40,6 +46,8 @@ export default function TextField({
   // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
   const value = useFieldValue(fieldId ?? 0);
+  const editable = useEditableRow();
+  const field = useFieldMetadata(fieldId);
 
   // No field selected
   if (fieldId === undefined) {
@@ -62,6 +70,29 @@ export default function TextField({
       </div>
     );
   }
+
+  // ============================================
+  // EDIT MODE: Render as uncontrolled input
+  // ============================================
+  if (editable?.isEditMode && field) {
+    const initialValue = value ?? '';
+
+    return (
+      <div className={styles.editContainer}>
+        <TextInput
+          field={field}
+          name={field.name}
+          defaultValue={String(initialValue)}
+          label={label || field.name}
+          disabled={editable.isSaving}
+        />
+      </div>
+    );
+  }
+
+  // ============================================
+  // DISPLAY MODE: Render as text
+  // ============================================
 
   // Get display value
   let displayValue = value ?? fallback;

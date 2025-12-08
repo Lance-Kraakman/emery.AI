@@ -42,15 +42,15 @@ def convert_protobuf_field_to_arrow(field: table_service_pb2.TableField) -> pa.D
         table_service_pb2.FIELD_TYPE_TEXT: pa.large_string(),
         table_service_pb2.FIELD_TYPE_NUMBER: pa.float64(),
         table_service_pb2.FIELD_TYPE_BOOLEAN: pa.bool_(),
-        table_service_pb2.FIELD_TYPE_DATE: pa.timestamp('us'),
+        table_service_pb2.FIELD_TYPE_DATE: pa.timestamp('ms'),  # milliseconds (JS getTime())
         table_service_pb2.FIELD_TYPE_FILE: pa.large_string(),
         table_service_pb2.FIELD_TYPE_RELATION: pa.large_string(),
         table_service_pb2.FIELD_TYPE_DOCUMENT: pa.large_string(),
         table_service_pb2.FIELD_TYPE_SINGLE_SELECT: pa.large_string(),
         table_service_pb2.FIELD_TYPE_MULTI_SELECT: pa.large_string(),
         table_service_pb2.FIELD_TYPE_AUTONUMBER: pa.large_string(),
-        table_service_pb2.FIELD_TYPE_LAST_UPDATED: pa.timestamp('us'),
-        table_service_pb2.FIELD_TYPE_CREATED_AT: pa.timestamp('us'),
+        table_service_pb2.FIELD_TYPE_LAST_UPDATED: pa.timestamp('ms'),  # milliseconds (JS getTime())
+        table_service_pb2.FIELD_TYPE_CREATED_AT: pa.timestamp('ms'),  # milliseconds (JS getTime())
         table_service_pb2.FIELD_TYPE_EMAIL: pa.large_string(),
         table_service_pb2.FIELD_TYPE_PHONE: pa.large_string(),
     }

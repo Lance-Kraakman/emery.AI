@@ -2,236 +2,30 @@
 
 import React, { useEffect, useState, type ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Puck, Data, usePuck, resolveAllData, Button as PuckButton } from "@measured/puck";
+import { Puck, Data, resolveAllData } from "@measured/puck";
 import "@measured/puck/puck.css";
 import "@/styles/puck-theme.css";
 import { config } from "@/components/puck/config";
-import { getPage, getPages, updatePage, updatePageContent, publishPage, unpublishPage } from "@/app/actions/puck-pages";
+import { getPage, getPages, updatePage, publishPage, unpublishPage } from "@/app/actions/puck-pages";
 import { getApp } from "@/app/actions/puck-apps";
 import { getCurrentOrganization } from "@/app/actions/user-organizations";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import type { OrganizationDTO } from "@/app/mappers/organization-mapper";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Globe, Eye, ExternalLink, Copy, Check } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Loading } from "@/components/ui/loading";
 import { toast } from "sonner";
 import { ThemeProvider } from "@/components/puck/theme-context";
 import { LinkContextProvider } from "@/components/puck/link-context";
 import { QueryParamProvider } from "@/components/puck/contexts/QueryParamContext";
 import { PuckEditorThemeProvider, usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
-import { createPuckUIOverrides } from "@/components/puck/overrides";
 import { PuckSession } from "@/lib/puck/session-storage";
-import { PublicUrlDisplay } from "./components/PublicUrlDisplay";
 import { EditorDataLayoutProvider } from "@/components/puck/contexts/EditorDataLayoutProvider";
 import { PageVariablesProvider } from "@/components/puck/contexts/PageVariablesContext";
 import { updatePageVariables } from "@/app/actions/puck-pages";
 import type { PageVariable } from "@/components/puck/types";
-
-// Sidebar state persistence component
-// AIDEV-NOTE: This component handles saving/restoring Puck's sidebar state to sessionStorage
-// so that sidebar visibility persists across page reloads (especially after theme changes)
-function SidebarStatePersistence({ pageId }: { pageId: number }) {
-  const { appState, dispatch } = usePuck();
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  // Restore sidebar state on mount
-  useEffect(() => {
-    if (isInitialized) return;
-
-    const savedLeftState = PuckSession.getSidebarState(pageId, 'left');
-    const savedRightState = PuckSession.getSidebarState(pageId, 'right');
-
-    if (savedLeftState !== null || savedRightState !== null) {
-      const uiUpdate: { leftSideBarVisible?: boolean; rightSideBarVisible?: boolean } = {};
-
-      if (savedLeftState !== null) {
-        uiUpdate.leftSideBarVisible = savedLeftState;
-      }
-
-      if (savedRightState !== null) {
-        uiUpdate.rightSideBarVisible = savedRightState;
-      }
-
-      dispatch({ type: 'setUi', ui: uiUpdate });
-    }
-
-    setIsInitialized(true);
-  }, [pageId, dispatch, isInitialized]);
-
-  // Save sidebar state whenever it changes
-  useEffect(() => {
-    if (!isInitialized) return; // Don't save initial state
-
-    const leftVisible = appState.ui.leftSideBarVisible;
-    const rightVisible = appState.ui.rightSideBarVisible;
-
-    if (leftVisible !== undefined) {
-      PuckSession.setSidebarState(pageId, 'left', leftVisible);
-    }
-
-    if (rightVisible !== undefined) {
-      PuckSession.setSidebarState(pageId, 'right', rightVisible);
-    }
-  }, [appState.ui.leftSideBarVisible, appState.ui.rightSideBarVisible, pageId, isInitialized]);
-
-  return null; // This component doesn't render anything
-}
-
-// Custom header actions component with full Puck controls
-function CustomHeaderActions({
-  children,
-  pageId,
-  appId,
-  page,
-  app,
-  organization,
-  onPublish,
-  loadedFromSessionStorage,
-  setLoadedFromSessionStorage,
-}: {
-  children: ReactNode;
-  pageId: number;
-  appId: number;
-  page: PageDTO;
-  app: AppDTO;
-  organization: OrganizationDTO | null;
-  onPublish: () => void;
-  loadedFromSessionStorage: boolean;
-  setLoadedFromSessionStorage: (value: boolean) => void;
-}) {
-  const router = useRouter();
-  const { appState, history } = usePuck();
-  const themeContext = usePuckEditorTheme();
-  const [copiedUrl, setCopiedUrl] = useState(false);
-
-  // Detect unsaved changes: Puck history OR sessionStorage OR theme changes
-  const hasUnsavedChanges = history.hasPast || loadedFromSessionStorage || themeContext.hasUnsavedChanges;
-
-  // Build public URL
-  const publicUrl = organization?.slug && app.slug && page.slug
-    ? `/public/${organization.slug}/${app.slug}/${page.slug}`
-    : null;
-  const fullPublicUrl = typeof window !== 'undefined' && publicUrl
-    ? `${window.location.origin}${publicUrl}`
-    : null;
-
-  const handleSave = async () => {
-    try {
-      // Save theme first if needed
-      if (themeContext.hasUnsavedChanges) {
-        const themeData = PuckSession.getTheme(pageId);
-        if (themeData) {
-          await themeContext.saveTheme(themeData);
-        }
-      }
-
-      // Save page content (no revalidation - prevents page reload)
-      const result = await updatePageContent({
-        id: pageId,
-        templateData: appState.data
-      });
-
-      if (!result.success) {
-        toast.error(result.error || "Failed to save page");
-        return;
-      }
-
-      toast.success("Page saved successfully!");
-
-      // Clean up sessionStorage
-      PuckSession.clearData(pageId);
-      setLoadedFromSessionStorage(false);
-    } catch (err) {
-      console.error('Error saving page:', err);
-      toast.error("Failed to save page");
-    }
-  };
-
-  const handlePreview = () => {
-    // Get current data from Puck's state (no re-render!)
-    const currentData = appState.data;
-
-    // Save current data to sessionStorage so preview can access unsaved changes
-    PuckSession.setData(pageId, currentData);
-
-    // Navigate to preview route
-    router.push(`/apps/${appId}/pages/${pageId}/preview`);
-  };
-
-  const handleCopyUrl = async () => {
-    if (fullPublicUrl) {
-      await navigator.clipboard.writeText(fullPublicUrl);
-      setCopiedUrl(true);
-      toast.success("URL copied to clipboard!");
-      setTimeout(() => setCopiedUrl(false), 2000);
-    }
-  };
-
-  const handleOpenPublicPage = () => {
-    if (publicUrl) {
-      window.open(publicUrl, '_blank');
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-2 w-full min-w-0">
-      {/* Public URL display (left side) */}
-      {page.isPublic && publicUrl && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-md border border-border">
-          <span className="text-xs text-muted-foreground font-mono truncate max-w-[150px] sm:max-w-[300px]" title={fullPublicUrl || undefined}>
-            {publicUrl}
-          </span>
-          <button
-            onClick={handleCopyUrl}
-            className="p-1 hover:bg-background rounded transition-colors"
-            title="Copy URL"
-          >
-            {copiedUrl ? (
-              <Check size={14} className="text-green-600" />
-            ) : (
-              <Copy size={14} className="text-muted-foreground" />
-            )}
-          </button>
-          <button
-            onClick={handleOpenPublicPage}
-            className="p-1 hover:bg-background rounded transition-colors"
-            title="Open in new tab"
-          >
-            <ExternalLink size={14} className="text-muted-foreground" />
-          </button>
-        </div>
-      )}
-
-      {/* Spacer to push actions to the right */}
-      <div className="flex-1" />
-
-      {/* Custom Action Buttons using Puck's Button component */}
-      <div className="flex gap-2 items-center flex-shrink-0">
-        <Button
-          onClick={handleSave}
-          disabled={!hasUnsavedChanges}
-        >
-          {hasUnsavedChanges ? "Save Changes" : "Saved"}
-        </Button>
-
-        <Button
-          onClick={handlePreview}
-        >
-          <Eye size={16} className="mr-1" />
-          Preview
-        </Button>
-
-        <Button
-          onClick={onPublish}
-        >
-          <Globe size={16} className="mr-1" />
-          {page.isPublic ? "Make Private" : "Make Public"}
-        </Button>
-      </div>
-    </div>
-  );
-}
+import { PuckEditorLayout } from "@/components/puck/PuckEditorLayout";
 
 export default function PageEditPage() {
   const params = useParams();
@@ -441,74 +235,41 @@ export default function PageEditPage() {
           }}
         >
           <ThemeProviderWrapper>
-            <div className="h-screen">
-              <Puck
-            config={config}
-            data={initialData}
-            ui={{
-              leftSideBarWidth: 180,
-              rightSideBarWidth: 180,
-            }}
-            viewports={[
-              { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
-              { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },
-              { width: 1440, height: "auto", icon: "Monitor", label: "Desktop" }
-            ]}
-            iframe={{
-              enabled: true,
-              waitForStyles: true,
-            }}
-            overrides={{
-              ...createPuckUIOverrides({
-                pageId: pageId,
-                pageName: page.name,
-                pageSlug: page.slug,
-                pageIsPublic: page.isPublic,
-                pageRequiresAuth: page.requiresAuth,
-                pageAllowedRoles: page.allowedRoles || [],
-                pageVariables: page.pageVariables || [],
-                onSavePageSettings: handleSavePageSettings,
-                onSaveAccessSettings: handleSaveAccessSettings,
-                onSavePageVariables: handleSavePageVariables,
-                themeMode: "page",
-              }),
-              header: ({ children }) => (
-                <div className="bg-transparent">{children}</div>
-              ),
-              puck: ({ children }) => (
-                <PageVariablesProvider
-                  pageVariables={page.pageVariables || []}
-                  pageId={pageId}
-                  onAddPageVariable={async (variable) => {
-                    // Add to existing variables and save
-                    const updatedVariables = [...(page.pageVariables || []), variable];
-                    await handleSavePageVariables(updatedVariables);
-                  }}
-                >
-                  <EditorDataLayoutProvider>
-                    <SidebarStatePersistence pageId={pageId} />
-                    {children}
-                  </EditorDataLayoutProvider>
-                </PageVariablesProvider>
-              ),
-              headerActions: ({ children }) => (
-                <CustomHeaderActions
-                  pageId={pageId}
-                  appId={appId}
-                  page={page}
-                  app={app}
-                  organization={organization}
-                  onPublish={handlePublish}
-                  loadedFromSessionStorage={loadedFromSessionStorage}
-                  setLoadedFromSessionStorage={setLoadedFromSessionStorage}
-                >
-                  {children}
-                </CustomHeaderActions>
-              )
-            }}
-          />
-        </div>
-      </ThemeProviderWrapper>
+            <Puck
+              config={config}
+              data={initialData}
+              iframe={{
+                enabled: true,
+                waitForStyles: true,
+              }}
+            >
+              <PageVariablesProvider
+                pageVariables={page.pageVariables || []}
+                pageId={pageId}
+                onAddPageVariable={async (variable) => {
+                  const updatedVariables = [...(page.pageVariables || []), variable];
+                  await handleSavePageVariables(updatedVariables);
+                }}
+              >
+                <EditorDataLayoutProvider>
+                  <PuckEditorLayout
+                    pageId={pageId}
+                    appId={appId}
+                    page={page}
+                    app={app}
+                    organization={organization}
+                    loadedFromSessionStorage={loadedFromSessionStorage}
+                    setLoadedFromSessionStorage={setLoadedFromSessionStorage}
+                    onPublish={handlePublish}
+                    onSavePageSettings={handleSavePageSettings}
+                    onSaveAccessSettings={handleSaveAccessSettings}
+                    onSavePageVariables={handleSavePageVariables}
+                    themeMode="page"
+                  />
+                </EditorDataLayoutProvider>
+              </PageVariablesProvider>
+            </Puck>
+          </ThemeProviderWrapper>
       </LinkContextProvider>
     </PuckEditorThemeProvider>
     </QueryParamProvider>

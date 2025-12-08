@@ -8,7 +8,11 @@
 import type { ComponentConfig } from "@measured/puck";
 import LinkField, { type LinkFieldProps } from "./LinkField";
 import { createFieldSelectorField } from "../../custom-fields";
-import { labelPositionField } from "../../fields/standard-fields";
+import {
+  labelPositionField,
+  textColorField,
+  fontFamilyField,
+} from "../../fields/standard-fields";
 
 export const LinkFieldConfig: ComponentConfig<LinkFieldProps> = {
   label: "Link Field",
@@ -73,6 +77,9 @@ export const LinkFieldConfig: ComponentConfig<LinkFieldProps> = {
       type: "text",
       label: "Fallback Text",
     },
+
+    textColor: textColorField,
+    fontFamily: fontFamilyField,
   },
 
   defaultProps: {

@@ -20,8 +20,8 @@ const NavItem = ({ label, href }: { label: string; href: string }) => {
       style={{
         textDecoration: "none",
         color: isActive
-          ? "var(--puck-color-grey-02)"
-          : "var(--puck-color-grey-06)",
+          ? "var(--theme-text, #1e293b)"
+          : "var(--theme-text-muted, #64748b)",
         fontWeight: isActive ? "600" : "400",
       }}
     >

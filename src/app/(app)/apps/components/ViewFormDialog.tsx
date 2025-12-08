@@ -27,7 +27,9 @@ import { createView, updateView } from '@/app/actions/views';
 import { getTables } from '@/app/actions/tables';
 import { getFields } from '@/app/actions/fields';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ViewType } from '@/ddd/domain/views/value-objects/view-type';
 import { ViewConfig } from '@/ddd/domain/views/value-objects/view-config';
 import type { AggregationType, FormatType } from '@/ddd/domain/views/value-objects/aggregation-config';
@@ -79,6 +81,9 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
     aggregations: [],
   });
 
+  // Public access configuration
+  const [requiresAuth, setRequiresAuth] = useState(true); // Secure by default
+
   // Load tables on mount
   useEffect(() => {
     if (open) {
@@ -117,6 +122,7 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
       setDescription(view.description || '');
       setTableId(view.tableId);
       setViewType(view.viewType);
+      setRequiresAuth(view.requiresAuth ?? true); // Load public access setting
 
       // Load metric configuration if it's a metric view
       if (view.viewType === 'metric' && view.viewConfig.type === 'metric') {
@@ -190,6 +196,7 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
         yAxisFieldIds: [],
         aggregations: [],
       });
+      setRequiresAuth(true); // Reset to secure by default
     }
   }, [view]);
 
@@ -331,6 +338,7 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
             id: view!.id,
             name: name.trim(),
             description: description.trim() || undefined,
+            requiresAuth, // Pass public access setting
             filters: viewType === 'grid' ? gridFilters : undefined,
             sorting: viewType === 'grid' ? gridSorting : undefined,
             fieldMappings: viewType === 'grid' && gridFieldMappings.length > 0 ? gridFieldMappings : undefined,
@@ -340,6 +348,7 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
             tableId,
             name: name.trim(),
             description: description.trim() || undefined,
+            requiresAuth, // Pass public access setting
             filters: viewType === 'grid' ? gridFilters : undefined,
             sorting: viewType === 'grid' ? gridSorting : undefined,
             fieldMappings: viewType === 'grid' && gridFieldMappings.length > 0 ? gridFieldMappings : undefined,
@@ -517,6 +526,35 @@ export function ViewFormDialog({ open, onOpenChange, view, onSuccess }: ViewForm
                   isSubmitting={isSubmitting}
                 />
               )}
+
+              {/* Public Access Toggle */}
+              <div className="border-t pt-4 mt-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="public-access">Allow Public Access</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Enable access without requiring user login
+                      </p>
+                    </div>
+                    <Switch
+                      id="public-access"
+                      checked={!requiresAuth}
+                      onCheckedChange={(checked) => setRequiresAuth(!checked)}
+                      disabled={isSubmitting}
+                    />
+                  </div>
+
+                  {!requiresAuth && (
+                    <Alert variant="destructive" className="bg-amber-500/10 border-amber-500/50 text-amber-700">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>
+                        <span className="font-medium">Security Warning:</span> Anyone can access data in this view without signing in. Only enable for truly public data.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              </div>
 
               {error && (
                 <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">

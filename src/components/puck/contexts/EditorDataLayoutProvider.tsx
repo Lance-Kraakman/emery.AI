@@ -15,6 +15,7 @@
 import React, { useState, useEffect, type ReactNode } from 'react';
 import { createUsePuck } from '@measured/puck';
 import { DataLayoutProvider } from './DataLayoutContext';
+import { EditorDataLayoutErrorBoundary } from './EditorDataLayoutErrorBoundary';
 import { getFieldsForView } from '@/app/actions/fields';
 import { executeView } from '@/app/actions/views';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
@@ -184,9 +185,16 @@ function findParentDataBlockViewId(
 /**
  * Wrapper component that provides EditorDataLayoutProvider
  * This must be rendered INSIDE Puck's context (as a child of <Puck>)
+ *
+ * Wrapped in an error boundary to catch Puck internal errors when
+ * zones become stale (e.g., deleting the last block from a page).
  */
 export function EditorDataLayoutProvider({ children }: { children: ReactNode }) {
-  return <EditorDataLayoutProviderInner>{children}</EditorDataLayoutProviderInner>;
+  return (
+    <EditorDataLayoutErrorBoundary>
+      <EditorDataLayoutProviderInner>{children}</EditorDataLayoutProviderInner>
+    </EditorDataLayoutErrorBoundary>
+  );
 }
 
 export default EditorDataLayoutProvider;

@@ -112,3 +112,16 @@
   font-size: 0.875rem;
   color: hsl(var(--destructive));
 }
+
+/* Edit mode container */
+.editContainer {
+  width: 100%;
+}
+
+/* Validation error text */
+.error {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: hsl(var(--destructive));
+}

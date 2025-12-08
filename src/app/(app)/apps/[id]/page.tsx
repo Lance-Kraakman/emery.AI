@@ -22,13 +22,13 @@ export default async function AppPage({ params }: AppPageProps) {
   const appId = parseInt(id, 10);
 
   if (isNaN(appId)) {
-    redirect("/mission-control");
+    redirect("/apps");
   }
 
   const result = await getApp(appId);
 
   if (!result.success || !result.data) {
-    redirect("/mission-control");
+    redirect("/apps");
   }
 
   return (

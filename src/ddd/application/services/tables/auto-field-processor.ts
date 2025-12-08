@@ -96,6 +96,17 @@ export class AutoFieldProcessor {
           if (operation === 'create') {
             processed[fieldKey] = this.formatTimestamp(now, field);
             logger.debug('Set created-at field', { fieldId: fieldKey, fieldName: field.name, value: processed[fieldKey] });
+          } else if (operation === 'update') {
+            // Restore from existing row if current value is empty/falsy
+            // This handles cases where created_at was lost during data flow
+            const currentValue = processed[fieldKey];
+            if (!currentValue && existingRow) {
+              const existingValue = existingRow[fieldKey];
+              if (existingValue) {
+                processed[fieldKey] = existingValue;
+                logger.debug('Restored created-at from existing row', { fieldId: fieldKey, fieldName: field.name, value: existingValue });
+              }
+            }
           }
           break;
 

@@ -8,7 +8,7 @@
  * Each domain has its own registration module in ./modules/ directory.
  */
 
-import type { DbClient } from '@/lib/db/client';
+import { db as rawDb, type DbClient } from '@/lib/db/client';
 import { contextAwareDb, type ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
 import type { RepositoryRegistry } from './registry';
 
@@ -111,8 +111,10 @@ export class DIContainer {
 
     // Phase 4.5: Register view services (Puck integration)
     // Depends on: table application service
+    // AIDEV-NOTE: rawDb is passed for public view queries (bypasses RLS for requiresAuth=false views)
     const viewServices = registerViewServices({
       db,
+      rawDb,
       tableApplicationService: databaseServices.tableApplicationService
     });
     this.registerServices('view', viewServices);
