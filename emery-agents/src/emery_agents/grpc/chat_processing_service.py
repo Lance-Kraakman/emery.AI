@@ -112,8 +112,14 @@ class ErrorResponseDict(TypedDict):
     error: ErrorDataDict
 
 
+class InterruptedResponseDict(TypedDict):
+    """Typed structure for HITL interrupt events (not an error - pause for user approval)."""
+    type: Literal["interrupted"]
+    message: str
+
+
 # Union type for all possible stream response types
-StreamResponseDict = StepProgressDict | ContentChunkDict | ErrorResponseDict
+StreamResponseDict = StepProgressDict | ContentChunkDict | ErrorResponseDict | InterruptedResponseDict
 
 
 # Type variable for generic async function return type
@@ -250,6 +256,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         self.session_manager.start_cleanup_task()
         logger.info("✅ SessionManager initialized with automatic cleanup")
 
+
         # Initialize AI processing services - no database dependencies
         logger.info("Initializing ChatProcessingService with shared utilities")
 
@@ -372,6 +379,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             else:
                 logger.info("🔧 No organization model specified, will use system default")
 
+            # Extract user API key from request (for managed agents like skill_builder)
+            user_api_key = request.user_api_key if hasattr(request, 'user_api_key') and request.user_api_key else None
+            if user_api_key:
+                logger.info(f"🔑 User API key provided for managed agents")
+            else:
+                logger.warning("⚠️ No user API key provided - managed agents may fail auth")
+
             async for response_dict in self._stream_tool_calling_agent_response(
                 conversation_messages,
                 tools_to_use,
@@ -383,7 +397,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 user_id=user_id,
                 org_id=org_id,
                 conversation_history=request.conversation_history,
-                agent_config=agent_config  # Pass agent_config for skill execution
+                agent_config=agent_config,  # Pass agent_config for skill execution
+                user_api_key=user_api_key  # User API key for managed agents
             ):
                 # Check for cancellation
                 if self.active_streams.get(message_id, False):
@@ -477,6 +492,26 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         yield error_response
                         # Stop processing after error
                         break
+
+                    elif response_type == "interrupted":
+                        # HITL interrupt - agent paused for user approval
+                        # Send as final content chunk with the interrupt message
+                        # Session preserved for resumption on next message
+                        interrupt_resp = response_dict  # type: InterruptedResponseDict
+                        logger.info(f"⏸️ Sending interrupt response to client: {interrupt_resp['message']}")
+
+                        # Stream the interrupt message as content
+                        interrupt_response = agent_worker_pb2.ProcessMessageResponse(
+                            content_chunk=agent_worker_pb2.ContentChunk(
+                                content=f"\n\n{interrupt_resp['message']}",
+                                sequence=sequence
+                            ),
+                            timestamp=int(time.time() * 1000)
+                        )
+                        yield interrupt_response
+                        sequence += 1
+                        # Don't break - let it fall through to completion marker
+                        # Session remains active for user to respond and resume
 
                     else:
                         # Unknown response type - log warning
@@ -625,7 +660,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         user_id: Optional[str] = None,
         org_id: Optional[int] = None,
         conversation_history: Optional[List] = None,
-        agent_config: Optional['agent_worker_pb2.AgentConfig'] = None
+        agent_config: Optional['agent_worker_pb2.AgentConfig'] = None,
+        user_api_key: Optional[str] = None
     ) -> AsyncIterator[StreamResponseDict]:
         """
         Stream AI response using ToolCallingAgent with stateful session support.
@@ -670,11 +706,28 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 # Agent doesn't exist - COLD PATH (create + restore from history)
                 logger.info(f"✨ [COLD-PATH] Creating new agent for session {session_id}")
 
-                # Create ToolCallingAgent with model provider
+                # Use user API key from request for managed agents
+                effective_api_key = user_api_key or self._extract_user_api_key_from_tools(tools)
+                if effective_api_key:
+                    logger.info(f"🔑 Using API key for managed agents (source: {'request' if user_api_key else 'tools'})")
+                else:
+                    logger.warning("⚠️ No API key available for managed agents - skill_builder may fail")
+
+                # Create skill builder managed agent (routes automatically via smolagents)
+                skill_builder_agent = self._create_skill_builder_agent(
+                    api_key=effective_api_key or "",
+                    org_id=org_id,
+                    org_model=org_model
+                )
+
+                # Create ToolCallingAgent with skill_builder as managed agent
+                # AIDEV-NOTE: InterruptAwareToolCallingAgent sets interrupt_switch=True
+                # when detecting interrupt from managed agent, breaking the loop
                 agent = self._create_agent_with_model_provider(
                     smolagents_tools,
                     org_model=org_model,
-                    has_images=has_images
+                    has_images=has_images,
+                    managed_agents=[skill_builder_agent]
                 )
 
                 logger.info(f"🧠 [MEMORY-DEBUG] New agent created, memory steps: {len(agent.memory.steps)}")
@@ -709,6 +762,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"🤖 Using ToolCallingAgent with {len(smolagents_tools)} tools")
             logger.info(f"🧠 [MEMORY-DEBUG] Final agent memory before execution: {len(agent.memory.steps)} steps")
 
+            # Debug: Verify managed agents are set up correctly
+            logger.info(f"📋 [MANAGED-AGENTS-DEBUG] Managed agents dict: {list(agent.managed_agents.keys())}")
+            if agent.managed_agents:
+                logger.info(f"📋 [MANAGED-AGENTS-DEBUG] System prompt includes 'team members': {'team members' in agent.system_prompt.lower()}")
+                logger.info(f"📋 [MANAGED-AGENTS-DEBUG] System prompt preview (first 1500 chars):\n{agent.system_prompt[:1500]}")
+
             # 4. Extract current user message (last message in conversation)
             # AIDEV-NOTE: With reset=False, agent.memory persists, so we only need the current message
             last_message = conversation_messages[-1] if conversation_messages else None
@@ -724,6 +783,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"🧠 Agent memory: {len(agent.memory.steps)} steps")
 
             # 6. Execute with ToolCallingAgent with real streaming
+            # AIDEV-NOTE: skill_builder is a managed_agent - smolagents routes automatically
+            # InterruptAwareToolCallingAgent handles interrupt propagation from managed agents
             logger.info("🚀 Executing ToolCallingAgent with stream=True...")
 
             # Import smolagents step types for proper type checking
@@ -808,6 +869,21 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"✅ Completed streaming with {step_index} steps")
 
         except Exception as e:
+            # ============================================================
+            # Check for HITL Interrupt (not an error - pause for user approval)
+            # ============================================================
+            # Pattern matches smolagents' official plan_customization example
+            if "interrupted" in str(e).lower():
+                logger.info("⏸️ Agent interrupted for user approval (HITL workflow)")
+                # Don't yield error - the plan was already streamed via step progress
+                # Session preserved with reset=False for resumption on next message
+                interrupted_response: InterruptedResponseDict = {
+                    "type": "interrupted",
+                    "message": "Waiting for your approval to proceed."
+                }
+                yield interrupted_response
+                return
+
             # ============================================================
             # Comprehensive Error Recovery System
             # ============================================================
@@ -1106,7 +1182,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         self,
         smolagents_tools: List[Any],
         org_model: Optional[str] = None,
-        has_images: bool = False
+        has_images: bool = False,
+        managed_agents: Optional[List[Any]] = None
     ) -> ToolCallingAgent:
         """Create ToolCallingAgent using AgentFactory with smart vision model selection."""
         agent_config = AgentConfig(
@@ -1116,9 +1193,71 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             max_steps=10,
             agent_name="chat_tool_calling",
             agent_description=f"Chat agent with {len(smolagents_tools)} tools available",
-            enable_caching=False
+            enable_caching=False,
+            managed_agents=managed_agents
         )
         return self.agent_factory.create_agent(agent_config)
+
+    def _create_skill_builder_agent(
+        self,
+        api_key: str,
+        org_id: Optional[int],
+        org_model: Optional[str] = None
+    ) -> ToolCallingAgent:
+        """
+        Create a Skill Builder agent with native planning for HITL workflow.
+
+        This agent runs as a TOP-LEVEL agent (not managed agent) so that
+        interrupt() works natively for human-in-the-loop approval.
+
+        AIDEV-NOTE: Changed from managed agent to top-level agent because
+        smolagents wraps managed agent interrupts as errors, breaking HITL.
+
+        AIDEV-NOTE: Uses native planning_interval + step_callbacks for human-in-the-loop:
+        - planning_interval=1: Plan after first action (reading skill)
+        - step_callbacks: Interrupt after planning for user approval
+        - reset=False: Memory preserved between messages for resumption
+        """
+        from ..tools.crud_tools import load_skill_crud
+        from ..agents.skill_builder_agent import create_skill_builder_agent
+
+        # Create skill CRUD tool for the agent
+        skill_crud_tool = load_skill_crud(None, api_key, org_id)
+
+        # Get model for the agent
+        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+
+        # Use factory function with native planning support
+        skill_builder = create_skill_builder_agent(
+            tools=[skill_crud_tool],
+            model=model,
+            max_steps=10
+        )
+
+        logger.info("✨ Created Skill Builder agent with native planning (top-level for HITL)")
+        return skill_builder
+
+    def _extract_user_api_key_from_tools(self, tools: List['agent_worker_pb2.ToolConfig']) -> Optional[str]:
+        """
+        Extract user API key from enriched tool configs.
+
+        The Next.js layer enriches tool configs with user API keys for authentication.
+        This extracts the key so managed agents (like skill_builder) can reuse it.
+
+        Args:
+            tools: List of ToolConfig proto objects with config maps
+
+        Returns:
+            User API key string if found, None otherwise
+        """
+        for tool in tools:
+            if tool.config:
+                api_key = tool.config.get('api_key')
+                if api_key and api_key.startswith('user_'):
+                    logger.debug(f"🔑 Extracted user API key from tool {tool.name}")
+                    return api_key
+        logger.warning("⚠️ No user API key found in tool configs")
+        return None
 
     def _extract_images_from_message(self, message: ChatMessage) -> list[Image.Image]:
         """Extract PIL Image objects from ChatMessage content using shared utility."""

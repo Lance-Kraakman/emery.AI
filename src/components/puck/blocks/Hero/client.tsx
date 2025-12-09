@@ -5,7 +5,7 @@ import { quotes } from "./quotes";
 import { AutoField, FieldLabel } from "@measured/puck";
 import { Link2 } from "lucide-react";
 import HeroComponent, { HeroProps } from "./Hero";
-import { backgroundColorField, textColorField, fontFamilyField, fontWeightField } from "../../fields/standard-fields";
+import { backgroundColorField, textColorField, fontFamilyField, fontWeightField, paddingField } from "../../fields/standard-fields";
 import { createLinkActionField } from "../../custom-fields";
 
 export const Hero: ComponentConfig<HeroProps> = {
@@ -108,6 +108,10 @@ export const Hero: ComponentConfig<HeroProps> = {
         { label: "center", value: "center" },
       ],
     },
+    paddingLevel: {
+      ...paddingField,
+      label: "Padding",
+    },
     image: {
       type: "object",
       objectFields: {
@@ -170,7 +174,7 @@ export const Hero: ComponentConfig<HeroProps> = {
     align: "left",
     description: "Description",
     buttons: [{ label: "Learn more", action: { actionType: "none" } }],
-    padding: "64px",
+    paddingLevel: "7",
     titleColor: undefined,
     subtitleColor: undefined,
     backgroundColor: undefined,

@@ -8,7 +8,11 @@
 import type { ComponentConfig } from "@measured/puck";
 import DocumentField, { type DocumentFieldProps } from "./DocumentField";
 import { createFieldSelectorField } from "../../custom-fields";
-import { labelPositionField } from "../../fields/standard-fields";
+import {
+  labelPositionField,
+  textColorField,
+  fontFamilyField,
+} from "../../fields/standard-fields";
 
 export const DocumentFieldConfig: ComponentConfig<DocumentFieldProps> = {
   label: "Document Field",
@@ -59,6 +63,9 @@ export const DocumentFieldConfig: ComponentConfig<DocumentFieldProps> = {
         { label: "No", value: false },
       ],
     },
+
+    textColor: textColorField,
+    fontFamily: fontFamilyField,
   },
 
   defaultProps: {

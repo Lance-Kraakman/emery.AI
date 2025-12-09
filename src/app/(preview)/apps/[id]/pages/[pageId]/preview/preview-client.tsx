@@ -1,16 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Render, type Data } from "@measured/puck";
-import "@measured/puck/puck.css";
-import { config } from "@/components/puck/config";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Monitor, Tablet, Smartphone, X, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PreviewClientProps {
-  resolvedData: Data;
   pageName?: string;
 }
 
@@ -18,15 +14,18 @@ interface PreviewClientProps {
  * PreviewClient Component
  *
  * Client component that handles:
- * - Viewport switching (mobile/tablet/desktop)
+ * - Viewport switching (mobile/tablet/desktop) using an iframe
  * - Floating toolbar UI
  * - Navigation controls
  *
- * Receives pre-resolved data from server component parent.
- * Theme is provided via ThemeContext.
+ * Uses an iframe to render the preview content, enabling proper CSS media query
+ * behavior at different viewport widths. The iframe loads the /frame sub-route
+ * which contains the actual Puck Render component.
  */
-export function PreviewClient({ resolvedData, pageName }: PreviewClientProps) {
+export function PreviewClient({ pageName }: PreviewClientProps) {
   const router = useRouter();
+  const params = useParams();
+  const searchParams = useSearchParams();
   const [isToolbarOpen, setIsToolbarOpen] = useState(false);
   const [viewport, setViewport] = useState<"mobile" | "tablet" | "desktop">("desktop");
 
@@ -36,18 +35,24 @@ export function PreviewClient({ resolvedData, pageName }: PreviewClientProps) {
     desktop: 1440
   };
 
+  // Build iframe URL with query params preserved
+  const frameUrl = `/apps/${params.id}/pages/${params.pageId}/preview/frame${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+
   return (
-    <div className="h-screen w-screen bg-white overflow-auto flex flex-col items-center">
-      {/* Viewport container */}
+    <div className="h-screen w-screen bg-slate-100 overflow-auto flex flex-col items-center">
+      {/* Viewport container with iframe */}
       <div
-        className="bg-white transition-all duration-300 min-h-screen overflow-x-hidden"
+        className="bg-white transition-all duration-300 h-full shadow-lg"
         style={{
           width: viewport === "desktop" ? "100%" : `${viewportWidths[viewport]}px`,
           maxWidth: "100%",
-          boxSizing: "border-box"
         }}
       >
-        <Render config={config} data={resolvedData} />
+        <iframe
+          src={frameUrl}
+          className="w-full h-full border-0"
+          title={`Preview: ${pageName || 'Page'}`}
+        />
       </div>
 
       {/* Floating Action Button + Toolbar */}

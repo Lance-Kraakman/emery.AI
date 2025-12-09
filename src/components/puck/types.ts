@@ -12,6 +12,8 @@ export interface PageVariable {
 }
 import { ButtonProps } from "./blocks/Button";
 import { CardProps } from "./blocks/Card";
+import { ContainerProps } from "./blocks/Container";
+import { DividerProps } from "./blocks/Divider";
 import { GridProps } from "./blocks/Grid";
 import { HeroProps } from "./blocks/Hero";
 import { HeadingProps } from "./blocks/Heading";
@@ -68,6 +70,8 @@ export type FooterBlockProps = {
 export type Components = {
   Button: ButtonProps;
   Card: CardProps;
+  Container: ContainerProps;
+  Divider: DividerProps;
   Grid: GridProps;
   Hero: HeroProps;
   Heading: HeadingProps;

@@ -14,7 +14,7 @@ interface EmailSignInFormProps {
 }
 
 export function EmailSignInForm({
-  callbackUrl = "/mission-control",
+  callbackUrl = "/apps",
   buttonColor,
   buttonTextColor,
   borderColor,

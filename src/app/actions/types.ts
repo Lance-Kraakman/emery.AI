@@ -141,6 +141,7 @@ export interface CreateViewData {
   tableId: number;
   name: string;
   description?: string;
+  requiresAuth?: boolean; // Whether this view requires authentication (default: true)
   filters?: Array<{
     field: string;
     operator: string;
@@ -165,6 +166,7 @@ export interface UpdateViewData {
   id: number;
   name?: string;
   description?: string;
+  requiresAuth?: boolean; // Whether this view requires authentication
   filters?: Array<{
     field: string;           // Field name (will be converted to fieldId in action)
     operator: string;

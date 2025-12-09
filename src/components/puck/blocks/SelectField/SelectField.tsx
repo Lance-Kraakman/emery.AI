@@ -7,9 +7,16 @@
  * Must be used inside DataContextBlock or RepeatBlock.
  *
  * Handles both single-select and multi-select fields.
+ *
+ * Edit Mode: When inside an EditableRowProvider with isEditMode=true,
+ * renders as a select input (single or multi based on field type).
  */
 
 import { useFieldValue, useIsInDataContext } from '@/components/puck/hooks/useFieldValue';
+import { useEditableRow } from '@/components/puck/contexts/EditableRowContext';
+import { useFieldMetadata } from '@/components/puck/hooks/useFieldMetadata';
+import { SingleSelectInput } from '@/components/forms/inputs/SingleSelectInput';
+import { MultiSelectInput } from '@/components/forms/inputs/MultiSelectInput';
 import { cn } from '@/lib/utils';
 import styles from './styles.module.css';
 
@@ -18,6 +25,10 @@ export interface SelectFieldProps {
   label?: string;
   labelPosition?: 'top' | 'inline';
   size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
+  textColor?: string;
+  fontFamily?: string;
+  fontWeight?: string;
+  backgroundColor?: string;
   fallback?: string;
 }
 
@@ -26,11 +37,17 @@ export default function SelectField({
   label,
   labelPosition = 'top',
   size = 'sm',
+  textColor,
+  fontFamily,
+  fontWeight,
+  backgroundColor,
   fallback = '',
 }: SelectFieldProps) {
   // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
   const value = useFieldValue(fieldId ?? 0);
+  const editable = useEditableRow();
+  const field = useFieldMetadata(fieldId);
 
   // No field selected
   if (fieldId === undefined) {
@@ -53,6 +70,67 @@ export default function SelectField({
       </div>
     );
   }
+
+  // ============================================
+  // EDIT MODE: Render as uncontrolled select input
+  // ============================================
+  if (editable?.isEditMode && field) {
+    const isMultiSelect = field.type === 'multi-select';
+
+    if (isMultiSelect) {
+      // Multi-select: value is array of option IDs
+      let initialValue: number[] = [];
+      if (Array.isArray(value)) {
+        initialValue = value.map(item => {
+          if (typeof item === 'object' && item !== null && 'id' in item) {
+            return (item as { id: number }).id;
+          }
+          return typeof item === 'number' ? item : parseInt(String(item), 10);
+        }).filter(id => !isNaN(id));
+      }
+
+      return (
+        <div className={styles.editContainer}>
+          <MultiSelectInput
+            field={field}
+            name={field.name}
+            defaultValue={initialValue}
+            label={label || field.name}
+            disabled={editable.isSaving}
+          />
+        </div>
+      );
+    } else {
+      // Single-select: value is option ID or object with id
+      let initialValue: number | null = null;
+      if (value !== null && value !== undefined) {
+        if (typeof value === 'object' && 'id' in value) {
+          initialValue = (value as { id: number }).id;
+        } else if (typeof value === 'number') {
+          initialValue = value;
+        } else {
+          const parsed = parseInt(String(value), 10);
+          if (!isNaN(parsed)) initialValue = parsed;
+        }
+      }
+
+      return (
+        <div className={styles.editContainer}>
+          <SingleSelectInput
+            field={field}
+            name={field.name}
+            defaultValue={initialValue}
+            label={label || field.name}
+            disabled={editable.isSaving}
+          />
+        </div>
+      );
+    }
+  }
+
+  // ============================================
+  // DISPLAY MODE: Render as badges
+  // ============================================
 
   // Parse select field value
   // Select fields can be:
@@ -93,22 +171,37 @@ export default function SelectField({
     labelPosition === 'inline' && styles.inline
   );
 
+  // Build custom styles
+  const customStyles: React.CSSProperties = {
+    ...(fontFamily && { fontFamily }),
+    ...(fontWeight && { fontWeight }),
+  };
+
   return (
-    <div className={containerClass}>
+    <div className={containerClass} style={customStyles}>
       {label && <label className={styles.label}>{label}</label>}
       <div className={styles.badges} data-size={size}>
-        {options.map((option, index) => (
-          <span
-            key={index}
-            className={styles.badge}
-            style={option.color ? {
-              backgroundColor: option.color,
-              color: getContrastColor(option.color)
-            } : undefined}
-          >
-            {option.value}
-          </span>
-        ))}
+        {options.map((option, index) => {
+          // Priority: option.color > backgroundColor prop > default
+          const bgColor = option.color || backgroundColor;
+          const badgeStyle: React.CSSProperties = {
+            ...(bgColor && {
+              backgroundColor: bgColor,
+              color: textColor || getContrastColor(bgColor)
+            }),
+            ...(textColor && !bgColor && { color: textColor }),
+          };
+
+          return (
+            <span
+              key={index}
+              className={styles.badge}
+              style={Object.keys(badgeStyle).length > 0 ? badgeStyle : undefined}
+            >
+              {option.value}
+            </span>
+          );
+        })}
       </div>
     </div>
   );

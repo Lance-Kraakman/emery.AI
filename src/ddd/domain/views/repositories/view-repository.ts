@@ -23,6 +23,29 @@ export interface ViewRepository {
   findById(id: ViewId): Promise<View | null>;
 
   /**
+   * Find a public view by its ID (bypasses RLS)
+   * Only returns views where requiresAuth = false
+   */
+  findByIdPublic(id: ViewId): Promise<View | null>;
+
+  /**
+   * Find fields for a public view's table (bypasses RLS)
+   * Only returns fields if the view is public (requiresAuth = false)
+   */
+  findFieldsForPublicView(viewId: ViewId): Promise<import("@/ddd/domain/tables/value-objects/table-field").TableField[] | null>;
+
+  /**
+   * Find table metadata for a public view (bypasses RLS)
+   * Only returns table if the view is public (requiresAuth = false)
+   */
+  findTableForPublicView(viewId: ViewId): Promise<{
+    tableId: number;
+    organizationId: number;
+    databaseId: number;
+    s3Path: string;
+  } | null>;
+
+  /**
    * Find all views for a specific table
    */
   findByTableId(tableId: TableId): Promise<View[]>;

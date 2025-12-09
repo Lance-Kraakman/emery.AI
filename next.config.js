@@ -4,7 +4,12 @@ const nextConfig = {
   // output: 'standalone',
   // AIDEV-NOTE: Removed env config to allow runtime environment variable loading
   // App router is now stable in Next.js 15
-  
+
+  // AIDEV-NOTE: Consistent build ID for multi-container deployments (prevents version skew)
+  generateBuildId: async () => {
+    return process.env.GIT_SHA || process.env.BUILD_ID || 'development'
+  },
+
   // Modern Next.js approach for native modules - replaces complex webpack externals
   serverExternalPackages: [
     'duckdb',
@@ -49,6 +54,18 @@ const nextConfig = {
         // Proxy gRPC-Web requests to Python gRPC server
         source: '/grpc/:path*',
         destination: 'http://localhost:50051/:path*',
+      },
+    ]
+  },
+
+  // AIDEV-NOTE: Enable RSC streaming (disable proxy buffering for ALB/CloudFront)
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Accel-Buffering', value: 'no' }
+        ],
       },
     ]
   },

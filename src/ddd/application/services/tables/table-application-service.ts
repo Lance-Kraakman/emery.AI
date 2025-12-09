@@ -1079,6 +1079,34 @@ export class TableApplicationService {
   }
 
   /**
+   * Get rows using pre-fetched table data (bypasses findById)
+   * Used for public view access where table metadata is already fetched via rawDb
+   *
+   * AIDEV-NOTE: This method accepts table metadata directly, bypassing RLS.
+   * The actual row retrieval goes to Delta Lake which has no RLS.
+   */
+  async getRowsWithTableData(
+    tableData: { tableId: number; s3Path: string; organizationId: number; databaseId: number },
+    fields: TableField[],
+    options: RowQueryOptions
+  ): Promise<Row[]> {
+    try {
+      return await this.dynamicTableRepository.getRowsWithParams(
+        {
+          tableId: tableData.tableId,
+          s3Path: tableData.s3Path,
+          organizationId: tableData.organizationId,
+        },
+        fields,
+        options
+      );
+    } catch (error) {
+      logger.error('Error getting rows with table data:', error);
+      return [];
+    }
+  }
+
+  /**
    * Bulk create multiple rows in a table
    */
   async bulkCreateRows(command: BulkCreateRowsCommand): Promise<TableApplicationServiceResult<Row[]>> {

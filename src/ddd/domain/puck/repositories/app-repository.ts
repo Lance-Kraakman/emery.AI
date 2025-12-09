@@ -7,6 +7,19 @@ import type { AppId } from '../value-objects/app-id';
 import type { AppSlug } from '../value-objects/app-slug';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
+// DTO for apps with their pages (for sidebar - lightweight)
+export interface SidebarAppDTO {
+  id: number;
+  name: string;
+  slug: string;
+  pages: {
+    id: number;
+    name: string;
+    slug: string;
+    order: number;
+  }[];
+}
+
 export interface IAppRepository {
   /**
    * Find an app by its ID
@@ -47,4 +60,10 @@ export interface IAppRepository {
    * Count apps for an organization
    */
   countByOrganization(organizationId: OrganizationId): Promise<number>;
+
+  /**
+   * Find all apps for an organization with their pages (for sidebar)
+   * Single query with JOIN - avoids N+1 problem
+   */
+  findByOrganizationWithPages(organizationId: OrganizationId): Promise<SidebarAppDTO[]>;
 }
