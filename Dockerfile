@@ -46,8 +46,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && npm i -g pnpm
 
-ENV NODE_ENV=production 
+ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# AIDEV-NOTE: Limit glibc memory arenas to prevent Sharp memory bloat on Linux
+ENV MALLOC_ARENA_MAX=2
 
 # AIDEV-NOTE: Use regular Next.js build with node_modules (faster build time)
 COPY --from=builder /app/.next ./.next
