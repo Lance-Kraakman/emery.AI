@@ -325,26 +325,44 @@ class AppStack(Stack):
                 description="Test listener URL for green environment (use to test before approving deployment)"
             )
 
+        # Create the ALB origin once for reuse
+        alb_origin = origins.LoadBalancerV2Origin(
+            frontend_service.load_balancer,
+            protocol_policy=cloudfront.OriginProtocolPolicy.HTTP_ONLY
+        )
+
         # Create CloudFront distribution for static URL routing
         cloudfront_distribution = cloudfront.Distribution(
             self, f"{prefix}CloudFrontDistribution",
             default_behavior=cloudfront.BehaviorOptions(
-                origin=origins.LoadBalancerV2Origin(
-                    frontend_service.load_balancer,
-                    protocol_policy=cloudfront.OriginProtocolPolicy.HTTP_ONLY
-                ),
+                origin=alb_origin,
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
                 cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,  # Disable caching for dynamic content
                 compress=True,
                 origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER
             ),
+            # AIDEV-NOTE: Cache static assets at edge - Next.js static files are immutable (hashed filenames)
+            additional_behaviors={
+                "/_next/static/*": cloudfront.BehaviorOptions(
+                    origin=alb_origin,
+                    viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                    cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                    compress=True,
+                ),
+                "/favicon.ico": cloudfront.BehaviorOptions(
+                    origin=alb_origin,
+                    viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                    cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                    compress=True,
+                ),
+            },
             # Custom domain configuration
             domain_names=[custom_domain] if custom_domain else None,
             certificate=certificate,
             comment=f"CloudFront distribution for {prefix} Emery application",
             enabled=True,
-            price_class=cloudfront.PriceClass.PRICE_CLASS_100  # Use only North America and Europe for cost savings
+            price_class=cloudfront.PriceClass.PRICE_CLASS_ALL  # All edge locations including APAC (Sydney)
         )
 
         # Output the CloudFront URL for easy access
