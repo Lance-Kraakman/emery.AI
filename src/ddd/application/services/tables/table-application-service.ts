@@ -995,6 +995,16 @@ export class TableApplicationService {
         }
       }
 
+      // Fetch previous row data for all rows being updated (needed for UPDATE trigger events)
+      const previousRows = await Promise.all(
+        enrichedUpdates.map(update => 
+          this.dynamicTableRepository.getRow(tableId, update.rowId.value)
+        )
+      );
+      const previousRowsMap = new Map(
+        previousRows.filter(row => row !== null).map(row => [row!.id.value, row])
+      );
+
       // Bulk update using repository (single Delta Lake merge)
       const updatedRows = await this.dynamicTableRepository.updateRows(
         tableId,
@@ -1003,6 +1013,22 @@ export class TableApplicationService {
           row: u.data
         }))
       );
+
+      // Emit table trigger events for each updated row (non-blocking)
+      // AIDEV-NOTE: For bulk operations, emit event per row to allow fine-grained agent triggering
+      for (const updatedRow of updatedRows) {
+        const previousRow = previousRowsMap.get(updatedRow.id.value);
+        await this.handleTableTriggers({
+          tableId: tableId.value,
+          tableName: table.name,
+          operation: 'UPDATE',
+          organizationId: table.organizationId,
+          rowId: updatedRow.id.value,
+          rowData: updatedRow.toPlainObject(table.fields),
+          previousRowData: previousRow?.toPlainObject(table.fields),
+          timestamp: new Date()
+        });
+      }
 
       logger.summary('Bulk update completed', {
         rows: updatedRows.length,
