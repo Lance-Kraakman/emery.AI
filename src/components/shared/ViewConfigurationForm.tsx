@@ -323,7 +323,7 @@ export function ViewConfigurationForm({
                 title: 'Form',
                 description: undefined,
                 order: 0,
-                fields: fields.map((field, index) => ({
+                fields: fields.filter(f => f.id > 0).map((field, index) => ({
                   fieldId: field.id,
                   order: index,
                   label: field.name,
