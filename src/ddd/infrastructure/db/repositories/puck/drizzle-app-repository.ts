@@ -3,9 +3,9 @@
 // Uses Puck schema but that's just an implementation detail
 
 import type { DbClient } from '@/lib/db/client';
-import { apps } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
-import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-repository';
+import { apps, pages } from '@/lib/db/schema';
+import { eq, and, asc } from 'drizzle-orm';
+import type { IAppRepository, SidebarAppDTO } from '@/ddd/domain/puck/repositories/app-repository';
 import { App } from '@/ddd/domain/puck/entities/app';
 import { AppId } from '@/ddd/domain/puck/value-objects/app-id';
 import { AppSlug } from '@/ddd/domain/puck/value-objects/app-slug';
@@ -148,6 +148,53 @@ export class DrizzleAppRepository implements IAppRepository {
       return records.length;
     } catch (error) {
       console.error('[DrizzleAppRepository] Error counting apps:', error);
+      throw error;
+    }
+  }
+
+  async findByOrganizationWithPages(organizationId: OrganizationId): Promise<SidebarAppDTO[]> {
+    try {
+      // Fetch apps and pages in parallel (2 queries instead of N+1)
+      const [appRecords, pageRecords] = await Promise.all([
+        this.db.query.apps.findMany({
+          where: eq(apps.organizationId, organizationId.value),
+          orderBy: [asc(apps.name)]
+        }),
+        this.db.select({
+          id: pages.id,
+          appId: pages.appId,
+          name: pages.name,
+          slug: pages.slug,
+          order: pages.order
+        })
+        .from(pages)
+        .innerJoin(apps, eq(pages.appId, apps.id))
+        .where(eq(apps.organizationId, organizationId.value))
+        .orderBy(asc(pages.order))
+      ]);
+
+      // Group pages by appId
+      const pagesByApp = new Map<number, SidebarAppDTO['pages']>();
+      for (const page of pageRecords) {
+        const existing = pagesByApp.get(page.appId) || [];
+        existing.push({
+          id: page.id,
+          name: page.name,
+          slug: page.slug,
+          order: page.order
+        });
+        pagesByApp.set(page.appId, existing);
+      }
+
+      // Combine apps with their pages
+      return appRecords.map((app: { id: number; name: string; slug: string }) => ({
+        id: app.id,
+        name: app.name,
+        slug: app.slug,
+        pages: pagesByApp.get(app.id) || []
+      }));
+    } catch (error) {
+      console.error('[DrizzleAppRepository] Error finding apps with pages:', error);
       throw error;
     }
   }
