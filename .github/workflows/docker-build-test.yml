@@ -265,24 +265,61 @@ jobs:
             -c aws_account_id=${{ env.AWS_ACCOUNT_ID }} \
             -c region=${{ env.AWS_REGION }}
 
-      - name: Blue/Green Deployment Info
+      - name: Trigger Blue/Green Deployment
         if: success() && startsWith(github.ref, 'refs/tags/v')
         run: |
-          echo "🔵🟢 Blue/Green Deployment Created"
+          # Get the latest task definition ARN
+          TASK_DEF_ARN=$(aws ecs describe-services \
+            --cluster ProductionEmeryCluster \
+            --services Production-Frontend \
+            --query 'services[0].taskDefinition' \
+            --output text)
+
+          echo "📦 Task Definition: ${TASK_DEF_ARN}"
+
+          # Create AppSpec YAML content (no leading whitespace)
+          APPSPEC_CONTENT="version: 0.0
+          Resources:
+            - TargetService:
+                Type: AWS::ECS::Service
+                Properties:
+                  TaskDefinition: ${TASK_DEF_ARN}
+                  LoadBalancerInfo:
+                    ContainerName: ProductionFrontendContainer
+                    ContainerPort: 3000"
+
+          echo "📄 AppSpec contents:"
+          echo "$APPSPEC_CONTENT"
+
+          # Create revision JSON file (avoids shell escaping issues)
+          jq -n --arg content "$APPSPEC_CONTENT" '{
+            revisionType: "AppSpecContent",
+            appSpecContent: {
+              content: $content
+            }
+          }' > /tmp/revision.json
+
+          echo "📄 Revision JSON:"
+          cat /tmp/revision.json
+
+          # Create CodeDeploy deployment
+          DEPLOYMENT_ID=$(aws deploy create-deployment \
+            --application-name Production-Frontend-BlueGreen \
+            --deployment-group-name Production-Frontend-DeploymentGroup \
+            --revision file:///tmp/revision.json \
+            --query 'deploymentId' \
+            --output text)
+
+          echo ""
+          echo "🔵🟢 Blue/Green Deployment Created!"
           echo "=================================="
+          echo "📋 Deployment ID: ${DEPLOYMENT_ID}"
           echo ""
-          echo "📋 CodeDeploy Application: Production-Frontend-BlueGreen"
-          echo "📋 Deployment Group: Production-Frontend-DeploymentGroup"
+          echo "🔗 View deployment:"
+          echo "   https://ap-southeast-2.console.aws.amazon.com/codesuite/codedeploy/deployments/${DEPLOYMENT_ID}"
           echo ""
-          echo "🔗 View deployment in AWS Console:"
-          echo "   https://ap-southeast-2.console.aws.amazon.com/codesuite/codedeploy/deployments"
+          echo "⏳ Waiting for manual approval (1 hour timeout)"
+          echo "🧪 Test green environment at ALB:3001 before approving"
           echo ""
-          echo "⏳ The deployment is waiting for manual approval (1 hour timeout)"
-          echo ""
-          echo "✅ To APPROVE the deployment:"
-          echo "   aws deploy continue-deployment --deployment-id <DEPLOYMENT_ID> --deployment-wait-type READY_WAIT"
-          echo ""
-          echo "❌ To REJECT/ROLLBACK:"
-          echo "   aws deploy stop-deployment --deployment-id <DEPLOYMENT_ID> --auto-rollback-enabled"
-          echo ""
-          echo "🧪 Test the green environment at port 3001 before approving"
+          echo "✅ To APPROVE: aws deploy continue-deployment --deployment-id ${DEPLOYMENT_ID} --deployment-wait-type READY_WAIT"
+          echo "❌ To ROLLBACK: aws deploy stop-deployment --deployment-id ${DEPLOYMENT_ID} --auto-rollback-enabled"
