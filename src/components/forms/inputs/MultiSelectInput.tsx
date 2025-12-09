@@ -4,10 +4,11 @@
  * MultiSelectInput Component
  *
  * Form input for multi-select field types
- * Uses SelectOption[] from field metadata
+ * Uses SelectOption[] from field metadata.
+ * Supports controlled and uncontrolled modes.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,8 +24,10 @@ import type { SelectOption } from '@/ddd/domain/tables/value-objects/table-field
 
 interface MultiSelectInputProps {
   field: FieldDTO;
-  value: number[]; // Array of SelectOption IDs
-  onChange: (value: number[]) => void;
+  name?: string;                    // For form collection
+  value?: number[];                 // Controlled mode - Array of SelectOption IDs
+  defaultValue?: number[];          // Uncontrolled mode
+  onChange?: (value: number[]) => void;
   label?: string;
   placeholder?: string;
   required?: boolean;
@@ -33,7 +36,9 @@ interface MultiSelectInputProps {
 
 export function MultiSelectInput({
   field,
+  name,
   value,
+  defaultValue,
   onChange,
   label,
   placeholder,
@@ -43,9 +48,14 @@ export function MultiSelectInput({
   const inputLabel = label || field.name;
   const isRequired = required ?? field.required ?? false;
 
+  // For uncontrolled mode, use local state
+  const [localValue, setLocalValue] = useState<number[]>(defaultValue ?? []);
+  const isControlled = value !== undefined;
+  const currentValue = isControlled ? value : localValue;
+
   // Extract options from field metadata
-  const options = (field.metadata as any)?.options as SelectOption[] | undefined;
-  const maxSelections = (field.metadata as any)?.maxSelections as number | undefined;
+  const options = (field.metadata as Record<string, unknown>)?.options as SelectOption[] | undefined;
+  const maxSelections = (field.metadata as Record<string, unknown>)?.maxSelections as number | undefined;
 
   if (!options || options.length === 0) {
     return (
@@ -56,25 +66,38 @@ export function MultiSelectInput({
     );
   }
 
-  const selectedOptions = options.filter((opt) => value.includes(opt.id));
+  const selectedOptions = options.filter((opt) => currentValue.includes(opt.id));
 
   const toggleOption = (optionId: number) => {
-    if (value.includes(optionId)) {
-      onChange(value.filter((id) => id !== optionId));
+    let newValue: number[];
+    if (currentValue.includes(optionId)) {
+      newValue = currentValue.filter((id) => id !== optionId);
     } else {
-      if (maxSelections && value.length >= maxSelections) {
+      if (maxSelections && currentValue.length >= maxSelections) {
         return; // Max selections reached
       }
-      onChange([...value, optionId]);
+      newValue = [...currentValue, optionId];
     }
+    if (!isControlled) {
+      setLocalValue(newValue);
+    }
+    onChange?.(newValue);
   };
 
   const removeOption = (optionId: number) => {
-    onChange(value.filter((id) => id !== optionId));
+    const newValue = currentValue.filter((id) => id !== optionId);
+    if (!isControlled) {
+      setLocalValue(newValue);
+    }
+    onChange?.(newValue);
   };
 
   return (
     <div className="space-y-2">
+      {/* Hidden input for form submission - stores JSON array of IDs */}
+      {name && (
+        <input type="hidden" name={name} value={JSON.stringify(currentValue)} />
+      )}
       <Label htmlFor={`field-${field.id}`}>
         {inputLabel}
         {isRequired && <span className="text-destructive ml-1">*</span>}
@@ -125,11 +148,11 @@ export function MultiSelectInput({
         <PopoverContent className="w-full p-2">
           <div className="space-y-2">
             {options.map((option) => {
-              const isSelected = value.includes(option.id);
+              const isSelected = currentValue.includes(option.id);
               const isDisabled =
                 maxSelections &&
                 !isSelected &&
-                value.length >= maxSelections;
+                currentValue.length >= maxSelections;
 
               return (
                 <div

@@ -6,6 +6,15 @@ import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organization
 import type { ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
 import type { PuckDataStructure } from '@/ddd/domain/puck/value-objects/puck-data';
 import type { PageVariable } from '@/components/puck/types';
+
+// AIDEV-NOTE: Template variants for component library functionality
+export interface TemplateVariant {
+  id: string;                    // e.g., "default", "dark", "compact"
+  name: string;                  // Display name
+  description?: string;
+  data: PuckDataStructure["content"];  // Full component tree for this variant
+  isDefault?: boolean;
+}
 import type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 import type { SkillParameterType, SkillInputFileConfig } from '@/ddd/domain/skills/entities/skill';
@@ -236,6 +245,20 @@ export const fields = pgTable("fields", {
       )
     )`,
   }),
+
+  // RLS: Allow public access to fields when ANY view on the table has requires_auth = false
+  // NOTE: This grants field access if ANY view on the table is public, not per-view.
+  // This is acceptable since views typically expose all fields anyway.
+  pgPolicy("fields_public_via_view", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM views v
+      WHERE v.table_id = table_id
+      AND v.requires_auth = false
+    )`,
+  }),
 ]);
 
 // AIDEV-NOTE: Views - Filtered/sorted table configurations (Baserow view pattern) with tables
@@ -246,6 +269,11 @@ export const views = pgTable("views", {
   tableId: integer("table_id").notNull().references(() => tables.id, { onDelete: 'cascade' }),
   name: text("name").notNull(),
   ownerId: uuid("owner_id").notNull().references(() => users.id), // View owner - used for 'owned' scope permissions
+
+  // Whether this view requires authentication to access
+  // AIDEV-NOTE: When false, the view data can be accessed without login (for public pages)
+  // Secure by default - new views require authentication
+  requiresAuth: boolean("requires_auth").notNull().default(true),
 
   // Filter configuration (array of filter conditions)
   filters: jsonb("filters").$type<Array<{
@@ -402,6 +430,15 @@ export const views = pgTable("views", {
       'view',
       id
     )`,
+  }),
+
+  // RLS: Allow public access to views marked as not requiring auth
+  // AIDEV-NOTE: This enables unauthenticated access to views used on public pages
+  pgPolicy("views_public_access", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`requires_auth = false`,
   }),
 ]);
 
@@ -1596,6 +1633,79 @@ export const apps = pgTable("apps", {
       WHERE p.app_id = id
       AND p.is_public = true
     )`,
+  }),
+]);
+
+// AIDEV-NOTE: Puck Templates - Reusable component tree templates for the page builder
+// Templates can be org-wide (appId = null) or app-specific (appId = app.id)
+export const templates = pgTable("templates", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  appId: integer("app_id")
+    .references(() => apps.id, { onDelete: 'cascade' }), // null = org-wide, set = app-specific
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category"), // for grouping in UI: 'layout', 'content', 'data', etc.
+  thumbnailUrl: text("thumbnail_url"), // optional preview image
+  data: jsonb("data").notNull().$type<PuckDataStructure["content"]>(), // array of ComponentData (the component tree)
+  variants: jsonb("variants").default(sql`'[]'::jsonb`).$type<TemplateVariant[]>(), // pre-defined layout variations
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("templates_org_idx").on(table.organizationId),
+  index("templates_app_idx").on(table.appId),
+  index("templates_category_idx").on(table.category),
+
+  // View permission: Users can view org-wide templates or app-specific templates they have access to
+  pgPolicy("templates_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        app_id IS NULL
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'apps:view',
+          organization_id,
+          'app',
+          app_id
+        )
+      )`,
+  }),
+
+  // Create permission: Users with apps:manage can create templates
+  pgPolicy("templates_create_permission", {
+    as: "permissive",
+    for: "insert",
+    to: "public",
+    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:manage',
+        organization_id
+      )`,
+  }),
+
+  // Manage permission: Creator or org managers can update/delete templates
+  pgPolicy("templates_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        created_by = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'apps:manage',
+          organization_id
+        )
+      )`,
   }),
 ]);
 

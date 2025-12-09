@@ -6,11 +6,17 @@
  * Displays boolean field values from the nearest data context.
  * Must be used inside DataBlock.
  * Supports different display styles: text, badge, icon.
+ *
+ * Edit Mode: When inside an EditableRowProvider with isEditMode=true,
+ * renders as a checkbox input instead of display text.
  */
 
 import { useFieldValue, useIsInDataContext } from '@/components/puck/hooks/useFieldValue';
+import { useEditableRow } from '@/components/puck/contexts/EditableRowContext';
+import { useFieldMetadata } from '@/components/puck/hooks/useFieldMetadata';
+import { BooleanInput } from '@/components/forms/inputs/BooleanInput';
 import { cn } from '@/lib/utils';
-import { Check, X, Circle, CircleCheck, CircleX } from 'lucide-react';
+import { Check, X, CircleCheck, CircleX } from 'lucide-react';
 import styles from './styles.module.css';
 
 export interface BooleanFieldProps {
@@ -22,6 +28,8 @@ export interface BooleanFieldProps {
   falseText?: string;
   iconStyle?: 'check' | 'circle';
   size?: 'sm' | 'base' | 'lg';
+  textColor?: string;
+  fontFamily?: string;
 }
 
 export default function BooleanField({
@@ -33,10 +41,14 @@ export default function BooleanField({
   falseText = 'No',
   iconStyle = 'check',
   size = 'base',
+  textColor,
+  fontFamily,
 }: BooleanFieldProps) {
   // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
   const value = useFieldValue(fieldId ?? 0);
+  const editable = useEditableRow();
+  const field = useFieldMetadata(fieldId);
 
   // No field selected
   if (fieldId === undefined) {
@@ -59,6 +71,29 @@ export default function BooleanField({
       </div>
     );
   }
+
+  // ============================================
+  // EDIT MODE: Render as uncontrolled checkbox input
+  // ============================================
+  if (editable?.isEditMode && field) {
+    const initialValue = Boolean(value);
+
+    return (
+      <div className={styles.editContainer}>
+        <BooleanInput
+          field={field}
+          name={field.name}
+          defaultValue={initialValue}
+          label={label || field.name}
+          disabled={editable.isSaving}
+        />
+      </div>
+    );
+  }
+
+  // ============================================
+  // DISPLAY MODE: Render as text/badge/icon
+  // ============================================
 
   // Convert value to boolean
   const boolValue = Boolean(value);
@@ -108,8 +143,13 @@ export default function BooleanField({
     );
   };
 
+  const customStyles: React.CSSProperties = {
+    ...(textColor && { color: textColor }),
+    ...(fontFamily && { fontFamily }),
+  };
+
   return (
-    <div className={containerClass}>
+    <div className={containerClass} style={customStyles}>
       {label && <label className={styles.label}>{label}</label>}
       {renderValue()}
     </div>

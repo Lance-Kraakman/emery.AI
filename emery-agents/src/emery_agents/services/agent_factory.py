@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from smolagents import ToolCallingAgent
 from .model_provider import SmolagentsModelProvider
+from ..agents.interrupt_aware_agent import InterruptAwareToolCallingAgent
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,26 @@ class AgentConfig:
     agent_name: str = "tool_calling_agent"
     agent_description: str = "ToolCallingAgent with configured tools"
     enable_caching: bool = False
+    managed_agents: Optional[List[Any]] = None  # Sub-agents for multi-agent routing
+    instructions: Optional[str] = None  # Custom instructions inserted into system prompt
+
+
+# Default instructions for all agents
+# AIDEV-NOTE: These instructions are critical for reliable agent behavior
+DEFAULT_AGENT_INSTRUCTIONS = """## Critical Rules
+
+1. **NEVER use arbitrary or placeholder values** - If you don't know a value (like an ID), you MUST either:
+   - Ask the user to provide it
+   - Use a tool to look it up first
+   - Report that you cannot proceed without the information
+
+2. **Report failures clearly** - If a tool fails or returns an error, inform the user immediately with:
+   - What you were trying to do
+   - What went wrong
+   - Suggested next steps (if any)
+
+3. **List before reading** - When working with resources (skills, agents, tables, etc.), always list available items first to find the correct ID before attempting to read or modify.
+"""
 
 
 class AgentFactory:
@@ -76,11 +97,20 @@ class AgentFactory:
         # Get model instance
         model = self.model_provider.get_model(model_id=model_id)
 
-        # Create agent
-        agent = ToolCallingAgent(
+        # Build instructions: default rules + any custom instructions
+        instructions = DEFAULT_AGENT_INSTRUCTIONS
+        if config.instructions:
+            instructions = f"{DEFAULT_AGENT_INSTRUCTIONS}\n\n{config.instructions}"
+
+        # Create agent with optional managed agents for multi-agent routing
+        # AIDEV-NOTE: Use InterruptAwareToolCallingAgent to propagate interrupts from managed agents
+        # This enables HITL workflows where managed agents can pause for user approval
+        agent = InterruptAwareToolCallingAgent(
             tools=config.tools,
             model=model,
-            max_steps=config.max_steps
+            max_steps=config.max_steps,
+            managed_agents=config.managed_agents or [],
+            instructions=instructions
         )
 
         agent.name = config.agent_name

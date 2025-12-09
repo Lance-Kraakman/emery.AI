@@ -41,6 +41,7 @@ export function ViewSelector({
           variant="outline"
           size="sm"
           className={`${className} h-8`}
+          title={displayName} // Show full name on hover
         >
           <span className="text-xs font-normal truncate">{displayName}</span>
           <ChevronDown className="ml-1.5 h-3.5 w-3.5 opacity-50 shrink-0" />

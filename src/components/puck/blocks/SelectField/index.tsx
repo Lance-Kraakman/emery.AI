@@ -11,6 +11,10 @@ import { createFieldSelectorField } from "../../custom-fields";
 import {
   typographySizeField,
   labelPositionField,
+  textColorField,
+  fontFamilyField,
+  fontWeightField,
+  backgroundColorField,
 } from "../../fields/standard-fields";
 
 export const SelectFieldConfig: ComponentConfig<SelectFieldProps> = {
@@ -30,6 +34,17 @@ export const SelectFieldConfig: ComponentConfig<SelectFieldProps> = {
     labelPosition: labelPositionField,
 
     size: typographySizeField,
+
+    textColor: textColorField,
+
+    fontFamily: fontFamilyField,
+
+    fontWeight: fontWeightField,
+
+    backgroundColor: {
+      ...backgroundColorField,
+      label: "Badge Background (Optional)",
+    },
 
     fallback: {
       type: "text",

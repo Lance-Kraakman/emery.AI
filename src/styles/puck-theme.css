@@ -9,6 +9,42 @@
  */
 
 /* ============================================
+   THEME SPACING SCALE
+   ============================================
+
+   Exponential scale based on theme spacing config.
+   Uses --theme-spacing-unit (default: 0.25rem) as base.
+   Scale factor: 1.5x per level
+
+   Level 0: 4px   (none)
+   Level 1: 6px   (xs)
+   Level 2: 9px   (sm)
+   Level 3: 13px  (md)
+   Level 4: 20px  (base)
+   Level 5: 30px  (lg)
+   Level 6: 45px  (xl)
+   Level 7: 68px  (2xl)
+   Level 8: 100px (3xl)
+   Level 9: 152px (4xl)
+   Level 10: 228px (5xl)
+*/
+
+:root {
+  /* Spacing scale using CSS calc with theme base unit */
+  --spacing-0: calc(var(--theme-spacing-unit, 0.25rem) * 1);
+  --spacing-1: calc(var(--theme-spacing-unit, 0.25rem) * 1.5);
+  --spacing-2: calc(var(--theme-spacing-unit, 0.25rem) * 2.25);
+  --spacing-3: calc(var(--theme-spacing-unit, 0.25rem) * 3.375);
+  --spacing-4: calc(var(--theme-spacing-unit, 0.25rem) * 5.0625);
+  --spacing-5: calc(var(--theme-spacing-unit, 0.25rem) * 7.59375);
+  --spacing-6: calc(var(--theme-spacing-unit, 0.25rem) * 11.390625);
+  --spacing-7: calc(var(--theme-spacing-unit, 0.25rem) * 17.0859375);
+  --spacing-8: calc(var(--theme-spacing-unit, 0.25rem) * 25.62890625);
+  --spacing-9: calc(var(--theme-spacing-unit, 0.25rem) * 38.443359375);
+  --spacing-10: calc(var(--theme-spacing-unit, 0.25rem) * 57.6650390625);
+}
+
+/* ============================================
    OFFICIAL: CSS Variable Overrides
    ============================================ */
 

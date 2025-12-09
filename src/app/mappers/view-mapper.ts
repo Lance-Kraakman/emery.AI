@@ -19,6 +19,7 @@ export interface ViewDTO {
     type: 'grid' | 'metric' | 'chart' | 'form';
     [key: string]: any;
   };
+  requiresAuth: boolean; // Whether this view requires authentication (default: true)
   filters: Array<{
     fieldId: number;
     operator: string;
@@ -59,6 +60,7 @@ export class ViewMapper {
         type: 'grid' | 'metric' | 'chart' | 'form';
         [key: string]: any;
       },
+      requiresAuth: persistence.requiresAuth,
       filters: persistence.filters,
       sorting: persistence.sorting,
       pagination: persistence.pagination,

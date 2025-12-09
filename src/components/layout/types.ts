@@ -32,34 +32,31 @@ export interface LayoutState {
   // Panel states
   sidebarState: PanelState
   chatState: PanelState
-  canvasState: PanelState // New canvas state
-  
+
   // Canvas configuration
   canvasType: CanvasType
-  
+
   // Responsive state
   breakpoint: LayoutBreakpoint
   isMobile: boolean
-  
+
   // Chat configuration
   chatContext?: ChatContextConfig
-  
+
   // User context (for permissions and personalization)
   userId?: UserId
   organizationId?: OrganizationId
 }
 
 // Layout actions
-export type LayoutAction = 
+export type LayoutAction =
   | { type: 'SET_SIDEBAR_STATE'; state: PanelState }
   | { type: 'SET_CHAT_STATE'; state: PanelState }
-  | { type: 'SET_CANVAS_STATE'; state: PanelState }
   | { type: 'SET_CANVAS_TYPE'; canvasType: CanvasType }
   | { type: 'SET_BREAKPOINT'; breakpoint: LayoutBreakpoint }
   | { type: 'SET_CHAT_CONTEXT'; context: ChatContextConfig }
   | { type: 'TOGGLE_SIDEBAR' }
   | { type: 'TOGGLE_CHAT' }
-  | { type: 'TOGGLE_CANVAS' }
   | { type: 'RESET_LAYOUT' }
 
 // Props for layout components
@@ -69,7 +66,6 @@ export interface EmeryLayoutProps {
   enableChat?: boolean
   initialSidebarState?: PanelState
   initialChatState?: PanelState
-  initialCanvasState?: PanelState
 }
 
 export interface LayoutProviderProps {
@@ -87,7 +83,6 @@ export const LAYOUT_BREAKPOINTS = {
 export const DEFAULT_LAYOUT_STATE: LayoutState = {
   sidebarState: 'expanded',
   chatState: 'expanded',
-  canvasState: 'collapsed', // Canvas starts collapsed by default
   canvasType: 'chat',
   breakpoint: 'desktop',
   isMobile: false

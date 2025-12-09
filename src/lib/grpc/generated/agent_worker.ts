@@ -462,6 +462,8 @@ export interface ProcessMessageRequest {
   messageId: string;
   /** Required: session identifier (chat_id from database) */
   sessionId: string;
+  /** User API key for internal service calls (skill_builder, etc.) */
+  userApiKey: string;
 }
 
 /** Streaming response from AI processing */
@@ -3230,6 +3232,7 @@ function createBaseProcessMessageRequest(): ProcessMessageRequest {
     model: "",
     messageId: "",
     sessionId: "",
+    userApiKey: "",
   };
 }
 
@@ -3261,6 +3264,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     }
     if (message.sessionId !== "") {
       writer.uint32(74).string(message.sessionId);
+    }
+    if (message.userApiKey !== "") {
+      writer.uint32(82).string(message.userApiKey);
     }
     return writer;
   },
@@ -3344,6 +3350,14 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
           message.sessionId = reader.string();
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.userApiKey = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3368,6 +3382,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
       model: isSet(object.model) ? globalThis.String(object.model) : "",
       messageId: isSet(object.messageId) ? globalThis.String(object.messageId) : "",
       sessionId: isSet(object.sessionId) ? globalThis.String(object.sessionId) : "",
+      userApiKey: isSet(object.userApiKey) ? globalThis.String(object.userApiKey) : "",
     };
   },
 
@@ -3400,6 +3415,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     if (message.sessionId !== "") {
       obj.sessionId = message.sessionId;
     }
+    if (message.userApiKey !== "") {
+      obj.userApiKey = message.userApiKey;
+    }
     return obj;
   },
 
@@ -3421,6 +3439,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     message.model = object.model ?? "";
     message.messageId = object.messageId ?? "";
     message.sessionId = object.sessionId ?? "";
+    message.userApiKey = object.userApiKey ?? "";
     return message;
   },
 };

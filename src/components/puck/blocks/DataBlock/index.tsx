@@ -72,11 +72,23 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       max: 6,
     },
 
-    // List mode: Gap (in pixels)
+    // List mode: Gap (spacing level)
     gap: {
-      type: "number",
-      label: "Gap (px)",
-      min: 0,
+      type: "select",
+      label: "Gap",
+      options: [
+        { value: "0", label: "None (0)" },
+        { value: "1", label: "XS (1)" },
+        { value: "2", label: "SM (2)" },
+        { value: "3", label: "MD (3)" },
+        { value: "4", label: "Base (4)" },
+        { value: "5", label: "LG (5)" },
+        { value: "6", label: "XL (6)" },
+        { value: "7", label: "2XL (7)" },
+        { value: "8", label: "3XL (8)" },
+        { value: "9", label: "4XL (9)" },
+        { value: "10", label: "5XL (10)" },
+      ],
     },
 
     // List mode: Items per page
@@ -115,6 +127,25 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       ],
     },
 
+    // Edit mode options
+    editEnabled: {
+      type: "radio",
+      label: "Enable Editing",
+      options: [
+        { label: "Yes", value: true },
+        { label: "No", value: false },
+      ],
+    },
+
+    allowCreate: {
+      type: "radio",
+      label: "Allow Creating New Rows",
+      options: [
+        { label: "Yes", value: true },
+        { label: "No", value: false },
+      ],
+    },
+
     // Slot for item template content
     children: {
       type: "slot",
@@ -136,10 +167,12 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     },
     layout: "vertical",
     columns: 2,
-    gap: 16,
+    gap: "4",
     itemsPerPage: 10,
     paginationStyle: "none",
     showCarouselArrows: false,
+    editEnabled: false,
+    allowCreate: false,
   },
 
   /**
@@ -150,12 +183,19 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     const mode = data.props.mode;
     const layout = data.props.layout;
     const viewId = data.props.viewId;
+    const editEnabled = data.props.editEnabled;
 
     // Base fields always shown
     const baseFields = {
       mode: fields.mode,
       viewId: fields.viewId,
     };
+
+    // Edit mode fields (shown when viewId is selected)
+    const editFields = viewId ? {
+      editEnabled: fields.editEnabled,
+      ...(editEnabled && mode === 'list' && { allowCreate: fields.allowCreate }),
+    } : {};
 
     if (mode === 'single') {
       // Single mode: dynamically create singleRowFilter with viewId in closure
@@ -173,6 +213,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
             />
           ),
         },
+        ...editFields,
         children: fields.children,
       };
     }
@@ -187,6 +228,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       paginationStyle: fields.paginationStyle,
       maxHeight: fields.maxHeight,
       ...(layout === 'horizontal' && { showCarouselArrows: fields.showCarouselArrows }),
+      ...editFields,
       children: fields.children,
     };
   },
@@ -238,8 +280,18 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         };
       }
 
-      // Get fields for the table (for field selector)
-      const fields = await getFields(view.tableId);
+      // Get all table fields (for full FieldDTO data needed by edit mode)
+      // Pass viewId so RLS can check public access via fields_public_via_view policy
+      const allTableFields = await getFields(view.tableId, { viaViewId: props.viewId });
+
+      // Helper to filter fields to only those mapped in the view
+      const filterFieldsToView = (
+        tableFields: typeof allTableFields,
+        viewFields: Array<{ id: number; name: string; type: string }>
+      ) => {
+        const viewFieldIds = new Set(viewFields.map(f => f.id));
+        return tableFields.filter(f => viewFieldIds.has(f.id));
+      };
 
       // Helper to execute view (uses public or authenticated based on context)
       const doExecuteView = async (
@@ -279,7 +331,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
               ...props,
               _viewName: view.name,
               _tableId: view.tableId,
-              _fields: fields,
+              _fields: allTableFields, // Use all fields when no filter (editor needs field options)
               _resolvedRow: undefined,
               _error: undefined, // No error, just not configured yet
             },
@@ -307,12 +359,15 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
               ...props,
               _viewName: view.name,
               _tableId: view.tableId,
-              _fields: fields,
+              _fields: allTableFields,
               _resolvedRow: undefined,
               _error: 'Failed to execute view',
             },
           };
         }
+
+        // Filter fields to only those configured in the view
+        const viewFields = filterFieldsToView(allTableFields, result.fields);
 
         // Get the first (and only) row
         const targetRow = result.rows[0];
@@ -325,7 +380,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
               ...props,
               _viewName: view.name,
               _tableId: view.tableId,
-              _fields: fields,
+              _fields: viewFields,
               _resolvedRow: undefined,
               _error: undefined, // Don't show error in editor when variable isn't available
             },
@@ -337,7 +392,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
             ...props,
             _viewName: view.name,
             _tableId: view.tableId,
-            _fields: fields,
+            _fields: viewFields,
             _resolvedRow: targetRow,
             _error: undefined,
           },
@@ -357,7 +412,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
             ...props,
             _viewName: view.name,
             _tableId: view.tableId,
-            _fields: fields,
+            _fields: allTableFields,
             _rows: [],
             _totalCount: 0,
             _error: 'Failed to execute view',
@@ -365,12 +420,15 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         };
       }
 
+      // Filter fields to only those configured in the view
+      const viewFields = filterFieldsToView(allTableFields, result.fields);
+
       return {
         props: {
           ...props,
           _viewName: view.name,
           _tableId: view.tableId,
-          _fields: fields,
+          _fields: viewFields,
           _rows: result.rows,
           _totalCount: result.totalCount,
           _error: undefined,

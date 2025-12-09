@@ -155,6 +155,11 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   const [optimisticFields, setOptimisticFields] = useState<FieldDTO[] | null>(null)
   const [reorderError, setReorderError] = useState<string | null>(null)
 
+  // Clear optimistic state when fields prop updates from server
+  useEffect(() => {
+    setOptimisticFields(null)
+  }, [fields])
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
 
@@ -189,7 +194,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
         
         if (result.success) {
           onFieldsUpdated()
-          setOptimisticFields(null) // Clear optimistic state on success
+          // Don't clear optimisticFields here - let the useEffect do it when fields prop updates
         } else {
           // Rollback on error
           setOptimisticFields(null)
@@ -314,8 +319,11 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   }
 
   // Sort fields by orderIndex, with optimistic updates
+  // Filter out system 'id' field - it's synthetic and shouldn't be reorderable
   const sortedFields = useMemo(() => {
-    const baseFields = [...fields].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0))
+    const baseFields = [...fields]
+      .filter(f => f.name !== 'id')
+      .sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0))
     return optimisticFields || baseFields
   }, [fields, optimisticFields]);
 

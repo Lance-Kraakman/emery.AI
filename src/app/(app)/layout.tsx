@@ -3,16 +3,16 @@ import { Toaster } from 'sonner'
 import AnimatedBackground from '@/app/components/AnimatedBackground'
 import { EmeryProviders } from '@/components/EmeryProviders'
 import { auth } from '@/lib/auth'
-import { getApps } from '@/app/actions/puck-apps'
-import { getPages } from '@/app/actions/puck-pages'
 import { getAgents } from '@/app/actions/agents'
 import { getTeams } from '@/app/actions/teams'
 import { getSkillsByOrganization } from '@/app/actions/skills'
 import { getDatabases } from '@/app/actions/databases'
 import { getTables } from '@/app/actions/tables'
+import { getAppApplicationService } from '@/ddd/application/di/container'
+import { OrganizationId } from '@/ddd/domain/shared/value-objects'
 
 // AIDEV-NOTE: Server-side sidebar data fetching moved to layout
-// Eliminates client-side waterfalls and loading states
+// Uses optimized 2-query approach for apps+pages instead of N+1
 
 interface SidebarApp {
   id: number
@@ -63,8 +63,12 @@ export default async function AppLayout({
   // Only fetch if user has an organization
   if (session?.user?.currentOrganizationId) {
     try {
-      const [appsResult, agentsResult, teamsResult, skillsResult, databasesResult, tablesResult] = await Promise.all([
-        getApps(),
+      const startTime = Date.now()
+      const orgId = OrganizationId.fromNumber(session.user.currentOrganizationId)
+
+      // Fetch all sidebar data in parallel (no N+1 - apps+pages use optimized 2-query approach)
+      const [appsWithPages, agentsResult, teamsResult, skillsResult, databasesResult, tablesResult] = await Promise.all([
+        getAppApplicationService().getAppsWithPagesForOrganization(orgId),
         getAgents(),
         getTeams(),
         getSkillsByOrganization(session.user.currentOrganizationId),
@@ -72,20 +76,7 @@ export default async function AppLayout({
         getTables()
       ])
 
-      // Extract data from Result types
-      const apps = appsResult.success && appsResult.data ? appsResult.data : []
-
-      // Fetch pages for each app
-      const appsWithPages = await Promise.all(
-        apps.map(async (app) => {
-          const pagesResult = await getPages(app.id)
-          const pages = pagesResult.success && pagesResult.data ? pagesResult.data : []
-          return {
-            ...app,
-            pages
-          }
-        })
-      )
+      console.log(`[PERF] Sidebar data fetch: ${Date.now() - startTime}ms`)
 
       // Group tables by database
       const tablesByDatabase = (tablesResult || []).reduce((acc, table) => {

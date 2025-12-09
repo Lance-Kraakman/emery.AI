@@ -5,9 +5,15 @@
  *
  * Displays formatted date from date field values from the nearest data context.
  * Must be used inside DataContextBlock or RepeatBlock.
+ *
+ * Edit Mode: When inside an EditableRowProvider with isEditMode=true,
+ * renders as a date input instead of display text.
  */
 
 import { useFieldValue, useIsInDataContext } from '@/components/puck/hooks/useFieldValue';
+import { useEditableRow } from '@/components/puck/contexts/EditableRowContext';
+import { useFieldMetadata } from '@/components/puck/hooks/useFieldMetadata';
+import { DateInput } from '@/components/forms/inputs/DateInput';
 import { cn } from '@/lib/utils';
 import styles from './styles.module.css';
 
@@ -37,6 +43,8 @@ export default function DateField({
   // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
   const value = useFieldValue(fieldId ?? 0);
+  const editable = useEditableRow();
+  const field = useFieldMetadata(fieldId);
 
   // No field selected
   if (fieldId === undefined) {
@@ -59,6 +67,36 @@ export default function DateField({
       </div>
     );
   }
+
+  // ============================================
+  // EDIT MODE: Render as uncontrolled date input
+  // ============================================
+  if (editable?.isEditMode && field) {
+    // Convert to Date object or null
+    let initialValue: Date | null = null;
+    if (value) {
+      const parsed = new Date(value as string | number | Date);
+      if (!isNaN(parsed.getTime())) {
+        initialValue = parsed;
+      }
+    }
+
+    return (
+      <div className={styles.editContainer}>
+        <DateInput
+          field={field}
+          name={field.name}
+          defaultValue={initialValue}
+          label={label || field.name}
+          disabled={editable.isSaving}
+        />
+      </div>
+    );
+  }
+
+  // ============================================
+  // DISPLAY MODE: Render as formatted text
+  // ============================================
 
   // Get display value
   let displayValue = fallback;

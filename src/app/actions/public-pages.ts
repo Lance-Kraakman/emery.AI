@@ -424,8 +424,9 @@ export async function executePublicView(
 
     if (additionalFilters && additionalFilters.length > 0) {
       // Fetch fields to convert field names to IDs
+      // Pass viaViewId so RLS can check public access via fields_public_via_view policy
       const { getFields } = await import('./fields');
-      const fields = await getFields(view.tableId.value);
+      const fields = await getFields(view.tableId.value, { viaViewId: viewId });
       const fieldNameToIdMap = new Map(fields.map(f => [f.name, f.id]));
 
       // Operator mapping
@@ -504,9 +505,9 @@ export async function executePublicView(
 
     const fields = schemaResult.data;
 
-    // Convert Row entities to plain objects with field NAMES as keys
-    // (Required for variable resolution in templates like {Name})
-    const plainRows = result.data.rows.map((row) => row.toNamedObject(fields));
+    // Convert Row entities to plain objects with field IDs as keys
+    // (useFieldValue looks up by fieldId, e.g., rowData["42"])
+    const plainRows = result.data.rows.map((row) => row.toPlainObject(fields));
 
     // Convert TableField VOs to plain objects
     const plainFields = fields.map((field) => ({
