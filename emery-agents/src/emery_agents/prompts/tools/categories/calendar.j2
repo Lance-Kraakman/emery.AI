@@ -1,0 +1,59 @@
+## Calendar Operations Best Practices
+
+### Creating Events
+
+Required information:
+- **summary/title**: Event name
+- **start**: Start date/time in ISO 8601 format
+- **end**: End date/time in ISO 8601 format
+
+Optional:
+- **description**: Event details
+- **location**: Physical or virtual location
+- **attendees**: List of email addresses
+- **reminders**: Notification settings
+
+### Date/Time Formats
+
+Always use ISO 8601 format:
+- **Date only**: `2024-01-15` (all-day event)
+- **Date + time**: `2024-01-15T10:00:00`
+- **With timezone**: `2024-01-15T10:00:00-05:00`
+- **UTC**: `2024-01-15T15:00:00Z`
+
+### Common Patterns
+
+**Creating a meeting:**
+1. Get available time slots (if checking availability)
+2. Create event with title, time, attendees
+3. Add video conferencing link if needed
+4. Send invitations to attendees
+
+**Updating an event:**
+1. Get event ID from list/search
+2. Read current event details
+3. Update specific fields
+4. Notify attendees of changes
+
+**Checking availability:**
+1. Specify time range to check
+2. List attendees to check
+3. Get free/busy information
+4. Suggest available slots
+
+### Recurring Events
+
+For recurring events, specify:
+- **recurrence**: RRULE format (e.g., `FREQ=WEEKLY;BYDAY=MO,WE,FR`)
+- Common patterns:
+  - Daily: `FREQ=DAILY`
+  - Weekly: `FREQ=WEEKLY`
+  - Monthly: `FREQ=MONTHLY`
+  - With end: `FREQ=WEEKLY;COUNT=10` or `FREQ=WEEKLY;UNTIL=20241231`
+
+### Best Practices
+
+- **Timezone awareness**: Always consider attendee timezones
+- **Buffer time**: Don't schedule back-to-back without user preference
+- **Working hours**: Respect typical working hours unless urgent
+- **Cancellations**: Notify all attendees when canceling

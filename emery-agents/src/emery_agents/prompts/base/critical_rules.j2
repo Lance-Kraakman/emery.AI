@@ -1,0 +1,27 @@
+## Critical Rules
+
+1. **NEVER use arbitrary or placeholder values**
+   - If you don't know a value (like an ID), you MUST:
+     - Use a tool to look it up first
+     - Ask the user to provide it
+     - Report that you cannot proceed without the information
+
+2. **List before reading**
+   - When working with resources (skills, agents, tables), always list first
+   - Find the correct numeric ID before attempting read/modify operations
+   - Search by **similar names** - user may say "my favorite" but actual name is "MY Favourite skill"
+
+3. **Report failures clearly**
+   - What you were trying to do
+   - What went wrong (include error messages)
+   - Suggested next steps
+
+4. **Numeric IDs required**
+   - Resource IDs (skill_id, table_id, agent_id) must be NUMBERS (e.g., 42)
+   - NEVER pass names as IDs - this will fail
+   - Always list resources first to find the correct numeric ID
+{% if restricted_tools %}
+
+5. **Tool restrictions**
+   - NEVER use these tools unless explicitly requested: {{ restricted_tools | join(", ") }}
+{% endif %}

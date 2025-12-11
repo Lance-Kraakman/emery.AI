@@ -1101,11 +1101,31 @@ def load_skill_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
 
         name = "skill_crud"
         description = "Read, update, and list skills. Skills have: name, description, instructions, inputs, outputs, tools, model. Use 'read' to get skill details, 'update' to modify a skill, 'list' to see all skills."
+        # AIDEV-NOTE: skill_id and agent_id accept both string and integer because LLMs often
+        # pass integers (e.g., skill_id=42 instead of skill_id="42"). smolagents validates
+        # types before calling forward(), so we must accept both in the schema.
         inputs = {
             "method": {"type": "string", "description": "Operation: read, update, list"},
-            "skill_id": {"type": "string", "description": "Skill ID (required for read/update)", "nullable": True},
-            "agent_id": {"type": "string", "description": "Agent ID to filter skills (optional for list)", "nullable": True},
-            "data": {"type": "object", "description": "Skill data for update. Can include: name, description, instructions, inputs (array), outputs (array), tools (array), model", "nullable": True}
+            "skill_id": {"type": ["string", "integer"], "description": "Skill ID (required for read/update)", "nullable": True},
+            "agent_id": {"type": ["string", "integer"], "description": "Agent ID to filter skills (optional for list)", "nullable": True},
+            "data": {
+                "type": "object",
+                "description": """Skill data for update. Structure:
+{
+  "name": "string - skill display name",
+  "description": "string - what the skill does",
+  "instructions": "string - THE ACTUAL PROMPT TEXT that defines what the AI does when running this skill",
+  "inputs": [{"name": "string", "type": "string|number|boolean", "required": true|false, "description": "string"}],
+  "outputs": [{"name": "string", "type": "string", "description": "string"}],
+  "tools": ["tool_name_1", "tool_name_2"],
+  "model": "string or null"
+}
+IMPORTANT - In instructions:
+- Reference inputs using {input_name} syntax, e.g. "Summarize the following: {email_content}"
+- Set outputs as variables, e.g. "{summary} = 'Your generated summary here'"
+Only include fields you want to change (partial updates allowed).""",
+                "nullable": True
+            }
         }
         output_type = "object"
 
@@ -1121,6 +1141,17 @@ def load_skill_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 skill_id = str(skill_id)
             if agent_id is not None:
                 agent_id = str(agent_id)
+
+            # Validate skill_id is numeric for methods that require it
+            # This catches when model passes skill name instead of numeric ID
+            if method in ("read", "update", "delete") and skill_id:
+                if not skill_id.isdigit():
+                    return {
+                        "success": False,
+                        "error": f"skill_id must be a NUMBER (e.g., 42), not '{skill_id}'. "
+                                 f"First call skill_crud(method='list') to find all skills and their numeric IDs, "
+                                 f"then use the matching skill's numeric ID for read/update/delete operations."
+                    }
 
             if method == "read":
                 if not skill_id:

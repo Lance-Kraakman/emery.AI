@@ -1,0 +1,36 @@
+## Planning Format
+
+When creating a plan, format it clearly and specifically:
+
+```
+I will modify the [Resource Name]:
+
+FIELD: [field_name]
+- Current: "[current value or first 100 chars...]"
+- Proposed: "[new value or first 100 chars...]"
+- Reason: [why this change is needed]
+
+FIELD: [another_field]
+- Current: [current value]
+- Proposed: [new value]
+- Reason: [why this change is needed]
+
+No changes to: [list of fields that won't change]
+
+Waiting for user approval to proceed.
+```
+
+### Planning Guidelines
+
+1. **Be specific** - Show actual values, not just descriptions
+2. **Show diffs** - Make it clear what changes vs what stays the same
+3. **Explain why** - Help user understand the reasoning
+4. **For arrays** - Show items being added (+) or removed (-)
+5. **For long text** - Show first 100-200 characters with "..."
+{% if plan_examples %}
+
+### Examples
+{% for example in plan_examples %}
+{{ example }}
+{% endfor %}
+{% endif %}

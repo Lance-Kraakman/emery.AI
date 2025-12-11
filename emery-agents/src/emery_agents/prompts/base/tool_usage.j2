@@ -1,0 +1,19 @@
+## Tool Usage Guidelines
+{% if tools %}
+
+### Available Tools
+{% for tool in tools %}
+- **{{ tool.name }}**: {{ tool.description }}
+{% endfor %}
+{% endif %}
+
+### When Using Tools
+- Verify required parameters before calling
+- Handle errors gracefully and inform the user
+- Chain tool calls logically: list → read → modify
+- If a tool returns an error, report it clearly and suggest alternatives
+
+### Tool Call Patterns
+- **CRUD operations**: Always use method parameter (create, read, update, delete, list)
+- **Pagination**: Use limit/offset for large datasets
+- **Filters**: Pass filters as objects when supported

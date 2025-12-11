@@ -875,11 +875,42 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # Pattern matches smolagents' official plan_customization example
             if "interrupted" in str(e).lower():
                 logger.info("⏸️ Agent interrupted for user approval (HITL workflow)")
-                # Don't yield error - the plan was already streamed via step progress
+
+                # Extract the plan from agent memory to show user what they're approving
+                # AIDEV-NOTE: Plan may be in parent agent memory OR managed agent memory
+                # depending on which agent created the plan (skill_builder stores in its own memory)
+                plan_content = None
+
+                # First check parent agent memory
+                for step in reversed(agent.memory.steps):
+                    if hasattr(step, 'plan') and step.plan:
+                        plan_content = step.plan
+                        logger.info(f"📋 Found plan in parent agent memory ({len(plan_content)} chars)")
+                        break
+
+                # If not found, check managed agents' memory (for HITL workflows like skill_builder)
+                if not plan_content and hasattr(agent, 'managed_agents'):
+                    for name, managed_agent in agent.managed_agents.items():
+                        if hasattr(managed_agent, 'memory') and managed_agent.memory:
+                            for step in reversed(managed_agent.memory.steps):
+                                if hasattr(step, 'plan') and step.plan:
+                                    plan_content = step.plan
+                                    logger.info(f"📋 Found plan in {name} agent memory ({len(plan_content)} chars)")
+                                    break
+                        if plan_content:
+                            break
+
+                # Build descriptive message with plan content
+                if plan_content:
+                    message = f"## Proposed Plan\n\n{plan_content}\n\n---\n\n**Reply 'yes' or 'approve' to proceed, or provide feedback.**"
+                else:
+                    logger.warning("⚠️ No plan found in agent memory for interrupt message")
+                    message = "Waiting for your approval to proceed."
+
                 # Session preserved with reset=False for resumption on next message
                 interrupted_response: InterruptedResponseDict = {
                     "type": "interrupted",
-                    "message": "Waiting for your approval to proceed."
+                    "message": message
                 }
                 yield interrupted_response
                 return
