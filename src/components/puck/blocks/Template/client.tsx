@@ -9,15 +9,6 @@ import { generateId } from "@/components/puck/lib/generate-id";
 import TemplateComponent, { TemplateProps } from "./Template";
 import { useLinkContext } from "../../link-context";
 import {
-  SYSTEM_TEMPLATES,
-  getSystemTemplate,
-  getVariantData,
-  getDefaultVariantId,
-  isSystemTemplate,
-  type SystemTemplate,
-  type SystemTemplateVariant,
-} from "./system-templates";
-import {
   getTemplates,
   createTemplate,
   updateTemplate,
@@ -66,12 +57,27 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
         const linkContext = useLinkContext();
         const appId = linkContext.appId;
 
-        const allProps = usePuck((s) => s.selectedItem?.props) as
-          | TemplateProps
-          | undefined;
+        // Get props, appState, and dispatch from Puck
+        const props = usePuck((s) => s.selectedItem?.props) as TemplateProps | undefined;
         const selectedItem = usePuck((s) => s.selectedItem);
         const dispatch = usePuck((s) => s.dispatch);
-        const appStateData = usePuck((s) => s.appState?.data);
+        const appState = usePuck((s) => s.appState);
+
+        // Get children from zones (for DB templates) or props (for drag-drop)
+        // Zone key format: "<componentId>:children"
+        const zoneKey = selectedItem?.props?.id ? `${selectedItem.props.id}:children` : null;
+        const childrenFromZone = zoneKey ? (appState?.data?.zones?.[zoneKey] as any[] | undefined) : undefined;
+        // Use zone data if available, otherwise fall back to props.children
+        const children = childrenFromZone && childrenFromZone.length > 0 ? childrenFromZone : props?.children;
+
+        // DEBUG
+        console.log('[Template] Render:', {
+          value,
+          zoneKey,
+          childrenFromZone: childrenFromZone?.length,
+          propsChildren: Array.isArray(props?.children) ? props.children.length : typeof props?.children,
+          children: Array.isArray(children) ? children.length : typeof children,
+        });
 
         const [templates, setTemplates] = useState<TemplateDTO[]>([]);
         const [loading, setLoading] = useState(true);
@@ -109,100 +115,109 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
           loadTemplates();
         }, [loadTemplates]);
 
-        // Handle template selection - dispatch zone data BEFORE updating prop
+        // Handle template change - dispatches zone updates directly
+        // All templates are now DB templates (including system templates)
         const handleTemplateChange = async (newValue: string) => {
-          console.log('[Template] handleTemplateChange called:', {
+          // DEBUG - add stack trace to find what's calling this
+          console.log('[Template] handleTemplateChange:', {
             newValue,
-            selectedItemId: selectedItem?.props?.id,
+            componentId: selectedItem?.props?.id,
+            templateFound: newValue.startsWith('db_') ? !!templates.find(t => t.id === parseInt(newValue.replace('db_', ''), 10)) : 'n/a',
+            saveDialogOpen,
           });
+          if (newValue === 'blank') {
+            console.trace('[Template] WHO IS CALLING handleTemplateChange with blank?');
+            // If dialog is open, this is a bug - don't change template
+            if (saveDialogOpen) {
+              console.warn('[Template] BLOCKED: handleTemplateChange called with blank while dialog is open!');
+              return;
+            }
+          }
 
-          if (!selectedItem?.props?.id) {
+          const componentId = selectedItem?.props?.id;
+
+          if (!componentId) {
             onChange(newValue);
             return;
           }
 
-          const zoneKey = `${selectedItem.props.id}:children`;
+          const componentZoneKey = `${componentId}:children`;
 
-          if (isSystemTemplate(newValue)) {
-            const systemTemplate = getSystemTemplate(newValue);
-            if (systemTemplate) {
-              const variantResult = getVariantData(systemTemplate, undefined);
-              if (variantResult) {
-                const { conf: config } = await import("../../index");
-                const children = variantResult.data.map((item) =>
-                  walkTree(
-                    { type: item.type, props: { ...item.props, id: generateId(item.type) } },
-                    config,
-                    (content) =>
-                      content.map((child) => ({
-                        ...child,
-                        props: { ...child.props, id: generateId(child.type) },
-                      }))
-                  )
-                );
-
-                console.log('[Template] Dispatching zone update:', {
-                  zoneKey,
-                  childrenCount: children.length,
-                  childrenTypes: children.map((c: any) => c.type),
-                });
-
-                // Dispatch BEFORE onChange - set zone first
-                dispatch({
-                  type: "setData",
-                  data: (prev: any) => ({
-                    ...prev,
-                    zones: {
-                      ...prev.zones,
-                      [zoneKey]: children,
-                    },
-                  }),
-                });
-              }
-            }
-          } else if (newValue === "blank") {
-            // Clear children for blank template - dispatch BEFORE onChange
+          if (newValue === "blank") {
+            // Clear zones for blank template
             dispatch({
               type: "setData",
               data: (prev: any) => ({
                 ...prev,
                 zones: {
                   ...prev.zones,
-                  [zoneKey]: [],
+                  [componentZoneKey]: [],
                 },
               }),
             });
-          }
-          // For db_ templates, resolveData handles loading
+          } else if (newValue.startsWith("db_")) {
+            // DB template (includes system templates) - load and dispatch
+            const templateId = parseInt(newValue.replace("db_", ""), 10);
+            const template = templates.find((t) => t.id === templateId);
 
-          // Update prop AFTER dispatch
+            if (template) {
+              let componentTree = template.data;
+              if (template.variants && template.variants.length > 0) {
+                const defaultVariant = template.variants.find((v) => v.isDefault) || template.variants[0];
+                if (defaultVariant) {
+                  componentTree = defaultVariant.data;
+                }
+              }
+
+              // Generate unique IDs for all components in the tree
+              // This is required because template data may not have IDs (system templates)
+              // or we need fresh IDs for each instance
+              const { conf: config } = await import("../../index");
+              const children = componentTree.map((item: any) =>
+                walkTree(
+                  { type: item.type, props: { ...item.props, id: generateId(item.type) } },
+                  config,
+                  (content) => content.map((child) => ({
+                    ...child,
+                    props: { ...child.props, id: generateId(child.type) },
+                  }))
+                )
+              );
+
+              // DEBUG
+              console.log('[Template] Dispatching zone update:', {
+                componentZoneKey,
+                childrenCount: children.length,
+                childrenTypes: children.map((c: any) => c.type),
+              });
+
+              dispatch({
+                type: "setData",
+                data: (prev: any) => ({
+                  ...prev,
+                  zones: {
+                    ...prev.zones,
+                    [componentZoneKey]: children,
+                  },
+                }),
+              });
+            }
+          }
+
           onChange(newValue);
-        };
-
-        // Get zone content for saving - reads from Puck's stored state
-        const getZoneContent = (): any[] => {
-          if (!selectedItem?.props?.id) {
-            console.log('[Template Save] No selectedItem.props.id');
-            return [];
-          }
-          const zoneKey = `${selectedItem.props.id}:children`;
-          const zoneContent = appStateData?.zones?.[zoneKey] ?? [];
-
-          console.log('[Template Save] Debug:', {
-            zoneKey,
-            zoneContentLength: zoneContent.length,
-            allZoneKeys: Object.keys(appStateData?.zones ?? {}),
-            templateValue: value,
-          });
-
-          return zoneContent;
         };
 
         // Handle save new template
         const handleSaveTemplate = async () => {
-          const contentToSave = getZoneContent();
+          // DEBUG
+          console.log('[Template] handleSaveTemplate:', {
+            zoneKey,
+            childrenFromZone: childrenFromZone?.length,
+            propsChildren: Array.isArray(props?.children) ? props.children.length : typeof props?.children,
+            children: Array.isArray(children) ? children.length : typeof children,
+          });
 
-          if (!contentToSave || contentToSave.length === 0) {
+          if (!children || (Array.isArray(children) && children.length === 0)) {
             toast.error("No content to save as template");
             return;
           }
@@ -212,11 +227,18 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
             return;
           }
 
+          const childrenArray = Array.isArray(children) ? children : [];
+          console.log('[Template] childrenArray:', childrenArray.length); // DEBUG
+          if (childrenArray.length === 0) {
+            toast.error("No content to save as template");
+            return;
+          }
+
           setSaving(true);
           try {
             const { conf: config } = await import("../../index");
 
-            const data = contentToSave.map((child) =>
+            const data = childrenArray.map((child: any) =>
               walkTree(
                 {
                   type: child.type,
@@ -258,16 +280,17 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
           }
         };
 
-        // Find current template (DB or system)
+        // Find current template
         const currentTemplateId = value?.startsWith("db_")
           ? parseInt(value.replace("db_", ""), 10)
           : null;
         const currentTemplate = currentTemplateId
           ? templates.find((t) => t.id === currentTemplateId)
           : null;
-        const currentSystemTemplate = value?.startsWith("system_")
-          ? SYSTEM_TEMPLATES[value.replace("system_", "")]
-          : null;
+
+        // Separate system templates from user templates for UI grouping
+        const systemTemplates = templates.filter((t) => t.isSystem);
+        const userTemplates = templates.filter((t) => !t.isSystem);
 
         // Handle share click
         const handleShareClick = (template: TemplateDTO, e: React.MouseEvent) => {
@@ -288,7 +311,12 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
                 <div className="flex flex-col gap-1.5 max-h-[300px] overflow-y-auto pr-1">
                   {/* Blank option */}
                   <button
-                    onClick={() => handleTemplateChange("blank")}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      console.log('[Template] Blank button clicked explicitly');
+                      handleTemplateChange("blank");
+                    }}
                     className={`relative group text-left p-1.5 rounded-md border transition-all ${
                       value === "blank" || !value
                         ? "border-primary bg-primary/5 ring-1 ring-primary"
@@ -304,40 +332,50 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
                   </button>
 
                   {/* System templates section */}
-                  <div className="mt-2 mb-1">
-                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">System</span>
-                  </div>
-
-                  {/* System templates - 7 items */}
-                  {Object.entries(SYSTEM_TEMPLATES).map(([key, template]) => (
-                    <button
-                      key={key}
-                      onClick={() => handleTemplateChange(`system_${key}`)}
-                      className={`relative group text-left p-1.5 rounded-md border transition-all ${
-                        value === `system_${key}`
-                          ? "border-primary bg-primary/5 ring-1 ring-primary"
-                          : "border-border hover:border-muted-foreground/50 hover:bg-accent/50"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        {value === `system_${key}` && (
-                          <Check className="h-3 w-3 text-primary shrink-0" />
-                        )}
-                        <span className="text-xs font-medium">{template.label}</span>
+                  {systemTemplates.length > 0 && (
+                    <>
+                      <div className="mt-2 mb-1">
+                        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">System</span>
                       </div>
-                    </button>
-                  ))}
+                      {systemTemplates.map((template) => (
+                        <button
+                          type="button"
+                          key={template.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTemplateChange(`db_${template.id}`);
+                          }}
+                          className={`relative group text-left p-1.5 rounded-md border transition-all ${
+                            value === `db_${template.id}`
+                              ? "border-primary bg-primary/5 ring-1 ring-primary"
+                              : "border-border hover:border-muted-foreground/50 hover:bg-accent/50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            {value === `db_${template.id}` && (
+                              <Check className="h-3 w-3 text-primary shrink-0" />
+                            )}
+                            <span className="text-xs font-medium">{template.name}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </>
+                  )}
 
                   {/* Saved templates section */}
-                  {templates.length > 0 && (
+                  {userTemplates.length > 0 && (
                     <>
                       <div className="mt-2 mb-1">
                         <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Saved</span>
                       </div>
-                      {templates.map((template) => (
+                      {userTemplates.map((template) => (
                         <button
+                          type="button"
                           key={template.id}
-                          onClick={() => onChange(`db_${template.id}`)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTemplateChange(`db_${template.id}`);
+                          }}
                           className={`relative group text-left p-1.5 rounded-md border transition-all ${
                             value === `db_${template.id}`
                               ? "border-primary bg-primary/5 ring-1 ring-primary"
@@ -351,8 +389,9 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
                               )}
                               <span className="text-xs font-medium truncate">{template.name}</span>
                             </div>
-                            {/* Share button */}
+                            {/* Share button - only for user templates */}
                             <button
+                              type="button"
                               onClick={(e) => handleShareClick(template, e)}
                               className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent transition-all shrink-0"
                               title="Share template"
@@ -384,12 +423,18 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
               <div className="flex flex-col gap-2">
                 <PuckButton
                   variant="secondary"
-                  onClick={() => setSaveDialogOpen(true)}
-                  disabled={
-                    // Enable if zone has content OR if a system template is selected
-                    !((appStateData?.zones?.[`${selectedItem?.props?.id}:children`]?.length ?? 0) > 0 ||
-                      isSystemTemplate(value))
-                  }
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    console.log('[Template] Save as template button clicked');
+                    console.log('[Template] Current children before opening dialog:', {
+                      childrenFromZone: childrenFromZone?.length,
+                      propsChildren: Array.isArray(props?.children) ? props.children.length : typeof props?.children,
+                      children: Array.isArray(children) ? children.length : typeof children,
+                    });
+                    setSaveDialogOpen(true);
+                  }}
+                  disabled={!children || (Array.isArray(children) && children.length === 0)}
                 >
                   Save as template
                 </PuckButton>
@@ -504,8 +549,18 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
         const linkContext = useLinkContext();
         const appId = linkContext.appId;
 
-        const allProps = usePuck((s) => s.selectedItem?.props) as TemplateProps | undefined;
-        const templateValue = allProps?.template;
+        // Get props, appState, and dispatch from Puck
+        const props = usePuck((s) => s.selectedItem?.props) as TemplateProps | undefined;
+        const selectedItem = usePuck((s) => s.selectedItem);
+        const dispatch = usePuck((s) => s.dispatch);
+        const appState = usePuck((s) => s.appState);
+
+        // Get children from zones (for DB templates) or props (for drag-drop)
+        const zoneKey = selectedItem?.props?.id ? `${selectedItem.props.id}:children` : null;
+        const childrenFromZone = zoneKey ? (appState?.data?.zones?.[zoneKey] as any[] | undefined) : undefined;
+        const children = childrenFromZone && childrenFromZone.length > 0 ? childrenFromZone : props?.children;
+
+        const templateValue = props?.template;
 
         const [templates, setTemplates] = useState<TemplateDTO[]>([]);
         const [loading, setLoading] = useState(true);
@@ -535,12 +590,7 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
           loadTemplates();
         }, [loadTemplates]);
 
-        // Check if this is a system template
-        const isSystemTemplate = templateValue?.startsWith("system_");
-        const systemTemplateKey = isSystemTemplate && templateValue ? templateValue.replace("system_", "") : null;
-        const systemTemplate = systemTemplateKey ? SYSTEM_TEMPLATES[systemTemplateKey] : null;
-
-        // Get current DB template
+        // Get current template (all templates are now DB templates)
         const currentTemplateId = templateValue?.startsWith("db_")
           ? parseInt(templateValue.replace("db_", ""), 10)
           : null;
@@ -548,49 +598,20 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
           ? templates.find((t) => t.id === currentTemplateId)
           : null;
 
-        // If it's a system template with variants, show them
-        if (systemTemplate && systemTemplate.variants.length > 1) {
-          const selectedVariantId = value || systemTemplate.variants.find((v) => v.isDefault)?.id || systemTemplate.variants[0]?.id;
-
-          return (
-            <FieldLabel label="Variants">
-              <div className="flex flex-col gap-1.5">
-                {systemTemplate.variants.map((variant) => (
-                  <button
-                    key={variant.id}
-                    onClick={() => onChange(variant.id)}
-                    className={`relative group text-left p-1.5 rounded-md border transition-all ${
-                      variant.id === selectedVariantId
-                        ? "border-primary bg-primary/5 ring-1 ring-primary"
-                        : "border-border hover:border-muted-foreground/50 hover:bg-accent/50"
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      {variant.id === selectedVariantId && (
-                        <Check className="h-3 w-3 text-primary shrink-0" />
-                      )}
-                      <span className="text-xs font-medium">{variant.name}</span>
-                      {variant.description && (
-                        <span className="text-xs text-muted-foreground">— {variant.description}</span>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </FieldLabel>
-          );
-        }
-
-        // Only show for DB templates with variants
-        if (!currentDbTemplate) {
+        // Only show for templates with variants
+        if (!currentDbTemplate || currentDbTemplate.variants.length === 0) {
           return <></>;
         }
+
+        // System templates can't be modified - only show variant selection
+        const isSystemTemplate = currentDbTemplate.isSystem;
 
         const selectedVariantId = value || currentDbTemplate.variants.find((v) => v.isDefault)?.id || currentDbTemplate.variants[0]?.id;
 
         // Handle save as variant
         const handleSaveVariant = async () => {
-          if (!allProps?.children || allProps.children.length === 0) {
+          const childrenArray = Array.isArray(children) ? children : [];
+          if (childrenArray.length === 0) {
             toast.error("No content to save as variant");
             return;
           }
@@ -604,7 +625,7 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
           try {
             const { conf: config } = await import("../../index");
 
-            const variantData = allProps.children.map((child) =>
+            const variantData = childrenArray.map((child: any) =>
               walkTree(
                 {
                   type: child.type,
@@ -684,7 +705,8 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
 
         // Handle update variant
         const handleUpdateVariant = async () => {
-          if (!allProps?.children || allProps.children.length === 0) {
+          const childrenArray = Array.isArray(children) ? children : [];
+          if (childrenArray.length === 0) {
             toast.error("No content to save");
             return;
           }
@@ -698,7 +720,7 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
           try {
             const { conf: config } = await import("../../index");
 
-            const variantData = allProps.children.map((child) =>
+            const variantData = childrenArray.map((child: any) =>
               walkTree(
                 {
                   type: child.type,
@@ -773,8 +795,8 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
                             </span>
                           )}
                         </div>
-                        {/* Delete button - only show if more than 1 variant */}
-                        {currentDbTemplate.variants.length > 1 && (
+                        {/* Delete button - only show for user templates with more than 1 variant */}
+                        {!isSystemTemplate && currentDbTemplate.variants.length > 1 && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -795,11 +817,11 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
                     </button>
                   ))}
 
-                  {/* Add variant button */}
-                  {!addingVariant && (
+                  {/* Add variant button - only for user templates */}
+                  {!isSystemTemplate && !addingVariant && (
                     <button
                       onClick={() => setAddingVariant(true)}
-                      disabled={!allProps?.children || allProps.children.length === 0}
+                      disabled={!children || (Array.isArray(children) && children.length === 0)}
                       className="flex items-center justify-center gap-1 p-1.5 rounded-md border border-dashed border-border hover:border-muted-foreground/50 hover:bg-accent/50 text-muted-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Plus className="h-3 w-3" />
@@ -851,13 +873,13 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
                   </div>
                 )}
 
-                {/* Update variant button - only show when a variant is selected and has content */}
-                {selectedVariantId && currentDbTemplate.variants.length > 0 && !addingVariant && (
+                {/* Update variant button - only for user templates */}
+                {!isSystemTemplate && selectedVariantId && currentDbTemplate.variants.length > 0 && !addingVariant && (
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={handleUpdateVariant}
-                    disabled={updatingVariant || !allProps?.children || allProps.children.length === 0}
+                    disabled={updatingVariant || !children || (Array.isArray(children) && children.length === 0)}
                     className="w-full h-7 text-xs"
                   >
                     {updatingVariant && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
@@ -880,68 +902,10 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
     children: [],
     _expandedChildren: undefined,
   },
-  resolveData: async (data, { changed, trigger }) => {
-    // Skip on initial load, only resolve when template or variant changes
-    const shouldResolve = changed.template || changed.selectedVariant;
-    if (!shouldResolve || trigger === "load") return data;
-
-    const templateValue = data.props.template;
-    const selectedVariant = data.props.selectedVariant;
-
-    // System templates are handled by dispatch in handleTemplateChange
-    // resolveData cannot set zones, only dispatch can
-    if (isSystemTemplate(templateValue)) {
-      return data;
-    }
-
-    // Database template
-    if (templateValue?.startsWith("db_")) {
-      const templateId = parseInt(templateValue.replace("db_", ""), 10);
-      try {
-        const result = await getTemplates();
-        if (result.success && result.data) {
-          const template = result.data.find((t) => t.id === templateId);
-          if (template) {
-            let componentTree = template.data;
-            let variantId = selectedVariant;
-
-            if (template.variants && template.variants.length > 0) {
-              const defaultVariant = template.variants.find((v) => v.isDefault) || template.variants[0];
-              const variant = (changed.template || !selectedVariant)
-                ? defaultVariant
-                : template.variants.find((v) => v.id === selectedVariant) || defaultVariant;
-
-              if (variant) {
-                componentTree = variant.data;
-                variantId = variant.id;
-              }
-            }
-
-            return {
-              ...data,
-              props: {
-                ...data.props,
-                selectedVariant: variantId,
-                children: componentTree,
-                _expandedChildren: undefined,  // DB templates don't need this
-              },
-            };
-          }
-        }
-      } catch (error) {
-        console.error("Error loading template from database:", error);
-      }
-    }
-
-    // Blank template - clear everything
-    return {
-      ...data,
-      props: {
-        ...data.props,
-        children: [],
-        _expandedChildren: undefined,
-      },
-    };
+  // Note: resolveData cannot update zones (slots), so we handle zone updates
+  // via dispatch in handleTemplateChange. This resolveData is kept minimal.
+  resolveData: async (data) => {
+    return data;
   },
   render: TemplateComponent,
 };
