@@ -789,9 +789,10 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
     selectedVariant: undefined,
     children: [],
   },
-  resolveData: async (data, { changed, trigger }) => {
-    // Only resolve when template or variant changes
-    if (!changed.template && !changed.selectedVariant && trigger !== "load") {
+  resolveData: async (data, { changed }) => {
+    // Only resolve when template or variant is explicitly changed by user
+    // Do NOT resolve on load - keep existing children (snapshot behavior)
+    if (!changed.template && !changed.selectedVariant) {
       return data;
     }
 
