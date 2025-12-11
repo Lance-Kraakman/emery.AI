@@ -288,6 +288,13 @@
       "when": 1765067516069,
       "tag": "0040_silky_mongu",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1765415950672,
+      "tag": "0041_wise_avengers",
+      "breakpoints": true
     }
   ]
 }

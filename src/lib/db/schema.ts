@@ -1641,32 +1641,33 @@ export const apps = pgTable("apps", {
 export const templates = pgTable("templates", {
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id")
-    .notNull()
-    .references(() => organizations.id, { onDelete: 'cascade' }),
+    .references(() => organizations.id, { onDelete: 'cascade' }), // null for system templates
   appId: integer("app_id")
     .references(() => apps.id, { onDelete: 'cascade' }), // null = org-wide, set = app-specific
   name: text("name").notNull(),
   description: text("description"),
   category: text("category"), // for grouping in UI: 'layout', 'content', 'data', etc.
+  isSystem: boolean("is_system").default(false).notNull(), // true = pre-seeded system template, can't delete
   thumbnailUrl: text("thumbnail_url"), // optional preview image
   data: jsonb("data").notNull().$type<PuckDataStructure["content"]>(), // array of ComponentData (the component tree)
   variants: jsonb("variants").default(sql`'[]'::jsonb`).$type<TemplateVariant[]>(), // pre-defined layout variations
   createdBy: uuid("created_by")
-    .notNull()
-    .references(() => users.id),
+    .references(() => users.id), // null for system templates
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("templates_org_idx").on(table.organizationId),
   index("templates_app_idx").on(table.appId),
   index("templates_category_idx").on(table.category),
+  index("templates_is_system_idx").on(table.isSystem),
 
-  // View permission: Users can view org-wide templates or app-specific templates they have access to
+  // View permission: Users can view their org templates OR global system templates
   pgPolicy("templates_view_permission", {
     as: "permissive",
     for: "select",
     to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+    using: sql`is_system = true OR (
+      organization_id = current_setting('app.current_organization_id')::integer
       AND (
         app_id IS NULL
         OR user_has_permission(
@@ -1676,15 +1677,17 @@ export const templates = pgTable("templates", {
           'app',
           app_id
         )
-      )`,
+      )
+    )`,
   }),
 
-  // Create permission: Users with apps:manage can create templates
+  // Create permission: Users with apps:manage can create templates (not system templates)
   pgPolicy("templates_create_permission", {
     as: "permissive",
     for: "insert",
     to: "public",
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+    withCheck: sql`is_system = false
+      AND organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
         'apps:manage',
@@ -1692,12 +1695,13 @@ export const templates = pgTable("templates", {
       )`,
   }),
 
-  // Manage permission: Creator or org managers can update/delete templates
+  // Manage permission: Creator or org managers can update/delete templates (not system templates)
   pgPolicy("templates_manage_permission", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+    using: sql`is_system = false
+      AND organization_id = current_setting('app.current_organization_id')::integer
       AND (
         created_by = current_setting('app.current_user_id')::uuid
         OR user_has_permission(
