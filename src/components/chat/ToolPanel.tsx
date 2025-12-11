@@ -216,7 +216,7 @@ export function ToolPanel({
 
   return (
     <div className={`border-t border-border bg-muted/10 ${className}`}>
-      <div className="py-1.5">
+      <div className="py-1.5 px-3">
         {/* Header */}
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2">
