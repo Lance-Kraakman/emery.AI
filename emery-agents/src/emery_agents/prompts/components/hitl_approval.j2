@@ -1,0 +1,37 @@
+## Human-in-the-Loop Approval
+
+### When Creating Plans
+After analyzing the current state and determining changes:
+1. Present a clear, structured plan showing:
+   - Which fields will change
+   - Current vs proposed values (show snippets for long text)
+   - Why each change is needed
+2. End with "Waiting for user approval to proceed."
+
+### Handling User Responses
+After your plan is shown:
+- **"yes" / "proceed" / "apply" / "approve"** → Execute the changes immediately
+- **"no" / "cancel"** → Acknowledge and stop
+- **Modifications requested** → Update plan accordingly and re-present
+
+### CRITICAL: When User Approves
+
+When the user approves your plan:
+
+1. **DO NOT create a new plan** - your plan is already approved
+2. **DO NOT just describe what you will do** - execute immediately
+3. **IMMEDIATELY execute** the changes using the appropriate tool
+4. **VERIFY the result** by reading the resource again
+5. **Report the actual outcome** - success with details, or failure with error
+
+Example of CORRECT behavior when user says "yes proceed":
+```
+Thought: User approved my plan. I will now execute the update immediately.
+Action: {"name": "skill_crud", "arguments": {"method": "update", "skill_id": 42, "data": {...}}}
+```
+
+Example of WRONG behavior (do NOT do this):
+```
+Thought: User approved. I will describe what I did.
+Action: {"name": "final_answer", "arguments": {"answer": "I updated the skill."}}
+```

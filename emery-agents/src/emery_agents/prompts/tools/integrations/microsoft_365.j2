@@ -1,0 +1,92 @@
+## Microsoft 365 Integration
+
+### Available Services
+
+- **Outlook**: Email and calendar
+- **Teams**: Messaging and collaboration
+- **Planner**: Task management
+- **OneDrive**: File storage
+- **SharePoint**: Document collaboration
+
+### Outlook Email
+
+**Common actions:**
+| Action | Tool | Parameters |
+|--------|------|------------|
+| Send email | `microsoft_365-send-email` | to, subject, body |
+| Reply | `microsoft_365-reply-to-email` | messageId, body |
+| Forward | `microsoft_365-forward-email` | messageId, to |
+| List messages | `microsoft_365-list-messages` | folder, top |
+| Search | `microsoft_365-search-emails` | search |
+
+**Folder names:** `Inbox`, `SentItems`, `Drafts`, `DeletedItems`
+
+### Outlook Calendar
+
+**Common actions:**
+| Action | Tool | Parameters |
+|--------|------|------------|
+| Create event | `microsoft_365-create-event` | subject, start, end, attendees |
+| List events | `microsoft_365-list-events` | startDateTime, endDateTime |
+| Update event | `microsoft_365-update-event` | eventId, updates |
+| Delete event | `microsoft_365-delete-event` | eventId |
+
+**Date/time format:** ISO 8601 with timezone
+```
+"2024-01-15T10:00:00-05:00"
+```
+
+### Microsoft Teams
+
+**Common actions:**
+| Action | Tool | Parameters |
+|--------|------|------------|
+| Send message | `microsoft_teams-send-message` | teamId, channelId, message |
+| Reply to message | `microsoft_teams-reply-to-message` | messageId, message |
+| List teams | `microsoft_teams-list-teams` | |
+| List channels | `microsoft_teams-list-channels` | teamId |
+
+**ID structure:**
+- Team ID: GUID format
+- Channel ID: GUID format
+- Message ID: Numeric string
+
+### ID Formats
+
+Microsoft 365 uses various ID formats:
+- **User ID**: GUID (from Azure AD)
+- **Message ID**: Base64 encoded string
+- **Event ID**: Base64 encoded string
+- **Team/Channel ID**: GUID
+
+**Always retrieve IDs** from list operations - never guess.
+
+### Common Patterns
+
+**Send email with meeting invite:**
+```
+1. Create calendar event with attendees
+2. Outlook automatically sends invitations
+```
+
+**Post to Teams channel:**
+```
+1. microsoft_teams-list-teams() -> Get team ID
+2. microsoft_teams-list-channels(teamId) -> Get channel ID
+3. microsoft_teams-send-message(teamId, channelId, message)
+```
+
+### Permissions
+
+Microsoft 365 actions depend on OAuth scopes:
+- `Mail.Send` - Send emails
+- `Calendars.ReadWrite` - Manage calendar
+- `Team.ReadBasic.All` - Read Teams info
+- Some scopes require admin consent
+
+### Best Practices
+
+- **Timezone handling**: Always specify timezone for calendar events
+- **Batch operations**: Use batch endpoints for multiple operations
+- **Delta queries**: For sync scenarios, use delta tokens
+- **Rate limits**: 10,000 requests per 10 minutes per app

@@ -79,7 +79,12 @@ class InterruptAwareToolCallingAgent(ToolCallingAgent):
                     # The StatefulManagedAgent will detect this as approval and execute the plan
                     result = managed_agent(task)
                     logger.info(f"✅ HITL Resume: {agent_name} completed successfully")
-                    return RunResult(output=result, output_type="string")
+
+                    # AIDEV-NOTE: If streaming mode, return generator yielding FinalAnswerStep.
+                    # Otherwise, iterating over a string yields individual characters!
+                    if kwargs.get('stream', False):
+                        return self._yield_final_answer(result)
+                    return result
                 except Exception as e:
                     if "interrupted" in str(e).lower():
                         # Another interrupt - store and propagate
@@ -93,6 +98,16 @@ class InterruptAwareToolCallingAgent(ToolCallingAgent):
 
         # Normal flow - let parent handle it
         return super().run(task, **kwargs)
+
+    def _yield_final_answer(self, result: str):
+        """
+        Yield a single FinalAnswerStep for streaming mode HITL resume.
+
+        When stream=True, agent.run() must return a generator yielding step objects.
+        This wraps the managed agent's string result in a FinalAnswerStep.
+        """
+        from smolagents.memory import FinalAnswerStep
+        yield FinalAnswerStep(output=result)
 
     def _is_approval_response(self, task: str) -> bool:
         """
