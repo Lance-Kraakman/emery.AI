@@ -309,14 +309,14 @@ function ChatContentWithCanvas({
                       isLast={index === handler.messages.length - 1}
                       className={cn(
                         "my-0.5 mx-4",
-                        message.role === 'assistant' && "rounded-md px-3 py-1.5 transition-colors"
+                        message.role === 'assistant' && "rounded-md py-1.5 transition-colors"
                       )}
                     >
                       <ChatMessage.Avatar />
                       <ChatMessage.Content
                         className={cn(
                           "[&_p]:text-sm [&_p]:leading-snug [&_p]:my-0.5",
-                          message.role === 'user' && "border border-input rounded-md px-2.5 py-1 inline-block"
+                          message.role === 'user' && "rounded-md px-2.5 py-1 inline-block"
                         )}
                       >
                         <ChatMessage.Part.Markdown />
@@ -373,7 +373,7 @@ function ChatContentWithCanvas({
       />
 
       {/* Input area */}
-      <div className="flex-shrink-0 py-2 px-3 border-t border-border/10 bg-card">
+      <div className="flex-shrink-0 py-2 px-3 bg-card">
         <UnifiedChatInput
           onSendMessage={async (message) => {
             // Send message with proper MessagePart format
@@ -590,6 +590,8 @@ export function EmeryChat() {
   // Handle removing tool from panel - delegates to handler which also removes from input
   const handleRemoveTool = (toolToRemove: ToolDTO) => {
     handler.removeTool(toolToRemove)
+    // Also update local state so ToolPanel re-renders
+    setSelectedTools(prev => prev.filter(t => t.name !== toolToRemove.name))
     logger.debug('Tool removed via handler', { tool: toolToRemove.name })
   }
 
