@@ -144,14 +144,25 @@ export function withLayout<
       };
     },
     inline: true,
-    render: (props) => (
-      <Layout
-        className={getClassName()}
-        layout={props.layout as LayoutFieldProps}
-        ref={props.puck.dragRef}
-      >
-        {componentConfig.render(props)}
-      </Layout>
-    ),
+    render: (props) => {
+      // Check if the component has sticky enabled - apply to outer Layout wrapper
+      const sticky = (props as any).sticky;
+      const stickyPosition = (props as any).stickyPosition || "top";
+
+      return (
+        <Layout
+          className={getClassName()}
+          layout={props.layout as LayoutFieldProps}
+          ref={props.puck.dragRef}
+          style={sticky ? {
+            position: "sticky",
+            [stickyPosition]: 0,
+            zIndex: 50,
+          } : undefined}
+        >
+          {componentConfig.render(props)}
+        </Layout>
+      );
+    },
   };
 }

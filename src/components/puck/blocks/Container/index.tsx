@@ -169,11 +169,7 @@ export const ContainerInternal: ComponentConfig<ContainerProps> = {
           ...(borderColor && { borderColor }),
           ...(borderRadius && { borderRadius }),
           ...(padding && { padding }),
-          ...(sticky && {
-            position: "sticky",
-            [stickyPosition]: 0,
-            zIndex: 50,
-          }),
+          // Note: sticky styles are applied to the outer Layout wrapper by withLayout HOC
         }}
       >
         <Children />
