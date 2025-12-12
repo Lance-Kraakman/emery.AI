@@ -131,6 +131,7 @@ message SkillConfig {
   repeated ToolConfig tools = 7;
   string model = 8;                    // Optional: model override for this skill
   repeated MessagePart content = 9;    // Skill-level attachments (images, files, text)
+  string agent_type = 10;              // Optional: "tool_calling" (default) or "code_agent"
 }
 
 // Skill input parameter

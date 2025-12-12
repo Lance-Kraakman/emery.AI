@@ -166,6 +166,7 @@ export class ChatProcessingClient {
         config: t.config || {}
       })),
       model: skill.model || '',
+      agentType: skill.agentType || '',  // "tool_calling" (default) or "code_agent"
       content: skill.content || []
     }));
 

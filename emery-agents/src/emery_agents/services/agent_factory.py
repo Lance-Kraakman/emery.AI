@@ -15,7 +15,7 @@ import logging
 from typing import List, Any, Optional, Dict
 from dataclasses import dataclass
 
-from smolagents import ToolCallingAgent
+from smolagents import ToolCallingAgent, CodeAgent
 from .model_provider import SmolagentsModelProvider
 from ..agents.interrupt_aware_agent import InterruptAwareToolCallingAgent
 from ..prompts import build_agent_instructions
@@ -40,6 +40,7 @@ class AgentConfig:
     instructions: Optional[str] = None  # Additional custom instructions (appended to defaults)
     agent_type: str = "default"  # Agent type for instruction loading
     context_type: str = "interactive"  # Execution context (interactive/autonomous)
+    skill_agent_type: Optional[str] = None  # "tool_calling" (default) or "code_agent"
 
 
 class AgentFactory:
@@ -100,13 +101,26 @@ class AgentFactory:
         # Create agent with optional managed agents for multi-agent routing
         # AIDEV-NOTE: Use InterruptAwareToolCallingAgent to propagate interrupts from managed agents
         # This enables HITL workflows where managed agents can pause for user approval
-        agent = InterruptAwareToolCallingAgent(
-            tools=config.tools,
-            model=model,
-            max_steps=config.max_steps,
-            managed_agents=config.managed_agents or [],
-            instructions=instructions
-        )
+        if config.skill_agent_type == "code_agent":
+            # CodeAgent writes Python code to execute tools
+            # Better for complex multi-step reasoning with conditionals and loops
+            logger.info("🐍 Creating CodeAgent for skill execution")
+            agent = CodeAgent(
+                tools=config.tools,
+                model=model,
+                max_steps=config.max_steps,
+                additional_authorized_imports=["json", "re", "datetime", "math"],
+            )
+        else:
+            # ToolCallingAgent uses structured function calls (default)
+            # More reliable and predictable for simple tasks
+            agent = InterruptAwareToolCallingAgent(
+                tools=config.tools,
+                model=model,
+                max_steps=config.max_steps,
+                managed_agents=config.managed_agents or [],
+                instructions=instructions
+            )
 
         agent.name = config.agent_name
         agent.description = config.agent_description

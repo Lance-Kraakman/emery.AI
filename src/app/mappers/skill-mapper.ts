@@ -50,6 +50,8 @@ export interface SkillDTO {
   instructions: string;
   tools: ToolConfigDTO[];
   content?: MessagePart[]; // Skill-level attachments with pre-signed URLs
+  model?: string | null; // Optional: Override model for this skill
+  agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   isSystem: boolean; // System skills cannot be deleted by users
   createdAt: string;
   updatedAt: string;
@@ -80,6 +82,8 @@ export class SkillMapper {
       instructions: skill.instructions,
       tools: skill.tools,
       content: skill.content,
+      model: skill.model ?? null,
+      agentType: skill.agentType ?? null,
       isSystem: skill.isSystem,
       createdAt: skill.createdAt.toISOString(),
       updatedAt: skill.updatedAt.toISOString()

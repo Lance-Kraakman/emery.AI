@@ -1,0 +1,1 @@
+ALTER TABLE "skills" ADD COLUMN "agent_type" text;

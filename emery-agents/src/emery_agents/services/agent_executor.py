@@ -399,8 +399,9 @@ class AgentExecutor:
             tools.extend(skill_tools)
             logger.info(f"Added {len(skill_tools)} skills as tools for delegation")
 
-        # Extract skill model if present
+        # Extract skill model and agent type if present
         skill_model = skill.model if hasattr(skill, 'model') and skill.model else None
+        skill_agent_type = skill.agent_type if hasattr(skill, 'agent_type') and skill.agent_type else None
 
         # Create agent using AgentFactory with autonomous context
         agent_config = AgentConfig(
@@ -413,11 +414,10 @@ class AgentExecutor:
             agent_description=skill.description,
             enable_caching=False,  # Tasks are stateless - no caching
             agent_type="skill_executor",
-            context_type="autonomous"
+            context_type="autonomous",
+            skill_agent_type=skill_agent_type  # "tool_calling" (default) or "code_agent"
         )
 
-        # Create ToolCallingAgent (AgentFactory always creates ToolCallingAgent)
-        # Note: If CodeAgent is truly needed, this would need special handling
         return self.agent_factory.create_agent(agent_config)
 
     def _create_skill_tools(
@@ -483,6 +483,7 @@ class AgentExecutor:
 
                 # Create sub-agent with skill context from template
                 skill_model = skill_config.model if hasattr(skill_config, 'model') and skill_config.model else None
+                skill_agent_type = skill_config.agent_type if hasattr(skill_config, 'agent_type') and skill_config.agent_type else None
                 agent_config = AgentConfig(
                     tools=skill_tools,
                     skill_model=skill_model,
@@ -492,7 +493,8 @@ class AgentExecutor:
                     agent_description=skill_config.description,
                     enable_caching=False,
                     agent_type="skill_executor",
-                    context_type="autonomous"
+                    context_type="autonomous",
+                    skill_agent_type=skill_agent_type  # "tool_calling" (default) or "code_agent"
                 )
                 sub_agent = self.agent_factory.create_agent(agent_config)
 

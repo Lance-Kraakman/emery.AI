@@ -31,6 +31,7 @@ interface SidebarSkill {
   name: string
   agentId: number | null
   agentName?: string
+  isSystem: boolean
 }
 
 interface SidebarDatabase {
@@ -114,7 +115,8 @@ export default async function AppLayout({
             id: skill.id,
             name: skill.name,
             agentId: skill.agentId,
-            agentName: agent?.name
+            agentName: agent?.name,
+            isSystem: skill.isSystem
           }
         }),
         databases: (databasesResult || []).map(database => ({
