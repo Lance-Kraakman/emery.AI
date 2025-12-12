@@ -179,7 +179,7 @@ export function CodeViewer({
         formData.append('file', blob, fileName)
         formData.append('organizationId', '0') // Will be set by server from session
         formData.append('tableId', targetTableId.toString())
-        formData.append('fieldName', targetFieldId.toString())
+        formData.append('fieldId', targetFieldId.toString())
 
         // Upload file
         const uploadResponse = await fetch('/api/files/upload', {
@@ -202,7 +202,7 @@ export function CodeViewer({
         formData.append('file', blob, fileName)
         formData.append('organizationId', '0') // Will be set by server from session
         formData.append('tableId', targetTableId.toString())
-        formData.append('fieldName', targetFieldId.toString())
+        formData.append('fieldId', targetFieldId.toString())
 
         const uploadResponse = await fetch('/api/files/upload', {
           method: 'POST',

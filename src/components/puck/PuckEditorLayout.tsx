@@ -243,7 +243,7 @@ function PuckEditorLayoutInner({
             </TabsList>
 
             {/* Blocks Tab */}
-            <TabsContent value="blocks" className="flex-1 overflow-auto m-0 p-0">
+            <TabsContent value="blocks" className="flex-1 overflow-auto m-0 p-2">
               <Puck.Components />
             </TabsContent>
 
