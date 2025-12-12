@@ -23,6 +23,8 @@ export interface CreateSkillCommand {
   outputs: SkillOutput[];
   instructions: string;
   tools: ToolConfig[];
+  model?: string | null; // Optional: Override model for this skill
+  agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
 }
 
 /**
@@ -35,6 +37,8 @@ export interface UpdateSkillCommand {
   outputs?: SkillOutput[];
   instructions?: string;
   tools?: ToolConfig[];
+  model?: string | null; // Optional: Override model for this skill
+  agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   content?: MessagePart[]; // Skill-level attachments
 }
 
@@ -79,7 +83,9 @@ export class SkillApplicationService {
         inputs: command.inputs,
         outputs: command.outputs,
         instructions: command.instructions,
-        tools: command.tools
+        tools: command.tools,
+        model: command.model,
+        agentType: command.agentType
       });
 
       logger.debug('[SkillApplicationService] skill created', {

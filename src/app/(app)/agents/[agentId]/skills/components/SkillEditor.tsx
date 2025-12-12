@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp, Save, Plus, X, Settings } from 'lucide-react';
+import { ChevronDown, ChevronUp, Save, Plus, X, Settings, Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,6 +22,7 @@ export interface SkillFormData {
   instructions: string;
   tools: ToolConfigDTO[];
   model?: string | null; // Optional model override for this skill
+  agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   content?: MessagePart[]; // Existing uploaded attachments
   pendingAttachments?: File[]; // New attachments to upload on save
 }
@@ -282,6 +283,37 @@ export function SkillEditor({
               />
               <p className="text-xs text-muted-foreground">
                 Override the AI model used for this skill. Different models have different costs and capabilities.
+              </p>
+            </div>
+
+            {/* Agent Type Selection */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium">Agent Type</Label>
+                <div className="group relative">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  <div className="invisible group-hover:visible absolute left-0 top-5 z-50 w-72 rounded-md bg-popover p-3 text-xs text-popover-foreground shadow-md border">
+                    <p className="font-medium mb-1">Tool Calling (Default)</p>
+                    <p className="text-muted-foreground mb-2">Calls tools using structured function calls. More reliable and predictable. Best for simple tasks and smaller models.</p>
+                    <p className="font-medium mb-1">Code Agent</p>
+                    <p className="text-muted-foreground">Writes Python code to execute tools. Better for complex multi-step reasoning with conditionals and loops. Works best with larger models.</p>
+                  </div>
+                </div>
+              </div>
+              <Select
+                value={localValue.agentType || 'tool_calling'}
+                onValueChange={(agentType) => handleChange({ agentType: agentType === 'tool_calling' ? null : agentType })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select agent type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tool_calling">Tool Calling (Default)</SelectItem>
+                  <SelectItem value="code_agent">Code Agent</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                How the AI executes tools. Tool Calling is recommended for most use cases.
               </p>
             </div>
           </div>

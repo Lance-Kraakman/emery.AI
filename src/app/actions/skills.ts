@@ -40,6 +40,8 @@ export async function createSkill(command: {
   outputs: SkillOutput[];
   instructions: string;
   tools: ToolConfigDTO[];
+  model?: string | null;
+  agentType?: string | null; // "tool_calling" (default) or "code_agent"
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -122,6 +124,8 @@ export async function createOrganizationSkill(command: {
   outputs: SkillOutput[];
   instructions: string;
   tools: ToolConfigDTO[];
+  model?: string | null;
+  agentType?: string | null; // "tool_calling" (default) or "code_agent"
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -164,7 +168,9 @@ export async function createOrganizationSkill(command: {
       inputs: command.inputs,
       outputs: command.outputs,
       instructions: command.instructions,
-      tools: command.tools
+      tools: command.tools,
+      model: command.model,
+      agentType: command.agentType
     });
 
     if (!result.success) {
@@ -206,6 +212,8 @@ export async function updateSkill(
     outputs?: SkillOutput[];
     instructions?: string;
     tools?: ToolConfigDTO[];
+    model?: string | null;
+    agentType?: string | null; // "tool_calling" (default) or "code_agent"
     content?: MessagePart[]; // Skill-level attachments
   }
 ): Promise<Result<SkillDTO>> {
@@ -355,7 +363,7 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
     // Create new name with " (Copy)" suffix
     const newName = `${originalSkill.name} (Copy)`;
 
-    // Create the duplicate skill
+    // Create the duplicate skill (copy model and agentType settings)
     const createResult = await service.createSkill({
       agentId: originalSkill.agentId?.value || null,
       organizationId: originalSkill.organizationId.value,
@@ -364,7 +372,9 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
       inputs: originalSkill.inputs,
       outputs: originalSkill.outputs,
       instructions: originalSkill.instructions,
-      tools: originalSkill.tools
+      tools: originalSkill.tools,
+      model: originalSkill.model,
+      agentType: originalSkill.agentType
     });
 
     if (!createResult.success || !createResult.data) {

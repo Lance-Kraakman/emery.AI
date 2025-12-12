@@ -72,6 +72,7 @@ export interface Skill {
   readonly tools: ToolConfig[];
   readonly content?: MessagePart[]; // Skill-level attachments (images, files, text)
   readonly model?: string | null; // Optional: Override model for this skill
+  readonly agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   readonly isSystem: boolean; // System skills cannot be deleted by users
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -91,6 +92,7 @@ export interface CreateSkillProps {
   tools?: ToolConfig[];
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
+  agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
 }
 
 /**
@@ -105,6 +107,7 @@ export interface UpdateSkillProps {
   tools?: ToolConfig[];
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
+  agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
 }
 
 /**

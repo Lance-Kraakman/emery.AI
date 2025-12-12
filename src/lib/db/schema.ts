@@ -1007,6 +1007,12 @@ export const skills = pgTable("skills", {
   // Used for common operations like Table Operations, Document Operations, etc.
   isSystem: boolean("is_system").default(false).notNull(),
 
+  // Agent type for skill execution: "tool_calling" (default) or "code_agent"
+  // Follows same pattern as model override
+  // tool_calling: Structured function calls, more reliable for simple tasks
+  // code_agent: Python code execution, better for complex multi-step reasoning
+  agentType: text("agent_type"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
