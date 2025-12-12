@@ -91,17 +91,21 @@ function EmeryChatHeader({
   const toggleChat = uiStateActions.toggleChat
   const toggleChatWidthMode = uiStateActions.toggleChatWidthMode
 
-  // Handle model change - save immediately on selection
+  // Handle model change - save if chat exists, otherwise just update state for pre-config
   const handleModelSelect = async (newModel: string | null) => {
-    if (!currentChatId) return
-
-    try {
-      const result = await updateChatModel(currentChatId, newModel)
-      if (result.success) {
-        onModelChange?.(newModel)
+    if (currentChatId) {
+      // Chat exists - save immediately
+      try {
+        const result = await updateChatModel(currentChatId, newModel)
+        if (result.success) {
+          onModelChange?.(newModel)
+        }
+      } catch (error) {
+        console.error('Failed to update chat model:', error)
       }
-    } catch (error) {
-      console.error('Failed to update chat model:', error)
+    } else {
+      // No chat yet - store as pre-selection for when chat is created
+      onModelChange?.(newModel)
     }
   }
 
@@ -121,15 +125,14 @@ function EmeryChatHeader({
           userId={userId}
           organizationId={organizationId}
         />
-        {/* Inline Model Selector - always visible */}
+        {/* Inline Model Selector - always visible, compact icon-only mode */}
         <ModelSelector
           value={currentChatModel || null}
           onChange={handleModelSelect}
           showInherit={true}
           inheritLabel="Default"
           requiredCapabilities={['toolCalling']}
-          className="w-[140px] h-7 text-xs"
-          disabled={!currentChatId}
+          compact={true}
         />
       </div>
 
@@ -441,9 +444,20 @@ export function EmeryChat() {
   }
 
   // Handle chat created callback from useChatGRPC
-  const handleChatCreated = (chatId: string) => {
+  const handleChatCreated = async (chatId: string) => {
     logger.summary('New chat created', { chatId })
     setCurrentChatId(chatId)
+
+    // Apply pre-selected model to new chat (if one was selected before chat existed)
+    if (currentChatModel) {
+      try {
+        await updateChatModel(chatId, currentChatModel)
+        logger.debug('Applied pre-selected model to new chat', { chatId, model: currentChatModel })
+      } catch (error) {
+        console.error('Failed to apply pre-selected model:', error)
+      }
+    }
+
     // Trigger refresh of chat history dropdown
     handleChatHistoryUpdate()
   }

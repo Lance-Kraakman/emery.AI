@@ -8,7 +8,7 @@
  */
 
 import * as React from "react"
-import { Check, ChevronDown, Sparkles, Zap, Target } from "lucide-react"
+import { Check, ChevronDown, Sparkles, Zap, Target, Settings2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   Select,
@@ -18,6 +18,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   getAllModels,
   getModelsForTier,
@@ -37,6 +42,8 @@ export interface ModelSelectorProps {
   requiredCapabilities?: Array<keyof ModelMetadata['capabilities']>
   className?: string
   disabled?: boolean
+  /** Compact icon-only mode for headers */
+  compact?: boolean
 }
 
 export function ModelSelector({
@@ -50,6 +57,7 @@ export function ModelSelector({
   requiredCapabilities = [],
   className,
   disabled = false,
+  compact = false,
 }: ModelSelectorProps) {
   // Get filtered models based on tier and capabilities
   const models = React.useMemo(() => {
@@ -86,6 +94,80 @@ export function ModelSelector({
     }
   }
 
+  // Get tooltip text for compact mode
+  const tooltipText = currentModel?.name || inheritLabel
+
+  const selectContent = (
+    <SelectContent className="max-h-[400px]">
+      {showInherit && (
+        <SelectItem value="__inherit__" className="font-medium">
+          <div className="flex items-center gap-2">
+            <Settings2 className="h-4 w-4 text-muted-foreground" />
+            <span>{inheritLabel}</span>
+            {inheritFromModel && (
+              <span className="text-xs text-muted-foreground">
+                ({inheritFromModel})
+              </span>
+            )}
+          </div>
+        </SelectItem>
+      )}
+
+      {models.map((model) => (
+        <SelectItem
+          key={model.id}
+          value={model.id}
+          className="cursor-pointer"
+        >
+          <ModelOption model={model} />
+        </SelectItem>
+      ))}
+
+      {models.length === 0 && (
+        <div className="py-6 text-center text-sm text-muted-foreground">
+          No models available
+        </div>
+      )}
+    </SelectContent>
+  )
+
+  // Compact mode: icon-only with tooltip
+  if (compact) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div>
+            <Select
+              value={value || '__inherit__'}
+              onValueChange={handleValueChange}
+              disabled={disabled}
+            >
+              <SelectTrigger
+                className={cn(
+                  "h-7 w-auto gap-1 px-2 border-0 bg-transparent hover:bg-muted/50",
+                  className
+                )}
+              >
+                <SelectValue>
+                  {currentModel ? (
+                    <CategoryIcon category={currentModel.category} className="h-4 w-4" />
+                  ) : (
+                    <Settings2 className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              {selectContent}
+            </Select>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          <p className="text-xs">{tooltipText}</p>
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  // Full mode: standard dropdown
   return (
     <Select
       value={value || '__inherit__'}
@@ -108,36 +190,7 @@ export function ModelSelector({
           )}
         </SelectValue>
       </SelectTrigger>
-      <SelectContent className="max-h-[400px]">
-        {showInherit && (
-          <SelectItem value="__inherit__" className="font-medium">
-            <div className="flex items-center gap-2">
-              <span>{inheritLabel}</span>
-              {inheritFromModel && (
-                <span className="text-xs text-muted-foreground">
-                  ({inheritFromModel})
-                </span>
-              )}
-            </div>
-          </SelectItem>
-        )}
-
-        {models.map((model) => (
-          <SelectItem
-            key={model.id}
-            value={model.id}
-            className="cursor-pointer"
-          >
-            <ModelOption model={model} />
-          </SelectItem>
-        ))}
-
-        {models.length === 0 && (
-          <div className="py-6 text-center text-sm text-muted-foreground">
-            No models available
-          </div>
-        )}
-      </SelectContent>
+      {selectContent}
     </Select>
   )
 }
