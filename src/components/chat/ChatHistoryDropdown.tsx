@@ -18,6 +18,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -394,17 +399,23 @@ export function ChatHistoryDropdown({
   return (
     <>
       <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 text-muted-foreground hover:text-foreground px-2"
-          >
-            <History className="h-4 w-4" />
-            <span className="hidden sm:inline font-medium">Chats</span>
-            <ChevronDown className="h-3 w-3 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1 text-muted-foreground hover:text-foreground px-2 h-7"
+              >
+                <History className="h-4 w-4" />
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="text-xs">Chats</p>
+          </TooltipContent>
+        </Tooltip>
 
         <DropdownMenuContent
           className="w-80 p-0"
