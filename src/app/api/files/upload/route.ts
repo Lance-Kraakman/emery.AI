@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const organizationId = parseInt(formData.get('organizationId') as string);
     const tableId = parseInt(formData.get('tableId') as string);
-    const fieldIdNum = parseInt(formData.get('fieldName') as string);
+    const fieldIdNum = parseInt(formData.get('fieldId') as string);
     
     // Document-specific form fields
     const documentTitle = formData.get('documentTitle') as string | null;

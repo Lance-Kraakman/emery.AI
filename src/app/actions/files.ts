@@ -17,7 +17,7 @@ export async function uploadFileAction(formData: FormData): Promise<Result> {
     const file = formData.get('file') as File;
     const organizationId = parseInt(formData.get('organizationId') as string);
     const tableId = parseInt(formData.get('tableId') as string);
-    const fieldName = formData.get('fieldName') as string;
+    const fieldId = parseInt(formData.get('fieldId') as string);
 
     if (!file) {
       return {
@@ -26,14 +26,14 @@ export async function uploadFileAction(formData: FormData): Promise<Result> {
       };
     }
 
-    if (!organizationId || !tableId || !fieldName) {
+    if (!organizationId || !tableId || !fieldId || isNaN(fieldId)) {
       return {
         success: false,
-        error: "organizationId, tableId, and fieldName are required"
+        error: "organizationId, tableId, and fieldId are required"
       };
     }
 
-    // Use TableApplicationService to find field by name and get its ID
+    // Use TableApplicationService to find field by ID
     const tableApplicationService = getTableApplicationService();
     const table = await tableApplicationService.getTable(TableId.fromNumber(tableId));
     if (!table) {
@@ -42,11 +42,11 @@ export async function uploadFileAction(formData: FormData): Promise<Result> {
         error: "Table not found"
       };
     }
-    const field = table.getField(fieldName);
+    const field = table.getFieldById(FieldId.fromNumber(fieldId));
     if (!field) {
       return {
         success: false,
-        error: `Field '${fieldName}' not found in table`
+        error: `Field with ID '${fieldId}' not found in table`
       };
     }
 
@@ -88,11 +88,11 @@ export async function uploadFileAction(formData: FormData): Promise<Result> {
   }
 }
 
-export async function deleteFileAction(fileId: string, fieldName: string, tableId: number, organizationId: number): Promise<Result> {
+export async function deleteFileAction(fileId: string, fieldId: number, tableId: number, organizationId: number): Promise<Result> {
   try {
     const session = await requirePermission("table:manage");
 
-    // Use TableApplicationService to find field by name and get its ID
+    // Use TableApplicationService to find field by ID
     const tableApplicationService = getTableApplicationService();
     const table = await tableApplicationService.getTable(TableId.fromNumber(tableId));
     if (!table) {
@@ -102,11 +102,11 @@ export async function deleteFileAction(fileId: string, fieldName: string, tableI
       };
     }
 
-    const field = table.getField(fieldName);
+    const field = table.getFieldById(FieldId.fromNumber(fieldId));
     if (!field) {
       return {
         success: false,
-        error: `Field '${fieldName}' not found in table`
+        error: `Field with ID '${fieldId}' not found in table`
       };
     }
 
