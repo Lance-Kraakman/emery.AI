@@ -14,8 +14,14 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Plus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { ModelSelector } from '@/components/ai/ModelSelector'
 import { updateChatModel } from '@/app/actions/chat-history'
 import { cn } from '@/lib/utils'
@@ -111,21 +117,11 @@ function EmeryChatHeader({
 
   return (
     <div className="flex items-center justify-between py-3 px-4 bg-muted/20">
-      <div className="flex items-center gap-2 min-w-0 flex-1">
+      {/* Left side: Dash + Model Selector */}
+      <div className="flex items-center gap-2 min-w-0">
         <h3 className="font-bold text-lg bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent flex-shrink-0">
           Dash
         </h3>
-        <ChatHistoryDropdown
-          currentChatId={currentChatId}
-          onChatSelect={onChatSelect}
-          onNewChat={onNewChat}
-          onChatHistoryUpdate={onChatHistoryUpdate}
-          domainType={domainType}
-          domainName={domainName}
-          userId={userId}
-          organizationId={organizationId}
-        />
-        {/* Inline Model Selector - always visible, compact icon-only mode */}
         <ModelSelector
           value={currentChatModel || null}
           onChange={handleModelSelect}
@@ -136,7 +132,37 @@ function EmeryChatHeader({
         />
       </div>
 
+      {/* Right side: New chat + Chats + Width toggle + Collapse */}
       <div className="flex items-center gap-1 flex-shrink-0">
+        {/* New chat button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onNewChat}
+              className="h-7 w-7"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="text-xs">New chat</p>
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Chat history dropdown */}
+        <ChatHistoryDropdown
+          currentChatId={currentChatId}
+          onChatSelect={onChatSelect}
+          onNewChat={onNewChat}
+          onChatHistoryUpdate={onChatHistoryUpdate}
+          domainType={domainType}
+          domainName={domainName}
+          userId={userId}
+          organizationId={organizationId}
+        />
+
         {/* Width toggle button (only when chat is expanded) */}
         {chatState === 'expanded' && (
           <Button
@@ -527,10 +553,11 @@ export function EmeryChat() {
   }
 
   // Handle chat selection from history
-  const handleChatSelect = async (chatId: string) => {
+  const handleChatSelect = async (chatId: string, model?: string) => {
     if (handler.switchToChat) {
       await handler.switchToChat(chatId)
       setCurrentChatId(chatId)
+      setCurrentChatModel(model) // Load the chat's model
     }
   }
 

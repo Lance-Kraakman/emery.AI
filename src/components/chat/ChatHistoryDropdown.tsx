@@ -45,7 +45,7 @@ import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
 
 interface ChatHistoryDropdownProps {
   currentChatId?: string
-  onChatSelect: (chatId: string) => void
+  onChatSelect: (chatId: string, model?: string) => void
   onNewChat: () => void
   onChatHistoryUpdate?: () => void // Callback to notify parent of changes
 
@@ -61,7 +61,7 @@ interface ChatHistoryDropdownProps {
 interface ChatItemProps {
   session: ChatSessionDTO
   isActive: boolean
-  onClick: (sessionId: string) => void
+  onClick: (sessionId: string, model?: string) => void
   onArchive?: (sessionId: string) => void
   onSettings?: (session: ChatSessionDTO) => void
 }
@@ -127,7 +127,7 @@ function ChatItem({ session, isActive, onClick, onArchive, onSettings }: ChatIte
       className={`group flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/50 cursor-pointer text-sm transition-colors ${
         isActive ? 'bg-primary/10 border border-primary/20' : ''
       }`}
-      onClick={() => onClick(session.id)}
+      onClick={() => onClick(session.id, session.model)}
     >
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
         <span className="text-base flex-shrink-0">{getDomainIcon()}</span>
@@ -361,7 +361,7 @@ export function ChatHistoryDropdown({
 
       if (result.success && result.data) {
         setSessions([result.data, ...sessions])
-        onChatSelect(result.data.id)
+        onChatSelect(result.data.id, result.data.model)
         await loadChatSessions()
       }
 
@@ -494,8 +494,8 @@ export function ChatHistoryDropdown({
                     key={session.id}
                     session={session}
                     isActive={session.id === currentChatId}
-                    onClick={(chatId) => {
-                      onChatSelect(chatId)
+                    onClick={(chatId, model) => {
+                      onChatSelect(chatId, model)
                       setIsOpen(false)
                     }}
                     onArchive={handleArchiveChat}
