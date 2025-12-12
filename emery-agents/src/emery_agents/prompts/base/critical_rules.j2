@@ -24,6 +24,15 @@
 - EDIT = tool confirmed update
 - DELETE = tool confirmed removal
 - Only use final_answer when tool output confirms the goal is achieved
+
+### Delegating to Team Members
+When calling a team member (document_builder, skill_builder), include ALL relevant context in the task:
+- Include any IDs mentioned (table_id, field_id, row_id, skill_id)
+- Include specific values the user provided
+- Don't summarize away important details
+
+**BAD:** `{"task": "Create a document"}`
+**GOOD:** `{"task": "Create document named 'Report' in table_id=1, field_id=3, row_id=abc-123"}`
 {% if restricted_tools %}
 
 ### Tool Restrictions

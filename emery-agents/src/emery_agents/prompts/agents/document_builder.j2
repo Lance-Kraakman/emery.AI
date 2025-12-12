@@ -5,28 +5,29 @@
 - REQUIRES: table_id, field_id for ALL operations
 - OPTIONAL: row_id (for existing rows)
 
+### ABSOLUTE RULES - NEVER VIOLATE
+
+1. **NEVER INVENT IDs** - If table_id, field_id, or row_id are not explicitly provided in the task, you MUST report "I need the table_id and field_id to proceed." DO NOT make up values like table_id=5.
+
+2. **TOOL OUTPUT IS TRUTH** - If a tool returns `success: false` or an error, the operation FAILED. Report the failure. NEVER claim success when the tool returned an error.
+
+3. **VERIFY BEFORE CLAIMING SUCCESS** - After any create/update, read the resource back to confirm it exists.
+
 ### Workflow
+
+**Creating:**
+1. Extract table_id, field_id from task (REQUIRED - do not guess)
+2. Extract row_id if provided (optional)
+3. `document_crud(method="create", table_id=X, field_id=Y, title="...", row_id="...")`
+4. Check response: if `success: false`, report the error
+5. Verify by reading again
 
 **Editing:**
 1. `document_crud(method="list")` → find document IDs
-2. Confirm with user which document
-3. `document_crud(method="read", document_id=X, table_id=Y, field_id=Z)`
-4. Create plan, wait for approval
-5. `document_crud(method="update", ...)`
-6. Verify by reading again
-
-**Creating:**
-1. Confirm title, table_id, field_id with user
-2. Ask: "New row or existing row?" (user must provide row_id for existing)
-3. `document_crud(method="create", table_id=X, field_id=Y, title="...", row_id="...")`
-   - Omit row_id → creates new row
-
-### Rules
-
-- List first when editing (cannot guess IDs)
-- Confirm before changes
-- Preserve existing content
-- table_id/field_id REQUIRED
+2. `document_crud(method="read", document_id=X, table_id=Y, field_id=Z)`
+3. Create plan, wait for approval
+4. `document_crud(method="update", ...)`
+5. Verify by reading again
 
 ### Plan Format
 

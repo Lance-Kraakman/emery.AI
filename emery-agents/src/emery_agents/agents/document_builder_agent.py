@@ -27,7 +27,7 @@ from smolagents import Tool, CodeAgent
 from smolagents.memory import PlanningStep
 
 from .stateful_managed_agent import StatefulManagedAgent
-from ..services.agent_factory import get_default_instructions
+from ..prompts import build_agent_instructions
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def create_document_builder_agent(
     planning_callback = create_planning_callback()
 
     # Get instructions from centralized function (base + agent-specific + tools)
-    instructions = get_default_instructions(
+    instructions = build_agent_instructions(
         tools=tools,
         agent_type="document_builder",
         context_type="interactive"

@@ -125,7 +125,7 @@ class AsyncHTTPManager:
             
             total_time = time.time() - start_time
 
-            # Handle HTTP errors
+            # Handle HTTP errors - return explicit error STRING so model can't miss it
             if response.status_code >= 400:
                 error_detail = f"HTTP {response.status_code}"
                 try:
@@ -138,13 +138,9 @@ class AsyncHTTPManager:
                     error_detail = response.text[:200] if response.text else error_detail
 
                 logger.error(f"[TOOL-HTTP] ❌ {method} {endpoint} - call_id: {call_id}, status: {response.status_code}, duration: {total_time:.2f}s")
-                return {
-                    "success": False,
-                    "error": f"API request failed: {error_detail}",
-                    "status_code": response.status_code,
-                    "call_id": call_id,
-                    "total_time": total_time
-                }
+                # AIDEV-NOTE: Return explicit error STRING instead of dict so small models can't miss it
+                # The model kept hallucinating success when seeing {"success": False, "error": "..."}
+                return f"❌ ERROR: {error_detail}. This operation FAILED. Do NOT claim success - report this error to the user."
 
             # Parse JSON response
             try:
@@ -169,30 +165,15 @@ class AsyncHTTPManager:
         except httpx.TimeoutException:
             total_time = time.time() - start_time
             logger.error(f"[ASYNC_MANAGER] ❌ TIMEOUT - call_id: {call_id}, timeout: {timeout}s")
-            return {
-                "success": False,
-                "error": f"Request timeout after {timeout} seconds",
-                "call_id": call_id,
-                "total_time": total_time
-            }
+            return f"❌ ERROR: Request timeout after {timeout} seconds. This operation FAILED. Do NOT claim success."
         except httpx.RequestError as e:
             total_time = time.time() - start_time
             logger.error(f"[ASYNC_MANAGER] ❌ REQUEST ERROR - call_id: {call_id}, error: {str(e)}")
-            return {
-                "success": False,
-                "error": f"HTTP request failed: {str(e)}",
-                "call_id": call_id,
-                "total_time": total_time
-            }
+            return f"❌ ERROR: HTTP request failed: {str(e)}. This operation FAILED. Do NOT claim success."
         except Exception as e:
             total_time = time.time() - start_time
             logger.error(f"[ASYNC_MANAGER] ❌ UNEXPECTED ERROR - call_id: {call_id}, error: {str(e)}")
-            return {
-                "success": False,
-                "error": f"Unexpected error: {str(e)}",
-                "call_id": call_id,
-                "total_time": total_time
-            }
+            return f"❌ ERROR: Unexpected error: {str(e)}. This operation FAILED. Do NOT claim success."
 
 # Global AsyncHTTPManager instance
 _async_manager = AsyncHTTPManager()
@@ -302,7 +283,7 @@ class BaseCrudTool(Tool):
                 
                 total_time = time.time() - start_time
                 
-                # Handle HTTP errors
+                # Handle HTTP errors - return explicit error STRING so model can't miss it
                 if response.status_code >= 400:
                     error_detail = f"HTTP {response.status_code}"
                     try:
@@ -315,13 +296,7 @@ class BaseCrudTool(Tool):
                         error_detail = response.text[:200] if response.text else error_detail
 
                     logger.error(f"[ASYNC_HTTP] HTTP error response - call_id: {call_id}, status: {response.status_code}, error: {error_detail}")
-                    return {
-                        "success": False,
-                        "error": f"API request failed: {error_detail}",
-                        "status_code": response.status_code,
-                        "call_id": call_id,
-                        "total_time": total_time
-                    }
+                    return f"❌ ERROR: {error_detail}. This operation FAILED. Do NOT claim success - report this error to the user."
 
                 # Parse JSON response
                 try:
