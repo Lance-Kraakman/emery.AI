@@ -711,23 +711,28 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 if effective_api_key:
                     logger.info(f"🔑 Using API key for managed agents (source: {'request' if user_api_key else 'tools'})")
                 else:
-                    logger.warning("⚠️ No API key available for managed agents - skill_builder may fail")
+                    logger.warning("⚠️ No API key available for managed agents - skill_builder/document_builder may fail")
 
-                # Create skill builder managed agent (routes automatically via smolagents)
+                # Create managed agents (routes automatically via smolagents)
                 skill_builder_agent = self._create_skill_builder_agent(
                     api_key=effective_api_key or "",
                     org_id=org_id,
                     org_model=org_model
                 )
+                document_builder_agent = self._create_document_builder_agent(
+                    api_key=effective_api_key or "",
+                    org_id=org_id,
+                    org_model=org_model
+                )
 
-                # Create ToolCallingAgent with skill_builder as managed agent
+                # Create ToolCallingAgent with managed agents
                 # AIDEV-NOTE: InterruptAwareToolCallingAgent sets interrupt_switch=True
                 # when detecting interrupt from managed agent, breaking the loop
                 agent = self._create_agent_with_model_provider(
                     smolagents_tools,
                     org_model=org_model,
                     has_images=has_images,
-                    managed_agents=[skill_builder_agent]
+                    managed_agents=[skill_builder_agent, document_builder_agent]
                 )
 
                 logger.info(f"🧠 [MEMORY-DEBUG] New agent created, memory steps: {len(agent.memory.steps)}")
@@ -1119,6 +1124,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 # 4. Create sub-agent with skill's tools and correct has_images flag
                 has_images = bool(images)  # Calculate once for clarity
+
+                # Create sub-agent with autonomous context
                 agent_config = AgentConfig(
                     tools=skill_tools,
                     skill_model=skill_config.model if skill_config.model else None,
@@ -1127,7 +1134,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     max_steps=10,
                     agent_name=f"skill_{skill_config.name}",
                     agent_description=skill_config.description,
-                    enable_caching=False
+                    enable_caching=False,
+                    context_type="autonomous"  # Use autonomous execution context
                 )
                 sub_agent = self.agent_factory.create_agent(agent_config)
                 logger.info(f"✨ Created sub-agent for skill {skill_config.name} (has_images={has_images})")
@@ -1267,6 +1275,42 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         logger.info("✨ Created Skill Builder agent with native planning (top-level for HITL)")
         return skill_builder
+
+    def _create_document_builder_agent(
+        self,
+        api_key: str,
+        org_id: Optional[int],
+        org_model: Optional[str] = None
+    ) -> ToolCallingAgent:
+        """
+        Create a Document Builder agent with native planning for HITL workflow.
+
+        This agent runs as a TOP-LEVEL agent (not managed agent) so that
+        interrupt() works natively for human-in-the-loop approval.
+
+        AIDEV-NOTE: Uses native planning_interval + step_callbacks for human-in-the-loop:
+        - planning_interval=1: Plan after first action (reading document)
+        - step_callbacks: Interrupt after planning for user approval
+        - reset=False: Memory preserved between messages for resumption
+        """
+        from ..tools.crud_tools import load_document_crud
+        from ..agents.document_builder_agent import create_document_builder_agent
+
+        # Create document CRUD tool for the agent
+        document_crud_tool = load_document_crud(None, api_key, org_id)
+
+        # Get model for the agent
+        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+
+        # Use factory function with native planning support
+        document_builder = create_document_builder_agent(
+            tools=[document_crud_tool],
+            model=model,
+            max_steps=10
+        )
+
+        logger.info("✨ Created Document Builder agent with native planning (top-level for HITL)")
+        return document_builder
 
     def _extract_user_api_key_from_tools(self, tools: List['agent_worker_pb2.ToolConfig']) -> Optional[str]:
         """

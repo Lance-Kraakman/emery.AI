@@ -35,8 +35,8 @@ class UnifiedToolLoader:
     def _get_default_metadata_path(self) -> str:
         """Get default path to unified metadata file."""
         current_dir = Path(__file__).parent
-        # Navigate to tools directory where the metadata is generated
-        metadata_path = current_dir.parent / "tools" / "unified_metadata.json"
+        # Navigate to execution/tools directory where the metadata is located
+        metadata_path = current_dir.parent / "execution" / "tools" / "unified_metadata.json"
         return str(metadata_path)
 
     def _load_unified_metadata(self) -> Dict[str, Any]:
