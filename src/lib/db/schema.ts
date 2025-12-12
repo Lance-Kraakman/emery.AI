@@ -1003,6 +1003,10 @@ export const skills = pgTable("skills", {
   // Status: Schema field exists, NOT yet mapped to Skill entity or exposed in UI
   model: text("model"), // Skill-specific model override (highest priority for skill execution)
 
+  // System skills - pre-built skills that cannot be deleted by users
+  // Used for common operations like Table Operations, Document Operations, etc.
+  isSystem: boolean("is_system").default(false).notNull(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

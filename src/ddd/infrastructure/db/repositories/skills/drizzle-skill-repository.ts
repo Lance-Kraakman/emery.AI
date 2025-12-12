@@ -187,6 +187,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
       instructions: record.instructions || '',
       tools: record.tools || [],
       content: record.content || undefined,
+      isSystem: record.isSystem ?? false,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     };

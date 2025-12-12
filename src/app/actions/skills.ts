@@ -225,6 +225,11 @@ export async function updateSkill(
 
     const skill = skillResult.data;
 
+    // Prevent editing of system skills
+    if (skill.isSystem) {
+      return { success: false, error: 'System skills cannot be edited. Duplicate this skill to create your own version.' };
+    }
+
     // Check appropriate permission based on skill type
     if (skill.agentId) {
       // Agent-scoped skill: check agent management permission
@@ -270,6 +275,7 @@ export async function updateSkill(
 
 /**
  * Delete a skill
+ * System skills (isSystem=true) cannot be deleted
  */
 export async function deleteSkill(skillId: number): Promise<Result<void>> {
   try {
@@ -288,6 +294,11 @@ export async function deleteSkill(skillId: number): Promise<Result<void>> {
 
     const skill = skillResult.data;
     const agentId = skill.agentId?.value ?? null;
+
+    // Prevent deletion of system skills
+    if (skill.isSystem) {
+      return { success: false, error: 'System skills cannot be deleted. You can duplicate this skill to create your own version.' };
+    }
 
     // Check appropriate permission based on skill type
     if (skill.agentId) {

@@ -50,6 +50,7 @@ export interface SkillDTO {
   instructions: string;
   tools: ToolConfigDTO[];
   content?: MessagePart[]; // Skill-level attachments with pre-signed URLs
+  isSystem: boolean; // System skills cannot be deleted by users
   createdAt: string;
   updatedAt: string;
 }
@@ -79,6 +80,7 @@ export class SkillMapper {
       instructions: skill.instructions,
       tools: skill.tools,
       content: skill.content,
+      isSystem: skill.isSystem,
       createdAt: skill.createdAt.toISOString(),
       updatedAt: skill.updatedAt.toISOString()
     };
