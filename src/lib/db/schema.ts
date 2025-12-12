@@ -1242,7 +1242,13 @@ export const chats = pgTable("chats", {
   // Chat metadata
   title: text("title").notNull(),
   description: text("description"),
-  
+
+  // Model configuration
+  // AIDEV-NOTE: Used for chat-specific model selection
+  // Hierarchy: chat.model → organization.defaultModel → System Default
+  // See /docs/model-selection-hierarchy.md for complete context-specific hierarchies
+  model: text("model"), // Chat-specific model override (highest priority for chat messages)
+
   // RAG and AI context
   contextMetadata: jsonb("context_metadata").$type<{
     ragIndexId?: string;
