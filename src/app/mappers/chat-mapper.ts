@@ -28,12 +28,13 @@ export interface ChatSessionDTO {
   id: string
   title: string
   description?: string
+  model?: string // Chat-specific model override
   status: 'active' | 'archived' | 'deleted'
   messageCount: number
   lastMessageAt?: Date
   createdAt: Date
   updatedAt: Date
-  
+
   // Context information for UI
   contextMetadata?: {
     contextType?: DomainType | 'organizations'
@@ -106,6 +107,7 @@ export class ChatMapper {
       id: chat.id.value,
       title: chat.title,
       description: chat.description,
+      model: chat.model,
       status: chat.status,
       messageCount: chat.messageCount,
       lastMessageAt: chat.lastMessageAt,

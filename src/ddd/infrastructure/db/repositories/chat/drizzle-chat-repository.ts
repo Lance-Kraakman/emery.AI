@@ -168,6 +168,7 @@ export class DrizzleChatRepository implements IChatRepository {
 
     if (data.title !== undefined) updateData.title = data.title;
     if (data.description !== undefined) updateData.description = data.description;
+    if (data.model !== undefined) updateData.model = data.model; // null clears, undefined keeps unchanged
     if (data.contextMetadata !== undefined) updateData.contextMetadata = data.contextMetadata;
     if (data.status !== undefined) updateData.status = data.status;
     if (data.lastMessageAt !== undefined) updateData.lastMessageAt = data.lastMessageAt;
@@ -329,6 +330,7 @@ export class DrizzleChatRepository implements IChatRepository {
       createdBy: row.createdBy,
       title: row.title,
       description: row.description,
+      model: row.model,
       contextMetadata: row.contextMetadata,
       status: row.status,
       messageCount: row.messageCount || 0,

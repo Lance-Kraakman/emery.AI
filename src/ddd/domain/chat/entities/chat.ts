@@ -33,6 +33,7 @@ export class Chat {
     private readonly _createdBy: UserId,
     private _title: string,
     private _description: string | undefined,
+    private _model: string | undefined,
     private _contextMetadata: ChatContextMetadata | undefined,
     private _status: ChatStatus,
     private _messageCount: number,
@@ -47,6 +48,7 @@ export class Chat {
   get createdBy(): UserId { return this._createdBy; }
   get title(): string { return this._title; }
   get description(): string | undefined { return this._description; }
+  get model(): string | undefined { return this._model; }
   get contextMetadata(): ChatContextMetadata | undefined { return this._contextMetadata; }
   get status(): ChatStatus { return this._status; }
   get messageCount(): number { return this._messageCount; }
@@ -96,6 +98,7 @@ export class Chat {
     createdBy: string;
     title: string;
     description?: string;
+    model?: string;
     contextMetadata?: ChatContextMetadata;
     status: ChatStatus;
     messageCount: number;
@@ -109,6 +112,7 @@ export class Chat {
       UserId.fromString(data.createdBy),
       data.title,
       data.description,
+      data.model,
       data.contextMetadata,
       data.status,
       data.messageCount,
@@ -125,6 +129,7 @@ export class Chat {
     createdBy: string;
     title: string;
     description?: string;
+    model?: string;
     contextMetadata?: ChatContextMetadata;
     status: ChatStatus;
     messageCount: number;
@@ -138,6 +143,7 @@ export class Chat {
       createdBy: this._createdBy.value,
       title: this._title,
       description: this._description,
+      model: this._model,
       contextMetadata: this._contextMetadata,
       status: this._status,
       messageCount: this._messageCount,
@@ -160,6 +166,7 @@ export interface CreateChatData {
 export interface UpdateChatData {
   title?: string;
   description?: string;
+  model?: string | null; // null to clear, undefined to keep unchanged
   contextMetadata?: ChatContextMetadata;
   status?: ChatStatus;
   lastMessageAt?: Date;

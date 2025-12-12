@@ -394,12 +394,20 @@ export async function POST(req: NextRequest) {
       resolvedDomainId = null;
     }
 
-    // 5.5 Get organization's default AI model
-    console.log('[CHAT-GRPC-API] Fetching organization default model');
+    // 5.5 Get AI model: chat-specific model takes priority over organization default
+    console.log('[CHAT-GRPC-API] Fetching AI model configuration');
     const orgRepository = getOrganizationRepository();
     const organization = await orgRepository.findById(OrganizationId.fromNumber(organizationId));
-    const defaultModel = organization?.defaultModel || null;
-    console.log('[CHAT-GRPC-API] Organization default model:', defaultModel || 'not set (will use system default)');
+    const organizationModel = organization?.defaultModel || null;
+
+    // Chat model hierarchy: chat.model → organization.defaultModel → System Default
+    const chatModel = currentChat?.model || null;
+    const defaultModel = chatModel || organizationModel;
+    console.log('[CHAT-GRPC-API] Model configuration:', {
+      chatModel: chatModel || 'not set',
+      organizationModel: organizationModel || 'not set',
+      resolved: defaultModel || 'will use system default'
+    });
 
     // 5.1 Separate skill references from regular tools BEFORE enrichment
     // This prevents skill_reference type from being overwritten during enrichment

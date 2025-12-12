@@ -243,6 +243,42 @@ export async function getCurrentChatSession(context: ChatContextDTO): Promise<Ch
 }
 
 /**
+ * Update a chat session's model configuration
+ */
+export async function updateChatModel(chatId: string, model: string | null): Promise<ChatActionResult<ChatSessionDTO>> {
+  try {
+    // Authenticate user
+    const session = await auth()
+    if (!session?.user?.id) {
+      return { success: false, error: 'Authentication required' }
+    }
+
+    const chatApplicationService = getChatApplicationService()
+
+    // Use the application service's updateChat method
+    const result = await chatApplicationService.updateChat({
+      chatId,
+      userId: session.user.id,
+      organizationId: session.user.currentOrganizationId!,
+      model
+    })
+
+    if (!result.success) {
+      return { success: false, error: result.error || 'Failed to update chat model' }
+    }
+
+    return { success: true, data: result.data! }
+
+  } catch (error) {
+    console.error('[CHAT-ACTIONS] Error updating chat model:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update chat model'
+    }
+  }
+}
+
+/**
  * Delete/archive a chat session
  */
 export async function archiveChatSession(chatId: string): Promise<ChatActionResult<boolean>> {
