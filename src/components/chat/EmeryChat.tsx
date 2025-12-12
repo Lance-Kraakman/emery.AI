@@ -14,8 +14,19 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Settings2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { ModelSelector } from '@/components/ai/ModelSelector'
+import { updateChatModel } from '@/app/actions/chat-history'
+import type { ChatSessionDTO } from '@/app/mappers/chat-mapper'
 import { cn } from '@/lib/utils'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
@@ -62,9 +73,11 @@ interface EmeryChatHeaderProps {
   domainType?: DomainType | 'organizations' | 'general'
   domainName?: string
   currentChatId?: string
+  currentChatModel?: string
   onChatSelect: (chatId: string) => void
   onNewChat: () => void
   onChatHistoryUpdate?: () => void
+  onModelChange?: (model: string | null) => void
   userId: string
   organizationId: number
 }
@@ -73,101 +86,177 @@ function EmeryChatHeader({
   domainType,
   domainName,
   currentChatId,
+  currentChatModel,
   onChatSelect,
   onNewChat,
   onChatHistoryUpdate,
+  onModelChange,
   userId,
   organizationId
 }: EmeryChatHeaderProps) {
+  const [showSettings, setShowSettings] = useState(false)
+  const [model, setModel] = useState<string | null>(currentChatModel || null)
+  const [isSaving, setIsSaving] = useState(false)
+
   // AIDEV-NOTE: Use fine-grained store subscriptions to prevent re-renders
   const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
   const chatWidthMode = useStore(uiStateStore, uiStateSelectors.chatWidthMode)
   const toggleChat = uiStateActions.toggleChat
   const toggleChatWidthMode = uiStateActions.toggleChatWidthMode
-  
-  // Determine context subtitle based on domain
-  const getSubtitle = () => {
-    if (domainType && domainName) {
-      switch (domainType) {
-        case 'agents': return `Agent: ${domainName}`
-        case 'teams': return `Team: ${domainName}`
-        case 'tables': return `Table: ${domainName}`
-        case 'files': return `File: ${domainName}`
-        case 'organizations': return 'Organization Assistant'
-        default: return 'AI Assistant'
+
+  // Sync local state when chat changes
+  useEffect(() => {
+    setModel(currentChatModel || null)
+  }, [currentChatModel, currentChatId])
+
+  const handleSaveSettings = async () => {
+    if (!currentChatId) return
+
+    setIsSaving(true)
+    try {
+      const result = await updateChatModel(currentChatId, model)
+      if (result.success) {
+        onModelChange?.(model)
+        setShowSettings(false)
       }
+    } catch (error) {
+      console.error('Failed to update chat model:', error)
+    } finally {
+      setIsSaving(false)
     }
-    return 'AI Assistant'
+  }
+
+  // Get short model name for badge display
+  const getShortModelName = (modelId?: string) => {
+    if (!modelId) return 'Default'
+    const parts = modelId.split('/')
+    const name = parts[parts.length - 1]
+    // Shorten common model names
+    return name.replace(/-Instruct$/, '').substring(0, 15)
   }
 
   return (
-    <div className="flex items-center justify-between py-4 px-4 bg-muted/20">
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="font-bold text-lg bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-              Dash
-            </h3>
-            <ChatHistoryDropdown
-              currentChatId={currentChatId}
-              onChatSelect={onChatSelect}
-              onNewChat={onNewChat}
-              onChatHistoryUpdate={onChatHistoryUpdate}
-              domainType={domainType}
-              domainName={domainName}
-              userId={userId}
-              organizationId={organizationId}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground truncate">{getSubtitle()}</p>
+    <>
+      <div className="flex items-center justify-between py-3 px-4 bg-muted/20">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <h3 className="font-bold text-lg bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent flex-shrink-0">
+            Dash
+          </h3>
+          <ChatHistoryDropdown
+            currentChatId={currentChatId}
+            onChatSelect={onChatSelect}
+            onNewChat={onNewChat}
+            onChatHistoryUpdate={onChatHistoryUpdate}
+            domainType={domainType}
+            domainName={domainName}
+            userId={userId}
+            organizationId={organizationId}
+          />
+          {/* Model badge */}
+          <Badge
+            variant="secondary"
+            className="text-[10px] px-1.5 py-0.5 cursor-pointer hover:bg-muted truncate max-w-[100px]"
+            onClick={() => currentChatId && setShowSettings(true)}
+            title={currentChatModel || 'Using default model'}
+          >
+            {getShortModelName(currentChatModel)}
+          </Badge>
+          {/* Settings button */}
+          {currentChatId && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowSettings(true)}
+              className="h-6 w-6 flex-shrink-0"
+              title="Chat settings"
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Width toggle button (only when chat is expanded) */}
+          {chatState === 'expanded' && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleChatWidthMode}
+              className="h-7 w-7"
+              title={chatWidthMode === 'normal' ? 'Expand to half width' : 'Shrink to normal width'}
+            >
+              {chatWidthMode === 'normal' ? (
+                <ChevronsLeft className="h-4 w-4" />
+              ) : (
+                <ChevronsRight className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+
+          {/* Chat collapse button (only show when expanded) - points right > */}
+          {chatState === 'expanded' && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleChat}
+              className="h-7 w-7"
+              title="Collapse chat"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          )}
+
+          {/* Chat expand button (only show when collapsed) - points left < */}
+          {chatState === 'collapsed' && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleChat}
+              className="h-7 w-7"
+              title="Expand chat"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
-      
-      <div className="flex items-center gap-1 flex-shrink-0">
-        {/* Width toggle button (only when chat is expanded) */}
-        {chatState === 'expanded' && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleChatWidthMode}
-            className="h-7 w-7"
-            title={chatWidthMode === 'normal' ? 'Expand to half width' : 'Shrink to normal width'}
-          >
-            {chatWidthMode === 'normal' ? (
-              <ChevronsLeft className="h-4 w-4" />
-            ) : (
-              <ChevronsRight className="h-4 w-4" />
-            )}
-          </Button>
-        )}
 
-        {/* Chat collapse button (only show when expanded) - points right > */}
-        {chatState === 'expanded' && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleChat}
-            className="h-7 w-7"
-            title="Collapse chat"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        )}
+      {/* Chat Settings Dialog */}
+      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings2 className="h-5 w-5" />
+              Chat Settings
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">AI Model</label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Select a model for this chat. Leave as "Inherit" to use the organization default.
+              </p>
+              <ModelSelector
+                value={model}
+                onChange={setModel}
+                showInherit={true}
+                inheritLabel="Inherit from organization"
+                requiredCapabilities={['toolCalling']}
+              />
+            </div>
 
-        {/* Chat expand button (only show when collapsed) - points left < */}
-        {chatState === 'collapsed' && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleChat}
-            className="h-7 w-7"
-            title="Expand chat"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
-    </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setShowSettings(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveSettings} disabled={isSaving}>
+                {isSaving ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
@@ -416,6 +505,7 @@ export function EmeryChat() {
 
   // Chat session state
   const [currentChatId, setCurrentChatId] = useState<string | undefined>()
+  const [currentChatModel, setCurrentChatModel] = useState<string | undefined>()
   const [isClient, setIsClient] = useState(false)
 
   // Tools state for @ tool selection
@@ -514,7 +604,13 @@ export function EmeryChat() {
     if (handler.createNewChat) {
       await handler.createNewChat()
       setCurrentChatId(undefined)
+      setCurrentChatModel(undefined)
     }
+  }
+
+  // Handle model change from settings
+  const handleModelChange = (model: string | null) => {
+    setCurrentChatModel(model || undefined)
   }
   
   // Collapsed state - show minimal icon strip with braintable logo
@@ -611,13 +707,15 @@ export function EmeryChat() {
     >
       {/* Chat Section - dynamic width based on chatWidthMode */}
       <div className={`flex flex-col w-full h-full`}>
-        <EmeryChatHeader 
+        <EmeryChatHeader
           domainType={chatContext?.domainType}
           domainName={chatContext?.domainName}
           currentChatId={currentChatId}
+          currentChatModel={currentChatModel}
           onChatSelect={handleChatSelect}
           onNewChat={handleNewChat}
           onChatHistoryUpdate={handleChatHistoryUpdate}
+          onModelChange={handleModelChange}
           userId={userId}
           organizationId={organizationId}
         />
