@@ -1,0 +1,114 @@
+## Document Operations (TipTap)
+
+### Available Operations
+
+- `create`: Create a new TipTap document
+- `list`: List all documents across tables
+- `read`: Get document content (TipTap JSON)
+- `update`: Update document content
+
+### Document Structure
+
+Documents are stored as field values in table rows. Each document has:
+
+```json
+{
+  "id": "uuid-string",
+  "name": "meeting-notes.tiptap.json",
+  "title": "Meeting Notes",
+  "tableId": 5,
+  "tableName": "Documents",
+  "rowId": "row-uuid",
+  "fieldId": 12,
+  "fieldName": "Content",
+  "mimeType": "application/vnd.tiptap+json",
+  "version": 1
+}
+```
+
+### Creating Documents
+
+Create in a **new row** (default):
+```
+document_crud(method="create",
+              table_id=5,
+              field_id=12,
+              title="New Document")
+```
+
+Create in an **existing row** (use `row_id`):
+```
+document_crud(method="create",
+              table_id=5,
+              field_id=12,
+              row_id="existing-row-uuid",
+              title="New Document")
+```
+
+With initial content:
+```
+document_crud(method="create",
+              table_id=5,
+              field_id=12,
+              title="New Document",
+              data=[{"type": "paragraph", "content": [{"type": "text", "text": "Hello world"}]}])
+```
+
+**row_id behavior:**
+- Omit `row_id` → creates a new row in the table
+- Provide `row_id` → adds document to an existing row (user must provide the row ID)
+
+### Listing Documents
+
+```
+document_crud(method="list")
+```
+
+Returns all TipTap documents with their location (tableId, fieldId, rowId).
+
+### Reading Documents
+
+```
+document_crud(method="read",
+              document_id="uuid-string",
+              table_id=5,
+              field_id=12)
+```
+
+Returns full TipTap JSON content.
+
+### Updating Documents
+
+```
+document_crud(method="update",
+              document_id="uuid-string",
+              table_id=5,
+              field_id=12,
+              data={"type": "doc", "content": [...]})
+```
+
+The `data` must be a complete TipTap document structure.
+
+### TipTap JSON Format
+
+```json
+{
+  "type": "doc",
+  "content": [
+    {"type": "paragraph", "content": [{"type": "text", "text": "Plain text"}]},
+    {"type": "heading", "attrs": {"level": 2}, "content": [{"type": "text", "text": "Title"}]},
+    {"type": "bulletList", "content": [
+      {"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Item"}]}]}
+    ]}
+  ]
+}
+```
+
+### Important Notes
+
+- `table_id` and `field_id` are REQUIRED for create/read/update
+- `row_id` is OPTIONAL for create: omit to create new row, provide to add to existing row
+- Always `list` first to find document IDs (for read/update)
+- Document IDs are UUID strings
+- `data` for update must be complete TipTap JSON (not partial)
+- Marks (bold, italic, etc.) go on text nodes: `{"type": "text", "text": "bold", "marks": [{"type": "bold"}]}`

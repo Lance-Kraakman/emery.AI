@@ -66,7 +66,7 @@ EMERY_TOOL_MAP = {
     "skill_crud": "tools/emery/skill_crud.j2",
     "agent_crud": "tools/emery/agent_crud.j2",
     "file_crud": "tools/emery/file_crud.j2",
-    "document_crud": "tools/emery/crud_operations.j2",
+    "document_crud": "tools/emery/document_crud.j2",
     "database_crud": "tools/emery/crud_operations.j2",
     "team_crud": "tools/emery/crud_operations.j2",
 }

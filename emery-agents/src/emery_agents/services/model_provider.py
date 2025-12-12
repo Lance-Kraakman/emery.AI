@@ -46,9 +46,10 @@ class SmolagentsCompatibleMessage:
         self.content = content
         self.role = role
         self.token_usage = token_usage or TokenUsage()
-        # Add other attributes that might be expected
+        # Add attributes expected by smolagents
         self.name = None
         self.tool_calls = None
+        self.raw = content  # smolagents uses raw as fallback when content is None
 
 
 class CustomInferenceModel(Model):

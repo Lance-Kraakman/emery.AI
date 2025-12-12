@@ -48,6 +48,10 @@ class ExecutionContext:
     # Skill configuration for skill-based execution
     skill: Optional[SkillConfig] = None
 
+    # Available skills for delegation (skill-as-tool)
+    # When set, these skills can be invoked as tools by the executing agent
+    available_skills: List[SkillConfig] = field(default_factory=list)
+
     # Model selection hierarchy
     agent_model: Optional[str] = None
     org_model: Optional[str] = None
@@ -79,6 +83,7 @@ class ExecutionContext:
             max_steps=self.max_steps,
             timeout_seconds=self.timeout_seconds,
             skill=self.skill,
+            available_skills=self.available_skills,
             agent_model=self.agent_model,
             org_model=self.org_model,
             environment=self.environment.copy()

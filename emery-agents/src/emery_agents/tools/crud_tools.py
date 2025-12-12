@@ -488,95 +488,125 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
 def load_document_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """Load Document CRUD tool with method-specific routing."""
 
+    # Capture auth in closure - NOT exposed to LLM via inputs schema
+    _auth_token = api_key or ""
+    _org_id = str(organization_id) if organization_id else ""
+
     class DocumentCrudTool(BaseCrudTool):
         """CRUD operations for Emery documents."""
 
         name = "document_crud"
-        description = "Create, read, update, delete, and list documents in your organization. Supports document content management and metadata operations."
+        description = "Create, read, update, and list documents. Use 'create' to make new documents, 'list' to find documents, 'read' to get content, 'update' to modify content."
+        # AIDEV-NOTE: tableId and fieldId accept both string and integer (like skill_crud)
         inputs = {
-            "method": {"type": "string", "description": "CRUD operation: create, read, update, delete, list"},
-            "document_id": {"type": "string", "description": "Document ID for read, update, delete operations", "nullable": True},
-            "data": {"type": "object", "description": "Document data for create and update operations", "nullable": True},
-            "filters": {"type": "object", "description": "Filter criteria for list operation", "nullable": True},
-            "auth_token": {"type": "string", "description": "Internal API authentication token"},
-            "organization_id": {"type": "string", "description": "Organization ID for RLS context"}
+            "method": {"type": "string", "description": "Operation: create, read, update, list"},
+            "document_id": {"type": "string", "description": "Document ID (required for read/update)", "nullable": True},
+            "table_id": {"type": ["string", "integer"], "description": "Table ID containing the document field (required for create/read/update)", "nullable": True},
+            "field_id": {"type": ["string", "integer"], "description": "Field ID of document column (required for create/read/update)", "nullable": True},
+            "row_id": {"type": "string", "description": "Row ID to add document to (optional for create). If omitted, creates a new row.", "nullable": True},
+            "title": {"type": "string", "description": "Document title (required for create)", "nullable": True},
+            "data": {
+                "type": "object",
+                "description": """Document content for update. JSON structure:
+{
+  "type": "doc",
+  "content": [
+    {"type": "paragraph", "content": [{"type": "text", "text": "Plain text here"}]},
+    {"type": "heading", "attrs": {"level": 2}, "content": [{"type": "text", "text": "Section Title"}]},
+    {"type": "bulletList", "content": [
+      {"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Item 1"}]}]}
+    ]}
+  ]
+}
+Node types: paragraph, heading (level 1-6), bulletList, orderedList, listItem, blockquote, codeBlock, image, table, tableRow, tableCell, horizontalRule, hardBreak
+Marks (inline formatting): {"type": "text", "text": "bold", "marks": [{"type": "bold"}]}
+Available marks: bold, italic, underline, strike, code, link (with href attr), highlight""",
+                "nullable": True
+            }
         }
         output_type = "object"
 
         def __init__(self):
             super().__init__("document", "crud")
 
-        def forward(self, method: str, auth_token: str, organization_id: str,
-                   document_id: Optional[str] = None, data: Optional[Dict] = None,
-                   filters: Optional[Dict] = None) -> Dict[str, Any]:
+        def forward(self, method: str, document_id: Optional[str] = None,
+                   table_id: Optional[Union[str, int]] = None,
+                   field_id: Optional[Union[str, int]] = None,
+                   row_id: Optional[str] = None,
+                   title: Optional[str] = None,
+                   data: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute document CRUD operation."""
 
+            # AIDEV-NOTE: Coerce table_id and field_id to strings for URL params
+            table_id_str = str(table_id) if table_id is not None else None
+            field_id_str = str(field_id) if field_id is not None else None
+
             if method == "create":
-                if not data:
-                    return {"success": False, "error": "Document data is required for create operation"}
+                if not table_id or not field_id:
+                    return {"success": False, "error": "table_id and field_id are required for create operation"}
+                if not title:
+                    return {"success": False, "error": "title is required for create operation"}
+
+                create_data: Dict[str, Any] = {
+                    "tableId": int(table_id),
+                    "fieldId": int(field_id),
+                    "title": title
+                }
+                if row_id:  # Optional: add to existing row
+                    create_data["rowId"] = row_id
+                if data:  # Optional initial content
+                    create_data["initialContent"] = data
 
                 return self._make_api_request_with_deadline(
                     endpoint="documents",
                     method="POST",
-                    data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    data=create_data,
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "read":
                 if not document_id:
-                    return {"success": False, "error": "Document ID is required for read operation"}
+                    return {"success": False, "error": "document_id is required for read operation"}
+                if not table_id_str or not field_id_str:
+                    return {"success": False, "error": "table_id and field_id are required for read operation. First call document_crud(method='list') to find documents and their location."}
 
                 return self._make_api_request_with_deadline(
-                    endpoint=f"documents/{document_id}",
+                    endpoint=f"documents/{document_id}?tableId={table_id_str}&fieldId={field_id_str}",
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "update":
                 if not document_id:
-                    return {"success": False, "error": "Document ID is required for update operation"}
+                    return {"success": False, "error": "document_id is required for update operation"}
+                if not table_id_str or not field_id_str:
+                    return {"success": False, "error": "table_id and field_id are required for update operation. First call document_crud(method='list') to find documents and their location."}
                 if not data:
-                    return {"success": False, "error": "Document data is required for update operation"}
+                    return {"success": False, "error": "data (TipTap content) is required for update operation"}
+
+                # Wrap content in tiptapContent for the API
+                update_data = {"tiptapContent": data}
 
                 return self._make_api_request_with_deadline(
-                    endpoint=f"documents/{document_id}",
+                    endpoint=f"documents/{document_id}?tableId={table_id_str}&fieldId={field_id_str}",
                     method="PUT",
-                    data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
-                )
-
-            elif method == "delete":
-                if not document_id:
-                    return {"success": False, "error": "Document ID is required for delete operation"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint=f"documents/{document_id}",
-                    method="DELETE",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    data=update_data,
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "list":
-                endpoint = "documents"
-                if filters:
-                    query_params = []
-                    for key, value in filters.items():
-                        query_params.append(f"{key}={value}")
-                    if query_params:
-                        endpoint += "?" + "&".join(query_params)
-
                 return self._make_api_request_with_deadline(
-                    endpoint=endpoint,
+                    endpoint="documents",
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             else:
-                return {"success": False, "error": f"Unknown method: {method}. Supported: create, read, update, delete, list"}
+                return {"success": False, "error": f"Unknown method: {method}. Supported: create, list, read, update"}
 
     return DocumentCrudTool()
 
@@ -1169,6 +1199,19 @@ Only include fields you want to change (partial updates allowed).""",
                     return {"success": False, "error": "Skill ID is required for update operation"}
                 if not data:
                     return {"success": False, "error": "Skill data is required for update operation. Provide: name, description, instructions, inputs, outputs, tools, or model"}
+
+                # Check if skill is a system skill (cannot be edited)
+                read_result = self._make_api_request_with_deadline(
+                    endpoint=f"skills/{skill_id}",
+                    method="GET",
+                    auth_token=_auth_token,
+                    organization_id=_org_id
+                )
+                if read_result.get("success") and read_result.get("data", {}).get("isSystem"):
+                    return {
+                        "success": False,
+                        "error": "System skills cannot be edited. Duplicate this skill to create your own version."
+                    }
 
                 return self._make_api_request_with_deadline(
                     endpoint=f"skills/{skill_id}",

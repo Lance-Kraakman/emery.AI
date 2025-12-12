@@ -29,6 +29,7 @@ from .tool_loader import UnifiedToolLoader
 from .image_processor import ImageProcessor
 from .agent_factory import AgentFactory, AgentConfig
 from .token_usage_extractor import TokenUsageExtractor
+from ..tools.skill_tool import SkillTool
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,10 @@ class AgentExecutor:
                 # Files are already in the right format
                 attachments.append(part.file)
 
+        # Get all available skills for delegation (excluding the current skill)
+        all_skills = list(request.agent_config.skills) if hasattr(request.agent_config, 'skills') else []
+        available_skills = [s for s in all_skills if s.name != request.skill_name]
+
         return ExecutionContext(
             mode=ExecutionMode.SKILL,
             task=skill.instructions,  # Changed from 'instructions'
@@ -143,6 +148,7 @@ class AgentExecutor:
             organization_id=request.organization_id if hasattr(request, 'organization_id') else None,
             skill_name=request.skill_name,
             skill=skill,
+            available_skills=available_skills,  # Skills that can be delegated to
             agent_model=agent_model,
             org_model=org_model,
             images=images,
@@ -385,10 +391,16 @@ class AgentExecutor:
             except Exception as e:
                 logger.warning(f"Failed to load some tools for skill {skill.name}: {e}")
 
+        # Load available skills as SkillTools for delegation
+        if context.available_skills:
+            skill_tools = self._create_skill_tools(context.available_skills, context.org_model)
+            tools.extend(skill_tools)
+            logger.info(f"Added {len(skill_tools)} skills as tools for delegation")
+
         # Extract skill model if present
         skill_model = skill.model if hasattr(skill, 'model') and skill.model else None
 
-        # Create agent using AgentFactory
+        # Create agent using AgentFactory with autonomous context
         agent_config = AgentConfig(
             tools=tools,
             skill_model=skill_model,
@@ -397,12 +409,101 @@ class AgentExecutor:
             max_steps=context.max_steps,
             agent_name=skill.name,
             agent_description=skill.description,
-            enable_caching=False  # Tasks are stateless - no caching
+            enable_caching=False,  # Tasks are stateless - no caching
+            context_type="autonomous"  # Use autonomous execution context
         )
 
         # Create ToolCallingAgent (AgentFactory always creates ToolCallingAgent)
         # Note: If CodeAgent is truly needed, this would need special handling
         return self.agent_factory.create_agent(agent_config)
+
+    def _create_skill_tools(
+        self,
+        skills: List[SkillConfig],
+        org_model: Optional[str] = None
+    ) -> List[SkillTool]:
+        """
+        Create SkillTool instances for each skill.
+
+        These allow the agent to delegate work to other skills.
+
+        Args:
+            skills: List of SkillConfig objects to wrap as tools
+            org_model: Organization default model (used as fallback)
+
+        Returns:
+            List of SkillTool instances
+        """
+        skill_tools = []
+
+        for skill_config in skills:
+            try:
+                # Create executor callback for this skill
+                skill_tool = SkillTool(
+                    skill_config=skill_config,
+                    skill_executor=self._create_skill_executor(org_model)
+                )
+                skill_tools.append(skill_tool)
+                logger.debug(f"Created SkillTool for: {skill_config.name}")
+            except Exception as e:
+                logger.warning(f"Failed to create SkillTool for {skill_config.name}: {e}")
+
+        return skill_tools
+
+    def _create_skill_executor(self, org_model: Optional[str] = None):
+        """
+        Create an executor callback for skill tools.
+
+        Args:
+            org_model: Organization default model
+
+        Returns:
+            Callable that executes a skill and returns result string
+        """
+        def execute_skill(skill_config: SkillConfig, runtime_inputs: Dict[str, Any]) -> str:
+            """Execute a skill synchronously (for task execution)."""
+            logger.info(f"🎯 Task executing skill: {skill_config.name}")
+
+            try:
+                # Load skill's tools
+                skill_tools = []
+                if skill_config.tools:
+                    skill_tools = self.tool_loader.load_tools(list(skill_config.tools))
+
+                # Build task from instructions + inputs
+                task_parts = [skill_config.instructions]
+                if runtime_inputs:
+                    task_parts.append("\n## Inputs:")
+                    for key, value in runtime_inputs.items():
+                        task_parts.append(f"- {key}: {value}")
+                task = "\n".join(task_parts)
+
+                # Create sub-agent with skill context from template
+                from ..prompts import render_template
+                skill_model = skill_config.model if hasattr(skill_config, 'model') and skill_config.model else None
+                agent_config = AgentConfig(
+                    tools=skill_tools,
+                    skill_model=skill_model,
+                    org_model=org_model,
+                    max_steps=10,
+                    agent_name=f"skill_{skill_config.name}",
+                    agent_description=skill_config.description,
+                    enable_caching=False,
+                    context_type="autonomous"  # Use autonomous execution context
+                )
+                sub_agent = self.agent_factory.create_agent(agent_config)
+
+                # Execute
+                result = sub_agent.run(task=task, reset=True)
+                logger.info(f"✅ Task skill {skill_config.name} completed")
+                return str(result)
+
+            except Exception as e:
+                error_msg = f"Skill execution failed: {str(e)}"
+                logger.error(f"❌ Task skill {skill_config.name} failed: {e}")
+                return error_msg
+
+        return execute_skill
 
     # Note: _create_tool_configs_with_context removed - now using tool_loader.create_tool_configs_with_context()
 

@@ -126,10 +126,15 @@ _loader: Optional[PromptTemplateLoader] = None
 
 
 def get_loader() -> PromptTemplateLoader:
-    """Get singleton template loader."""
+    """Get singleton template loader with registered globals."""
     global _loader
     if _loader is None:
         _loader = PromptTemplateLoader()
+        # Register get_tool_instructions as a Jinja2 global
+        # This allows templates to call {{ get_tool_instructions(tools) }} directly
+        from .tools import get_tool_instructions
+        _loader.env.globals['get_tool_instructions'] = get_tool_instructions
+        logger.debug("📝 Registered get_tool_instructions as Jinja2 global")
     return _loader
 
 
@@ -172,3 +177,56 @@ def list_templates(pattern: str = "**/*.j2") -> List[str]:
         List of template paths
     """
     return get_loader().list_templates(pattern)
+
+
+def get_managed_agent_templates() -> dict:
+    """
+    Get managed agent task/report templates for smolagents.
+
+    Returns raw Jinja2 template strings that smolagents will render
+    with {{name}}, {{task}}, {{final_answer}} variables.
+
+    Returns:
+        Dict with 'task' and 'report' keys containing template strings
+    """
+    return {
+        "task": render_template("base/managed_agent_task.j2"),
+        "report": render_template("base/managed_agent_report.j2")
+    }
+
+
+def get_planning_templates() -> dict:
+    """
+    Get planning templates for smolagents.
+
+    smolagents expects these exact keys:
+    - "initial_plan": Initial planning prompt
+    - "update_plan_pre_messages": System prompt for plan updates
+    - "update_plan_post_messages": User prompt after memory context
+
+    Returns raw Jinja2 template strings that smolagents will render
+    with {{task}}, {{remaining_steps}} variables.
+
+    Returns:
+        Dict with planning template keys
+    """
+    return {
+        "initial_plan": render_template("planning/plan.j2"),
+        "update_plan_pre_messages": render_template("planning/update_plan_pre_messages.j2"),
+        "update_plan_post_messages": render_template("planning/update_plan_post_messages.j2"),
+    }
+
+
+def get_hitl_templates() -> dict:
+    """
+    Get Human-in-the-Loop resume templates.
+
+    Used when resuming agent execution after user approval.
+
+    Returns:
+        Dict with 'resume_with_plan' and 'resume_fallback' keys
+    """
+    return {
+        "resume_with_plan": render_template("hitl/resume_with_plan.j2"),
+        "resume_fallback": render_template("hitl/resume_fallback.j2"),
+    }
