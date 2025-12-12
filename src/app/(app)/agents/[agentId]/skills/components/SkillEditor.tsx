@@ -37,6 +37,7 @@ interface SkillEditorProps {
   agentDefaultModel?: string | null; // Agent's default model for inheritance display
   organizationTier?: 'free' | 'pro' | 'enterprise'; // For filtering available models
   availableModels?: string[]; // Organization's whitelist of allowed models
+  isReadOnly?: boolean; // When true, disables all inputs (for system skills)
 }
 
 /**
@@ -58,6 +59,7 @@ export function SkillEditor({
   agentDefaultModel,
   organizationTier = 'free',
   availableModels,
+  isReadOnly = false,
 }: SkillEditorProps) {
   const [localValue, setLocalValue] = useState(value);
   const [showDescription, setShowDescription] = useState(false);
@@ -112,6 +114,7 @@ export function SkillEditor({
               onChange={(e) => handleChange({ name: e.target.value })}
               placeholder="e.g., Send Welcome Email, Generate Report, Analyze Data..."
               className="text-base h-10"
+              disabled={isReadOnly}
             />
           </div>
           {onSave && (
@@ -122,29 +125,31 @@ export function SkillEditor({
           )}
         </div>
 
-        {/* Add Description Link */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => setShowDescription(!showDescription)}
-        >
-          {showDescription ? (
-            <>
-              <ChevronUp className="h-3 w-3 mr-1" />
-              Hide description
-            </>
-          ) : (
-            <>
-              <ChevronDown className="h-3 w-3 mr-1" />
-              Add description
-            </>
-          )}
-        </Button>
+        {/* Add Description Link (hide when read-only unless there's a description) */}
+        {!isReadOnly && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setShowDescription(!showDescription)}
+          >
+            {showDescription ? (
+              <>
+                <ChevronUp className="h-3 w-3 mr-1" />
+                Hide description
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3 w-3 mr-1" />
+                Add description
+              </>
+            )}
+          </Button>
+        )}
 
         {/* Collapsible Description */}
-        {showDescription && (
+        {(showDescription || (isReadOnly && localValue.description)) && (
           <Textarea
             id="description"
             value={localValue.description}
@@ -152,6 +157,7 @@ export function SkillEditor({
             placeholder="Briefly describe what this skill does..."
             rows={2}
             className="text-base"
+            disabled={isReadOnly}
           />
         )}
       </div>
@@ -167,6 +173,7 @@ export function SkillEditor({
         <SkillInputsSection
           inputs={localValue.inputs}
           onInputsChange={(inputs) => handleChange({ inputs })}
+          isReadOnly={isReadOnly}
         />
         <p className="text-xs text-muted-foreground">
           Reference inputs in instructions using {'{input_name}'} syntax
@@ -193,17 +200,19 @@ export function SkillEditor({
                   </span>
                 </div>
 
-                {/* Remove button */}
-                <button
-                  onClick={() => {
-                    const newTools = localValue.tools.filter((_, i) => i !== index);
-                    handleChange({ tools: newTools });
-                  }}
-                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="Remove tool"
-                >
-                  <X className="w-2 h-2" />
-                </button>
+                {/* Remove button (hide when read-only) */}
+                {!isReadOnly && (
+                  <button
+                    onClick={() => {
+                      const newTools = localValue.tools.filter((_, i) => i !== index);
+                      handleChange({ tools: newTools });
+                    }}
+                    className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Remove tool"
+                  >
+                    <X className="w-2 h-2" />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -220,6 +229,7 @@ export function SkillEditor({
           onAttachmentRemove={handleAttachmentRemove}
           existingAttachments={existingAttachments}
           onExistingAttachmentRemove={handleExistingAttachmentRemove}
+          isReadOnly={isReadOnly}
         />
 
         <p className="text-xs text-muted-foreground">
@@ -238,36 +248,40 @@ export function SkillEditor({
         <SkillOutputsSection
           outputs={localValue.outputs}
           onOutputsChange={(outputs) => handleChange({ outputs })}
+          isReadOnly={isReadOnly}
         />
         <p className="text-xs text-muted-foreground">
           Define what data this skill returns
         </p>
       </div>
 
-      {/* Advanced Settings Section */}
+      {/* Advanced Settings Section (hide toggle when read-only, show if values are set) */}
       <div className="space-y-3 border-t pt-6">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-        >
-          {showAdvanced ? (
-            <>
-              <ChevronUp className="h-3 w-3 mr-1" />
-              Hide advanced settings
-            </>
-          ) : (
-            <>
-              <Settings className="h-3 w-3 mr-1" />
-              Advanced settings
-            </>
-          )}
-        </Button>
+        {!isReadOnly && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+          >
+            {showAdvanced ? (
+              <>
+                <ChevronUp className="h-3 w-3 mr-1" />
+                Hide advanced settings
+              </>
+            ) : (
+              <>
+                <Settings className="h-3 w-3 mr-1" />
+                Advanced settings
+              </>
+            )}
+          </Button>
+        )}
 
-        {showAdvanced && (
+        {(showAdvanced || (isReadOnly && (localValue.model || localValue.agentType))) && (
           <div className="space-y-4">
+            {isReadOnly && <Label className="text-xs text-muted-foreground">Advanced Settings</Label>}
             {/* Model Selection */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">AI Model</Label>
@@ -280,6 +294,7 @@ export function SkillEditor({
                 inheritLabel="Inherit from agent"
                 inheritFromModel={agentDefaultModel || 'IBM Granite 3.3 8B'}
                 requiredCapabilities={['toolCalling']}
+                disabled={isReadOnly}
               />
               <p className="text-xs text-muted-foreground">
                 Override the AI model used for this skill. Different models have different costs and capabilities.
@@ -303,6 +318,7 @@ export function SkillEditor({
               <Select
                 value={localValue.agentType || 'tool_calling'}
                 onValueChange={(agentType) => handleChange({ agentType: agentType === 'tool_calling' ? null : agentType })}
+                disabled={isReadOnly}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select agent type" />
