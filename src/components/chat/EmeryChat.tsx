@@ -121,17 +121,16 @@ function EmeryChatHeader({
           userId={userId}
           organizationId={organizationId}
         />
-        {/* Inline Model Selector */}
-        {currentChatId && (
-          <ModelSelector
-            value={currentChatModel || null}
-            onChange={handleModelSelect}
-            showInherit={true}
-            inheritLabel="Default"
-            requiredCapabilities={['toolCalling']}
-            className="w-[140px] h-7 text-xs"
-          />
-        )}
+        {/* Inline Model Selector - always visible */}
+        <ModelSelector
+          value={currentChatModel || null}
+          onChange={handleModelSelect}
+          showInherit={true}
+          inheritLabel="Default"
+          requiredCapabilities={['toolCalling']}
+          className="w-[140px] h-7 text-xs"
+          disabled={!currentChatId}
+        />
       </div>
 
       <div className="flex items-center gap-1 flex-shrink-0">
