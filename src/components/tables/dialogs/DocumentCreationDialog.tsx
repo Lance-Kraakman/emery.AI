@@ -43,7 +43,7 @@ export function DocumentCreationDialog({
       const formData = new FormData();
       formData.append('organizationId', organizationId.toString());
       formData.append('tableId', tableId.toString());
-      formData.append('fieldName', field.name || 'unknown-field');
+      formData.append('fieldId', field.id.toString());
       formData.append('documentTitle', documentName.trim());
       formData.append('documentType', 'tiptap');
       formData.append('initialContent', JSON.stringify([]));
