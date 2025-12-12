@@ -370,7 +370,9 @@ class AgentExecutor:
             max_steps=context.max_steps,
             agent_name="direct_executor",
             agent_description="Direct tool execution agent",
-            enable_caching=False
+            enable_caching=False,
+            agent_type="skill_executor",
+            context_type="autonomous"
         )
 
         return self.agent_factory.create_agent(agent_config)
@@ -410,7 +412,8 @@ class AgentExecutor:
             agent_name=skill.name,
             agent_description=skill.description,
             enable_caching=False,  # Tasks are stateless - no caching
-            context_type="autonomous"  # Use autonomous execution context
+            agent_type="skill_executor",
+            context_type="autonomous"
         )
 
         # Create ToolCallingAgent (AgentFactory always creates ToolCallingAgent)
@@ -479,7 +482,6 @@ class AgentExecutor:
                 task = "\n".join(task_parts)
 
                 # Create sub-agent with skill context from template
-                from ..prompts import render_template
                 skill_model = skill_config.model if hasattr(skill_config, 'model') and skill_config.model else None
                 agent_config = AgentConfig(
                     tools=skill_tools,
@@ -489,7 +491,8 @@ class AgentExecutor:
                     agent_name=f"skill_{skill_config.name}",
                     agent_description=skill_config.description,
                     enable_caching=False,
-                    context_type="autonomous"  # Use autonomous execution context
+                    agent_type="skill_executor",
+                    context_type="autonomous"
                 )
                 sub_agent = self.agent_factory.create_agent(agent_config)
 
