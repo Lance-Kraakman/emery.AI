@@ -10,7 +10,7 @@ AIDEV-NOTE: Templates are stored in subdirectories:
 - components/: Reusable components (hitl_approval, planning, etc.)
 
 Usage:
-    from emery_agents.prompts import render_template, compose_templates
+    from emery_agents.prompts import render_template, compose_templates, build_agent_instructions
 
     # Render a single template
     instructions = render_template("agents/skill_builder.j2", tools=tool_list)
@@ -20,9 +20,13 @@ Usage:
         "base/identity.j2",
         "base/critical_rules.j2"
     ], knowledge_cutoff="January 2025")
+
+    # Build instructions for an agent type
+    instructions = build_agent_instructions(tools=tools, agent_type="skill_builder")
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional, Any, List
 
@@ -230,3 +234,84 @@ def get_hitl_templates() -> dict:
         "resume_with_plan": render_template("hitl/resume_with_plan.j2"),
         "resume_fallback": render_template("hitl/resume_fallback.j2"),
     }
+
+
+def _write_debug_prompt(name: str, content: str) -> None:
+    """Write prompt content to /tmp for debugging."""
+    try:
+        os.makedirs('/tmp/emery_prompts', exist_ok=True)
+        filepath = f'/tmp/emery_prompts/{name}.txt'
+        with open(filepath, 'w') as f:
+            f.write(content)
+        logger.info(f"📋 Wrote debug prompt to {filepath}")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to write debug prompt: {e}")
+
+
+def build_agent_instructions(
+    tools: List[Any] = None,
+    agent_type: str = "default",
+    context_type: str = "interactive",
+    **kwargs
+) -> str:
+    """
+    Build agent instructions from Jinja2 templates.
+
+    Centralized function for building instructions for all agent types.
+    Ensures consistent base rules + agent-specific content + tool instructions.
+
+    Args:
+        tools: List of tool objects (for dynamic tool instructions)
+        agent_type: Type of agent ("default", "document_builder", "skill_builder", "skill_executor")
+        context_type: Execution context ("interactive" or "autonomous")
+        **kwargs: Template variables (e.g., restricted_tools)
+
+    Returns:
+        Rendered instructions string
+    """
+    from .tools import get_tool_instructions
+
+    try:
+        # Base templates (always included for all agents)
+        base_instructions = compose_templates([
+            "base/identity.j2",
+            "base/critical_rules.j2",
+            "components/goal_persistence.j2",
+        ], **kwargs)
+
+        # Agent-specific additions (domain content)
+        if agent_type != "default":
+            try:
+                agent_template = f"agents/{agent_type}.j2"
+                agent_content = render_template(agent_template, tools=tools, **kwargs)
+                if agent_content.strip():
+                    base_instructions = f"{base_instructions}\n\n{agent_content}"
+                    logger.debug(f"📝 Added agent template: {agent_template} ({len(agent_content)} chars)")
+            except Exception as e:
+                logger.warning(f"⚠️ Agent template {agent_type}.j2 not found: {e}")
+
+        # Context mode (interactive vs autonomous)
+        try:
+            context_content = render_template("base/context.j2", context_type=context_type)
+            if context_content.strip():
+                base_instructions = f"{base_instructions}\n\n{context_content}"
+        except Exception as e:
+            logger.debug(f"📝 Context template not rendered: {e}")
+
+        # Tool-specific instructions (dynamic based on available tools)
+        if tools:
+            tool_instructions = get_tool_instructions(tools)
+            if tool_instructions:
+                base_instructions = f"{base_instructions}\n\n{tool_instructions}"
+                logger.debug(f"📝 Added tool instructions ({len(tool_instructions)} chars)")
+
+        # Log final size
+        logger.info(f"📋 Instructions for {agent_type}: {len(base_instructions)} chars")
+
+        # Always write to /tmp for debugging
+        _write_debug_prompt(f"{agent_type}_instructions", base_instructions)
+
+        return base_instructions
+    except Exception as e:
+        logger.error(f"❌ Failed to load templates: {e}")
+        raise RuntimeError(f"Failed to build agent instructions: {e}") from e

@@ -4,6 +4,14 @@
 - REQUIRES: skill_id (NUMERIC from list results)
 - skill_id must be a NUMBER, not a name
 
+### ABSOLUTE RULES - NEVER VIOLATE
+
+1. **NEVER INVENT IDs** - If skill_id is not known, you MUST list skills first. DO NOT make up values like skill_id=5.
+
+2. **TOOL OUTPUT IS TRUTH** - If a tool returns `success: false` or an error, the operation FAILED. Report the failure. NEVER claim success when the tool returned an error.
+
+3. **VERIFY BEFORE CLAIMING SUCCESS** - After any create/update, read the skill back to confirm changes applied.
+
 ### Skill Structure
 
 | Field | Description |
@@ -18,19 +26,13 @@
 
 ### Workflow
 
-1. `skill_crud(method="list")` → find skill IDs
+1. `skill_crud(method="list")` → find skill IDs (REQUIRED if skill_id not provided)
 2. Confirm with user which skill
 3. `skill_crud(method="read", skill_id=X)`
 4. Create plan, wait for approval
 5. `skill_crud(method="update", skill_id=X, data={...})`
-6. Verify by reading again
-
-### Rules
-
-- List first (cannot guess IDs)
-- Confirm before changes
-- skill_id must be NUMERIC
-- For arrays, provide COMPLETE updated array
+6. Check response: if `success: false`, report the error
+7. Verify by reading again
 
 ### Plan Format
 

@@ -42,7 +42,6 @@ services:
       AWS_SECRET_ACCESS_KEY: minioadmin
       AWS_REGION: us-east-1
       S3_BUCKET_NAME: emery-files
-      EMERY_DEBUG_PROMPTS: true
       S3_FORCE_PATH_STYLE: true
     depends_on:
       postgres-integration:
