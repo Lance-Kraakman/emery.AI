@@ -78,7 +78,17 @@ export function VariablesPanel({
             key={variable.name}
             type="button"
             className="w-full flex items-start gap-2 text-xs cursor-pointer hover:bg-muted/80 p-1.5 rounded transition-colors text-left"
-            onClick={() => onInsert(formatVariable(variable.name))}
+            onMouseDown={(e) => {
+              console.log('🟣 VariablesPanel button mousedown for:', variable.name);
+              e.preventDefault(); // Prevents input blur so variable can be inserted at cursor
+              e.stopPropagation(); // Prevents Puck from capturing this event
+              console.log('🟣 Calling onInsert with:', formatVariable(variable.name));
+              onInsert(formatVariable(variable.name));
+            }}
+            onClick={(e) => {
+              console.log('🟣 VariablesPanel button onClick for:', variable.name);
+              e.stopPropagation();
+            }}
             title={variable.description || `Click to insert ${formatVariable(variable.name)}`}
           >
             <span className="font-mono text-muted-foreground min-w-[100px] flex-shrink-0 truncate">
