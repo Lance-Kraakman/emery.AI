@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { History, Plus, Search, Archive, MessageSquare, Calendar, Settings2, ChevronDown } from 'lucide-react'
+import { History, Plus, Search, Trash2, MessageSquare, Calendar, Settings2, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -23,6 +23,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { getChatSessions, createNewChatSession, archiveChatSession, updateChatModel } from '@/app/actions/chat-history'
 import { ModelSelector } from '@/components/ai/ModelSelector'
 import type { ChatSessionDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
@@ -52,24 +62,29 @@ interface ChatItemProps {
 }
 
 function ChatItem({ session, isActive, onClick, onArchive, onSettings }: ChatItemProps) {
-  const [isArchiving, setIsArchiving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  const handleArchive = async (e: React.MouseEvent) => {
+  const handleDeleteClick = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    setShowDeleteConfirm(true)
+  }
 
-    if (isArchiving) return
+  const handleConfirmDelete = async () => {
+    if (isDeleting) return
 
-    setIsArchiving(true)
+    setIsDeleting(true)
     try {
       const result = await archiveChatSession(session.id)
       if (result.success) {
         onArchive?.(session.id)
       }
     } catch (error) {
-      console.error('Failed to archive chat:', error)
+      console.error('Failed to delete chat:', error)
     } finally {
-      setIsArchiving(false)
+      setIsDeleting(false)
+      setShowDeleteConfirm(false)
     }
   }
 
@@ -147,14 +162,35 @@ function ChatItem({ session, isActive, onClick, onArchive, onSettings }: ChatIte
         <Button
           variant="ghost"
           size="icon"
-          onClick={handleArchive}
-          disabled={isArchiving}
-          className="h-7 w-7"
-          title="Archive chat"
+          onClick={handleDeleteClick}
+          disabled={isDeleting}
+          className="h-7 w-7 hover:text-destructive"
+          title="Delete chat"
         >
-          <Archive className="h-3.5 w-3.5" />
+          <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{session.title}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
