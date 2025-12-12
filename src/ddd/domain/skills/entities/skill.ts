@@ -72,6 +72,7 @@ export interface Skill {
   readonly tools: ToolConfig[];
   readonly content?: MessagePart[]; // Skill-level attachments (images, files, text)
   readonly model?: string | null; // Optional: Override model for this skill
+  readonly isSystem: boolean; // System skills cannot be deleted by users
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -157,7 +158,8 @@ export class SkillEntity {
       outputs: outputs,
       instructions: props.instructions.trim(),
       tools: props.tools || [],
-      content: props.content
+      content: props.content,
+      isSystem: false // User-created skills are never system skills
     };
   }
 
