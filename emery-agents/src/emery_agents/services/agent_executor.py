@@ -15,6 +15,7 @@ import logging
 import os
 import time
 import json
+import threading
 from typing import Dict, Any, List, Optional, Union, AsyncIterator
 
 from smolagents import CodeAgent, ToolCallingAgent
@@ -30,6 +31,7 @@ from .image_processor import ImageProcessor
 from .agent_factory import AgentFactory, AgentConfig
 from .token_usage_extractor import TokenUsageExtractor
 from ..tools.skill_tool import SkillTool
+from ..clients import HuggingFaceInferenceClient, TaskResult
 
 logger = logging.getLogger(__name__)
 
@@ -39,18 +41,39 @@ class AgentExecutor:
     Agent execution service combining routing and execution logic.
 
     Simplified from DDD pattern - no interfaces, direct dependencies.
+
+    AIDEV-NOTE: Thread-local context storage allows SkillTool to access parent
+    context (images, attachments) when invoked from an agent. This enables
+    Direct mode skills to receive image/audio inputs from chat attachments.
     """
+
+    # Thread-local storage for execution context
+    # Allows SkillTool.forward() to access parent context for injecting images/audio
+    _context_local = threading.local()
+
+    @classmethod
+    def set_current_context(cls, context: Optional[ExecutionContext]) -> None:
+        """Store execution context for skill access in current thread."""
+        cls._context_local.context = context
+
+    @classmethod
+    def get_current_context(cls) -> Optional[ExecutionContext]:
+        """Get execution context for current thread (used by SkillTool)."""
+        return getattr(cls._context_local, 'context', None)
 
     def __init__(
         self,
         model_provider: Optional[SmolagentsModelProvider] = None,
         tool_loader: Optional[UnifiedToolLoader] = None,
-        agent_factory: Optional[AgentFactory] = None
+        agent_factory: Optional[AgentFactory] = None,
+        inference_client: Optional[HuggingFaceInferenceClient] = None
     ):
         """Initialize with optional dependencies (creates defaults if not provided)."""
         self.model_provider = model_provider or SmolagentsModelProvider()
         self.tool_loader = tool_loader or UnifiedToolLoader()
         self.agent_factory = agent_factory or AgentFactory(self.model_provider)
+        # Inference client for direct task-model execution (lazy initialization)
+        self._inference_client = inference_client
         # Agent cache now managed by AgentFactory
         logger.info("AgentExecutor initialized with shared utilities")
 
@@ -61,6 +84,50 @@ class AgentExecutor:
     async def _download_images(self, image_attachments: List[ImageAttachment]) -> List[Image.Image]:
         """Download images using consolidated ImageProcessor."""
         return await ImageProcessor.download_images_from_attachments(image_attachments)
+
+    def _get_inference_client(self) -> HuggingFaceInferenceClient:
+        """Get or create the inference client (lazy initialization)."""
+        if self._inference_client is None:
+            self._inference_client = HuggingFaceInferenceClient()
+        return self._inference_client
+
+    def _is_task_model_skill(self, skill: SkillConfig) -> bool:
+        """
+        Check if skill uses task-model execution (bypasses LLM orchestration).
+
+        Task-model skills call inference APIs directly for single-task models:
+        - text-to-image, speech-to-text, feature-extraction, etc.
+        """
+        # SkillConfig is a protobuf - execution_type field is always present (empty string if not set)
+        return skill.execution_type == 'task-model'
+
+    def _extract_runtime_inputs(self, context: ExecutionContext) -> Dict[str, Any]:
+        """
+        Extract runtime inputs from execution context for direct skill execution.
+
+        Maps skill inputs from context to a dictionary for inference client.
+        """
+        inputs = {}
+
+        # For now, extract from the task text (skill instructions with injected inputs)
+        # TODO: Parse structured inputs from context once frontend sends them
+        if context.task:
+            inputs['prompt'] = context.task
+            inputs['text'] = context.task
+
+        # Extract image inputs from context
+        if context.images:
+            # For image-based tasks, include first image
+            # TODO: Handle multiple images if needed
+            inputs['images'] = context.images
+
+        # Extract audio inputs from attachments
+        # FileAttachment is a protobuf - mime_type field is always present
+        for attachment in context.attachments:
+            if attachment.mime_type and attachment.mime_type.startswith('audio/'):
+                inputs['audio'] = attachment
+
+        return inputs
 
     # =========================================================================
     # Routing Logic (from CapabilityRoutingService)
@@ -225,6 +292,10 @@ class AgentExecutor:
 
         start_time = time.time()
 
+        # Store context in thread-local for SkillTool access
+        # This allows skills to access images/audio from parent context
+        self.set_current_context(context)
+
         try:
             # Yield initial progress
             yield {
@@ -287,6 +358,15 @@ class AgentExecutor:
                     raise ValueError(error_msg)
 
                 skill = context.skill
+
+                # Route: task-model skills bypass LLM orchestration
+                if self._is_task_model_skill(skill):
+                    logger.info(f"🎯 Task-model skill '{skill.name}' - using direct execution")
+                    async for progress in self._execute_direct_skill(context, start_time):
+                        yield progress
+                    return
+
+                # Standard agent execution (LLM orchestration via smolagents)
                 tool_count = len(skill.tools) if skill.tools else 0
                 logger.info(f"Using skill '{skill.name}' with {tool_count} tools")
 
@@ -348,6 +428,131 @@ class AgentExecutor:
                 "progress_percent": 0.0
             }
 
+        finally:
+            # Always clean up thread-local context
+            self.set_current_context(None)
+
+    async def _execute_direct_skill(
+        self,
+        context: ExecutionContext,
+        start_time: float
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Execute skill directly without LLM orchestration.
+
+        Uses the model specified in taskModelConfig to perform a single task:
+        - text-to-image: Generate image from prompt
+        - speech-to-text: Transcribe audio
+        - feature-extraction: Generate embeddings
+        - etc.
+
+        Args:
+            context: ExecutionContext with skill configuration
+            start_time: Task start time for duration calculation
+
+        Yields:
+            Dict with status, output, progress updates
+        """
+        skill = context.skill
+        task_config = skill.task_model_config
+
+        if not task_config:
+            raise ValueError(f"Task-model skill '{skill.name}' missing task_model_config")
+
+        model_id = task_config.model_id
+        task_type = task_config.task_type
+
+        # Convert protobuf map to dict for parameters
+        parameters = dict(task_config.parameters) if task_config.parameters else {}
+
+        logger.info(f"🚀 Direct skill execution: {skill.name}")
+        logger.info(f"   Model: {model_id}, Task: {task_type}")
+
+        yield {
+            "status": "in_progress",
+            "output": json.dumps({
+                "skill": skill.name,
+                "model": model_id,
+                "task_type": task_type,
+                "message": "Starting direct model execution"
+            }),
+            "error_message": "",
+            "timestamp_ms": int(time.time() * 1000),
+            "progress_percent": 20.0
+        }
+
+        # Get inference client
+        client = self._get_inference_client()
+
+        # Verify task type is supported
+        if not client.supports_task_type(task_type):
+            raise ValueError(
+                f"Task type '{task_type}' not supported. "
+                f"Supported: {client.supported_task_types}"
+            )
+
+        # Extract runtime inputs from context
+        runtime_inputs = self._extract_runtime_inputs(context)
+
+        yield {
+            "status": "in_progress",
+            "output": json.dumps({
+                "message": f"Executing {task_type}...",
+                "inputs_count": len(runtime_inputs)
+            }),
+            "error_message": "",
+            "timestamp_ms": int(time.time() * 1000),
+            "progress_percent": 50.0
+        }
+
+        # Execute the task
+        result: TaskResult = await client.execute_task(
+            model_id=model_id,
+            task_type=task_type,
+            inputs=runtime_inputs,
+            parameters=parameters
+        )
+
+        # Build output based on result type
+        output_data = self._build_task_result_output(result, skill.name)
+
+        # Final completion
+        duration_ms = int((time.time() - start_time) * 1000)
+        yield {
+            "status": "completed",
+            "output": json.dumps(output_data),
+            "error_message": "",
+            "timestamp_ms": int(time.time() * 1000),
+            "progress_percent": 100.0,
+            "duration_ms": duration_ms,
+            # Include binary data for image/audio results
+            "binary_data": result.data if result.is_binary else None,
+            "result_type": result.type.value,
+            "metadata": result.metadata
+        }
+
+    def _build_task_result_output(self, result: TaskResult, skill_name: str) -> Dict[str, Any]:
+        """Build output dict from TaskResult for progress response."""
+        output: Dict[str, Any] = {
+            "skill": skill_name,
+            "result_type": result.type.value,
+            "message": "Task completed successfully"
+        }
+
+        if result.is_text:
+            output["result"] = str(result.data)
+        elif result.is_structured:
+            output["result"] = result.data  # Already list or dict
+        elif result.is_binary:
+            # For binary data (image/audio), include metadata only
+            # Actual binary data is passed separately in the progress dict
+            data_bytes = result.data if isinstance(result.data, bytes) else b""
+            output["result"] = f"Binary data: {len(data_bytes)} bytes"
+            if result.metadata:
+                output.update(result.metadata)
+
+        return output
+
     async def _create_direct_execution_agent(
         self,
         context: ExecutionContext
@@ -395,7 +600,12 @@ class AgentExecutor:
 
         # Load available skills as SkillTools for delegation
         if context.available_skills:
-            skill_tools = self._create_skill_tools(context.available_skills, context.org_model)
+            skill_tools = self._create_skill_tools(
+                context.available_skills,
+                context.org_model,
+                api_key=context.api_key,
+                organization_id=context.organization_id
+            )
             tools.extend(skill_tools)
             logger.info(f"Added {len(skill_tools)} skills as tools for delegation")
 
@@ -423,28 +633,44 @@ class AgentExecutor:
     def _create_skill_tools(
         self,
         skills: List[SkillConfig],
-        org_model: Optional[str] = None
+        org_model: Optional[str] = None,
+        api_key: Optional[str] = None,
+        organization_id: Optional[int] = None
     ) -> List[SkillTool]:
         """
         Create SkillTool instances for each skill.
 
         These allow the agent to delegate work to other skills.
+        For task-model skills, passes the inference client for direct execution.
 
         Args:
             skills: List of SkillConfig objects to wrap as tools
             org_model: Organization default model (used as fallback)
+            api_key: Optional API key for output mapping (calls emery-api)
+            organization_id: Optional org ID for output mapping (RLS context)
 
         Returns:
             List of SkillTool instances
         """
         skill_tools = []
 
+        # Check if any skills need inference client
+        # SkillConfig is a protobuf - execution_type field is always present
+        has_task_model_skills = any(
+            s.execution_type == 'task-model'
+            for s in skills
+        )
+        inference_client = self._get_inference_client() if has_task_model_skills else None
+
         for skill_config in skills:
             try:
                 # Create executor callback for this skill
                 skill_tool = SkillTool(
                     skill_config=skill_config,
-                    skill_executor=self._create_skill_executor(org_model)
+                    skill_executor=self._create_skill_executor(org_model),
+                    inference_client=inference_client,
+                    api_key=api_key,
+                    organization_id=organization_id
                 )
                 skill_tools.append(skill_tool)
                 logger.debug(f"Created SkillTool for: {skill_config.name}")
