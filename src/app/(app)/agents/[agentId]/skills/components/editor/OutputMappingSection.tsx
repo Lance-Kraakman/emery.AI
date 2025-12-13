@@ -10,6 +10,7 @@ import type { TableDTO } from '@/app/mappers/table-mapper';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import { getTables } from '@/app/actions/tables';
 import { getFields } from '@/app/actions/fields';
+import { getRowsDSG } from '@/app/actions/rows';
 
 // Compatible column types for each output type
 const OUTPUT_TYPE_TO_FIELD_TYPES: Record<string, string[]> = {
@@ -31,7 +32,9 @@ interface OutputMappingRowProps {
 function OutputMappingRow({ output, tables, onMappingChange, isReadOnly }: OutputMappingRowProps) {
   const [selectedTableId, setSelectedTableId] = useState<number | undefined>(output.mapping?.tableId);
   const [fields, setFields] = useState<FieldDTO[]>([]);
+  const [rows, setRows] = useState<Array<{ id: string; [key: string]: any }>>([]);
   const [loadingFields, setLoadingFields] = useState(false);
+  const [loadingRows, setLoadingRows] = useState(false);
 
   // Fetch fields when table is selected
   useEffect(() => {
@@ -48,6 +51,32 @@ function OutputMappingRow({ output, tables, onMappingChange, isReadOnly }: Outpu
       setFields([]);
     }
   }, [selectedTableId]);
+
+  // Fetch rows when table is selected (for update mode row picker)
+  useEffect(() => {
+    if (selectedTableId) {
+      setLoadingRows(true);
+      getRowsDSG(selectedTableId, 50) // Limit to 50 rows for picker
+        .then(result => {
+          setRows(result.rows || []);
+        })
+        .catch(() => setRows([]))
+        .finally(() => setLoadingRows(false));
+    } else {
+      setRows([]);
+    }
+  }, [selectedTableId]);
+
+  // Get a display label for a row (use first text field or ID)
+  const getRowLabel = (row: { id: string; [key: string]: any }) => {
+    // Find first text field to use as label
+    const textField = fields.find(f => f.type === 'text');
+    if (textField && row[textField.name]) {
+      const value = String(row[textField.name]);
+      return value.length > 30 ? value.substring(0, 30) + '...' : value;
+    }
+    return `Row ${row.id.substring(0, 8)}`;
+  };
 
   // Filter fields by compatible types
   const compatibleTypes = OUTPUT_TYPE_TO_FIELD_TYPES[output.type || 'text'] || ['text'];
@@ -76,6 +105,14 @@ function OutputMappingRow({ output, tables, onMappingChange, isReadOnly }: Outpu
       ...output.mapping,
       mode,
       rowId: mode === 'create' ? undefined : output.mapping.rowId
+    });
+  };
+
+  const handleRowChange = (rowId: string) => {
+    if (!output.mapping) return;
+    onMappingChange({
+      ...output.mapping,
+      rowId
     });
   };
 
@@ -157,6 +194,32 @@ function OutputMappingRow({ output, tables, onMappingChange, isReadOnly }: Outpu
             <RefreshCw className="h-3 w-3" />
           </Button>
         </div>
+      )}
+
+      {/* Row selector (for update mode) */}
+      {output.mapping?.mode === 'update' && (
+        <Select
+          value={output.mapping.rowId}
+          onValueChange={handleRowChange}
+          disabled={isReadOnly || loadingRows}
+        >
+          <SelectTrigger className="w-[160px] h-8">
+            <SelectValue placeholder={loadingRows ? 'Loading...' : 'Select row...'} />
+          </SelectTrigger>
+          <SelectContent>
+            {rows.length === 0 ? (
+              <div className="p-2 text-xs text-muted-foreground">
+                No rows in table
+              </div>
+            ) : (
+              rows.map(row => (
+                <SelectItem key={row.id} value={row.id}>
+                  {getRowLabel(row)}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
       )}
 
       {/* Clear button */}
