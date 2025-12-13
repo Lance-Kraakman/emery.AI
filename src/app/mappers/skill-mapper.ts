@@ -1,4 +1,4 @@
-import type { Skill, SkillParameterType, SkillInputFileConfig } from '@/ddd/domain/skills/entities/skill';
+import type { Skill, SkillParameterType, SkillInputFileConfig, SkillExecutionType, TaskModelConfig } from '@/ddd/domain/skills/entities/skill';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 
@@ -24,12 +24,24 @@ export interface SkillInput {
 }
 
 /**
+ * DTO for Output Mapping
+ * Configures how a skill output is saved to a table
+ */
+export interface OutputMapping {
+  tableId: number;
+  fieldId: number;
+  mode: 'create' | 'update';
+  rowId?: string;  // For update mode - specific row to update
+}
+
+/**
  * DTO for Skill Output
  * Defines an output value from a skill
  */
 export interface SkillOutput {
   name: string;
   type?: SkillParameterType;
+  mapping?: OutputMapping;  // Optional: save output to table
 }
 
 /**
@@ -39,6 +51,15 @@ export interface SkillOutput {
  * Added: organizationId, agentId nullable for global skills
  * Added: content for skill-level attachments (images, files, text)
  */
+/**
+ * DTO for Task Model Configuration
+ */
+export interface TaskModelConfigDTO {
+  modelId: string;
+  taskType: string;
+  parameters?: Record<string, any>;
+}
+
 export interface SkillDTO {
   id: number;
   organizationId: number;
@@ -52,6 +73,8 @@ export interface SkillDTO {
   content?: MessagePart[]; // Skill-level attachments with pre-signed URLs
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  executionType?: SkillExecutionType; // 'agent' (default) or 'task-model'
+  taskModelConfig?: TaskModelConfigDTO; // Config for task-model execution
   isSystem: boolean; // System skills cannot be deleted by users
   createdAt: string;
   updatedAt: string;
@@ -84,6 +107,8 @@ export class SkillMapper {
       content: skill.content,
       model: skill.model ?? null,
       agentType: skill.agentType ?? null,
+      executionType: skill.executionType,
+      taskModelConfig: skill.taskModelConfig,
       isSystem: skill.isSystem,
       createdAt: skill.createdAt.toISOString(),
       updatedAt: skill.updatedAt.toISOString()

@@ -334,6 +334,27 @@ export interface SkillConfig {
   model: string;
   /** Skill-level attachments (images, files, text) */
   content: MessagePart[];
+  /** Optional: "tool_calling" (default) or "code_agent" */
+  agentType: string;
+  /** 'agent' (default) or 'task-model' */
+  executionType: string;
+  /** Config for task-model execution (when execution_type='task-model') */
+  taskModelConfig: TaskModelConfig | undefined;
+}
+
+/** Configuration for task-model execution (direct model invocation without LLM orchestration) */
+export interface TaskModelConfig {
+  /** HuggingFace model ID (e.g., 'black-forest-labs/FLUX.1-schnell') */
+  modelId: string;
+  /** Task type: text-to-image, speech-to-text, etc. */
+  taskType: string;
+  /** Model-specific parameters (steps, guidance_scale, etc.) */
+  parameters: { [key: string]: string };
+}
+
+export interface TaskModelConfig_ParametersEntry {
+  key: string;
+  value: string;
 }
 
 /** Skill input parameter */
@@ -361,6 +382,20 @@ export interface SkillOutput {
   name: string;
   /** text, image, file, audio, video, document */
   type: string;
+  /** Optional: save output to table */
+  mapping: OutputMapping | undefined;
+}
+
+/** Output mapping configuration - saves skill output to a table */
+export interface OutputMapping {
+  /** Target table ID */
+  tableId: number;
+  /** Target column/field ID */
+  fieldId: number;
+  /** 'create' (new row) or 'update' (existing row) */
+  mode: string;
+  /** For update mode: specific row ID to update */
+  rowId: string;
 }
 
 /** Tool configuration */
@@ -1895,6 +1930,9 @@ function createBaseSkillConfig(): SkillConfig {
     tools: [],
     model: "",
     content: [],
+    agentType: "",
+    executionType: "",
+    taskModelConfig: undefined,
   };
 }
 
@@ -1926,6 +1964,15 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     }
     for (const v of message.content) {
       MessagePart.encode(v!, writer.uint32(74).fork()).join();
+    }
+    if (message.agentType !== "") {
+      writer.uint32(82).string(message.agentType);
+    }
+    if (message.executionType !== "") {
+      writer.uint32(90).string(message.executionType);
+    }
+    if (message.taskModelConfig !== undefined) {
+      TaskModelConfig.encode(message.taskModelConfig, writer.uint32(98).fork()).join();
     }
     return writer;
   },
@@ -2009,6 +2056,30 @@ export const SkillConfig: MessageFns<SkillConfig> = {
           message.content.push(MessagePart.decode(reader, reader.uint32()));
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.agentType = reader.string();
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.executionType = reader.string();
+          continue;
+        }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          message.taskModelConfig = TaskModelConfig.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2029,6 +2100,9 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
       model: isSet(object.model) ? globalThis.String(object.model) : "",
       content: globalThis.Array.isArray(object?.content) ? object.content.map((e: any) => MessagePart.fromJSON(e)) : [],
+      agentType: isSet(object.agentType) ? globalThis.String(object.agentType) : "",
+      executionType: isSet(object.executionType) ? globalThis.String(object.executionType) : "",
+      taskModelConfig: isSet(object.taskModelConfig) ? TaskModelConfig.fromJSON(object.taskModelConfig) : undefined,
     };
   },
 
@@ -2061,6 +2135,15 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     if (message.content?.length) {
       obj.content = message.content.map((e) => MessagePart.toJSON(e));
     }
+    if (message.agentType !== "") {
+      obj.agentType = message.agentType;
+    }
+    if (message.executionType !== "") {
+      obj.executionType = message.executionType;
+    }
+    if (message.taskModelConfig !== undefined) {
+      obj.taskModelConfig = TaskModelConfig.toJSON(message.taskModelConfig);
+    }
     return obj;
   },
 
@@ -2078,6 +2161,203 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.model = object.model ?? "";
     message.content = object.content?.map((e) => MessagePart.fromPartial(e)) || [];
+    message.agentType = object.agentType ?? "";
+    message.executionType = object.executionType ?? "";
+    message.taskModelConfig = (object.taskModelConfig !== undefined && object.taskModelConfig !== null)
+      ? TaskModelConfig.fromPartial(object.taskModelConfig)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseTaskModelConfig(): TaskModelConfig {
+  return { modelId: "", taskType: "", parameters: {} };
+}
+
+export const TaskModelConfig: MessageFns<TaskModelConfig> = {
+  encode(message: TaskModelConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.modelId !== "") {
+      writer.uint32(10).string(message.modelId);
+    }
+    if (message.taskType !== "") {
+      writer.uint32(18).string(message.taskType);
+    }
+    Object.entries(message.parameters).forEach(([key, value]) => {
+      TaskModelConfig_ParametersEntry.encode({ key: key as any, value }, writer.uint32(26).fork()).join();
+    });
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskModelConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTaskModelConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.modelId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.taskType = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          const entry3 = TaskModelConfig_ParametersEntry.decode(reader, reader.uint32());
+          if (entry3.value !== undefined) {
+            message.parameters[entry3.key] = entry3.value;
+          }
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TaskModelConfig {
+    return {
+      modelId: isSet(object.modelId) ? globalThis.String(object.modelId) : "",
+      taskType: isSet(object.taskType) ? globalThis.String(object.taskType) : "",
+      parameters: isObject(object.parameters)
+        ? Object.entries(object.parameters).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+          acc[key] = String(value);
+          return acc;
+        }, {})
+        : {},
+    };
+  },
+
+  toJSON(message: TaskModelConfig): unknown {
+    const obj: any = {};
+    if (message.modelId !== "") {
+      obj.modelId = message.modelId;
+    }
+    if (message.taskType !== "") {
+      obj.taskType = message.taskType;
+    }
+    if (message.parameters) {
+      const entries = Object.entries(message.parameters);
+      if (entries.length > 0) {
+        obj.parameters = {};
+        entries.forEach(([k, v]) => {
+          obj.parameters[k] = v;
+        });
+      }
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TaskModelConfig>, I>>(base?: I): TaskModelConfig {
+    return TaskModelConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TaskModelConfig>, I>>(object: I): TaskModelConfig {
+    const message = createBaseTaskModelConfig();
+    message.modelId = object.modelId ?? "";
+    message.taskType = object.taskType ?? "";
+    message.parameters = Object.entries(object.parameters ?? {}).reduce<{ [key: string]: string }>(
+      (acc, [key, value]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.String(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    return message;
+  },
+};
+
+function createBaseTaskModelConfig_ParametersEntry(): TaskModelConfig_ParametersEntry {
+  return { key: "", value: "" };
+}
+
+export const TaskModelConfig_ParametersEntry: MessageFns<TaskModelConfig_ParametersEntry> = {
+  encode(message: TaskModelConfig_ParametersEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskModelConfig_ParametersEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTaskModelConfig_ParametersEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TaskModelConfig_ParametersEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: TaskModelConfig_ParametersEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TaskModelConfig_ParametersEntry>, I>>(base?: I): TaskModelConfig_ParametersEntry {
+    return TaskModelConfig_ParametersEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TaskModelConfig_ParametersEntry>, I>>(
+    object: I,
+  ): TaskModelConfig_ParametersEntry {
+    const message = createBaseTaskModelConfig_ParametersEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
     return message;
   },
 };
@@ -2287,7 +2567,7 @@ export const SkillInputFileConfig: MessageFns<SkillInputFileConfig> = {
 };
 
 function createBaseSkillOutput(): SkillOutput {
-  return { name: "", type: "" };
+  return { name: "", type: "", mapping: undefined };
 }
 
 export const SkillOutput: MessageFns<SkillOutput> = {
@@ -2297,6 +2577,9 @@ export const SkillOutput: MessageFns<SkillOutput> = {
     }
     if (message.type !== "") {
       writer.uint32(18).string(message.type);
+    }
+    if (message.mapping !== undefined) {
+      OutputMapping.encode(message.mapping, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -2324,6 +2607,14 @@ export const SkillOutput: MessageFns<SkillOutput> = {
           message.type = reader.string();
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.mapping = OutputMapping.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2337,6 +2628,7 @@ export const SkillOutput: MessageFns<SkillOutput> = {
     return {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       type: isSet(object.type) ? globalThis.String(object.type) : "",
+      mapping: isSet(object.mapping) ? OutputMapping.fromJSON(object.mapping) : undefined,
     };
   },
 
@@ -2348,6 +2640,9 @@ export const SkillOutput: MessageFns<SkillOutput> = {
     if (message.type !== "") {
       obj.type = message.type;
     }
+    if (message.mapping !== undefined) {
+      obj.mapping = OutputMapping.toJSON(message.mapping);
+    }
     return obj;
   },
 
@@ -2358,6 +2653,117 @@ export const SkillOutput: MessageFns<SkillOutput> = {
     const message = createBaseSkillOutput();
     message.name = object.name ?? "";
     message.type = object.type ?? "";
+    message.mapping = (object.mapping !== undefined && object.mapping !== null)
+      ? OutputMapping.fromPartial(object.mapping)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseOutputMapping(): OutputMapping {
+  return { tableId: 0, fieldId: 0, mode: "", rowId: "" };
+}
+
+export const OutputMapping: MessageFns<OutputMapping> = {
+  encode(message: OutputMapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.tableId !== 0) {
+      writer.uint32(8).int32(message.tableId);
+    }
+    if (message.fieldId !== 0) {
+      writer.uint32(16).int32(message.fieldId);
+    }
+    if (message.mode !== "") {
+      writer.uint32(26).string(message.mode);
+    }
+    if (message.rowId !== "") {
+      writer.uint32(34).string(message.rowId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OutputMapping {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseOutputMapping();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.tableId = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.fieldId = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.mode = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.rowId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): OutputMapping {
+    return {
+      tableId: isSet(object.tableId) ? globalThis.Number(object.tableId) : 0,
+      fieldId: isSet(object.fieldId) ? globalThis.Number(object.fieldId) : 0,
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
+      rowId: isSet(object.rowId) ? globalThis.String(object.rowId) : "",
+    };
+  },
+
+  toJSON(message: OutputMapping): unknown {
+    const obj: any = {};
+    if (message.tableId !== 0) {
+      obj.tableId = Math.round(message.tableId);
+    }
+    if (message.fieldId !== 0) {
+      obj.fieldId = Math.round(message.fieldId);
+    }
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
+    if (message.rowId !== "") {
+      obj.rowId = message.rowId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<OutputMapping>, I>>(base?: I): OutputMapping {
+    return OutputMapping.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OutputMapping>, I>>(object: I): OutputMapping {
+    const message = createBaseOutputMapping();
+    message.tableId = object.tableId ?? 0;
+    message.fieldId = object.fieldId ?? 0;
+    message.mode = object.mode ?? "";
+    message.rowId = object.rowId ?? "";
     return message;
   },
 };

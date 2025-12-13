@@ -207,8 +207,13 @@ class UnifiedToolLoader:
             if not skill_config:
                 raise ValueError(f"Skill with ID {skill_id} not found in agent_config.skills")
 
-            # Create and return SkillTool
-            return SkillTool(skill_config, skill_executor)
+            # Create and return SkillTool with auth for output mappings
+            return SkillTool(
+                skill_config,
+                skill_executor,
+                api_key=api_key,
+                organization_id=organization_id
+            )
 
         # AIDEV-NOTE: Handle CRUD tools from database - they don't need unified_metadata
         # These tools are seeded in the DB and sent with full config via gRPC
