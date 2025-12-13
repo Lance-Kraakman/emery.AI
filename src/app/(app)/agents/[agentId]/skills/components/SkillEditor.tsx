@@ -11,6 +11,9 @@ import { ModelSelector } from '@/components/ai/ModelSelector';
 import { InstructionsInput } from './editor/InstructionsInput';
 import { SkillInputsSection } from './editor/SkillInputsSection';
 import { SkillOutputsSection } from './editor/SkillOutputsSection';
+import { ExecutionTypeToggle } from './editor/ExecutionTypeToggle';
+import { TaskModelForm } from './editor/TaskModelForm';
+import { OutputMappingSection } from './editor/OutputMappingSection';
 import type { ToolConfigDTO, SkillInput, SkillOutput } from '@/app/mappers/skill-mapper';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 
@@ -25,6 +28,14 @@ export interface SkillFormData {
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   content?: MessagePart[]; // Existing uploaded attachments
   pendingAttachments?: File[]; // New attachments to upload on save
+  // Execution type: 'agent' (default) or 'task-model' (direct model invocation)
+  executionType?: 'agent' | 'task-model';
+  // Configuration for task-model execution (required when executionType is 'task-model')
+  taskModelConfig?: {
+    modelId: string;
+    taskType: string;
+    parameters?: Record<string, any>;
+  };
 }
 
 interface SkillEditorProps {
@@ -65,15 +76,36 @@ export function SkillEditor({
   const [showDescription, setShowDescription] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // Separate state for Agent and Direct mode inputs/outputs
+  // This preserves user's work when switching between modes
+  const [savedAgentState, setSavedAgentState] = useState<{
+    inputs: SkillInput[];
+    outputs: SkillOutput[];
+    instructions: string;
+    tools: ToolConfigDTO[];
+  }>({ inputs: [], outputs: [], instructions: '', tools: [] });
+
+  const [savedDirectState, setSavedDirectState] = useState<{
+    inputs: SkillInput[];
+    outputs: SkillOutput[];
+    instructions: string;
+    taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
+  }>({ inputs: [], outputs: [], instructions: '' });
+
   // Sync with external value changes
   useEffect(() => {
     setLocalValue(value);
   }, [value]);
 
   const handleChange = (updates: Partial<SkillFormData>) => {
-    const newValue = { ...localValue, ...updates };
-    setLocalValue(newValue);
-    onChange(newValue);
+    // Use functional update to avoid stale closure issues when multiple
+    // updates are called in sequence (e.g., TaskModelForm updating taskModelConfig,
+    // inputs, and outputs separately)
+    setLocalValue(prev => {
+      const newValue = { ...prev, ...updates };
+      onChange(newValue);
+      return newValue;
+    });
   };
 
   // Attachment handlers
@@ -162,7 +194,70 @@ export function SkillEditor({
         )}
       </div>
 
-      {/* Inputs Section */}
+      {/* Execution Type Toggle */}
+      <ExecutionTypeToggle
+        value={localValue.executionType || 'agent'}
+        onChange={(newMode) => {
+          const currentMode = localValue.executionType || 'agent';
+          if (currentMode === newMode) return;
+
+          // Save current state, restore target mode's saved state
+          if (currentMode === 'agent') {
+            setSavedAgentState({ inputs: localValue.inputs, outputs: localValue.outputs, instructions: localValue.instructions, tools: localValue.tools });
+            handleChange({ executionType: newMode, ...savedDirectState, tools: [] });
+          } else {
+            setSavedDirectState({ inputs: localValue.inputs, outputs: localValue.outputs, instructions: localValue.instructions, taskModelConfig: localValue.taskModelConfig });
+            handleChange({ executionType: newMode, ...savedAgentState, taskModelConfig: undefined });
+          }
+        }}
+        disabled={isReadOnly}
+      />
+
+      {/* Conditional Form Based on Execution Type */}
+      {(localValue.executionType || 'agent') === 'task-model' ? (
+        /* Direct Mode Form - Compact, auto-configures inputs/outputs */
+        <>
+          <TaskModelForm
+            value={localValue.taskModelConfig}
+            onChange={(taskModelConfig) => handleChange({ taskModelConfig })}
+            onInputsChange={(inputs) => handleChange({ inputs })}
+            onOutputsChange={(outputs) => handleChange({ outputs })}
+            onInstructionsChange={(instructions) => handleChange({ instructions })}
+            organizationTier={organizationTier}
+            isReadOnly={isReadOnly}
+          />
+
+          {/* Prompt Template - Only for operations with text inputs */}
+          {localValue.taskModelConfig?.taskType && localValue.inputs.some(input => input.type === 'text') && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Prompt Template</Label>
+              <InstructionsInput
+                value={localValue.instructions}
+                onChange={(text) => handleChange({ instructions: text })}
+                onToolsChange={() => {}}
+                tools={[]}
+                stepIndex={0}
+                isReadOnly={isReadOnly}
+              />
+              <p className="text-xs text-muted-foreground">
+                Use {'{{ input_name }}'} syntax. Leave empty to pass input directly.
+              </p>
+            </div>
+          )}
+
+          {/* Output Mapping Section - for Direct mode */}
+          {localValue.taskModelConfig?.taskType && localValue.outputs.length > 0 && (
+            <OutputMappingSection
+              outputs={localValue.outputs}
+              onOutputsChange={(outputs) => handleChange({ outputs })}
+              isReadOnly={isReadOnly}
+            />
+          )}
+        </>
+      ) : (
+        /* Agent Form (existing) */
+        <>
+          {/* Inputs Section */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label className="text-sm text-muted-foreground">Inputs</Label>
@@ -335,6 +430,8 @@ export function SkillEditor({
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

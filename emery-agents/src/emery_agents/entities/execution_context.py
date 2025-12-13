@@ -56,6 +56,9 @@ class ExecutionContext:
     agent_model: Optional[str] = None
     org_model: Optional[str] = None
 
+    # API authentication for output mappings and managed agents
+    api_key: Optional[str] = None
+
     # Environment data
     environment: Dict[str, Any] = field(default_factory=dict)
 
@@ -86,5 +89,6 @@ class ExecutionContext:
             available_skills=self.available_skills,
             agent_model=self.agent_model,
             org_model=self.org_model,
+            api_key=self.api_key,
             environment=self.environment.copy()
         )
