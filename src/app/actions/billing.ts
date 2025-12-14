@@ -123,7 +123,9 @@ export async function getBillingStatus(): Promise<BillingStatusResult> {
 
     const tier = (org.plan || 'free') as SubscriptionTier;
     const tierConfig = getTierConfig(tier);
-    const allowanceCredits = org.usageAllowanceCredits || 0;
+    // Use DB value if set, otherwise fall back to tier's default allowance
+    // This ensures free tier gets 1000 credits even if usageAllowanceCredits is 0/null in DB
+    const allowanceCredits = org.usageAllowanceCredits || tierConfig.creditsPerMonth;
     const usedCredits = org.creditsUsedCurrentMonth || 0;
     const overageCredits = Math.max(0, usedCredits - allowanceCredits);
     const spendingLimitUsd = org.spendingLimitUsd ? parseFloat(org.spendingLimitUsd.toString()) : 0;
@@ -234,8 +236,8 @@ export async function createCheckoutSession(
           quantity: 1,
         },
       ],
-      success_url: `${process.env.NEXTAUTH_URL}/billing?success=true`,
-      cancel_url: `${process.env.NEXTAUTH_URL}/billing?canceled=true`,
+      success_url: `${process.env.NEXTAUTH_URL}/settings/billing?success=true`,
+      cancel_url: `${process.env.NEXTAUTH_URL}/settings/billing?canceled=true`,
       metadata: {
         organizationId: orgId.toString(),
         tier,
@@ -282,7 +284,7 @@ export async function createPortalSession(): Promise<PortalSessionResult> {
     // Create portal session
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: org.stripeCustomerId,
-      return_url: `${process.env.NEXTAUTH_URL}/billing`,
+      return_url: `${process.env.NEXTAUTH_URL}/settings/billing`,
     });
 
     return {
