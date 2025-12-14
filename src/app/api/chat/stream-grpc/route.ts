@@ -545,7 +545,9 @@ export async function POST(req: NextRequest) {
               outputs: skill.outputs,
               tools: skill.tools,
               content: skill.content || [], // Message parts (attachments)
-              model: skill.model || null // Model override for this skill
+              model: skill.model || null, // Model override for this skill
+              executionType: skill.executionType || 'agent',
+              taskModelConfig: skill.taskModelConfig || undefined
             });
 
             console.log('[CHAT-GRPC-API] Loaded skill by ID:', {
