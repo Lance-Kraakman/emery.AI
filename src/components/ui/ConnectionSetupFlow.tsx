@@ -55,7 +55,7 @@ export function ConnectionSetupFlow({
       const result = await getConnectionSetupUrl(appName, redirectUrl);
 
       if (result.success && result.data) {
-        // Use same-tab navigation like OAuth connections page to prevent popup blockers
+        // Use same-tab navigation like Connections page to prevent popup blockers
         // and ensure consistent behavior across the application
         window.location.href = result.data as string;
       } else {
