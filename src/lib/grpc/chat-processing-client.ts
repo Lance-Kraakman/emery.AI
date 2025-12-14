@@ -167,7 +167,15 @@ export class ChatProcessingClient {
       })),
       model: skill.model || '',
       agentType: skill.agentType || '',  // "tool_calling" (default) or "code_agent"
-      content: skill.content || []
+      content: skill.content || [],
+      executionType: skill.executionType || 'agent',  // 'agent' (default) or 'operation'
+      taskModelConfig: skill.taskModelConfig ? {
+        modelId: skill.taskModelConfig.modelId || '',
+        taskType: skill.taskModelConfig.taskType || '',
+        parameters: Object.fromEntries(
+          Object.entries(skill.taskModelConfig.parameters || {}).map(([k, v]) => [k, String(v)])
+        )
+      } : undefined
     }));
 
     const agentConfig = {
