@@ -42,7 +42,7 @@ export async function createSkill(command: {
   tools: ToolConfigDTO[];
   model?: string | null;
   agentType?: string | null; // "tool_calling" (default) or "code_agent"
-  executionType?: 'agent' | 'operation' | 'task-model';  // 'task-model' is legacy alias for 'operation'
+  executionType?: 'agent' | 'operation';
   taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
 }): Promise<Result<SkillDTO>> {
   try {
@@ -60,15 +60,14 @@ export async function createSkill(command: {
     }
 
     const executionType = command.executionType || 'agent';
-    const isOperationMode = executionType === 'operation' || executionType === 'task-model';
 
     // Instructions required for agent execution, optional for operation mode
-    if (!isOperationMode && !command.instructions?.trim()) {
+    if (executionType !== 'operation' && !command.instructions?.trim()) {
       return { success: false, error: 'Instructions are required for agent execution' };
     }
 
     // Task model config required for operation mode
-    if (isOperationMode && !command.taskModelConfig) {
+    if (executionType === 'operation' && !command.taskModelConfig) {
       return { success: false, error: 'Task model configuration is required for operation execution' };
     }
 
@@ -137,7 +136,7 @@ export async function createOrganizationSkill(command: {
   tools: ToolConfigDTO[];
   model?: string | null;
   agentType?: string | null; // "tool_calling" (default) or "code_agent"
-  executionType?: 'agent' | 'operation' | 'task-model';  // 'task-model' is legacy alias for 'operation'
+  executionType?: 'agent' | 'operation';
   taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
 }): Promise<Result<SkillDTO>> {
   try {
@@ -155,15 +154,14 @@ export async function createOrganizationSkill(command: {
     }
 
     const executionType = command.executionType || 'agent';
-    const isOperationMode = executionType === 'operation' || executionType === 'task-model';
 
     // Instructions required for agent execution, optional for operation mode
-    if (!isOperationMode && !command.instructions?.trim()) {
+    if (executionType !== 'operation' && !command.instructions?.trim()) {
       return { success: false, error: 'Instructions are required for agent execution' };
     }
 
     // Task model config required for operation mode
-    if (isOperationMode && !command.taskModelConfig) {
+    if (executionType === 'operation' && !command.taskModelConfig) {
       return { success: false, error: 'Task model configuration is required for operation execution' };
     }
 
@@ -238,7 +236,7 @@ export async function updateSkill(
     tools?: ToolConfigDTO[];
     model?: string | null;
     agentType?: string | null; // "tool_calling" (default) or "code_agent"
-    executionType?: 'agent' | 'operation' | 'task-model';  // 'task-model' is legacy alias for 'operation'
+    executionType?: 'agent' | 'operation';
     taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> } | null;
     content?: MessagePart[]; // Skill-level attachments
   }

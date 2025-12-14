@@ -5,19 +5,15 @@ import { Bot, Cpu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface ExecutionTypeToggleProps {
-  value: 'agent' | 'operation' | 'task-model';  // Include legacy 'task-model' for loading existing skills
-  onChange: (value: 'agent' | 'operation') => void;  // Only emit new values
+  value: 'agent' | 'operation';
+  onChange: (value: 'agent' | 'operation') => void;
   disabled?: boolean;
 }
 
 /**
  * Compact toggle between Agent and Direct (operation) execution types.
- * Note: 'task-model' is a legacy value that maps to 'operation' for display purposes.
  */
 export function ExecutionTypeToggle({ value, onChange, disabled }: ExecutionTypeToggleProps) {
-  // Normalize legacy 'task-model' to 'operation' for display
-  const isOperation = value === 'operation' || value === 'task-model';
-
   return (
     <div className="flex gap-2">
       <Button
@@ -34,7 +30,7 @@ export function ExecutionTypeToggle({ value, onChange, disabled }: ExecutionType
       </Button>
       <Button
         type="button"
-        variant={isOperation ? 'default' : 'outline'}
+        variant={value === 'operation' ? 'default' : 'outline'}
         size="sm"
         onClick={() => onChange('operation')}
         disabled={disabled}

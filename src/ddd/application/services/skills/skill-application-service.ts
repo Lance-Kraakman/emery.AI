@@ -25,8 +25,8 @@ export interface CreateSkillCommand {
   tools: ToolConfig[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
-  executionType?: SkillExecutionType; // 'agent' (default) or 'task-model'
-  taskModelConfig?: TaskModelConfig; // Config for task-model execution
+  executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
+  taskModelConfig?: TaskModelConfig; // Config for operation execution
 }
 
 /**
@@ -42,8 +42,8 @@ export interface UpdateSkillCommand {
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   content?: MessagePart[]; // Skill-level attachments
-  executionType?: SkillExecutionType; // 'agent' (default) or 'task-model'
-  taskModelConfig?: TaskModelConfig | null; // Config for task-model execution
+  executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
+  taskModelConfig?: TaskModelConfig | null; // Config for operation execution
 }
 
 /**

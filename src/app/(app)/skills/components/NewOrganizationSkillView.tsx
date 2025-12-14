@@ -49,7 +49,9 @@ export function NewOrganizationSkillView({ organizationId, templateId }: NewOrga
             inputs: result.data.inputs,
             outputs: result.data.outputs,
             instructions: result.data.instructions,
-            tools: result.data.tools
+            tools: result.data.tools,
+            executionType: result.data.executionType,
+            taskModelConfig: result.data.taskModelConfig
           });
           toast.success('Template loaded successfully');
         } else {
@@ -85,7 +87,9 @@ export function NewOrganizationSkillView({ organizationId, templateId }: NewOrga
         inputs: formData.inputs,
         outputs: formData.outputs,
         instructions: formData.instructions,
-        tools: formData.tools
+        tools: formData.tools,
+        executionType: formData.executionType,
+        taskModelConfig: formData.taskModelConfig
       });
 
       if (!result.success || !result.data) {
