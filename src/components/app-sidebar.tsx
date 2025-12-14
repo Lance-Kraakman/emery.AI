@@ -517,7 +517,7 @@ export function AppSidebar({
                     <SidebarMenuButton asChild isActive={pathname === "/connections"} className="h-6">
                       <Link href="/connections">
                         <Plug className="h-4 w-4" />
-                        <span className="group-data-[collapsible=icon]:hidden">OAuth Connections</span>
+                        <span className="group-data-[collapsible=icon]:hidden">Connections</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

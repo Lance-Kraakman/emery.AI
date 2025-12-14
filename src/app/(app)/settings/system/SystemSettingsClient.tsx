@@ -12,7 +12,7 @@ import { ThemeToggle } from './ThemeToggle';
 
 export interface SystemSettingsClientProps {
   organizationId: number;
-  organizationTier: 'free' | 'pro' | 'enterprise';
+  organizationTier: 'free' | 'pro' | 'max' | 'enterprise';
   currentModel: string | null;
   availableModels: string[];
 }
