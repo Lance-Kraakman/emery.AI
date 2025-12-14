@@ -1,45 +1,19 @@
 'use client';
 
 /**
- * FileField - Field Block Component (Display Only)
+ * FileField - View Mode Component
  *
  * Displays file field values from the nearest data context.
  * Must be used inside DataBlock.
- * Shows files as downloadable links or preview cards.
+ * For edit mode with edit buttons, see FileEditMode.
  */
 
 import { useFieldValue, useIsInDataContext } from '@/components/puck/hooks/useFieldValue';
 import { cn } from '@/lib/utils';
 import { File, Download, FileText, FileImage, FileVideo, FileAudio, FileArchive } from 'lucide-react';
 import styles from './styles.module.css';
-
-export interface FileFieldProps {
-  fieldId?: number;
-  label?: string;
-  labelPosition?: 'top' | 'inline';
-  displayStyle?: 'list' | 'compact' | 'card';
-  maxItems?: number;
-  showSize?: boolean;
-  showDownload?: boolean;
-  textColor?: string;
-  fontFamily?: string;
-}
-
-interface FileItem {
-  id: string;
-  name: string;
-  size?: number;
-  mimeType?: string;
-  s3Key?: string;
-  url?: string;
-}
-
-function formatFileSize(bytes?: number): string {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+import type { FileFieldProps, FileItem } from './types';
+import { formatFileSize, getFileUrl } from './types';
 
 function getFileIcon(mimeType?: string) {
   if (!mimeType) return File;
@@ -51,26 +25,18 @@ function getFileIcon(mimeType?: string) {
   return File;
 }
 
-function getFileUrl(file: FileItem): string {
-  if (file.s3Key) {
-    return `/api/files/stream?s3Key=${encodeURIComponent(file.s3Key)}`;
-  }
-  if (file.url) return file.url;
-  return '#';
-}
-
 export default function FileField({
   fieldId,
   label,
   labelPosition = 'top',
   displayStyle = 'list',
+  size = 'normal',
   maxItems = 5,
   showSize = true,
   showDownload = true,
   textColor,
   fontFamily,
 }: FileFieldProps) {
-  // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
   const value = useFieldValue(fieldId ?? 0);
 
@@ -113,7 +79,8 @@ export default function FileField({
 
   const containerClass = cn(
     styles.fileField,
-    labelPosition === 'inline' && styles.inline
+    labelPosition === 'inline' && styles.inline,
+    size !== 'normal' && styles[size]
   );
 
   const customStyles: React.CSSProperties = {
