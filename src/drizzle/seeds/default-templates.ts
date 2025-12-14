@@ -391,7 +391,7 @@ const SYSTEM_TEMPLATES = [
       props: {
         variant: "card",
         shadow: "md",
-        paddingLevel: "6",
+        padding: { top: 6, right: 6, bottom: 6, left: 6, linked: true },
         children: [
           { type: "Flex", props: { direction: "column", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
             { type: "Heading", props: { text: "Card Title", size: "xl", align: "left" } },
@@ -411,7 +411,7 @@ const SYSTEM_TEMPLATES = [
           props: {
             variant: "card",
             shadow: "md",
-            paddingLevel: "6",
+            padding: { top: 6, right: 6, bottom: 6, left: 6, linked: true },
             children: [
               { type: "Flex", props: { direction: "column", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
                 { type: "Heading", props: { text: "Card Title", size: "xl", align: "left" } },
@@ -430,7 +430,7 @@ const SYSTEM_TEMPLATES = [
           props: {
             variant: "bordered",
             shadow: "none",
-            paddingLevel: "6",
+            padding: { top: 6, right: 6, bottom: 6, left: 6, linked: true },
             children: [
               { type: "Flex", props: { direction: "column", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
                 { type: "Heading", props: { text: "Card Title", size: "xl", align: "left" } },
