@@ -129,9 +129,37 @@ function PageVariablesEditor({
     }
   });
 
+  // Add context variables (available when triggered from document/file fields)
+  availableVariables.push({
+    name: 'documentId',
+    description: 'ID of clicked document (when triggered from document field)',
+  });
+  availableVariables.push({
+    name: 'documentName',
+    description: 'Name of clicked document (when triggered from document field)',
+  });
+  availableVariables.push({
+    name: 'fileId',
+    description: 'ID of clicked file (when triggered from file field)',
+  });
+  availableVariables.push({
+    name: 'fileName',
+    description: 'Name of clicked file (when triggered from file field)',
+  });
+
   const addVariable = useCallback(() => {
     const newKey = `var${entries.length + 1}`;
+    const newIndex = entries.length; // This will be the index of the new entry
     onChange({ ...value, [newKey]: '' });
+    // Auto-focus the new entry's value input after render
+    setTimeout(() => {
+      const input = inputRefs.current[newIndex];
+      if (input) {
+        input.focus();
+        lastFocusedIndexRef.current = newIndex;
+        console.log('🟢 Auto-focused new variable at index:', newIndex);
+      }
+    }, 0);
   }, [entries.length, value, onChange]);
 
   const updateKey = useCallback((oldKey: string, newKey: string) => {
@@ -163,7 +191,13 @@ function PageVariablesEditor({
     console.log('🔵 currentEntries.length:', currentEntries.length);
     console.log('🔵 inputRefs.current:', inputRefs.current);
 
-    const index = lastFocusedIndexRef.current;
+    // Default to first entry if no input was explicitly focused
+    let index = lastFocusedIndexRef.current;
+    if (index === null && currentEntries.length > 0) {
+      console.log('🔵 No input focused, defaulting to first entry (index 0)');
+      index = 0;
+    }
+
     if (index === null || index >= currentEntries.length) {
       console.log('🔵 Early return: index is null or out of bounds');
       return;
