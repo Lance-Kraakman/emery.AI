@@ -336,13 +336,13 @@ export interface SkillConfig {
   content: MessagePart[];
   /** Optional: "tool_calling" (default) or "code_agent" */
   agentType: string;
-  /** 'agent' (default) or 'task-model' */
+  /** 'agent' (default) or 'operation' */
   executionType: string;
-  /** Config for task-model execution (when execution_type='task-model') */
+  /** Config for operation execution (when execution_type='operation') */
   taskModelConfig: TaskModelConfig | undefined;
 }
 
-/** Configuration for task-model execution (direct model invocation without LLM orchestration) */
+/** Configuration for operation execution (direct model invocation without LLM orchestration) */
 export interface TaskModelConfig {
   /** HuggingFace model ID (e.g., 'black-forest-labs/FLUX.1-schnell') */
   modelId: string;

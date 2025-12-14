@@ -132,11 +132,11 @@ message SkillConfig {
   string model = 8;                    // Optional: model override for this skill
   repeated MessagePart content = 9;    // Skill-level attachments (images, files, text)
   string agent_type = 10;              // Optional: "tool_calling" (default) or "code_agent"
-  string execution_type = 11;          // 'agent' (default) or 'task-model'
-  TaskModelConfig task_model_config = 12; // Config for task-model execution (when execution_type='task-model')
+  string execution_type = 11;          // 'agent' (default) or 'operation'
+  TaskModelConfig task_model_config = 12; // Config for operation execution (when execution_type='operation')
 }
 
-// Configuration for task-model execution (direct model invocation without LLM orchestration)
+// Configuration for operation execution (direct model invocation without LLM orchestration)
 message TaskModelConfig {
   string model_id = 1;                 // HuggingFace model ID (e.g., 'black-forest-labs/FLUX.1-schnell')
   string task_type = 2;                // Task type: text-to-image, speech-to-text, etc.
