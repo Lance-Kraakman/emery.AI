@@ -42,6 +42,8 @@ export async function createSkill(command: {
   tools: ToolConfigDTO[];
   model?: string | null;
   agentType?: string | null; // "tool_calling" (default) or "code_agent"
+  executionType?: 'agent' | 'operation' | 'task-model';  // 'task-model' is legacy alias for 'operation'
+  taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -57,8 +59,17 @@ export async function createSkill(command: {
       return { success: false, error: 'Skill name is required' };
     }
 
-    if (!command.instructions?.trim()) {
-      return { success: false, error: 'Instructions are required' };
+    const executionType = command.executionType || 'agent';
+    const isOperationMode = executionType === 'operation' || executionType === 'task-model';
+
+    // Instructions required for agent execution, optional for operation mode
+    if (!isOperationMode && !command.instructions?.trim()) {
+      return { success: false, error: 'Instructions are required for agent execution' };
+    }
+
+    // Task model config required for operation mode
+    if (isOperationMode && !command.taskModelConfig) {
+      return { success: false, error: 'Task model configuration is required for operation execution' };
     }
 
     // Validate input names
@@ -126,6 +137,8 @@ export async function createOrganizationSkill(command: {
   tools: ToolConfigDTO[];
   model?: string | null;
   agentType?: string | null; // "tool_calling" (default) or "code_agent"
+  executionType?: 'agent' | 'operation' | 'task-model';  // 'task-model' is legacy alias for 'operation'
+  taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -141,8 +154,17 @@ export async function createOrganizationSkill(command: {
       return { success: false, error: 'Skill name is required' };
     }
 
-    if (!command.instructions?.trim()) {
-      return { success: false, error: 'Instructions are required' };
+    const executionType = command.executionType || 'agent';
+    const isOperationMode = executionType === 'operation' || executionType === 'task-model';
+
+    // Instructions required for agent execution, optional for operation mode
+    if (!isOperationMode && !command.instructions?.trim()) {
+      return { success: false, error: 'Instructions are required for agent execution' };
+    }
+
+    // Task model config required for operation mode
+    if (isOperationMode && !command.taskModelConfig) {
+      return { success: false, error: 'Task model configuration is required for operation execution' };
     }
 
     // Validate input names
@@ -170,7 +192,9 @@ export async function createOrganizationSkill(command: {
       instructions: command.instructions,
       tools: command.tools,
       model: command.model,
-      agentType: command.agentType
+      agentType: command.agentType,
+      executionType: command.executionType,  // Include execution type
+      taskModelConfig: command.taskModelConfig  // Include task model config
     });
 
     if (!result.success) {
@@ -214,6 +238,8 @@ export async function updateSkill(
     tools?: ToolConfigDTO[];
     model?: string | null;
     agentType?: string | null; // "tool_calling" (default) or "code_agent"
+    executionType?: 'agent' | 'operation' | 'task-model';  // 'task-model' is legacy alias for 'operation'
+    taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> } | null;
     content?: MessagePart[]; // Skill-level attachments
   }
 ): Promise<Result<SkillDTO>> {
@@ -363,7 +389,7 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
     // Create new name with " (Copy)" suffix
     const newName = `${originalSkill.name} (Copy)`;
 
-    // Create the duplicate skill (copy model and agentType settings)
+    // Create the duplicate skill (copy all settings including execution type)
     const createResult = await service.createSkill({
       agentId: originalSkill.agentId?.value || null,
       organizationId: originalSkill.organizationId.value,
@@ -374,7 +400,9 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
       instructions: originalSkill.instructions,
       tools: originalSkill.tools,
       model: originalSkill.model,
-      agentType: originalSkill.agentType
+      agentType: originalSkill.agentType,
+      executionType: originalSkill.executionType,
+      taskModelConfig: originalSkill.taskModelConfig
     });
 
     if (!createResult.success || !createResult.data) {

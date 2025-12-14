@@ -2,7 +2,7 @@ import { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-reposit
 import { SkillId } from '@/ddd/domain/skills/value-objects/skill-id';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
-import { SkillEntity, type Skill, type SkillInput, type SkillOutput, type ToolConfig } from '@/ddd/domain/skills/entities/skill';
+import { SkillEntity, type Skill, type SkillInput, type SkillOutput, type ToolConfig, type SkillExecutionType, type TaskModelConfig } from '@/ddd/domain/skills/entities/skill';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
@@ -25,6 +25,8 @@ export interface CreateSkillCommand {
   tools: ToolConfig[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  executionType?: SkillExecutionType; // 'agent' (default) or 'task-model'
+  taskModelConfig?: TaskModelConfig; // Config for task-model execution
 }
 
 /**
@@ -40,6 +42,8 @@ export interface UpdateSkillCommand {
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   content?: MessagePart[]; // Skill-level attachments
+  executionType?: SkillExecutionType; // 'agent' (default) or 'task-model'
+  taskModelConfig?: TaskModelConfig | null; // Config for task-model execution
 }
 
 /**
@@ -85,7 +89,9 @@ export class SkillApplicationService {
         instructions: command.instructions,
         tools: command.tools,
         model: command.model,
-        agentType: command.agentType
+        agentType: command.agentType,
+        executionType: command.executionType,
+        taskModelConfig: command.taskModelConfig
       });
 
       logger.debug('[SkillApplicationService] skill created', {
