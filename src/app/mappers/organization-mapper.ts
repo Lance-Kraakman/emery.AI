@@ -9,7 +9,7 @@ export interface OrganizationDTO {
   sharedServers?: string[] | null;
   databaseId?: string | null;
   viewConfig?: Record<string, any> | null;
-  plan?: string | null;
+  plan?: 'free' | 'pro' | 'max' | 'enterprise' | null;
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
   stripeSubscriptionStatus?: string | null;
