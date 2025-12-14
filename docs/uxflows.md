@@ -14,7 +14,7 @@
 4. [Organization](#organization)
 5. [Data Management](#data-management)
 6. [Users & Permissions](#users--permissions)
-7. [OAuth Connections](#oauth-connections)
+7. [Connections](#oauth-connections)
 8. [Chat & AI Assistant](#chat--ai-assistant)
 9. [Tasks & Execution](#tasks--execution)
 10. [Authentication & Onboarding](#authentication--onboarding)
@@ -42,7 +42,7 @@
 │  ├─ Data (hierarchical)
 │  │  └─ Databases → Tables
 │  └─ Settings
-│     ├─ OAuth Connections
+│     ├─ Connections
 │     ├─ Users & Permissions
 │     └─ System Settings
 └─ Sign Out (bottom)
@@ -62,7 +62,7 @@
 - `/teams` - Teams Management
 - `/agents` - Agents Management
 - `/data` - Data Browser
-- `/connections` - OAuth Connections
+- `/connections` - Connections
 - `/organization/settings/permissions` - Users & Permissions
 - `/settings/system` - System Settings
 
@@ -1014,7 +1014,7 @@ Find User in List
 
 ---
 
-## OAuth Connections
+## Connections
 
 ### Overview
 Manage external service integrations via OAuth 2.0 for use in agents and workflows.
