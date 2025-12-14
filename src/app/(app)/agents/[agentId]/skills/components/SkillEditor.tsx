@@ -250,6 +250,7 @@ export function SkillEditor({
             <OutputMappingSection
               outputs={localValue.outputs}
               onOutputsChange={(outputs) => handleChange({ outputs })}
+              taskType={localValue.taskModelConfig?.taskType}
               isReadOnly={isReadOnly}
             />
           )}
