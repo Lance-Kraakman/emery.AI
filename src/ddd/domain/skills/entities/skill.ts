@@ -5,12 +5,14 @@ import { MessagePart } from '@/lib/grpc/generated/agent_worker';
 
 /**
  * Skill Execution Types
+ * - 'agent' (default): LLM orchestration with tools via smolagents
+ * - 'operation': Direct model invocation for single-task models (image gen, speech, etc.)
  */
-export type SkillExecutionType = 'agent' | 'task-model';
+export type SkillExecutionType = 'agent' | 'operation';
 
 /**
  * Task Model Configuration
- * Used when executionType is 'task-model' to bypass LLM orchestration
+ * Used when executionType is 'operation' to bypass LLM orchestration
  * taskType is stored as string for flexibility - validated at execution time
  */
 export interface TaskModelConfig {
@@ -101,8 +103,8 @@ export interface Skill {
   readonly content?: MessagePart[]; // Skill-level attachments (images, files, text)
   readonly model?: string | null; // Optional: Override model for this skill
   readonly agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
-  readonly executionType?: SkillExecutionType; // 'agent' (default) or 'task-model'
-  readonly taskModelConfig?: TaskModelConfig; // Config for task-model execution
+  readonly executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
+  readonly taskModelConfig?: TaskModelConfig; // Config for operation execution
   readonly isSystem: boolean; // System skills cannot be deleted by users
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -123,8 +125,8 @@ export interface CreateSkillProps {
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
-  executionType?: SkillExecutionType; // 'agent' (default) or 'task-model'
-  taskModelConfig?: TaskModelConfig; // Config for task-model execution
+  executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
+  taskModelConfig?: TaskModelConfig; // Config for operation execution
 }
 
 /**
@@ -140,8 +142,8 @@ export interface UpdateSkillProps {
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
-  executionType?: SkillExecutionType; // 'agent' (default) or 'task-model'
-  taskModelConfig?: TaskModelConfig | null; // Config for task-model execution (null to clear)
+  executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
+  taskModelConfig?: TaskModelConfig | null; // Config for operation execution (null to clear)
 }
 
 /**
@@ -169,14 +171,14 @@ export class SkillEntity {
 
     const executionType = props.executionType || 'agent';
 
-    // Instructions are required for agent execution, optional for task-model
+    // Instructions are required for agent execution, optional for operation mode
     if (executionType === 'agent' && !props.instructions?.trim()) {
       throw new Error('Instructions are required and cannot be empty');
     }
 
-    // Task model config is required for task-model execution
-    if (executionType === 'task-model' && !props.taskModelConfig) {
-      throw new Error('Task model configuration is required for task-model execution');
+    // Task model config is required for operation execution
+    if (executionType === 'operation' && !props.taskModelConfig) {
+      throw new Error('Task model configuration is required for operation execution');
     }
 
     // Validate input names
@@ -291,10 +293,10 @@ export class SkillEntity {
   }
 
   /**
-   * Check if skill uses task-model execution (bypasses LLM orchestration)
+   * Check if skill uses operation execution (bypasses LLM orchestration)
    */
-  static isTaskModel(skill: Skill): boolean {
-    return skill.executionType === 'task-model';
+  static isOperation(skill: Skill): boolean {
+    return skill.executionType === 'operation';
   }
 
   /**

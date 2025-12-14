@@ -73,8 +73,8 @@ export interface SkillDTO {
   content?: MessagePart[]; // Skill-level attachments with pre-signed URLs
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
-  executionType?: SkillExecutionType; // 'agent' (default) or 'task-model'
-  taskModelConfig?: TaskModelConfigDTO; // Config for task-model execution
+  executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
+  taskModelConfig?: TaskModelConfigDTO; // Config for operation execution
   isSystem: boolean; // System skills cannot be deleted by users
   createdAt: string;
   updatedAt: string;
