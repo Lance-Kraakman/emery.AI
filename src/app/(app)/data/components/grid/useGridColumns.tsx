@@ -29,6 +29,8 @@ import type {
   SingleSelectCellConfiguration,
   MultiSelectValue,
   MultiSelectCellConfiguration,
+  JSONValue,
+  JSONCellConfiguration,
 } from './cell-types'
 import { TextCell } from './cells/TextCell'
 import { NumberCell } from './cells/NumberCell'
@@ -74,6 +76,7 @@ interface UseGridColumnsParams {
   EmbeddingCell?: CellComponent<EmbeddingValue, EmbeddingCellConfiguration>
   SingleSelectCell?: CellComponent<SingleSelectValue, SingleSelectCellConfiguration>
   MultiSelectCell?: CellComponent<MultiSelectValue, MultiSelectCellConfiguration>
+  JSONCell?: CellComponent<JSONValue, JSONCellConfiguration>
 }
 
 /**
@@ -106,6 +109,7 @@ export function useGridColumns({
   EmbeddingCell,
   SingleSelectCell,
   MultiSelectCell,
+  JSONCell,
 }: UseGridColumnsParams) {
   console.log('[USE GRID COLUMNS] Hook called', {
     fieldsCount: fields.length,
@@ -295,6 +299,25 @@ export function useGridColumns({
             }
             basis = WIDE_COLUMN_BASIS
             minWidth = MULTI_SELECT_MIN_WIDTH
+          } else {
+            columnConfig = textColumn
+          }
+          break
+
+        case 'json':
+          // Custom component for JSON data
+          if (JSONCell) {
+            columnConfig = {
+              ...textColumn,  // ✅ CRITICAL: Extend base column type for proper data binding
+              component: JSONCell,
+              disableKeys: true,
+              columnData: {
+                field,
+                onUpdateRow
+              }
+            }
+            basis = WIDE_COLUMN_BASIS
+            minWidth = WIDE_COLUMN_MIN_WIDTH
           } else {
             columnConfig = textColumn
           }

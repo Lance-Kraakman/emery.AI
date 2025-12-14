@@ -102,3 +102,13 @@ export interface MultiSelectCellConfiguration extends BaseCellConfiguration {
   onFieldUpdate: OnFieldUpdateCallback
 }
 export type MultiSelectCellProps = CellProps<MultiSelectValue, MultiSelectCellConfiguration>
+
+/**
+ * JSON field cell types
+ * AIDEV-NOTE: JSONField expects Record<string, unknown> or array or null
+ */
+export type JSONValue = Record<string, unknown> | unknown[] | null | undefined
+export interface JSONCellConfiguration extends BaseCellConfiguration {
+  // JSON-specific config would go here
+}
+export type JSONCellProps = CellProps<JSONValue, JSONCellConfiguration>

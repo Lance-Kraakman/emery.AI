@@ -48,6 +48,7 @@ import { DocumentField } from '@/components/tables/fields/DocumentField'
 import { EmbeddingField } from '@/components/tables/fields/EmbeddingField'
 import { SingleSelectField } from '@/components/tables/fields/SingleSelectField'
 import { MultiSelectField } from '@/components/tables/fields/MultiSelectField'
+import { JSONField } from '@/components/tables/fields/JSONField'
 import { FileTypeDetector } from '@/ddd/domain/tables/services/file-type-detector'
 import { createFileArtifact, createDocumentArtifact } from '@/components/chat/types/chat-artifacts'
 import { uiStateActions } from '@/stores/ui-state.store'
@@ -68,7 +69,8 @@ import type {
   DocumentCellProps,
   EmbeddingCellProps,
   SingleSelectCellProps,
-  MultiSelectCellProps
+  MultiSelectCellProps,
+  JSONCellProps
 } from './grid/cell-types'
 
 interface DynamicDataSheetGridProps {
@@ -388,6 +390,24 @@ const MultiSelectCell = ({ rowData, setRowData, columnData }: MultiSelectCellPro
   )
 }
 
+const JSONCell = ({ rowData, setRowData, columnData, focus }: JSONCellProps) => {
+  // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
+  // rowData = field value (JSON object/array or null)
+  // setRowData(newValue) = updates the field value
+
+  return (
+    <JSONField
+      value={rowData}  // ✅ rowData IS the field value
+      onChange={(newValue) => {
+        setRowData(newValue)  // ✅ Set field value directly
+      }}
+      isEditMode={true}
+      compact={true}
+      focus={focus}  // ✅ Pass focus for keyboard shortcut support
+    />
+  )
+}
+
 // Loading state component
 const LoadingState = () => (
   <div className="flex items-center justify-center h-32 text-muted-foreground">
@@ -581,6 +601,7 @@ export function DynamicDataSheetGrid({
     EmbeddingCell,
     SingleSelectCell,
     MultiSelectCell,
+    JSONCell,
   })
 
   /**
