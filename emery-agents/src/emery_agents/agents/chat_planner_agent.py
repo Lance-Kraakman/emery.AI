@@ -77,10 +77,9 @@ def create_chat_planner_agent(
     )
 
     # Override the system prompt with our custom instructions
-    # Note: smolagents builds system_prompt internally, but we can set instructions
-    # which are appended to the default prompt
-    if hasattr(agent, 'system_prompt'):
-        agent.system_prompt = instructions
+    # NOTE: As of smolagents updates, system_prompt is read-only, use prompt_templates instead
+    if hasattr(agent, 'prompt_templates'):
+        agent.prompt_templates["system_prompt"] = instructions
 
     # Set attributes for identification
     agent.name = "chat_planner"
