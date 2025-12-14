@@ -19,6 +19,7 @@ interface DocumentFieldProps {
   field?: FieldDTO;
   organizationId?: number;
   tableId?: number;
+  rowId?: string;  // Row ID for updating existing rows when creating documents
   compact?: boolean;
   disabled?: boolean;
   readOnly?: boolean;
@@ -51,6 +52,7 @@ export function DocumentField({
   field,
   organizationId = 1,
   tableId = 1,
+  rowId,
   compact = false,
   disabled = false,
   readOnly = false,
@@ -238,6 +240,7 @@ export function DocumentField({
           field={field}
           organizationId={organizationId}
           tableId={tableId}
+          rowId={rowId}
           onDocumentCreated={handleDocumentCreated}
         />
       )}

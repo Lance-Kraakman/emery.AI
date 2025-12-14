@@ -7,6 +7,7 @@
 
 import type { CellProps } from 'react-datasheet-grid'
 import type { FieldDTO } from '@/app/mappers/field-mapper'
+import type { DSGRow } from '@/app/mappers/dsg-mapper'
 import type {
   FileArrayFieldValue,
   DocumentArrayFieldValue,
@@ -68,6 +69,7 @@ export type DocumentValue = DocumentArrayFieldValue | null | undefined
 export interface DocumentCellConfiguration extends BaseCellConfiguration {
   organizationId: number
   tableId: number
+  data: DSGRow[]  // Row data array to look up rowId by index
 }
 export type DocumentCellProps = CellProps<DocumentValue, DocumentCellConfiguration>
 

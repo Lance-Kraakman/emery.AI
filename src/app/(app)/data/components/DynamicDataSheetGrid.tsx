@@ -240,9 +240,10 @@ const FileCell = ({ rowData, setRowData, columnData, focus, active, stopEditing 
   )
 }
 
-const DocumentCell = ({ rowData, setRowData, columnData, focus, active, stopEditing }: DocumentCellProps) => {
+const DocumentCell = ({ rowData, setRowData, columnData, rowIndex, focus, active, stopEditing }: DocumentCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
-  const { field, organizationId, tableId } = columnData
+  const { field, organizationId, tableId, data } = columnData
+  const rowId = data[rowIndex]?.id  // Get rowId from data array using rowIndex
 
   const handleDocumentOpen = (file: any) => {
     try {
@@ -309,6 +310,7 @@ const DocumentCell = ({ rowData, setRowData, columnData, focus, active, stopEdit
       field={field}
       organizationId={organizationId}
       tableId={tableId}
+      rowId={rowId}
       onDocumentOpen={handleDocumentOpen}
       focus={focus}
       onClose={() => stopEditing?.({ nextRow: false })}
@@ -565,6 +567,7 @@ export function DynamicDataSheetGrid({
     organizationId,
     tableId,
     availableTables,
+    data: state.data,
     onUpdateRow,
     onEditField: handleEditField,
     onDeleteField: handleDeleteField,
