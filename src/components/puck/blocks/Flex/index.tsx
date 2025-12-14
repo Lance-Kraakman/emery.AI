@@ -5,6 +5,9 @@ import { getClassNameFactory } from "@/components/puck/lib";
 import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
 import { spacingField, paddingField } from "../../fields/standard-fields";
+import type { FourSidedSpacing } from "../../types/spacing-types";
+import { useTheme } from "../../theme-context";
+import { computeFourSidedShorthand } from "../../utils/spacing";
 
 const getClassName = getClassNameFactory("Flex", styles);
 
@@ -16,7 +19,7 @@ export type FlexProps = WithLayout<{
   gap: string;
   wrap: "wrap" | "nowrap";
   itemStyle?: ItemStyle;
-  itemPadding?: string;
+  itemPadding?: FourSidedSpacing;
   items: Slot;
 }>;
 
@@ -78,7 +81,7 @@ const FlexInternal: ComponentConfig<FlexProps> = {
     },
     items: [],
   },
-  render: ({
+  render: function FlexRender({
     justifyContent,
     direction,
     gap,
@@ -86,11 +89,13 @@ const FlexInternal: ComponentConfig<FlexProps> = {
     itemStyle,
     itemPadding,
     items: Items,
-  }) => {
+  }) {
+    const theme = useTheme();
     const hasItemStyle = itemStyle && itemStyle !== "none";
 
+    // Compute item padding as shorthand CSS value
     const itemPaddingStyle = itemPadding
-      ? `calc(var(--theme-spacing-unit, 0.25rem) * ${itemPadding})`
+      ? computeFourSidedShorthand(itemPadding, theme)
       : undefined;
 
     return (

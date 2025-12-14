@@ -5,6 +5,9 @@ import { getClassNameFactory } from "@/components/puck/lib";
 import { Section } from "../../components/Section";
 import { withLayout } from "../../components/Layout";
 import { spacingField, paddingField } from "../../fields/standard-fields";
+import type { FourSidedSpacing } from "../../types/spacing-types";
+import { useTheme } from "../../theme-context";
+import { computeFourSidedShorthand } from "../../utils/spacing";
 
 const getClassName = getClassNameFactory("Grid", styles);
 
@@ -14,7 +17,7 @@ export type GridProps = {
   numColumns: number;
   gap: string;
   itemStyle?: ItemStyle;
-  itemPadding?: string;
+  itemPadding?: FourSidedSpacing;
   items: Slot;
 };
 
@@ -52,11 +55,13 @@ export const GridInternal: ComponentConfig<GridProps> = {
     itemPadding: undefined,
     items: [],
   },
-  render: ({ gap, numColumns, itemStyle, itemPadding, items: Items }) => {
+  render: function GridRender({ gap, numColumns, itemStyle, itemPadding, items: Items }) {
+    const theme = useTheme();
     const hasItemStyle = itemStyle && itemStyle !== "none";
 
+    // Compute item padding as shorthand CSS value
     const itemPaddingStyle = itemPadding
-      ? `calc(var(--theme-spacing-unit, 0.25rem) * ${itemPadding})`
+      ? computeFourSidedShorthand(itemPadding, theme)
       : undefined;
 
     return (

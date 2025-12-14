@@ -9,6 +9,9 @@ import { CheckCircle } from "lucide-react";
 import { useLinkContext } from "@/components/puck/link-context";
 import { resolveLinkAction } from "@/components/puck/utils/resolve-link-action";
 import type { LinkActionConfig } from "@/components/puck/custom-fields/link-action-field";
+import type { FourCornerRadius } from "@/components/puck/types/spacing-types";
+import { useTheme } from "@/components/puck/theme-context";
+import { computeFourCornerRadiusShorthand } from "@/components/puck/utils/spacing";
 
 export interface LoginBlockProps {
   title: string;
@@ -22,7 +25,7 @@ export interface LoginBlockProps {
   buttonColor?: string;
   buttonTextColor?: string;
   borderColor?: string;
-  borderRadius?: string;
+  radius?: FourCornerRadius;
 }
 
 export function LoginBlock({
@@ -37,8 +40,12 @@ export function LoginBlock({
   buttonColor,
   buttonTextColor,
   borderColor,
-  borderRadius,
+  radius,
 }: LoginBlockProps) {
+  const theme = useTheme();
+
+  // Compute borderRadius shorthand string for CSS and child components
+  const borderRadius = radius ? computeFourCornerRadiusShorthand(radius, theme) : undefined;
   const { isAuthenticated, isLoading, user, appId } = usePublicAppAuth();
   const isPreviewMode = appId === 0;
   const linkContext = useLinkContext();
