@@ -24,7 +24,7 @@ class ModelTier(Enum):
     """Minimum subscription tier required to access model."""
     FREE = "free"
     PRO = "pro"
-    ENTERPRISE = "enterprise"
+    MAX = "max"
 
 
 @dataclass
@@ -230,10 +230,482 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         endpoint=ModelEndpoint(type="inference-api"),
     ),
 
-    # AIDEV-NOTE: Multimodal models removed - SmolVLM and Phi-4 don't support text-only chat
-    # through HF Inference API. They only work for image-to-text tasks, not conversational AI.
-    # SmolVLM models throw: "Task 'conversational' not supported for provider 'replicate'"
-    # Phi-4 multimodal is not deployed on HF Inference API (only Azure AI, DeepInfra, etc.)
+    # Vision model (basic)
+    "llava-hf/llava-1.5-7b-hf": ModelMetadata(
+        id="llava-hf/llava-1.5-7b-hf",
+        name="LLaVA 1.5 7B",
+        provider="huggingface",
+        description="Vision-language model for image understanding and visual question answering.",
+        context_window=4096,
+        max_output_tokens=2048,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=True,
+            vision=True,
+            json_mode=False,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0.10, output_per_1m=0.40),
+        tier=ModelTier.FREE,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # CHAT LLMs WITH TOOL CALLING - 32B CLASS (Sweet Spot)
+    # ============================================================================
+
+    "Qwen/Qwen2.5-32B-Instruct": ModelMetadata(
+        id="Qwen/Qwen2.5-32B-Instruct",
+        name="Qwen 2.5 32B Instruct",
+        provider="huggingface",
+        description="Excellent balance of capability and speed. 128K context, strong reasoning and tool calling.",
+        context_window=128000,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=False,
+            json_mode=True,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.30, output_per_1m=0.80),
+        tier=ModelTier.PRO,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "Qwen/Qwen2.5-Coder-32B-Instruct": ModelMetadata(
+        id="Qwen/Qwen2.5-Coder-32B-Instruct",
+        name="Qwen 2.5 Coder 32B",
+        provider="huggingface",
+        description="Top-tier coding model. 128K context, excellent for code generation and tool use workflows.",
+        context_window=128000,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=False,
+            json_mode=True,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.30, output_per_1m=0.80),
+        tier=ModelTier.PRO,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "Qwen/QwQ-32B": ModelMetadata(
+        id="Qwen/QwQ-32B",
+        name="Qwen QwQ 32B (Reasoning)",
+        provider="huggingface",
+        description="Specialized reasoning model with chain-of-thought. Excellent for complex problem-solving.",
+        context_window=32768,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=False,
+            json_mode=True,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.30, output_per_1m=0.80),
+        tier=ModelTier.PRO,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # CHAT LLMs WITH TOOL CALLING - SMALLER (Fast)
+    # ============================================================================
+
+    "meta-llama/Llama-3.1-8B-Instruct": ModelMetadata(
+        id="meta-llama/Llama-3.1-8B-Instruct",
+        name="Llama 3.1 8B Instruct",
+        provider="huggingface",
+        description="Fast and reliable with 128K context. Multi-provider support.",
+        context_window=128000,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=False,
+            json_mode=True,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.10, output_per_1m=0.40),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # CHAT LLMs WITH TOOL CALLING - LARGER (Advanced)
+    # ============================================================================
+
+    "meta-llama/Llama-3.1-70B-Instruct": ModelMetadata(
+        id="meta-llama/Llama-3.1-70B-Instruct",
+        name="Llama 3.1 70B Instruct",
+        provider="huggingface",
+        description="Powerful 70B model with 128K context. Excellent reasoning and tool calling capabilities.",
+        context_window=128000,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=False,
+            json_mode=True,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.60, output_per_1m=1.20),
+        tier=ModelTier.PRO,
+        category=ModelCategory.ADVANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "Qwen/Qwen2.5-72B-Instruct": ModelMetadata(
+        id="Qwen/Qwen2.5-72B-Instruct",
+        name="Qwen 2.5 72B Instruct",
+        provider="huggingface",
+        description="Top-tier 72B model with 128K context. State-of-the-art reasoning and tool use.",
+        context_window=128000,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=False,
+            json_mode=True,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.50, output_per_1m=1.00),
+        tier=ModelTier.PRO,
+        category=ModelCategory.ADVANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "deepseek-ai/DeepSeek-R1": ModelMetadata(
+        id="deepseek-ai/DeepSeek-R1",
+        name="DeepSeek R1 (Reasoning)",
+        provider="huggingface",
+        description="Advanced reasoning model with extended thinking. Excellent for complex analytical tasks.",
+        context_window=65536,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=False,
+            json_mode=True,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.50, output_per_1m=2.00),
+        tier=ModelTier.MAX,
+        category=ModelCategory.ADVANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # VLM (Vision + Tool Calling)
+    # ============================================================================
+
+    "Qwen/Qwen2.5-VL-32B-Instruct": ModelMetadata(
+        id="Qwen/Qwen2.5-VL-32B-Instruct",
+        name="Qwen 2.5 VL 32B",
+        provider="huggingface",
+        description="Vision-language model with tool calling. Excellent for image understanding and analysis.",
+        context_window=32768,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=True,
+            json_mode=True,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0.40, output_per_1m=1.00),
+        tier=ModelTier.PRO,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "Qwen/Qwen2.5-VL-72B-Instruct": ModelMetadata(
+        id="Qwen/Qwen2.5-VL-72B-Instruct",
+        name="Qwen 2.5 VL 72B",
+        provider="huggingface",
+        description="Top-tier vision-language model. State-of-the-art image understanding with tool calling.",
+        context_window=32768,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=True,
+            json_mode=True,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0.60, output_per_1m=1.20),
+        tier=ModelTier.MAX,
+        category=ModelCategory.ADVANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # TASK-SPECIFIC MODELS - Image Generation
+    # ============================================================================
+
+    "black-forest-labs/FLUX.1-schnell": ModelMetadata(
+        id="black-forest-labs/FLUX.1-schnell",
+        name="FLUX.1 Schnell",
+        provider="huggingface",
+        description="Fast image generation. 4 steps, high quality.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.PRO,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "black-forest-labs/FLUX.1-dev": ModelMetadata(
+        id="black-forest-labs/FLUX.1-dev",
+        name="FLUX.1 Dev",
+        provider="huggingface",
+        description="High-quality image generation. More steps, better detail.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.PRO,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # TASK-SPECIFIC MODELS - Audio
+    # ============================================================================
+
+    "openai/whisper-large-v3": ModelMetadata(
+        id="openai/whisper-large-v3",
+        name="Whisper Large V3",
+        provider="huggingface",
+        description="State-of-the-art speech recognition. Transcribes audio to text.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "distil-whisper/distil-large-v3": ModelMetadata(
+        id="distil-whisper/distil-large-v3",
+        name="Distil Whisper Large V3",
+        provider="huggingface",
+        description="Fast speech recognition. 6x faster than Whisper with similar accuracy.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "suno/bark": ModelMetadata(
+        id="suno/bark",
+        name="Bark TTS",
+        provider="huggingface",
+        description="Text-to-speech generation. Creates natural-sounding audio from text.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.PRO,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # TASK-SPECIFIC MODELS - Vision Analysis
+    # ============================================================================
+
+    "facebook/detr-resnet-50": ModelMetadata(
+        id="facebook/detr-resnet-50",
+        name="DETR Object Detection",
+        provider="huggingface",
+        description="Detects objects in images. Returns bounding boxes and labels.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=True,
+            json_mode=False,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "google/vit-base-patch16-224": ModelMetadata(
+        id="google/vit-base-patch16-224",
+        name="ViT Image Classification",
+        provider="huggingface",
+        description="Classifies images into categories. Returns labels with confidence scores.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=True,
+            json_mode=False,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # TASK-SPECIFIC MODELS - Text Processing
+    # ============================================================================
+
+    "deepset/roberta-base-squad2": ModelMetadata(
+        id="deepset/roberta-base-squad2",
+        name="RoBERTa Question Answering",
+        provider="huggingface",
+        description="Extractive question answering. Finds answers in provided context.",
+        context_window=512,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.01, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "facebook/bart-large-mnli": ModelMetadata(
+        id="facebook/bart-large-mnli",
+        name="BART Zero-Shot Classification",
+        provider="huggingface",
+        description="Classifies text into custom categories. No training required.",
+        context_window=1024,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.02, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "facebook/bart-large-cnn": ModelMetadata(
+        id="facebook/bart-large-cnn",
+        name="BART Summarization",
+        provider="huggingface",
+        description="Summarizes long text into concise summaries.",
+        context_window=1024,
+        max_output_tokens=142,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.02, output_per_1m=0.04),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # TASK-SPECIFIC MODELS - Embeddings
+    # ============================================================================
+
+    "BAAI/bge-large-en-v1.5": ModelMetadata(
+        id="BAAI/bge-large-en-v1.5",
+        name="BGE Large English",
+        provider="huggingface",
+        description="High-quality text embeddings for semantic search and RAG. 1024 dimensions.",
+        context_window=512,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.01, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "BAAI/bge-m3": ModelMetadata(
+        id="BAAI/bge-m3",
+        name="BGE M3 (Multilingual)",
+        provider="huggingface",
+        description="Multilingual embeddings supporting 100+ languages. 1024 dimensions.",
+        context_window=8192,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.02, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
 }
 
 
@@ -252,7 +724,7 @@ def get_models_for_tier(tier: ModelTier) -> List[ModelMetadata]:
     tier_hierarchy = {
         ModelTier.FREE: 0,
         ModelTier.PRO: 1,
-        ModelTier.ENTERPRISE: 2,
+        ModelTier.MAX: 2,
     }
     user_tier_level = tier_hierarchy[tier]
 
@@ -328,7 +800,7 @@ def can_access_model(
     tier_hierarchy = {
         ModelTier.FREE: 0,
         ModelTier.PRO: 1,
-        ModelTier.ENTERPRISE: 2,
+        ModelTier.MAX: 2,
     }
     user_tier_level = tier_hierarchy[organization_tier]
     model_tier_level = tier_hierarchy[model.tier]
