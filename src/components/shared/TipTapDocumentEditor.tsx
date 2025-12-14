@@ -10,20 +10,8 @@
  * Handles document loading, editing, and auto-save functionality.
  */
 
-import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
-import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Placeholder from '@tiptap/extension-placeholder';
-import Image from '@tiptap/extension-image';
-import { Table } from '@tiptap/extension-table';
-import { TableCell } from '@tiptap/extension-table-cell';
-import { TableHeader } from '@tiptap/extension-table-header';
-import { TableRow } from '@tiptap/extension-table-row';
-import Underline from '@tiptap/extension-underline';
-import TextAlign from '@tiptap/extension-text-align';
-import { TextStyle } from '@tiptap/extension-text-style';
-import Color from '@tiptap/extension-color';
-import Highlight from '@tiptap/extension-highlight';
+import React from 'react';
+import { EditorContent } from '@tiptap/react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -45,11 +33,8 @@ import {
   Clock,
   AlertCircle,
 } from 'lucide-react';
-import { fetchTiptapDocumentContent, updateTiptapDocumentContent } from '@/app/actions/artifacts';
-import { createDebugLogger } from '@/lib/utils/debug-logger';
+import { useTipTapDocument } from './useTipTapDocument';
 import styles from './TipTapDocumentEditor.module.css';
-
-const logger = createDebugLogger('TipTapDocumentEditor');
 
 export interface TipTapDocumentEditorProps {
   /** Document ID to load/edit */
@@ -101,221 +86,29 @@ export function TipTapDocumentEditor({
   onContentChange,
   className = '',
 }: TipTapDocumentEditorProps) {
-  // Content state
-  const [content, setContent] = useState<any>('<p>Loading document content...</p>');
-  const [isLoadingContent, setIsLoadingContent] = useState(false);
-  const [loadAttempts, setLoadAttempts] = useState(0);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [contentLoaded, setContentLoaded] = useState(false);
-
-  // Track whether we've synced the initial content to the editor
-  // This prevents cursor reset when user is typing
-  const hasInitializedEditor = useRef(false);
-
-  // Save state
-  const [hasChanges, setHasChanges] = useState(false);
-  const [contentRecentlyChanged, setContentRecentlyChanged] = useState(false);
-
-  // Document key for change detection
-  const documentKey = useMemo(() => documentId, [documentId]);
-
-  // Reset when document changes
-  useEffect(() => {
-    setContentLoaded(false);
-    setLoadAttempts(0);
-    setContent('<p>Loading document content...</p>');
-    setHasChanges(false);
-    setContentRecentlyChanged(false);
-    hasInitializedEditor.current = false;
-  }, [documentKey]);
-
-  // Load document content
-  useEffect(() => {
-    const loadContent = async () => {
-      if (isLoadingContent || contentLoaded || loadAttempts >= 3) return;
-
-      setIsLoadingContent(true);
-      setLoadError(null);
-
-      try {
-        const result = await fetchTiptapDocumentContent(
-          documentId,
-          organizationId,
-          tableId,
-          fieldId
-        );
-
-        if (result.success && result.data?.content) {
-          const tiptapJson = result.data.content as any;
-          if (tiptapJson && typeof tiptapJson === 'object' && tiptapJson.type === 'doc') {
-            setContent(tiptapJson);
-            setLoadError(null);
-            setContentLoaded(true);
-          } else {
-            setContent('<p>Invalid TipTap document format</p>');
-            setLoadError('Invalid document format');
-          }
-        } else {
-          const errorMsg = result.error || 'Document content not available';
-          setContent(`<p>Failed to load document: ${errorMsg}</p>`);
-          setLoadError(errorMsg);
-          setLoadAttempts((prev) => prev + 1);
-        }
-      } catch (error) {
-        logger.error('Error loading TipTap content', error);
-        const errorMsg = error instanceof Error ? error.message : 'Error loading document content';
-        setContent(`<p>Error loading document content: ${errorMsg}</p>`);
-        setLoadError(errorMsg);
-        setLoadAttempts((prev) => prev + 1);
-        onError?.(error instanceof Error ? error : new Error(errorMsg));
-      } finally {
-        setIsLoadingContent(false);
-      }
-    };
-
-    // Add exponential backoff for retries
-    const delay = loadAttempts > 0 ? Math.min(1000 * Math.pow(2, loadAttempts - 1), 5000) : 0;
-    const timeoutId = setTimeout(loadContent, delay);
-    return () => clearTimeout(timeoutId);
-  }, [documentId, organizationId, tableId, fieldId, loadAttempts, isLoadingContent, contentLoaded, onError]);
-
-  // Configure TipTap editor
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Placeholder.configure({
-        placeholder,
-        showOnlyWhenEditable: true,
-        showOnlyCurrent: true,
-        includeChildren: false,
-        emptyEditorClass: 'is-editor-empty',
-        emptyNodeClass: 'is-empty',
-      }),
-      Image,
-      Table.configure({ resizable: true }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      Underline,
-      TextStyle,
-      Color,
-      Highlight.configure({ multicolor: true }),
-      TextAlign.configure({ types: ['heading', 'paragraph'] }),
-    ],
-    content: '<p>Loading document content...</p>',
-    editable: allowEdit,
-    immediatelyRender: false,
-    onUpdate: () => {
-      // Don't sync content back to state - this causes cursor reset issues
-      // The editor is the source of truth for current content
-      // We only track dirty state here
-      setHasChanges(true);
-      setContentRecentlyChanged(true);
-      onContentChange?.(true);
-    },
-  }, [allowEdit]);
-
-  // Update editor content when loaded (only once per document)
-  useEffect(() => {
-    // Only sync content to editor once during initial load
-    // After that, the editor is the source of truth
-    if (editor && content && contentLoaded && !hasInitializedEditor.current) {
-      if (typeof content === 'string') {
-        editor.commands.setContent(content, { emitUpdate: false });
-      } else if (content && typeof content === 'object' && content.type === 'doc') {
-        editor.commands.setContent(content, { emitUpdate: false });
-      }
-      hasInitializedEditor.current = true;
-    }
-  }, [editor, content, contentLoaded]);
-
-  // Update editor editable state
-  useEffect(() => {
-    if (editor) {
-      editor.setEditable(allowEdit);
-    }
-  }, [editor, allowEdit]);
-
-  // Auto-save interval
-  useEffect(() => {
-    if (!autoSave) return;
-
-    const saveInterval = setInterval(async () => {
-      if (editor && contentRecentlyChanged && allowEdit) {
-        try {
-          onSaveStart?.();
-          const currentContent = editor.getJSON();
-          const result = await updateTiptapDocumentContent(
-            documentId,
-            organizationId,
-            tableId,
-            fieldId,
-            currentContent
-          );
-
-          if (result.success) {
-            setContentRecentlyChanged(false);
-            setHasChanges(false);
-            onContentChange?.(false);
-            onSaveComplete?.();
-          }
-        } catch (error) {
-          logger.error('Auto-save failed', error);
-          onError?.(error instanceof Error ? error : new Error('Auto-save failed'));
-        }
-      }
-    }, autoSaveInterval);
-
-    return () => clearInterval(saveInterval);
-  }, [
+  const {
     editor,
-    contentRecentlyChanged,
-    allowEdit,
-    autoSave,
-    autoSaveInterval,
+    isLoading,
+    loadError,
+    isSaved,
+    retry,
+  } = useTipTapDocument({
     documentId,
     organizationId,
     tableId,
     fieldId,
+    allowEdit,
+    autoSave,
+    autoSaveInterval,
+    placeholder,
     onSaveStart,
     onSaveComplete,
-    onContentChange,
     onError,
-  ]);
-
-  // Manual save function
-  const handleSave = useCallback(async () => {
-    if (!editor) return;
-
-    try {
-      onSaveStart?.();
-      const tiptapContent = editor.getJSON();
-
-      const result = await updateTiptapDocumentContent(
-        documentId,
-        organizationId,
-        tableId,
-        fieldId,
-        tiptapContent
-      );
-
-      if (result.success) {
-        setHasChanges(false);
-        setContentRecentlyChanged(false);
-        onContentChange?.(false);
-        onSaveComplete?.();
-      } else {
-        logger.error('Failed to save document', result.error);
-        onError?.(new Error(result.error || 'Failed to save document'));
-      }
-    } catch (error) {
-      logger.error('Error saving document', error);
-      onError?.(error instanceof Error ? error : new Error('Failed to save document'));
-    }
-  }, [editor, documentId, organizationId, tableId, fieldId, onSaveStart, onSaveComplete, onContentChange, onError]);
+    onContentChange,
+  });
 
   // Loading state
-  if (isLoadingContent && !contentLoaded) {
+  if (isLoading) {
     return (
       <div className={`${styles.editorContainer} ${className}`} style={{ height }}>
         <div className="flex items-center justify-center h-full">
@@ -331,21 +124,14 @@ export function TipTapDocumentEditor({
   }
 
   // Error state
-  if (loadError && loadAttempts >= 3) {
+  if (loadError) {
     return (
       <div className={`${styles.editorContainer} ${className}`} style={{ height }}>
         <div className="flex items-center justify-center h-full">
           <div className="text-center space-y-4 p-8">
             <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
             <p className="text-sm text-destructive">{loadError}</p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setLoadAttempts(0);
-                setContentLoaded(false);
-              }}
-            >
+            <Button variant="outline" size="sm" onClick={retry}>
               Retry
             </Button>
           </div>
@@ -531,7 +317,7 @@ export function TipTapDocumentEditor({
 
           {/* Save status */}
           <div className="flex items-center gap-2 ml-auto">
-            {!contentRecentlyChanged && !hasChanges ? (
+            {isSaved ? (
               <Badge variant="outline" className="text-xs border-green-500/50 bg-green-50 text-green-700">
                 <Clock className="w-3 h-3 mr-1" />
                 Saved
@@ -549,20 +335,11 @@ export function TipTapDocumentEditor({
       {/* Editor Content */}
       <div className={styles.editorWrapper}>
         {editor ? (
-          <div
-            className="flex-1 flex flex-col overflow-hidden"
-            onClick={() => {
-              if (editor && allowEdit) {
-                editor.commands.focus('end');
-              }
-            }}
-          >
-            <div className={styles.tiptapEditor}>
-              <EditorContent
-                editor={editor}
-                className={`${allowEdit ? 'focus:outline-none' : 'cursor-default'} h-full`}
-              />
-            </div>
+          <div className={styles.tiptapEditor}>
+            <EditorContent
+              editor={editor}
+              className={`${allowEdit ? 'focus:outline-none' : 'cursor-default'} h-full`}
+            />
           </div>
         ) : (
           <div className="p-8 border border-dashed border-border rounded-lg bg-muted/20">
