@@ -142,6 +142,9 @@ export function useChatGRPC(
   // Attachment management state
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([])
 
+  // Model selection state - can be set before first message
+  const [selectedModel, setSelectedModel] = useState<string | undefined>(contextOptions?.model)
+
   // Generate domain-specific storage key for this chat session
   const chatStorageKey = `emery-chat-${contextOptions?.domainType || chatContext?.domainType || 'general'}-${contextOptions?.domainId || chatContext?.domainId || 'default'}`
 
@@ -311,7 +314,8 @@ export function useChatGRPC(
       // Prepare context data for API call using proper UI types
       const chatContextOptions = {
         domainType: contextOptions?.domainType || chatContext?.domainType,
-        domainId: contextOptions?.domainId || chatContext?.domainId
+        domainId: contextOptions?.domainId || chatContext?.domainId,
+        model: selectedModel  // Include selected model for new chats
       }
 
       // AIDEV-NOTE: Extract tools from both UI selection AND message content
@@ -383,6 +387,7 @@ export function useChatGRPC(
         messageId: messageId, // For cancellation tracking
         ...(chatContextOptions?.domainType ? { domainType: chatContextOptions.domainType } : {}),
         ...(chatContextOptions?.domainId ? { domainId: chatContextOptions.domainId } : {}),
+        ...(chatContextOptions?.model ? { model: chatContextOptions.model } : {}),
         tools: allTools
       }
 
@@ -587,10 +592,13 @@ export function useChatGRPC(
     return messageContent
   }
 
-  // Clear all messages and localStorage
+  // Clear all messages and session state
   const clearMessages = () => {
     setMessages([])
     setCurrentChatId(undefined)
+    setStreamingSteps([])
+    setCurrentStep(null)
+    setSelectedModel(undefined)
     if (typeof window !== 'undefined') {
       try {
         localStorage.removeItem(chatStorageKey)
@@ -659,9 +667,12 @@ export function useChatGRPC(
         domainId: contextOptions?.domainId || chatContext?.domainId
       })
 
-      // Clear current session
+      // Clear ALL session state for clean slate
       setMessages([])
       setCurrentChatId(undefined)
+      setStreamingSteps([])
+      setCurrentStep(null)
+      setSelectedModel(undefined)
 
       // Clear localStorage for this context
       if (typeof window !== 'undefined') {
@@ -670,6 +681,8 @@ export function useChatGRPC(
 
       // Note: New chat sessions are created automatically by stream-grpc
       // when the first message is sent with no chatId
+
+      logger.debug('New chat session cleared successfully')
 
     } catch (error) {
       logger.error('Failed to create new chat', error)
@@ -776,6 +789,9 @@ export function useChatGRPC(
     currentStep,
     streamingSteps,
     cancelMessage,
+    // Model selection for new chats
+    selectedModel,
+    setModel: setSelectedModel,
   }
 }
 

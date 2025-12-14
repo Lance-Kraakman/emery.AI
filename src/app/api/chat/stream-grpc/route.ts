@@ -97,6 +97,7 @@ export async function POST(req: NextRequest) {
     let messageId: string;
     let domainType: string | undefined;
     let domainId: number | undefined;
+    let requestModel: string | undefined;  // Model override from frontend
     let tools: any[] = [];
     let uploadedFiles: File[] = [];
 
@@ -120,6 +121,7 @@ export async function POST(req: NextRequest) {
       messageId = parsedData.messageId;
       domainType = parsedData.domainType;
       domainId = parsedData.domainId;
+      requestModel = parsedData.model;
       tools = parsedData.tools || [];
 
       // Extract uploaded files
@@ -141,6 +143,7 @@ export async function POST(req: NextRequest) {
       messageId = body.messageId;
       domainType = body.domainType;
       domainId = body.domainId;
+      requestModel = body.model;
       tools = body.tools || [];
 
       console.log('[CHAT-GRPC-API] [DEBUG] Received tools from frontend:', JSON.stringify(tools, null, 2));
@@ -265,8 +268,20 @@ export async function POST(req: NextRequest) {
 
       if (chatHistory.success) {
         currentChat = chatHistory.data;
+        // Debug logging to diagnose model retrieval
+        console.log('[CHAT-GRPC-API] DEBUG - Retrieved chat data:', {
+          hasChatHistory: !!currentChat,
+          hasSession: !!currentChat?.session,
+          sessionModel: currentChat?.session?.model,
+          directModel: (currentChat as any)?.model
+        });
       }
     }
+
+    // Normalize currentChat to extract session for consistent access
+    // NEW chats: chatResult.data is ChatSessionDTO (no wrapper)
+    // EXISTING chats: chatHistory.data is ChatWithMessagesDTO (has session wrapper)
+    const chatSession = (currentChat as any)?.session || currentChat;
 
     // Upload attachments to S3 if present
     const attachmentMetadata: AnyAttachmentMetadata[] = [];
@@ -385,8 +400,9 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Determine processing options from contextMetadata or request params
-    let resolvedDomainType = currentChat?.contextMetadata?.contextType || domainType;
-    let resolvedDomainId = currentChat?.contextMetadata?.domainSchema?.id || domainId;
+    // Use normalized chatSession for consistent access across new/existing chats
+    let resolvedDomainType = chatSession?.contextMetadata?.contextType || domainType;
+    let resolvedDomainId = chatSession?.contextMetadata?.domainSchema?.id || domainId;
 
     // Convert 'organization' contextType to null for processing
     if (resolvedDomainType === 'organization') {
@@ -394,16 +410,19 @@ export async function POST(req: NextRequest) {
       resolvedDomainId = null;
     }
 
-    // 5.5 Get AI model: chat-specific model takes priority over organization default
+    // 5.5 Get AI model: request model takes priority over chat/organization defaults
     console.log('[CHAT-GRPC-API] Fetching AI model configuration');
     const orgRepository = getOrganizationRepository();
     const organization = await orgRepository.findById(OrganizationId.fromNumber(organizationId));
     const organizationModel = organization?.defaultModel || null;
 
-    // Chat model hierarchy: chat.model → organization.defaultModel → System Default
-    const chatModel = currentChat?.model || null;
-    const defaultModel = chatModel || organizationModel;
+    // Model hierarchy: request.model → chat.model → organization.defaultModel → System Default
+    // requestModel: sent from frontend (for new chats with pre-selected model)
+    // chatSession.model: saved in database (for existing chats)
+    const chatModel = chatSession?.model || null;
+    const defaultModel = requestModel || chatModel || organizationModel;
     console.log('[CHAT-GRPC-API] Model configuration:', {
+      requestModel: requestModel || 'not set',
       chatModel: chatModel || 'not set',
       organizationModel: organizationModel || 'not set',
       resolved: defaultModel || 'will use system default'

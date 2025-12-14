@@ -27,6 +27,7 @@ import { updateChatModel } from '@/app/actions/chat-history'
 import { cn } from '@/lib/utils'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
+import { useOrganizationPlan } from '@/stores/app-state.store'
 // import { ChatCanvas } from './ChatCanvas'
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
@@ -71,7 +72,7 @@ interface EmeryChatHeaderProps {
   domainName?: string
   currentChatId?: string
   currentChatModel?: string
-  onChatSelect: (chatId: string) => void
+  onChatSelect: (chatId: string, model?: string) => void
   onNewChat: () => void
   onChatHistoryUpdate?: () => void
   onModelChange?: (model: string | null) => void
@@ -96,23 +97,17 @@ function EmeryChatHeader({
   const chatWidthMode = useStore(uiStateStore, uiStateSelectors.chatWidthMode)
   const toggleChat = uiStateActions.toggleChat
   const toggleChatWidthMode = uiStateActions.toggleChatWidthMode
+  const organizationPlan = useOrganizationPlan()
 
-  // Handle model change - save if chat exists, otherwise just update state for pre-config
+  // Handle model change - only for new chats (disabled after first message like ChatGPT)
   const handleModelSelect = async (newModel: string | null) => {
     if (currentChatId) {
-      // Chat exists - save immediately
-      try {
-        const result = await updateChatModel(currentChatId, newModel)
-        if (result.success) {
-          onModelChange?.(newModel)
-        }
-      } catch (error) {
-        console.error('Failed to update chat model:', error)
-      }
-    } else {
-      // No chat yet - store as pre-selection for when chat is created
-      onModelChange?.(newModel)
+      // Chat exists - model changes disabled (like ChatGPT)
+      // Model is locked after first message to avoid session cache issues
+      return
     }
+    // No chat yet - store as pre-selection for when chat is created
+    onModelChange?.(newModel)
   }
 
   return (
@@ -125,10 +120,12 @@ function EmeryChatHeader({
         <ModelSelector
           value={currentChatModel || null}
           onChange={handleModelSelect}
+          organizationTier={organizationPlan}
           showInherit={true}
           inheritLabel="Default"
           requiredCapabilities={['toolCalling']}
           compact={true}
+          disabled={!!currentChatId}  // Disable after first message (model locked for session)
         />
       </div>
 
@@ -450,6 +447,7 @@ export function EmeryChat() {
   const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
   const chatContext = useStore(uiStateStore, uiStateSelectors.chatContext)
   const setChatContext = uiStateActions.setChatContext
+  const organizationPlan = useOrganizationPlan()
 
   const { data: emeryData } = useEmery()
 
@@ -558,6 +556,7 @@ export function EmeryChat() {
       await handler.switchToChat(chatId)
       setCurrentChatId(chatId)
       setCurrentChatModel(model) // Load the chat's model
+      handler.setModel?.(model)  // Sync to handler for future messages
     }
   }
 
@@ -567,12 +566,15 @@ export function EmeryChat() {
       await handler.createNewChat()
       setCurrentChatId(undefined)
       setCurrentChatModel(undefined)
+      handler.setModel?.(undefined)  // Clear model selection for new chat
     }
   }
 
-  // Handle model change from settings
+  // Handle model change from settings - also syncs to chat hook
   const handleModelChange = (model: string | null) => {
     setCurrentChatModel(model || undefined)
+    // Sync to chat hook so model is included in request
+    handler.setModel?.(model || undefined)
   }
   
   // Collapsed state - show minimal icon strip with braintable logo
