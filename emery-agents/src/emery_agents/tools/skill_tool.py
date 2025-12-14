@@ -20,11 +20,12 @@ Binary outputs (images, audio) are uploaded to S3 first.
 """
 
 import asyncio
+import concurrent.futures
 import logging
 import os
 import threading
 import uuid
-from typing import Any, Callable, Dict, Optional, Set, TYPE_CHECKING
+from typing import Any, Callable, Coroutine, Dict, Optional, Set, TYPE_CHECKING
 
 import httpx
 from smolagents import Tool
@@ -115,6 +116,31 @@ class SkillTool(Tool):
         """Check if this skill uses operation execution (direct model invocation)."""
         # SkillConfig is a protobuf - execution_type field is always present (empty string if not set)
         return self.skill_config.execution_type == 'operation'
+
+    def _run_async_in_thread(self, coro: Coroutine) -> Any:
+        """
+        Run an async coroutine from a sync context, handling nested event loops.
+
+        When running inside gRPC's async context, we can't use run_until_complete().
+        This method runs the coroutine in a separate thread with its own event loop.
+
+        Args:
+            coro: The coroutine to execute
+
+        Returns:
+            The result of the coroutine
+        """
+        def run_in_new_loop():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(run_in_new_loop)
+            return future.result(timeout=60)  # 60 second timeout for inference calls
 
     @classmethod
     def _get_call_stack(cls) -> Set[str]:
@@ -333,8 +359,9 @@ class SkillTool(Tool):
             input_name = skill_input.name
             input_type = skill_input.type
 
-            # Skip if already provided by LLM
-            if input_name in result and result[input_name]:
+            # Skip only if already provided as bytes (not string filename from LLM)
+            # LLM may pass filename string like 'file.mp3' which we should replace with actual bytes
+            if input_name in result and isinstance(result[input_name], bytes):
                 continue
 
             # Inject image from context
@@ -358,15 +385,14 @@ class SkillTool(Tool):
         Download images from context and convert to bytes for HF API.
 
         REUSES: ImageProcessor.download_images_from_attachments()
+        Uses _run_async_in_thread() to avoid event loop conflicts in gRPC context.
         """
-        import asyncio
         from io import BytesIO
         from ..services.image_processor import ImageProcessor
 
         try:
-            # Run async download in sync context
-            loop = asyncio.get_event_loop()
-            pil_images = loop.run_until_complete(
+            # Use _run_async_in_thread to avoid "event loop already running" error
+            pil_images = self._run_async_in_thread(
                 ImageProcessor.download_images_from_attachments(image_attachments)
             )
 
@@ -386,16 +412,16 @@ class SkillTool(Tool):
         Download audio from context attachments.
 
         REUSES: file_processor.download_file()
+        Uses _run_async_in_thread() to avoid event loop conflicts in gRPC context.
         """
-        import asyncio
         from ..services.file_processor import download_file
 
         for attachment in attachments:
             mime_type = getattr(attachment, 'mime_type', '') or ''
             if mime_type.startswith('audio/'):
                 try:
-                    loop = asyncio.get_event_loop()
-                    audio_bytes = loop.run_until_complete(
+                    # Use _run_async_in_thread to avoid "event loop already running" error
+                    audio_bytes = self._run_async_in_thread(
                         download_file(attachment.url)
                     )
                     return audio_bytes
@@ -446,13 +472,9 @@ class SkillTool(Tool):
         final_inputs = self._apply_template_substitution(runtime_inputs)
 
         # Run async execution in sync context (smolagents tools are sync)
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        result = loop.run_until_complete(
+        # Use thread executor to avoid "event loop already running" error when
+        # called from within gRPC's async context
+        result = self._run_async_in_thread(
             self.inference_client.execute_task(
                 model_id=model_id,
                 task_type=task_type,
@@ -461,8 +483,8 @@ class SkillTool(Tool):
             )
         )
 
-        # Apply output mappings if configured (async, use same loop)
-        loop.run_until_complete(self._apply_output_mappings(result))
+        # Apply output mappings if configured
+        self._run_async_in_thread(self._apply_output_mappings(result))
 
         # Return result based on type
         if result.is_text:
@@ -480,26 +502,28 @@ class SkillTool(Tool):
         """
         Apply output mappings to save skill results to tables.
 
-        For each output with a mapping:
-        - mode='create': Creates a new row with the output value
-        - mode='update': Updates an existing row (by rowId)
+        Uses path-based field mapping:
+        - single_row mode: Map top result to fields on one row
+        - multi_row mode: Create a row per array item (object detection)
 
         Binary outputs (images, audio) are uploaded to S3 first via the files API.
 
         Args:
             result: The TaskResult from inference execution
         """
-        from ..clients import TaskResult
+        from ..entities.output_mapping import (
+            OutputMappingConfig, build_row_data, get_extension_for_mime
+        )
 
         # Check if we have auth for API calls
         if not self.api_key or not self.organization_id:
             logger.debug("No API auth available, skipping output mappings")
             return
 
-        # Get outputs with mappings
+        # Get outputs with output_mapping configured
         outputs_with_mappings = [
             output for output in self.skill_config.outputs
-            if output.HasField('mapping') and output.mapping.table_id > 0
+            if output.HasField('output_mapping') and output.output_mapping.mappings
         ]
 
         if not outputs_with_mappings:
@@ -522,33 +546,32 @@ class SkillTool(Tool):
         result: "TaskResult"
     ) -> None:
         """
-        Apply a single output mapping.
+        Apply a single output mapping using path-based field mappings.
+
+        Supports two modes:
+        - single_row: Map top result to one row (classification)
+        - multi_row: Create a row per array item (object detection)
 
         Args:
             client: HTTP client for API calls
-            output: SkillOutput with mapping configuration
+            output: SkillOutput with output_mapping configuration
             result: The TaskResult from inference execution
         """
-        import json
-        import base64
+        from ..entities.output_mapping import (
+            OutputMappingConfig, FieldMapping, build_row_data
+        )
 
-        mapping = output.mapping
-        table_id = mapping.table_id
-        field_id = mapping.field_id
-        mode = mapping.mode or 'create'
-        row_id = mapping.row_id if mapping.row_id else None
+        config = OutputMappingConfig.from_proto(output.output_mapping)
 
-        # Determine the value to save based on result type
-        if result.is_text:
-            field_value = str(result.data)
-        elif result.is_structured:
-            # Store structured data as JSON in document field
-            field_value = result.data
-        elif result.is_binary:
-            # Upload binary to S3 via files API, get file metadata
-            field_value = await self._upload_binary_to_s3(client, result, output.name)
-        else:
-            field_value = str(result.data)
+        if not config.mappings:
+            logger.debug(f"No field mappings configured for output {output.name}")
+            return
+
+        # Get target table ID from first mapping
+        table_id = config.get_target_table_id()
+        if not table_id:
+            logger.warning(f"No target table ID in mappings for output {output.name}")
+            return
 
         # Build request headers
         headers = {
@@ -557,39 +580,79 @@ class SkillTool(Tool):
             "Content-Type": "application/json"
         }
 
-        # Make API request based on mode
-        if mode == 'create':
-            # Create new row
-            url = f"{self.api_base_url}/rows"
-            data = {
-                "tableId": table_id,
-                "data": {str(field_id): field_value}
-            }
-            logger.info(f"📝 Creating row in table {table_id}, field {field_id}")
+        # Handle binary results - upload first, then map URL
+        data_for_mapping = result.data
+        if result.is_binary:
+            file_metadata = await self._upload_binary_to_s3(client, result, output.name)
+            data_for_mapping = file_metadata
 
-            response = await client.post(url, headers=headers, json=data)
-            if response.status_code >= 400:
-                logger.error(f"Failed to create row: {response.status_code} - {response.text[:200]}")
+        # Context for special fields like source.rowId
+        context = {}  # Could be enriched with source row info if available
+
+        if config.is_single_row:
+            # Single row mode: take first item from array, map to one row
+            item = data_for_mapping[0] if isinstance(data_for_mapping, list) else data_for_mapping
+            row_data = build_row_data(item, config.mappings, context)
+
+            if config.is_create:
+                await self._create_row(client, headers, table_id, row_data)
+            elif config.is_update and config.row_id:
+                await self._update_row(client, headers, table_id, config.row_id, row_data)
             else:
-                logger.info(f"✅ Created row in table {table_id}")
+                logger.warning(f"Update mode requires rowId, got: {config.row_id}")
 
-        elif mode == 'update' and row_id:
-            # Update existing row
-            url = f"{self.api_base_url}/rows"
-            data = {
-                "tableId": table_id,
-                "rowId": row_id,
-                "data": {str(field_id): field_value}
-            }
-            logger.info(f"📝 Updating row {row_id} in table {table_id}, field {field_id}")
+        elif config.is_multi_row:
+            # Multi row mode: create a row for each array item
+            items = data_for_mapping if isinstance(data_for_mapping, list) else [data_for_mapping]
+            logger.info(f"📊 Creating {len(items)} rows for multi_row mapping")
 
-            response = await client.put(url, headers=headers, json=data)
-            if response.status_code >= 400:
-                logger.error(f"Failed to update row: {response.status_code} - {response.text[:200]}")
-            else:
-                logger.info(f"✅ Updated row {row_id} in table {table_id}")
+            for i, item in enumerate(items):
+                row_data = build_row_data(item, config.mappings, context)
+                await self._create_row(client, headers, table_id, row_data)
+
+    async def _create_row(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict,
+        table_id: int,
+        row_data: dict
+    ) -> None:
+        """Create a new row via API."""
+        url = f"{self.api_base_url}/rows"
+        data = {
+            "tableId": table_id,
+            "data": row_data
+        }
+        logger.info(f"📝 Creating row in table {table_id} with fields: {list(row_data.keys())}")
+
+        response = await client.post(url, headers=headers, json=data)
+        if response.status_code >= 400:
+            logger.error(f"Failed to create row: {response.status_code} - {response.text[:200]}")
         else:
-            logger.warning(f"Invalid mapping mode or missing rowId: mode={mode}, rowId={row_id}")
+            logger.info(f"✅ Created row in table {table_id}")
+
+    async def _update_row(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict,
+        table_id: int,
+        row_id: str,
+        row_data: dict
+    ) -> None:
+        """Update an existing row via API."""
+        url = f"{self.api_base_url}/rows"
+        data = {
+            "tableId": table_id,
+            "rowId": row_id,
+            "data": row_data
+        }
+        logger.info(f"📝 Updating row {row_id} in table {table_id} with fields: {list(row_data.keys())}")
+
+        response = await client.put(url, headers=headers, json=data)
+        if response.status_code >= 400:
+            logger.error(f"Failed to update row: {response.status_code} - {response.text[:200]}")
+        else:
+            logger.info(f"✅ Updated row {row_id} in table {table_id}")
 
     async def _upload_binary_to_s3(
         self,

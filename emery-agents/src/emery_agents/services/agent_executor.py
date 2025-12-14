@@ -16,7 +16,10 @@ import os
 import time
 import json
 import threading
+import uuid
 from typing import Dict, Any, List, Optional, Union, AsyncIterator
+
+import httpx
 
 from smolagents import CodeAgent, ToolCallingAgent
 from PIL import Image
@@ -32,6 +35,10 @@ from .agent_factory import AgentFactory, AgentConfig
 from .token_usage_extractor import TokenUsageExtractor
 from ..tools.skill_tool import SkillTool
 from ..clients import HuggingFaceInferenceClient, TaskResult
+from ..entities.output_mapping import (
+    OutputMappingConfig, FieldMapping, OutputMappingMode, RowAction,
+    extract_field_value, build_row_data, get_extension_for_mime
+)
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +170,9 @@ class AgentExecutor:
         if not skill:
             raise ValueError(f"Skill '{request.skill_name}' not found in agent configuration")
 
+        # Extract api_key from skill's tool configs (for output mappings)
+        api_key = self._extract_api_key_from_tools(list(skill.tools)) if skill.tools else None
+
         # Extract tool names from skill's tools list
         tool_names = [tool.name for tool in skill.tools] if skill.tools else []
 
@@ -220,6 +230,7 @@ class AgentExecutor:
             org_model=org_model,
             images=images,
             attachments=attachments,
+            api_key=api_key,  # For output mappings
             environment={}
         )
 
@@ -513,6 +524,14 @@ class AgentExecutor:
             parameters=parameters
         )
 
+        # Apply output mappings if configured
+        await self._apply_output_mappings_for_skill(
+            skill=skill,
+            result=result,
+            api_key=context.api_key,
+            organization_id=context.organization_id
+        )
+
         # Build output based on result type
         output_data = self._build_task_result_output(result, skill.name)
 
@@ -742,6 +761,16 @@ class AgentExecutor:
     # Utility Methods
     # =========================================================================
 
+    def _extract_api_key_from_tools(self, tools: List[ToolConfig]) -> Optional[str]:
+        """Extract user API key from tool configs (for output mappings)."""
+        for tool in tools:
+            if hasattr(tool, 'config') and tool.config:
+                config = dict(tool.config) if hasattr(tool.config, 'items') else tool.config
+                api_key = config.get('api_key')
+                if api_key and (api_key.startswith('user_') or api_key.startswith('agent_')):
+                    return api_key
+        return None
+
     async def validate_execution_context(self, context: ExecutionContext) -> bool:
         """Validate that execution context is valid."""
         try:
@@ -783,3 +812,221 @@ class AgentExecutor:
     def clear_cache(self):
         """Clear cached agents (useful for testing)."""
         self.agent_factory.clear_cache()
+
+    # =========================================================================
+    # Output Mapping Methods (for direct skill execution)
+    # =========================================================================
+
+    async def _apply_output_mappings_for_skill(
+        self,
+        skill: SkillConfig,
+        result: TaskResult,
+        api_key: Optional[str],
+        organization_id: Optional[str],
+        source_row_id: Optional[str] = None
+    ) -> None:
+        """
+        Apply output mappings to save skill results to tables.
+
+        Supports two modes:
+        - single_row: Map to one row (classification - top result)
+        - multi_row: Create row per array item (object detection)
+
+        Args:
+            skill: SkillConfig with output definitions
+            result: The TaskResult from inference execution
+            api_key: API key for authenticated calls
+            organization_id: Organization ID for RLS context
+            source_row_id: Optional source row ID for linking back
+        """
+        # Check if we have auth for API calls
+        if not api_key or not organization_id:
+            logger.warning("📊 Output mapping skipped: missing api_key or organization_id")
+            return
+
+        # Get outputs with mappings (new structure uses output_mapping)
+        outputs_with_mappings = [
+            output for output in skill.outputs
+            if output.HasField('output_mapping') and len(output.output_mapping.mappings) > 0
+        ]
+
+        if not outputs_with_mappings:
+            logger.debug("No output mappings configured")
+            return
+
+        logger.info(f"📊 Applying {len(outputs_with_mappings)} output mappings")
+
+        # Get API base URL
+        nextjs_base = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
+        api_base_url = f"{nextjs_base}/api"
+
+        # Build context for field extraction (source row info for linking)
+        context = {'source': {'rowId': source_row_id}} if source_row_id else None
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "X-Organization-ID": str(organization_id),
+                "Content-Type": "application/json"
+            }
+
+            for output in outputs_with_mappings:
+                try:
+                    config = OutputMappingConfig.from_proto(output.output_mapping)
+                    await self._apply_output_mapping(
+                        client, config, result, headers, api_base_url, context
+                    )
+                except Exception as e:
+                    logger.error(f"❌ Failed to apply output mapping for {output.name}: {e}")
+
+    async def _apply_output_mapping(
+        self,
+        client: httpx.AsyncClient,
+        config: OutputMappingConfig,
+        result: TaskResult,
+        headers: Dict[str, str],
+        api_base_url: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Apply output mapping based on mode (single_row or multi_row)."""
+
+        if config.is_single_row:
+            await self._apply_single_row_mapping(client, config, result, headers, api_base_url, context)
+        elif config.is_multi_row:
+            await self._apply_multi_row_mapping(client, config, result, headers, api_base_url, context)
+        else:
+            logger.warning(f"Unknown mapping mode: {config.mode}")
+
+    async def _apply_single_row_mapping(
+        self,
+        client: httpx.AsyncClient,
+        config: OutputMappingConfig,
+        result: TaskResult,
+        headers: Dict[str, str],
+        api_base_url: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Apply single-row mapping (e.g., classification top result)."""
+        # Get the data item to extract from
+        if result.is_structured and isinstance(result.data, list) and len(result.data) > 0:
+            item = result.data[0]  # Take first item for single_row mode
+        elif result.is_structured:
+            item = result.data
+        elif result.is_text:
+            item = {'text': str(result.data)}
+        else:
+            logger.warning("Unsupported result type for single_row mapping")
+            return
+
+        # Build row data from mappings
+        row_data = build_row_data(item, config.mappings, context)
+
+        if not row_data:
+            logger.warning("No data extracted from mappings")
+            return
+
+        table_id = config.get_target_table_id()
+        if not table_id:
+            logger.warning("No target table ID found in mappings")
+            return
+
+        url = f"{api_base_url}/rows"
+
+        if config.is_create:
+            payload = {"tableId": table_id, "data": row_data}
+            logger.info(f"📝 Creating row in table {table_id} with {len(row_data)} fields")
+            response = await client.post(url, headers=headers, json=payload)
+            if response.status_code >= 400:
+                logger.error(f"Failed to create row: {response.status_code} - {response.text[:200]}")
+            else:
+                logger.info(f"✅ Created row in table {table_id}")
+
+        elif config.is_update and config.row_id:
+            payload = {"tableId": table_id, "rowId": config.row_id, "data": row_data}
+            logger.info(f"📝 Updating row {config.row_id} in table {table_id}")
+            response = await client.put(url, headers=headers, json=payload)
+            if response.status_code >= 400:
+                logger.error(f"Failed to update row: {response.status_code} - {response.text[:200]}")
+            else:
+                logger.info(f"✅ Updated row {config.row_id}")
+
+    async def _apply_multi_row_mapping(
+        self,
+        client: httpx.AsyncClient,
+        config: OutputMappingConfig,
+        result: TaskResult,
+        headers: Dict[str, str],
+        api_base_url: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Apply multi-row mapping (e.g., object detection - one row per detection)."""
+        # Get array of items to iterate
+        if result.is_structured and isinstance(result.data, list):
+            items = result.data
+        elif result.is_structured:
+            items = [result.data]
+        else:
+            logger.warning("Multi-row mapping requires structured array result")
+            return
+
+        table_id = config.get_target_table_id()
+        if not table_id:
+            logger.warning("No target table ID found in mappings")
+            return
+
+        url = f"{api_base_url}/rows"
+        created_count = 0
+
+        for item in items:
+            row_data = build_row_data(item, config.mappings, context)
+            if not row_data:
+                continue
+
+            payload = {"tableId": table_id, "data": row_data}
+            try:
+                response = await client.post(url, headers=headers, json=payload)
+                if response.status_code >= 400:
+                    logger.error(f"Failed to create row: {response.status_code}")
+                else:
+                    created_count += 1
+            except Exception as e:
+                logger.error(f"Error creating row: {e}")
+
+        logger.info(f"✅ Created {created_count}/{len(items)} rows in table {table_id}")
+
+    async def _upload_binary_to_s3(
+        self,
+        client: httpx.AsyncClient,
+        result: TaskResult,
+        output_name: str,
+        api_key: str,
+        organization_id: str,
+        api_base_url: str
+    ) -> Dict[str, Any]:
+        """Upload binary result to S3 via the files upload API."""
+        mime_type = result.metadata.get('mime_type', 'application/octet-stream')
+        ext = get_extension_for_mime(mime_type)
+        filename = f"{output_name}_{uuid.uuid4().hex[:8]}.{ext}"
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "X-Organization-ID": str(organization_id)
+        }
+
+        url = f"{api_base_url}/files/upload"
+        files = {'file': (filename, result.data, mime_type)}
+
+        logger.info(f"📤 Uploading {len(result.data)} bytes to S3 as {filename}")
+
+        response = await client.post(url, headers=headers, files=files)
+        if response.status_code >= 400:
+            logger.error(f"Failed to upload file: {response.status_code} - {response.text[:200]}")
+            return {"error": f"Upload failed: {response.status_code}", "filename": filename, "size": len(result.data)}
+
+        try:
+            file_data = response.json()
+            logger.info(f"✅ Uploaded file: {file_data.get('id', 'unknown')}")
+            return file_data
+        except Exception as e:
+            logger.error(f"Failed to parse upload response: {e}")
+            return {"error": str(e), "filename": filename}
