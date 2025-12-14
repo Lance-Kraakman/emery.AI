@@ -34,7 +34,7 @@ import {
 export interface ModelSelectorProps {
   value?: string | null
   onChange: (modelId: string | null) => void
-  organizationTier?: 'free' | 'pro' | 'enterprise'
+  organizationTier?: 'free' | 'pro' | 'max' | 'enterprise'
   availableModels?: string[]
   showInherit?: boolean
   inheritLabel?: string
@@ -265,11 +265,12 @@ function CategoryIcon({ category, className }: {
   }
 }
 
-function TierBadge({ tier }: { tier: 'free' | 'pro' | 'enterprise' }) {
+function TierBadge({ tier }: { tier: 'free' | 'pro' | 'max' | 'enterprise' }) {
   if (tier === 'free') return null
 
   const colors = {
     pro: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+    max: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
     enterprise: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
   }
 
