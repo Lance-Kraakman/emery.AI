@@ -84,7 +84,9 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
         inputs: formData.inputs,
         outputs: formData.outputs,
         instructions: formData.instructions,
-        tools: formData.tools
+        tools: formData.tools,
+        executionType: formData.executionType,
+        taskModelConfig: formData.taskModelConfig
       });
 
       if (!result.success || !result.data) {
