@@ -26,6 +26,8 @@ import { TipTapDocumentEditor } from '@/components/shared/TipTapDocumentEditor';
 import { updateTiptapDocumentContent } from '@/app/actions/artifacts';
 import styles from './DocumentArtifactViewer.module.css';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
+import { useOptionalTheme } from '@/components/puck/theme-context';
+import type { CSSProperties } from 'react';
 
 const logger = createDebugLogger('DocumentArtifactViewer');
 
@@ -46,9 +48,22 @@ export function DocumentArtifactViewer({
   const [isEditing, setIsEditing] = useState(true); // Always start in edit mode
   const [documentTitle, setDocumentTitle] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
+  const theme = useOptionalTheme();
 
   // Extract display information
   const displayInfo = getDocumentDisplayInfo(artifact);
+
+  // Get theme styles for the container - injects Puck CSS variables when in Puck context
+  const getContainerStyle = (): CSSProperties => {
+    if (!theme) return {};
+    return {
+      ...theme.toCSSVariables(),
+      backgroundColor: 'var(--theme-background)',
+      color: 'var(--theme-text)',
+      borderColor: 'var(--theme-border)',
+      fontFamily: 'var(--theme-font-family)',
+    };
+  };
 
   // Initialize title
   useEffect(() => {
@@ -95,7 +110,7 @@ export function DocumentArtifactViewer({
   }, []);
 
   return (
-    <div className={`${styles.editorContainer} ${className}`}>
+    <div className={`${styles.editorContainer} ${className}`} style={getContainerStyle()}>
       {/* Header */}
       <div className={styles.documentHeader}>
         <div className={styles.documentTitle}>

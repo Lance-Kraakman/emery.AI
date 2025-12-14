@@ -22,6 +22,8 @@ import {
 } from 'lucide-react'
 import type { FileArtifact } from '../types/chat-artifacts'
 import { getFileDisplayInfo } from '../types/chat-artifacts'
+import { useOptionalTheme } from '@/components/puck/theme-context'
+import { getViewerContainerStyle, getThemedSectionStyle } from './theme-utils'
 
 interface VideoViewerProps {
   artifact: FileArtifact
@@ -36,6 +38,7 @@ export function VideoViewer({
 }: VideoViewerProps) {
   const { fileField, fileName, fileUrl } = artifact.data
   const displayInfo = getFileDisplayInfo(artifact)
+  const theme = useOptionalTheme()
 
   // Handle download
   const handleDownload = useCallback(() => {
@@ -53,9 +56,15 @@ export function VideoViewer({
   }, [fileUrl])
 
   return (
-    <div className={`h-full flex flex-col bg-card ${className}`}>
+    <div
+      className={`h-full flex flex-col ${!theme ? 'bg-card' : ''} ${className}`}
+      style={getViewerContainerStyle(theme)}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
+      <div
+        className={`flex items-center justify-between p-3 border-b ${!theme ? 'border-border bg-muted/10' : ''}`}
+        style={getThemedSectionStyle(theme)}
+      >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <Video className="w-5 h-5 text-pink-600 flex-shrink-0" />
           <div className="min-w-0 flex-1">
@@ -124,7 +133,10 @@ export function VideoViewer({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between p-3 border-t border-border bg-muted/10 text-xs text-muted-foreground flex-shrink-0">
+      <div
+        className={`flex items-center justify-between p-3 border-t text-xs flex-shrink-0 ${!theme ? 'border-border bg-muted/10 text-muted-foreground' : ''}`}
+        style={{ ...getThemedSectionStyle(theme), color: theme ? 'var(--theme-text-muted)' : undefined }}
+      >
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />

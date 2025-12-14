@@ -22,6 +22,8 @@ import {
 } from 'lucide-react'
 import type { FileArtifact } from '../types/chat-artifacts'
 import { getFileDisplayInfo } from '../types/chat-artifacts'
+import { useOptionalTheme } from '@/components/puck/theme-context'
+import { getViewerContainerStyle, getThemedBackground, getThemedSectionStyle } from './theme-utils'
 
 interface AudioViewerProps {
   artifact: FileArtifact
@@ -36,6 +38,7 @@ export function AudioViewer({
 }: AudioViewerProps) {
   const { fileField, fileName, fileUrl } = artifact.data
   const displayInfo = getFileDisplayInfo(artifact)
+  const theme = useOptionalTheme()
 
   // Handle download
   const handleDownload = useCallback(() => {
@@ -53,9 +56,15 @@ export function AudioViewer({
   }, [fileUrl])
 
   return (
-    <div className={`h-full flex flex-col bg-card ${className}`}>
+    <div
+      className={`h-full flex flex-col ${!theme ? 'bg-card' : ''} ${className}`}
+      style={getViewerContainerStyle(theme)}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
+      <div
+        className={`flex items-center justify-between p-3 border-b ${!theme ? 'border-border bg-muted/10' : ''}`}
+        style={getThemedSectionStyle(theme)}
+      >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <Music className="w-5 h-5 text-orange-600 flex-shrink-0" />
           <div className="min-w-0 flex-1">
@@ -112,7 +121,10 @@ export function AudioViewer({
       </div>
 
       {/* Audio Content */}
-      <div className="flex-1 flex items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100 p-8">
+      <div
+        className={`flex-1 flex items-center justify-center p-8 ${!theme ? 'bg-gradient-to-b from-gray-50 to-gray-100' : ''}`}
+        style={getThemedBackground(theme, 'surface')}
+      >
         <div className="w-full max-w-md text-center">
           <Music className="w-16 h-16 mx-auto mb-6 text-orange-500/50" />
           <p className="text-sm font-medium mb-4 truncate">{fileName}</p>
@@ -128,7 +140,10 @@ export function AudioViewer({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between p-3 border-t border-border bg-muted/10 text-xs text-muted-foreground flex-shrink-0">
+      <div
+        className={`flex items-center justify-between p-3 border-t text-xs flex-shrink-0 ${!theme ? 'border-border bg-muted/10 text-muted-foreground' : ''}`}
+        style={{ ...getThemedSectionStyle(theme), color: theme ? 'var(--theme-text-muted)' : undefined }}
+      >
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />
