@@ -190,7 +190,7 @@ export function AuthorizedConnectionsModal({
         {!loading && !error && connections.length === 0 && (
           <div className="py-12 text-center text-muted-foreground">
             <ShieldX className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">No OAuth connections found.</p>
+            <p className="text-sm">No connections found.</p>
             <p className="text-xs mt-1">Connect services in the Connections page first.</p>
           </div>
         )}

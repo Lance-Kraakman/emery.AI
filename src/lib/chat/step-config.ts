@@ -1,12 +1,16 @@
-import { Brain, Wrench, Lightbulb, CheckCircle2 } from 'lucide-react'
+import { Brain, Wrench, Lightbulb, CheckCircle2, Code } from 'lucide-react'
 
 /**
  * Step type constants - single source of truth
+ *
+ * AIDEV-NOTE: CODE_EXECUTION added for CodeAgent steps that execute Python code
+ * instead of calling tools via structured function calls.
  */
 export const STEP_TYPES = {
   PLANNING: 'PLANNING',
   ACTION: 'ACTION',
   REASONING: 'REASONING',
+  CODE_EXECUTION: 'CODE_EXECUTION',
   FINAL: 'FINAL'
 } as const
 
@@ -15,7 +19,7 @@ export type StepType = typeof STEP_TYPES[keyof typeof STEP_TYPES]
 /**
  * Array of step types in order (matches protobuf enum)
  */
-export const STEP_TYPE_ARRAY = ['PLANNING', 'ACTION', 'REASONING', 'FINAL'] as const
+export const STEP_TYPE_ARRAY = ['PLANNING', 'ACTION', 'REASONING', 'CODE_EXECUTION', 'FINAL'] as const
 
 /**
  * Step configuration with icons, colors, and labels
@@ -44,6 +48,14 @@ export const STEP_CONFIG = {
     borderColor: 'border-yellow-200',
     label: 'Reasoning',
     loadingMessage: 'Processing results...'
+  },
+  CODE_EXECUTION: {
+    icon: Code,
+    color: 'text-purple-500',
+    bgColor: 'bg-purple-50',
+    borderColor: 'border-purple-200',
+    label: 'Executing Code',
+    loadingMessage: 'Executing Python code...'
   },
   FINAL: {
     icon: CheckCircle2,
