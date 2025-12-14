@@ -8,11 +8,11 @@ import type { ITokenUsageRepository, UsageStatistics } from '@/ddd/domain/billin
 import type { CreateTokenUsageData, EntityType, TokenUsageMetadata } from '@/ddd/domain/billing/entities/token-usage';
 import { TokenUsageUtils } from '@/ddd/domain/billing/entities/token-usage';
 import { OrganizationId, UserId, AgentId } from '@/ddd/domain/shared/value-objects';
-import { calculateTokenCost } from '@/lib/ai/model-registry';
+import { calculateTokenCost, calculateCreditsUsed } from '@/lib/ai/model-registry';
 import type { Result } from '@/ddd/domain/shared/result';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
-import { PRICE_PER_CREDIT_USD } from '@/lib/stripe/config';
+import { PRICE_PER_CREDIT_USD, getTierConfig, type SubscriptionTier } from '@/lib/stripe/config';
 
 const logger = createDebugLogger('TokenUsageService');
 
@@ -81,8 +81,9 @@ export class TokenUsageApplicationService {
       const userId = dto.userId ? UserId.fromString(dto.userId) : undefined;
       const agentId = dto.agentId ? AgentId.fromNumber(dto.agentId) : undefined;
 
-      // Calculate cost using model registry
+      // Calculate cost and credits using model registry
       const costUsd = calculateTokenCost(dto.modelName, dto.inputTokens, dto.outputTokens);
+      const creditsUsed = calculateCreditsUsed(dto.modelName, dto.inputTokens, dto.outputTokens);
       const totalTokens = dto.inputTokens + dto.outputTokens;
 
       // Create token usage data
@@ -97,6 +98,7 @@ export class TokenUsageApplicationService {
         outputTokens: dto.outputTokens,
         totalTokens,
         costUsd,
+        creditsUsed, // CRITICAL: Store calculated credits for billing
         processingTimeMs: dto.processingTimeMs,
         metadata: dto.metadata,
       };
@@ -115,12 +117,14 @@ export class TokenUsageApplicationService {
       await this.tokenUsageRepository.create(tokenUsageData);
 
       // Update organization's current month usage counter
-      await this.tokenUsageRepository.updateOrganizationUsage(organizationId, totalTokens);
+      // Pass both tokens (for analytics) and credits (for billing) - they are NOT the same!
+      await this.tokenUsageRepository.updateOrganizationUsage(organizationId, totalTokens, creditsUsed);
 
       logger.summary('Token usage recorded', {
         organizationId: dto.organizationId,
         modelName: dto.modelName,
         totalTokens,
+        creditsUsed: creditsUsed.toFixed(2),
         costUsd: costUsd.toFixed(6)
       });
 
@@ -234,7 +238,10 @@ export class TokenUsageApplicationService {
         };
       }
 
-      const allowanceLimit = organization.usageAllowanceCredits ?? 0;
+      // Use DB value if set, otherwise fall back to tier's default allowance
+      const tier = (organization.plan || 'free') as SubscriptionTier;
+      const tierConfig = getTierConfig(tier);
+      const allowanceLimit = organization.usageAllowanceCredits || tierConfig.creditsPerMonth;
       const currentUsage = organization.creditsUsedCurrentMonth ?? 0;
       const spendingLimitUsd = organization.spendingLimitUsd ? parseFloat(organization.spendingLimitUsd.toString()) : 0;
 
