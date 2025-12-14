@@ -35,12 +35,13 @@ import { BooleanFieldProps } from "./blocks/BooleanField/BooleanField";
 import { ImageFieldProps } from "./blocks/ImageField/ImageField";
 import { DateFieldProps } from "./blocks/DateField/DateField";
 import { SelectFieldProps } from "./blocks/SelectField/SelectField";
-import { FileFieldProps } from "./blocks/FileField/FileField";
-import { DocumentFieldProps } from "./blocks/DocumentField/DocumentField";
+import { FileFieldProps } from "./blocks/FileField/types";
+import { DocumentFieldProps } from "./blocks/DocumentField/types";
 import { RelationFieldProps } from "./blocks/RelationField/RelationField";
 import { LinkFieldProps } from "./blocks/LinkField/LinkField";
 import type { LoginBlockProps } from "./blocks/LoginBlock";
 import type { SignOutBlockProps } from "./blocks/SignOutBlock";
+import type { EditorBlockProps } from "./blocks/EditorBlock/types";
 
 import { RootProps } from "./root";
 
@@ -101,6 +102,7 @@ export type Components = {
   LinkField: LinkFieldProps;
   LoginBlock: LoginBlockProps;
   SignOutBlock: SignOutBlockProps;
+  EditorBlock: EditorBlockProps;
 };
 
 export type UserConfig = Config<{

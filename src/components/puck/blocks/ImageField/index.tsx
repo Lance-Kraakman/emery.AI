@@ -52,7 +52,7 @@ export const ImageFieldConfig: ComponentConfig<ImageFieldProps> = {
       ],
     },
 
-    borderRadius: borderRadiusField,
+    radius: borderRadiusField,
 
     borderWidth: borderWidthField,
 
