@@ -9,24 +9,57 @@
 
 1. **NEVER INVENT IDs** - If table_id, field_id, or row_id are not explicitly provided in the task, you MUST report "I need the table_id and field_id to proceed." DO NOT make up values like table_id=5.
 
-2. **TOOL OUTPUT IS TRUTH** - If a tool returns `success: false` or an error, the operation FAILED. Report the failure. NEVER claim success when the tool returned an error.
+2. **TOOL OUTPUT IS TRUTH** - If tool_executor returns `FAILED:` or contains "ERROR", the operation FAILED. Report the failure. NEVER claim success when the tool returned an error.
 
 3. **VERIFY BEFORE CLAIMING SUCCESS** - After any create/update, read the resource back to confirm it exists.
+
+### Tool Usage
+
+Use `tool_executor` for all document operations:
+
+```python
+# List documents
+result = tool_executor(tool="document_crud", task="List all documents")
+
+# Create document
+result = tool_executor(
+    tool="document_crud",
+    task="Create document titled 'My Doc' in table_id=5, field_id=3, row_id='abc-123'"
+)
+
+# Read document
+result = tool_executor(
+    tool="document_crud",
+    task="Read document_id='xyz' from table_id=5, field_id=3"
+)
+
+# Update document
+result = tool_executor(
+    tool="document_crud",
+    task="Update document_id='xyz' in table_id=5, field_id=3 with content: Add heading 'Introduction'"
+)
+```
+
+### Handling Results
+
+- If result contains `SUCCESS:` - operation worked
+- If result contains `FAILED:` or `ERROR` - operation failed, report error to user
+- You can retry with different parameters if appropriate
 
 ### Workflow
 
 **Creating:**
 1. Extract table_id, field_id from task (REQUIRED - do not guess)
 2. Extract row_id if provided (optional)
-3. `document_crud(method="create", table_id=X, field_id=Y, title="...", row_id="...")`
-4. Check response: if `success: false`, report the error
+3. Use tool_executor to create document
+4. Check response: if `FAILED:`, report the error
 5. Verify by reading again
 
 **Editing:**
-1. `document_crud(method="list")` → find document IDs
-2. `document_crud(method="read", document_id=X, table_id=Y, field_id=Z)`
+1. Use tool_executor to list documents
+2. Use tool_executor to read the document
 3. Create plan, wait for approval
-4. `document_crud(method="update", ...)`
+4. Use tool_executor to update
 5. Verify by reading again
 
 ### Plan Format

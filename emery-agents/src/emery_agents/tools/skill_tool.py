@@ -10,7 +10,7 @@ Includes recursion protection:
 
 AIDEV-NOTE: Supports two execution modes:
 - 'agent' (default): Creates sub-agent with LLM orchestration via smolagents
-- 'task-model': Direct model invocation for single-task models (image gen, speech, etc.)
+- 'operation': Direct model invocation for single-task models (image gen, speech, etc.)
 
 AIDEV-NOTE: Output Mapping (Phase 2e)
 When skill outputs have mapping configuration, results are automatically saved to tables:
@@ -80,8 +80,8 @@ class SkillTool(Tool):
             skill_config: The full skill definition from proto
             skill_executor: Callback function that executes the skill
                           Takes (skill_config, runtime_inputs) -> result string
-            inference_client: Optional client for direct task-model execution
-                             Required for skills with execution_type='task-model'
+            inference_client: Optional client for direct operation execution
+                             Required for skills with execution_type='operation'
             api_key: Optional API key for output mapping (calls emery-api)
             organization_id: Optional org ID for output mapping (RLS context)
         """
@@ -107,14 +107,14 @@ class SkillTool(Tool):
         self.inputs = self._build_inputs_schema()
 
         # Detect execution type
-        self._is_task_model = self._check_is_task_model()
-        execution_mode = "task-model" if self._is_task_model else "agent"
+        self._is_operation = self._check_is_operation()
+        execution_mode = "operation" if self._is_operation else "agent"
         logger.info(f"✨ Created SkillTool: {self.name} ({execution_mode}) with {len(self.inputs)} inputs")
 
-    def _check_is_task_model(self) -> bool:
-        """Check if this skill uses task-model execution."""
+    def _check_is_operation(self) -> bool:
+        """Check if this skill uses operation execution (direct model invocation)."""
         # SkillConfig is a protobuf - execution_type field is always present (empty string if not set)
-        return self.skill_config.execution_type == 'task-model'
+        return self.skill_config.execution_type == 'operation'
 
     @classmethod
     def _get_call_stack(cls) -> Set[str]:
@@ -178,7 +178,7 @@ class SkillTool(Tool):
         For 'agent' skills (default):
         - Creates a new sub-agent and executes the skill's instructions via smolagents
 
-        For 'task-model' skills:
+        For 'operation' skills:
         - Calls the inference client directly (no LLM orchestration)
         - Used for single-task models (image gen, speech, embeddings, etc.)
 
@@ -208,7 +208,7 @@ class SkillTool(Tool):
             logger.error(f"📊 {error_msg}")
             return f"Error: {error_msg}"
 
-        execution_mode = "task-model" if self._is_task_model else "agent"
+        execution_mode = "operation" if self._is_operation else "agent"
         logger.info(f"🎯 Executing skill: {self.name} ({execution_mode}, depth: {current_depth + 1}/{self.MAX_DEPTH}) with inputs: {list(kwargs.keys())}")
 
         # Add to call stack
@@ -216,10 +216,10 @@ class SkillTool(Tool):
 
         try:
             # Route based on execution type
-            if self._is_task_model:
+            if self._is_operation:
                 # Inject images/audio from parent context if available
                 enriched_kwargs = self._inject_context_inputs(kwargs)
-                result = self._execute_task_model(enriched_kwargs)
+                result = self._execute_operation(enriched_kwargs)
             else:
                 # Standard agent execution via callback
                 result = self.skill_executor(self.skill_config, kwargs)
@@ -238,7 +238,7 @@ class SkillTool(Tool):
 
     def _apply_template_substitution(self, runtime_inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Apply Jinja2 template substitution for task-model execution.
+        Apply Jinja2 template substitution for operation execution.
 
         Uses the skill's instructions field as a template with {{ input_name }} syntax.
         Same syntax as system prompts in prompts/__init__.py.
@@ -304,7 +304,7 @@ class SkillTool(Tool):
         """
         Inject images/audio from parent execution context into skill inputs.
 
-        For task-model skills, the LLM only passes text kwargs (e.g., prompt).
+        For operation skills, the LLM only passes text kwargs (e.g., prompt).
         Images/audio from chat attachments are in the parent's ExecutionContext.
         This method retrieves them and injects into kwargs based on skill input types.
 
@@ -404,9 +404,9 @@ class SkillTool(Tool):
 
         return None
 
-    def _execute_task_model(self, runtime_inputs: Dict[str, Any]) -> str:
+    def _execute_operation(self, runtime_inputs: Dict[str, Any]) -> str:
         """
-        Execute skill directly without LLM orchestration.
+        Execute skill directly without LLM orchestration (operation mode).
 
         Uses HuggingFace Inference API for single-task model execution.
 
@@ -418,21 +418,21 @@ class SkillTool(Tool):
         """
         if not self.inference_client:
             raise ValueError(
-                f"Task-model skill '{self.skill_config.name}' requires inference_client. "
+                f"Operation skill '{self.skill_config.name}' requires inference_client. "
                 "Ensure inference_client is passed when creating SkillTool."
             )
 
         task_config = self.skill_config.task_model_config
         if not task_config:
             raise ValueError(
-                f"Task-model skill '{self.skill_config.name}' missing task_model_config"
+                f"Operation skill '{self.skill_config.name}' missing task_model_config"
             )
 
         model_id = task_config.model_id
         task_type = task_config.task_type
         parameters = dict(task_config.parameters) if task_config.parameters else {}
 
-        logger.info(f"🚀 Direct task-model execution: {model_id} ({task_type})")
+        logger.info(f"🚀 Direct operation execution: {model_id} ({task_type})")
 
         # Verify task type is supported
         if not self.inference_client.supports_task_type(task_type):

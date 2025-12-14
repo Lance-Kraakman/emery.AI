@@ -1042,6 +1042,18 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         if agent_config and agent_config.skills:
             skill_executor = self._create_skill_executor_callback(org_model=org_model)
 
+        # Create inference client for operation skills (direct HF API calls)
+        # Check if any skills use operation execution type
+        inference_client = None
+        if agent_config and agent_config.skills:
+            has_operation_skills = any(
+                s.execution_type == 'operation'
+                for s in agent_config.skills
+            )
+            if has_operation_skills:
+                inference_client = self._get_or_create_inference_client()
+                logger.info(f"🔧 Created inference client for operation skills")
+
         # Use consolidated load_tools_from_configs method
         return self.tool_registry.load_tools_from_configs(
             tool_configs=tools,
@@ -1049,8 +1061,24 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             api_key_mode="user",  # Chat system uses user API key mode
             agent_config=agent_config,
             skill_executor=skill_executor,
-            organization_id=org_id  # Pass organization ID for CRUD tools
+            organization_id=org_id,  # Pass organization ID for CRUD tools
+            inference_client=inference_client  # Pass inference client for operation skills
         )
+
+    def _get_or_create_inference_client(self):
+        """
+        Get or create the HuggingFace inference client for operation skills.
+
+        Lazily creates the client on first use to avoid unnecessary initialization
+        when no operation skills are present.
+
+        Returns:
+            HuggingFaceInferenceClient instance
+        """
+        if not hasattr(self, '_inference_client') or self._inference_client is None:
+            from ..clients import HuggingFaceInferenceClient
+            self._inference_client = HuggingFaceInferenceClient()
+        return self._inference_client
 
     def _create_skill_executor_callback(self, org_model: Optional[str] = None):
         """
@@ -1256,24 +1284,38 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         - planning_interval=1: Plan after first action (reading skill)
         - step_callbacks: Interrupt after planning for user approval
         - reset=False: Memory preserved between messages for resumption
+
+        AIDEV-NOTE: Uses ToolExecutorTool to delegate tool calls to a sub-agent with
+        proper instructions. The sub-agent gets tool-specific docs from build_agent_instructions
+        and executor rules from tool_executor.j2 template.
         """
         from ..tools.crud_tools import load_skill_crud
+        from ..tools.tool_executor import create_tool_executor
         from ..agents.skill_builder_agent import create_skill_builder_agent
 
-        # Create skill CRUD tool for the agent
+        # Create the CRUD tool (will be wrapped by tool_executor)
         skill_crud_tool = load_skill_crud(None, api_key, org_id)
 
-        # Get model for the agent
+        # Get model for the agent and sub-agent
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
 
-        # Use factory function with native planning support
-        skill_builder = create_skill_builder_agent(
+        # Create tool_executor that wraps the CRUD tool
+        # Sub-agent gets proper instructions via build_agent_instructions
+        tool_executor = create_tool_executor(
             tools=[skill_crud_tool],
+            model=model,
+            max_steps=3
+        )
+
+        # Use factory function with native planning support
+        # CodeAgent calls tool_executor which delegates to sub-agent
+        skill_builder = create_skill_builder_agent(
+            tools=[tool_executor],
             model=model,
             max_steps=10
         )
 
-        logger.info("✨ Created Skill Builder agent with native planning (top-level for HITL)")
+        logger.info("✨ Created Skill Builder agent with ToolExecutor sub-agent")
         return skill_builder
 
     def _create_document_builder_agent(
@@ -1292,24 +1334,38 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         - planning_interval=1: Plan after first action (reading document)
         - step_callbacks: Interrupt after planning for user approval
         - reset=False: Memory preserved between messages for resumption
+
+        AIDEV-NOTE: Uses ToolExecutorTool to delegate tool calls to a sub-agent with
+        proper instructions. The sub-agent gets tool-specific docs from build_agent_instructions
+        and executor rules from tool_executor.j2 template.
         """
         from ..tools.crud_tools import load_document_crud
+        from ..tools.tool_executor import create_tool_executor
         from ..agents.document_builder_agent import create_document_builder_agent
 
-        # Create document CRUD tool for the agent
+        # Create the CRUD tool (will be wrapped by tool_executor)
         document_crud_tool = load_document_crud(None, api_key, org_id)
 
-        # Get model for the agent
+        # Get model for the agent and sub-agent
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
 
-        # Use factory function with native planning support
-        document_builder = create_document_builder_agent(
+        # Create tool_executor that wraps the CRUD tool
+        # Sub-agent gets proper instructions via build_agent_instructions
+        tool_executor = create_tool_executor(
             tools=[document_crud_tool],
+            model=model,
+            max_steps=3
+        )
+
+        # Use factory function with native planning support
+        # CodeAgent calls tool_executor which delegates to sub-agent
+        document_builder = create_document_builder_agent(
+            tools=[tool_executor],
             model=model,
             max_steps=10
         )
 
-        logger.info("✨ Created Document Builder agent with native planning (top-level for HITL)")
+        logger.info("✨ Created Document Builder agent with ToolExecutor sub-agent")
         return document_builder
 
     def _extract_user_api_key_from_tools(self, tools: List['agent_worker_pb2.ToolConfig']) -> Optional[str]:
@@ -1438,9 +1494,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         """
         Extract typed data from ActionStep.
 
-        ActionStep has 'tool_calls' (list of ToolCall objects) and 'observations'.
-        When tool_calls is empty/None, uses model_output for raw LLM response.
-        Uses proper type access instead of hasattr checks.
+        ActionStep has 'tool_calls' (list of ToolCall objects), 'code_action' (for CodeAgent),
+        and 'observations'. When tool_calls is empty/None, checks for code_action (CodeAgent),
+        then falls back to model_output for raw LLM response.
+
+        AIDEV-NOTE: CodeAgent populates step.code_action with Python code, not tool_calls.
+        We now handle this as a CODE_EXECUTION step type for proper UI display.
         """
         # Extract tool info from tool_calls
         tool_name = "unknown"
@@ -1450,7 +1509,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         content = ""
 
         if step.tool_calls and len(step.tool_calls) > 0:
-            # Has valid tool calls
+            # Has valid tool calls (ToolCallingAgent)
             tool_call = step.tool_calls[0]
             tool_name = tool_call.name
             tool_args = str(tool_call.arguments)
@@ -1461,9 +1520,32 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 obs = str(step.observations)
                 MAX_LENGTH = 500
                 content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
+
+        elif step.code_action:
+            # CodeAgent: has Python code execution instead of tool_calls
+            # AIDEV-NOTE: code_action contains the Python code that was executed
+            step_type = "CODE_EXECUTION"
+            step_name = "Code Execution"
+            tool_name = "python_interpreter"
+
+            # Format the code (truncate if too long)
+            code = str(step.code_action)
+            MAX_CODE_LENGTH = 1000
+            content = code[:MAX_CODE_LENGTH] + "..." if len(code) > MAX_CODE_LENGTH else code
+            tool_args = code[:500]  # Store truncated code in args
+
+            # Append observations/output if available
+            if step.observations:
+                obs = str(step.observations)
+                MAX_OUTPUT_LENGTH = 500
+                output_truncated = obs[:MAX_OUTPUT_LENGTH] + "..." if len(obs) > MAX_OUTPUT_LENGTH else obs
+                content += f"\n\n--- Output ---\n{output_truncated}"
+
+            logger.info(f"📜 CodeAgent step: code_action detected, {len(code)} chars")
+
         else:
-            # No tool calls - check for raw model output
-            logger.debug(f"ActionStep without tool_calls: model_output={'exists' if step.model_output else 'None'}")
+            # No tool calls or code - check for raw model output
+            logger.debug(f"ActionStep without tool_calls/code_action: model_output={'exists' if step.model_output else 'None'}")
 
             if step.model_output:
                 # Use model's raw output as reasoning step

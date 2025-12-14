@@ -72,7 +72,7 @@ class AgentExecutor:
         self.model_provider = model_provider or SmolagentsModelProvider()
         self.tool_loader = tool_loader or UnifiedToolLoader()
         self.agent_factory = agent_factory or AgentFactory(self.model_provider)
-        # Inference client for direct task-model execution (lazy initialization)
+        # Inference client for direct operation execution (lazy initialization)
         self._inference_client = inference_client
         # Agent cache now managed by AgentFactory
         logger.info("AgentExecutor initialized with shared utilities")
@@ -91,15 +91,15 @@ class AgentExecutor:
             self._inference_client = HuggingFaceInferenceClient()
         return self._inference_client
 
-    def _is_task_model_skill(self, skill: SkillConfig) -> bool:
+    def _is_operation_skill(self, skill: SkillConfig) -> bool:
         """
-        Check if skill uses task-model execution (bypasses LLM orchestration).
+        Check if skill uses operation execution (bypasses LLM orchestration).
 
-        Task-model skills call inference APIs directly for single-task models:
+        Operation skills call inference APIs directly for single-task models:
         - text-to-image, speech-to-text, feature-extraction, etc.
         """
         # SkillConfig is a protobuf - execution_type field is always present (empty string if not set)
-        return skill.execution_type == 'task-model'
+        return skill.execution_type == 'operation'
 
     def _extract_runtime_inputs(self, context: ExecutionContext) -> Dict[str, Any]:
         """
@@ -359,9 +359,9 @@ class AgentExecutor:
 
                 skill = context.skill
 
-                # Route: task-model skills bypass LLM orchestration
-                if self._is_task_model_skill(skill):
-                    logger.info(f"🎯 Task-model skill '{skill.name}' - using direct execution")
+                # Route: operation skills bypass LLM orchestration
+                if self._is_operation_skill(skill):
+                    logger.info(f"🎯 Operation skill '{skill.name}' - using direct execution")
                     async for progress in self._execute_direct_skill(context, start_time):
                         yield progress
                     return
@@ -457,7 +457,7 @@ class AgentExecutor:
         task_config = skill.task_model_config
 
         if not task_config:
-            raise ValueError(f"Task-model skill '{skill.name}' missing task_model_config")
+            raise ValueError(f"Operation skill '{skill.name}' missing task_model_config")
 
         model_id = task_config.model_id
         task_type = task_config.task_type
@@ -641,7 +641,7 @@ class AgentExecutor:
         Create SkillTool instances for each skill.
 
         These allow the agent to delegate work to other skills.
-        For task-model skills, passes the inference client for direct execution.
+        For operation skills, passes the inference client for direct execution.
 
         Args:
             skills: List of SkillConfig objects to wrap as tools
@@ -656,11 +656,11 @@ class AgentExecutor:
 
         # Check if any skills need inference client
         # SkillConfig is a protobuf - execution_type field is always present
-        has_task_model_skills = any(
-            s.execution_type == 'task-model'
+        has_operation_skills = any(
+            s.execution_type == 'operation'
             for s in skills
         )
-        inference_client = self._get_inference_client() if has_task_model_skills else None
+        inference_client = self._get_inference_client() if has_operation_skills else None
 
         for skill_config in skills:
             try:
