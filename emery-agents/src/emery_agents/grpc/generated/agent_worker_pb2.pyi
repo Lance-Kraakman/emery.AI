@@ -248,26 +248,36 @@ class SkillInputFileConfig(_message.Message):
     def __init__(self, allowed_mime_types: _Optional[_Iterable[str]] = ..., max_size_bytes: _Optional[int] = ..., multiple: bool = ...) -> None: ...
 
 class SkillOutput(_message.Message):
-    __slots__ = ("name", "type", "mapping")
+    __slots__ = ("name", "type", "output_mapping")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
-    MAPPING_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_MAPPING_FIELD_NUMBER: _ClassVar[int]
     name: str
     type: str
-    mapping: OutputMapping
-    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., mapping: _Optional[_Union[OutputMapping, _Mapping]] = ...) -> None: ...
+    output_mapping: OutputMappingConfig
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., output_mapping: _Optional[_Union[OutputMappingConfig, _Mapping]] = ...) -> None: ...
 
-class OutputMapping(_message.Message):
-    __slots__ = ("table_id", "field_id", "mode", "row_id")
-    TABLE_ID_FIELD_NUMBER: _ClassVar[int]
-    FIELD_ID_FIELD_NUMBER: _ClassVar[int]
+class FieldMapping(_message.Message):
+    __slots__ = ("source_field", "target_table_id", "target_field_id")
+    SOURCE_FIELD_FIELD_NUMBER: _ClassVar[int]
+    TARGET_TABLE_ID_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_ID_FIELD_NUMBER: _ClassVar[int]
+    source_field: str
+    target_table_id: int
+    target_field_id: int
+    def __init__(self, source_field: _Optional[str] = ..., target_table_id: _Optional[int] = ..., target_field_id: _Optional[int] = ...) -> None: ...
+
+class OutputMappingConfig(_message.Message):
+    __slots__ = ("mode", "row_action", "row_id", "mappings")
     MODE_FIELD_NUMBER: _ClassVar[int]
+    ROW_ACTION_FIELD_NUMBER: _ClassVar[int]
     ROW_ID_FIELD_NUMBER: _ClassVar[int]
-    table_id: int
-    field_id: int
+    MAPPINGS_FIELD_NUMBER: _ClassVar[int]
     mode: str
+    row_action: str
     row_id: str
-    def __init__(self, table_id: _Optional[int] = ..., field_id: _Optional[int] = ..., mode: _Optional[str] = ..., row_id: _Optional[str] = ...) -> None: ...
+    mappings: _containers.RepeatedCompositeFieldContainer[FieldMapping]
+    def __init__(self, mode: _Optional[str] = ..., row_action: _Optional[str] = ..., row_id: _Optional[str] = ..., mappings: _Optional[_Iterable[_Union[FieldMapping, _Mapping]]] = ...) -> None: ...
 
 class ToolConfig(_message.Message):
     __slots__ = ("name", "version", "config")

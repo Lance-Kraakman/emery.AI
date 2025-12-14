@@ -47,14 +47,24 @@ export interface SkillInput {
 }
 
 /**
- * Output Mapping Configuration
- * Defines how a skill output is saved to a table
+ * Field Mapping - maps a source output field to a target table field
+ * Used in path-based output mapping for structured model outputs
  */
-export interface OutputMapping {
-  tableId: number;
-  fieldId: number;
-  mode: 'create' | 'update';
-  rowId?: string;  // For update mode - specific row to update
+export interface FieldMapping {
+  sourceField: string;       // e.g., "label", "score", "box.xmin", "source.rowId"
+  targetTableId: number;     // Destination table
+  targetFieldId: number;     // Destination field/column
+}
+
+/**
+ * Output Mapping Configuration
+ * Supports single-row (classification) and multi-row (object detection) mapping modes
+ */
+export interface OutputMappingConfig {
+  mode: 'single_row' | 'multi_row';
+  rowAction?: 'create' | 'update';  // For single_row mode
+  rowId?: string;                    // For update mode - specific row to update
+  mappings: FieldMapping[];
 }
 
 /**
@@ -63,7 +73,7 @@ export interface OutputMapping {
 export interface SkillOutput {
   name: string;
   type?: SkillParameterType;
-  mapping?: OutputMapping;  // Optional: save output to table
+  outputMapping?: OutputMappingConfig;  // Optional: path-based field mapping
 }
 
 /**

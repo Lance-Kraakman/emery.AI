@@ -162,15 +162,22 @@ message SkillInputFileConfig {
 message SkillOutput {
   string name = 1;
   string type = 2;                     // text, image, file, audio, video, document
-  OutputMapping mapping = 3;           // Optional: save output to table
+  OutputMappingConfig output_mapping = 3;  // Optional: path-based field mapping configuration
 }
 
-// Output mapping configuration - saves skill output to a table
-message OutputMapping {
-  int32 table_id = 1;                  // Target table ID
-  int32 field_id = 2;                  // Target column/field ID
-  string mode = 3;                     // 'create' (new row) or 'update' (existing row)
-  string row_id = 4;                   // For update mode: specific row ID to update
+// Individual field mapping - maps a source path to a target table field
+message FieldMapping {
+  string source_field = 1;             // Field path: "label", "score", "box.xmin", "source.rowId"
+  int32 target_table_id = 2;           // Target table ID
+  int32 target_field_id = 3;           // Target field/column ID
+}
+
+// Output mapping configuration - supports single-row and multi-row mapping modes
+message OutputMappingConfig {
+  string mode = 1;                     // 'single_row' or 'multi_row'
+  string row_action = 2;               // 'create' or 'update' (for single_row mode)
+  string row_id = 3;                   // For update mode: specific row ID to update
+  repeated FieldMapping mappings = 4;  // Field mappings from output to table fields
 }
 
 // Tool configuration
