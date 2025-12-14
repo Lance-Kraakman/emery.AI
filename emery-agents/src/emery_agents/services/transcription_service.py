@@ -62,7 +62,8 @@ async def transcribe_audio(
     try:
         # AIDEV-NOTE: HuggingFace Inference API endpoint for audio transcription
         # User can configure dedicated endpoint by setting WHISPER_ENDPOINT env var
-        endpoint = os.getenv('WHISPER_ENDPOINT') or f"https://api-inference.huggingface.co/models/{model_id}"
+        # NOTE: api-inference.huggingface.co was deprecated Dec 2025, use router.huggingface.co
+        endpoint = os.getenv('WHISPER_ENDPOINT') or f"https://router.huggingface.co/hf-inference/models/{model_id}"
 
         headers = {
             "Authorization": f"Bearer {hf_token}",
