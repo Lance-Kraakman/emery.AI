@@ -11,7 +11,7 @@ import { ConnectionMapper, type ConnectionDTO } from "@/app/mappers/connection-m
 import type { Result } from "./types";
 
 /**
- * Get user's OAuth connections (paginated) - optimized for large connection lists
+ * Get user's Connections (paginated) - optimized for large connection lists
  * Returns connections sorted by most recent first with cursor-based pagination
  *
  * @param options - Pagination options { limit, cursor }
@@ -32,7 +32,7 @@ export async function getUserOAuthConnectionsPaginated(options?: {
     const limit = options?.limit || 50;
     const cursor = options?.cursor;
 
-    console.log(`[ConnectionActions] Getting paginated OAuth connections for user ${session.user.id} (limit: ${limit}, cursor: ${cursor || 'none'})`);
+    console.log(`[ConnectionActions] Getting paginated Connections for user ${session.user.id} (limit: ${limit}, cursor: ${cursor || 'none'})`);
 
     const paginationOptions = cursor
       ? { limit, after: cursor }
@@ -61,7 +61,7 @@ export async function getUserOAuthConnectionsPaginated(options?: {
       return { success: false, error: result.error };
     }
   } catch (error: unknown) {
-    console.error('[ConnectionActions] Error getting paginated OAuth connections:', error);
+    console.error('[ConnectionActions] Error getting paginated Connections:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return {
       success: false,
@@ -73,7 +73,7 @@ export async function getUserOAuthConnectionsPaginated(options?: {
 }
 
 /**
- * Get user's OAuth connections - replaces getUserOAuthConnections from pipedream.ts
+ * Get user's Connections - replaces getUserOAuthConnections from pipedream.ts
  * Returns connections sorted by most recent first
  * @deprecated Use getUserOAuthConnectionsPaginated for better performance with large lists
  */
@@ -82,7 +82,7 @@ export async function getUserOAuthConnections(): Promise<Result<ConnectionDTO[]>
     const session = await requireAuth();
     const connectionService = getConnectionApplicationService();
     
-    console.log(`[ConnectionActions] Getting OAuth connections for user ${session.user.id}`);
+    console.log(`[ConnectionActions] Getting Connections for user ${session.user.id}`);
     
     const result = await connectionService.getUserConnections(
       UserId.fromString(session.user.id)
@@ -108,7 +108,7 @@ export async function getUserOAuthConnections(): Promise<Result<ConnectionDTO[]>
       return { success: false, error: result.error };
     }
   } catch (error: unknown) {
-    console.error('[ConnectionActions] Error getting user OAuth connections:', error);
+    console.error('[ConnectionActions] Error getting user Connections:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return { 
       success: false, 
