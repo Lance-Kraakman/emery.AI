@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
     const documentTitle = formData.get('documentTitle') as string | null;
     const documentType = formData.get('documentType') as 'tiptap' | 'file' | null;
     const initialContent = formData.get('initialContent') as string | null;
+    const rowId = formData.get('rowId') as string | null;
 
     // Validate common required fields
     if (!organizationId || !tableId || !fieldIdNum || isNaN(fieldIdNum)) {
@@ -117,7 +118,8 @@ export async function POST(request: NextRequest) {
         fieldId: field.id,
         title: documentTitle,
         initialContent: initialContent ? JSON.parse(initialContent) : undefined,
-        createdBy: UserId.fromString(session.user.id)
+        createdBy: UserId.fromString(session.user.id),
+        rowId: rowId || undefined
       };
 
       const result = await documentApplicationService.createTiptapDocument(command);

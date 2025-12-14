@@ -54,12 +54,19 @@ export const storeActions = {
       ])
 
       // Update app state store with all data
+      // Map organization DTO to store Organization type with default plan
+      const organization = currentOrgResult ? {
+        id: currentOrgResult.id,
+        name: currentOrgResult.name,
+        plan: (currentOrgResult.plan || 'free') as 'free' | 'pro' | 'max' | 'enterprise'
+      } : null
+
       appStateActions.setAllData({
         databases: databasesResult,
         tables: tablesResult,
         agents: agentsResult,
         teams: teamsResult,
-        organization: currentOrgResult
+        organization
       })
 
       // Initialize other stores with relevant data

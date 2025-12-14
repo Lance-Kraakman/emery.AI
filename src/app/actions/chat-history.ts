@@ -246,14 +246,24 @@ export async function getCurrentChatSession(context: ChatContextDTO): Promise<Ch
  * Update a chat session's model configuration
  */
 export async function updateChatModel(chatId: string, model: string | null): Promise<ChatActionResult<ChatSessionDTO>> {
+  console.log('[CHAT-ACTIONS] updateChatModel called:', { chatId, model })
+
   try {
     // Authenticate user
     const session = await auth()
     if (!session?.user?.id) {
+      console.log('[CHAT-ACTIONS] updateChatModel - auth failed')
       return { success: false, error: 'Authentication required' }
     }
 
     const chatApplicationService = getChatApplicationService()
+
+    console.log('[CHAT-ACTIONS] updateChatModel - calling service:', {
+      chatId,
+      userId: session.user.id,
+      organizationId: session.user.currentOrganizationId,
+      model
+    })
 
     // Use the application service's updateChat method
     const result = await chatApplicationService.updateChat({
@@ -261,6 +271,12 @@ export async function updateChatModel(chatId: string, model: string | null): Pro
       userId: session.user.id,
       organizationId: session.user.currentOrganizationId!,
       model
+    })
+
+    console.log('[CHAT-ACTIONS] updateChatModel - result:', {
+      success: result.success,
+      error: result.error,
+      updatedModel: result.data?.model
     })
 
     if (!result.success) {

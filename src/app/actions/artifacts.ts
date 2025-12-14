@@ -13,7 +13,7 @@ import { FieldId, OrganizationId, TableId, UserId } from "@/ddd/domain/shared/va
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import type { Result } from "./types";
-import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
+import { DocumentFieldValue, FileFieldValue } from "@/ddd/domain/tables/value-objects/field-values";
 
 /**
  * Fetch document field value using domain service
