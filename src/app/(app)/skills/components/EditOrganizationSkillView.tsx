@@ -33,7 +33,9 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
     instructions: skill.instructions,
     tools: skill.tools,
     content: skill.content, // Load existing attachments
-    pendingAttachments: [] // Start with no pending attachments
+    pendingAttachments: [], // Start with no pending attachments
+    executionType: skill.executionType,
+    taskModelConfig: skill.taskModelConfig
   });
 
   const handleSave = async () => {
@@ -87,7 +89,9 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
         outputs: formData.outputs,
         instructions: formData.instructions,
         tools: formData.tools,
-        content: updatedContent // Include attachment metadata
+        content: updatedContent, // Include attachment metadata
+        executionType: formData.executionType,
+        taskModelConfig: formData.taskModelConfig
       });
 
       if (!result.success) {

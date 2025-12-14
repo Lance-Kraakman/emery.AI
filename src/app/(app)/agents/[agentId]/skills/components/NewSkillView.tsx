@@ -50,7 +50,9 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
             inputs: result.data.inputs,
             outputs: result.data.outputs,
             instructions: result.data.instructions,
-            tools: result.data.tools
+            tools: result.data.tools,
+            executionType: result.data.executionType,
+            taskModelConfig: result.data.taskModelConfig
           });
           toast.success('Template loaded successfully');
         } else {

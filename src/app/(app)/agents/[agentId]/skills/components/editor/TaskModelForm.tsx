@@ -109,7 +109,7 @@ interface TaskModelFormProps {
 }
 
 /**
- * Compact form for configuring task-model skill execution.
+ * Compact form for configuring operation skill execution.
  */
 export function TaskModelForm({
   value,

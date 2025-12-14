@@ -28,9 +28,9 @@ export interface SkillFormData {
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   content?: MessagePart[]; // Existing uploaded attachments
   pendingAttachments?: File[]; // New attachments to upload on save
-  // Execution type: 'agent' (default) or 'task-model' (direct model invocation)
-  executionType?: 'agent' | 'task-model';
-  // Configuration for task-model execution (required when executionType is 'task-model')
+  // Execution type: 'agent' (default) or 'operation' (direct model invocation)
+  executionType?: 'agent' | 'operation';
+  // Configuration for operation execution (required when executionType is 'operation')
   taskModelConfig?: {
     modelId: string;
     taskType: string;
@@ -214,7 +214,7 @@ export function SkillEditor({
       />
 
       {/* Conditional Form Based on Execution Type */}
-      {(localValue.executionType || 'agent') === 'task-model' ? (
+      {localValue.executionType === 'operation' ? (
         /* Direct Mode Form - Compact, auto-configures inputs/outputs */
         <>
           <TaskModelForm
