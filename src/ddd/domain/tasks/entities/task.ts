@@ -312,18 +312,9 @@ export class Task {
    * Append a log message to the task
    */
   appendLog(message: string): void {
-    console.log(`[TASK-ENTITY-DEBUG] appendLog called with message:`, message);
-    console.log(`[TASK-ENTITY-DEBUG] Current logs array length:`, this._logs.length);
-
     const timestamp = new Date().toISOString();
     const logEntry = `[${timestamp}] ${message}`;
-
-    console.log(`[TASK-ENTITY-DEBUG] Formatted log entry:`, logEntry);
-
     this._logs.push(logEntry);
-
-    console.log(`[TASK-ENTITY-DEBUG] New logs array length:`, this._logs.length);
-    console.log(`[TASK-ENTITY-DEBUG] All logs:`, this._logs);
   }
 
   /**

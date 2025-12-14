@@ -150,7 +150,7 @@ export class InvitationApplicationService {
       }
 
       // Check member limit for Free tier
-      const tierConfig = getTierConfig(organization.tier || 'free');
+      const tierConfig = getTierConfig(organization.plan || 'free');
       if (tierConfig.maxTeamMembers !== null) {
         const orgWithMembers = await this.organizationRepository.findByIdWithMembers(OrganizationId.fromNumber(command.organizationId));
         const currentMemberCount = orgWithMembers?.memberCount || 0;
