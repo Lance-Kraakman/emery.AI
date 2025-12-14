@@ -1013,6 +1013,19 @@ export const skills = pgTable("skills", {
   // code_agent: Python code execution, better for complex multi-step reasoning
   agentType: text("agent_type"),
 
+  // Execution type: "agent" (default) or "task-model"
+  // agent: LLM orchestration with tools (existing flow)
+  // task-model: Direct task model execution (bypasses LLM)
+  executionType: text("execution_type").default('agent'),
+
+  // Task model configuration (when executionType is 'task-model')
+  // Contains modelId, taskType, and model-specific parameters
+  taskModelConfig: jsonb("task_model_config").$type<{
+    modelId: string;
+    taskType: string;
+    parameters?: Record<string, any>;
+  }>(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
