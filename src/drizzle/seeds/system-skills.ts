@@ -93,7 +93,7 @@ If multiple matches exist, list them all with distinguishing details.
   }
 ];
 
-async function seedSystemSkills() {
+export async function seedSystemSkills() {
   console.log('🌱 Seeding system skills...');
 
   // Get all organizations
@@ -159,9 +159,11 @@ async function seedSystemSkills() {
 }
 
 // Run if called directly
-seedSystemSkills()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error('Seeding failed:', error);
-    process.exit(1);
-  });
+if (require.main === module) {
+  seedSystemSkills()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error('Seeding failed:', error);
+      process.exit(1);
+    });
+}

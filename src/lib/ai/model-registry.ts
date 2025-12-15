@@ -683,6 +683,41 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
   },
 
   // ============================================================================
+  // TASK-SPECIFIC MODELS - Video Generation
+  // Returns video file in chat
+  // ============================================================================
+
+  'genmo/mochi-1-preview': {
+    id: 'genmo/mochi-1-preview',
+    name: 'Mochi 1 Preview',
+    provider: 'huggingface',
+    description: 'Text-to-video generation. Creates short video clips from text prompts.',
+    contextWindow: 0,
+    maxOutputTokens: 0,
+    taskType: 'text-to-video',
+    outputType: 'video',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0,
+      outputCreditsPerK: 5.0, // Per video
+    },
+    tier: 'pro',
+    category: 'balanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  // ============================================================================
   // TASK-SPECIFIC MODELS - Audio
   // Speech-to-text returns text, text-to-speech returns audio file
   // ============================================================================
