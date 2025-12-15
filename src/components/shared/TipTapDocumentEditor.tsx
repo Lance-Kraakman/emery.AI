@@ -4,13 +4,14 @@
  * TipTapDocumentEditor - Shared TipTap document editor component
  *
  * Used by:
- * - DocumentArtifactViewer (chat artifacts)
- * - EditorBlock (Puck pages)
+ * - DocumentArtifactViewer (chat artifacts) - uses default shadcn theme
+ * - EditorBlock (Puck pages) - uses Puck theme when available
  *
  * Handles document loading, editing, and auto-save functionality.
+ * Automatically detects Puck theme context and applies appropriate styling.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { EditorContent } from '@tiptap/react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,7 +35,39 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { useTipTapDocument } from './useTipTapDocument';
+import { useOptionalTheme } from '@/components/puck/theme-context';
 import styles from './TipTapDocumentEditor.module.css';
+
+/**
+ * Convert hex color to HSL format for shadcn CSS variables
+ */
+function hexToHSL(hex: string): string {
+  // Remove # if present
+  hex = hex.replace(/^#/, '');
+
+  // Parse hex
+  let r = parseInt(hex.substring(0, 2), 16) / 255;
+  let g = parseInt(hex.substring(2, 4), 16) / 255;
+  let b = parseInt(hex.substring(4, 6), 16) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: h = ((b - r) / d + 2) / 6; break;
+      case b: h = ((r - g) / d + 4) / 6; break;
+    }
+  }
+
+  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+}
 
 export interface TipTapDocumentEditorProps {
   /** Document ID to load/edit */
@@ -107,10 +140,48 @@ export function TipTapDocumentEditor({
     onContentChange,
   });
 
+  // Check if we're in a Puck context with a theme
+  const puckTheme = useOptionalTheme();
+
+  // Generate shadcn-compatible CSS variables from Puck theme
+  const themeStyles = useMemo(() => {
+    if (!puckTheme) return undefined;
+
+    const colors = puckTheme.colors;
+
+    // Map Puck theme colors to shadcn CSS variables (HSL format)
+    return {
+      '--background': hexToHSL(colors.background),
+      '--foreground': hexToHSL(colors.text),
+      '--card': hexToHSL(colors.surface),
+      '--card-foreground': hexToHSL(colors.text),
+      '--popover': hexToHSL(colors.surface),
+      '--popover-foreground': hexToHSL(colors.text),
+      '--primary': hexToHSL(colors.primary),
+      '--primary-foreground': '0 0% 100%', // White text on primary
+      '--secondary': hexToHSL(colors.secondary),
+      '--secondary-foreground': '0 0% 100%',
+      '--muted': hexToHSL(colors.surface),
+      '--muted-foreground': hexToHSL(colors.textMuted),
+      '--accent': hexToHSL(colors.primary),
+      '--accent-foreground': '0 0% 100%',
+      '--destructive': hexToHSL(colors.error),
+      '--destructive-foreground': '0 0% 100%',
+      '--border': hexToHSL(colors.border),
+      '--input': hexToHSL(colors.border),
+      '--ring': hexToHSL(colors.primary),
+    } as React.CSSProperties;
+  }, [puckTheme]);
+
+  const isPuckThemed = !!puckTheme;
+
+  // Container class with optional themed modifier
+  const containerClass = `${styles.editorContainer} ${isPuckThemed ? styles.puckThemed : ''} ${className}`.trim();
+
   // Loading state
   if (isLoading) {
     return (
-      <div className={`${styles.editorContainer} ${className}`} style={{ height }}>
+      <div className={containerClass} style={{ height, ...themeStyles }}>
         <div className="flex items-center justify-center h-full">
           <div className="space-y-4 w-full max-w-md p-8">
             <Skeleton className="h-4 w-3/4" />
@@ -126,7 +197,7 @@ export function TipTapDocumentEditor({
   // Error state
   if (loadError) {
     return (
-      <div className={`${styles.editorContainer} ${className}`} style={{ height }}>
+      <div className={containerClass} style={{ height, ...themeStyles }}>
         <div className="flex items-center justify-center h-full">
           <div className="text-center space-y-4 p-8">
             <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
@@ -141,7 +212,7 @@ export function TipTapDocumentEditor({
   }
 
   return (
-    <div className={`${styles.editorContainer} ${className}`} style={{ height }}>
+    <div className={containerClass} style={{ height, ...themeStyles }}>
       {/* Toolbar */}
       {showToolbar && allowEdit && editor && (
         <div className={styles.toolbar}>
