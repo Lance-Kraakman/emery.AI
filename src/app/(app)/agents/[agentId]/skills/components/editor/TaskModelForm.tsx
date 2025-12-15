@@ -11,7 +11,12 @@ import {
   Binary,
   HelpCircle,
   ListFilter,
-  Info
+  Info,
+  Video,
+  Languages,
+  ImagePlus,
+  Layers,
+  FileImage
 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -22,15 +27,29 @@ import type { SkillInput, SkillOutput } from '@/app/mappers/skill-mapper';
 
 // Task type options with icons and detailed descriptions for info tooltips
 const TASK_TYPE_OPTIONS = [
+  // Image Generation/Transformation
   { value: 'text-to-image', label: 'Text to Image', icon: Image, hint: 'Generate images', description: 'Creates images from text descriptions using diffusion models. Input a prompt describing what you want, get an image back.' },
+  { value: 'image-to-image', label: 'Image to Image', icon: ImagePlus, hint: 'Transform images', description: 'Transforms images using another image as input (style transfer, inpainting, etc.). Input an image, get a transformed image back.' },
+  { value: 'text-to-video', label: 'Text to Video', icon: Video, hint: 'Generate video', description: 'Creates short video clips from text descriptions. Input a prompt, get a video file back.' },
+
+  // Audio
   { value: 'speech-to-text', label: 'Speech to Text', icon: Mic, hint: 'Transcribe audio', description: 'Transcribes spoken audio into text. Supports various audio formats. Output is the transcribed text.' },
   { value: 'text-to-speech', label: 'Text to Speech', icon: Volume2, hint: 'Generate audio', description: 'Converts written text into spoken audio. Output is an audio file that can be played back.' },
+
+  // Vision Analysis
   { value: 'object-detection', label: 'Object Detection', icon: ScanSearch, hint: 'Find objects', description: 'Identifies and locates objects in images with bounding boxes. Returns a list of detected objects with coordinates and confidence scores.' },
   { value: 'image-classification', label: 'Image Classification', icon: Tags, hint: 'Classify images', description: 'Categorizes images into predefined labels. Returns top classifications with confidence scores.' },
-  { value: 'summarization', label: 'Summarization', icon: FileText, hint: 'Summarize text', description: 'Condenses long text into a shorter summary while preserving key information. Good for articles, documents, or any lengthy content.' },
-  { value: 'feature-extraction', label: 'Embeddings', icon: Binary, hint: 'Vector embeddings', description: 'Converts text into numerical vectors (embeddings) for semantic search, clustering, or similarity comparisons.' },
+  { value: 'image-segmentation', label: 'Image Segmentation', icon: Layers, hint: 'Segment images', description: 'Identifies distinct regions/objects in images with pixel-level masks. Returns segments with labels and mask data.' },
+  { value: 'image-to-text', label: 'Image to Text', icon: FileImage, hint: 'Describe images', description: 'Generates text descriptions or captions from images. Input an image, get a text description back.' },
+
+  // Text Processing
+  { value: 'summarization', label: 'Summarization', icon: FileText, hint: 'Summarize text', description: 'Condenses long text into a shorter summary while preserving key information. Summary length is determined by the model\'s default settings.' },
+  { value: 'translation', label: 'Translation', icon: Languages, hint: 'Translate text', description: 'Translates text between languages. Specify source and target languages for accurate translation.' },
   { value: 'question-answering', label: 'Question Answering', icon: HelpCircle, hint: 'Extract answers', description: 'Extracts answers from a given context. Provide a question and context passage, get the specific answer.' },
   { value: 'zero-shot-classification', label: 'Zero-Shot', icon: ListFilter, hint: 'Classify text', description: 'Classifies text into custom labels without training. Provide text and candidate labels, get classification scores.' },
+
+  // Embeddings
+  { value: 'feature-extraction', label: 'Embeddings', icon: Binary, hint: 'Vector embeddings', description: 'Converts text into numerical vectors (embeddings) for semantic search, clustering, or similarity comparisons.' },
 ] as const;
 
 // Auto input/output mapping + default templates per task type
@@ -39,11 +58,31 @@ const TASK_CONFIG: Record<string, {
   outputs: SkillOutput[],
   defaultTemplate?: string  // Default prompt template (Jinja2 syntax)
 }> = {
+  // ============================================================================
+  // IMAGE GENERATION/TRANSFORMATION
+  // ============================================================================
   'text-to-image': {
     inputs: [{ name: 'prompt', type: 'text', required: true }],
     outputs: [{ name: 'image', type: 'image' }],
     defaultTemplate: '{{ prompt }}'
   },
+  'image-to-image': {
+    inputs: [
+      { name: 'image', type: 'image', required: true },
+      { name: 'prompt', type: 'text', required: false }
+    ],
+    outputs: [{ name: 'image', type: 'image' }],
+    defaultTemplate: '{{ prompt }}'
+  },
+  'text-to-video': {
+    inputs: [{ name: 'prompt', type: 'text', required: true }],
+    outputs: [{ name: 'video', type: 'video' }],
+    defaultTemplate: '{{ prompt }}'
+  },
+
+  // ============================================================================
+  // AUDIO
+  // ============================================================================
   'speech-to-text': {
     inputs: [{ name: 'audio', type: 'audio', required: true }],
     outputs: [{ name: 'transcript', type: 'text' }]
@@ -54,6 +93,10 @@ const TASK_CONFIG: Record<string, {
     outputs: [{ name: 'audio', type: 'audio' }],
     defaultTemplate: '{{ text }}'
   },
+
+  // ============================================================================
+  // VISION ANALYSIS
+  // ============================================================================
   'object-detection': {
     inputs: [{ name: 'image', type: 'image', required: true }],
     outputs: [{ name: 'detections', type: 'document' }]
@@ -64,14 +107,32 @@ const TASK_CONFIG: Record<string, {
     outputs: [{ name: 'classifications', type: 'document' }]
     // No template - image input only
   },
+  'image-segmentation': {
+    inputs: [{ name: 'image', type: 'image', required: true }],
+    outputs: [{ name: 'segments', type: 'document' }]
+    // No template - image input only
+  },
+  'image-to-text': {
+    inputs: [{ name: 'image', type: 'image', required: true }],
+    outputs: [{ name: 'description', type: 'text' }]
+    // No template - image input only
+  },
+
+  // ============================================================================
+  // TEXT PROCESSING
+  // ============================================================================
   'summarization': {
     inputs: [{ name: 'text', type: 'text', required: true }],
     outputs: [{ name: 'summary', type: 'text' }],
     defaultTemplate: '{{ text }}'
   },
-  'feature-extraction': {
-    inputs: [{ name: 'text', type: 'text', required: true }],
-    outputs: [{ name: 'embedding', type: 'document' }],
+  'translation': {
+    inputs: [
+      { name: 'text', type: 'text', required: true },
+      { name: 'source_lang', type: 'text', required: false },
+      { name: 'target_lang', type: 'text', required: true }
+    ],
+    outputs: [{ name: 'translation', type: 'text' }],
     defaultTemplate: '{{ text }}'
   },
   'question-answering': {
@@ -88,6 +149,15 @@ const TASK_CONFIG: Record<string, {
       { name: 'labels', type: 'text', required: true }
     ],
     outputs: [{ name: 'classification', type: 'document' }],
+    defaultTemplate: '{{ text }}'
+  },
+
+  // ============================================================================
+  // EMBEDDINGS
+  // ============================================================================
+  'feature-extraction': {
+    inputs: [{ name: 'text', type: 'text', required: true }],
+    outputs: [{ name: 'embedding', type: 'document' }],
     defaultTemplate: '{{ text }}'
   },
 };
@@ -309,28 +379,9 @@ function TaskParameterForm({ taskType, parameters, onChange, isReadOnly }: TaskP
       );
 
     case 'summarization':
-      return (
-        <ParamRow hint="Target summary length in tokens. Min sets the minimum, max sets the maximum length.">
-          <Label className="text-xs text-muted-foreground whitespace-nowrap">Length</Label>
-          <Input
-            type="number"
-            value={parameters.min_length || 30}
-            onChange={(e) => onChange({ ...parameters, min_length: parseInt(e.target.value) || 30 })}
-            disabled={isReadOnly}
-            className="w-20 h-8"
-            placeholder="min"
-          />
-          <span className="text-muted-foreground">—</span>
-          <Input
-            type="number"
-            value={parameters.max_length || 150}
-            onChange={(e) => onChange({ ...parameters, max_length: parseInt(e.target.value) || 150 })}
-            disabled={isReadOnly}
-            className="w-20 h-8"
-            placeholder="max"
-          />
-        </ParamRow>
-      );
+      // HuggingFace Inference API doesn't support generation parameters (min/max length)
+      // The model uses its default settings for length control
+      return null;
 
     case 'image-classification':
       return (
