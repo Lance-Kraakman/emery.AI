@@ -1,11 +1,11 @@
 /**
  * Drizzle ChatMessage Repository Implementation
- * 
+ *
  * Concrete implementation of IChatMessageRepository using Drizzle ORM.
- * Handles message persistence with conversation flow and RAG source tracking.
- * 
+ * Handles message persistence with conversation flow management.
+ *
  * AIDEV-NOTE: Repository implementation for chat message domain - provides data access
- * for conversation management with RAG source tracking and message ordering
+ * for conversation management and message ordering
  */
 
 import { chatMessages } from '@/lib/db/schema';
@@ -182,24 +182,6 @@ export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
   }
 
   /**
-   * Find messages with RAG sources
-   */
-  async findMessagesWithRagSources(chatId: ChatId, limit = 20, offset = 0): Promise<ChatMessage[]> {
-    const results = await this.db
-      .select()
-      .from(chatMessages)
-      .where(and(
-        eq(chatMessages.chatId, chatId.value),
-        sql`${chatMessages.metadata}->>'ragSources' is not null`
-      ))
-      .orderBy(desc(chatMessages.messageIndex))
-      .limit(limit)
-      .offset(offset);
-
-    return results.map((message: ChatMessageRow) => this.mapToChatMessage(message));
-  }
-
-  /**
    * Find messages by content search
    */
   async searchMessageContent(chatId: ChatId, query: string, limit = 20, offset = 0): Promise<ChatMessage[]> {
@@ -261,7 +243,6 @@ export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
     userMessages: number;
     assistantMessages: number;
     systemMessages: number;
-    messagesWithRag: number;
     averageProcessingTime: number | null;
   }> {
     const [stats] = await this.db
@@ -270,7 +251,6 @@ export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
         userMessages: sql<number>`count(*) filter (where role = 'user')`,
         assistantMessages: sql<number>`count(*) filter (where role = 'assistant')`,
         systemMessages: sql<number>`count(*) filter (where role = 'system')`,
-        messagesWithRag: sql<number>`count(*) filter (where metadata->>'ragSources' is not null)`,
         averageProcessingTime: sql<number>`avg((metadata->>'processingTime')::numeric) filter (where metadata->>'processingTime' is not null)`
       })
       .from(chatMessages)
@@ -281,7 +261,6 @@ export class DrizzleChatMessageRepository extends DrizzleBaseRepository<
       userMessages: stats?.userMessages || 0,
       assistantMessages: stats?.assistantMessages || 0,
       systemMessages: stats?.systemMessages || 0,
-      messagesWithRag: stats?.messagesWithRag || 0,
       averageProcessingTime: stats?.averageProcessingTime || null
     };
   }

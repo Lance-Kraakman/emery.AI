@@ -7,11 +7,14 @@ source of truth for both frontend and backend tool configurations.
 
 import json
 import os
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable, TYPE_CHECKING
 from pathlib import Path
 
 from ..grpc.generated.agent_worker_pb2 import ToolConfig, AgentConfig, SkillConfig
 from ..tools.skill_tool import SkillTool
+
+if TYPE_CHECKING:
+    from ..clients import HuggingFaceInferenceClient
 
 
 class UnifiedToolLoader:
@@ -35,8 +38,8 @@ class UnifiedToolLoader:
     def _get_default_metadata_path(self) -> str:
         """Get default path to unified metadata file."""
         current_dir = Path(__file__).parent
-        # Navigate to tools directory where the metadata is generated
-        metadata_path = current_dir.parent / "tools" / "unified_metadata.json"
+        # Navigate to execution/tools directory where the metadata is located
+        metadata_path = current_dir.parent / "execution" / "tools" / "unified_metadata.json"
         return str(metadata_path)
 
     def _load_unified_metadata(self) -> Dict[str, Any]:
@@ -176,7 +179,8 @@ class UnifiedToolLoader:
         api_key_mode: str = "agent",
         agent_config: Optional[AgentConfig] = None,
         skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None,
-        organization_id: Optional[int] = None
+        organization_id: Optional[int] = None,
+        inference_client: Optional["HuggingFaceInferenceClient"] = None
     ) -> Any:
         """
         Load a tool instance from ToolConfig using unified metadata.
@@ -187,6 +191,8 @@ class UnifiedToolLoader:
             api_key_mode: API key mode ("agent" or "user")
             agent_config: Optional AgentConfig containing skills list
             skill_executor: Optional callback for executing skills
+            organization_id: Optional org ID for RLS context
+            inference_client: Optional client for operation skills (direct HF API calls)
 
         Returns:
             Tool instance (either regular tool or SkillTool)
@@ -207,8 +213,15 @@ class UnifiedToolLoader:
             if not skill_config:
                 raise ValueError(f"Skill with ID {skill_id} not found in agent_config.skills")
 
-            # Create and return SkillTool
-            return SkillTool(skill_config, skill_executor)
+            # Create and return SkillTool with auth for output mappings
+            # Pass inference_client for operation skills (direct HF API calls)
+            return SkillTool(
+                skill_config,
+                skill_executor,
+                inference_client=inference_client,
+                api_key=api_key,
+                organization_id=organization_id
+            )
 
         # AIDEV-NOTE: Handle CRUD tools from database - they don't need unified_metadata
         # These tools are seeded in the DB and sent with full config via gRPC
@@ -481,7 +494,8 @@ class UnifiedToolLoader:
         api_key_mode: str = "agent",
         agent_config: Optional[AgentConfig] = None,
         skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None,
-        organization_id: Optional[int] = None
+        organization_id: Optional[int] = None,
+        inference_client: Optional["HuggingFaceInferenceClient"] = None
     ) -> List[Any]:
         """
         Load smolagents tools from ToolConfig protobuf objects.
@@ -495,6 +509,8 @@ class UnifiedToolLoader:
             api_key_mode: API key mode ("agent" or "user")
             agent_config: Optional AgentConfig containing skills list
             skill_executor: Optional callback for executing skills
+            organization_id: Optional org ID for RLS context
+            inference_client: Optional client for operation skills (direct HF API calls)
 
         Returns:
             List of successfully loaded tool instances
@@ -523,7 +539,8 @@ class UnifiedToolLoader:
                     api_key_mode=api_key_mode,
                     agent_config=agent_config,
                     skill_executor=skill_executor,
-                    organization_id=organization_id
+                    organization_id=organization_id,
+                    inference_client=inference_client
                 )
                 smolagents_tools.append(tool_instance)
                 logger.info(f"✅ Successfully loaded tool: {tool_config.name}")

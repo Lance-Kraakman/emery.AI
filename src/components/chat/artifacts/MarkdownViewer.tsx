@@ -34,6 +34,8 @@ import type { FileArtifact } from '../types/chat-artifacts'
 import { getFileDisplayInfo } from '../types/chat-artifacts'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
 import { SaveToDatabaseDialog } from './SaveToDatabaseDialog'
+import { useOptionalTheme } from '@/components/puck/theme-context'
+import { getViewerContainerStyle, getThemedSectionStyle } from './theme-utils'
 
 const logger = createDebugLogger('MarkdownViewer')
 
@@ -51,6 +53,7 @@ export function MarkdownViewer({
   className = ''
 }: MarkdownViewerProps) {
   const { fileField, fileName, fileUrl, tableId, fieldId, rowId } = artifact.data
+  const theme = useOptionalTheme()
   const [content, setContent] = useState<string>('')
   const [originalContent, setOriginalContent] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -154,7 +157,7 @@ export function MarkdownViewer({
         formData.append('file', blob, fileName)
         formData.append('organizationId', '0') // Will be set by server from session
         formData.append('tableId', targetTableId.toString())
-        formData.append('fieldName', targetFieldId.toString())
+        formData.append('fieldId', targetFieldId.toString())
 
         // Upload file
         const uploadResponse = await fetch('/api/files/upload', {
@@ -176,7 +179,7 @@ export function MarkdownViewer({
         formData.append('file', blob, fileName)
         formData.append('organizationId', '0') // Will be set by server from session
         formData.append('tableId', targetTableId.toString())
-        formData.append('fieldName', targetFieldId.toString())
+        formData.append('fieldId', targetFieldId.toString())
 
         const uploadResponse = await fetch('/api/files/upload', {
           method: 'POST',
@@ -226,9 +229,15 @@ export function MarkdownViewer({
   }, [])
 
   return (
-    <div className={`h-full flex flex-col bg-card ${className}`}>
+    <div
+      className={`h-full flex flex-col ${!theme ? 'bg-card' : ''} ${className}`}
+      style={getViewerContainerStyle(theme)}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
+      <div
+        className={`flex items-center justify-between p-3 border-b ${!theme ? 'border-border bg-muted/10' : ''}`}
+        style={getThemedSectionStyle(theme)}
+      >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <FileText className="w-5 h-5 text-blue-600 flex-shrink-0" />
           <div className="min-w-0 flex-1">
@@ -363,7 +372,10 @@ export function MarkdownViewer({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between p-3 border-t border-border bg-muted/10 text-xs text-muted-foreground flex-shrink-0">
+      <div
+        className={`flex items-center justify-between p-3 border-t text-xs flex-shrink-0 ${!theme ? 'border-border bg-muted/10 text-muted-foreground' : ''}`}
+        style={{ ...getThemedSectionStyle(theme), color: theme ? 'var(--theme-text-muted)' : undefined }}
+      >
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />

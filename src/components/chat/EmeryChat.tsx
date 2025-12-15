@@ -14,11 +14,20 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Plus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { ModelSelector } from '@/components/ai/ModelSelector'
+import { updateChatModel } from '@/app/actions/chat-history'
 import { cn } from '@/lib/utils'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors, uiStateActions } from '@/stores/ui-state.store'
+import { useOrganizationPlan } from '@/stores/app-state.store'
 // import { ChatCanvas } from './ChatCanvas'
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
@@ -62,9 +71,11 @@ interface EmeryChatHeaderProps {
   domainType?: DomainType | 'organizations' | 'general'
   domainName?: string
   currentChatId?: string
-  onChatSelect: (chatId: string) => void
+  currentChatModel?: string
+  onChatSelect: (chatId: string, model?: string) => void
   onNewChat: () => void
   onChatHistoryUpdate?: () => void
+  onModelChange?: (model: string | null) => void
   userId: string
   organizationId: number
 }
@@ -73,9 +84,11 @@ function EmeryChatHeader({
   domainType,
   domainName,
   currentChatId,
+  currentChatModel,
   onChatSelect,
   onNewChat,
   onChatHistoryUpdate,
+  onModelChange,
   userId,
   organizationId
 }: EmeryChatHeaderProps) {
@@ -84,46 +97,69 @@ function EmeryChatHeader({
   const chatWidthMode = useStore(uiStateStore, uiStateSelectors.chatWidthMode)
   const toggleChat = uiStateActions.toggleChat
   const toggleChatWidthMode = uiStateActions.toggleChatWidthMode
-  
-  // Determine context subtitle based on domain
-  const getSubtitle = () => {
-    if (domainType && domainName) {
-      switch (domainType) {
-        case 'agents': return `Agent: ${domainName}`
-        case 'teams': return `Team: ${domainName}`
-        case 'tables': return `Table: ${domainName}`
-        case 'files': return `File: ${domainName}`
-        case 'organizations': return 'Organization Assistant'
-        default: return 'AI Assistant'
-      }
+  const organizationPlan = useOrganizationPlan()
+
+  // Handle model change - only for new chats (disabled after first message like ChatGPT)
+  const handleModelSelect = async (newModel: string | null) => {
+    if (currentChatId) {
+      // Chat exists - model changes disabled (like ChatGPT)
+      // Model is locked after first message to avoid session cache issues
+      return
     }
-    return 'AI Assistant'
+    // No chat yet - store as pre-selection for when chat is created
+    onModelChange?.(newModel)
   }
 
   return (
-    <div className="flex items-center justify-between py-4 px-4 bg-muted/20">
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="font-bold text-lg bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-              Dash
-            </h3>
-            <ChatHistoryDropdown
-              currentChatId={currentChatId}
-              onChatSelect={onChatSelect}
-              onNewChat={onNewChat}
-              onChatHistoryUpdate={onChatHistoryUpdate}
-              domainType={domainType}
-              domainName={domainName}
-              userId={userId}
-              organizationId={organizationId}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground truncate">{getSubtitle()}</p>
-        </div>
+    <div className="flex items-center justify-between py-3 px-4 bg-muted/20">
+      {/* Left side: Dash + Model Selector */}
+      <div className="flex items-center gap-2 min-w-0">
+        <h3 className="font-bold text-lg bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent flex-shrink-0">
+          Dash
+        </h3>
+        <ModelSelector
+          value={currentChatModel || null}
+          onChange={handleModelSelect}
+          organizationTier={organizationPlan}
+          showInherit={true}
+          inheritLabel="Default"
+          requiredCapabilities={['toolCalling']}
+          compact={true}
+          disabled={!!currentChatId}  // Disable after first message (model locked for session)
+        />
       </div>
-      
+
+      {/* Right side: New chat + Chats + Width toggle + Collapse */}
       <div className="flex items-center gap-1 flex-shrink-0">
+        {/* New chat button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onNewChat}
+              className="h-7 w-7"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="text-xs">New chat</p>
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Chat history dropdown */}
+        <ChatHistoryDropdown
+          currentChatId={currentChatId}
+          onChatSelect={onChatSelect}
+          onNewChat={onNewChat}
+          onChatHistoryUpdate={onChatHistoryUpdate}
+          domainType={domainType}
+          domainName={domainName}
+          userId={userId}
+          organizationId={organizationId}
+        />
+
         {/* Width toggle button (only when chat is expanded) */}
         {chatState === 'expanded' && (
           <Button
@@ -309,14 +345,14 @@ function ChatContentWithCanvas({
                       isLast={index === handler.messages.length - 1}
                       className={cn(
                         "my-0.5 mx-4",
-                        message.role === 'assistant' && "rounded-md px-3 py-1.5 transition-colors"
+                        message.role === 'assistant' && "rounded-md py-1.5 transition-colors"
                       )}
                     >
                       <ChatMessage.Avatar />
                       <ChatMessage.Content
                         className={cn(
                           "[&_p]:text-sm [&_p]:leading-snug [&_p]:my-0.5",
-                          message.role === 'user' && "border border-input rounded-md px-2.5 py-1 inline-block"
+                          message.role === 'user' && "rounded-md px-2.5 py-1 inline-block"
                         )}
                       >
                         <ChatMessage.Part.Markdown />
@@ -373,7 +409,7 @@ function ChatContentWithCanvas({
       />
 
       {/* Input area */}
-      <div className="flex-shrink-0 py-2 px-3 border-t border-border/10 bg-card">
+      <div className="flex-shrink-0 py-2 px-3 bg-card">
         <UnifiedChatInput
           onSendMessage={async (message) => {
             // Send message with proper MessagePart format
@@ -411,12 +447,21 @@ export function EmeryChat() {
   const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
   const chatContext = useStore(uiStateStore, uiStateSelectors.chatContext)
   const setChatContext = uiStateActions.setChatContext
+  const organizationPlan = useOrganizationPlan()
 
   const { data: emeryData } = useEmery()
 
   // Chat session state
   const [currentChatId, setCurrentChatId] = useState<string | undefined>()
+  const [currentChatModel, setCurrentChatModel] = useState<string | undefined>()
   const [isClient, setIsClient] = useState(false)
+
+  // Sync currentChatModel with handler.selectedModel when it changes (e.g., when loading a chat)
+  useEffect(() => {
+    if (handler.selectedModel !== currentChatModel) {
+      setCurrentChatModel(handler.selectedModel)
+    }
+  }, [handler.selectedModel])
 
   // Tools state for @ tool selection
   const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([])
@@ -430,9 +475,20 @@ export function EmeryChat() {
   }
 
   // Handle chat created callback from useChatGRPC
-  const handleChatCreated = (chatId: string) => {
+  const handleChatCreated = async (chatId: string) => {
     logger.summary('New chat created', { chatId })
     setCurrentChatId(chatId)
+
+    // Apply pre-selected model to new chat (if one was selected before chat existed)
+    if (currentChatModel) {
+      try {
+        await updateChatModel(chatId, currentChatModel)
+        logger.debug('Applied pre-selected model to new chat', { chatId, model: currentChatModel })
+      } catch (error) {
+        console.error('Failed to apply pre-selected model:', error)
+      }
+    }
+
     // Trigger refresh of chat history dropdown
     handleChatHistoryUpdate()
   }
@@ -502,10 +558,12 @@ export function EmeryChat() {
   }
 
   // Handle chat selection from history
-  const handleChatSelect = async (chatId: string) => {
+  const handleChatSelect = async (chatId: string, model?: string) => {
     if (handler.switchToChat) {
       await handler.switchToChat(chatId)
       setCurrentChatId(chatId)
+      setCurrentChatModel(model) // Load the chat's model
+      handler.setModel?.(model)  // Sync to handler for future messages
     }
   }
 
@@ -514,7 +572,16 @@ export function EmeryChat() {
     if (handler.createNewChat) {
       await handler.createNewChat()
       setCurrentChatId(undefined)
+      setCurrentChatModel(undefined)
+      handler.setModel?.(undefined)  // Clear model selection for new chat
     }
+  }
+
+  // Handle model change from settings - also syncs to chat hook
+  const handleModelChange = (model: string | null) => {
+    setCurrentChatModel(model || undefined)
+    // Sync to chat hook so model is included in request
+    handler.setModel?.(model || undefined)
   }
   
   // Collapsed state - show minimal icon strip with braintable logo
@@ -590,6 +657,8 @@ export function EmeryChat() {
   // Handle removing tool from panel - delegates to handler which also removes from input
   const handleRemoveTool = (toolToRemove: ToolDTO) => {
     handler.removeTool(toolToRemove)
+    // Also update local state so ToolPanel re-renders
+    setSelectedTools(prev => prev.filter(t => t.name !== toolToRemove.name))
     logger.debug('Tool removed via handler', { tool: toolToRemove.name })
   }
 
@@ -609,13 +678,15 @@ export function EmeryChat() {
     >
       {/* Chat Section - dynamic width based on chatWidthMode */}
       <div className={`flex flex-col w-full h-full`}>
-        <EmeryChatHeader 
+        <EmeryChatHeader
           domainType={chatContext?.domainType}
           domainName={chatContext?.domainName}
           currentChatId={currentChatId}
+          currentChatModel={currentChatModel}
           onChatSelect={handleChatSelect}
           onNewChat={handleNewChat}
           onChatHistoryUpdate={handleChatHistoryUpdate}
+          onModelChange={handleModelChange}
           userId={userId}
           organizationId={organizationId}
         />

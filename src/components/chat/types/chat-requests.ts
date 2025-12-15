@@ -24,6 +24,7 @@ export interface ChatContextOptions {
   domainType?: DomainType | 'organizations' | 'general'
   domainId?: number
   chatId?: string
+  model?: string  // AI model override for this chat
 }
 
 // Helper function to create properly structured chat requests

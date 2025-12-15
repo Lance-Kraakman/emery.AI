@@ -33,6 +33,7 @@ const FIELD_TYPES: Array<{ value: FieldType; label: string }> = [
   { value: "file", label: "File" },
   { value: "document", label: "Document" },
   { value: "embedding", label: "Embedding" },
+  { value: "json", label: "JSON" },
 ]
 
 export function AddColumnButton({ onAddColumn, availableTables = [] }: AddColumnButtonProps) {

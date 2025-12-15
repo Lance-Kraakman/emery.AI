@@ -1,0 +1,49 @@
+## Email Operations Best Practices
+
+### Composing Emails
+
+When sending emails, ensure you have:
+- **to**: Primary recipient(s) - comma-separated email addresses
+- **cc**: Carbon copy recipients (visible to all)
+- **bcc**: Blind carbon copy (hidden from other recipients)
+- **subject**: Clear, descriptive subject line
+- **body**: Email content (HTML or plain text depending on tool)
+
+### Common Patterns
+
+**Sending a new email:**
+1. Compose with recipient, subject, body
+2. Add CC/BCC if needed
+3. Attach files if required
+4. Send and confirm delivery
+
+**Replying to an email:**
+1. Get the original message/thread ID first
+2. Use reply action (not send new) to maintain thread
+3. Include context from original if helpful
+
+**Forwarding an email:**
+1. Get original message ID
+2. Use forward action with new recipient
+3. Add any additional context
+
+**Email with attachments:**
+1. Upload or reference file first
+2. Include file reference in email action
+3. Verify attachment size limits (usually 25MB)
+
+### Email Etiquette Guidelines
+
+- **Large recipient lists**: Confirm with user before sending to 10+ recipients
+- **External domains**: Warn before sending to domains outside organization
+- **Reply-all**: Use carefully, ask user if unsure
+- **Sensitive content**: Never include passwords, API keys, or PII in emails
+
+### Error Handling
+
+| Error | Likely Cause | Action |
+|-------|--------------|--------|
+| Invalid recipient | Malformed email address | Verify email format |
+| Message too large | Attachments exceed limit | Compress or use file sharing |
+| Rate limited | Too many emails sent | Wait and retry |
+| Authentication failed | Token expired | User needs to reconnect |

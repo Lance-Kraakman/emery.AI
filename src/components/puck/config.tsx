@@ -31,6 +31,7 @@ import RelationFieldConfig from "./blocks/RelationField";
 import FileFieldConfig from "./blocks/FileField";
 import DocumentFieldConfig from "./blocks/DocumentField";
 import LinkFieldConfig from "./blocks/LinkField";
+import { EditorBlock } from "./blocks/EditorBlock";
 
 import Root from "./root";
 import { UserConfig } from "./types";
@@ -57,6 +58,10 @@ export const config: UserConfig = {
     data: {
       title: "Data",
       components: ["DataBlock", "TableBlock", "MetricBlock", "ChartBlock", "FormBlock"],
+    },
+    content: {
+      title: "Content",
+      components: ["EditorBlock"],
     },
     fields: {
       title: "Fields",
@@ -102,6 +107,7 @@ export const config: UserConfig = {
     LinkField: LinkFieldConfig,
     LoginBlock,
     SignOutBlock,
+    EditorBlock,
   },
 };
 

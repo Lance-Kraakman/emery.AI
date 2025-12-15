@@ -1,0 +1,25 @@
+## CRITICAL: Output Submission Required
+
+**You MUST call `submit_result` BEFORE calling `final_answer`.**
+
+This task requires you to save outputs to the database. The workflow is:
+1. Complete your analysis/work
+2. Call `submit_result(...)` with your outputs ← **REQUIRED FIRST**
+3. Then call `final_answer(...)` to finish
+
+### Outputs to Submit:
+{% for output in outputs %}
+- **{{ output.name }}** ({{ output.type }}){% if output.description %}: {{ output.description }}{% endif %}
+
+{% endfor %}
+
+### Required Call:
+```
+submit_result(
+{% for output in outputs %}
+    {{ output.name }}=<your {{ output.type }} value>{{ "," if not loop.last else "" }}
+{% endfor %}
+)
+```
+
+⚠️ **WARNING**: If you call `final_answer` without first calling `submit_result`, the outputs will NOT be saved. Always call `submit_result` first!

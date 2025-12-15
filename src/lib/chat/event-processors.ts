@@ -63,14 +63,12 @@ export function processContentChunk(
 export function processCompletion(
   modelUsed: string,
   totalTokens: number,
-  collectedSteps: ExecutionStep[],
-  ragSources: any[]
+  collectedSteps: ExecutionStep[]
 ): MessageCompleteEvent {
   return {
     type: 'message_complete',
     metadata: {
       executionSteps: collectedSteps,
-      ragSources,
       modelUsed,
       totalTokens
     }

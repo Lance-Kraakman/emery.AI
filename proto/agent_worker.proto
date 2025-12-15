@@ -131,6 +131,16 @@ message SkillConfig {
   repeated ToolConfig tools = 7;
   string model = 8;                    // Optional: model override for this skill
   repeated MessagePart content = 9;    // Skill-level attachments (images, files, text)
+  string agent_type = 10;              // Optional: "tool_calling" (default) or "code_agent"
+  string execution_type = 11;          // 'agent' (default) or 'operation'
+  TaskModelConfig task_model_config = 12; // Config for operation execution (when execution_type='operation')
+}
+
+// Configuration for operation execution (direct model invocation without LLM orchestration)
+message TaskModelConfig {
+  string model_id = 1;                 // HuggingFace model ID (e.g., 'black-forest-labs/FLUX.1-schnell')
+  string task_type = 2;                // Task type: text-to-image, speech-to-text, etc.
+  map<string, string> parameters = 3;  // Model-specific parameters (steps, guidance_scale, etc.)
 }
 
 // Skill input parameter
@@ -152,8 +162,23 @@ message SkillInputFileConfig {
 message SkillOutput {
   string name = 1;
   string type = 2;                     // text, image, file, audio, video, document
+  OutputMappingConfig output_mapping = 3;  // Optional: path-based field mapping configuration
 }
 
+// Individual field mapping - maps a source path to a target table field
+message FieldMapping {
+  string source_field = 1;             // Field path: "label", "score", "box.xmin", "source.rowId"
+  int32 target_table_id = 2;           // Target table ID
+  int32 target_field_id = 3;           // Target field/column ID
+}
+
+// Output mapping configuration - supports single-row and multi-row mapping modes
+message OutputMappingConfig {
+  string mode = 1;                     // 'single_row' or 'multi_row'
+  string row_action = 2;               // 'create' or 'update' (for single_row mode)
+  string row_id = 3;                   // For update mode: specific row ID to update
+  repeated FieldMapping mappings = 4;  // Field mappings from output to table fields
+}
 
 // Tool configuration
 message ToolConfig {
@@ -241,7 +266,7 @@ message ProcessMessageResponse {
   // Standard oneof pattern for different response types
   oneof response {
     ContentChunk content_chunk = 1;    // AI-generated streaming content
-    RagContext rag_context = 2;       // RAG sources and context
+    // Field 2 reserved (was: RagContext rag_context)
     ProcessingComplete complete = 3;   // Processing finished marker
     ProcessingError error = 4;        // Processing error
     StepProgress step_progress = 5;   // Real-time step execution progress
@@ -254,7 +279,6 @@ message ProcessMessageResponse {
 // AIDEV-NOTE: Multi-attachment support implemented (2025-01)
 // - ImageUrlPart: Vision model support (PIL Images → base64)
 // - FilePart: Text extraction from PDFs, audio transcription, documents
-// - Simple extraction approach (no embeddings/RAG initially)
 // - Files processed async in message_mapper.py using file_processor.py
 message MessagePart {
   oneof part {
@@ -290,21 +314,6 @@ message HistoryMessage {
 message ContentChunk {
   string content = 1;                // Text content chunk
   int32 sequence = 2;                // Sequence number for ordering
-}
-
-// RAG context information
-message RagContext {
-  repeated RagSource sources = 1;    // List of RAG sources used
-  string context_summary = 2;        // Summary of context used
-  int32 total_sources = 3;           // Total number of sources found
-}
-
-message RagSource {
-  string document_id = 1;            // Source document identifier
-  string title = 2;                  // Source document title
-  float similarity = 3;              // Similarity score
-  string domain_type = 4;            // Domain type (table, agent, file, etc.)
-  string excerpt = 5;                // Relevant text excerpt
 }
 
 // Processing completion marker

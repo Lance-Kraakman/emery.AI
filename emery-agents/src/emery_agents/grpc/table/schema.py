@@ -53,6 +53,7 @@ def convert_protobuf_field_to_arrow(field: table_service_pb2.TableField) -> pa.D
         table_service_pb2.FIELD_TYPE_CREATED_AT: pa.timestamp('ms'),  # milliseconds (JS getTime())
         table_service_pb2.FIELD_TYPE_EMAIL: pa.large_string(),
         table_service_pb2.FIELD_TYPE_PHONE: pa.large_string(),
+        table_service_pb2.FIELD_TYPE_JSON: pa.large_string(),  # JSON stored as string in Delta Lake
     }
 
     # Handle embedding fields with dynamic sizing

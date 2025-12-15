@@ -142,7 +142,7 @@ export function FileField({
         formData.append('file', file);
         formData.append('organizationId', organizationId.toString());
         formData.append('tableId', tableId.toString());
-        formData.append('fieldName', fieldId.toString());
+        formData.append('fieldId', fieldId.toString());
 
         try {
           const response = await fetch('/api/files/upload', {

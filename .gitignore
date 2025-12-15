@@ -54,8 +54,11 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Python venv lib directories (not src/lib/)
+/lib/
+/lib64/
+emery-agents/lib/
+emery-agents/lib64/
 parts/
 sdist/
 var/

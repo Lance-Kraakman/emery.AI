@@ -1,0 +1,59 @@
+## Spreadsheet Operations Best Practices
+
+### Common Operations
+
+- **Read data**: Get cell values, ranges, or entire sheets
+- **Write data**: Update cells, append rows, insert columns
+- **Format**: Apply styles, colors, borders
+- **Formulas**: Insert calculations
+- **Sheets**: Create, rename, delete sheets
+
+### Cell References
+
+Standard A1 notation:
+- **Single cell**: `A1`, `B2`, `Z100`
+- **Range**: `A1:D10`, `B2:B100`
+- **Column**: `A:A`, `B:B`
+- **Row**: `1:1`, `2:2`
+- **Named range**: Use defined name if available
+
+### Data Formats
+
+When writing data:
+- **Text**: String values as-is
+- **Numbers**: Numeric values (no quotes)
+- **Dates**: ISO format or spreadsheet date serial
+- **Formulas**: Start with `=` (e.g., `=SUM(A1:A10)`)
+- **Boolean**: `TRUE` or `FALSE`
+
+### Common Patterns
+
+**Reading a range:**
+1. Identify spreadsheet ID
+2. Specify sheet name and range
+3. Parse returned values
+
+**Appending rows:**
+1. Identify target sheet
+2. Prepare row data as array
+3. Append to end of data range
+
+**Updating specific cells:**
+1. Get current values if needed
+2. Prepare update with exact range
+3. Write values to range
+
+### Batch Operations
+
+For efficiency with multiple updates:
+- Batch reads: Request multiple ranges in one call
+- Batch writes: Update multiple ranges together
+- Reduces API calls and improves performance
+
+### Best Practices
+
+- **Preserve formulas**: Don't overwrite cells with formulas unless intended
+- **Check dimensions**: Verify data fits in target range
+- **Handle empty cells**: Decide how to treat blank values
+- **Large datasets**: Use pagination for very large sheets
+- **Sheet names**: Use exact name (case-sensitive in some platforms)

@@ -29,12 +29,14 @@ export interface CreateFieldData {
 export interface CreateRowCommand {
   tableId: number;                    // Infrastructure concern
   data: Record<string, any>;          // Plain data from client (converted to Row entity in action)
+  dataKeyType?: 'name' | 'id';        // Whether data keys are field names or IDs (default: 'name')
 }
 
 export interface UpdateRowCommand {
   rowId: string;                      // Infrastructure concern
   tableId: number;                    // Infrastructure concern
   data: Record<string, any>;          // Plain data from client (converted to Row entity in action)
+  dataKeyType?: 'name' | 'id';        // Whether data keys are field names or IDs (default: 'name')
 }
 
 export interface CreateOrganizationData {

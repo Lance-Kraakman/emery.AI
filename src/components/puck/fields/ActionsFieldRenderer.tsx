@@ -77,9 +77,15 @@ function PageVariablesEditor({
   const pageVariables = usePageVariables();
   const searchParams = useSearchParams();
 
-  // Track which input was last focused for variable insertion
-  const lastFocusedKeyRef = useRef<string | null>(null);
-  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // Track which input was last focused for variable insertion (by index, not key name)
+  const lastFocusedIndexRef = useRef<number | null>(null);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Keep refs to current value and entries to avoid stale closures
+  const valueRef = useRef(value);
+  const entriesRef = useRef(entries);
+  valueRef.current = value;
+  entriesRef.current = entries;
 
   // Build available variables list
   const availableVariables: Variable[] = [];
@@ -123,51 +129,106 @@ function PageVariablesEditor({
     }
   });
 
-  const addVariable = () => {
-    const newKey = `var${entries.length + 1}`;
-    onChange({ ...value, [newKey]: '' });
-  };
+  // Add context variables (available when triggered from document/file fields)
+  availableVariables.push({
+    name: 'documentId',
+    description: 'ID of clicked document (when triggered from document field)',
+  });
+  availableVariables.push({
+    name: 'documentName',
+    description: 'Name of clicked document (when triggered from document field)',
+  });
+  availableVariables.push({
+    name: 'fileId',
+    description: 'ID of clicked file (when triggered from file field)',
+  });
+  availableVariables.push({
+    name: 'fileName',
+    description: 'Name of clicked file (when triggered from file field)',
+  });
 
-  const updateKey = (oldKey: string, newKey: string) => {
+  const addVariable = useCallback(() => {
+    const newKey = `var${entries.length + 1}`;
+    const newIndex = entries.length; // This will be the index of the new entry
+    onChange({ ...value, [newKey]: '' });
+    // Auto-focus the new entry's value input after render
+    setTimeout(() => {
+      const input = inputRefs.current[newIndex];
+      if (input) {
+        input.focus();
+        lastFocusedIndexRef.current = newIndex;
+        console.log('🟢 Auto-focused new variable at index:', newIndex);
+      }
+    }, 0);
+  }, [entries.length, value, onChange]);
+
+  const updateKey = useCallback((oldKey: string, newKey: string) => {
     if (oldKey === newKey) return;
     const newValue = { ...value };
     delete newValue[oldKey];
     newValue[newKey] = value[oldKey];
     onChange(newValue);
-  };
+  }, [value, onChange]);
 
-  const updateValue = (key: string, newVal: string) => {
+  const updateValue = useCallback((key: string, newVal: string) => {
     onChange({ ...value, [key]: newVal });
-  };
+  }, [value, onChange]);
 
-  const removeVariable = (key: string) => {
+  const removeVariable = useCallback((key: string) => {
     const newValue = { ...value };
     delete newValue[key];
     onChange(newValue);
-  };
+  }, [value, onChange]);
 
   // Insert variable into last focused input at cursor position
+  // Uses refs to avoid stale closure issues
   const handleInsertVariable = useCallback((formattedVar: string) => {
-    const key = lastFocusedKeyRef.current;
-    if (!key) return;
+    const currentEntries = entriesRef.current;
+    const currentValue = valueRef.current;
 
-    const input = inputRefs.current[key];
-    if (!input) return;
+    console.log('🔵 handleInsertVariable called with:', formattedVar);
+    console.log('🔵 lastFocusedIndexRef.current:', lastFocusedIndexRef.current);
+    console.log('🔵 currentEntries.length:', currentEntries.length);
+    console.log('🔵 inputRefs.current:', inputRefs.current);
 
-    const currentValue = String(value[key] || '');
-    const start = input.selectionStart ?? currentValue.length;
-    const end = input.selectionEnd ?? currentValue.length;
+    // Default to first entry if no input was explicitly focused
+    let index = lastFocusedIndexRef.current;
+    if (index === null && currentEntries.length > 0) {
+      console.log('🔵 No input focused, defaulting to first entry (index 0)');
+      index = 0;
+    }
 
-    const newValue = currentValue.slice(0, start) + formattedVar + currentValue.slice(end);
-    updateValue(key, newValue);
+    if (index === null || index >= currentEntries.length) {
+      console.log('🔵 Early return: index is null or out of bounds');
+      return;
+    }
+
+    const input = inputRefs.current[index];
+    console.log('🔵 input element at index', index, ':', input);
+    if (!input) {
+      console.log('🔵 Early return: no input element found');
+      return;
+    }
+
+    const key = currentEntries[index][0];
+    const existingValue = String(currentValue[key] || '');
+    const start = input.selectionStart ?? existingValue.length;
+    const end = input.selectionEnd ?? existingValue.length;
+
+    console.log('🔵 Inserting at position', start, '-', end, 'in value:', existingValue);
+
+    const newValue = existingValue.slice(0, start) + formattedVar + existingValue.slice(end);
+    console.log('🔵 New value will be:', newValue);
+    onChange({ ...currentValue, [key]: newValue });
 
     // Restore focus and set cursor after inserted variable
     setTimeout(() => {
       input.focus();
       const newCursor = start + formattedVar.length;
       input.setSelectionRange(newCursor, newCursor);
+      console.log('🔵 Focus restored, cursor at:', newCursor);
     }, 0);
-  }, [value, updateValue]);
+  }, [onChange]);
 
   return (
     <div className="space-y-3">
@@ -179,8 +240,8 @@ function PageVariablesEditor({
           </p>
         )}
 
-        {entries.map(([key, val]) => (
-          <div key={key} className="flex items-center gap-2">
+        {entries.map(([key, val], index) => (
+          <div key={index} className="flex items-center gap-2">
             <Input
               value={key}
               onChange={(e) => updateKey(key, e.target.value)}
@@ -190,10 +251,16 @@ function PageVariablesEditor({
             />
             <span className="text-muted-foreground">=</span>
             <Input
-              ref={(el) => { inputRefs.current[key] = el; }}
+              ref={(el) => { inputRefs.current[index] = el; }}
               value={String(val)}
               onChange={(e) => updateValue(key, e.target.value)}
-              onFocus={() => { lastFocusedKeyRef.current = key; }}
+              onFocus={() => {
+                console.log('🟢 Input focused at index:', index, 'key:', key);
+                lastFocusedIndexRef.current = index;
+              }}
+              onBlur={() => {
+                console.log('🟠 Input blurred at index:', index, 'key:', key);
+              }}
               placeholder="{id}"
               className="flex-1 text-xs font-mono"
               disabled={disabled}
@@ -267,6 +334,10 @@ function ActionItem({
 }) {
   const actionType = action.type as ActionType;
 
+  // Track if mousedown happened on the delete button to prevent accidental deletion
+  // from Puck's focus management system which can focus+click buttons unexpectedly
+  const mouseDownOnDeleteRef = useRef(false);
+
   const handleTypeChange = (newType: ActionType) => {
     // Reset to defaults for the new type
     switch (newType) {
@@ -313,22 +384,55 @@ function ActionItem({
   };
 
   return (
-    <div className="border border-border rounded-lg p-3 space-y-3 bg-background">
+    <div
+      className="border border-border rounded-lg p-3 space-y-3 bg-background"
+      onClick={(e) => {
+        console.log('🟤 ActionItem container clicked, target:', e.target);
+      }}
+      onFocus={(e) => {
+        console.log('🟤 ActionItem container received focus, target:', e.target);
+      }}
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-muted-foreground">
           <GripVertical className="h-4 w-4" />
           <span className="text-xs font-medium">Action {index + 1}</span>
         </div>
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onRemove}
+          onMouseDown={(e) => {
+            console.log('🔴 Delete button mousedown for action index:', index);
+            mouseDownOnDeleteRef.current = true;
+            e.stopPropagation();
+          }}
+          onMouseUp={(e) => {
+            console.log('🔴 Delete button mouseup for action index:', index);
+            e.stopPropagation();
+          }}
+          onFocus={(e) => {
+            console.log('🔴 Delete button FOCUS for action index:', index);
+          }}
+          onBlur={() => {
+            // Reset mousedown flag when button loses focus (prevents stale state)
+            mouseDownOnDeleteRef.current = false;
+          }}
+          onClick={(e) => {
+            console.log('🔴 Delete button onClick fired for action index:', index);
+            console.log('🔴 mouseDownOnDeleteRef.current:', mouseDownOnDeleteRef.current);
+            e.stopPropagation();
+            // Only delete if there was a real mousedown on this button
+            if (mouseDownOnDeleteRef.current) {
+              onRemove();
+            } else {
+              console.log('🔴 BLOCKED: onClick without prior mousedown on button');
+            }
+            mouseDownOnDeleteRef.current = false;
+          }}
           disabled={readOnly}
-          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+          className="h-7 w-7 p-0 inline-flex items-center justify-center rounded-md text-muted-foreground bg-transparent hover:text-destructive hover:bg-destructive/10 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
         >
           <Trash2 className="h-4 w-4" />
-        </Button>
+        </button>
       </div>
 
       {/* Action Type Selector */}
@@ -609,6 +713,8 @@ export function ActionsFieldRenderer({
   };
 
   const removeAction = (index: number) => {
+    console.log('🗑️ removeAction called with index:', index);
+    console.trace('removeAction call stack');
     const newActions = actions.filter((_, i) => i !== index);
     onChange(newActions);
   };
@@ -634,11 +740,7 @@ export function ActionsFieldRenderer({
 
   return (
     <FieldLabel label={field.label || 'Actions'}>
-      <div
-        className="space-y-3"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="space-y-3">
         {actions.length === 0 && (
           <p className="text-xs text-muted-foreground py-2">
             No actions configured. Add an action to define what happens on click.

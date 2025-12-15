@@ -50,6 +50,8 @@ export enum FieldType {
   FIELD_TYPE_EMAIL = 14,
   /** FIELD_TYPE_PHONE - Phone number in E.164 format */
   FIELD_TYPE_PHONE = 15,
+  /** FIELD_TYPE_JSON - Arbitrary JSON data (classification results, structured outputs) */
+  FIELD_TYPE_JSON = 16,
   UNRECOGNIZED = -1,
 }
 
@@ -103,6 +105,9 @@ export function fieldTypeFromJSON(object: any): FieldType {
     case 15:
     case "FIELD_TYPE_PHONE":
       return FieldType.FIELD_TYPE_PHONE;
+    case 16:
+    case "FIELD_TYPE_JSON":
+      return FieldType.FIELD_TYPE_JSON;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -144,6 +149,8 @@ export function fieldTypeToJSON(object: FieldType): string {
       return "FIELD_TYPE_EMAIL";
     case FieldType.FIELD_TYPE_PHONE:
       return "FIELD_TYPE_PHONE";
+    case FieldType.FIELD_TYPE_JSON:
+      return "FIELD_TYPE_JSON";
     case FieldType.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";

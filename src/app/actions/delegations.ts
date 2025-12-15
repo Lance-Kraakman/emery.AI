@@ -29,7 +29,7 @@ interface DelegationData {
 }
 
 /**
- * Get agent's delegation and owner's OAuth connections
+ * Get agent's delegation and owner's Connections
  * Auto-creates delegation if owner has connections but no delegation exists
  */
 export async function getAgentDelegation(agentId: number): Promise<{ success: boolean; data?: DelegationData; error?: string }> {
@@ -58,7 +58,7 @@ export async function getAgentDelegation(agentId: number): Promise<{ success: bo
         };
       }
 
-      // Get owner's OAuth connections
+      // Get owner's Connections
       const connectionsResult = await connectionService.getUserConnections(agent.ownerId);
 
       if (!connectionsResult.success) {
