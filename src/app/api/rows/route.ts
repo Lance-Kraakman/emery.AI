@@ -47,7 +47,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       };
     }
 
-    const { tableId, data } = body;
+    const { tableId, data, dataKeyType } = body;
 
     // Check if this is from Python tool
     const isFromPythonTool = source === 'python_tool' || callId?.startsWith('http_');
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     requireParam(data, 'data');
 
     const actionStart = Date.now();
-    const result = await createRow({ tableId, data });
+    const result = await createRow({ tableId, data, dataKeyType });
 
     const actionTime = Date.now() - actionStart;
     const totalTime = Date.now() - startTime;
@@ -150,7 +150,7 @@ export async function PUT(request: NextRequest): Promise<Response> {
       };
     }
 
-    const { tableId, rowId, data } = body;
+    const { tableId, rowId, data, dataKeyType } = body;
 
     // Validate required fields
     requireParam(tableId, 'tableId');
@@ -158,7 +158,7 @@ export async function PUT(request: NextRequest): Promise<Response> {
     requireParam(data, 'data');
 
     // Use server action function
-    const result = await updateRowData({ tableId, rowId, data });
+    const result = await updateRowData({ tableId, rowId, data, dataKeyType });
 
     if (!result.success) {
       return {

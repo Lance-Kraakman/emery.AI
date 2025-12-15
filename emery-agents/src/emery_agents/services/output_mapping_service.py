@@ -132,11 +132,13 @@ class OutputMappingService:
                     item = {"value": item}
 
                 row_data = build_row_data(item, config.mappings, context)
+                logger.info(f"📋 Item {i}: {item}, mappings: {[(m.source_field, m.target_field_id) for m in config.mappings]}, row_data: {row_data}")
+
                 if row_data:
                     if await OutputMappingService._create_row(client, ctx, table_id, row_data):
                         success_count += 1
                 else:
-                    logger.debug(f"No data to map for item {i}")
+                    logger.warning(f"No data to map for item {i} - item={item}, mappings={[(m.source_field, m.target_field_id) for m in config.mappings]}")
 
         logger.info(f"Multi-row mapping: created {success_count}/{len(items)} rows")
         return success_count > 0
@@ -150,7 +152,8 @@ class OutputMappingService:
     ) -> bool:
         """Create a row via API."""
         url = f"{ctx.api_base_url}/rows"
-        payload = {"tableId": table_id, "data": row_data}
+        # AIDEV-NOTE: dataKeyType='id' tells API that keys are field IDs, not field names
+        payload = {"tableId": table_id, "data": row_data, "dataKeyType": "id"}
 
         try:
             response = await client.post(url, headers=ctx.headers, json=payload)
@@ -173,7 +176,8 @@ class OutputMappingService:
     ) -> bool:
         """Update a row via API."""
         url = f"{ctx.api_base_url}/rows"
-        payload = {"tableId": table_id, "rowId": row_id, "data": row_data}
+        # AIDEV-NOTE: dataKeyType='id' tells API that keys are field IDs, not field names
+        payload = {"tableId": table_id, "rowId": row_id, "data": row_data, "dataKeyType": "id"}
 
         try:
             response = await client.put(url, headers=ctx.headers, json=payload)
