@@ -354,7 +354,12 @@ def render_output_instructions(skill_outputs: List[Any]) -> str:
     if not outputs_for_template:
         return ""
 
-    return render_template("components/output_capture.j2", outputs=outputs_for_template)
+    rendered = render_template("components/output_capture.j2", outputs=outputs_for_template)
+
+    # Write to debug file for inspection
+    _write_debug_prompt("output_capture_instructions", rendered)
+
+    return rendered
 
 
 def build_agent_instructions(
