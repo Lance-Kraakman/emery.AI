@@ -172,27 +172,46 @@ class SkillTool(Tool):
         """
         Convert SkillConfig.inputs to smolagents tool input schema.
 
+        File inputs (image, audio, file, document) can specify a filename to use
+        a specific file from the session, or leave empty to use the current message's file.
+
         Returns:
             Dict mapping input name to {type, description}
         """
         inputs_schema = {}
 
+        # File input types that support filename-based lookup
+        file_input_types = {'image', 'audio', 'file', 'document', 'video', 'pdf'}
+
         for skill_input in self.skill_config.inputs:
             # Map skill input types to smolagents types
             type_mapping = {
                 "text": "string",
-                "image": "string",  # URL to image
-                "file": "string",   # URL to file
-                "audio": "string",  # URL to audio
-                "video": "string",  # URL to video
-                "document": "string"  # URL to document
+                "image": "string",  # Filename or empty for current message
+                "file": "string",   # Filename or empty for current message
+                "audio": "string",  # Filename or empty for current message
+                "video": "string",  # Filename or empty for current message
+                "document": "string",  # Filename or empty for current message
+                "pdf": "string"  # Filename or empty for current message
             }
 
             input_type = type_mapping.get(skill_input.type, "string")
+            required_prefix = '(Required) ' if skill_input.required else '(Optional) '
+
+            # Build description based on input type
+            if skill_input.type in file_input_types:
+                # File inputs: hint that filename can be specified
+                description = (
+                    f"{required_prefix}Filename to use (e.g., 'audio.mp3'), "
+                    f"or leave empty to use the {skill_input.type} from the current message"
+                )
+            else:
+                # Text and other inputs: simple description
+                description = f"{required_prefix}{skill_input.name}"
 
             inputs_schema[skill_input.name] = {
                 "type": input_type,
-                "description": f"{'(Required) ' if skill_input.required else '(Optional) '}{skill_input.name}"
+                "description": description
             }
 
         # If skill has no inputs, provide a generic task input
@@ -360,9 +379,14 @@ class SkillTool(Tool):
         Images/audio from chat attachments are in the parent's ExecutionContext.
         This method retrieves them and injects into kwargs based on skill input types.
 
+        File selection logic:
+        1. If LLM provided a filename string → search session_attachments by name
+        2. If no filename provided → use current message attachments (default)
+
         REUSES existing utilities:
         - ImageProcessor.download_images_from_attachments() for images
         - file_processor.download_file() for audio
+        - _find_file_by_name() for explicit filename lookup
 
         Args:
             kwargs: Original inputs from LLM call
@@ -390,19 +414,88 @@ class SkillTool(Tool):
             if input_name in result and isinstance(result[input_name], bytes):
                 continue
 
+            # Get any filename provided by LLM for this input
+            provided_value = result.get(input_name)
+            has_explicit_filename = (
+                provided_value and
+                isinstance(provided_value, str) and
+                provided_value.strip()
+            )
+
             # Inject image from context
-            if input_type == 'image' and parent_context.images:
-                image_bytes = self._download_and_convert_image(parent_context.images)
+            if input_type == 'image':
+                image_bytes = None
+
+                if has_explicit_filename and parent_context.session_attachments:
+                    # LLM specified a filename - search session files
+                    image_bytes = self._find_file_by_name(
+                        provided_value,
+                        parent_context.session_attachments,
+                        mime_prefix='image/'
+                    )
+                    if image_bytes:
+                        logger.info(f"📷 Injected image by name '{provided_value}' into '{input_name}'")
+
+                if not image_bytes and parent_context.images:
+                    # No filename or not found - use current message image (default)
+                    image_bytes = self._download_and_convert_image(parent_context.images)
+                    if image_bytes:
+                        logger.info(f"📷 Injected image from current message into '{input_name}' ({len(image_bytes)} bytes)")
+
                 if image_bytes:
                     result[input_name] = image_bytes
-                    logger.info(f"📷 Injected image from context into '{input_name}' ({len(image_bytes)} bytes)")
 
             # Inject audio from context
-            elif input_type == 'audio' and parent_context.attachments:
-                audio_bytes = self._download_audio(parent_context.attachments)
+            elif input_type == 'audio':
+                audio_bytes = None
+
+                if has_explicit_filename and parent_context.session_attachments:
+                    # LLM specified a filename - search session files
+                    audio_bytes = self._find_file_by_name(
+                        provided_value,
+                        parent_context.session_attachments,
+                        mime_prefix='audio/'
+                    )
+                    if audio_bytes:
+                        logger.info(f"🎵 Injected audio by name '{provided_value}' into '{input_name}'")
+
+                if not audio_bytes and parent_context.attachments:
+                    # No filename or not found - use current message audio (default)
+                    audio_bytes = self._download_audio(parent_context.attachments)
+                    if audio_bytes:
+                        logger.info(f"🎵 Injected audio from current message into '{input_name}' ({len(audio_bytes)} bytes)")
+
                 if audio_bytes:
                     result[input_name] = audio_bytes
-                    logger.info(f"🎵 Injected audio from context into '{input_name}' ({len(audio_bytes)} bytes)")
+
+            # Inject generic file from context (document, file, etc.)
+            elif input_type in ('file', 'document', 'pdf'):
+                file_bytes = None
+
+                if has_explicit_filename and parent_context.session_attachments:
+                    # LLM specified a filename - search session files
+                    file_bytes = self._find_file_by_name(
+                        provided_value,
+                        parent_context.session_attachments,
+                        mime_prefix=None  # Accept any MIME type for generic files
+                    )
+                    if file_bytes:
+                        logger.info(f"📄 Injected file by name '{provided_value}' into '{input_name}'")
+
+                if not file_bytes and parent_context.attachments:
+                    # No filename or not found - try current message attachments
+                    for att in parent_context.attachments:
+                        try:
+                            from ..services.file_processor import download_file
+                            file_bytes = self._run_async_in_thread(download_file(att.url))
+                            if file_bytes:
+                                logger.info(f"📄 Injected file from current message into '{input_name}'")
+                                break
+                        except Exception as e:
+                            logger.error(f"Failed to download file: {e}")
+
+                if file_bytes:
+                    result[input_name] = file_bytes
 
         return result
 
@@ -453,6 +546,82 @@ class SkillTool(Tool):
                     return audio_bytes
                 except Exception as e:
                     logger.error(f"Failed to download audio: {e}")
+
+        return None
+
+    def _find_file_by_name(
+        self,
+        filename: str,
+        attachments: list,
+        mime_prefix: Optional[str] = None
+    ) -> Optional[bytes]:
+        """
+        Find and download a file by filename from attachments.
+
+        Supports index suffix for duplicates: "audio.mp3 (2)" → second file named "audio.mp3"
+
+        Args:
+            filename: Filename to search for (may include index suffix like "(2)")
+            attachments: List of FileAttachment objects to search
+            mime_prefix: Optional MIME type prefix to validate (e.g., "audio/")
+
+        Returns:
+            File bytes if found and downloaded, None otherwise
+        """
+        from ..services.file_processor import download_file
+        import re
+
+        if not attachments or not filename:
+            return None
+
+        # Parse index suffix: "audio.mp3 (2)" → ("audio.mp3", 2)
+        index_match = re.match(r'^(.+?)\s*\((\d+)\)$', filename.strip())
+        if index_match:
+            base_filename = index_match.group(1).strip()
+            target_index = int(index_match.group(2))
+        else:
+            base_filename = filename.strip()
+            target_index = 1  # First occurrence
+
+        # Count occurrences and find the target
+        occurrence = 0
+        for attachment in attachments:
+            att_filename = getattr(attachment, 'filename', '') or ''
+            att_mime = getattr(attachment, 'mime_type', '') or ''
+
+            # Check filename match
+            if att_filename.strip() == base_filename:
+                occurrence += 1
+
+                # Check if this is the target occurrence
+                if occurrence == target_index:
+                    # Validate MIME type if specified
+                    if mime_prefix and not att_mime.startswith(mime_prefix):
+                        logger.warning(
+                            f"⚠️ File '{filename}' found but MIME type '{att_mime}' "
+                            f"doesn't match expected '{mime_prefix}*'"
+                        )
+                        continue
+
+                    # Download and return the file
+                    try:
+                        logger.info(f"📎 Found file by name: '{filename}' (occurrence {occurrence})")
+                        file_bytes = self._run_async_in_thread(
+                            download_file(attachment.url)
+                        )
+                        return file_bytes
+                    except Exception as e:
+                        logger.error(f"❌ Failed to download file '{filename}': {e}")
+                        return None
+
+        # File not found
+        if occurrence > 0:
+            logger.warning(
+                f"⚠️ File '{base_filename}' found {occurrence} time(s), "
+                f"but requested index {target_index}"
+            )
+        else:
+            logger.warning(f"⚠️ File '{filename}' not found in {len(attachments)} attachments")
 
         return None
 
