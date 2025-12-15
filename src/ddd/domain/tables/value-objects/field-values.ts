@@ -39,6 +39,7 @@ export type TextFieldValue = string;
 export type NumberFieldValue = number;
 export type BooleanFieldValue = boolean;
 export type DateFieldValue = Date | string;  // Can be Date object or ISO string
+export type JsonFieldValue = Record<string, unknown>;  // Arbitrary JSON data (classification results, etc.)
 
 // ========================================
 // Complex Field Value Types (Arrays)
@@ -74,7 +75,7 @@ export type DocumentArrayFieldValue = DocumentFieldValue[];
 // Union Type for All Field Values
 // ========================================
 
-export type FieldValue = 
+export type FieldValue =
   | TextFieldValue
   | NumberFieldValue
   | BooleanFieldValue
@@ -82,6 +83,7 @@ export type FieldValue =
   | FileArrayFieldValue
   | RelationArrayFieldValue
   | DocumentArrayFieldValue
+  | JsonFieldValue
   | null
   | undefined;
 
@@ -133,7 +135,8 @@ export const FIELD_TYPE_MAPPING = {
   'file': 'FileFieldValue[]',
   'relation': 'RelationFieldValue[]',
   'document': 'DocumentFieldValue[]',
-  'tiptap_doc': 'DocumentFieldValue[]'
+  'tiptap_doc': 'DocumentFieldValue[]',
+  'json': 'Record<string, unknown>'  // Arbitrary JSON data
 } as const;
 
 /**

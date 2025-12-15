@@ -48,6 +48,7 @@ import { DocumentField } from '@/components/tables/fields/DocumentField'
 import { EmbeddingField } from '@/components/tables/fields/EmbeddingField'
 import { SingleSelectField } from '@/components/tables/fields/SingleSelectField'
 import { MultiSelectField } from '@/components/tables/fields/MultiSelectField'
+import { JSONField } from '@/components/tables/fields/JSONField'
 import { FileTypeDetector } from '@/ddd/domain/tables/services/file-type-detector'
 import { createFileArtifact, createDocumentArtifact } from '@/components/chat/types/chat-artifacts'
 import { uiStateActions } from '@/stores/ui-state.store'
@@ -68,7 +69,8 @@ import type {
   DocumentCellProps,
   EmbeddingCellProps,
   SingleSelectCellProps,
-  MultiSelectCellProps
+  MultiSelectCellProps,
+  JSONCellProps
 } from './grid/cell-types'
 
 interface DynamicDataSheetGridProps {
@@ -240,9 +242,10 @@ const FileCell = ({ rowData, setRowData, columnData, focus, active, stopEditing 
   )
 }
 
-const DocumentCell = ({ rowData, setRowData, columnData, focus, active, stopEditing }: DocumentCellProps) => {
+const DocumentCell = ({ rowData, setRowData, columnData, rowIndex, focus, active, stopEditing }: DocumentCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
-  const { field, organizationId, tableId } = columnData
+  const { field, organizationId, tableId, data } = columnData
+  const rowId = data[rowIndex]?.id  // Get rowId from data array using rowIndex
 
   const handleDocumentOpen = (file: any) => {
     try {
@@ -309,6 +312,7 @@ const DocumentCell = ({ rowData, setRowData, columnData, focus, active, stopEdit
       field={field}
       organizationId={organizationId}
       tableId={tableId}
+      rowId={rowId}
       onDocumentOpen={handleDocumentOpen}
       focus={focus}
       onClose={() => stopEditing?.({ nextRow: false })}
@@ -382,6 +386,24 @@ const MultiSelectCell = ({ rowData, setRowData, columnData }: MultiSelectCellPro
       compact={true}
       field={field}
       onFieldUpdate={onFieldUpdate}
+    />
+  )
+}
+
+const JSONCell = ({ rowData, setRowData, columnData, focus }: JSONCellProps) => {
+  // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
+  // rowData = field value (JSON object/array or null)
+  // setRowData(newValue) = updates the field value
+
+  return (
+    <JSONField
+      value={rowData}  // ✅ rowData IS the field value
+      onChange={(newValue) => {
+        setRowData(newValue)  // ✅ Set field value directly
+      }}
+      isEditMode={true}
+      compact={true}
+      focus={focus}  // ✅ Pass focus for keyboard shortcut support
     />
   )
 }
@@ -565,6 +587,7 @@ export function DynamicDataSheetGrid({
     organizationId,
     tableId,
     availableTables,
+    data: state.data,
     onUpdateRow,
     onEditField: handleEditField,
     onDeleteField: handleDeleteField,
@@ -578,6 +601,7 @@ export function DynamicDataSheetGrid({
     EmbeddingCell,
     SingleSelectCell,
     MultiSelectCell,
+    JSONCell,
   })
 
   /**

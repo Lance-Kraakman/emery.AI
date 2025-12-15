@@ -20,13 +20,12 @@ export interface Organization {
   sharedServers?: string[] | null;
   databaseId?: string | null;
   viewConfig?: Record<string, any> | null;
-  plan?: string | null;
+  plan?: 'free' | 'pro' | 'max' | 'enterprise' | null;
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
   stripeSubscriptionStatus?: string | null;
   analysisCapabilities?: OrganizationAnalysisCapabilities | null;
   // Model and billing configuration
-  tier?: 'free' | 'pro' | 'enterprise';
   defaultModel?: string | null;
   availableModels?: string[] | null;
   tokenQuotaMonthly?: number | null;
@@ -62,14 +61,13 @@ export interface CreateOrganizationData {
   sharedServers?: string[];
   databaseId?: string;
   viewConfig?: Record<string, any>;
-  plan?: string;
+  plan?: 'free' | 'pro' | 'max' | 'enterprise' | null;
 }
 
 export interface UpdateOrganizationData extends Partial<CreateOrganizationData> {
   // Billing and model configuration fields
   defaultModel?: string | null;
   tokenQuotaMonthly?: number | null;
-  tier?: 'free' | 'pro' | 'enterprise';
   availableModels?: string[];
   // Credit system fields
   creditBalance?: number;

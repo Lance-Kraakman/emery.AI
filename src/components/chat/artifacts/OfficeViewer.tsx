@@ -26,6 +26,8 @@ import type { FileArtifact } from '../types/chat-artifacts'
 import { getFileDisplayInfo } from '../types/chat-artifacts'
 import { getFileExtension } from '@/ddd/domain/tables/value-objects/file-viewer-types'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
+import { useOptionalTheme } from '@/components/puck/theme-context'
+import { getViewerContainerStyle, getThemedBackground, getThemedSectionStyle } from './theme-utils'
 
 const logger = createDebugLogger('OfficeViewer')
 
@@ -41,6 +43,7 @@ export function OfficeViewer({
   className = ''
 }: OfficeViewerProps) {
   const { fileField, fileName, fileUrl } = artifact.data
+  const theme = useOptionalTheme()
   const [htmlContent, setHtmlContent] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -111,7 +114,10 @@ export function OfficeViewer({
     // For non-DOCX files, show download message
     if (!isDocx) {
       return (
-        <div className="flex-1 flex items-center justify-center bg-gray-50 p-8">
+        <div
+          className={`flex-1 flex items-center justify-center p-8 ${!theme ? 'bg-gray-50' : ''}`}
+          style={getThemedBackground(theme, 'surface')}
+        >
           <div className="text-center max-w-md">
             <FileText className="w-16 h-16 mx-auto mb-4 text-gray-400" />
             <p className="text-sm font-medium mb-2">{fileName}</p>
@@ -137,7 +143,10 @@ export function OfficeViewer({
     // Loading state
     if (loading) {
       return (
-        <div className="flex-1 flex items-center justify-center bg-gray-50">
+        <div
+          className={`flex-1 flex items-center justify-center ${!theme ? 'bg-gray-50' : ''}`}
+          style={getThemedBackground(theme, 'surface')}
+        >
           <div className="text-sm text-gray-500">Converting document...</div>
         </div>
       )
@@ -146,7 +155,10 @@ export function OfficeViewer({
     // Error state
     if (error) {
       return (
-        <div className="flex-1 flex items-center justify-center bg-gray-50 p-8">
+        <div
+          className={`flex-1 flex items-center justify-center p-8 ${!theme ? 'bg-gray-50' : ''}`}
+          style={getThemedBackground(theme, 'surface')}
+        >
           <div className="text-center max-w-md">
             <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-400" />
             <p className="text-sm font-medium text-red-600 mb-2">Failed to load document</p>
@@ -162,7 +174,10 @@ export function OfficeViewer({
 
     // Render converted HTML
     return (
-      <div className="flex-1 overflow-auto bg-white p-6">
+      <div
+        className={`flex-1 overflow-auto p-6 ${!theme ? 'bg-white' : ''}`}
+        style={getThemedBackground(theme, 'background')}
+      >
         <div
           className="prose prose-sm max-w-none"
           dangerouslySetInnerHTML={{ __html: htmlContent }}
@@ -172,9 +187,15 @@ export function OfficeViewer({
   }
 
   return (
-    <div className={`h-full flex flex-col bg-card ${className}`}>
+    <div
+      className={`h-full flex flex-col ${!theme ? 'bg-card' : ''} ${className}`}
+      style={getViewerContainerStyle(theme)}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
+      <div
+        className={`flex items-center justify-between p-3 border-b ${!theme ? 'border-border bg-muted/10' : ''}`}
+        style={getThemedSectionStyle(theme)}
+      >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <FileText className="w-5 h-5 text-blue-600 flex-shrink-0" />
           <div className="min-w-0 flex-1">
@@ -234,7 +255,10 @@ export function OfficeViewer({
       {renderContent()}
 
       {/* Footer */}
-      <div className="flex items-center justify-between p-3 border-t border-border bg-muted/10 text-xs text-muted-foreground flex-shrink-0">
+      <div
+        className={`flex items-center justify-between p-3 border-t text-xs flex-shrink-0 ${!theme ? 'border-border bg-muted/10 text-muted-foreground' : ''}`}
+        style={{ ...getThemedSectionStyle(theme), color: theme ? 'var(--theme-text-muted)' : undefined }}
+      >
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />

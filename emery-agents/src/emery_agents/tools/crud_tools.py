@@ -125,7 +125,7 @@ class AsyncHTTPManager:
             
             total_time = time.time() - start_time
 
-            # Handle HTTP errors
+            # Handle HTTP errors - return explicit error STRING so model can't miss it
             if response.status_code >= 400:
                 error_detail = f"HTTP {response.status_code}"
                 try:
@@ -138,13 +138,9 @@ class AsyncHTTPManager:
                     error_detail = response.text[:200] if response.text else error_detail
 
                 logger.error(f"[TOOL-HTTP] ❌ {method} {endpoint} - call_id: {call_id}, status: {response.status_code}, duration: {total_time:.2f}s")
-                return {
-                    "success": False,
-                    "error": f"API request failed: {error_detail}",
-                    "status_code": response.status_code,
-                    "call_id": call_id,
-                    "total_time": total_time
-                }
+                # AIDEV-NOTE: Return explicit error STRING instead of dict so small models can't miss it
+                # The model kept hallucinating success when seeing {"success": False, "error": "..."}
+                return f"❌ ERROR: {error_detail}. This operation FAILED. Do NOT claim success - report this error to the user."
 
             # Parse JSON response
             try:
@@ -169,30 +165,15 @@ class AsyncHTTPManager:
         except httpx.TimeoutException:
             total_time = time.time() - start_time
             logger.error(f"[ASYNC_MANAGER] ❌ TIMEOUT - call_id: {call_id}, timeout: {timeout}s")
-            return {
-                "success": False,
-                "error": f"Request timeout after {timeout} seconds",
-                "call_id": call_id,
-                "total_time": total_time
-            }
+            return f"❌ ERROR: Request timeout after {timeout} seconds. This operation FAILED. Do NOT claim success."
         except httpx.RequestError as e:
             total_time = time.time() - start_time
             logger.error(f"[ASYNC_MANAGER] ❌ REQUEST ERROR - call_id: {call_id}, error: {str(e)}")
-            return {
-                "success": False,
-                "error": f"HTTP request failed: {str(e)}",
-                "call_id": call_id,
-                "total_time": total_time
-            }
+            return f"❌ ERROR: HTTP request failed: {str(e)}. This operation FAILED. Do NOT claim success."
         except Exception as e:
             total_time = time.time() - start_time
             logger.error(f"[ASYNC_MANAGER] ❌ UNEXPECTED ERROR - call_id: {call_id}, error: {str(e)}")
-            return {
-                "success": False,
-                "error": f"Unexpected error: {str(e)}",
-                "call_id": call_id,
-                "total_time": total_time
-            }
+            return f"❌ ERROR: Unexpected error: {str(e)}. This operation FAILED. Do NOT claim success."
 
 # Global AsyncHTTPManager instance
 _async_manager = AsyncHTTPManager()
@@ -302,7 +283,7 @@ class BaseCrudTool(Tool):
                 
                 total_time = time.time() - start_time
                 
-                # Handle HTTP errors
+                # Handle HTTP errors - return explicit error STRING so model can't miss it
                 if response.status_code >= 400:
                     error_detail = f"HTTP {response.status_code}"
                     try:
@@ -315,13 +296,7 @@ class BaseCrudTool(Tool):
                         error_detail = response.text[:200] if response.text else error_detail
 
                     logger.error(f"[ASYNC_HTTP] HTTP error response - call_id: {call_id}, status: {response.status_code}, error: {error_detail}")
-                    return {
-                        "success": False,
-                        "error": f"API request failed: {error_detail}",
-                        "status_code": response.status_code,
-                        "call_id": call_id,
-                        "total_time": total_time
-                    }
+                    return f"❌ ERROR: {error_detail}. This operation FAILED. Do NOT claim success - report this error to the user."
 
                 # Parse JSON response
                 try:
@@ -488,95 +463,125 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
 def load_document_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
     """Load Document CRUD tool with method-specific routing."""
 
+    # Capture auth in closure - NOT exposed to LLM via inputs schema
+    _auth_token = api_key or ""
+    _org_id = str(organization_id) if organization_id else ""
+
     class DocumentCrudTool(BaseCrudTool):
         """CRUD operations for Emery documents."""
 
         name = "document_crud"
-        description = "Create, read, update, delete, and list documents in your organization. Supports document content management and metadata operations."
+        description = "Create, read, update, and list documents. Use 'create' to make new documents, 'list' to find documents, 'read' to get content, 'update' to modify content."
+        # AIDEV-NOTE: tableId and fieldId accept both string and integer (like skill_crud)
         inputs = {
-            "method": {"type": "string", "description": "CRUD operation: create, read, update, delete, list"},
-            "document_id": {"type": "string", "description": "Document ID for read, update, delete operations", "nullable": True},
-            "data": {"type": "object", "description": "Document data for create and update operations", "nullable": True},
-            "filters": {"type": "object", "description": "Filter criteria for list operation", "nullable": True},
-            "auth_token": {"type": "string", "description": "Internal API authentication token"},
-            "organization_id": {"type": "string", "description": "Organization ID for RLS context"}
+            "method": {"type": "string", "description": "Operation: create, read, update, list"},
+            "document_id": {"type": "string", "description": "Document ID (required for read/update)", "nullable": True},
+            "table_id": {"type": ["string", "integer"], "description": "Table ID containing the document field (required for create/read/update)", "nullable": True},
+            "field_id": {"type": ["string", "integer"], "description": "Field ID of document column (required for create/read/update)", "nullable": True},
+            "row_id": {"type": "string", "description": "Row ID to add document to (optional for create). If omitted, creates a new row.", "nullable": True},
+            "title": {"type": "string", "description": "Document title (required for create)", "nullable": True},
+            "data": {
+                "type": "object",
+                "description": """Document content for update. JSON structure:
+{
+  "type": "doc",
+  "content": [
+    {"type": "paragraph", "content": [{"type": "text", "text": "Plain text here"}]},
+    {"type": "heading", "attrs": {"level": 2}, "content": [{"type": "text", "text": "Section Title"}]},
+    {"type": "bulletList", "content": [
+      {"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Item 1"}]}]}
+    ]}
+  ]
+}
+Node types: paragraph, heading (level 1-6), bulletList, orderedList, listItem, blockquote, codeBlock, image, table, tableRow, tableCell, horizontalRule, hardBreak
+Marks (inline formatting): {"type": "text", "text": "bold", "marks": [{"type": "bold"}]}
+Available marks: bold, italic, underline, strike, code, link (with href attr), highlight""",
+                "nullable": True
+            }
         }
         output_type = "object"
 
         def __init__(self):
             super().__init__("document", "crud")
 
-        def forward(self, method: str, auth_token: str, organization_id: str,
-                   document_id: Optional[str] = None, data: Optional[Dict] = None,
-                   filters: Optional[Dict] = None) -> Dict[str, Any]:
+        def forward(self, method: str, document_id: Optional[str] = None,
+                   table_id: Optional[Union[str, int]] = None,
+                   field_id: Optional[Union[str, int]] = None,
+                   row_id: Optional[str] = None,
+                   title: Optional[str] = None,
+                   data: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute document CRUD operation."""
 
+            # AIDEV-NOTE: Coerce table_id and field_id to strings for URL params
+            table_id_str = str(table_id) if table_id is not None else None
+            field_id_str = str(field_id) if field_id is not None else None
+
             if method == "create":
-                if not data:
-                    return {"success": False, "error": "Document data is required for create operation"}
+                if not table_id or not field_id:
+                    return {"success": False, "error": "table_id and field_id are required for create operation"}
+                if not title:
+                    return {"success": False, "error": "title is required for create operation"}
+
+                create_data: Dict[str, Any] = {
+                    "tableId": int(table_id),
+                    "fieldId": int(field_id),
+                    "title": title
+                }
+                if row_id:  # Optional: add to existing row
+                    create_data["rowId"] = row_id
+                if data:  # Optional initial content
+                    create_data["initialContent"] = data
 
                 return self._make_api_request_with_deadline(
                     endpoint="documents",
                     method="POST",
-                    data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    data=create_data,
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "read":
                 if not document_id:
-                    return {"success": False, "error": "Document ID is required for read operation"}
+                    return {"success": False, "error": "document_id is required for read operation"}
+                if not table_id_str or not field_id_str:
+                    return {"success": False, "error": "table_id and field_id are required for read operation. First call document_crud(method='list') to find documents and their location."}
 
                 return self._make_api_request_with_deadline(
-                    endpoint=f"documents/{document_id}",
+                    endpoint=f"documents/{document_id}?tableId={table_id_str}&fieldId={field_id_str}",
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "update":
                 if not document_id:
-                    return {"success": False, "error": "Document ID is required for update operation"}
+                    return {"success": False, "error": "document_id is required for update operation"}
+                if not table_id_str or not field_id_str:
+                    return {"success": False, "error": "table_id and field_id are required for update operation. First call document_crud(method='list') to find documents and their location."}
                 if not data:
-                    return {"success": False, "error": "Document data is required for update operation"}
+                    return {"success": False, "error": "data (TipTap content) is required for update operation"}
+
+                # Wrap content in tiptapContent for the API
+                update_data = {"tiptapContent": data}
 
                 return self._make_api_request_with_deadline(
-                    endpoint=f"documents/{document_id}",
+                    endpoint=f"documents/{document_id}?tableId={table_id_str}&fieldId={field_id_str}",
                     method="PUT",
-                    data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
-                )
-
-            elif method == "delete":
-                if not document_id:
-                    return {"success": False, "error": "Document ID is required for delete operation"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint=f"documents/{document_id}",
-                    method="DELETE",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    data=update_data,
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "list":
-                endpoint = "documents"
-                if filters:
-                    query_params = []
-                    for key, value in filters.items():
-                        query_params.append(f"{key}={value}")
-                    if query_params:
-                        endpoint += "?" + "&".join(query_params)
-
                 return self._make_api_request_with_deadline(
-                    endpoint=endpoint,
+                    endpoint="documents",
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             else:
-                return {"success": False, "error": f"Unknown method: {method}. Supported: create, read, update, delete, list"}
+                return {"success": False, "error": f"Unknown method: {method}. Supported: create, list, read, update"}
 
     return DocumentCrudTool()
 
@@ -1101,11 +1106,31 @@ def load_skill_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
 
         name = "skill_crud"
         description = "Read, update, and list skills. Skills have: name, description, instructions, inputs, outputs, tools, model. Use 'read' to get skill details, 'update' to modify a skill, 'list' to see all skills."
+        # AIDEV-NOTE: skill_id and agent_id accept both string and integer because LLMs often
+        # pass integers (e.g., skill_id=42 instead of skill_id="42"). smolagents validates
+        # types before calling forward(), so we must accept both in the schema.
         inputs = {
             "method": {"type": "string", "description": "Operation: read, update, list"},
-            "skill_id": {"type": "string", "description": "Skill ID (required for read/update)", "nullable": True},
-            "agent_id": {"type": "string", "description": "Agent ID to filter skills (optional for list)", "nullable": True},
-            "data": {"type": "object", "description": "Skill data for update. Can include: name, description, instructions, inputs (array), outputs (array), tools (array), model", "nullable": True}
+            "skill_id": {"type": ["string", "integer"], "description": "Skill ID (required for read/update)", "nullable": True},
+            "agent_id": {"type": ["string", "integer"], "description": "Agent ID to filter skills (optional for list)", "nullable": True},
+            "data": {
+                "type": "object",
+                "description": """Skill data for update. Structure:
+{
+  "name": "string - skill display name",
+  "description": "string - what the skill does",
+  "instructions": "string - THE ACTUAL PROMPT TEXT that defines what the AI does when running this skill",
+  "inputs": [{"name": "string", "type": "string|number|boolean", "required": true|false, "description": "string"}],
+  "outputs": [{"name": "string", "type": "string", "description": "string"}],
+  "tools": ["tool_name_1", "tool_name_2"],
+  "model": "string or null"
+}
+IMPORTANT - In instructions:
+- Reference inputs using {input_name} syntax, e.g. "Summarize the following: {email_content}"
+- Set outputs as variables, e.g. "{summary} = 'Your generated summary here'"
+Only include fields you want to change (partial updates allowed).""",
+                "nullable": True
+            }
         }
         output_type = "object"
 
@@ -1121,6 +1146,17 @@ def load_skill_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 skill_id = str(skill_id)
             if agent_id is not None:
                 agent_id = str(agent_id)
+
+            # Validate skill_id is numeric for methods that require it
+            # This catches when model passes skill name instead of numeric ID
+            if method in ("read", "update", "delete") and skill_id:
+                if not skill_id.isdigit():
+                    return {
+                        "success": False,
+                        "error": f"skill_id must be a NUMBER (e.g., 42), not '{skill_id}'. "
+                                 f"First call skill_crud(method='list') to find all skills and their numeric IDs, "
+                                 f"then use the matching skill's numeric ID for read/update/delete operations."
+                    }
 
             if method == "read":
                 if not skill_id:
@@ -1138,6 +1174,19 @@ def load_skill_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                     return {"success": False, "error": "Skill ID is required for update operation"}
                 if not data:
                     return {"success": False, "error": "Skill data is required for update operation. Provide: name, description, instructions, inputs, outputs, tools, or model"}
+
+                # Check if skill is a system skill (cannot be edited)
+                read_result = self._make_api_request_with_deadline(
+                    endpoint=f"skills/{skill_id}",
+                    method="GET",
+                    auth_token=_auth_token,
+                    organization_id=_org_id
+                )
+                if read_result.get("success") and read_result.get("data", {}).get("isSystem"):
+                    return {
+                        "success": False,
+                        "error": "System skills cannot be edited. Duplicate this skill to create your own version."
+                    }
 
                 return self._make_api_request_with_deadline(
                     endpoint=f"skills/{skill_id}",

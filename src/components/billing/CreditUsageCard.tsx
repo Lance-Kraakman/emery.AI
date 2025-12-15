@@ -25,9 +25,10 @@ export interface CreditUsageCardProps {
   usage: CreditUsage;
   tierName?: string;
   showOverage?: boolean;
+  hidePeriod?: boolean; // Hide billing period display (e.g., for free tier)
 }
 
-export function CreditUsageCard({ usage, tierName, showOverage = true }: CreditUsageCardProps) {
+export function CreditUsageCard({ usage, tierName, showOverage = true, hidePeriod = false }: CreditUsageCardProps) {
   const percentageUsed = calculatePercentageUsed(usage.creditsUsed, usage.monthlyAllowance);
   const hasOverage = usage.overageCredits > 0;
   const isApproachingLimit = percentageUsed >= 80 && !hasOverage;
@@ -47,10 +48,12 @@ export function CreditUsageCard({ usage, tierName, showOverage = true }: CreditU
             {formatCredits(usage.creditsUsed)} / {formatCredits(usage.monthlyAllowance)}
           </Badge>
         </div>
-        <CardDescription>
-          Current billing period:{' '}
-          {usage.periodStart.toLocaleDateString()} - {usage.periodEnd.toLocaleDateString()}
-        </CardDescription>
+        {!hidePeriod && (
+          <CardDescription>
+            Current billing period:{' '}
+            {usage.periodStart.toLocaleDateString()} - {usage.periodEnd.toLocaleDateString()}
+          </CardDescription>
+        )}
       </CardHeader>
 
       <CardContent className="space-y-6">

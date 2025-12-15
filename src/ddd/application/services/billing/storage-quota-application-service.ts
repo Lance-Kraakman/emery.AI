@@ -90,7 +90,7 @@ export class StorageQuotaApplicationService {
       }
 
       // Get tier configuration
-      const tierConfig = getTierConfig(organization.tier || 'free');
+      const tierConfig = getTierConfig(organization.plan || 'free');
       const quotaBytes = tierConfig.storageQuotaGB * 1024 * 1024 * 1024; // Convert GB to bytes
 
       // Get current usage from organization
@@ -221,7 +221,7 @@ export class StorageQuotaApplicationService {
       }
 
       // Get tier configuration
-      const tierConfig = getTierConfig(organization.tier || 'free');
+      const tierConfig = getTierConfig(organization.plan || 'free');
       const quotaBytes = tierConfig.storageQuotaGB * 1024 * 1024 * 1024;
 
       const totalUsageBytes = organization.storageUsedBytes || 0;

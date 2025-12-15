@@ -32,6 +32,7 @@ interface InstructionsInputProps {
     size?: number;
   }>;
   onExistingAttachmentRemove?: (index: number) => void;
+  isReadOnly?: boolean;
 }
 
 export function InstructionsInput({
@@ -44,7 +45,8 @@ export function InstructionsInput({
   onAttachmentAdd,
   onAttachmentRemove,
   existingAttachments,
-  onExistingAttachmentRemove
+  onExistingAttachmentRemove,
+  isReadOnly = false
 }: InstructionsInputProps) {
   return (
     <UnifiedChatInput
@@ -57,12 +59,13 @@ export function InstructionsInput({
       mode="form"
       minHeight="300px"
       enableSendButton={false}
-      enableAttachments={true}
+      enableAttachments={!isReadOnly}
       pendingAttachments={pendingAttachments}
       onAttachmentAdd={onAttachmentAdd}
       onAttachmentRemove={onAttachmentRemove}
       existingAttachments={existingAttachments}
       onExistingAttachmentRemove={onExistingAttachmentRemove}
+      disabled={isReadOnly}
     />
   );
 }

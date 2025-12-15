@@ -3,16 +3,29 @@
  *
  * Field block for displaying file fields from data context.
  * Category: "Fields" - Data display blocks that require context
+ * Supports view-only and edit modes with configurable edit actions.
  */
 
 import type { ComponentConfig } from "@measured/puck";
-import FileField, { type FileFieldProps } from "./FileField";
-import { createFieldSelectorField } from "../../custom-fields";
+import FileField from "./FileField";
+import FileEditMode from "./FileEditMode";
+import { createFieldSelectorField, createActionsField } from "../../custom-fields";
 import {
   labelPositionField,
   textColorField,
   fontFamilyField,
 } from "../../fields/standard-fields";
+import type { FileFieldProps } from "./types";
+
+/**
+ * Router component that renders the appropriate mode
+ */
+function FileFieldRouter(props: FileFieldProps) {
+  if (props.mode === 'edit') {
+    return <FileEditMode {...props} />;
+  }
+  return <FileField {...props} />;
+}
 
 export const FileFieldConfig: ComponentConfig<FileFieldProps> = {
   label: "File Field",
@@ -39,6 +52,27 @@ export const FileFieldConfig: ComponentConfig<FileFieldProps> = {
         { label: "Cards", value: "card" },
       ],
     },
+
+    size: {
+      type: "select",
+      label: "Size",
+      options: [
+        { label: "Compact", value: "compact" },
+        { label: "Normal", value: "normal" },
+        { label: "Large", value: "large" },
+      ],
+    },
+
+    mode: {
+      type: "radio",
+      label: "Mode",
+      options: [
+        { label: "View Only", value: "view" },
+        { label: "Editable", value: "edit" },
+      ],
+    },
+
+    onEditAction: createActionsField(),
 
     maxItems: {
       type: "number",
@@ -69,15 +103,26 @@ export const FileFieldConfig: ComponentConfig<FileFieldProps> = {
     fontFamily: fontFamilyField,
   },
 
+  // Only show onEditAction when mode is 'edit'
+  resolveFields: (data, { fields }) => {
+    if (data.props.mode !== 'edit') {
+      const { onEditAction, ...rest } = fields;
+      return rest;
+    }
+    return fields;
+  },
+
   defaultProps: {
     labelPosition: "top",
     displayStyle: "list",
+    size: "normal",
+    mode: "view",
     maxItems: 5,
     showSize: true,
     showDownload: true,
   },
 
-  render: FileField,
+  render: FileFieldRouter,
 };
 
 export default FileFieldConfig;

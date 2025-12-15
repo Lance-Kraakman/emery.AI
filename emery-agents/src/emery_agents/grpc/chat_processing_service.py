@@ -11,7 +11,6 @@ AIDEV-NOTE: Session-based architecture with agent persistence:
 - Automatic cleanup (30 min idle, 4 hour max lifetime)
 
 AI Processing features:
-- RAG context retrieval
 - LLM response generation
 - Tool execution
 - OAuth proxy operations
@@ -58,7 +57,9 @@ from ..utils.error_messages import ErrorSeverity
 from ..services.image_processor import ImageProcessor
 from ..services.agent_factory import AgentFactory, AgentConfig
 from ..services.token_usage_extractor import TokenUsageExtractor
-from ..rag.rag_processor import RagProcessor
+from ..services.agent_executor import AgentExecutor
+from ..entities.execution_context import ExecutionContext
+from ..types import ExecutionMode
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -221,15 +222,15 @@ async def _process_skill_content_async(content_parts: List['agent_worker_pb2.Mes
 class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingServiceServicer):
     """
     gRPC service implementation for ChatProcessingService.
-    
+
     Handles AI-only operations:
-    - RAG context retrieval using existing DualContextRagService patterns
     - LLM response streaming using existing HuggingFace integration
     - Tool execution for agent-based responses
-    
+    - Managed agent delegation (skill_builder, document_builder)
+
     Does NOT handle:
     - Chat session management (Next.js)
-    - Message persistence (Next.js) 
+    - Message persistence (Next.js)
     - User authentication (Next.js)
     """
     
@@ -262,10 +263,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         # Import services at runtime to avoid circular dependencies
         try:
-            # RAG processing (always available - no external dependencies)
-            self.rag_processor = RagProcessor()
-            logger.info("✅ RagProcessor initialized successfully")
-
             # Tool loader for converting ToolConfig to smolagents tools
             try:
                 self.tool_registry = UnifiedToolLoader()
@@ -283,7 +280,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         except ImportError as e:
             logger.error(f"❌ Failed to import core services: {e}")
-            self.rag_processor = None
             self.tool_registry = None
             self.model_provider = None
             self.agent_factory = None
@@ -295,13 +291,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
     ) -> AsyncIterator[agent_worker_pb2.ProcessMessageResponse]:
         """
         Process a chat message and stream AI response.
-        
+
         This is the core stateless operation:
-        1. Extract RAG context based on domain/organization
-        2. Build conversation context from provided history
-        3. Stream LLM response using existing AI infrastructure
-        4. Return processing metadata
-        
+        1. Build conversation context from provided history
+        2. Stream LLM response using existing AI infrastructure
+        3. Return processing metadata
+
         All session/persistence logic is handled by Next.js caller.
         """
         
@@ -323,6 +318,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         if has_image_content:
             logger.info(f"🖼️ Message contains images")
 
+        # Extract file attachments (audio, PDFs) for skill context injection
+        # AIDEV-NOTE: Don't add to session here - session may not exist yet (created lazily)
+        # Attachments are passed to _stream_tool_calling_agent_response and added after session creation
+        file_attachments = self._extract_file_attachments(message_parts)
+        if file_attachments:
+            logger.info(f"📎 Extracted {len(file_attachments)} file attachments")
+
         # Extract tools and skills from AgentConfig
         agent_config = request.agent_config if hasattr(request, 'agent_config') and request.agent_config else None
 
@@ -334,11 +336,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"⚠️ No AgentConfig provided, using empty tools")
 
         try:
-            # RAG context has been removed - chat is now simpler without automatic RAG
-            # Tools can still be provided for specific data access if needed
-            logger.debug("🔧 Processing without RAG context (RAG system removed)")
-
-            # 2. Build Conversation Context using mapper
+            # 1. Build Conversation Context using mapper
             # Converts protobuf MessageParts to HuggingFace format
             # AIDEV-NOTE: Now async to support file processing (PDFs, audio, documents)
             conversation_messages = await build_conversation_messages(
@@ -389,7 +387,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             async for response_dict in self._stream_tool_calling_agent_response(
                 conversation_messages,
                 tools_to_use,
-                None,  # RAG context removed
                 domain_context=request.context,
                 org_model=org_model,
                 has_images=has_image_content,
@@ -398,7 +395,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 org_id=org_id,
                 conversation_history=request.conversation_history,
                 agent_config=agent_config,  # Pass agent_config for skill execution
-                user_api_key=user_api_key  # User API key for managed agents
+                user_api_key=user_api_key,  # User API key for managed agents
+                file_attachments=file_attachments  # File attachments for skill context injection
             ):
                 # Check for cancellation
                 if self.active_streams.get(message_id, False):
@@ -523,15 +521,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # Convert stored token usage to protobuf using shared utility
             token_usage_proto = TokenUsageExtractor.to_proto(self.last_token_usage)
 
+            # Get model name from token usage if available
+            model_used = getattr(self.last_token_usage, 'model_name', '') if self.last_token_usage else ''
+
             complete_response = agent_worker_pb2.ProcessMessageResponse(
                 complete=agent_worker_pb2.ProcessingComplete(
-                    model_used=self._get_model_name(),
+                    model_used=model_used,
                     total_tokens=sequence,
                     processing_time_ms=processing_time,
                     token_usage=token_usage_proto,
                     metadata={
                         'content_length': str(len(total_content)),
-                        'rag_sources': '0',  # RAG context removed
                         'domain_type': request.context.domain_type if request.context else 'none'
                     }
                 ),
@@ -596,63 +596,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 message=f"Message {message_id} not found or already completed"
             )
 
-    async def _get_rag_context(
-        self, 
-        query: str, 
-        domain_type: str, 
-        domain_id: int, 
-        organization_id: int,
-        threshold: float = 0.3,
-        max_docs: int = 5,
-        primary_weight: float = 0.7
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Retrieve RAG context using existing dual-context patterns.
-        
-        This should integrate with the same RAG service used by:
-        - /api/chat/stream-grpc/route.ts (DualContextRagService)
-        - Agent execution pipeline
-        
-        AIDEV-TODO: Implement using actual DualContextRagService patterns
-        """
-        
-        if not self.rag_processor:
-            logger.warning("⚠️ RAG processor not available - returning empty context")
-            return {'sources': [], 'context_summary': 'RAG not available'}
-        
-        try:
-            # This should mirror the logic in ddd/application/services/chat/dual-context-rag-service.ts
-            # For now, return mock data that matches the expected structure
-            
-            logger.info(f"🔍 RAG query: {query[:50]}... for {domain_type}:{domain_id}")
-            
-            # AIDEV-TODO: Replace with actual RAG integration
-            mock_sources = [
-                {
-                    'document_id': f'doc_{domain_type}_{domain_id}_1',
-                    'title': f'{domain_type.title()} Documentation',
-                    'similarity': 0.85,
-                    'domain_type': domain_type,
-                    'excerpt': f'Relevant information about {domain_type} operations...'
-                }
-            ]
-            
-            return {
-                'sources': mock_sources,
-                'context_summary': f'Found {len(mock_sources)} relevant {domain_type} documents',
-                'total_sources': len(mock_sources)
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ RAG context retrieval failed: {e}")
-            return {'sources': [], 'context_summary': f'RAG failed: {str(e)}'}
-
-
     async def _stream_tool_calling_agent_response(
         self,
         conversation_messages: List[ChatMessage],
         tools: List['agent_worker_pb2.ToolConfig'],
-        rag_context_data: Optional['RagContextData'],
         domain_context: Optional['agent_worker_pb2.ChatContext'] = None,
         org_model: Optional[str] = None,
         has_images: bool = False,
@@ -661,7 +608,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         org_id: Optional[int] = None,
         conversation_history: Optional[List] = None,
         agent_config: Optional['agent_worker_pb2.AgentConfig'] = None,
-        user_api_key: Optional[str] = None
+        user_api_key: Optional[str] = None,
+        file_attachments: Optional[List['agent_worker_pb2.FileAttachment']] = None
     ) -> AsyncIterator[StreamResponseDict]:
         """
         Stream AI response using ToolCallingAgent with stateful session support.
@@ -675,18 +623,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         """
 
         try:
-            # Import here to avoid circular dependencies
-            # RagContextData imported from rag_processor (already imported)
-
-            # 1. Build system prompt using RAG processor if available
-            system_prompt = self._build_system_prompt_with_rag(rag_context_data, domain_context)
-            logger.info(f"📝 Built system prompt: {len(system_prompt)} chars")
-
-            # 2. Convert protobuf tools to smolagents tools
-            smolagents_tools = self._convert_tools_to_smolagents(tools, agent_config=agent_config, org_model=org_model, org_id=org_id)
+            # 1. Convert protobuf tools to smolagents tools
+            smolagents_tools = self._convert_tools_to_smolagents(
+                tools, agent_config=agent_config, org_model=org_model, org_id=org_id, api_key=user_api_key
+            )
             logger.info(f"🔧 Converted {len(smolagents_tools)} tools for ToolCallingAgent")
 
-            # 3. Get or create agent with session management
+            # 2. Get or create agent with session management
             # HOT PATH: Check if agent exists in session
             logger.info(f"🔍 [SESSION-DEBUG] Checking for existing session: {session_id}")
             logger.info(f"🔍 [SESSION-DEBUG] Conversation history length: {len(conversation_history) if conversation_history else 0}")
@@ -702,6 +645,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 step_types = [type(step).__name__ for step in agent.memory.steps]
                 logger.info(f"🧠 [MEMORY-DEBUG] Step types: {step_types}")
 
+                # Add new file attachments to existing session (for cross-message file access)
+                if file_attachments and session_id:
+                    self.session_manager.add_attachments(session_id, file_attachments)
+                    logger.info(f"📎 Added {len(file_attachments)} new attachments to existing session")
+
             else:
                 # Agent doesn't exist - COLD PATH (create + restore from history)
                 logger.info(f"✨ [COLD-PATH] Creating new agent for session {session_id}")
@@ -711,23 +659,30 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 if effective_api_key:
                     logger.info(f"🔑 Using API key for managed agents (source: {'request' if user_api_key else 'tools'})")
                 else:
-                    logger.warning("⚠️ No API key available for managed agents - skill_builder may fail")
+                    logger.warning("⚠️ No API key available for managed agents - skill_builder/document_builder may fail")
 
-                # Create skill builder managed agent (routes automatically via smolagents)
+                # Create managed agents (routes automatically via smolagents)
                 skill_builder_agent = self._create_skill_builder_agent(
                     api_key=effective_api_key or "",
                     org_id=org_id,
                     org_model=org_model
                 )
+                document_builder_agent = self._create_document_builder_agent(
+                    api_key=effective_api_key or "",
+                    org_id=org_id,
+                    org_model=org_model
+                )
 
-                # Create ToolCallingAgent with skill_builder as managed agent
+                # Create ToolCallingAgent with managed agents
                 # AIDEV-NOTE: InterruptAwareToolCallingAgent sets interrupt_switch=True
                 # when detecting interrupt from managed agent, breaking the loop
+                # Pass file_attachments so chat agent can see available files in session
                 agent = self._create_agent_with_model_provider(
                     smolagents_tools,
                     org_model=org_model,
                     has_images=has_images,
-                    managed_agents=[skill_builder_agent]
+                    managed_agents=[skill_builder_agent, document_builder_agent],
+                    session_attachments=file_attachments  # Current message files for initial agent context
                 )
 
                 logger.info(f"🧠 [MEMORY-DEBUG] New agent created, memory steps: {len(agent.memory.steps)}")
@@ -758,6 +713,21 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         restored_from_history=bool(conversation_history),
                         history_message_count=len(conversation_history) if conversation_history else 0
                     )
+                    # Add file attachments to session AFTER session is created
+                    # This enables cross-message file access for skills
+                    if file_attachments:
+                        self.session_manager.add_attachments(session_id, file_attachments)
+                        logger.info(f"📎 Added {len(file_attachments)} attachments to session")
+
+                    # Also restore file attachments from conversation history (cold path)
+                    # This makes files from previous messages available to skills
+                    if conversation_history:
+                        history_attachments = self.session_manager.extract_file_attachments_from_history(
+                            conversation_history
+                        )
+                        if history_attachments:
+                            self.session_manager.add_attachments(session_id, history_attachments)
+                            logger.info(f"📎 Restored {len(history_attachments)} attachments from history")
 
             logger.info(f"🤖 Using ToolCallingAgent with {len(smolagents_tools)} tools")
             logger.info(f"🧠 [MEMORY-DEBUG] Final agent memory before execution: {len(agent.memory.steps)} steps")
@@ -793,6 +763,27 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             step_index = 0
             final_answer_text = ""
+
+            # Set execution context for skill tools to access file attachments
+            # This enables _inject_context_inputs() in SkillTool to inject audio/image bytes
+            #
+            # File selection logic:
+            # - attachments: Current message files (DEFAULT for skill inputs)
+            # - session_attachments: All session files (for explicit filename lookup)
+            #
+            # When LLM doesn't specify a filename → uses current message file
+            # When LLM specifies a filename → searches session_attachments by name
+            session_attachments = self.session_manager.get_attachments(session_id) if session_id else []
+            context = ExecutionContext(
+                mode=ExecutionMode.INSTRUCTION,
+                task=current_task,
+                available_tools=[],
+                images=[],  # Images already passed via smolagents images param
+                attachments=file_attachments or [],  # Current message files (default)
+                session_attachments=session_attachments,  # All session files (for explicit lookup)
+            )
+            AgentExecutor.set_current_context(context)
+            logger.info(f"📎 Set execution context: {len(file_attachments or [])} current, {len(session_attachments)} session files")
 
             # Use stream=True for real-time step-by-step progress
             # Pass images via official smolagents API (images parameter)
@@ -851,6 +842,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 step_index += 1
 
+            # Clear execution context after agent completes
+            if file_attachments:
+                AgentExecutor.set_current_context(None)
+                logger.debug("📎 Cleared execution context")
+
             # Log summary of collected steps
             logger.info(f"✅ Completed streaming with {step_index} steps")
 
@@ -875,11 +871,42 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # Pattern matches smolagents' official plan_customization example
             if "interrupted" in str(e).lower():
                 logger.info("⏸️ Agent interrupted for user approval (HITL workflow)")
-                # Don't yield error - the plan was already streamed via step progress
+
+                # Extract the plan from agent memory to show user what they're approving
+                # AIDEV-NOTE: Plan may be in parent agent memory OR managed agent memory
+                # depending on which agent created the plan (skill_builder stores in its own memory)
+                plan_content = None
+
+                # First check parent agent memory
+                for step in reversed(agent.memory.steps):
+                    if hasattr(step, 'plan') and step.plan:
+                        plan_content = step.plan
+                        logger.info(f"📋 Found plan in parent agent memory ({len(plan_content)} chars)")
+                        break
+
+                # If not found, check managed agents' memory (for HITL workflows like skill_builder)
+                if not plan_content and hasattr(agent, 'managed_agents'):
+                    for name, managed_agent in agent.managed_agents.items():
+                        if hasattr(managed_agent, 'memory') and managed_agent.memory:
+                            for step in reversed(managed_agent.memory.steps):
+                                if hasattr(step, 'plan') and step.plan:
+                                    plan_content = step.plan
+                                    logger.info(f"📋 Found plan in {name} agent memory ({len(plan_content)} chars)")
+                                    break
+                        if plan_content:
+                            break
+
+                # Build descriptive message with plan content
+                if plan_content:
+                    message = f"## Proposed Plan\n\n{plan_content}\n\n---\n\n**Reply 'yes' or 'approve' to proceed, or provide feedback.**"
+                else:
+                    logger.warning("⚠️ No plan found in agent memory for interrupt message")
+                    message = "Waiting for your approval to proceed."
+
                 # Session preserved with reset=False for resumption on next message
                 interrupted_response: InterruptedResponseDict = {
                     "type": "interrupted",
-                    "message": "Waiting for your approval to proceed."
+                    "message": message
                 }
                 yield interrupted_response
                 return
@@ -955,35 +982,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             if session_id and 'error_info' not in locals():
                 self.session_manager.reset_error_count(session_id)
 
-    def _build_system_prompt_with_rag(
-        self,
-        rag_context_data: Optional['RagContextData'],
-        domain_context: Optional['agent_worker_pb2.ChatContext']
-    ) -> str:
-        """Build system prompt with RAG context integration."""
-        if self.rag_processor and rag_context_data:
-            # RagContextData imported from rag_processor (already imported)
-
-            if isinstance(rag_context_data, RagContextData):
-                domain_context_dict = {
-                    'domain_type': domain_context.domain_type if domain_context else None,
-                    'domain_id': domain_context.domain_id if domain_context else None
-                } if domain_context else None
-
-                return self.rag_processor.format_context_for_llm(
-                    rag_context_data=rag_context_data,
-                    user_query='',  # Will be added in conversation prompt
-                    domain_context=domain_context_dict
-                )
-
-        return self._build_basic_system_prompt(domain_context)
-
     def _convert_tools_to_smolagents(
         self,
         tools: List['agent_worker_pb2.ToolConfig'],
         agent_config: Optional['agent_worker_pb2.AgentConfig'] = None,
         org_model: Optional[str] = None,
-        org_id: Optional[int] = None
+        org_id: Optional[int] = None,
+        api_key: Optional[str] = None
     ) -> List[Any]:
         """
         Convert protobuf ToolConfig objects to smolagents tools using shared utility.
@@ -993,6 +998,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             agent_config: Optional AgentConfig containing skills for skill execution
             org_model: Organization default model (used as fallback for skills)
             org_id: Organization ID for CRUD tool authentication
+            api_key: API key for output mapping in SkillTools
 
         Returns:
             List of loaded tool instances (including SkillTools)
@@ -1006,15 +1012,43 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         if agent_config and agent_config.skills:
             skill_executor = self._create_skill_executor_callback(org_model=org_model)
 
+        # Create inference client for operation skills (direct HF API calls)
+        # Check if any skills use operation execution type
+        inference_client = None
+        if agent_config and agent_config.skills:
+            has_operation_skills = any(
+                s.execution_type == 'operation'
+                for s in agent_config.skills
+            )
+            if has_operation_skills:
+                inference_client = self._get_or_create_inference_client()
+                logger.info(f"🔧 Created inference client for operation skills")
+
         # Use consolidated load_tools_from_configs method
         return self.tool_registry.load_tools_from_configs(
             tool_configs=tools,
-            api_key=None,  # API keys are in tool configs already
+            api_key=api_key,  # Pass API key for SkillTool output mappings
             api_key_mode="user",  # Chat system uses user API key mode
             agent_config=agent_config,
             skill_executor=skill_executor,
-            organization_id=org_id  # Pass organization ID for CRUD tools
+            organization_id=org_id,  # Pass organization ID for CRUD tools
+            inference_client=inference_client  # Pass inference client for operation skills
         )
+
+    def _get_or_create_inference_client(self):
+        """
+        Get or create the HuggingFace inference client for operation skills.
+
+        Lazily creates the client on first use to avoid unnecessary initialization
+        when no operation skills are present.
+
+        Returns:
+            HuggingFaceInferenceClient instance
+        """
+        if not hasattr(self, '_inference_client') or self._inference_client is None:
+            from ..clients import HuggingFaceInferenceClient
+            self._inference_client = HuggingFaceInferenceClient()
+        return self._inference_client
 
     def _create_skill_executor_callback(self, org_model: Optional[str] = None):
         """
@@ -1027,22 +1061,32 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             org_model: Organization default model (used as fallback if skill has no model)
 
         Returns:
-            Callable that takes (SkillConfig, runtime_inputs) and returns result string
+            Callable that takes (SkillConfig, runtime_inputs, capture_outputs) and returns result
+            - When capture_outputs=False: returns result string
+            - When capture_outputs=True: returns (result_string, captured_outputs_dict)
         """
-        def execute_skill(skill_config: 'agent_worker_pb2.SkillConfig', runtime_inputs: Dict[str, Any]) -> str:
+        def execute_skill(
+            skill_config: 'agent_worker_pb2.SkillConfig',
+            runtime_inputs: Dict[str, Any],
+            capture_outputs: bool = False
+        ) -> str | tuple:
             """
             Execute a skill by creating a sub-agent.
 
             Args:
                 skill_config: Full skill definition from proto
                 runtime_inputs: Runtime inputs from LLM (matching skill.inputs)
+                capture_outputs: If True, add OutputTool and return (result, captured_outputs)
 
             Returns:
-                Skill execution result as string
+                Skill execution result as string (or tuple with captured outputs if capture_outputs=True)
             """
-            logger.info(f"🎯 Executing skill: {skill_config.name} with inputs: {list(runtime_inputs.keys())}")
+            logger.info(f"🎯 Executing skill: {skill_config.name} (capture_outputs={capture_outputs})")
 
             try:
+                # Import OutputTool for output capture
+                from ..tools.output_tool import OutputTool
+
                 # 1. Load skill's tools
                 skill_tools = []
                 if skill_config.tools:
@@ -1052,6 +1096,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         api_key_mode="user"
                     )
                     logger.info(f"🔧 Loaded {len(skill_tools)} tools for skill {skill_config.name}")
+
+                # Add OutputTool if capturing outputs
+                output_tool = None
+                if capture_outputs and skill_config.outputs:
+                    output_tool = OutputTool(skill_outputs=list(skill_config.outputs))
+                    skill_tools.append(output_tool)
+                    logger.info(f"📤 Added OutputTool for {len(list(skill_config.outputs))} outputs")
 
                 # 2. Process attachments from skill_config.content using shared utilities
                 images = []
@@ -1081,6 +1132,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 # Add text parts from attachments to task
                 task_parts.extend(text_parts)
 
+                # Add output instructions if capturing (use template for detailed instructions)
+                if capture_outputs and skill_config.outputs:
+                    from ..prompts import render_output_instructions
+                    output_instructions = render_output_instructions(list(skill_config.outputs))
+                    if output_instructions:
+                        task_parts.append(f"\n\n{output_instructions}")
+                        logger.info(f"📤 Added output capture instructions ({len(output_instructions)} chars)")
+
                 task = "\n".join(task_parts)
                 logger.info(f"📝 Skill task: {task[:200]}...")
                 if images:
@@ -1088,6 +1147,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 # 4. Create sub-agent with skill's tools and correct has_images flag
                 has_images = bool(images)  # Calculate once for clarity
+
+                # Create sub-agent with autonomous context
                 agent_config = AgentConfig(
                     tools=skill_tools,
                     skill_model=skill_config.model if skill_config.model else None,
@@ -1096,7 +1157,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     max_steps=10,
                     agent_name=f"skill_{skill_config.name}",
                     agent_description=skill_config.description,
-                    enable_caching=False
+                    enable_caching=False,
+                    context_type="autonomous"  # Use autonomous execution context
                 )
                 sub_agent = self.agent_factory.create_agent(agent_config)
                 logger.info(f"✨ Created sub-agent for skill {skill_config.name} (has_images={has_images})")
@@ -1169,11 +1231,24 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 result_json = json.dumps({'parts': serialized_parts})
                 logger.info(f"✅ Skill {skill_config.name} completed: {len(message_parts)} message parts")
-                return result_json
+
+                # Return with captured outputs if requested
+                if capture_outputs:
+                    was_called = output_tool.was_called() if output_tool else False
+                    captured = output_tool.get_captured_values() if output_tool and was_called else None
+                    if captured:
+                        logger.info(f"📤 Captured outputs from submit_result: {list(captured.keys())}")
+                    else:
+                        logger.warning(f"⚠️ OutputTool was {'NOT ' if not was_called else ''}called, captured={captured}")
+                    return result_json, captured
+                else:
+                    return result_json
 
             except Exception as e:
                 error_msg = f"Skill execution error: {str(e)}"
                 logger.error(f"❌ Skill {skill_config.name} failed: {e}", exc_info=True)
+                if capture_outputs:
+                    return error_msg, None
                 return error_msg
 
         return execute_skill
@@ -1183,20 +1258,37 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         smolagents_tools: List[Any],
         org_model: Optional[str] = None,
         has_images: bool = False,
-        managed_agents: Optional[List[Any]] = None
-    ) -> ToolCallingAgent:
-        """Create ToolCallingAgent using AgentFactory with smart vision model selection."""
-        agent_config = AgentConfig(
-            tools=smolagents_tools,
-            org_model=org_model,
-            has_images=has_images,
-            max_steps=10,
-            agent_name="chat_tool_calling",
-            agent_description=f"Chat agent with {len(smolagents_tools)} tools available",
-            enable_caching=False,
-            managed_agents=managed_agents
+        managed_agents: Optional[List[Any]] = None,
+        session_attachments: Optional[List[Any]] = None
+    ) -> 'InterruptAwareToolCallingAgent':
+        """
+        Create Chat Planner orchestrator agent with managed agents.
+
+        Uses create_chat_planner_agent for proper template-based instructions
+        and interrupt propagation from managed agents.
+
+        Args:
+            session_attachments: Optional list of file attachments available in session
+                                (displayed to agent for file reference awareness)
+        """
+        from ..agents.chat_planner_agent import create_chat_planner_agent
+
+        # Get model with smart vision selection
+        model = self.model_provider.get_model(
+            model_id=self.model_provider.resolve_model_selection(
+                org_model=org_model,
+                has_images=has_images
+            )
         )
-        return self.agent_factory.create_agent(agent_config)
+
+        return create_chat_planner_agent(
+            tools=smolagents_tools,
+            model=model,
+            managed_agents=managed_agents,
+            context_type="interactive",
+            max_steps=10,
+            session_attachments=session_attachments
+        )
 
     def _create_skill_builder_agent(
         self,
@@ -1217,25 +1309,89 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         - planning_interval=1: Plan after first action (reading skill)
         - step_callbacks: Interrupt after planning for user approval
         - reset=False: Memory preserved between messages for resumption
+
+        AIDEV-NOTE: Uses ToolExecutorTool to delegate tool calls to a sub-agent with
+        proper instructions. The sub-agent gets tool-specific docs from build_agent_instructions
+        and executor rules from tool_executor.j2 template.
         """
         from ..tools.crud_tools import load_skill_crud
+        from ..tools.tool_executor import create_tool_executor
         from ..agents.skill_builder_agent import create_skill_builder_agent
 
-        # Create skill CRUD tool for the agent
+        # Create the CRUD tool (will be wrapped by tool_executor)
         skill_crud_tool = load_skill_crud(None, api_key, org_id)
 
-        # Get model for the agent
+        # Get model for the agent and sub-agent
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
 
-        # Use factory function with native planning support
-        skill_builder = create_skill_builder_agent(
+        # Create tool_executor that wraps the CRUD tool
+        # Sub-agent gets proper instructions via build_agent_instructions
+        tool_executor = create_tool_executor(
             tools=[skill_crud_tool],
+            model=model,
+            max_steps=3
+        )
+
+        # Use factory function with native planning support
+        # CodeAgent calls tool_executor which delegates to sub-agent
+        skill_builder = create_skill_builder_agent(
+            tools=[tool_executor],
             model=model,
             max_steps=10
         )
 
-        logger.info("✨ Created Skill Builder agent with native planning (top-level for HITL)")
+        logger.info("✨ Created Skill Builder agent with ToolExecutor sub-agent")
         return skill_builder
+
+    def _create_document_builder_agent(
+        self,
+        api_key: str,
+        org_id: Optional[int],
+        org_model: Optional[str] = None
+    ) -> ToolCallingAgent:
+        """
+        Create a Document Builder agent with native planning for HITL workflow.
+
+        This agent runs as a TOP-LEVEL agent (not managed agent) so that
+        interrupt() works natively for human-in-the-loop approval.
+
+        AIDEV-NOTE: Uses native planning_interval + step_callbacks for human-in-the-loop:
+        - planning_interval=1: Plan after first action (reading document)
+        - step_callbacks: Interrupt after planning for user approval
+        - reset=False: Memory preserved between messages for resumption
+
+        AIDEV-NOTE: Uses ToolExecutorTool to delegate tool calls to a sub-agent with
+        proper instructions. The sub-agent gets tool-specific docs from build_agent_instructions
+        and executor rules from tool_executor.j2 template.
+        """
+        from ..tools.crud_tools import load_document_crud
+        from ..tools.tool_executor import create_tool_executor
+        from ..agents.document_builder_agent import create_document_builder_agent
+
+        # Create the CRUD tool (will be wrapped by tool_executor)
+        document_crud_tool = load_document_crud(None, api_key, org_id)
+
+        # Get model for the agent and sub-agent
+        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+
+        # Create tool_executor that wraps the CRUD tool
+        # Sub-agent gets proper instructions via build_agent_instructions
+        tool_executor = create_tool_executor(
+            tools=[document_crud_tool],
+            model=model,
+            max_steps=3
+        )
+
+        # Use factory function with native planning support
+        # CodeAgent calls tool_executor which delegates to sub-agent
+        document_builder = create_document_builder_agent(
+            tools=[tool_executor],
+            model=model,
+            max_steps=10
+        )
+
+        logger.info("✨ Created Document Builder agent with ToolExecutor sub-agent")
+        return document_builder
 
     def _extract_user_api_key_from_tools(self, tools: List['agent_worker_pb2.ToolConfig']) -> Optional[str]:
         """
@@ -1258,6 +1414,29 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     return api_key
         logger.warning("⚠️ No user API key found in tool configs")
         return None
+
+    def _extract_file_attachments(self, message_parts: List['agent_worker_pb2.MessagePart']) -> List['agent_worker_pb2.FileAttachment']:
+        """
+        Extract file attachments (audio, PDFs, etc.) from message parts.
+
+        Used to pass file context to skills that need raw file bytes (e.g., speech-to-text).
+
+        Args:
+            message_parts: List of MessagePart from the request
+
+        Returns:
+            List of FileAttachment protos with url and mime_type
+        """
+        attachments = []
+        for part in message_parts:
+            if part.HasField('file'):
+                # Create FileAttachment from the file part
+                attachment = agent_worker_pb2.FileAttachment(
+                    url=part.file.url,
+                    mime_type=part.file.mime_type
+                )
+                attachments.append(attachment)
+        return attachments
 
     def _extract_images_from_message(self, message: ChatMessage) -> list[Image.Image]:
         """Extract PIL Image objects from ChatMessage content using shared utility."""
@@ -1363,9 +1542,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         """
         Extract typed data from ActionStep.
 
-        ActionStep has 'tool_calls' (list of ToolCall objects) and 'observations'.
-        When tool_calls is empty/None, uses model_output for raw LLM response.
-        Uses proper type access instead of hasattr checks.
+        ActionStep has 'tool_calls' (list of ToolCall objects), 'code_action' (for CodeAgent),
+        and 'observations'. When tool_calls is empty/None, checks for code_action (CodeAgent),
+        then falls back to model_output for raw LLM response.
+
+        AIDEV-NOTE: CodeAgent populates step.code_action with Python code, not tool_calls.
+        We now handle this as a CODE_EXECUTION step type for proper UI display.
         """
         # Extract tool info from tool_calls
         tool_name = "unknown"
@@ -1375,7 +1557,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         content = ""
 
         if step.tool_calls and len(step.tool_calls) > 0:
-            # Has valid tool calls
+            # Has valid tool calls (ToolCallingAgent)
             tool_call = step.tool_calls[0]
             tool_name = tool_call.name
             tool_args = str(tool_call.arguments)
@@ -1386,9 +1568,32 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 obs = str(step.observations)
                 MAX_LENGTH = 500
                 content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
+
+        elif step.code_action:
+            # CodeAgent: has Python code execution instead of tool_calls
+            # AIDEV-NOTE: code_action contains the Python code that was executed
+            step_type = "CODE_EXECUTION"
+            step_name = "Code Execution"
+            tool_name = "python_interpreter"
+
+            # Format the code (truncate if too long)
+            code = str(step.code_action)
+            MAX_CODE_LENGTH = 1000
+            content = code[:MAX_CODE_LENGTH] + "..." if len(code) > MAX_CODE_LENGTH else code
+            tool_args = code[:500]  # Store truncated code in args
+
+            # Append observations/output if available
+            if step.observations:
+                obs = str(step.observations)
+                MAX_OUTPUT_LENGTH = 500
+                output_truncated = obs[:MAX_OUTPUT_LENGTH] + "..." if len(obs) > MAX_OUTPUT_LENGTH else obs
+                content += f"\n\n--- Output ---\n{output_truncated}"
+
+            logger.info(f"📜 CodeAgent step: code_action detected, {len(code)} chars")
+
         else:
-            # No tool calls - check for raw model output
-            logger.debug(f"ActionStep without tool_calls: model_output={'exists' if step.model_output else 'None'}")
+            # No tool calls or code - check for raw model output
+            logger.debug(f"ActionStep without tool_calls/code_action: model_output={'exists' if step.model_output else 'None'}")
 
             if step.model_output:
                 # Use model's raw output as reasoning step
@@ -1446,111 +1651,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             yield chunk
             await asyncio.sleep(0.05)  # Small delay for realistic streaming feel
 
-    def _build_basic_system_prompt(self, domain_context: Optional[Any] = None) -> str:
-        """Build basic system prompt without RAG context."""
-        
-        base_prompt = 'You are an AI assistant for Emery, a dynamic database and workflow platform. You help users understand their organizational data, create workflows, and manage their systems.'
-        
-        if domain_context and hasattr(domain_context, 'domain_type'):
-            domain_type = domain_context.domain_type
-            if domain_type == 'table':
-                base_prompt += ' You are currently assisting with a specific table and its data.'
-            elif domain_type == 'agent':
-                base_prompt += ' You are currently assisting with a specific agent.'
-            elif domain_type == 'file':
-                base_prompt += ' You are currently assisting with a specific file.'
-        
-        base_prompt += ' Always be helpful, accurate, and professional.'
-        return base_prompt
-
-    def _build_rag_context_proto_from_data(self, rag_context_data) -> agent_worker_pb2.RagContext:
-        """Build RagContext protobuf from RagContextData."""
-        
-        # Create mock sources for the protobuf response
-        sources = []
-        for i, source_summary in enumerate(rag_context_data.sources[:5]):  # Limit to 5 sources
-            proto_source = agent_worker_pb2.RagSource(
-                document_id=f'source_{i}',
-                title=f'Source {i+1}',
-                similarity=0.8,  # Mock similarity
-                domain_type=rag_context_data.domain_type or 'organization',
-                excerpt=source_summary[:100] + '...' if len(source_summary) > 100 else source_summary
-            )
-            sources.append(proto_source)
-        
-        return agent_worker_pb2.RagContext(
-            sources=sources,
-            context_summary=f'Found {len(rag_context_data.sources)} relevant sources from {rag_context_data.domain_type or "organization"} data',
-            total_sources=len(rag_context_data.sources)
-        )
-
     def _extract_token_usage_from_agent(self, agent) -> Optional[Any]:
         """Extract accumulated token usage from agent's memory steps using shared utility."""
-        return TokenUsageExtractor.extract_from_agent_memory(
-            agent=agent,
-            default_model_name=self._get_model_name()
-        )
-
-    def _build_system_prompt(
-        self, 
-        rag_context: Optional[Dict[str, Any]], 
-        domain_context: Optional[Any]
-    ) -> str:
-        """Build system prompt with RAG context, matching existing chat API patterns."""
-        
-        base_prompt = 'You are an AI assistant for Emery, a dynamic database and workflow platform. You help users understand their organizational data, create workflows, and manage their systems.'
-        
-        # Add domain-specific context
-        if domain_context:
-            domain_type = domain_context.domain_type
-            if domain_type == 'table':
-                base_prompt += ' You are currently assisting with a specific table and its data. Focus on table structure, data analysis, and table-specific operations.'
-            elif domain_type == 'agent':
-                base_prompt += ' You are currently assisting with a specific agent. Focus on agent capabilities, execution history, and configuration.'
-            elif domain_type == 'file':
-                base_prompt += ' You are currently assisting with a specific file. Focus on file content, analysis, and document-related tasks.'
-            elif domain_type == 'team':
-                base_prompt += ' You are currently assisting with a specific team. Focus on team dynamics, member coordination, and collaborative activities.'
-            elif domain_type == 'workflow':
-                base_prompt += ' You are currently assisting with a specific workflow. Focus on process optimization, execution analysis, and workflow management.'
-        
-        # Add RAG context if available
-        if rag_context and rag_context.get('sources'):
-            base_prompt += f"""
-
-You have access to relevant context information:
-
-{rag_context['context_summary']}
-
-Use this context to provide accurate, specific answers. When referencing information from the context, cite the specific sources."""
-        else:
-            base_prompt += ' No specific context is available. Provide general guidance about database management and workflows.'
-        
-        base_prompt += '\n\nAlways be helpful, accurate, and professional.'
-        
-        return base_prompt
-
-    def _get_model_name(self) -> str:
-        """Get the AI model name being used (should match existing setup)."""
-        # This should match the model used in lib/ai/models.ts
-        return 'Qwen/Qwen2.5-Coder-7B-Instruct'
-
-    def _convert_to_rag_context_proto(self, rag_data: Dict[str, Any]) -> agent_worker_pb2.RagContext:
-        """Convert RAG context data to protobuf format."""
-        
-        sources = []
-        for source in rag_data.get('sources', []):
-            proto_source = agent_worker_pb2.RagSource(
-                document_id=source.get('document_id', ''),
-                title=source.get('title', ''),
-                similarity=source.get('similarity', 0.0),
-                domain_type=source.get('domain_type', ''),
-                excerpt=source.get('excerpt', '')
-            )
-            sources.append(proto_source)
-        
-        return agent_worker_pb2.RagContext(
-            sources=sources,
-            context_summary=rag_data.get('context_summary', ''),
-            total_sources=rag_data.get('total_sources', len(sources))
-        )
+        return TokenUsageExtractor.extract_from_agent_memory(agent=agent)

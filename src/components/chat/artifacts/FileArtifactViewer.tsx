@@ -41,6 +41,8 @@ import { OfficeViewer } from './OfficeViewer'
 import { AudioViewer } from './AudioViewer'
 import { VideoViewer } from './VideoViewer'
 import { PdfViewer } from './PdfViewer'
+import { useOptionalTheme } from '@/components/puck/theme-context'
+import { getViewerContainerStyle, getThemedBackground, getThemedSectionStyle } from './theme-utils'
 
 const logger = createDebugLogger('FileArtifactViewer')
 // Note: Old reference search store removed in favor of simplified system
@@ -59,6 +61,7 @@ export function FileArtifactViewer({
   className = ""
 }: FileArtifactViewerProps) {
   const { fileField, viewerType, fileName, fileUrl } = artifact.data
+  const theme = useOptionalTheme()
 
   // Debug: Log what data we received
   logger.debug('FileArtifactViewer: opening file', { viewerType, fileName, fileUrl, s3Key: fileField?.s3Key })
@@ -83,8 +86,14 @@ export function FileArtifactViewer({
   // Early return if no fileUrl - show error state
   if (!fileUrl) {
     return (
-      <div className={`h-full flex flex-col bg-card ${className}`}>
-        <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
+      <div
+        className={`h-full flex flex-col ${!theme ? 'bg-card' : ''} ${className}`}
+        style={getViewerContainerStyle(theme)}
+      >
+        <div
+          className={`flex items-center justify-between p-3 border-b ${!theme ? 'border-border bg-muted/10' : ''}`}
+          style={getThemedSectionStyle(theme)}
+        >
           <div className="flex items-center gap-3">
             <File className="w-5 h-5 text-gray-600" />
             <div>
@@ -98,7 +107,10 @@ export function FileArtifactViewer({
             </Button>
           )}
         </div>
-        <div className="flex-1 flex items-center justify-center bg-gray-50">
+        <div
+          className={`flex-1 flex items-center justify-center ${!theme ? 'bg-gray-50' : ''}`}
+          style={getThemedBackground(theme, 'surface')}
+        >
           <div className="text-center p-8">
             <File className="w-16 h-16 mx-auto mb-4 text-gray-400" />
             <p className="text-sm font-medium text-gray-600 mb-2">Unable to load file</p>
@@ -187,12 +199,15 @@ export function FileArtifactViewer({
     switch (viewerType) {
       case 'image':
         return (
-          <div className="flex items-center justify-center min-h-[400px] bg-gray-50">
+          <div
+            className={`flex items-center justify-center min-h-[400px] ${!theme ? 'bg-gray-50' : ''}`}
+            style={getThemedBackground(theme, 'surface')}
+          >
             <img
               src={fileUrl}
               alt={fileName}
               className="max-w-full max-h-full object-contain transition-transform duration-200"
-              style={{ 
+              style={{
                 transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
                 maxHeight: isFullscreen ? '80vh' : '400px'
               }}
@@ -205,13 +220,16 @@ export function FileArtifactViewer({
 
       case 'text':
         return (
-          <div className="min-h-[400px] bg-gray-50 overflow-auto">
+          <div
+            className={`min-h-[400px] overflow-auto ${!theme ? 'bg-gray-50' : ''}`}
+            style={getThemedBackground(theme, 'surface')}
+          >
             {loadingText ? (
               <div className="flex items-center justify-center h-32">
                 <div className="text-sm text-gray-500">Loading text content...</div>
               </div>
             ) : (
-              <pre 
+              <pre
                 className="p-4 text-sm font-mono whitespace-pre-wrap break-words"
                 style={{ fontSize: `${zoom / 100}rem` }}
               >
@@ -223,7 +241,10 @@ export function FileArtifactViewer({
 
       default:
         return (
-          <div className="min-h-[400px] flex items-center justify-center bg-gray-50">
+          <div
+            className={`min-h-[400px] flex items-center justify-center ${!theme ? 'bg-gray-50' : ''}`}
+            style={getThemedBackground(theme, 'surface')}
+          >
             <div className="text-center">
               <File className="w-16 h-16 mx-auto mb-4 text-gray-400" />
               <p className="text-sm font-medium mb-2">{fileName}</p>
@@ -247,9 +268,15 @@ export function FileArtifactViewer({
   }
 
   return (
-    <div className={`h-full flex flex-col bg-card ${className}`}>
+    <div
+      className={`h-full flex flex-col ${!theme ? 'bg-card' : ''} ${className}`}
+      style={getViewerContainerStyle(theme)}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
+      <div
+        className={`flex items-center justify-between p-3 border-b ${!theme ? 'border-border bg-muted/10' : ''}`}
+        style={getThemedSectionStyle(theme)}
+      >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {getFileIcon()}
           <div className="min-w-0 flex-1">
@@ -366,16 +393,19 @@ export function FileArtifactViewer({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between p-3 border-t border-border bg-muted/10 text-xs text-muted-foreground flex-shrink-0">
+      <div
+        className={`flex items-center justify-between p-3 border-t text-xs flex-shrink-0 ${!theme ? 'border-border bg-muted/10 text-muted-foreground' : ''}`}
+        style={{ ...getThemedSectionStyle(theme), color: theme ? 'var(--theme-text-muted)' : undefined }}
+      >
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />
             {new Date(fileField.uploadedAt).toLocaleDateString()}
           </span>
-          
+
           <span>{fileField.mimeType}</span>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <span>Table {artifact.data.tableId} • Field {artifact.data.fieldId}</span>
         </div>

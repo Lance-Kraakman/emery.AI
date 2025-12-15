@@ -6,8 +6,6 @@
  */
 'use client';
 
-import { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
 import { exportCreditUsageCSV } from '@/app/actions/credits';
@@ -23,22 +21,14 @@ export interface BreakdownItem {
 export interface CreditBreakdownTabsProps {
   organizationId: number;
   modelBreakdown: BreakdownItem[];
-  agentBreakdown: BreakdownItem[];
-  userBreakdown: BreakdownItem[];
-  typeBreakdown: BreakdownItem[];
   isLoading?: boolean;
 }
 
 export function CreditBreakdownTabs({
   organizationId,
   modelBreakdown,
-  agentBreakdown,
-  userBreakdown,
-  typeBreakdown,
   isLoading = false,
 }: CreditBreakdownTabsProps) {
-  const [activeTab, setActiveTab] = useState<string>('model');
-
   const handleExportCSV = async (dimension: 'model' | 'agent' | 'user' | 'type') => {
     try {
       const result = await exportCreditUsageCSV(organizationId, dimension);
@@ -108,30 +98,7 @@ export function CreditBreakdownTabs({
     </div>
   );
 
-  return (
-    <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
-      <TabsList className="grid w-full grid-cols-4">
-        <TabsTrigger value="model">By Model</TabsTrigger>
-        <TabsTrigger value="agent">By Agent</TabsTrigger>
-        <TabsTrigger value="user">By User</TabsTrigger>
-        <TabsTrigger value="type">By Type</TabsTrigger>
-      </TabsList>
-
-      <TabsContent value="model">
-        {renderBreakdownTable(modelBreakdown, 'Model', 'model')}
-      </TabsContent>
-
-      <TabsContent value="agent">
-        {renderBreakdownTable(agentBreakdown, 'Agent', 'agent')}
-      </TabsContent>
-
-      <TabsContent value="user">
-        {renderBreakdownTable(userBreakdown, 'User', 'user')}
-      </TabsContent>
-
-      <TabsContent value="type">
-        {renderBreakdownTable(typeBreakdown, 'Type', 'type')}
-      </TabsContent>
-    </Tabs>
-  );
+  // Only Model breakdown is currently implemented
+  // Agent, User, and Type breakdowns will be added in a future release
+  return renderBreakdownTable(modelBreakdown, 'Model', 'model');
 }

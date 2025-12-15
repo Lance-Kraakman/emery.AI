@@ -13,13 +13,14 @@ const nextConfig = {
   // Modern Next.js approach for native modules - replaces complex webpack externals
   serverExternalPackages: [
     'duckdb',
-    '@duckdb/node-api', 
+    '@duckdb/node-api',
     '@duckdb/node-bindings',
     '@duckdb/node-bindings-darwin-arm64',
     '@duckdb/node-bindings-linux-x64',
-    'unpdf', 
-    '@z-skip/protoc', 
-    'canvas'
+    'unpdf',
+    '@z-skip/protoc',
+    'canvas',
+    'pdfjs-dist'
   ],
   
   webpack: (config, { isServer }) => {

@@ -38,7 +38,7 @@ export const databases = pgTable("databases", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
   slug: text("slug").notNull(), // URL-safe database identifier (unique per organization)
-  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata for RAG indexing
+  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata
   ownerId: uuid("owner_id").notNull().references(() => users.id), // Database owner - used for 'owned' scope permissions
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -88,7 +88,7 @@ export const tables = pgTable("tables", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
   s3Path: text("s3_path").notNull().unique(), // S3 path for table's Parquet data: org_{id}/db_{id}/table_{id}/
-  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata for RAG indexing
+  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata
   ownerId: uuid("owner_id").notNull().references(() => users.id), // Table owner - used for 'owned' scope permissions
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -158,7 +158,7 @@ export const fields = pgTable("fields", {
   tableId: integer("table_id").notNull().references(() => tables.id),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
-  type: text("type").notNull(), // text, number, boolean, email, url, date, file, relation
+  type: text("type").notNull(), // text, number, boolean, email, url, date, file, relation, json
   orderIndex: integer("order_index").default(0),
   required: boolean("required").default(false),
 
@@ -1003,6 +1003,29 @@ export const skills = pgTable("skills", {
   // Status: Schema field exists, NOT yet mapped to Skill entity or exposed in UI
   model: text("model"), // Skill-specific model override (highest priority for skill execution)
 
+  // System skills - pre-built skills that cannot be deleted by users
+  // Used for common operations like Table Operations, Document Operations, etc.
+  isSystem: boolean("is_system").default(false).notNull(),
+
+  // Agent type for skill execution: "tool_calling" (default) or "code_agent"
+  // Follows same pattern as model override
+  // tool_calling: Structured function calls, more reliable for simple tasks
+  // code_agent: Python code execution, better for complex multi-step reasoning
+  agentType: text("agent_type"),
+
+  // Execution type: "agent" (default) or "operation"
+  // agent: LLM orchestration with tools (existing flow)
+  // operation: Direct task model execution (bypasses LLM)
+  executionType: text("execution_type").default('agent'),
+
+  // Task model configuration (when executionType is 'operation')
+  // Contains modelId, taskType, and model-specific parameters
+  taskModelConfig: jsonb("task_model_config").$type<{
+    modelId: string;
+    taskType: string;
+    parameters?: Record<string, any>;
+  }>(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -1114,6 +1137,7 @@ export const tasks = pgTable("tasks", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id), // Organization for RLS
   name: text("name").notNull(),
   instructions: jsonb("instructions").notNull(), // Task instructions with tools: {task: string, images?: ImageAttachment[], tools?: ToolConfig[], metadata?: Record<string, any>}
+  skillId: integer("skill_id").references(() => skills.id), // Optional skill to execute instead of raw instructions
   triggerContext: jsonb("trigger_context"), // What triggered this task: {type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL', scheduleName?: string, tableChange?: TableChangeEvent}
   status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed, cancelled, timeout
   result: jsonb("result"), // Final output data
@@ -1238,10 +1262,15 @@ export const chats = pgTable("chats", {
   // Chat metadata
   title: text("title").notNull(),
   description: text("description"),
-  
-  // RAG and AI context
+
+  // Model configuration
+  // AIDEV-NOTE: Used for chat-specific model selection
+  // Hierarchy: chat.model → organization.defaultModel → System Default
+  // See /docs/model-selection-hierarchy.md for complete context-specific hierarchies
+  model: text("model"), // Chat-specific model override (highest priority for chat messages)
+
+  // AI context metadata
   contextMetadata: jsonb("context_metadata").$type<{
-    ragIndexId?: string;
     contextType?: 'tables' | 'agents' | 'files' | 'teams' | 'databases' | 'organizations' | 'tasks' | 'mixed';
     domainSchema?: {
       id?: number;        // Domain entity ID (replaces domainId/tableId)
@@ -1249,8 +1278,6 @@ export const chats = pgTable("chats", {
       type?: string;      // Additional type info if needed
       [key: string]: any; // Flexible domain-specific data
     };
-    primaryRagWeight?: number; // Weight for primary domain context (0.0-1.0)
-    lastRagUpdate?: string;
   }>(),
   
   // Status and lifecycle
@@ -1641,32 +1668,33 @@ export const apps = pgTable("apps", {
 export const templates = pgTable("templates", {
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id")
-    .notNull()
-    .references(() => organizations.id, { onDelete: 'cascade' }),
+    .references(() => organizations.id, { onDelete: 'cascade' }), // null for system templates
   appId: integer("app_id")
     .references(() => apps.id, { onDelete: 'cascade' }), // null = org-wide, set = app-specific
   name: text("name").notNull(),
   description: text("description"),
   category: text("category"), // for grouping in UI: 'layout', 'content', 'data', etc.
+  isSystem: boolean("is_system").default(false).notNull(), // true = pre-seeded system template, can't delete
   thumbnailUrl: text("thumbnail_url"), // optional preview image
   data: jsonb("data").notNull().$type<PuckDataStructure["content"]>(), // array of ComponentData (the component tree)
   variants: jsonb("variants").default(sql`'[]'::jsonb`).$type<TemplateVariant[]>(), // pre-defined layout variations
   createdBy: uuid("created_by")
-    .notNull()
-    .references(() => users.id),
+    .references(() => users.id), // null for system templates
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("templates_org_idx").on(table.organizationId),
   index("templates_app_idx").on(table.appId),
   index("templates_category_idx").on(table.category),
+  index("templates_is_system_idx").on(table.isSystem),
 
-  // View permission: Users can view org-wide templates or app-specific templates they have access to
+  // View permission: Users can view their org templates OR global system templates
   pgPolicy("templates_view_permission", {
     as: "permissive",
     for: "select",
     to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+    using: sql`is_system = true OR (
+      organization_id = current_setting('app.current_organization_id')::integer
       AND (
         app_id IS NULL
         OR user_has_permission(
@@ -1676,15 +1704,17 @@ export const templates = pgTable("templates", {
           'app',
           app_id
         )
-      )`,
+      )
+    )`,
   }),
 
-  // Create permission: Users with apps:manage can create templates
+  // Create permission: Users with apps:manage can create templates (not system templates)
   pgPolicy("templates_create_permission", {
     as: "permissive",
     for: "insert",
     to: "public",
-    withCheck: sql`organization_id = current_setting('app.current_organization_id')::integer
+    withCheck: sql`is_system = false
+      AND organization_id = current_setting('app.current_organization_id')::integer
       AND user_has_permission(
         current_setting('app.current_user_id')::uuid,
         'apps:manage',
@@ -1692,12 +1722,13 @@ export const templates = pgTable("templates", {
       )`,
   }),
 
-  // Manage permission: Creator or org managers can update/delete templates
+  // Manage permission: Creator or org managers can update/delete templates (not system templates)
   pgPolicy("templates_manage_permission", {
     as: "permissive",
     for: "all",
     to: "public",
-    using: sql`organization_id = current_setting('app.current_organization_id')::integer
+    using: sql`is_system = false
+      AND organization_id = current_setting('app.current_organization_id')::integer
       AND (
         created_by = current_setting('app.current_user_id')::uuid
         OR user_has_permission(

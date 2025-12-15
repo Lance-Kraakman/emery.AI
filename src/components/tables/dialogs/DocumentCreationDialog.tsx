@@ -15,6 +15,7 @@ interface DocumentCreationDialogProps {
   field: FieldDTO;
   organizationId: number;
   tableId: number;
+  rowId?: string;  // Row ID for updating existing rows
   onDocumentCreated: (document: DocumentFieldValue, shouldOpen: boolean) => void;
 }
 
@@ -24,6 +25,7 @@ export function DocumentCreationDialog({
   field,
   organizationId,
   tableId,
+  rowId,
   onDocumentCreated
 }: DocumentCreationDialogProps) {
   const [documentName, setDocumentName] = useState('');
@@ -43,10 +45,13 @@ export function DocumentCreationDialog({
       const formData = new FormData();
       formData.append('organizationId', organizationId.toString());
       formData.append('tableId', tableId.toString());
-      formData.append('fieldName', field.name || 'unknown-field');
+      formData.append('fieldId', field.id.toString());
       formData.append('documentTitle', documentName.trim());
       formData.append('documentType', 'tiptap');
       formData.append('initialContent', JSON.stringify([]));
+      if (rowId) {
+        formData.append('rowId', rowId);
+      }
 
       const response = await fetch('/api/files/upload', {
         method: 'POST',

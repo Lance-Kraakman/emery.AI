@@ -18,6 +18,7 @@ import { AgentAvatar } from '@/components/agents/AgentAvatar';
 import type { AvatarConfigV1 } from '@/lib/avatars';
 import { AvatarCustomizationModal } from './AvatarCustomizationModal';
 import { ModelSelector } from '@/components/ai/ModelSelector';
+import { useOrganizationPlan } from '@/stores/app-state.store';
 
 interface BasicInfoModalProps {
   isOpen: boolean;
@@ -45,6 +46,7 @@ interface User {
 
 export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoModalProps) {
   const { data: session } = useSession();
+  const organizationPlan = useOrganizationPlan();
   const [formData, setFormData] = useState<FormData>({
     name: '',
     role: '',
@@ -326,8 +328,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
           )}
           <p className="text-xs text-muted-foreground">
             {canManageAgents
-              ? "Tools will use this user's OAuth connections. Only users with 'agents:manage' permission can change ownership."
-              : "You don't have permission to change the agent owner. Tools will use the current owner's OAuth connections."}
+              ? "Tools will use this user's connections. Only users with 'agents:manage' permission can change ownership."
+              : "You don't have permission to change the agent owner. Tools will use the current owner's connections."}
           </p>
         </div>
 
@@ -362,7 +364,7 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
             <ModelSelector
               value={formData.defaultModel || null}
               onChange={(model) => setFormData(prev => ({ ...prev, defaultModel: model }))}
-              organizationTier="free"
+              organizationTier={organizationPlan}
               showInherit={true}
               inheritLabel="Inherit from organization"
               requiredCapabilities={['toolCalling']}

@@ -19,7 +19,6 @@ import type {
   HistoryMessage,
   ChatContext,
   ContentChunk,
-  RagContext,
   ProcessingComplete,
   ProcessingError,
   StepProgress,
@@ -50,10 +49,9 @@ export interface ChatProcessingOptions {
 }
 
 export interface StreamingChatResponse {
-  type: 'content' | 'rag_context' | 'complete' | 'error' | 'step_progress';
+  type: 'content' | 'complete' | 'error' | 'step_progress';
   content?: string;
   sequence?: number;
-  ragContext?: RagContext;
   complete?: ProcessingComplete;
   error?: ProcessingError;
   stepProgress?: StepProgress;
@@ -166,7 +164,16 @@ export class ChatProcessingClient {
         config: t.config || {}
       })),
       model: skill.model || '',
-      content: skill.content || []
+      agentType: skill.agentType || '',  // "tool_calling" (default) or "code_agent"
+      content: skill.content || [],
+      executionType: skill.executionType || 'agent',  // 'agent' (default) or 'operation'
+      taskModelConfig: skill.taskModelConfig ? {
+        modelId: skill.taskModelConfig.modelId || '',
+        taskType: skill.taskModelConfig.taskType || '',
+        parameters: Object.fromEntries(
+          Object.entries(skill.taskModelConfig.parameters || {}).map(([k, v]) => [k, String(v)])
+        )
+      } : undefined
     }));
 
     const agentConfig = {
@@ -212,7 +219,6 @@ export class ChatProcessingClient {
       call.on('data', (response: ProcessMessageResponse) => {
         console.log(`[CHAT-GRPC-CLIENT] Received streaming response:`, {
           hasContentChunk: !!response.contentChunk,
-          hasRagContext: !!response.ragContext,
           hasComplete: !!response.complete,
           hasError: !!response.error,
           hasStepProgress: !!response.stepProgress,
@@ -235,12 +241,6 @@ export class ChatProcessingClient {
             type: 'content',
             content: response.contentChunk.content,
             sequence: response.contentChunk.sequence,
-            timestamp: response.timestamp
-          };
-        } else if (response.ragContext) {
-          streamingResponse = {
-            type: 'rag_context',
-            ragContext: response.ragContext,
             timestamp: response.timestamp
           };
         } else if (response.complete) {

@@ -36,9 +36,6 @@ export interface BillingSettingsClientProps {
   invoices: Invoice[];
   organizationId: number;
   modelBreakdown: BreakdownItem[];
-  agentBreakdown: BreakdownItem[];
-  userBreakdown: BreakdownItem[];
-  typeBreakdown: BreakdownItem[];
 }
 
 export function BillingSettingsClient({
@@ -47,9 +44,6 @@ export function BillingSettingsClient({
   invoices,
   organizationId,
   modelBreakdown,
-  agentBreakdown,
-  userBreakdown,
-  typeBreakdown,
 }: BillingSettingsClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -91,24 +85,26 @@ export function BillingSettingsClient({
     billingStatus?.subscriptionStatus === 'trialing';
 
   // Prepare overview data
+  // Note: billingStatus returns periodStart/periodEnd (not currentPeriodStart/currentPeriodEnd)
   const overview: BillingOverview = {
     tier,
     subscriptionStatus: billingStatus?.subscriptionStatus || null,
-    currentPeriodStart: billingStatus?.currentPeriodStart ? new Date(billingStatus.currentPeriodStart) : null,
-    currentPeriodEnd: billingStatus?.currentPeriodEnd ? new Date(billingStatus.currentPeriodEnd) : null,
+    currentPeriodStart: billingStatus?.periodStart ? new Date(billingStatus.periodStart) : null,
+    currentPeriodEnd: billingStatus?.periodEnd ? new Date(billingStatus.periodEnd) : null,
     nextBillingAmount: billingStatus?.nextInvoiceAmount || 0,
     paymentMethodLast4: billingStatus?.paymentMethod?.last4 || null,
     paymentMethodBrand: billingStatus?.paymentMethod?.brand || null,
   };
 
   // Prepare credit usage data
+  // Note: billingStatus returns usedCredits/allowanceCredits, map to CreditUsage interface
   const creditUsage: CreditUsage | null = billingStatus ? {
-    creditsUsed: billingStatus.creditsUsed || 0,
-    monthlyAllowance: billingStatus.monthlyAllowance || 0,
-    overageCredits: Math.max(0, (billingStatus.creditsUsed || 0) - (billingStatus.monthlyAllowance || 0)),
-    overageCostUsd: billingStatus.overageCost || 0,
-    periodStart: billingStatus.currentPeriodStart ? new Date(billingStatus.currentPeriodStart) : new Date(),
-    periodEnd: billingStatus.currentPeriodEnd ? new Date(billingStatus.currentPeriodEnd) : new Date(),
+    creditsUsed: billingStatus.usedCredits || 0,
+    monthlyAllowance: billingStatus.allowanceCredits || 0,
+    overageCredits: Math.max(0, (billingStatus.usedCredits || 0) - (billingStatus.allowanceCredits || 0)),
+    overageCostUsd: billingStatus.overageCostUsd || 0,
+    periodStart: billingStatus.periodStart ? new Date(billingStatus.periodStart) : new Date(),
+    periodEnd: billingStatus.periodEnd ? new Date(billingStatus.periodEnd) : new Date(),
   } : null;
 
   /**
@@ -279,6 +275,7 @@ export function BillingSettingsClient({
               usage={creditUsage}
               tierName={tier}
               showOverage={true}
+              hidePeriod={tier === 'free'}
             />
           )}
 
@@ -319,6 +316,7 @@ export function BillingSettingsClient({
                   usage={creditUsage}
                   tierName={tier}
                   showOverage={true}
+                  hidePeriod={tier === 'free'}
                 />
               )}
 
@@ -333,9 +331,6 @@ export function BillingSettingsClient({
                   <CreditBreakdownTabs
                     organizationId={organizationId}
                     modelBreakdown={modelBreakdown}
-                    agentBreakdown={agentBreakdown}
-                    userBreakdown={userBreakdown}
-                    typeBreakdown={typeBreakdown}
                   />
                 </CardContent>
               </Card>

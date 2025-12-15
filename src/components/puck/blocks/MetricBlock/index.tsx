@@ -94,9 +94,9 @@ export const MetricBlockConfig: ComponentConfig<MetricBlockProps> = {
       ...fontWeightField,
       label: "Value Font Weight (Optional)",
     },
-    borderRadius: borderRadiusField,
+    radius: borderRadiusField,
     borderWidth: borderWidthField,
-    paddingLevel: paddingField,
+    padding: paddingField,
   },
 
   defaultProps: {
@@ -110,9 +110,9 @@ export const MetricBlockConfig: ComponentConfig<MetricBlockProps> = {
     labelFontWeight: undefined,
     valueFontFamily: undefined,
     valueFontWeight: undefined,
-    borderRadius: undefined,
+    radius: undefined,
     borderWidth: undefined,
-    paddingLevel: undefined,
+    padding: undefined,
   },
 
   /**

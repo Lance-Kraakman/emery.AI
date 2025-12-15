@@ -15,15 +15,16 @@ export type { TemplateVariant } from '@/lib/db/schema';
 export class Template {
   private constructor(
     private readonly _id: TemplateId,
-    private readonly _organizationId: OrganizationId,
+    private readonly _organizationId: OrganizationId | null, // null for system templates
     private readonly _appId: AppId | null, // null = org-wide, set = app-specific
     private _name: string,
     private _description: string | undefined,
     private _category: string | undefined,
+    private readonly _isSystem: boolean, // true = pre-seeded system template
     private _thumbnailUrl: string | undefined,
     private _data: TemplateData,
     private _variants: TemplateVariant[],
-    private readonly _createdBy: UserId,
+    private readonly _createdBy: UserId | null, // null for system templates
     private readonly _createdAt: Date,
     private _updatedAt: Date
   ) {}
@@ -33,8 +34,12 @@ export class Template {
     return this._id;
   }
 
-  get organizationId(): OrganizationId {
+  get organizationId(): OrganizationId | null {
     return this._organizationId;
+  }
+
+  get isSystem(): boolean {
+    return this._isSystem;
   }
 
   get appId(): AppId | null {
@@ -79,7 +84,7 @@ export class Template {
     return this._variants.find(v => v.isDefault) ?? this._variants[0];
   }
 
-  get createdBy(): UserId {
+  get createdBy(): UserId | null {
     return this._createdBy;
   }
 
@@ -203,14 +208,14 @@ export class Template {
    * Check if the template is owned by a specific organization
    */
   isOwnedBy(organizationId: OrganizationId): boolean {
-    return this._organizationId.equals(organizationId);
+    return this._organizationId?.equals(organizationId) ?? false;
   }
 
   /**
    * Check if the template was created by a specific user
    */
   wasCreatedBy(userId: UserId): boolean {
-    return this._createdBy.equals(userId);
+    return this._createdBy?.equals(userId) ?? false;
   }
 
   // Factory methods
@@ -266,6 +271,7 @@ export class Template {
       data.name.trim(),
       data.description,
       data.category,
+      false, // User-created templates are never system templates
       data.thumbnailUrl,
       data.data,
       data.variants ?? [],
@@ -280,15 +286,16 @@ export class Template {
    */
   static fromPersistence(data: {
     id: number;
-    organizationId: number;
+    organizationId: number | null;
     appId?: number | null;
     name: string;
     description?: string | null;
     category?: string | null;
+    isSystem?: boolean;
     thumbnailUrl?: string | null;
     data: TemplateData;
     variants?: TemplateVariant[] | null;
-    createdBy: string;
+    createdBy: string | null;
     createdAt: Date;
     updatedAt: Date;
   }): Template {
@@ -298,15 +305,16 @@ export class Template {
 
     return new Template(
       TemplateId.fromNumber(data.id),
-      OrganizationId.fromNumber(data.organizationId),
+      data.organizationId ? OrganizationId.fromNumber(data.organizationId) : null,
       data.appId ? AppId.fromNumber(data.appId) : null,
       data.name,
       data.description ?? undefined,
       data.category ?? undefined,
+      data.isSystem ?? false,
       data.thumbnailUrl ?? undefined,
       data.data,
       data.variants ?? [],
-      UserId.fromString(data.createdBy),
+      data.createdBy ? UserId.fromString(data.createdBy) : null,
       data.createdAt,
       data.updatedAt
     );
@@ -317,29 +325,31 @@ export class Template {
    */
   toPersistence(): {
     id: number;
-    organizationId: number;
+    organizationId: number | null;
     appId: number | null;
     name: string;
     description: string | undefined;
     category: string | undefined;
+    isSystem: boolean;
     thumbnailUrl: string | undefined;
     data: TemplateData;
     variants: TemplateVariant[];
-    createdBy: string;
+    createdBy: string | null;
     createdAt: Date;
     updatedAt: Date;
   } {
     return {
       id: this._id.value,
-      organizationId: this._organizationId.value,
+      organizationId: this._organizationId?.value ?? null,
       appId: this._appId?.value ?? null,
       name: this._name,
       description: this._description,
       category: this._category,
+      isSystem: this._isSystem,
       thumbnailUrl: this._thumbnailUrl,
       data: this._data,
       variants: this._variants,
-      createdBy: this._createdBy.value,
+      createdBy: this._createdBy?.value ?? null,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt
     };

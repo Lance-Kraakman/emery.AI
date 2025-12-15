@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp, Save, Plus, X, Settings } from 'lucide-react';
+import { ChevronDown, ChevronUp, Save, Plus, X, Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,6 +11,9 @@ import { ModelSelector } from '@/components/ai/ModelSelector';
 import { InstructionsInput } from './editor/InstructionsInput';
 import { SkillInputsSection } from './editor/SkillInputsSection';
 import { SkillOutputsSection } from './editor/SkillOutputsSection';
+import { ExecutionTypeToggle } from './editor/ExecutionTypeToggle';
+import { TaskModelForm } from './editor/TaskModelForm';
+import { OutputMappingSection } from './editor/OutputMappingSection';
 import type { ToolConfigDTO, SkillInput, SkillOutput } from '@/app/mappers/skill-mapper';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 
@@ -22,8 +25,17 @@ export interface SkillFormData {
   instructions: string;
   tools: ToolConfigDTO[];
   model?: string | null; // Optional model override for this skill
+  agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   content?: MessagePart[]; // Existing uploaded attachments
   pendingAttachments?: File[]; // New attachments to upload on save
+  // Execution type: 'agent' (default) or 'operation' (direct model invocation)
+  executionType?: 'agent' | 'operation';
+  // Configuration for operation execution (required when executionType is 'operation')
+  taskModelConfig?: {
+    modelId: string;
+    taskType: string;
+    parameters?: Record<string, any>;
+  };
 }
 
 interface SkillEditorProps {
@@ -36,6 +48,7 @@ interface SkillEditorProps {
   agentDefaultModel?: string | null; // Agent's default model for inheritance display
   organizationTier?: 'free' | 'pro' | 'enterprise'; // For filtering available models
   availableModels?: string[]; // Organization's whitelist of allowed models
+  isReadOnly?: boolean; // When true, disables all inputs (for system skills)
 }
 
 /**
@@ -57,10 +70,26 @@ export function SkillEditor({
   agentDefaultModel,
   organizationTier = 'free',
   availableModels,
+  isReadOnly = false,
 }: SkillEditorProps) {
   const [localValue, setLocalValue] = useState(value);
   const [showDescription, setShowDescription] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Separate state for Agent and Direct mode inputs/outputs
+  // This preserves user's work when switching between modes
+  const [savedAgentState, setSavedAgentState] = useState<{
+    inputs: SkillInput[];
+    outputs: SkillOutput[];
+    instructions: string;
+    tools: ToolConfigDTO[];
+  }>({ inputs: [], outputs: [], instructions: '', tools: [] });
+
+  const [savedDirectState, setSavedDirectState] = useState<{
+    inputs: SkillInput[];
+    outputs: SkillOutput[];
+    instructions: string;
+    taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
+  }>({ inputs: [], outputs: [], instructions: '' });
 
   // Sync with external value changes
   useEffect(() => {
@@ -68,9 +97,14 @@ export function SkillEditor({
   }, [value]);
 
   const handleChange = (updates: Partial<SkillFormData>) => {
-    const newValue = { ...localValue, ...updates };
-    setLocalValue(newValue);
-    onChange(newValue);
+    // Use functional update to avoid stale closure issues when multiple
+    // updates are called in sequence (e.g., TaskModelForm updating taskModelConfig,
+    // inputs, and outputs separately)
+    setLocalValue(prev => {
+      const newValue = { ...prev, ...updates };
+      onChange(newValue);
+      return newValue;
+    });
   };
 
   // Attachment handlers
@@ -111,6 +145,7 @@ export function SkillEditor({
               onChange={(e) => handleChange({ name: e.target.value })}
               placeholder="e.g., Send Welcome Email, Generate Report, Analyze Data..."
               className="text-base h-10"
+              disabled={isReadOnly}
             />
           </div>
           {onSave && (
@@ -121,29 +156,31 @@ export function SkillEditor({
           )}
         </div>
 
-        {/* Add Description Link */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => setShowDescription(!showDescription)}
-        >
-          {showDescription ? (
-            <>
-              <ChevronUp className="h-3 w-3 mr-1" />
-              Hide description
-            </>
-          ) : (
-            <>
-              <ChevronDown className="h-3 w-3 mr-1" />
-              Add description
-            </>
-          )}
-        </Button>
+        {/* Add Description Link (hide when read-only unless there's a description) */}
+        {!isReadOnly && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setShowDescription(!showDescription)}
+          >
+            {showDescription ? (
+              <>
+                <ChevronUp className="h-3 w-3 mr-1" />
+                Hide description
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3 w-3 mr-1" />
+                Add description
+              </>
+            )}
+          </Button>
+        )}
 
         {/* Collapsible Description */}
-        {showDescription && (
+        {(showDescription || (isReadOnly && localValue.description)) && (
           <Textarea
             id="description"
             value={localValue.description}
@@ -151,11 +188,77 @@ export function SkillEditor({
             placeholder="Briefly describe what this skill does..."
             rows={2}
             className="text-base"
+            disabled={isReadOnly}
           />
         )}
       </div>
 
-      {/* Inputs Section */}
+      {/* Execution Type Toggle */}
+      <ExecutionTypeToggle
+        value={localValue.executionType || 'agent'}
+        onChange={(newMode) => {
+          const currentMode = localValue.executionType || 'agent';
+          if (currentMode === newMode) return;
+
+          // Save current state, restore target mode's saved state
+          if (currentMode === 'agent') {
+            setSavedAgentState({ inputs: localValue.inputs, outputs: localValue.outputs, instructions: localValue.instructions, tools: localValue.tools });
+            handleChange({ executionType: newMode, ...savedDirectState, tools: [] });
+          } else {
+            setSavedDirectState({ inputs: localValue.inputs, outputs: localValue.outputs, instructions: localValue.instructions, taskModelConfig: localValue.taskModelConfig });
+            handleChange({ executionType: newMode, ...savedAgentState, taskModelConfig: undefined });
+          }
+        }}
+        disabled={isReadOnly}
+      />
+
+      {/* Conditional Form Based on Execution Type */}
+      {localValue.executionType === 'operation' ? (
+        /* Direct Mode Form - Compact, auto-configures inputs/outputs */
+        <>
+          <TaskModelForm
+            value={localValue.taskModelConfig}
+            onChange={(taskModelConfig) => handleChange({ taskModelConfig })}
+            onInputsChange={(inputs) => handleChange({ inputs })}
+            onOutputsChange={(outputs) => handleChange({ outputs })}
+            onInstructionsChange={(instructions) => handleChange({ instructions })}
+            organizationTier={organizationTier}
+            isReadOnly={isReadOnly}
+          />
+
+          {/* Prompt Template - Only for operations with text inputs */}
+          {localValue.taskModelConfig?.taskType && localValue.inputs.some(input => input.type === 'text') && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Prompt Template</Label>
+              <InstructionsInput
+                value={localValue.instructions}
+                onChange={(text) => handleChange({ instructions: text })}
+                onToolsChange={() => {}}
+                tools={[]}
+                stepIndex={0}
+                isReadOnly={isReadOnly}
+              />
+              <p className="text-xs text-muted-foreground">
+                Use {'{{ input_name }}'} syntax. Leave empty to pass input directly.
+              </p>
+            </div>
+          )}
+
+          {/* Output Mapping Section - for Direct/Operation mode */}
+          {localValue.taskModelConfig?.taskType && localValue.outputs.length > 0 && (
+            <OutputMappingSection
+              outputs={localValue.outputs}
+              onOutputsChange={(outputs) => handleChange({ outputs })}
+              executionType="operation"
+              taskType={localValue.taskModelConfig?.taskType}
+              isReadOnly={isReadOnly}
+            />
+          )}
+        </>
+      ) : (
+        /* Agent Form (existing) */
+        <>
+          {/* Inputs Section */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label className="text-sm text-muted-foreground">Inputs</Label>
@@ -166,6 +269,7 @@ export function SkillEditor({
         <SkillInputsSection
           inputs={localValue.inputs}
           onInputsChange={(inputs) => handleChange({ inputs })}
+          isReadOnly={isReadOnly}
         />
         <p className="text-xs text-muted-foreground">
           Reference inputs in instructions using {'{input_name}'} syntax
@@ -192,17 +296,19 @@ export function SkillEditor({
                   </span>
                 </div>
 
-                {/* Remove button */}
-                <button
-                  onClick={() => {
-                    const newTools = localValue.tools.filter((_, i) => i !== index);
-                    handleChange({ tools: newTools });
-                  }}
-                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="Remove tool"
-                >
-                  <X className="w-2 h-2" />
-                </button>
+                {/* Remove button (hide when read-only) */}
+                {!isReadOnly && (
+                  <button
+                    onClick={() => {
+                      const newTools = localValue.tools.filter((_, i) => i !== index);
+                      handleChange({ tools: newTools });
+                    }}
+                    className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Remove tool"
+                  >
+                    <X className="w-2 h-2" />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -219,6 +325,7 @@ export function SkillEditor({
           onAttachmentRemove={handleAttachmentRemove}
           existingAttachments={existingAttachments}
           onExistingAttachmentRemove={handleExistingAttachmentRemove}
+          isReadOnly={isReadOnly}
         />
 
         <p className="text-xs text-muted-foreground">
@@ -237,56 +344,77 @@ export function SkillEditor({
         <SkillOutputsSection
           outputs={localValue.outputs}
           onOutputsChange={(outputs) => handleChange({ outputs })}
+          isReadOnly={isReadOnly}
         />
         <p className="text-xs text-muted-foreground">
           Define what data this skill returns
         </p>
       </div>
 
-      {/* Advanced Settings Section */}
-      <div className="space-y-3 border-t pt-6">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-        >
-          {showAdvanced ? (
-            <>
-              <ChevronUp className="h-3 w-3 mr-1" />
-              Hide advanced settings
-            </>
-          ) : (
-            <>
-              <Settings className="h-3 w-3 mr-1" />
-              Advanced settings
-            </>
-          )}
-        </Button>
+      {/* Output Mapping Section - for Agent mode */}
+      <OutputMappingSection
+        outputs={localValue.outputs}
+        onOutputsChange={(outputs) => handleChange({ outputs })}
+        executionType="agent"
+        skillOutputs={localValue.outputs}
+        isReadOnly={isReadOnly}
+      />
 
-        {showAdvanced && (
-          <div className="space-y-4">
-            {/* Model Selection */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">AI Model</Label>
-              <ModelSelector
-                value={localValue.model}
-                onChange={(model) => handleChange({ model })}
-                organizationTier={organizationTier}
-                availableModels={availableModels}
-                showInherit={true}
-                inheritLabel="Inherit from agent"
-                inheritFromModel={agentDefaultModel || 'IBM Granite 3.3 8B'}
-                requiredCapabilities={['toolCalling']}
-              />
-              <p className="text-xs text-muted-foreground">
-                Override the AI model used for this skill. Different models have different costs and capabilities.
-              </p>
+      {/* Advanced Settings Section */}
+      <div className="space-y-4 border-t pt-6">
+        {/* Model Selection */}
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">AI Model</Label>
+          <ModelSelector
+            value={localValue.model}
+            onChange={(model) => handleChange({ model })}
+            organizationTier={organizationTier}
+            availableModels={availableModels}
+            showInherit={true}
+            inheritLabel="Inherit from agent"
+            inheritFromModel={agentDefaultModel || 'IBM Granite 3.3 8B'}
+            requiredCapabilities={['toolCalling']}
+            disabled={isReadOnly}
+          />
+          <p className="text-xs text-muted-foreground">
+            Override the AI model used for this skill. Different models have different costs and capabilities.
+          </p>
+        </div>
+
+        {/* Agent Type Selection */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm font-medium">Agent Type</Label>
+            <div className="group relative">
+              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+              <div className="invisible group-hover:visible absolute left-0 top-5 z-50 w-72 rounded-md bg-popover p-3 text-xs text-popover-foreground shadow-md border">
+                <p className="font-medium mb-1">Tool Calling (Default)</p>
+                <p className="text-muted-foreground mb-2">Calls tools using structured function calls. More reliable and predictable. Best for simple tasks and smaller models.</p>
+                <p className="font-medium mb-1">Code Agent</p>
+                <p className="text-muted-foreground">Writes Python code to execute tools. Better for complex multi-step reasoning with conditionals and loops. Works best with larger models.</p>
+              </div>
             </div>
           </div>
-        )}
+          <Select
+            value={localValue.agentType || 'tool_calling'}
+            onValueChange={(agentType) => handleChange({ agentType: agentType === 'tool_calling' ? null : agentType })}
+            disabled={isReadOnly}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select agent type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tool_calling">Tool Calling (Default)</SelectItem>
+              <SelectItem value="code_agent">Code Agent</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            How the AI executes tools. Tool Calling is recommended for most use cases.
+          </p>
+        </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

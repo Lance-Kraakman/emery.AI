@@ -20,15 +20,16 @@ import { db } from "@/lib/db/client"
 // DTO for transferring template data to the client
 export interface TemplateDTO {
   id: number;
-  organizationId: number;
+  organizationId: number | null;
   appId: number | null;
   name: string;
   description?: string;
   category?: string;
+  isSystem: boolean;
   thumbnailUrl?: string;
   data: TemplateData;
   variants: TemplateVariant[];
-  createdBy: string;
+  createdBy: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,15 +38,16 @@ export interface TemplateDTO {
 function toDTO(template: Template): TemplateDTO {
   return {
     id: template.id.value,
-    organizationId: template.organizationId.value,
+    organizationId: template.organizationId?.value ?? null,
     appId: template.appId?.value ?? null,
     name: template.name,
     description: template.description,
     category: template.category,
+    isSystem: template.isSystem,
     thumbnailUrl: template.thumbnailUrl,
     data: template.data,
     variants: template.variants,
-    createdBy: template.createdBy.value,
+    createdBy: template.createdBy?.value ?? null,
     createdAt: template.createdAt.toISOString(),
     updatedAt: template.updatedAt.toISOString()
   };
@@ -369,6 +371,15 @@ export async function deleteTemplate(id: number): Promise<Result<{ message: stri
         success: false,
         error: ActionError.notFound('Template', id),
         errorCode: 'NOT_FOUND'
+      };
+    }
+
+    // Block deletion of system templates
+    if (template.isSystem) {
+      return {
+        success: false,
+        error: 'System templates cannot be deleted',
+        errorCode: 'PERMISSION'
       };
     }
 

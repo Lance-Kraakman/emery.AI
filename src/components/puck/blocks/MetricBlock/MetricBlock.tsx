@@ -6,9 +6,14 @@
  * Following Baserow's architecture pattern for metric views with backend aggregations.
  */
 
+'use client';
+
 import React from "react";
 import styles from "./styles.module.css";
 import type { TypographySize } from "../../utils/typography";
+import type { FourSidedSpacing, FourCornerRadius } from "../../types/spacing-types";
+import { useTheme } from "../../theme-context";
+import { computeFourSidedCSS, computeFourCornerRadiusCSS } from "../../utils/spacing";
 
 export interface MetricBlockProps {
   // Configuration props (set in Puck editor)
@@ -23,9 +28,9 @@ export interface MetricBlockProps {
   labelFontWeight?: string;         // Optional label font weight override
   valueFontFamily?: string;         // Optional value font family override
   valueFontWeight?: string;         // Optional value font weight override
-  borderRadius?: string;            // Optional border radius override
+  radius?: FourCornerRadius;        // Optional border radius override
   borderWidth?: string;             // Optional border width override
-  paddingLevel?: string;            // Optional padding level (0-10 scale)
+  padding?: FourSidedSpacing;       // Optional padding
 
   // Resolved data (injected by resolveData hook)
   _viewName?: string;               // View name for display
@@ -55,9 +60,9 @@ export default function MetricBlock(props: MetricBlockProps) {
     labelFontWeight,
     valueFontFamily,
     valueFontWeight,
-    borderRadius,
+    radius,
     borderWidth,
-    paddingLevel,
+    padding,
     _viewName,
     _metricValue,
     _metricLabel,
@@ -139,8 +144,9 @@ export default function MetricBlock(props: MetricBlockProps) {
   const formattedValue = formatValue(_metricValue, _formatType, _decimals);
   const displayLabel = _metricLabel || _viewName || 'Metric';
 
-  // Calculate padding from level if provided
-  const padding = paddingLevel ? `calc(var(--theme-spacing-unit, 0.25rem) * ${paddingLevel})` : undefined;
+  const theme = useTheme();
+  const paddingStyles = padding ? computeFourSidedCSS(padding, theme, 'padding') : {};
+  const radiusStyles = radius ? computeFourCornerRadiusCSS(radius, theme) : {};
 
   return (
     <div
@@ -148,9 +154,9 @@ export default function MetricBlock(props: MetricBlockProps) {
       data-size={size}
       style={{
         ...(backgroundColor && { backgroundColor }),
-        ...(borderRadius && { borderRadius }),
+        ...radiusStyles,
         ...(borderWidth && { borderWidth }),
-        ...(padding && { padding }),
+        ...paddingStyles,
       }}
     >
       {showLabel && (
