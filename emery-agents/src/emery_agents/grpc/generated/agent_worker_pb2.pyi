@@ -257,15 +257,29 @@ class SkillOutput(_message.Message):
     output_mapping: OutputMappingConfig
     def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., output_mapping: _Optional[_Union[OutputMappingConfig, _Mapping]] = ...) -> None: ...
 
+class TargetFieldMetadata(_message.Message):
+    __slots__ = ("field_type", "options", "max_selections", "field_name")
+    FIELD_TYPE_FIELD_NUMBER: _ClassVar[int]
+    OPTIONS_FIELD_NUMBER: _ClassVar[int]
+    MAX_SELECTIONS_FIELD_NUMBER: _ClassVar[int]
+    FIELD_NAME_FIELD_NUMBER: _ClassVar[int]
+    field_type: str
+    options: _containers.RepeatedScalarFieldContainer[str]
+    max_selections: int
+    field_name: str
+    def __init__(self, field_type: _Optional[str] = ..., options: _Optional[_Iterable[str]] = ..., max_selections: _Optional[int] = ..., field_name: _Optional[str] = ...) -> None: ...
+
 class FieldMapping(_message.Message):
-    __slots__ = ("source_field", "target_table_id", "target_field_id")
+    __slots__ = ("source_field", "target_table_id", "target_field_id", "target_field_metadata")
     SOURCE_FIELD_FIELD_NUMBER: _ClassVar[int]
     TARGET_TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     TARGET_FIELD_ID_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_METADATA_FIELD_NUMBER: _ClassVar[int]
     source_field: str
     target_table_id: int
     target_field_id: int
-    def __init__(self, source_field: _Optional[str] = ..., target_table_id: _Optional[int] = ..., target_field_id: _Optional[int] = ...) -> None: ...
+    target_field_metadata: TargetFieldMetadata
+    def __init__(self, source_field: _Optional[str] = ..., target_table_id: _Optional[int] = ..., target_field_id: _Optional[int] = ..., target_field_metadata: _Optional[_Union[TargetFieldMetadata, _Mapping]] = ...) -> None: ...
 
 class OutputMappingConfig(_message.Message):
     __slots__ = ("mode", "row_action", "row_id", "mappings")

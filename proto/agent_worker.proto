@@ -147,7 +147,7 @@ message TaskModelConfig {
 message SkillInput {
   string name = 1;
   bool required = 2;
-  string type = 3;                     // text, image, file, audio, video, document
+  string type = 3;                     // text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document
   SkillInputFileConfig file_config = 4; // File configuration (for file-type inputs)
 }
 
@@ -161,8 +161,16 @@ message SkillInputFileConfig {
 // Skill output value
 message SkillOutput {
   string name = 1;
-  string type = 2;                     // text, image, file, audio, video, document
+  string type = 2;                     // text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document
   OutputMappingConfig output_mapping = 3;  // Optional: path-based field mapping configuration
+}
+
+// Target field metadata - provides LLM guidance based on database field type
+message TargetFieldMetadata {
+  string field_type = 1;               // Database field type: "single-select", "multi-select", "number", "boolean", etc.
+  repeated string options = 2;         // For select fields: valid option values
+  optional int32 max_selections = 3;   // For multi-select: maximum allowed selections
+  optional string field_name = 4;      // Target field name (for display)
 }
 
 // Individual field mapping - maps a source path to a target table field
@@ -170,6 +178,7 @@ message FieldMapping {
   string source_field = 1;             // Field path: "label", "score", "box.xmin", "source.rowId"
   int32 target_table_id = 2;           // Target table ID
   int32 target_field_id = 3;           // Target field/column ID
+  TargetFieldMetadata target_field_metadata = 4;  // Optional: target field info for LLM guidance
 }
 
 // Output mapping configuration - supports single-row and multi-row mapping modes

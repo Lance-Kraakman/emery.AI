@@ -23,18 +23,30 @@ import {
  * Map skill output type to OutputFieldDef type for output mapping.
  * Used in agent mode to derive source fields from skill outputs.
  * OutputFieldDef requires: 'text' | 'number' | 'boolean' | 'relation' | 'file' | 'embedding'
+ *
+ * Skill output types are expanded to align with database field types.
+ * This mapping converts them back to the limited set of OutputFieldDef types.
  */
 function mapSkillOutputTypeToFieldType(skillOutputType: string | undefined): OutputFieldDef['type'] {
   const typeMap: Record<string, OutputFieldDef['type']> = {
+    // Basic types
     'text': 'text',
     'number': 'number',
     'boolean': 'boolean',
-    'image': 'file',    // URLs stored as file
+    'date': 'text',         // ISO date string stored as text
+    'json': 'text',         // JSON serialized as text
+    // Format-specific types
+    'email': 'text',        // Email string stored as text
+    'phone': 'text',        // Phone string stored as text
+    // Select types
+    'single-select': 'text', // Selected value stored as text
+    'multi-select': 'text',  // Array stored as text (JSON serialized)
+    // Media types (URLs stored as file)
+    'image': 'file',
     'file': 'file',
-    'audio': 'file',    // URLs stored as file
-    'video': 'file',    // URLs stored as file
-    'document': 'file', // URLs stored as file
-    'json': 'text',     // JSON serialized as text
+    'audio': 'file',
+    'video': 'file',
+    'document': 'file',
   };
   return typeMap[skillOutputType || 'text'] || 'text';
 }

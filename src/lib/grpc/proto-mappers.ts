@@ -314,7 +314,17 @@ export function mapSkillToProto(skill: {
       mode: 'single_row' | 'multi_row';
       rowAction?: 'create' | 'update';
       rowId?: string;
-      mappings: Array<{ sourceField: string; targetTableId: number; targetFieldId: number }>;
+      mappings: Array<{
+        sourceField: string;
+        targetTableId: number;
+        targetFieldId: number;
+        targetFieldMetadata?: {
+          fieldType: string;
+          options?: string[];
+          maxSelections?: number;
+          fieldName?: string;
+        };
+      }>;
     };
   }>;
   tools: Array<{ name: string; version?: string; config?: Record<string, any> }>;
@@ -353,7 +363,14 @@ export function mapSkillToProto(skill: {
         mappings: output.outputMapping.mappings.map(m => ({
           sourceField: m.sourceField,
           targetTableId: m.targetTableId,
-          targetFieldId: m.targetFieldId
+          targetFieldId: m.targetFieldId,
+          // Include target field metadata for LLM guidance if available
+          targetFieldMetadata: m.targetFieldMetadata ? {
+            fieldType: m.targetFieldMetadata.fieldType || '',
+            options: m.targetFieldMetadata.options || [],
+            maxSelections: m.targetFieldMetadata.maxSelections,
+            fieldName: m.targetFieldMetadata.fieldName || ''
+          } : undefined
         }))
       } : undefined
     })),

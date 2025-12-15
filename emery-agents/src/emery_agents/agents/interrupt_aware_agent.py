@@ -16,7 +16,6 @@ class InterruptAwareToolCallingAgent(HITLMixin, ToolCallingAgent):
     """ToolCallingAgent that propagates interrupts and handles HITL resume via mixin."""
 
     def __init__(self, *args, **kwargs):
-        HITLMixin.__init__(self)
         super().__init__(*args, **kwargs)
 
     def run(self, task: str, **kwargs) -> RunResult | str:
@@ -42,7 +41,6 @@ class InterruptAwareCodeAgent(HITLMixin, CodeAgent):
     """CodeAgent that propagates interrupts and handles HITL resume via mixin."""
 
     def __init__(self, *args, **kwargs):
-        HITLMixin.__init__(self)
         super().__init__(*args, **kwargs)
 
     def run(self, task: str, **kwargs) -> RunResult | str:

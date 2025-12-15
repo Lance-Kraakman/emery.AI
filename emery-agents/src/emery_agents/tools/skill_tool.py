@@ -690,6 +690,10 @@ class SkillTool(Tool):
         Called when a delegated skill has output mappings configured and the
         sub-agent's OutputTool has captured values.
 
+        AIDEV-NOTE: The UI stores ALL field mappings on outputs[0].outputMapping,
+        and those mappings can reference any skill output as a source field.
+        So we pass ALL captured values to the mapping, not just one output's value.
+
         Args:
             captured_values: Values captured from OutputTool (keyed by output name)
         """
@@ -719,24 +723,21 @@ class SkillTool(Tool):
             return
 
         logger.info(f"📊 Applying {len(outputs_with_mappings)} agent output mappings from delegation")
+        logger.info(f"📤 Captured values available: {list(captured_values.keys())}")
 
         for output in outputs_with_mappings:
             output_name = output.name
-            output_value = captured_values.get(output_name)
-
-            if output_value is None:
-                logger.warning(f"No captured value for output '{output_name}'")
-                continue
 
             try:
                 config = OutputMappingConfig.from_proto(output.output_mapping)
 
-                # Wrap simple values for field extraction
-                # Use output_name as the key so source_field can reference it
-                if not isinstance(output_value, dict):
-                    data_for_mapping = {output_name: output_value}
-                else:
-                    data_for_mapping = output_value
+                # Pass ALL captured values to the mapping
+                # UI stores all field mappings on outputs[0], and they can reference
+                # any skill output (e.g., isGay, name) as source fields
+                # The captured_values dict already has {output_name: value} for each output
+                data_for_mapping = captured_values
+
+                logger.info(f"📋 Applying mapping for '{output_name}' with data: {data_for_mapping}")
 
                 # Apply mapping using shared service
                 success = await OutputMappingService.apply_mapping(

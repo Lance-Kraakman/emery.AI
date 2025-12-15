@@ -24,6 +24,17 @@ export interface SkillInput {
 }
 
 /**
+ * Target field metadata for LLM guidance
+ * Provides type info and constraints from the database field
+ */
+export interface TargetFieldMetadata {
+  fieldType: string;         // Database field type: "single-select", "multi-select", "number", etc.
+  options?: string[];        // For select fields: valid option values
+  maxSelections?: number;    // For multi-select: maximum allowed selections
+  fieldName?: string;        // Target field name (for display)
+}
+
+/**
  * DTO for Field Mapping
  * Maps a source output field to a target table field
  */
@@ -31,6 +42,7 @@ export interface FieldMapping {
   sourceField: string;       // e.g., "label", "score", "box.xmin", "source.rowId"
   targetTableId: number;     // Destination table
   targetFieldId: number;     // Destination field/column
+  targetFieldMetadata?: TargetFieldMetadata;  // Optional: target field info for LLM guidance
 }
 
 /**

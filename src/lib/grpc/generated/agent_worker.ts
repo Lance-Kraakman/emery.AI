@@ -361,7 +361,7 @@ export interface TaskModelConfig_ParametersEntry {
 export interface SkillInput {
   name: string;
   required: boolean;
-  /** text, image, file, audio, video, document */
+  /** text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document */
   type: string;
   /** File configuration (for file-type inputs) */
   fileConfig: SkillInputFileConfig | undefined;
@@ -380,10 +380,24 @@ export interface SkillInputFileConfig {
 /** Skill output value */
 export interface SkillOutput {
   name: string;
-  /** text, image, file, audio, video, document */
+  /** text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document */
   type: string;
   /** Optional: path-based field mapping configuration */
   outputMapping: OutputMappingConfig | undefined;
+}
+
+/** Target field metadata - provides LLM guidance based on database field type */
+export interface TargetFieldMetadata {
+  /** Database field type: "single-select", "multi-select", "number", "boolean", etc. */
+  fieldType: string;
+  /** For select fields: valid option values */
+  options: string[];
+  /** For multi-select: maximum allowed selections */
+  maxSelections?:
+    | number
+    | undefined;
+  /** Target field name (for display) */
+  fieldName?: string | undefined;
 }
 
 /** Individual field mapping - maps a source path to a target table field */
@@ -394,6 +408,8 @@ export interface FieldMapping {
   targetTableId: number;
   /** Target field/column ID */
   targetFieldId: number;
+  /** Optional: target field info for LLM guidance */
+  targetFieldMetadata: TargetFieldMetadata | undefined;
 }
 
 /** Output mapping configuration - supports single-row and multi-row mapping modes */
@@ -2642,8 +2658,116 @@ export const SkillOutput: MessageFns<SkillOutput> = {
   },
 };
 
+function createBaseTargetFieldMetadata(): TargetFieldMetadata {
+  return { fieldType: "", options: [], maxSelections: undefined, fieldName: undefined };
+}
+
+export const TargetFieldMetadata: MessageFns<TargetFieldMetadata> = {
+  encode(message: TargetFieldMetadata, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.fieldType !== "") {
+      writer.uint32(10).string(message.fieldType);
+    }
+    for (const v of message.options) {
+      writer.uint32(18).string(v!);
+    }
+    if (message.maxSelections !== undefined) {
+      writer.uint32(24).int32(message.maxSelections);
+    }
+    if (message.fieldName !== undefined) {
+      writer.uint32(34).string(message.fieldName);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TargetFieldMetadata {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTargetFieldMetadata();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.fieldType = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.options.push(reader.string());
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.maxSelections = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.fieldName = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TargetFieldMetadata {
+    return {
+      fieldType: isSet(object.fieldType) ? globalThis.String(object.fieldType) : "",
+      options: globalThis.Array.isArray(object?.options) ? object.options.map((e: any) => globalThis.String(e)) : [],
+      maxSelections: isSet(object.maxSelections) ? globalThis.Number(object.maxSelections) : undefined,
+      fieldName: isSet(object.fieldName) ? globalThis.String(object.fieldName) : undefined,
+    };
+  },
+
+  toJSON(message: TargetFieldMetadata): unknown {
+    const obj: any = {};
+    if (message.fieldType !== "") {
+      obj.fieldType = message.fieldType;
+    }
+    if (message.options?.length) {
+      obj.options = message.options;
+    }
+    if (message.maxSelections !== undefined) {
+      obj.maxSelections = Math.round(message.maxSelections);
+    }
+    if (message.fieldName !== undefined) {
+      obj.fieldName = message.fieldName;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TargetFieldMetadata>, I>>(base?: I): TargetFieldMetadata {
+    return TargetFieldMetadata.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TargetFieldMetadata>, I>>(object: I): TargetFieldMetadata {
+    const message = createBaseTargetFieldMetadata();
+    message.fieldType = object.fieldType ?? "";
+    message.options = object.options?.map((e) => e) || [];
+    message.maxSelections = object.maxSelections ?? undefined;
+    message.fieldName = object.fieldName ?? undefined;
+    return message;
+  },
+};
+
 function createBaseFieldMapping(): FieldMapping {
-  return { sourceField: "", targetTableId: 0, targetFieldId: 0 };
+  return { sourceField: "", targetTableId: 0, targetFieldId: 0, targetFieldMetadata: undefined };
 }
 
 export const FieldMapping: MessageFns<FieldMapping> = {
@@ -2656,6 +2780,9 @@ export const FieldMapping: MessageFns<FieldMapping> = {
     }
     if (message.targetFieldId !== 0) {
       writer.uint32(24).int32(message.targetFieldId);
+    }
+    if (message.targetFieldMetadata !== undefined) {
+      TargetFieldMetadata.encode(message.targetFieldMetadata, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -2691,6 +2818,14 @@ export const FieldMapping: MessageFns<FieldMapping> = {
           message.targetFieldId = reader.int32();
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.targetFieldMetadata = TargetFieldMetadata.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2705,6 +2840,9 @@ export const FieldMapping: MessageFns<FieldMapping> = {
       sourceField: isSet(object.sourceField) ? globalThis.String(object.sourceField) : "",
       targetTableId: isSet(object.targetTableId) ? globalThis.Number(object.targetTableId) : 0,
       targetFieldId: isSet(object.targetFieldId) ? globalThis.Number(object.targetFieldId) : 0,
+      targetFieldMetadata: isSet(object.targetFieldMetadata)
+        ? TargetFieldMetadata.fromJSON(object.targetFieldMetadata)
+        : undefined,
     };
   },
 
@@ -2719,6 +2857,9 @@ export const FieldMapping: MessageFns<FieldMapping> = {
     if (message.targetFieldId !== 0) {
       obj.targetFieldId = Math.round(message.targetFieldId);
     }
+    if (message.targetFieldMetadata !== undefined) {
+      obj.targetFieldMetadata = TargetFieldMetadata.toJSON(message.targetFieldMetadata);
+    }
     return obj;
   },
 
@@ -2730,6 +2871,9 @@ export const FieldMapping: MessageFns<FieldMapping> = {
     message.sourceField = object.sourceField ?? "";
     message.targetTableId = object.targetTableId ?? 0;
     message.targetFieldId = object.targetFieldId ?? 0;
+    message.targetFieldMetadata = (object.targetFieldMetadata !== undefined && object.targetFieldMetadata !== null)
+      ? TargetFieldMetadata.fromPartial(object.targetFieldMetadata)
+      : undefined;
     return message;
   },
 };

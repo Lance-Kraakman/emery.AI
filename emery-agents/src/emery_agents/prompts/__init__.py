@@ -28,7 +28,7 @@ Usage:
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -320,16 +320,22 @@ def render_available_files(attachments: List[Any]) -> str:
     return render_template("components/available_files.j2", files=files_for_template)
 
 
-def render_output_instructions(skill_outputs: List[Any]) -> str:
+def render_output_instructions(
+    skill_outputs: List[Any],
+    target_field_metadata: Optional[Dict[str, Any]] = None
+) -> str:
     """
     Render output capture instructions for agent mode skills.
 
     When a skill has outputs with mappings, this template instructs the LLM
-    to call submit_result() with the expected outputs.
+    to call submit_result() with the expected outputs. Includes type-aware
+    guidance based on target field metadata when available.
 
     Args:
         skill_outputs: List of skill output objects (proto or dict format)
                       Each should have 'name', 'type', and optional 'description'
+        target_field_metadata: Optional dict mapping output_name → target field info
+                              (field_type, options, max_selections, field_name)
 
     Returns:
         Rendered output instructions string
@@ -337,19 +343,33 @@ def render_output_instructions(skill_outputs: List[Any]) -> str:
     if not skill_outputs:
         return ""
 
+    target_metadata = target_field_metadata or {}
+
     # Convert protobuf outputs to dicts for template rendering
     outputs_for_template = []
     for output in skill_outputs:
         if hasattr(output, 'name'):
             # Proto object
-            outputs_for_template.append({
-                'name': output.name,
-                'type': getattr(output, 'type', 'text') or 'text',
-                'description': getattr(output, 'description', '') or ''
-            })
+            name = output.name
+            output_type = getattr(output, 'type', 'text') or 'text'
+            description = getattr(output, 'description', '') or ''
         elif isinstance(output, dict):
             # Already a dict
-            outputs_for_template.append(output)
+            name = output.get('name', '')
+            output_type = output.get('type', 'text') or 'text'
+            description = output.get('description', '') or ''
+        else:
+            continue
+
+        # Get target field metadata if available
+        target_meta = target_metadata.get(name, {})
+
+        outputs_for_template.append({
+            'name': name,
+            'type': output_type,
+            'description': description,
+            'target': target_meta  # Includes field_type, options, max_selections
+        })
 
     if not outputs_for_template:
         return ""
@@ -433,7 +453,21 @@ def build_agent_instructions(
 
         # Output capture instructions (for skills with output mappings)
         if skill_outputs:
-            output_instructions = render_output_instructions(skill_outputs)
+            # Extract target field metadata for type-aware guidance
+            from ..tools.output_tool import build_target_field_metadata_from_mappings
+            target_metadata = build_target_field_metadata_from_mappings(skill_outputs)
+            target_meta_dict = {
+                name: {
+                    'field_type': meta.field_type,
+                    'options': meta.options,
+                    'max_selections': meta.max_selections
+                }
+                for name, meta in target_metadata.items()
+            }
+            output_instructions = render_output_instructions(
+                skill_outputs,
+                target_field_metadata=target_meta_dict
+            )
             if output_instructions:
                 base_instructions = f"{base_instructions}\n\n{output_instructions}"
                 logger.debug(f"📝 Added output capture instructions ({len(output_instructions)} chars)")
