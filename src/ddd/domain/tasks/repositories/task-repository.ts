@@ -15,7 +15,7 @@ export interface CreateTaskData {
   agentId: number;
   organizationId: number;
   name: string;
-  skillName?: string | null;
+  skillId?: number | null; // Optional skill to execute
   instructions: any; // JSONB from database
   triggerContext?: any; // JSONB trigger context
   status?: string;
