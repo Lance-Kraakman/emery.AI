@@ -8,7 +8,7 @@
  */
 
 import * as React from "react"
-import { Check, ChevronDown, Sparkles, Zap, Target, Settings2 } from "lucide-react"
+import { Check, ChevronDown, Sparkles, Zap, Target, Settings2, Eye } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   Select,
@@ -150,7 +150,7 @@ export function ModelSelector({
               >
                 <SelectValue>
                   {currentModel ? (
-                    <CategoryIcon category={currentModel.category} className="h-4 w-4" />
+                    <CategoryIcon category={currentModel.category} hasVision={currentModel.capabilities.vision} className="h-4 w-4" />
                   ) : (
                     <Settings2 className="h-4 w-4 text-muted-foreground" />
                   )}
@@ -200,7 +200,7 @@ function ModelDisplayValue({ model }: { model: ModelMetadata | null | undefined 
 
   return (
     <div className="flex items-center gap-2">
-      <CategoryIcon category={model.category} className="h-4 w-4" />
+      <CategoryIcon category={model.category} hasVision={model.capabilities.vision} className="h-4 w-4" />
       <span className="truncate">{model.name}</span>
       <TierBadge tier={model.tier} />
     </div>
@@ -211,7 +211,7 @@ function ModelOption({ model }: { model: ModelMetadata }) {
   return (
     <div className="flex flex-col gap-1.5 py-1">
       <div className="flex items-center gap-2">
-        <CategoryIcon category={model.category} className="h-4 w-4" />
+        <CategoryIcon category={model.category} hasVision={model.capabilities.vision} className="h-4 w-4" />
         <span className="font-medium">{model.name}</span>
         <TierBadge tier={model.tier} />
       </div>
@@ -251,10 +251,16 @@ function ModelOption({ model }: { model: ModelMetadata }) {
   )
 }
 
-function CategoryIcon({ category, className }: {
+function CategoryIcon({ category, hasVision, className }: {
   category: 'fast' | 'balanced' | 'advanced'
+  hasVision?: boolean
   className?: string
 }) {
+  // Vision models get Eye icon regardless of category
+  if (hasVision) {
+    return <Eye className={cn("text-emerald-500", className)} />
+  }
+
   switch (category) {
     case 'fast':
       return <Zap className={cn("text-yellow-500", className)} />

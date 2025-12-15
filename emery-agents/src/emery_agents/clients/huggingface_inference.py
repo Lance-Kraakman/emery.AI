@@ -10,13 +10,14 @@ import os
 import io
 import base64
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from huggingface_hub import InferenceClient
 from PIL import Image
 
 from .base import BaseInferenceClient, TaskResult, TaskResultType
 from ..services.model_registry import get_model_metadata
+from ..types import is_nested_list, is_dict_list
 
 logger = logging.getLogger(__name__)
 
@@ -557,15 +558,16 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
 
         result = client.feature_extraction(text=text)
 
-        # Handle different response formats
-        if isinstance(result, list):
-            if isinstance(result[0], list):
-                # Nested array: [[0.1, 0.2, ...]]
-                embedding = result[0]
-            else:
-                # Flat array: [0.1, 0.2, ...]
-                embedding = result
+        # Handle different response formats using type guards
+        embedding: List[float]
+        if is_nested_list(result):
+            # Nested array: [[0.1, 0.2, ...]]
+            embedding = result[0]
+        elif isinstance(result, list):
+            # Flat array: [0.1, 0.2, ...]
+            embedding = result
         else:
+            # Convert other formats to list
             embedding = list(result)
 
         logger.info(f"✅ Generated embedding: {len(embedding)} dimensions")

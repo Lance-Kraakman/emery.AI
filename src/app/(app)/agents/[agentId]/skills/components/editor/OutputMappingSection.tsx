@@ -57,31 +57,26 @@ function FieldMappingRow({
   isReadOnly
 }: FieldMappingRowProps) {
   return (
-    <div className="flex items-center gap-2 p-2 rounded border bg-background">
+    <div className="flex items-center gap-1.5">
       {/* Source field selector */}
       <Select
         value={mapping.sourceField}
         onValueChange={(value) => onUpdate({ ...mapping, sourceField: value })}
         disabled={isReadOnly}
       >
-        <SelectTrigger className="w-[140px] h-8">
-          <SelectValue placeholder="Output field..." />
+        <SelectTrigger className="w-[120px] h-7 text-[11px]">
+          <SelectValue placeholder="Source..." />
         </SelectTrigger>
         <SelectContent>
           {sourceFields.map((field) => (
             <SelectItem key={field.field} value={field.field}>
-              <div className="flex flex-col">
-                <span>{field.field}</span>
-                {field.description && (
-                  <span className="text-xs text-muted-foreground">{field.description}</span>
-                )}
-              </div>
+              {field.field}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
 
-      <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+      <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
 
       {/* Target field selector */}
       <Select
@@ -89,16 +84,14 @@ function FieldMappingRow({
         onValueChange={(value) => onUpdate({ ...mapping, targetFieldId: parseInt(value) })}
         disabled={isReadOnly || targetFields.length === 0}
       >
-        <SelectTrigger className="w-[140px] h-8">
-          <SelectValue placeholder="Target field..." />
+        <SelectTrigger className="w-[130px] h-7 text-[11px]">
+          <SelectValue placeholder="Target..." />
         </SelectTrigger>
         <SelectContent>
           {targetFields.map((field) => (
             <SelectItem key={field.id} value={field.id.toString()}>
-              <div className="flex items-center gap-1">
-                <span>{field.name}</span>
-                <span className="text-xs text-muted-foreground">({field.type})</span>
-              </div>
+              <span>{field.name}</span>
+              <span className="text-[10px] text-muted-foreground ml-1">({field.type})</span>
             </SelectItem>
           ))}
         </SelectContent>
@@ -106,15 +99,13 @@ function FieldMappingRow({
 
       {/* Remove button */}
       {!isReadOnly && (
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
+          className="h-5 w-5 rounded text-muted-foreground hover:text-foreground hover:bg-muted flex items-center justify-center"
           onClick={onRemove}
         >
-          <X className="h-4 w-4" />
-        </Button>
+          <X className="h-3 w-3" />
+        </button>
       )}
     </div>
   );
@@ -223,15 +214,9 @@ export function OutputMappingSection({
   // Show info message if no outputs defined (agent mode only)
   if (executionType === 'agent' && (!skillOutputs || skillOutputs.length === 0)) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Database className="h-4 w-4 text-muted-foreground" />
-          <Label className="text-sm font-medium">Output Mapping</Label>
-        </div>
-        <div className="text-sm text-muted-foreground p-3 border rounded-lg bg-muted/20">
-          <p>Add outputs above to enable output mapping.</p>
-          <p className="text-xs mt-1">When outputs are defined, you can map them to table fields to save results automatically.</p>
-        </div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+        <Database className="h-3.5 w-3.5" />
+        <span>Add outputs above to enable output mapping</span>
       </div>
     );
   }
@@ -334,62 +319,47 @@ export function OutputMappingSection({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Database className="h-4 w-4 text-muted-foreground" />
-        <Label className="text-sm font-medium">Output Mapping</Label>
-        <div className="group relative">
-          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-          <div className="invisible group-hover:visible absolute left-0 top-5 z-50 w-64 rounded-md bg-popover p-2 text-xs text-popover-foreground shadow-md border">
-            Map output fields to table columns. Single row maps the top result; multi-row creates a row per item.
+    <div className="space-y-2">
+      {/* Compact header with inline config */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <Database className="h-3.5 w-3.5 text-muted-foreground" />
+          <Label className="text-xs font-medium">Output Mapping</Label>
+          <div className="group relative">
+            <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+            <div className="invisible group-hover:visible absolute left-0 top-4 z-50 w-56 rounded-md bg-popover p-2 text-[11px] text-popover-foreground shadow-md border">
+              Map outputs to table fields. Single row = top result; Multi = row per item.
+            </div>
           </div>
         </div>
-      </div>
 
-      {loading ? (
-        <div className="text-sm text-muted-foreground p-3 border rounded-lg">
-          Loading tables...
-        </div>
-      ) : tables.length === 0 ? (
-        <div className="text-sm text-muted-foreground p-3 border rounded-lg">
-          No tables available. Create a table first.
-        </div>
-      ) : (
-        <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-          {/* Mode selector */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Mode</Label>
+        {!loading && tables.length > 0 && (
+          <>
+            {/* Mode toggle */}
             <RadioGroup
               value={outputMapping?.mode || suggestMappingMode(taskType || '')}
               onValueChange={(value) => handleModeChange(value as 'single_row' | 'multi_row')}
-              className="flex gap-4"
+              className="flex gap-1"
               disabled={isReadOnly}
             >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="single_row" id="single_row" />
-                <Label htmlFor="single_row" className="text-sm cursor-pointer">
-                  Single Row (top result)
-                </Label>
+              <div className="flex items-center">
+                <RadioGroupItem value="single_row" id="single_row" className="h-3 w-3" />
+                <Label htmlFor="single_row" className="text-[11px] cursor-pointer pl-1">Single</Label>
               </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="multi_row" id="multi_row" />
-                <Label htmlFor="multi_row" className="text-sm cursor-pointer">
-                  Multiple Rows (all results)
-                </Label>
+              <div className="flex items-center">
+                <RadioGroupItem value="multi_row" id="multi_row" className="h-3 w-3" />
+                <Label htmlFor="multi_row" className="text-[11px] cursor-pointer pl-1">Multi</Label>
               </div>
             </RadioGroup>
-          </div>
 
-          {/* Table selector */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Target Table</Label>
+            {/* Table selector */}
             <Select
               value={selectedTableId?.toString()}
               onValueChange={handleTableChange}
               disabled={isReadOnly}
             >
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Select table..." />
+              <SelectTrigger className="h-7 w-[130px] text-[11px]">
+                <SelectValue placeholder="Table..." />
               </SelectTrigger>
               <SelectContent>
                 {tables.map((table) => (
@@ -399,24 +369,21 @@ export function OutputMappingSection({
                 ))}
               </SelectContent>
             </Select>
-          </div>
 
-          {/* Row action (single_row mode only) */}
-          {outputMapping?.mode === 'single_row' && selectedTableId && (
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Action</Label>
-              <div className="flex gap-2">
+            {/* Row action (single_row mode only) */}
+            {outputMapping?.mode === 'single_row' && selectedTableId && (
+              <>
                 <Select
                   value={outputMapping.rowAction || 'create'}
                   onValueChange={(value) => handleRowActionChange(value as 'create' | 'update')}
                   disabled={isReadOnly}
                 >
-                  <SelectTrigger className="w-[150px]">
+                  <SelectTrigger className="h-7 w-[100px] text-[11px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="create">Create new row</SelectItem>
-                    <SelectItem value="update">Update existing</SelectItem>
+                    <SelectItem value="create">Create</SelectItem>
+                    <SelectItem value="update">Update</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -426,8 +393,8 @@ export function OutputMappingSection({
                     onValueChange={handleRowIdChange}
                     disabled={isReadOnly}
                   >
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Select row..." />
+                    <SelectTrigger className="h-7 w-[140px] text-[11px]">
+                      <SelectValue placeholder="Row..." />
                     </SelectTrigger>
                     <SelectContent>
                       {rows.map((row) => (
@@ -438,53 +405,52 @@ export function OutputMappingSection({
                     </SelectContent>
                   </Select>
                 )}
-              </div>
-            </div>
-          )}
+              </>
+            )}
+          </>
+        )}
+      </div>
 
-          {/* Field mappings */}
-          {selectedTableId && (
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Field Mappings</Label>
-              <div className="space-y-2">
-                {(outputMapping?.mappings || []).map((mapping, index) => (
-                  <FieldMappingRow
-                    key={index}
-                    mapping={mapping}
-                    sourceFields={sourceFields}
-                    targetFields={fields}
-                    onUpdate={(m) => handleUpdateMapping(index, m)}
-                    onRemove={() => handleRemoveMapping(index)}
-                    isReadOnly={isReadOnly}
-                  />
-                ))}
-              </div>
-              {!isReadOnly && (
-                <Button
+      {loading ? (
+        <div className="text-[11px] text-muted-foreground py-1">Loading tables...</div>
+      ) : tables.length === 0 ? (
+        <div className="text-[11px] text-muted-foreground py-1">No tables available</div>
+      ) : selectedTableId && (
+        /* Field mappings - compact rows */
+        <div className="space-y-1.5 pl-5">
+          {(outputMapping?.mappings || []).map((mapping, index) => (
+            <FieldMappingRow
+              key={index}
+              mapping={mapping}
+              sourceFields={sourceFields}
+              targetFields={fields}
+              onUpdate={(m) => handleUpdateMapping(index, m)}
+              onRemove={() => handleRemoveMapping(index)}
+              isReadOnly={isReadOnly}
+            />
+          ))}
+          {!isReadOnly && (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleAddMapping}
+                className="h-6 px-2 text-[11px]"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Add
+              </Button>
+              {outputMapping && (
+                <button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddMapping}
-                  className="mt-2"
+                  className="text-[10px] text-muted-foreground hover:text-foreground"
+                  onClick={() => updateOutputMapping(undefined)}
                 >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Field Mapping
-                </Button>
+                  Clear all
+                </button>
               )}
             </div>
-          )}
-
-          {/* Clear all button */}
-          {outputMapping && !isReadOnly && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground"
-              onClick={() => updateOutputMapping(undefined)}
-            >
-              Clear All Mappings
-            </Button>
           )}
         </div>
       )}

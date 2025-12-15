@@ -4,6 +4,13 @@
 import { execSync } from 'child_process';
 import postgres from 'postgres';
 import { parseConnectionString } from '../lib/db/client-parser';
+  // Import and run seeds in order
+import { seedPermissions, seedSystemRoles } from '../drizzle/seeds/rbac.js';
+import { seedSystemUsers } from '../drizzle/seeds/system-users.js';
+import { seedSystemRoleAssignments } from '../drizzle/seeds/system-role-assignments.js';
+import { seedAppTypes } from '../drizzle/seeds/app-types.js';
+import { seedTools } from '../drizzle/seeds/tools.js';
+import { seedSystemSkills } from '../drizzle/seeds/system-skills.js';
 
 async function runMigration() {
   console.log('Starting database migration...');
@@ -54,13 +61,7 @@ async function runMigration() {
       console.log('\n🌱 Running database seed scripts...');
 
       try {
-        // Import and run seeds in order
-        const { seedPermissions, seedSystemRoles } = await import('../drizzle/seeds/rbac.js');
-        const { seedSystemUsers } = await import('../drizzle/seeds/system-users.js');
-        const { seedSystemRoleAssignments } = await import('../drizzle/seeds/system-role-assignments.js');
-        const { seedAppTypes } = await import('../drizzle/seeds/app-types.js');
-        const { seedTools } = await import('../drizzle/seeds/tools.js');
-
+      
         console.log('  📋 Seeding RBAC (permissions and roles)...');
         await seedPermissions();
         await seedSystemRoles();
@@ -76,6 +77,9 @@ async function runMigration() {
 
         console.log('  🛠️  Seeding tools...');
         await seedTools();
+
+        console.log('  🤖 Seeding system skills...')
+        await seedSystemSkills();
 
         console.log('✅ Database seeding completed successfully!');
       } catch (seedError) {
