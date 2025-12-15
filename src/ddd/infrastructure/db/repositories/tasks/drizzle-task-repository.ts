@@ -34,6 +34,7 @@ export class DrizzleTaskRepository
         organizationId: data.organizationId,
         name: data.name,
         instructions: data.instructions,
+        skillId: data.skillId,
         triggerContext: data.triggerContext,
         status: data.status || 'pending',
         result: data.result,
@@ -44,7 +45,7 @@ export class DrizzleTaskRepository
         createdAt: data.createdAt || new Date()
       })
       .returning();
-    
+
     return this.fromPersistence(record);
   }
   
@@ -261,6 +262,7 @@ export class DrizzleTaskRepository
       organizationId: record.organizationId,
       name: record.name,
       instructions: record.instructions,
+      skillId: record.skillId,
       triggerContext: record.triggerContext,
       status: record.status,
       result: record.result,
