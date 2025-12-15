@@ -197,7 +197,12 @@ export function useChatGRPC(
           createTextMessage(msg.content, msg.role as 'user' | 'assistant', msg.id, msg.metadata)
         )
 
+        console.log('[DEBUG] loadChatSession - messages from server:', {
+          count: result.data.messages.length,
+          messages: result.data.messages.map(m => ({ id: m.id, role: m.role, contentLength: m.content?.length }))
+        })
         setMessages(chatMessages)
+        setSelectedModel(result.data.session.model || undefined)
         logger.summary('Loaded messages', { count: chatMessages.length, chatId })
       } else {
         logger.error('Failed to load chat session', result.error)
@@ -507,8 +512,7 @@ export function useChatGRPC(
               } else if (isMessageCompleteEvent(eventData)) {
                 // Handle completion with execution steps metadata
                 logger.debug('Received message completion with metadata', {
-                  stepCount: eventData.metadata.executionSteps?.length || 0,
-                  ragSourcesCount: eventData.metadata.ragSources?.length || 0
+                  stepCount: eventData.metadata.executionSteps?.length || 0
                 })
 
                 // Update the assistant message with final metadata
