@@ -181,7 +181,8 @@ async def process_file(url: str, mime_type: str, filename: str) -> str:
     elif mime_type.startswith('audio/'):
         # Transcribe audio using HuggingFace Whisper
         try:
-            text = await transcribe_audio(file_bytes)
+            # Pass mime_type for correct content-type header
+            text = await transcribe_audio(file_bytes, content_type=mime_type)
             return f"[Audio File: {filename}]\n\nTranscription:\n{text}"
         except Exception as e:
             logger.error(f"❌ Audio transcription failed: {str(e)}")

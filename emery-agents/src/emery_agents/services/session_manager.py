@@ -9,7 +9,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Any, List
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from smolagents import ToolCallingAgent
 from smolagents.memory import FinalAnswerStep
 
@@ -31,6 +31,8 @@ class SessionMetadata:
     consecutive_errors: int = 0
     last_error_type: Optional[str] = None
     last_error_timestamp: Optional[datetime] = None
+    # File attachments accumulated during session (for skill context injection)
+    attachments: List[Any] = field(default_factory=list)
 
 
 class SessionManager:
@@ -274,6 +276,50 @@ class SessionManager:
 
         return " ".join(text_parts).strip() if text_parts else ""
 
+    def extract_file_attachments_from_history(
+        self,
+        conversation_history: List[Any]
+    ) -> List[Any]:
+        """
+        Extract file attachments from conversation history content_parts.
+
+        Used during cold-path session restoration to make files from previous
+        messages available to skills.
+
+        NOTE: URLs may be expired for old chats (presigned URLs last 1 hour).
+        Next.js should regenerate URLs before sending history for best results.
+
+        Args:
+            conversation_history: List of HistoryMessage protobuf objects
+
+        Returns:
+            List of FileAttachment protobuf objects
+        """
+        from ..grpc.generated import agent_worker_pb2
+
+        attachments = []
+        seen_urls = set()  # Avoid duplicates
+
+        for msg in conversation_history:
+            if not hasattr(msg, 'content_parts'):
+                continue
+
+            for part in msg.content_parts:
+                if part.HasField('file'):
+                    url = part.file.url
+                    if url and url not in seen_urls:
+                        attachment = agent_worker_pb2.FileAttachment(
+                            url=url,
+                            mime_type=part.file.mime_type if hasattr(part.file, 'mime_type') else ''
+                        )
+                        attachments.append(attachment)
+                        seen_urls.add(url)
+
+        if attachments:
+            logger.info(f"📎 Extracted {len(attachments)} file attachments from history")
+
+        return attachments
+
     async def remove_session(self, session_id: str, reason: str = "explicit"):
         """
         Remove session and cleanup resources.
@@ -354,6 +400,51 @@ class SessionManager:
             "idle_timeout": self.idle_timeout,
             "max_lifetime": self.max_lifetime
         }
+
+    # ============================================================
+    # Attachment Management Methods
+    # ============================================================
+
+    def add_attachments(self, session_id: str, attachments: List[Any]) -> None:
+        """
+        Add file attachments to session storage.
+
+        Attachments persist across messages in the same session, allowing skills
+        to access files uploaded in previous messages.
+
+        Args:
+            session_id: Session identifier
+            attachments: List of FileAttachment protobuf objects
+        """
+        if session_id not in self.metadata:
+            logger.warning(f"Cannot add attachments - session {session_id} not found")
+            return
+
+        for att in attachments:
+            # Avoid duplicates by URL
+            existing_urls = {a.url for a in self.metadata[session_id].attachments}
+            if att.url not in existing_urls:
+                self.metadata[session_id].attachments.append(att)
+
+        logger.info(
+            f"📎 Session {session_id}: {len(self.metadata[session_id].attachments)} total attachments"
+        )
+
+    def get_attachments(self, session_id: str) -> List[Any]:
+        """
+        Get all file attachments for session.
+
+        Returns attachments from all messages in the session.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            List of FileAttachment protobuf objects
+        """
+        if session_id in self.metadata:
+            return self.metadata[session_id].attachments
+        return []
 
     # ============================================================
     # Error Management Methods
