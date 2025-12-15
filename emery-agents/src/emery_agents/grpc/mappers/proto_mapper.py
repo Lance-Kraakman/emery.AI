@@ -88,8 +88,8 @@ class ProtoMapper:
             name=proto.name,
             skill_name=skill_name,
             instruction_config=instruction_config,
-            organization_model=proto.organization_model if proto.HasField("organization_model") else None,
-            agent_model=proto.agent_model if proto.HasField("agent_model") else None
+            organization_model=proto.organization_model or None,
+            agent_model=proto.agent_model or None
         )
 
     def task_progress_to_proto(self, progress: TaskProgressDict) -> agent_worker_pb2.TaskProgress:
