@@ -637,13 +637,12 @@ class AgentExecutor:
         if not outputs_with_mappings:
             return instructions
 
-        output_names = [o.name for o in outputs_with_mappings]
-        format_hint = (
-            f"\n\n⚠️ REQUIRED: When you have completed the task, you MUST call the "
-            f"'submit_result' tool with your final outputs. The expected outputs are: {output_names}"
-        )
-
-        return instructions + format_hint
+        # Use template for detailed output instructions
+        from ..prompts import render_output_instructions
+        output_instructions = render_output_instructions(outputs_with_mappings)
+        if output_instructions:
+            return instructions + "\n\n" + output_instructions
+        return instructions
 
     async def _create_skill_agent(
         self,
@@ -799,13 +798,12 @@ class AgentExecutor:
                     for key, value in runtime_inputs.items():
                         task_parts.append(f"- {key}: {value}")
 
-                # Add output instructions if capturing
+                # Add output instructions if capturing (use template for detailed instructions)
                 if capture_outputs and skill_config.outputs:
-                    output_names = [o.name for o in skill_config.outputs]
-                    task_parts.append(
-                        f"\n\n⚠️ REQUIRED: When you have completed the task, you MUST call the "
-                        f"'submit_result' tool with your final outputs. The expected outputs are: {output_names}"
-                    )
+                    from ..prompts import render_output_instructions
+                    output_instructions = render_output_instructions(list(skill_config.outputs))
+                    if output_instructions:
+                        task_parts.append(f"\n\n{output_instructions}")
 
                 task = "\n".join(task_parts)
 
@@ -832,9 +830,12 @@ class AgentExecutor:
 
                 # Return with captured outputs if requested
                 if capture_outputs:
-                    captured = output_tool.get_captured_values() if output_tool and output_tool.was_called() else None
+                    was_called = output_tool.was_called() if output_tool else False
+                    captured = output_tool.get_captured_values() if output_tool and was_called else None
                     if captured:
-                        logger.info(f"📤 Captured outputs: {list(captured.keys())}")
+                        logger.info(f"📤 Captured outputs from submit_result: {list(captured.keys())}")
+                    else:
+                        logger.warning(f"⚠️ OutputTool was {'NOT ' if not was_called else ''}called, captured={captured}")
                     return str(result), captured
                 else:
                     return str(result)
