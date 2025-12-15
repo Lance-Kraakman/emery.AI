@@ -87,7 +87,7 @@ export function SkillOutputsSection({
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs
                 transition-colors duration-150 flex-shrink-0 max-w-xs
                 border-border bg-muted/50"
-              title={`${output.name} (type: ${output.type || 'text'})`}
+              title={output.description || `${output.name} (type: ${output.type || 'text'})`}
             >
               <span className="truncate font-medium font-mono">
                 {output.name}
@@ -95,6 +95,11 @@ export function SkillOutputsSection({
               {output.type && output.type !== 'text' && (
                 <span className="text-[10px] text-blue-600 bg-blue-50 px-1 rounded">
                   {output.type}
+                </span>
+              )}
+              {output.description && (
+                <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded">
+                  ✓
                 </span>
               )}
             </div>
@@ -105,7 +110,7 @@ export function SkillOutputsSection({
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs
                   transition-colors duration-150 flex-shrink-0 max-w-xs
                   border-border bg-background hover:bg-muted/50 cursor-pointer"
-                title={`${output.name} (type: ${output.type || 'text'})`}
+                title={output.description || `${output.name} (type: ${output.type || 'text'})`}
               >
                 <span className="truncate font-medium font-mono">
                   {output.name}
@@ -113,6 +118,11 @@ export function SkillOutputsSection({
                 {output.type && output.type !== 'text' && (
                   <span className="text-[10px] text-blue-600 bg-blue-50 px-1 rounded">
                     {output.type}
+                  </span>
+                )}
+                {output.description && (
+                  <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded">
+                    ✓
                   </span>
                 )}
               </button>
@@ -135,54 +145,67 @@ export function SkillOutputsSection({
         showAddForm ? (
           <div
             ref={formRef}
-            className="flex items-center gap-2 p-2 border rounded-md bg-background shadow-sm"
+            className="flex flex-col gap-2 p-3 border rounded-md bg-background shadow-sm min-w-[280px]"
           >
+            <div className="flex items-center gap-2">
+              <Input
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="output_name"
+                className="w-32 h-8 font-mono text-xs"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && formData.name.trim()) handleAdd();
+                  if (e.key === 'Escape') handleCancel();
+                }}
+              />
+              <Select
+                value={formData.type || 'text'}
+                onValueChange={(v) => setFormData({ ...formData, type: v as any })}
+              >
+                <SelectTrigger className="w-24 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="image">Image</SelectItem>
+                  <SelectItem value="file">File</SelectItem>
+                  <SelectItem value="audio">Audio</SelectItem>
+                  <SelectItem value="video">Video</SelectItem>
+                  <SelectItem value="document">Document</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Input
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="output_name"
-              className="w-32 h-8 font-mono text-xs"
-              autoFocus
+              value={formData.description || ''}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="What should this output contain? (helps the AI)"
+              className="h-8 text-xs"
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleAdd();
+                if (e.key === 'Enter' && formData.name.trim()) handleAdd();
                 if (e.key === 'Escape') handleCancel();
               }}
             />
-            <Select
-              value={formData.type || 'text'}
-              onValueChange={(v) => setFormData({ ...formData, type: v as any })}
-            >
-              <SelectTrigger className="w-24 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="text">Text</SelectItem>
-                <SelectItem value="image">Image</SelectItem>
-                <SelectItem value="file">File</SelectItem>
-                <SelectItem value="audio">Audio</SelectItem>
-                <SelectItem value="video">Video</SelectItem>
-                <SelectItem value="document">Document</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0"
-              onClick={handleAdd}
-              disabled={!formData.name.trim()}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0 text-destructive"
-              onClick={handleCancel}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
+            <div className="flex justify-end gap-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs text-muted-foreground"
+                onClick={handleCancel}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={handleAdd}
+                disabled={!formData.name.trim()}
+              >
+                {editingIndex !== null ? 'Update' : 'Add'}
+              </Button>
+            </div>
           </div>
         ) : (
           <Button

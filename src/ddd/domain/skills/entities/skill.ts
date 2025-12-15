@@ -73,6 +73,7 @@ export interface OutputMappingConfig {
 export interface SkillOutput {
   name: string;
   type?: SkillParameterType;
+  description?: string;  // Description of what this output contains (shown in LLM instructions)
   outputMapping?: OutputMappingConfig;  // Optional: path-based field mapping
 }
 

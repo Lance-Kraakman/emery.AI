@@ -19,6 +19,26 @@ import {
   type OutputFieldDef
 } from '@/lib/constants/task-output-schemas';
 
+/**
+ * Map skill output type to OutputFieldDef type for output mapping.
+ * Used in agent mode to derive source fields from skill outputs.
+ * OutputFieldDef requires: 'text' | 'number' | 'boolean' | 'relation' | 'file' | 'embedding'
+ */
+function mapSkillOutputTypeToFieldType(skillOutputType: string | undefined): OutputFieldDef['type'] {
+  const typeMap: Record<string, OutputFieldDef['type']> = {
+    'text': 'text',
+    'number': 'number',
+    'boolean': 'boolean',
+    'image': 'file',    // URLs stored as file
+    'file': 'file',
+    'audio': 'file',    // URLs stored as file
+    'video': 'file',    // URLs stored as file
+    'document': 'file', // URLs stored as file
+    'json': 'text',     // JSON serialized as text
+  };
+  return typeMap[skillOutputType || 'text'] || 'text';
+}
+
 interface FieldMappingRowProps {
   mapping: FieldMapping;
   sourceFields: OutputFieldDef[];
@@ -103,7 +123,9 @@ function FieldMappingRow({
 interface OutputMappingSectionProps {
   outputs: SkillOutput[];
   onOutputsChange: (outputs: SkillOutput[]) => void;
-  taskType?: string;  // The task type for getting available output fields
+  taskType?: string;  // The task type for getting available output fields (operation mode)
+  skillOutputs?: SkillOutput[];  // Skill outputs for agent mode (source fields from skill definition)
+  executionType?: 'agent' | 'operation';  // Execution type to determine source field strategy
   isReadOnly?: boolean;
 }
 
@@ -118,6 +140,8 @@ export function OutputMappingSection({
   outputs,
   onOutputsChange,
   taskType,
+  skillOutputs,
+  executionType = 'operation',
   isReadOnly
 }: OutputMappingSectionProps) {
   const [tables, setTables] = useState<TableDTO[]>([]);
@@ -130,14 +154,36 @@ export function OutputMappingSection({
   const output = outputs[0];
   const outputMapping = output?.outputMapping;
 
-  // Get available source fields based on task type
-  const sourceFields = useMemo(() => {
-    if (!taskType) return [];
-    return getOutputFieldsForTask(taskType);
-  }, [taskType]);
+  // Get available source fields based on execution type
+  // - Operation mode: use task schema fields
+  // - Agent mode: use skill outputs as source fields (what the agent's submit_result() provides)
+  const sourceFields = useMemo((): OutputFieldDef[] => {
+    if (executionType === 'operation' && taskType) {
+      // Operation mode: get fields from task output schema
+      return getOutputFieldsForTask(taskType);
+    } else if (executionType === 'agent' && skillOutputs && skillOutputs.length > 0) {
+      // Agent mode: derive source fields from skill outputs
+      // These are the fields the agent will provide via submit_result()
+      return skillOutputs.map((skillOutput) => ({
+        field: skillOutput.name,
+        type: mapSkillOutputTypeToFieldType(skillOutput.type),
+        description: `Agent output: ${skillOutput.name}`
+      }));
+    }
+    return [];
+  }, [executionType, taskType, skillOutputs]);
 
-  // Check if this task type supports field mapping
-  const supportsMapping = taskType ? taskSupportsFieldMapping(taskType) : false;
+  // Check if mapping is supported
+  // - Operation mode: check task schema support
+  // - Agent mode: always supported if skill has outputs
+  const supportsMapping = useMemo(() => {
+    if (executionType === 'operation') {
+      return taskType ? taskSupportsFieldMapping(taskType) : false;
+    } else {
+      // Agent mode: supported if skill has defined outputs
+      return skillOutputs && skillOutputs.length > 0;
+    }
+  }, [executionType, taskType, skillOutputs]);
 
   // Fetch tables on mount
   useEffect(() => {
@@ -174,7 +220,23 @@ export function OutputMappingSection({
     }
   }, [selectedTableId, outputMapping?.rowAction]);
 
-  // Don't show section if task doesn't support mapping or no outputs
+  // Show info message if no outputs defined (agent mode only)
+  if (executionType === 'agent' && (!skillOutputs || skillOutputs.length === 0)) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Database className="h-4 w-4 text-muted-foreground" />
+          <Label className="text-sm font-medium">Output Mapping</Label>
+        </div>
+        <div className="text-sm text-muted-foreground p-3 border rounded-lg bg-muted/20">
+          <p>Add outputs above to enable output mapping.</p>
+          <p className="text-xs mt-1">When outputs are defined, you can map them to table fields to save results automatically.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't show section if task doesn't support mapping or no source fields
   if (!output || !supportsMapping || sourceFields.length === 0) {
     return null;
   }

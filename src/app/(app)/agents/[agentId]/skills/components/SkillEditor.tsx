@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp, Save, Plus, X, Settings, Info } from 'lucide-react';
+import { ChevronDown, ChevronUp, Save, Plus, X, Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -74,7 +74,6 @@ export function SkillEditor({
 }: SkillEditorProps) {
   const [localValue, setLocalValue] = useState(value);
   const [showDescription, setShowDescription] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Separate state for Agent and Direct mode inputs/outputs
   // This preserves user's work when switching between modes
@@ -245,11 +244,12 @@ export function SkillEditor({
             </div>
           )}
 
-          {/* Output Mapping Section - for Direct mode */}
+          {/* Output Mapping Section - for Direct/Operation mode */}
           {localValue.taskModelConfig?.taskType && localValue.outputs.length > 0 && (
             <OutputMappingSection
               outputs={localValue.outputs}
               onOutputsChange={(outputs) => handleChange({ outputs })}
+              executionType="operation"
               taskType={localValue.taskModelConfig?.taskType}
               isReadOnly={isReadOnly}
             />
@@ -351,85 +351,67 @@ export function SkillEditor({
         </p>
       </div>
 
-      {/* Advanced Settings Section (hide toggle when read-only, show if values are set) */}
-      <div className="space-y-3 border-t pt-6">
-        {!isReadOnly && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-          >
-            {showAdvanced ? (
-              <>
-                <ChevronUp className="h-3 w-3 mr-1" />
-                Hide advanced settings
-              </>
-            ) : (
-              <>
-                <Settings className="h-3 w-3 mr-1" />
-                Advanced settings
-              </>
-            )}
-          </Button>
-        )}
+      {/* Output Mapping Section - for Agent mode */}
+      <OutputMappingSection
+        outputs={localValue.outputs}
+        onOutputsChange={(outputs) => handleChange({ outputs })}
+        executionType="agent"
+        skillOutputs={localValue.outputs}
+        isReadOnly={isReadOnly}
+      />
 
-        {(showAdvanced || (isReadOnly && (localValue.model || localValue.agentType))) && (
-          <div className="space-y-4">
-            {isReadOnly && <Label className="text-xs text-muted-foreground">Advanced Settings</Label>}
-            {/* Model Selection */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">AI Model</Label>
-              <ModelSelector
-                value={localValue.model}
-                onChange={(model) => handleChange({ model })}
-                organizationTier={organizationTier}
-                availableModels={availableModels}
-                showInherit={true}
-                inheritLabel="Inherit from agent"
-                inheritFromModel={agentDefaultModel || 'IBM Granite 3.3 8B'}
-                requiredCapabilities={['toolCalling']}
-                disabled={isReadOnly}
-              />
-              <p className="text-xs text-muted-foreground">
-                Override the AI model used for this skill. Different models have different costs and capabilities.
-              </p>
-            </div>
+      {/* Advanced Settings Section */}
+      <div className="space-y-4 border-t pt-6">
+        {/* Model Selection */}
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">AI Model</Label>
+          <ModelSelector
+            value={localValue.model}
+            onChange={(model) => handleChange({ model })}
+            organizationTier={organizationTier}
+            availableModels={availableModels}
+            showInherit={true}
+            inheritLabel="Inherit from agent"
+            inheritFromModel={agentDefaultModel || 'IBM Granite 3.3 8B'}
+            requiredCapabilities={['toolCalling']}
+            disabled={isReadOnly}
+          />
+          <p className="text-xs text-muted-foreground">
+            Override the AI model used for this skill. Different models have different costs and capabilities.
+          </p>
+        </div>
 
-            {/* Agent Type Selection */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium">Agent Type</Label>
-                <div className="group relative">
-                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                  <div className="invisible group-hover:visible absolute left-0 top-5 z-50 w-72 rounded-md bg-popover p-3 text-xs text-popover-foreground shadow-md border">
-                    <p className="font-medium mb-1">Tool Calling (Default)</p>
-                    <p className="text-muted-foreground mb-2">Calls tools using structured function calls. More reliable and predictable. Best for simple tasks and smaller models.</p>
-                    <p className="font-medium mb-1">Code Agent</p>
-                    <p className="text-muted-foreground">Writes Python code to execute tools. Better for complex multi-step reasoning with conditionals and loops. Works best with larger models.</p>
-                  </div>
-                </div>
+        {/* Agent Type Selection */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm font-medium">Agent Type</Label>
+            <div className="group relative">
+              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+              <div className="invisible group-hover:visible absolute left-0 top-5 z-50 w-72 rounded-md bg-popover p-3 text-xs text-popover-foreground shadow-md border">
+                <p className="font-medium mb-1">Tool Calling (Default)</p>
+                <p className="text-muted-foreground mb-2">Calls tools using structured function calls. More reliable and predictable. Best for simple tasks and smaller models.</p>
+                <p className="font-medium mb-1">Code Agent</p>
+                <p className="text-muted-foreground">Writes Python code to execute tools. Better for complex multi-step reasoning with conditionals and loops. Works best with larger models.</p>
               </div>
-              <Select
-                value={localValue.agentType || 'tool_calling'}
-                onValueChange={(agentType) => handleChange({ agentType: agentType === 'tool_calling' ? null : agentType })}
-                disabled={isReadOnly}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select agent type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tool_calling">Tool Calling (Default)</SelectItem>
-                  <SelectItem value="code_agent">Code Agent</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                How the AI executes tools. Tool Calling is recommended for most use cases.
-              </p>
             </div>
           </div>
-        )}
+          <Select
+            value={localValue.agentType || 'tool_calling'}
+            onValueChange={(agentType) => handleChange({ agentType: agentType === 'tool_calling' ? null : agentType })}
+            disabled={isReadOnly}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select agent type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tool_calling">Tool Calling (Default)</SelectItem>
+              <SelectItem value="code_agent">Code Agent</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            How the AI executes tools. Tool Calling is recommended for most use cases.
+          </p>
+        </div>
       </div>
         </>
       )}
