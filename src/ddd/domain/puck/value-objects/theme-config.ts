@@ -6,11 +6,11 @@
 import type {
   FourSidedSpacing,
   FourCornerRadius,
-} from '@/components/puck/types/spacing-types';
+} from '@/lib/types/spacing-types';
 import {
   DEFAULT_FOUR_SIDED_SPACING,
   DEFAULT_FOUR_CORNER_RADIUS,
-} from '@/components/puck/types/spacing-types';
+} from '@/lib/types/spacing-types';
 
 // Re-export for convenience
 export type { FourSidedSpacing, FourCornerRadius };

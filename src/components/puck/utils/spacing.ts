@@ -6,12 +6,10 @@
  */
 
 import type { ThemeConfig } from '@/ddd/domain/puck/value-objects/theme-config';
+import type { SpacingLevel } from '@/lib/types/spacing-types';
 
-/**
- * Spacing level (0-10)
- * Higher numbers = larger spacing
- */
-export type SpacingLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+// Re-export SpacingLevel for backward compatibility
+export type { SpacingLevel } from '@/lib/types/spacing-types';
 
 /**
  * Calculate spacing based on theme configuration
