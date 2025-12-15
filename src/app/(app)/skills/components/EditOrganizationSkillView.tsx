@@ -13,6 +13,7 @@ import { updateSkill, deleteSkill, uploadSkillAttachment, duplicateSkill } from 
 import { toast } from 'sonner';
 import { SkillEditor, type SkillFormData } from '../../agents/[agentId]/skills/components/SkillEditor';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import { useOrganizationPlan } from '@/stores/app-state.store';
 
 interface EditOrganizationSkillViewProps {
   skill: SkillDTO;
@@ -21,6 +22,7 @@ interface EditOrganizationSkillViewProps {
 
 export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrganizationSkillViewProps) {
   const router = useRouter();
+  const organizationTier = useOrganizationPlan();
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
@@ -235,6 +237,7 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
           agentId={null} // No agentId for organization skills
           skillId={skill.id}
           isReadOnly={isSystem}
+          organizationTier={organizationTier}
         />
       </Card>
 
