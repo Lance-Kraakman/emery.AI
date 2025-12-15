@@ -27,10 +27,11 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
    * Execute agent via gRPC worker
    */
   async executeAgent(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
-    const { agentId, instructions, tools, executionId, organizationId, timeoutSeconds, onProgress, agentModel, organizationModel } = request;
+    const { agentId, instructions, tools, executionId, organizationId, timeoutSeconds, onProgress, agentModel, organizationModel, skill } = request;
 
     console.log(`[GRPC-EXECUTION-REPO] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
     console.log(`[GRPC-EXECUTION-REPO] Model selection: agentModel=${agentModel || 'none'}, orgModel=${organizationModel || 'none'}`);
+    console.log(`[GRPC-EXECUTION-REPO] Skill execution: ${skill ? `${skill.name} (${skill.executionType})` : 'none'}`);
 
     try {
       // 1. Load agent configuration (delegated to agent repository)
@@ -51,16 +52,22 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       // 4. Enrich agent with API key in tools (following chat pattern)
       const enrichedAgent = this.enrichAgentTools(agent);
 
-      // 5. Create proto task request - always use instruction-based execution
+      // 5. Create proto task request
+      // Use skill-based execution if skill is provided, otherwise instruction-based
       const taskRequest = createTaskRequest({
         taskId: executionId,
         agentId: agent.id.value,
-        instructionConfig: { // Instruction-based execution with task instructions
-          task: instructions,
-          tools: this.enrichTools((tools || []).map(tool =>
-            tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
-          ), agent.apiKey?.value)
-        },
+        // If skill provided, use skill_name mode; otherwise use instruction_config mode
+        ...(skill ? {
+          skill: skill // Pass skill for skill_name mode execution
+        } : {
+          instructionConfig: { // Instruction-based execution with task instructions
+            task: instructions,
+            tools: this.enrichTools((tools || []).map(tool =>
+              tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
+            ), agent.apiKey?.value)
+          }
+        }),
         agent: enrichedAgent,
         triggerData: {}, // Empty for proto compatibility
         organizationId: organizationIdStr,
@@ -74,13 +81,16 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       console.log('[GRPC-DEBUG] TaskRequest being sent:', JSON.stringify({
         taskId: taskRequest.taskId,
         agentId: taskRequest.agentId,
+        hasSkillName: !!taskRequest.skillName,
+        skillName: taskRequest.skillName,
         hasInstructionConfig: !!taskRequest.instructionConfig,
         instructionConfig: taskRequest.instructionConfig,
         instructionsText: instructions,
         toolsCount: tools?.length || 0,
         organizationId: taskRequest.organizationId,
         agentModel: taskRequest.agentModel,
-        organizationModel: taskRequest.organizationModel
+        organizationModel: taskRequest.organizationModel,
+        skillsInAgentConfig: taskRequest.agentConfig?.skills?.length || 0
       }, null, 2));
 
       // 5. Initialize execution tracking
