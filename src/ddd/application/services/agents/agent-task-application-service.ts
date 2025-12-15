@@ -19,7 +19,9 @@ import { taskToDTO } from '@/app/mappers/task-mapper';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { getOrganizationRepository } from '@/ddd/application/di/container';
+import { getSkillEnrichmentService } from '@/ddd/application/di/getters';
 import { InstructionTemplateService } from '@/ddd/domain/tasks/services/instruction-template-service';
+import type { EnrichedSkill } from '@/ddd/application/services/skills/skill-enrichment-service';
 
 const logger = createDebugLogger('AgentTaskService');
 
@@ -89,6 +91,7 @@ export class AgentTaskApplicationService {
         organizationId,
         name: dto.name,
         instructions: dto.instructions,
+        skillId: dto.skillId, // Optional skill to execute
         createdBy,
         status: TaskStatus.pending()
       });
@@ -100,6 +103,7 @@ export class AgentTaskApplicationService {
         organizationId: task.organizationId.value,
         name: task.name,
         instructions: task.instructions,
+        skillId: task.skillId, // Optional skill to execute
         status: task.status.value,
         createdBy: task.createdBy?.value || null,
         createdAt: task.createdAt
@@ -182,13 +186,25 @@ export class AgentTaskApplicationService {
         startedAt: task.startedAt
       });
 
-      // 5. Expand template variables in instructions
+      // 5. Load skill if task references one
+      let enrichedSkill: EnrichedSkill | null = null;
+      if (task.skillId) {
+        const skillEnrichmentService = getSkillEnrichmentService();
+        enrichedSkill = await skillEnrichmentService.enrichSkill(task.skillId);
+        if (enrichedSkill) {
+          logger.summary(`Loaded skill for task execution: ${enrichedSkill.name} (${enrichedSkill.executionType})`);
+        } else {
+          logger.error(`Skill ${task.skillId} not found for task ${task.id.value}`);
+        }
+      }
+
+      // 6. Expand template variables in instructions
       const expandedInstructions = InstructionTemplateService.expandTemplate(
         task.instructions.task,
         task.triggerContext
       );
 
-      // 6. Execute via execution repository
+      // 7. Execute via execution repository
       const executionRequest: AgentExecutionRequest = {
         agentId: task.agentId.value,
         instructions: expandedInstructions,
@@ -199,6 +215,7 @@ export class AgentTaskApplicationService {
         agentModel,
         organizationModel,
         timeoutSeconds,
+        skill: enrichedSkill || undefined, // Pass enriched skill if present
         onProgress: (logMessage: string) => {
           task.appendLog(logMessage);
         }

@@ -209,6 +209,7 @@ export class DIContainer {
       // Skill domain (formerly Capability)
       'skillRepository': 'ISkillRepository',
       'skillApplicationService': 'SkillApplicationService',
+      'skillEnrichmentService': 'SkillEnrichmentService',
 
       // Database domain
       'databaseRepository': 'IDatabaseRepository',
