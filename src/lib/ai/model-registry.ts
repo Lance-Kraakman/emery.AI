@@ -1068,6 +1068,34 @@ export function getConversationalModels(): ModelMetadata[] {
 }
 
 /**
+ * Get chat LLMs suitable for agent/skill execution
+ * These are conversational models that support tool calling
+ * AIDEV-NOTE: Use this for model selectors in agents and skills
+ */
+export function getChatModels(): ModelMetadata[] {
+  return getAllModels().filter(model =>
+    // Must be conversational (chat-completion or no specific task type)
+    (model.taskType === 'chat-completion' || !model.taskType) &&
+    // Must support tool calling for agent workflows
+    model.capabilities.toolCalling
+  );
+}
+
+/**
+ * Get chat LLMs filtered by tier
+ * AIDEV-NOTE: Use this for tier-restricted model selectors
+ */
+export function getChatModelsForTier(tier: 'free' | 'pro' | 'max' | 'enterprise'): ModelMetadata[] {
+  const tierHierarchy = { free: 0, pro: 1, max: 2, enterprise: 3 };
+  const userTierLevel = tierHierarchy[tier];
+
+  return getChatModels().filter(model => {
+    const modelTierLevel = tierHierarchy[model.tier];
+    return modelTierLevel <= userTierLevel;
+  });
+}
+
+/**
  * Get single-task models (one input → one output)
  * These still work through chat, but aren't conversational
  */
