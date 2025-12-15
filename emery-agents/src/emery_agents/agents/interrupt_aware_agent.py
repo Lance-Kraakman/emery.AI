@@ -1,8 +1,8 @@
 """
-InterruptAwareToolCallingAgent - Propagates interrupts from managed agents and handles HITL resume.
+InterruptAware Agents - Propagates interrupts from managed agents and handles HITL resume.
 
 smolagents wraps ALL exceptions from managed agents as AgentToolExecutionError.
-This subclass detects interrupts and re-raises them so they propagate correctly.
+These subclasses detect interrupts and re-raises them so they propagate correctly.
 
 AIDEV-NOTE: Pattern matches smolagents' official plan_customization example:
     if "interrupted" in str(e).lower():
@@ -17,12 +17,16 @@ HITL Resume Flow:
 4. User approves ("yes")
 5. On next run(), this class detects pending approval and calls managed agent
    directly with user's raw message, bypassing LLM task formulation
+
+AIDEV-NOTE: Both ToolCallingAgent and CodeAgent variants are provided:
+- InterruptAwareToolCallingAgent: For JSON tool calls (requires native API support)
+- InterruptAwareCodeAgent: For Python code tool calls (works with all models)
 """
 
 import logging
 from typing import Any
 
-from smolagents import ToolCallingAgent
+from smolagents import ToolCallingAgent, CodeAgent
 from smolagents.utils import AgentError, AgentToolExecutionError
 from smolagents.agents import RunResult
 
@@ -168,5 +172,113 @@ class InterruptAwareToolCallingAgent(ToolCallingAgent):
                 # but the interrupt_switch check at line 511 will stop it next iteration
                 self.interrupt_switch = True
                 # Re-raise as AgentError so it propagates up for HITL handling
+                raise AgentError("Agent interrupted.", self.logger) from e
+            raise
+
+
+class InterruptAwareCodeAgent(CodeAgent):
+    """
+    CodeAgent that propagates interrupts from managed agents and handles HITL resume.
+
+    Unlike ToolCallingAgent which uses JSON tool calls (requires native API support),
+    CodeAgent generates Python code to call tools. This works with all models since
+    it doesn't rely on native tool calling support.
+
+    AIDEV-NOTE: Preferred for chat_planner since:
+    - Works with all models (no provider-specific tool calling support needed)
+    - More expressive (can combine tools in single step)
+    - Same HITL handling as ToolCallingAgent variant
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Track which managed agent is waiting for approval
+        self._interrupted_agent_name: str | None = None
+
+    def run(self, task: str, **kwargs) -> RunResult | str:
+        """
+        Override run to handle HITL resume flow.
+
+        If a managed agent was interrupted and the user is responding with approval,
+        route directly to that managed agent instead of going through LLM.
+        """
+        # Check if we're resuming from an interrupt
+        if self._interrupted_agent_name and self._is_approval_response(task):
+            agent_name = self._interrupted_agent_name
+            logger.info(f"📋 HITL Resume: Routing '{task[:50]}...' directly to {agent_name}")
+
+            # Clear the interrupt state before calling
+            self._interrupted_agent_name = None
+            self.interrupt_switch = False
+
+            # Get the managed agent and call it directly with the user's approval
+            if agent_name in self.managed_agents:
+                managed_agent = self.managed_agents[agent_name]
+                try:
+                    result = managed_agent(task)
+                    logger.info(f"✅ HITL Resume: {agent_name} completed successfully")
+
+                    if kwargs.get('stream', False):
+                        return self._yield_final_answer(result)
+                    return result
+                except Exception as e:
+                    if "interrupted" in str(e).lower():
+                        self._interrupted_agent_name = agent_name
+                        logger.info(f"⏸️ HITL Resume: {agent_name} interrupted again")
+                        raise AgentError("Agent interrupted.", self.logger) from e
+                    raise
+            else:
+                logger.warning(f"⚠️ Interrupted agent '{agent_name}' not found in managed_agents")
+                self._interrupted_agent_name = None
+
+        # Normal flow - let parent handle it
+        return super().run(task, **kwargs)
+
+    def _yield_final_answer(self, result: str):
+        """Yield a single FinalAnswerStep for streaming mode HITL resume."""
+        from smolagents.memory import FinalAnswerStep
+        yield FinalAnswerStep(output=result)
+
+    def _is_approval_response(self, task: str) -> bool:
+        """Check if task is a user approval response."""
+        approval_words = {
+            "yes", "proceed", "apply", "approve", "ok", "okay", "go ahead",
+            "do it", "confirm", "continue", "execute", "approved", "y",
+            "yes proceed", "yes please", "go", "sure", "yep", "yeah"
+        }
+
+        task_lower = task.lower().strip()
+
+        if task_lower in approval_words:
+            return True
+
+        for word in approval_words:
+            if task_lower.startswith(word) and (
+                len(task_lower) == len(word) or
+                task_lower[len(word)] in " .,!?;:"
+            ):
+                return True
+
+        return False
+
+    def python_executor(self, code: str, **kwargs) -> Any:
+        """
+        Execute Python code, propagating interrupts from managed agents.
+
+        CodeAgent calls tools via Python code, so we catch interrupts here
+        instead of execute_tool_call.
+        """
+        try:
+            return super().python_executor(code, **kwargs)
+        except Exception as e:
+            # Check for interrupt from managed agent
+            if "interrupted" in str(e).lower():
+                # Try to extract which agent was interrupted from the code or error
+                for agent_name in self.managed_agents:
+                    if agent_name in code or agent_name in str(e):
+                        self._interrupted_agent_name = agent_name
+                        logger.info(f"⏸️ Detected interrupt from managed agent '{agent_name}', propagating")
+                        break
+                self.interrupt_switch = True
                 raise AgentError("Agent interrupted.", self.logger) from e
             raise
