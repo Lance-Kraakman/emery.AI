@@ -71,6 +71,10 @@ EMERY_TOOL_MAP = {
     "team_crud": "tools/emery/crud_operations.j2",
 }
 
+# Template for dynamic skill execution tools (from @skill:name references)
+# These are prefix-matched, not exact-matched like EMERY_TOOL_MAP
+SKILL_EXECUTION_TEMPLATE = "tools/emery/skill_execution.j2"
+
 
 def get_tool_instructions(tools: List[Any]) -> str:
     """
@@ -100,7 +104,15 @@ def get_tool_instructions(tools: List[Any]) -> str:
     templates_to_render: Set[str] = set()
     seen_categories: Set[str] = set()
 
-    # Check for emery tools
+    # Check for skill execution tools (skill_* from @skill:name, NOT skill_crud)
+    # These are dynamic tools created when user references a skill
+    for tool_name in tool_names:
+        if tool_name.startswith("skill_") and tool_name != "skill_crud":
+            templates_to_render.add(SKILL_EXECUTION_TEMPLATE)
+            logger.info(f"📝 Adding skill execution template for: {tool_name}")
+            break  # Only need to add template once
+
+    # Check for emery tools (exact match)
     for tool_name, template in EMERY_TOOL_MAP.items():
         if tool_name in tool_names:
             templates_to_render.add(template)
