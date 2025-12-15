@@ -7,10 +7,22 @@
   overflow: hidden;
 }
 
+/* Puck Theme Mode - applies CSS variable overrides */
+.puckThemed {
+  /* Container inherits shadcn CSS vars from inline styles */
+  border-color: hsl(var(--border));
+  background-color: hsl(var(--card));
+}
+
 /* Toolbar Styling */
 .toolbar {
   @apply border-b border-border p-3 bg-muted flex items-center;
   background-color: hsl(var(--muted) / 0.5);
+}
+
+.puckThemed .toolbar {
+  border-color: hsl(var(--border));
+  background-color: hsl(var(--muted));
 }
 
 .toolbarButtons {
@@ -29,6 +41,10 @@
   @apply w-px h-6 bg-border mx-2;
 }
 
+.puckThemed .toolbarSeparator {
+  background-color: hsl(var(--border));
+}
+
 /* Editor Content Area */
 .editorWrapper {
   @apply bg-background rounded-b-xl flex-1 relative;
@@ -36,6 +52,10 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.puckThemed .editorWrapper {
+  background-color: hsl(var(--background));
 }
 
 .tiptapEditor {
