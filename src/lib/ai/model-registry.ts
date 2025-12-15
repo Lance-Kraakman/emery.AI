@@ -28,20 +28,31 @@ export interface ModelPricing {
 }
 
 // Task types for different model capabilities
+// AIDEV-NOTE: Must match TASK_TYPE_OPTIONS in TaskModelForm.tsx
 export type ModelTaskType =
   | 'chat-completion'
+  // Image Generation/Transformation
   | 'text-to-image'
+  | 'image-to-image'
+  | 'text-to-video'
+  // Audio
   | 'speech-to-text'
   | 'text-to-speech'
+  // Vision Analysis
   | 'object-detection'
   | 'image-classification'
+  | 'image-segmentation'
+  | 'image-to-text'
+  // Text Processing
   | 'question-answering'
   | 'zero-shot-classification'
   | 'summarization'
+  | 'translation'
+  // Embeddings
   | 'feature-extraction';
 
 // Output types for chat display
-export type ModelOutputType = 'text' | 'image' | 'audio' | 'json' | 'embedding';
+export type ModelOutputType = 'text' | 'image' | 'audio' | 'video' | 'json' | 'embedding';
 
 export interface ModelMetadata {
   id: string;                 // Unique model identifier (e.g., 'ibm-granite/granite-3.3-8b-instruct')
