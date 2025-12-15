@@ -38,7 +38,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { getChatSessions, createNewChatSession, archiveChatSession, updateChatModel } from '@/app/actions/chat-history'
+import { getChatSessions, createNewChatSession, archiveChatSession, updateChatModel, updateChatTitle } from '@/app/actions/chat-history'
 import { ModelSelector } from '@/components/ai/ModelSelector'
 import type { ChatSessionDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
 import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
@@ -204,7 +204,7 @@ interface ChatSettingsDialogProps {
   session: ChatSessionDTO | null
   isOpen: boolean
   onClose: () => void
-  onModelChange: (chatId: string, model: string | null) => void
+  onUpdate: (chatId: string, updates: { title?: string; model?: string | null }) => void
   organizationTier: 'free' | 'pro' | 'enterprise'
 }
 
@@ -212,14 +212,16 @@ function ChatSettingsDialog({
   session,
   isOpen,
   onClose,
-  onModelChange,
+  onUpdate,
   organizationTier
 }: ChatSettingsDialogProps) {
+  const [title, setTitle] = useState(session?.title || '')
   const [model, setModel] = useState<string | null>(session?.model || null)
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
     if (session) {
+      setTitle(session.title)
       setModel(session.model || null)
     }
   }, [session])
@@ -229,13 +231,37 @@ function ChatSettingsDialog({
 
     setIsSaving(true)
     try {
-      const result = await updateChatModel(session.id, model)
-      if (result.success) {
-        onModelChange(session.id, model)
-        onClose()
+      const titleChanged = title.trim() !== session.title
+      const modelChanged = model !== (session.model || null)
+
+      // Update title if changed
+      if (titleChanged) {
+        const titleResult = await updateChatTitle(session.id, title.trim())
+        if (!titleResult.success) {
+          console.error('Failed to update chat title:', titleResult.error)
+          setIsSaving(false)
+          return
+        }
       }
+
+      // Update model if changed
+      if (modelChanged) {
+        const modelResult = await updateChatModel(session.id, model)
+        if (!modelResult.success) {
+          console.error('Failed to update chat model:', modelResult.error)
+          setIsSaving(false)
+          return
+        }
+      }
+
+      // Notify parent of updates
+      onUpdate(session.id, {
+        ...(titleChanged && { title: title.trim() }),
+        ...(modelChanged && { model })
+      })
+      onClose()
     } catch (error) {
-      console.error('Failed to update chat model:', error)
+      console.error('Failed to update chat settings:', error)
     } finally {
       setIsSaving(false)
     }
@@ -255,7 +281,13 @@ function ChatSettingsDialog({
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Chat Title</label>
-            <p className="text-sm text-muted-foreground truncate">{session.title}</p>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Enter chat title..."
+              maxLength={200}
+              className="h-9"
+            />
           </div>
 
           <div className="space-y-2">
@@ -277,7 +309,7 @@ function ChatSettingsDialog({
             <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={isSaving}>
+            <Button onClick={handleSave} disabled={isSaving || !title.trim()}>
               {isSaving ? 'Saving...' : 'Save'}
             </Button>
           </div>
@@ -382,10 +414,16 @@ export function ChatHistoryDropdown({
     }
   }
 
-  // Handle model change
-  const handleModelChange = (chatId: string, model: string | null) => {
+  // Handle chat updates (title, model)
+  const handleChatUpdate = (chatId: string, updates: { title?: string; model?: string | null }) => {
     setSessions(sessions.map(s =>
-      s.id === chatId ? { ...s, model: model || undefined } : s
+      s.id === chatId
+        ? {
+            ...s,
+            ...(updates.title !== undefined && { title: updates.title }),
+            ...(updates.model !== undefined && { model: updates.model || undefined })
+          }
+        : s
     ))
   }
 
@@ -513,7 +551,7 @@ export function ChatHistoryDropdown({
         session={settingsSession}
         isOpen={!!settingsSession}
         onClose={() => setSettingsSession(null)}
-        onModelChange={handleModelChange}
+        onUpdate={handleChatUpdate}
         organizationTier={organizationTier}
       />
     </>
