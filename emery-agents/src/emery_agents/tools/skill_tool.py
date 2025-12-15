@@ -24,12 +24,12 @@ import concurrent.futures
 import logging
 import os
 import threading
-import uuid
 from typing import Any, Callable, Coroutine, Dict, Optional, Set, TYPE_CHECKING
 
-import httpx
 from smolagents import Tool
 from ..grpc.generated.agent_worker_pb2 import SkillConfig
+from ..services.output_mapping_service import OutputMappingService, MappingContext
+from ..entities.output_mapping import OutputMappingConfig
 
 if TYPE_CHECKING:
     from ..clients import HuggingFaceInferenceClient
@@ -502,19 +502,12 @@ class SkillTool(Tool):
         """
         Apply output mappings to save skill results to tables.
 
-        Uses path-based field mapping:
-        - single_row mode: Map top result to fields on one row
-        - multi_row mode: Create a row per array item (object detection)
-
-        Binary outputs (images, audio) are uploaded to S3 first via the files API.
+        Uses shared OutputMappingService for consistent behavior across
+        agent_executor.py and skill_tool.py.
 
         Args:
             result: The TaskResult from inference execution
         """
-        from ..entities.output_mapping import (
-            OutputMappingConfig, build_row_data, get_extension_for_mime
-        )
-
         # Check if we have auth for API calls
         if not self.api_key or not self.organization_id:
             logger.debug("No API auth available, skipping output mappings")
@@ -532,204 +525,46 @@ class SkillTool(Tool):
 
         logger.info(f"📊 Applying {len(outputs_with_mappings)} output mappings")
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            for output in outputs_with_mappings:
-                try:
-                    await self._apply_single_output_mapping(client, output, result)
-                except Exception as e:
-                    logger.error(f"❌ Failed to apply output mapping for {output.name}: {e}")
-
-    async def _apply_single_output_mapping(
-        self,
-        client: httpx.AsyncClient,
-        output,
-        result: "TaskResult"
-    ) -> None:
-        """
-        Apply a single output mapping using path-based field mappings.
-
-        Supports two modes:
-        - single_row: Map top result to one row (classification)
-        - multi_row: Create a row per array item (object detection)
-
-        Args:
-            client: HTTP client for API calls
-            output: SkillOutput with output_mapping configuration
-            result: The TaskResult from inference execution
-        """
-        from ..entities.output_mapping import (
-            OutputMappingConfig, FieldMapping, build_row_data
+        # Create mapping context with auth
+        ctx = MappingContext(
+            api_key=self.api_key,
+            organization_id=str(self.organization_id)
         )
 
-        config = OutputMappingConfig.from_proto(output.output_mapping)
+        for output in outputs_with_mappings:
+            try:
+                config = OutputMappingConfig.from_proto(output.output_mapping)
 
-        if not config.mappings:
-            logger.debug(f"No field mappings configured for output {output.name}")
-            return
+                # Prepare data for mapping based on result type
+                # TEXT results are plain strings - wrap as {"text": ...} for field extraction
+                # STRUCTURED results are already dicts
+                # BINARY results get uploaded to S3 first
+                if result.is_text:
+                    data_for_mapping = {"text": result.data}
+                    logger.debug(f"Wrapped TEXT result for mapping: {str(result.data)[:100]}...")
+                elif result.is_binary:
+                    file_url = await OutputMappingService.upload_binary_to_s3(
+                        ctx=ctx,
+                        binary_data=result.data,
+                        mime_type=result.metadata.get('mime_type', 'application/octet-stream'),
+                        filename_prefix=output.name
+                    )
+                    data_for_mapping = {"url": file_url} if file_url else result.data
+                else:
+                    # STRUCTURED results are already dicts (classification, object detection, etc.)
+                    data_for_mapping = result.data
 
-        # Get target table ID from first mapping
-        table_id = config.get_target_table_id()
-        if not table_id:
-            logger.warning(f"No target table ID in mappings for output {output.name}")
-            return
+                # Apply mapping using shared service
+                success = await OutputMappingService.apply_mapping(
+                    ctx=ctx,
+                    config=config,
+                    data=data_for_mapping
+                )
 
-        # Build request headers
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "X-Organization-ID": str(self.organization_id),
-            "Content-Type": "application/json"
-        }
+                if success:
+                    logger.info(f"✅ Applied output mapping for '{output.name}'")
+                else:
+                    logger.warning(f"⚠️ Output mapping for '{output.name}' returned no success")
 
-        # Handle binary results - upload first, then map URL
-        data_for_mapping = result.data
-        if result.is_binary:
-            file_metadata = await self._upload_binary_to_s3(client, result, output.name)
-            data_for_mapping = file_metadata
-
-        # Context for special fields like source.rowId
-        context = {}  # Could be enriched with source row info if available
-
-        if config.is_single_row:
-            # Single row mode: take first item from array, map to one row
-            item = data_for_mapping[0] if isinstance(data_for_mapping, list) else data_for_mapping
-            row_data = build_row_data(item, config.mappings, context)
-
-            if config.is_create:
-                await self._create_row(client, headers, table_id, row_data)
-            elif config.is_update and config.row_id:
-                await self._update_row(client, headers, table_id, config.row_id, row_data)
-            else:
-                logger.warning(f"Update mode requires rowId, got: {config.row_id}")
-
-        elif config.is_multi_row:
-            # Multi row mode: create a row for each array item
-            items = data_for_mapping if isinstance(data_for_mapping, list) else [data_for_mapping]
-            logger.info(f"📊 Creating {len(items)} rows for multi_row mapping")
-
-            for i, item in enumerate(items):
-                row_data = build_row_data(item, config.mappings, context)
-                await self._create_row(client, headers, table_id, row_data)
-
-    async def _create_row(
-        self,
-        client: httpx.AsyncClient,
-        headers: dict,
-        table_id: int,
-        row_data: dict
-    ) -> None:
-        """Create a new row via API."""
-        url = f"{self.api_base_url}/rows"
-        data = {
-            "tableId": table_id,
-            "data": row_data
-        }
-        logger.info(f"📝 Creating row in table {table_id} with fields: {list(row_data.keys())}")
-
-        response = await client.post(url, headers=headers, json=data)
-        if response.status_code >= 400:
-            logger.error(f"Failed to create row: {response.status_code} - {response.text[:200]}")
-        else:
-            logger.info(f"✅ Created row in table {table_id}")
-
-    async def _update_row(
-        self,
-        client: httpx.AsyncClient,
-        headers: dict,
-        table_id: int,
-        row_id: str,
-        row_data: dict
-    ) -> None:
-        """Update an existing row via API."""
-        url = f"{self.api_base_url}/rows"
-        data = {
-            "tableId": table_id,
-            "rowId": row_id,
-            "data": row_data
-        }
-        logger.info(f"📝 Updating row {row_id} in table {table_id} with fields: {list(row_data.keys())}")
-
-        response = await client.put(url, headers=headers, json=data)
-        if response.status_code >= 400:
-            logger.error(f"Failed to update row: {response.status_code} - {response.text[:200]}")
-        else:
-            logger.info(f"✅ Updated row {row_id} in table {table_id}")
-
-    async def _upload_binary_to_s3(
-        self,
-        client: httpx.AsyncClient,
-        result: "TaskResult",
-        output_name: str
-    ) -> Dict[str, Any]:
-        """
-        Upload binary result to S3 via the files upload API.
-
-        Returns file metadata suitable for storing in a file column.
-
-        Args:
-            client: HTTP client for API calls
-            result: TaskResult with binary data
-            output_name: Name of the output (used for filename)
-
-        Returns:
-            File metadata dict for file column
-        """
-        import base64
-
-        # Determine file extension from result metadata
-        mime_type = result.metadata.get('mime_type', 'application/octet-stream')
-        extension = self._mime_to_extension(mime_type)
-        filename = f"{output_name}_{uuid.uuid4().hex[:8]}.{extension}"
-
-        # Prepare multipart upload
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "X-Organization-ID": str(self.organization_id)
-        }
-
-        # Upload via files API
-        url = f"{self.api_base_url}/files/upload"
-
-        # Use multipart form data for file upload
-        files = {
-            'file': (filename, result.data, mime_type)
-        }
-
-        logger.info(f"📤 Uploading {len(result.data)} bytes to S3 as {filename}")
-
-        response = await client.post(url, headers=headers, files=files)
-        if response.status_code >= 400:
-            logger.error(f"Failed to upload file: {response.status_code} - {response.text[:200]}")
-            # Return placeholder if upload fails
-            return {
-                "error": f"Upload failed: {response.status_code}",
-                "filename": filename,
-                "size": len(result.data)
-            }
-
-        # Return file metadata from API response
-        try:
-            file_data = response.json()
-            logger.info(f"✅ Uploaded file: {file_data.get('id', 'unknown')}")
-            return file_data
-        except Exception as e:
-            logger.error(f"Failed to parse upload response: {e}")
-            return {"error": str(e), "filename": filename}
-
-    def _mime_to_extension(self, mime_type: str) -> str:
-        """Convert MIME type to file extension."""
-        extensions = {
-            'image/png': 'png',
-            'image/jpeg': 'jpg',
-            'image/gif': 'gif',
-            'image/webp': 'webp',
-            'audio/mpeg': 'mp3',
-            'audio/wav': 'wav',
-            'audio/ogg': 'ogg',
-            'audio/flac': 'flac',
-            'video/mp4': 'mp4',
-            'video/webm': 'webm',
-            'application/pdf': 'pdf',
-            'application/json': 'json',
-            'text/plain': 'txt',
-        }
-        return extensions.get(mime_type, 'bin')
+            except Exception as e:
+                logger.error(f"❌ Failed to apply output mapping for {output.name}: {e}")
