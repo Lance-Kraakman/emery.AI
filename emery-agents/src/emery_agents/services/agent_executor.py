@@ -36,10 +36,12 @@ from .token_usage_extractor import TokenUsageExtractor
 from ..tools.skill_tool import SkillTool
 from ..tools.output_tool import OutputTool
 from ..clients import HuggingFaceInferenceClient, TaskResult
+from .skill_executor import SkillExecutorService
 from ..entities.output_mapping import (
     OutputMappingConfig, FieldMapping, OutputMappingMode, RowAction,
     extract_field_value, build_row_data, get_extension_for_mime
 )
+from ..prompts import render_output_instructions
 from .output_mapping_service import OutputMappingService, MappingContext
 
 logger = logging.getLogger(__name__)
@@ -83,6 +85,12 @@ class AgentExecutor:
         self.agent_factory = agent_factory or AgentFactory(self.model_provider)
         # Inference client for direct operation execution (lazy initialization)
         self._inference_client = inference_client
+        # SkillExecutorService for shared skill execution logic
+        self.skill_executor_service = SkillExecutorService(
+            tool_loader=self.tool_loader,
+            agent_factory=self.agent_factory,
+            inference_client=inference_client
+        )
         # Agent cache now managed by AgentFactory
         logger.info("AgentExecutor initialized with shared utilities")
 
@@ -208,7 +216,6 @@ class AgentExecutor:
         for part in all_content:
             if hasattr(part, 'image_url') and part.image_url:
                 # Convert MessagePart.ImageUrlPart to ImageAttachment for compatibility
-                from ..grpc.generated.agent_worker_pb2 import ImageAttachment
                 img_attachment = ImageAttachment(url=part.image_url.url)
                 images.append(img_attachment)
             elif hasattr(part, 'file') and part.file:
@@ -638,7 +645,6 @@ class AgentExecutor:
             return instructions
 
         # Use template for detailed output instructions
-        from ..prompts import render_output_instructions
         output_instructions = render_output_instructions(outputs_with_mappings)
         if output_instructions:
             return instructions + "\n\n" + output_instructions
@@ -733,12 +739,19 @@ class AgentExecutor:
         )
         inference_client = self._get_inference_client() if has_operation_skills else None
 
+        # Create shared executor callback for all skill tools
+        skill_executor_callback = self.skill_executor_service.create_executor_callback(
+            org_model=org_model,
+            return_message_parts=False,  # Task mode returns plain strings
+            api_key=api_key,
+            organization_id=organization_id
+        )
+
         for skill_config in skills:
             try:
-                # Create executor callback for this skill
                 skill_tool = SkillTool(
                     skill_config=skill_config,
-                    skill_executor=self._create_skill_executor(org_model),
+                    skill_executor=skill_executor_callback,
                     inference_client=inference_client,
                     api_key=api_key,
                     organization_id=organization_id
@@ -749,107 +762,6 @@ class AgentExecutor:
                 logger.warning(f"Failed to create SkillTool for {skill_config.name}: {e}")
 
         return skill_tools
-
-    def _create_skill_executor(self, org_model: Optional[str] = None):
-        """
-        Create an executor callback for skill tools.
-
-        Args:
-            org_model: Organization default model
-
-        Returns:
-            Callable that executes a skill and returns result string (or tuple with captured outputs)
-        """
-        def execute_skill(
-            skill_config: SkillConfig,
-            runtime_inputs: Dict[str, Any],
-            capture_outputs: bool = False
-        ) -> Union[str, tuple]:
-            """
-            Execute a skill synchronously (for task/delegation execution).
-
-            Args:
-                skill_config: Skill configuration
-                runtime_inputs: Runtime inputs from caller
-                capture_outputs: If True, add OutputTool and return (result, captured_outputs)
-
-            Returns:
-                str if capture_outputs=False, tuple(str, dict|None) if capture_outputs=True
-            """
-            logger.info(f"🎯 Executing skill: {skill_config.name} (capture_outputs={capture_outputs})")
-
-            try:
-                # Load skill's tools
-                skill_tools = []
-                if skill_config.tools:
-                    skill_tools = self.tool_loader.load_tools(list(skill_config.tools))
-
-                # Add OutputTool if capturing outputs
-                output_tool = None
-                if capture_outputs and skill_config.outputs:
-                    output_tool = OutputTool(skill_outputs=list(skill_config.outputs))
-                    skill_tools.append(output_tool)
-                    logger.info(f"Added OutputTool for {len(list(skill_config.outputs))} outputs")
-
-                # Build task from instructions + inputs
-                task_parts = [skill_config.instructions]
-                if runtime_inputs:
-                    task_parts.append("\n## Inputs:")
-                    for key, value in runtime_inputs.items():
-                        task_parts.append(f"- {key}: {value}")
-
-                # Add output instructions if capturing (use template for detailed instructions)
-                if capture_outputs and skill_config.outputs:
-                    from ..prompts import render_output_instructions
-                    output_instructions = render_output_instructions(list(skill_config.outputs))
-                    if output_instructions:
-                        task_parts.append(f"\n\n{output_instructions}")
-
-                task = "\n".join(task_parts)
-
-                # Create sub-agent with skill context from template
-                skill_model = skill_config.model if hasattr(skill_config, 'model') and skill_config.model else None
-                skill_agent_type = skill_config.agent_type if hasattr(skill_config, 'agent_type') and skill_config.agent_type else None
-                agent_config = AgentConfig(
-                    tools=skill_tools,
-                    skill_model=skill_model,
-                    org_model=org_model,
-                    max_steps=10,
-                    agent_name=f"skill_{skill_config.name}",
-                    agent_description=skill_config.description,
-                    enable_caching=False,
-                    agent_type="skill_executor",
-                    context_type="autonomous",
-                    skill_agent_type=skill_agent_type  # "tool_calling" (default) or "code_agent"
-                )
-                sub_agent = self.agent_factory.create_agent(agent_config)
-
-                # Execute
-                result = sub_agent.run(task=task, reset=True)
-                logger.info(f"✅ Skill {skill_config.name} completed")
-
-                # Return with captured outputs if requested
-                if capture_outputs:
-                    was_called = output_tool.was_called() if output_tool else False
-                    captured = output_tool.get_captured_values() if output_tool and was_called else None
-                    if captured:
-                        logger.info(f"📤 Captured outputs from submit_result: {list(captured.keys())}")
-                    else:
-                        logger.warning(f"⚠️ OutputTool was {'NOT ' if not was_called else ''}called, captured={captured}")
-                    return str(result), captured
-                else:
-                    return str(result)
-
-            except Exception as e:
-                error_msg = f"Skill execution failed: {str(e)}"
-                logger.error(f"❌ Skill {skill_config.name} failed: {e}")
-                if capture_outputs:
-                    return error_msg, None
-                return error_msg
-
-        return execute_skill
-
-    # Note: _create_tool_configs_with_context removed - now using tool_loader.create_tool_configs_with_context()
 
     # =========================================================================
     # Utility Methods
