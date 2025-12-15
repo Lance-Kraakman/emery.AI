@@ -58,14 +58,17 @@ export function SkillOutputsSection({
     setEditingIndex(null);
   };
 
-  // Close form when clicking outside
+  // Close form when clicking outside (but not on Select dropdown portals)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
+      // Radix Select renders dropdown in a portal outside the form
+      const isSelectPortal = target.closest('[role="listbox"]') || target.closest('[data-radix-popper-content-wrapper]');
       if (
         showAddForm &&
         formRef.current &&
-        !formRef.current.contains(target)
+        !formRef.current.contains(target) &&
+        !isSelectPortal
       ) {
         handleCancel();
       }
@@ -163,7 +166,19 @@ export function SkillOutputsSection({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  {/* Basic types */}
                   <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="number">Number</SelectItem>
+                  <SelectItem value="boolean">Boolean</SelectItem>
+                  <SelectItem value="date">Date</SelectItem>
+                  <SelectItem value="json">JSON</SelectItem>
+                  {/* Format-specific */}
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="phone">Phone</SelectItem>
+                  {/* Select types */}
+                  <SelectItem value="single-select">Single Select</SelectItem>
+                  <SelectItem value="multi-select">Multi Select</SelectItem>
+                  {/* Media types */}
                   <SelectItem value="image">Image</SelectItem>
                   <SelectItem value="file">File</SelectItem>
                   <SelectItem value="audio">Audio</SelectItem>

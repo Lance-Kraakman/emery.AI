@@ -23,8 +23,18 @@ export interface TaskModelConfig {
 
 /**
  * Skill Input/Output Types
+ *
+ * Expanded to align with database field types for better LLM guidance.
+ * - Basic types: text, number, boolean, date, json
+ * - Format-specific: email, phone
+ * - Select types: single-select, multi-select (for constrained options)
+ * - Media types: image, file, audio, video, document
  */
-export type SkillParameterType = 'text' | 'image' | 'file' | 'audio' | 'video' | 'document';
+export type SkillParameterType =
+  | 'text' | 'number' | 'boolean' | 'date' | 'json'
+  | 'email' | 'phone'
+  | 'single-select' | 'multi-select'
+  | 'image' | 'file' | 'audio' | 'video' | 'document';
 
 /**
  * File Configuration for file-type inputs

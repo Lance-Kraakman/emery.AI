@@ -23,7 +23,7 @@ from .image_processor import ImageProcessor
 from .agent_factory import AgentFactory, AgentConfig
 from .token_usage_extractor import TokenUsageExtractor
 from ..tools.skill_tool import SkillTool
-from ..tools.output_tool import OutputTool
+from ..tools.output_tool import OutputTool, build_target_field_metadata_from_mappings
 from ..clients import HuggingFaceInferenceClient, TaskResult
 from .skill_executor import SkillExecutorService
 from ..entities.output_mapping import (
@@ -628,8 +628,22 @@ class AgentExecutor:
         if not outputs_with_mappings:
             return instructions
 
+        # Build target field metadata for type-aware guidance
+        target_metadata = build_target_field_metadata_from_mappings(outputs_with_mappings)
+        target_meta_dict = {
+            name: {
+                'field_type': meta.field_type,
+                'options': meta.options,
+                'max_selections': meta.max_selections
+            }
+            for name, meta in target_metadata.items()
+        }
+
         # Use template for detailed output instructions
-        output_instructions = render_output_instructions(outputs_with_mappings)
+        output_instructions = render_output_instructions(
+            outputs_with_mappings,
+            target_field_metadata=target_meta_dict
+        )
         if output_instructions:
             return instructions + "\n\n" + output_instructions
         return instructions
@@ -664,7 +678,12 @@ class AgentExecutor:
         # Add OutputTool if skill has output mappings
         output_tool = None
         if self._has_output_mappings(skill):
-            output_tool = OutputTool(skill_outputs=list(skill.outputs))
+            # Extract target field metadata from output mappings for rich LLM guidance
+            target_metadata = build_target_field_metadata_from_mappings(list(skill.outputs))
+            output_tool = OutputTool(
+                skill_outputs=list(skill.outputs),
+                target_field_metadata=target_metadata
+            )
             tools.append(output_tool)
             # Store on context so we can check it after execution
             context.output_tool = output_tool

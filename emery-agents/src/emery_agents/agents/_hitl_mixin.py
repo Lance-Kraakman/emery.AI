@@ -21,8 +21,9 @@ class HITLMixin:
 
     _interrupted_agent_name: Optional[str] = None
 
-    def __init__(self) -> None:
-        """Initialize HITL state."""
+    def __init__(self, *args, **kwargs) -> None:
+        """Initialize HITL state. Passes args/kwargs through for cooperative MI."""
+        super().__init__(*args, **kwargs)
         self._interrupted_agent_name = None
 
     def _is_approval_response(self, task: str) -> bool:

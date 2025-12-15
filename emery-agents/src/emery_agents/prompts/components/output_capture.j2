@@ -1,25 +1,44 @@
 ## CRITICAL: Output Submission Required
 
-**You MUST call `submit_result` BEFORE calling `final_answer`.**
+**IMPORTANT: Call only ONE tool at a time. Wait for the observation before calling another tool.**
 
-This task requires you to save outputs to the database. The workflow is:
-1. Complete your analysis/work
-2. Call `submit_result(...)` with your outputs ← **REQUIRED FIRST**
-3. Then call `final_answer(...)` to finish
+This task requires you to save outputs to the database.
 
-### Outputs to Submit:
-{% for output in outputs %}
-- **{{ output.name }}** ({{ output.type }}){% if output.description %}: {{ output.description }}{% endif %}
+### Step 1: Call `submit_result` with your outputs
+When you have completed your analysis, call `submit_result` with all required outputs:
 
-{% endfor %}
-
-### Required Call:
 ```
 submit_result(
 {% for output in outputs %}
-    {{ output.name }}=<your {{ output.type }} value>{{ "," if not loop.last else "" }}
+    {{ output.name }}=<value>{{ "," if not loop.last else "" }}
 {% endfor %}
 )
 ```
 
-⚠️ **WARNING**: If you call `final_answer` without first calling `submit_result`, the outputs will NOT be saved. Always call `submit_result` first!
+### Outputs to Submit:
+{% for output in outputs %}
+- **{{ output.name }}**{% if output.target.field_type %} ({{ output.target.field_type }}){% else %} ({{ output.type }}){% endif %}
+{%- if output.target.field_type == 'single-select' and output.target.options %}
+  → Must be one of: {{ output.target.options | join(', ') }}
+{%- elif output.target.field_type == 'multi-select' and output.target.options %}
+  → Provide an array from: {{ output.target.options | join(', ') }}{% if output.target.max_selections %} (max {{ output.target.max_selections }}){% endif %}
+{%- elif output.target.field_type == 'number' or output.type == 'number' %}
+  → Provide a numeric value
+{%- elif output.target.field_type == 'boolean' or output.type == 'boolean' %}
+  → Provide true or false
+{%- elif output.target.field_type == 'date' or output.type == 'date' %}
+  → Provide date in ISO format (YYYY-MM-DD)
+{%- elif output.target.field_type == 'email' or output.type == 'email' %}
+  → Provide a valid email address
+{%- elif output.target.field_type == 'json' or output.type == 'json' %}
+  → Provide a JSON object or array
+{%- elif output.description %}
+  → {{ output.description }}
+{%- endif %}
+
+{% endfor %}
+
+### Step 2: After `submit_result` succeeds, call `final_answer`
+Only after you see the observation confirming `submit_result` succeeded, call `final_answer` to complete the task.
+
+⚠️ **Do NOT call both tools in the same response. Call `submit_result` first, wait for the observation, then call `final_answer`.**

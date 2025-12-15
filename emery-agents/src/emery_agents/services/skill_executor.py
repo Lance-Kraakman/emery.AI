@@ -9,7 +9,7 @@ from PIL import Image
 from ..clients import HuggingFaceInferenceClient, TaskResult
 from ..grpc.generated import agent_worker_pb2
 from ..prompts import render_output_instructions
-from ..tools.output_tool import OutputTool
+from ..tools.output_tool import OutputTool, build_target_field_metadata_from_mappings
 from ..types import SkillExecutionResult
 from ..utils import run_async_in_thread
 from .agent_factory import AgentFactory, AgentConfig
@@ -123,7 +123,12 @@ class SkillExecutorService:
         # 2. Add OutputTool if capturing outputs
         output_tool = None
         if capture_outputs and skill_config.outputs:
-            output_tool = OutputTool(skill_outputs=list(skill_config.outputs))
+            # Extract target field metadata from output mappings for rich LLM guidance
+            target_metadata = build_target_field_metadata_from_mappings(list(skill_config.outputs))
+            output_tool = OutputTool(
+                skill_outputs=list(skill_config.outputs),
+                target_field_metadata=target_metadata
+            )
             skill_tools.append(output_tool)
             logger.info(f"📤 Added OutputTool for {len(list(skill_config.outputs))} outputs")
 
@@ -143,7 +148,20 @@ class SkillExecutorService:
 
         # Add output instructions if capturing
         if capture_outputs and skill_config.outputs:
-            output_instructions = render_output_instructions(list(skill_config.outputs))
+            # Build target field metadata for type-aware guidance
+            target_metadata = build_target_field_metadata_from_mappings(list(skill_config.outputs))
+            target_meta_dict = {
+                name: {
+                    'field_type': meta.field_type,
+                    'options': meta.options,
+                    'max_selections': meta.max_selections
+                }
+                for name, meta in target_metadata.items()
+            }
+            output_instructions = render_output_instructions(
+                list(skill_config.outputs),
+                target_field_metadata=target_meta_dict
+            )
             if output_instructions:
                 task_parts.append(f"\n\n{output_instructions}")
                 logger.info(f"📤 Added output capture instructions ({len(output_instructions)} chars)")
