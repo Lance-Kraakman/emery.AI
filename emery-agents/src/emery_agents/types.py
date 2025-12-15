@@ -128,6 +128,17 @@ class FileInfo:
     url: Optional[str] = None
 
 
+@dataclass
+class InstructionConfig:
+    """Configuration for instruction-based task execution."""
+    task: str
+    tools: List[Any] = field(default_factory=list)  # List of ToolConfig protos or dicts
+    servers: List[Any] = field(default_factory=list)  # List of ServerConfig protos or dicts
+    images: List[Any] = field(default_factory=list)  # List of ImageAttachment protos
+    attachments: List[Any] = field(default_factory=list)  # List of FileAttachment protos
+    model: Optional[str] = None
+
+
 @runtime_checkable
 class AttachmentLike(Protocol):
     """Protocol for attachment-like objects."""

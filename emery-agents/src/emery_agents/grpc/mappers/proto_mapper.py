@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional, TypedDict
 from ..generated import agent_worker_pb2
 from ...entities.task import TaskRequest, TriggerData
 from ...entities.agent import AgentConfig
-from ...types import TaskStatus, WorkerStatus
+from ...types import TaskStatus, WorkerStatus, InstructionConfig
 
 
 # Type definitions for structured return values
@@ -67,15 +67,17 @@ class ProtoMapper:
         if proto.HasField("skill_name"):
             skill_name = proto.skill_name
 
-        # Convert instruction config to dict if present
+        # Convert instruction config to dataclass if present
         instruction_config = None
         if proto.HasField("instruction_config"):
-            instruction_config = {
-                'task': proto.instruction_config.task,
-                'tools': list(proto.instruction_config.tools),
-                'servers': list(proto.instruction_config.servers),
-                'model': proto.instruction_config.model
-            }
+            instruction_config = InstructionConfig(
+                task=proto.instruction_config.task,
+                tools=list(proto.instruction_config.tools),
+                servers=list(proto.instruction_config.servers),
+                images=list(proto.instruction_config.images),
+                attachments=list(proto.instruction_config.attachments),
+                model=proto.instruction_config.model or None
+            )
 
         return TaskRequest(
             task_id=proto.task_id,

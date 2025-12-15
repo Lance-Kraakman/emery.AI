@@ -46,7 +46,7 @@ interface SkillEditorProps {
   onSave?: () => void;
   isSaving?: boolean;
   agentDefaultModel?: string | null; // Agent's default model for inheritance display
-  organizationTier?: 'free' | 'pro' | 'enterprise'; // For filtering available models
+  organizationTier?: 'free' | 'pro' | 'max' | 'enterprise'; // For filtering available models
   availableModels?: string[]; // Organization's whitelist of allowed models
   isReadOnly?: boolean; // When true, disables all inputs (for system skills)
 }
