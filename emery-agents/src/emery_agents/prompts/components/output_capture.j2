@@ -1,0 +1,21 @@
+## Required Output Submission
+
+When you complete this task, you MUST call the `submit_result` tool to submit your outputs.
+
+### Outputs to Submit:
+{% for output in outputs %}
+- **{{ output.name }}** ({{ output.type }}){% if output.description %}: {{ output.description }}{% endif %}
+
+{% endfor %}
+
+### How to Submit:
+Call `submit_result()` with the values you've produced:
+```
+submit_result(
+{% for output in outputs %}
+    {{ output.name }}=<your {{ output.type }} result>{{ "," if not loop.last else "" }}
+{% endfor %}
+)
+```
+
+**Important**: Do NOT just describe your results in text. You MUST call `submit_result()` with the actual values to complete the task successfully. The outputs will be saved to the database.

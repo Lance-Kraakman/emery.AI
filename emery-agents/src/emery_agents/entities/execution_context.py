@@ -59,6 +59,9 @@ class ExecutionContext:
     # API authentication for output mappings and managed agents
     api_key: Optional[str] = None
 
+    # OutputTool reference for capturing agent outputs (set at runtime)
+    output_tool: Optional[Any] = None
+
     # Environment data
     environment: Dict[str, Any] = field(default_factory=dict)
 
