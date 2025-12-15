@@ -248,6 +248,78 @@ def _write_debug_prompt(name: str, content: str) -> None:
         logger.warning(f"⚠️ Failed to write debug prompt: {e}")
 
 
+def render_available_files(attachments: List[Any]) -> str:
+    """
+    Render available files list for chat agent context.
+
+    Creates display names with index suffixes for duplicate filenames:
+    - First occurrence: "audio.mp3"
+    - Second occurrence: "audio.mp3 (2)"
+    - Third occurrence: "audio.mp3 (3)"
+
+    Args:
+        attachments: List of FileAttachment objects (proto) with filename, mime_type, url
+
+    Returns:
+        Rendered available files section, or empty string if no files
+    """
+    if not attachments:
+        return ""
+
+    # Track filename occurrences for duplicate handling
+    filename_counts: dict[str, int] = {}
+    files_for_template = []
+
+    for attachment in attachments:
+        # Extract filename from attachment (proto or dict)
+        if hasattr(attachment, 'filename'):
+            filename = attachment.filename or 'Unnamed file'
+            mime_type = getattr(attachment, 'mime_type', '') or ''
+        elif isinstance(attachment, dict):
+            filename = attachment.get('filename', 'Unnamed file')
+            mime_type = attachment.get('mime_type', '')
+        else:
+            continue
+
+        # Determine file type from MIME type
+        if mime_type.startswith('audio/'):
+            file_type = 'audio'
+        elif mime_type.startswith('image/'):
+            file_type = 'image'
+        elif mime_type.startswith('video/'):
+            file_type = 'video'
+        elif 'pdf' in mime_type:
+            file_type = 'PDF'
+        elif 'document' in mime_type or 'word' in mime_type:
+            file_type = 'document'
+        elif 'spreadsheet' in mime_type or 'excel' in mime_type:
+            file_type = 'spreadsheet'
+        elif mime_type.startswith('text/'):
+            file_type = 'text'
+        else:
+            file_type = 'file'
+
+        # Handle duplicate filenames with index suffix
+        if filename in filename_counts:
+            filename_counts[filename] += 1
+            display_name = f"{filename} ({filename_counts[filename]})"
+        else:
+            filename_counts[filename] = 1
+            display_name = filename
+
+        files_for_template.append({
+            'display_name': display_name,
+            'filename': filename,
+            'type': file_type,
+            'mime_type': mime_type,
+        })
+
+    if not files_for_template:
+        return ""
+
+    return render_template("components/available_files.j2", files=files_for_template)
+
+
 def render_output_instructions(skill_outputs: List[Any]) -> str:
     """
     Render output capture instructions for agent mode skills.
@@ -290,6 +362,7 @@ def build_agent_instructions(
     agent_type: str = "default",
     context_type: str = "interactive",
     skill_outputs: List[Any] = None,
+    session_attachments: List[Any] = None,
     **kwargs
 ) -> str:
     """
@@ -303,6 +376,7 @@ def build_agent_instructions(
         agent_type: Type of agent ("default", "document_builder", "skill_builder", "skill_executor")
         context_type: Execution context ("interactive" or "autonomous")
         skill_outputs: Optional list of skill outputs for output capture instructions
+        session_attachments: Optional list of session file attachments (for chat agent visibility)
         **kwargs: Template variables (e.g., restricted_tools)
 
     Returns:
@@ -343,6 +417,14 @@ def build_agent_instructions(
             if tool_instructions:
                 base_instructions = f"{base_instructions}\n\n{tool_instructions}"
                 logger.debug(f"📝 Added tool instructions ({len(tool_instructions)} chars)")
+
+        # Available files in session (for chat agent visibility only)
+        # Sub-agents/skills don't need this - they reference files by name when calling skills
+        if session_attachments and agent_type in ("chat_agent", "chat_planner"):
+            files_section = render_available_files(session_attachments)
+            if files_section:
+                base_instructions = f"{base_instructions}\n\n{files_section}"
+                logger.debug(f"📝 Added available files section ({len(files_section)} chars, {len(session_attachments)} files)")
 
         # Output capture instructions (for skills with output mappings)
         if skill_outputs:

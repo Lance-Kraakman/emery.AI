@@ -36,7 +36,8 @@ def create_chat_planner_agent(
     model: Any,
     managed_agents: Optional[List[Any]] = None,
     context_type: str = "interactive",
-    max_steps: int = 10
+    max_steps: int = 10,
+    session_attachments: Optional[List[Any]] = None
 ) -> InterruptAwareToolCallingAgent:
     """
     Create the Chat Planner orchestrator agent.
@@ -58,17 +59,21 @@ def create_chat_planner_agent(
         managed_agents: Sub-agents (skill_builder, document_builder)
         context_type: "interactive" for chat, "autonomous" for tasks
         max_steps: Maximum execution steps
+        session_attachments: Optional list of file attachments available in session
+                            (displayed to agent for file reference awareness)
 
     Returns:
         Configured InterruptAwareToolCallingAgent
     """
     # Get instructions from centralized function (base + agent-specific + tools)
     # Pass managed_agents so template can list available specialists
+    # Pass session_attachments so agent knows what files are available
     instructions = build_agent_instructions(
         tools=tools,
         agent_type="chat_planner",
         context_type=context_type,
-        managed_agents=managed_agents or []
+        managed_agents=managed_agents or [],
+        session_attachments=session_attachments
     )
 
     # Create the orchestrator agent

@@ -36,7 +36,8 @@ class ExecutionContext:
 
     # Multimodal content (optional)
     images: List[ImageAttachment] = field(default_factory=list)       # Image URLs
-    attachments: List[FileAttachment] = field(default_factory=list)   # File metadata
+    attachments: List[FileAttachment] = field(default_factory=list)   # Current message files (default)
+    session_attachments: List[FileAttachment] = field(default_factory=list)  # All session files (for explicit lookup by name)
 
     # Optional context
     agent_id: Optional[AgentId] = None
@@ -83,6 +84,7 @@ class ExecutionContext:
             available_tools=tools,
             images=self.images,
             attachments=self.attachments,
+            session_attachments=self.session_attachments,
             agent_id=self.agent_id,
             organization_id=self.organization_id,
             skill_name=self.skill_name,
