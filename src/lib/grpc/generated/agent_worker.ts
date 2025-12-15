@@ -517,11 +517,7 @@ export interface ProcessMessageResponse {
   contentChunk?:
     | ContentChunk
     | undefined;
-  /** RAG sources and context */
-  ragContext?:
-    | RagContext
-    | undefined;
-  /** Processing finished marker */
+  /** Field 2 reserved (was: RagContext rag_context) */
   complete?:
     | ProcessingComplete
     | undefined;
@@ -542,7 +538,6 @@ export interface ProcessMessageResponse {
  * AIDEV-NOTE: Multi-attachment support implemented (2025-01)
  * - ImageUrlPart: Vision model support (PIL Images → base64)
  * - FilePart: Text extraction from PDFs, audio transcription, documents
- * - Simple extraction approach (no embeddings/RAG initially)
  * - Files processed async in message_mapper.py using file_processor.py
  */
 export interface MessagePart {
@@ -590,29 +585,6 @@ export interface ContentChunk {
   content: string;
   /** Sequence number for ordering */
   sequence: number;
-}
-
-/** RAG context information */
-export interface RagContext {
-  /** List of RAG sources used */
-  sources: RagSource[];
-  /** Summary of context used */
-  contextSummary: string;
-  /** Total number of sources found */
-  totalSources: number;
-}
-
-export interface RagSource {
-  /** Source document identifier */
-  documentId: string;
-  /** Source document title */
-  title: string;
-  /** Similarity score */
-  similarity: number;
-  /** Domain type (table, agent, file, etc.) */
-  domainType: string;
-  /** Relevant text excerpt */
-  excerpt: string;
 }
 
 /** Processing completion marker */
@@ -3955,23 +3927,13 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
 };
 
 function createBaseProcessMessageResponse(): ProcessMessageResponse {
-  return {
-    contentChunk: undefined,
-    ragContext: undefined,
-    complete: undefined,
-    error: undefined,
-    stepProgress: undefined,
-    timestamp: 0,
-  };
+  return { contentChunk: undefined, complete: undefined, error: undefined, stepProgress: undefined, timestamp: 0 };
 }
 
 export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
   encode(message: ProcessMessageResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.contentChunk !== undefined) {
       ContentChunk.encode(message.contentChunk, writer.uint32(10).fork()).join();
-    }
-    if (message.ragContext !== undefined) {
-      RagContext.encode(message.ragContext, writer.uint32(18).fork()).join();
     }
     if (message.complete !== undefined) {
       ProcessingComplete.encode(message.complete, writer.uint32(26).fork()).join();
@@ -4001,14 +3963,6 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
           }
 
           message.contentChunk = ContentChunk.decode(reader, reader.uint32());
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.ragContext = RagContext.decode(reader, reader.uint32());
           continue;
         }
         case 3: {
@@ -4055,7 +4009,6 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
   fromJSON(object: any): ProcessMessageResponse {
     return {
       contentChunk: isSet(object.contentChunk) ? ContentChunk.fromJSON(object.contentChunk) : undefined,
-      ragContext: isSet(object.ragContext) ? RagContext.fromJSON(object.ragContext) : undefined,
       complete: isSet(object.complete) ? ProcessingComplete.fromJSON(object.complete) : undefined,
       error: isSet(object.error) ? ProcessingError.fromJSON(object.error) : undefined,
       stepProgress: isSet(object.stepProgress) ? StepProgress.fromJSON(object.stepProgress) : undefined,
@@ -4067,9 +4020,6 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     const obj: any = {};
     if (message.contentChunk !== undefined) {
       obj.contentChunk = ContentChunk.toJSON(message.contentChunk);
-    }
-    if (message.ragContext !== undefined) {
-      obj.ragContext = RagContext.toJSON(message.ragContext);
     }
     if (message.complete !== undefined) {
       obj.complete = ProcessingComplete.toJSON(message.complete);
@@ -4093,9 +4043,6 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     const message = createBaseProcessMessageResponse();
     message.contentChunk = (object.contentChunk !== undefined && object.contentChunk !== null)
       ? ContentChunk.fromPartial(object.contentChunk)
-      : undefined;
-    message.ragContext = (object.ragContext !== undefined && object.ragContext !== null)
-      ? RagContext.fromPartial(object.ragContext)
       : undefined;
     message.complete = (object.complete !== undefined && object.complete !== null)
       ? ProcessingComplete.fromPartial(object.complete)
@@ -4595,222 +4542,6 @@ export const ContentChunk: MessageFns<ContentChunk> = {
     const message = createBaseContentChunk();
     message.content = object.content ?? "";
     message.sequence = object.sequence ?? 0;
-    return message;
-  },
-};
-
-function createBaseRagContext(): RagContext {
-  return { sources: [], contextSummary: "", totalSources: 0 };
-}
-
-export const RagContext: MessageFns<RagContext> = {
-  encode(message: RagContext, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.sources) {
-      RagSource.encode(v!, writer.uint32(10).fork()).join();
-    }
-    if (message.contextSummary !== "") {
-      writer.uint32(18).string(message.contextSummary);
-    }
-    if (message.totalSources !== 0) {
-      writer.uint32(24).int32(message.totalSources);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): RagContext {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseRagContext();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.sources.push(RagSource.decode(reader, reader.uint32()));
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.contextSummary = reader.string();
-          continue;
-        }
-        case 3: {
-          if (tag !== 24) {
-            break;
-          }
-
-          message.totalSources = reader.int32();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): RagContext {
-    return {
-      sources: globalThis.Array.isArray(object?.sources) ? object.sources.map((e: any) => RagSource.fromJSON(e)) : [],
-      contextSummary: isSet(object.contextSummary) ? globalThis.String(object.contextSummary) : "",
-      totalSources: isSet(object.totalSources) ? globalThis.Number(object.totalSources) : 0,
-    };
-  },
-
-  toJSON(message: RagContext): unknown {
-    const obj: any = {};
-    if (message.sources?.length) {
-      obj.sources = message.sources.map((e) => RagSource.toJSON(e));
-    }
-    if (message.contextSummary !== "") {
-      obj.contextSummary = message.contextSummary;
-    }
-    if (message.totalSources !== 0) {
-      obj.totalSources = Math.round(message.totalSources);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<RagContext>, I>>(base?: I): RagContext {
-    return RagContext.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<RagContext>, I>>(object: I): RagContext {
-    const message = createBaseRagContext();
-    message.sources = object.sources?.map((e) => RagSource.fromPartial(e)) || [];
-    message.contextSummary = object.contextSummary ?? "";
-    message.totalSources = object.totalSources ?? 0;
-    return message;
-  },
-};
-
-function createBaseRagSource(): RagSource {
-  return { documentId: "", title: "", similarity: 0, domainType: "", excerpt: "" };
-}
-
-export const RagSource: MessageFns<RagSource> = {
-  encode(message: RagSource, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.documentId !== "") {
-      writer.uint32(10).string(message.documentId);
-    }
-    if (message.title !== "") {
-      writer.uint32(18).string(message.title);
-    }
-    if (message.similarity !== 0) {
-      writer.uint32(29).float(message.similarity);
-    }
-    if (message.domainType !== "") {
-      writer.uint32(34).string(message.domainType);
-    }
-    if (message.excerpt !== "") {
-      writer.uint32(42).string(message.excerpt);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): RagSource {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseRagSource();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.documentId = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.title = reader.string();
-          continue;
-        }
-        case 3: {
-          if (tag !== 29) {
-            break;
-          }
-
-          message.similarity = reader.float();
-          continue;
-        }
-        case 4: {
-          if (tag !== 34) {
-            break;
-          }
-
-          message.domainType = reader.string();
-          continue;
-        }
-        case 5: {
-          if (tag !== 42) {
-            break;
-          }
-
-          message.excerpt = reader.string();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): RagSource {
-    return {
-      documentId: isSet(object.documentId) ? globalThis.String(object.documentId) : "",
-      title: isSet(object.title) ? globalThis.String(object.title) : "",
-      similarity: isSet(object.similarity) ? globalThis.Number(object.similarity) : 0,
-      domainType: isSet(object.domainType) ? globalThis.String(object.domainType) : "",
-      excerpt: isSet(object.excerpt) ? globalThis.String(object.excerpt) : "",
-    };
-  },
-
-  toJSON(message: RagSource): unknown {
-    const obj: any = {};
-    if (message.documentId !== "") {
-      obj.documentId = message.documentId;
-    }
-    if (message.title !== "") {
-      obj.title = message.title;
-    }
-    if (message.similarity !== 0) {
-      obj.similarity = message.similarity;
-    }
-    if (message.domainType !== "") {
-      obj.domainType = message.domainType;
-    }
-    if (message.excerpt !== "") {
-      obj.excerpt = message.excerpt;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<RagSource>, I>>(base?: I): RagSource {
-    return RagSource.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<RagSource>, I>>(object: I): RagSource {
-    const message = createBaseRagSource();
-    message.documentId = object.documentId ?? "";
-    message.title = object.title ?? "";
-    message.similarity = object.similarity ?? 0;
-    message.domainType = object.domainType ?? "";
-    message.excerpt = object.excerpt ?? "";
     return message;
   },
 };

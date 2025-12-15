@@ -387,20 +387,18 @@ class ProcessMessageRequest(_message.Message):
     def __init__(self, message_parts: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., context: _Optional[_Union[ChatContext, _Mapping]] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., model: _Optional[str] = ..., message_id: _Optional[str] = ..., session_id: _Optional[str] = ..., user_api_key: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageResponse(_message.Message):
-    __slots__ = ("content_chunk", "rag_context", "complete", "error", "step_progress", "timestamp")
+    __slots__ = ("content_chunk", "complete", "error", "step_progress", "timestamp")
     CONTENT_CHUNK_FIELD_NUMBER: _ClassVar[int]
-    RAG_CONTEXT_FIELD_NUMBER: _ClassVar[int]
     COMPLETE_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
     STEP_PROGRESS_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     content_chunk: ContentChunk
-    rag_context: RagContext
     complete: ProcessingComplete
     error: ProcessingError
     step_progress: StepProgress
     timestamp: int
-    def __init__(self, content_chunk: _Optional[_Union[ContentChunk, _Mapping]] = ..., rag_context: _Optional[_Union[RagContext, _Mapping]] = ..., complete: _Optional[_Union[ProcessingComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., step_progress: _Optional[_Union[StepProgress, _Mapping]] = ..., timestamp: _Optional[int] = ...) -> None: ...
+    def __init__(self, content_chunk: _Optional[_Union[ContentChunk, _Mapping]] = ..., complete: _Optional[_Union[ProcessingComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., step_progress: _Optional[_Union[StepProgress, _Mapping]] = ..., timestamp: _Optional[int] = ...) -> None: ...
 
 class MessagePart(_message.Message):
     __slots__ = ("text", "image_url", "file")
@@ -453,30 +451,6 @@ class ContentChunk(_message.Message):
     content: str
     sequence: int
     def __init__(self, content: _Optional[str] = ..., sequence: _Optional[int] = ...) -> None: ...
-
-class RagContext(_message.Message):
-    __slots__ = ("sources", "context_summary", "total_sources")
-    SOURCES_FIELD_NUMBER: _ClassVar[int]
-    CONTEXT_SUMMARY_FIELD_NUMBER: _ClassVar[int]
-    TOTAL_SOURCES_FIELD_NUMBER: _ClassVar[int]
-    sources: _containers.RepeatedCompositeFieldContainer[RagSource]
-    context_summary: str
-    total_sources: int
-    def __init__(self, sources: _Optional[_Iterable[_Union[RagSource, _Mapping]]] = ..., context_summary: _Optional[str] = ..., total_sources: _Optional[int] = ...) -> None: ...
-
-class RagSource(_message.Message):
-    __slots__ = ("document_id", "title", "similarity", "domain_type", "excerpt")
-    DOCUMENT_ID_FIELD_NUMBER: _ClassVar[int]
-    TITLE_FIELD_NUMBER: _ClassVar[int]
-    SIMILARITY_FIELD_NUMBER: _ClassVar[int]
-    DOMAIN_TYPE_FIELD_NUMBER: _ClassVar[int]
-    EXCERPT_FIELD_NUMBER: _ClassVar[int]
-    document_id: str
-    title: str
-    similarity: float
-    domain_type: str
-    excerpt: str
-    def __init__(self, document_id: _Optional[str] = ..., title: _Optional[str] = ..., similarity: _Optional[float] = ..., domain_type: _Optional[str] = ..., excerpt: _Optional[str] = ...) -> None: ...
 
 class ProcessingComplete(_message.Message):
     __slots__ = ("model_used", "total_tokens", "processing_time_ms", "metadata", "token_usage")

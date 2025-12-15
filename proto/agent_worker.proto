@@ -266,7 +266,7 @@ message ProcessMessageResponse {
   // Standard oneof pattern for different response types
   oneof response {
     ContentChunk content_chunk = 1;    // AI-generated streaming content
-    RagContext rag_context = 2;       // RAG sources and context
+    // Field 2 reserved (was: RagContext rag_context)
     ProcessingComplete complete = 3;   // Processing finished marker
     ProcessingError error = 4;        // Processing error
     StepProgress step_progress = 5;   // Real-time step execution progress
@@ -279,7 +279,6 @@ message ProcessMessageResponse {
 // AIDEV-NOTE: Multi-attachment support implemented (2025-01)
 // - ImageUrlPart: Vision model support (PIL Images → base64)
 // - FilePart: Text extraction from PDFs, audio transcription, documents
-// - Simple extraction approach (no embeddings/RAG initially)
 // - Files processed async in message_mapper.py using file_processor.py
 message MessagePart {
   oneof part {
@@ -315,21 +314,6 @@ message HistoryMessage {
 message ContentChunk {
   string content = 1;                // Text content chunk
   int32 sequence = 2;                // Sequence number for ordering
-}
-
-// RAG context information
-message RagContext {
-  repeated RagSource sources = 1;    // List of RAG sources used
-  string context_summary = 2;        // Summary of context used
-  int32 total_sources = 3;           // Total number of sources found
-}
-
-message RagSource {
-  string document_id = 1;            // Source document identifier
-  string title = 2;                  // Source document title
-  float similarity = 3;              // Similarity score
-  string domain_type = 4;            // Domain type (table, agent, file, etc.)
-  string excerpt = 5;                // Relevant text excerpt
 }
 
 // Processing completion marker
