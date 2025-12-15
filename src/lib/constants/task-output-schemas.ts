@@ -3,19 +3,35 @@
  *
  * Defines the expected output fields for each HuggingFace task type.
  * Used by the OutputMappingSection UI to show available fields for mapping.
+ *
+ * NOTE: "Task" here refers to HuggingFace task types (image-classification, object-detection, etc.)
+ * In the UI, this is displayed as "Operation" mode. The terminology difference is intentional -
+ * "task" aligns with HuggingFace's API naming, while "operation" is more user-friendly.
+ *
+ * AIDEV-NOTE: Extended to support all output types including binary outputs (2025-01)
+ * - 'file' type maps to our file field type (stores URL/S3 path)
+ * - 'embedding' type maps to our embedding field type (stores vector arrays)
  */
 
 export interface OutputFieldDef {
   field: string;           // Field path, e.g., "label", "score", "box.xmin"
-  type: 'text' | 'number' | 'boolean' | 'relation';
+  type: 'text' | 'number' | 'boolean' | 'relation' | 'file' | 'embedding';
   description?: string;
 }
 
 /**
  * Output schemas per task type
  * Maps task type to available output fields
+ *
+ * NOTE: Binary outputs (images, audio, video) are uploaded to S3 first,
+ * then the URL is mapped to a 'file' type field in the database.
  */
 export const TASK_OUTPUT_SCHEMAS: Record<string, OutputFieldDef[]> = {
+  // ============================================================================
+  // CLASSIFICATION & DETECTION TASKS
+  // Return structured JSON with labels/scores
+  // ============================================================================
+
   'image-classification': [
     { field: 'label', type: 'text', description: 'Classification label' },
     { field: 'score', type: 'number', description: 'Confidence score (0-1)' },
@@ -35,6 +51,17 @@ export const TASK_OUTPUT_SCHEMAS: Record<string, OutputFieldDef[]> = {
     { field: 'score', type: 'number', description: 'Confidence score (0-1)' },
   ],
 
+  'image-segmentation': [
+    { field: 'label', type: 'text', description: 'Segment label' },
+    { field: 'score', type: 'number', description: 'Confidence score (0-1)' },
+    { field: 'mask', type: 'text', description: 'Base64-encoded mask image' },
+  ],
+
+  // ============================================================================
+  // TEXT OUTPUT TASKS
+  // Return text strings
+  // ============================================================================
+
   'speech-to-text': [
     { field: 'text', type: 'text', description: 'Transcribed text' },
   ],
@@ -48,16 +75,42 @@ export const TASK_OUTPUT_SCHEMAS: Record<string, OutputFieldDef[]> = {
     { field: 'text', type: 'text', description: 'Summary text' },
   ],
 
+  'translation': [
+    { field: 'text', type: 'text', description: 'Translated text' },
+  ],
+
+  'image-to-text': [
+    { field: 'text', type: 'text', description: 'Generated text description' },
+  ],
+
+  // ============================================================================
+  // BINARY OUTPUT TASKS (Image/Audio/Video)
+  // Upload to S3, then map URL to file field
+  // ============================================================================
+
   'text-to-image': [
-    // Binary output - handled separately, no field mapping
+    { field: 'url', type: 'file', description: 'Generated image URL' },
   ],
 
   'text-to-speech': [
-    // Binary output - handled separately, no field mapping
+    { field: 'url', type: 'file', description: 'Generated audio URL' },
   ],
 
+  'text-to-video': [
+    { field: 'url', type: 'file', description: 'Generated video URL' },
+  ],
+
+  'image-to-image': [
+    { field: 'url', type: 'file', description: 'Transformed image URL' },
+  ],
+
+  // ============================================================================
+  // EMBEDDING TASKS
+  // Return vector arrays for semantic search/RAG
+  // ============================================================================
+
   'feature-extraction': [
-    // Embedding output - typically saved to embedding field directly
+    { field: 'embedding', type: 'embedding', description: 'Vector embedding array' },
   ],
 };
 
@@ -92,11 +145,12 @@ export function taskSupportsFieldMapping(taskType: string): boolean {
 
 /**
  * Suggest default mode for a task type
- * - object-detection uses multi_row (one row per detection)
- * - classification tasks use single_row (top result only)
+ * - object-detection, image-segmentation use multi_row (one row per item)
+ * - everything else uses single_row (single result)
  */
 export function suggestMappingMode(taskType: string): 'single_row' | 'multi_row' {
-  if (taskType === 'object-detection') {
+  const multiRowTasks = ['object-detection', 'image-segmentation'];
+  if (multiRowTasks.includes(taskType)) {
     return 'multi_row';
   }
   return 'single_row';

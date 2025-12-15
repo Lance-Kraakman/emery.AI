@@ -16,6 +16,7 @@ class TaskResultType(str, Enum):
     TEXT = "text"
     IMAGE = "image"
     AUDIO = "audio"
+    VIDEO = "video"
     JSON = "json"
     EMBEDDING = "embedding"
 
@@ -36,8 +37,8 @@ class TaskResult:
 
     @property
     def is_binary(self) -> bool:
-        """Check if result is binary data (image/audio)."""
-        return self.type in (TaskResultType.IMAGE, TaskResultType.AUDIO)
+        """Check if result is binary data (image/audio/video)."""
+        return self.type in (TaskResultType.IMAGE, TaskResultType.AUDIO, TaskResultType.VIDEO)
 
     @property
     def is_text(self) -> bool:

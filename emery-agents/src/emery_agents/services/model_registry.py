@@ -491,6 +491,134 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         endpoint=ModelEndpoint(type="inference-api"),
     ),
 
+    "stabilityai/stable-diffusion-xl-base-1.0": ModelMetadata(
+        id="stabilityai/stable-diffusion-xl-base-1.0",
+        name="SDXL Base 1.0",
+        provider="huggingface",
+        description="Classic SDXL. Reliable, well-supported image generation.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "ByteDance/SDXL-Lightning": ModelMetadata(
+        id="ByteDance/SDXL-Lightning",
+        name="SDXL Lightning",
+        provider="huggingface",
+        description="Ultra-fast SDXL. 4-step generation with great quality.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # TASK-SPECIFIC MODELS - Image-to-Image
+    # ============================================================================
+
+    "black-forest-labs/FLUX.1-Kontext-dev": ModelMetadata(
+        id="black-forest-labs/FLUX.1-Kontext-dev",
+        name="FLUX.1 Kontext",
+        provider="huggingface",
+        description="Image editing and transformation. High-quality prompt-guided image modification.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=True,
+            json_mode=False,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.PRO,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "timbrooks/instruct-pix2pix": ModelMetadata(
+        id="timbrooks/instruct-pix2pix",
+        name="InstructPix2Pix",
+        provider="huggingface",
+        description="Edit images with text instructions. Follow natural language editing commands.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=True,
+            json_mode=False,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # TASK-SPECIFIC MODELS - Text-to-Video
+    # ============================================================================
+
+    "tencent/HunyuanVideo": ModelMetadata(
+        id="tencent/HunyuanVideo",
+        name="HunyuanVideo",
+        provider="huggingface",
+        description="High-quality video generation. State-of-the-art text-to-video. Requires fal-ai provider.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.MAX,
+        category=ModelCategory.ADVANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "genmo/mochi-1-preview": ModelMetadata(
+        id="genmo/mochi-1-preview",
+        name="Mochi 1 Preview",
+        provider="huggingface",
+        description="Fast video generation with good quality. Requires fal-ai provider.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.PRO,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
     # ============================================================================
     # TASK-SPECIFIC MODELS - Audio
     # ============================================================================
@@ -535,11 +663,91 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         endpoint=ModelEndpoint(type="inference-api"),
     ),
 
+    "openai/whisper-large-v3-turbo": ModelMetadata(
+        id="openai/whisper-large-v3-turbo",
+        name="Whisper Large V3 Turbo",
+        provider="huggingface",
+        description="Faster Whisper variant. Good balance of speed and accuracy.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "nvidia/parakeet-tdt-0.6b-v2": ModelMetadata(
+        id="nvidia/parakeet-tdt-0.6b-v2",
+        name="NVIDIA Parakeet TDT",
+        provider="huggingface",
+        description="Extremely fast ASR. 3386x real-time speed. WER 6.05%.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
     "suno/bark": ModelMetadata(
         id="suno/bark",
         name="Bark TTS",
         provider="huggingface",
         description="Text-to-speech generation. Creates natural-sounding audio from text.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.PRO,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "facebook/mms-tts-eng": ModelMetadata(
+        id="facebook/mms-tts-eng",
+        name="MMS TTS English",
+        provider="huggingface",
+        description="Fast multilingual TTS model. English variant with good quality and speed.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "parler-tts/parler-tts-mini-v1": ModelMetadata(
+        id="parler-tts/parler-tts-mini-v1",
+        name="Parler TTS Mini",
+        provider="huggingface",
+        description="High-quality TTS with voice description control. Describe voice characteristics in prompt.",
         context_window=0,
         max_output_tokens=0,
         capabilities=ModelCapabilities(
@@ -584,6 +792,94 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         name="ViT Image Classification",
         provider="huggingface",
         description="Classifies images into categories. Returns labels with confidence scores.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=True,
+            json_mode=False,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # TASK-SPECIFIC MODELS - Image Segmentation
+    # ============================================================================
+
+    "facebook/sam2-hiera-large": ModelMetadata(
+        id="facebook/sam2-hiera-large",
+        name="SAM 2 Large",
+        provider="huggingface",
+        description="Segment Anything 2. State-of-the-art image segmentation.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=True,
+            json_mode=False,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.PRO,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "facebook/detr-resnet-101-panoptic": ModelMetadata(
+        id="facebook/detr-resnet-101-panoptic",
+        name="DETR Panoptic Segmentation",
+        provider="huggingface",
+        description="Panoptic segmentation. Separates instances and semantic classes.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=True,
+            json_mode=False,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # TASK-SPECIFIC MODELS - Image Captioning (Image-to-Text)
+    # ============================================================================
+
+    "Salesforce/blip-image-captioning-large": ModelMetadata(
+        id="Salesforce/blip-image-captioning-large",
+        name="BLIP Image Captioning",
+        provider="huggingface",
+        description="Generate captions for images. High-quality descriptions.",
+        context_window=0,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=True,
+            json_mode=False,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "nlpconnect/vit-gpt2-image-captioning": ModelMetadata(
+        id="nlpconnect/vit-gpt2-image-captioning",
+        name="ViT-GPT2 Image Captioning",
+        provider="huggingface",
+        description="Fast image captioning using ViT + GPT2 architecture.",
         context_window=0,
         max_output_tokens=0,
         capabilities=ModelCapabilities(
@@ -658,6 +954,90 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
             multimodal=False,
         ),
         pricing=ModelPricing(input_per_1m=0.02, output_per_1m=0.04),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # TASK-SPECIFIC MODELS - Translation
+    # ============================================================================
+
+    "facebook/nllb-200-distilled-600M": ModelMetadata(
+        id="facebook/nllb-200-distilled-600M",
+        name="NLLB-200 Translation",
+        provider="huggingface",
+        description="No Language Left Behind. Supports 200 languages.",
+        context_window=1024,
+        max_output_tokens=1024,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.01, output_per_1m=0.02),
+        tier=ModelTier.FREE,
+        category=ModelCategory.BALANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "Helsinki-NLP/opus-mt-en-de": ModelMetadata(
+        id="Helsinki-NLP/opus-mt-en-de",
+        name="OPUS MT English-German",
+        provider="huggingface",
+        description="Fast English to German translation.",
+        context_window=512,
+        max_output_tokens=512,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.01, output_per_1m=0.01),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "Helsinki-NLP/opus-mt-en-es": ModelMetadata(
+        id="Helsinki-NLP/opus-mt-en-es",
+        name="OPUS MT English-Spanish",
+        provider="huggingface",
+        description="Fast English to Spanish translation.",
+        context_window=512,
+        max_output_tokens=512,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.01, output_per_1m=0.01),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "Helsinki-NLP/opus-mt-en-fr": ModelMetadata(
+        id="Helsinki-NLP/opus-mt-en-fr",
+        name="OPUS MT English-French",
+        provider="huggingface",
+        description="Fast English to French translation.",
+        context_window=512,
+        max_output_tokens=512,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.01, output_per_1m=0.01),
         tier=ModelTier.FREE,
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),

@@ -8,6 +8,7 @@ Used for direct skill execution (no LLM orchestration).
 
 import os
 import io
+import base64
 import logging
 from typing import Any, Dict, Optional
 
@@ -22,12 +23,20 @@ logger = logging.getLogger(__name__)
 
 # Supported task types for HuggingFace Inference API
 SUPPORTED_TASK_TYPES = [
+    # Generation tasks
     'text-to-image',
-    'speech-to-text',
+    'text-to-video',
     'text-to-speech',
+    'image-to-image',
+    # Understanding tasks
+    'speech-to-text',
+    'image-to-text',
     'object-detection',
     'image-classification',
+    'image-segmentation',
+    # NLP tasks
     'summarization',
+    'translation',
     'zero-shot-classification',
     'feature-extraction',
     'question-answering',
@@ -107,14 +116,25 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         logger.info(f"🚀 Executing {task_type} with model {model_id}")
 
         match task_type:
+            # Generation tasks
             case 'text-to-image':
                 return await self._text_to_image(model_id, inputs, params)
 
-            case 'speech-to-text':
-                return await self._speech_to_text(model_id, inputs, params)
+            case 'text-to-video':
+                return await self._text_to_video(model_id, inputs, params)
 
             case 'text-to-speech':
                 return await self._text_to_speech(model_id, inputs, params)
+
+            case 'image-to-image':
+                return await self._image_to_image(model_id, inputs, params)
+
+            # Understanding tasks
+            case 'speech-to-text':
+                return await self._speech_to_text(model_id, inputs, params)
+
+            case 'image-to-text':
+                return await self._image_to_text(model_id, inputs, params)
 
             case 'object-detection':
                 return await self._object_detection(model_id, inputs, params)
@@ -122,8 +142,15 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
             case 'image-classification':
                 return await self._image_classification(model_id, inputs, params)
 
+            case 'image-segmentation':
+                return await self._image_segmentation(model_id, inputs, params)
+
+            # NLP tasks
             case 'summarization':
                 return await self._summarization(model_id, inputs, params)
+
+            case 'translation':
+                return await self._translation(model_id, inputs, params)
 
             case 'zero-shot-classification':
                 return await self._zero_shot_classification(model_id, inputs, params)
@@ -175,6 +202,78 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
             metadata={"format": "png", "width": image.width, "height": image.height}
         )
 
+    async def _text_to_video(
+        self,
+        model_id: str,
+        inputs: Dict[str, Any],
+        params: Dict[str, Any]
+    ) -> TaskResult:
+        """Generate video from text prompt.
+
+        Note: Requires models hosted on fal-ai or replicate providers.
+        Standard HF Inference API does not support text-to-video directly.
+        """
+        prompt = inputs.get("prompt", "")
+        if not prompt:
+            raise ValueError("text-to-video requires 'prompt' input")
+
+        logger.info(f"🎬 Generating video: '{prompt[:50]}...'")
+        client = self._get_client(model_id)
+
+        # Call HF text_to_video (requires provider support)
+        video_bytes = client.text_to_video(
+            prompt=prompt,
+            num_frames=int(params.get("num_frames", 49)),
+            num_inference_steps=int(params.get("num_inference_steps", 25)),
+        )
+
+        logger.info(f"✅ Generated video: {len(video_bytes)} bytes")
+        return TaskResult(
+            type=TaskResultType.VIDEO,
+            data=video_bytes,
+            metadata={"format": "mp4", "model": model_id}
+        )
+
+    async def _image_to_image(
+        self,
+        model_id: str,
+        inputs: Dict[str, Any],
+        params: Dict[str, Any]
+    ) -> TaskResult:
+        """Transform image based on prompt or guidance."""
+        image = inputs.get("image")
+        prompt = inputs.get("prompt", "")
+
+        if not image:
+            raise ValueError("image-to-image requires 'image' input (bytes)")
+        if not prompt:
+            raise ValueError("image-to-image requires 'prompt' input")
+
+        logger.info(f"🖼️ Transforming image: '{prompt[:50]}...'")
+        client = self._get_client(model_id)
+
+        # Call HF image_to_image
+        result_image: Image.Image = client.image_to_image(
+            image=image,
+            prompt=prompt,
+            negative_prompt=inputs.get("negative_prompt") or params.get("negative_prompt"),
+            num_inference_steps=int(params.get("num_inference_steps", 25)),
+            guidance_scale=float(params.get("guidance_scale", 7.5)),
+            strength=float(params.get("strength", 0.8)),
+        )
+
+        # Convert PIL Image to PNG bytes
+        buffer = io.BytesIO()
+        result_image.save(buffer, format="PNG")
+        image_bytes = buffer.getvalue()
+
+        logger.info(f"✅ Transformed image: {len(image_bytes)} bytes")
+        return TaskResult(
+            type=TaskResultType.IMAGE,
+            data=image_bytes,
+            metadata={"format": "png", "width": result_image.width, "height": result_image.height}
+        )
+
     async def _speech_to_text(
         self,
         model_id: str,
@@ -193,6 +292,30 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         text = result.text
         logger.info(f"✅ Transcribed: {len(text)} chars")
 
+        return TaskResult(
+            type=TaskResultType.TEXT,
+            data=text,
+            metadata={"model": model_id}
+        )
+
+    async def _image_to_text(
+        self,
+        model_id: str,
+        inputs: Dict[str, Any],
+        params: Dict[str, Any]
+    ) -> TaskResult:
+        """Generate text description from image (captioning)."""
+        image = inputs.get("image")
+        if not image:
+            raise ValueError("image-to-text requires 'image' input (bytes)")
+
+        logger.info(f"📝 Captioning image: {len(image)} bytes")
+        client = self._get_client(model_id)
+
+        result = client.image_to_text(image=image)
+        text = result.generated_text
+
+        logger.info(f"✅ Generated caption: {len(text)} chars")
         return TaskResult(
             type=TaskResultType.TEXT,
             data=text,
@@ -280,13 +403,54 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
             metadata={"top_k": top_k}
         )
 
+    async def _image_segmentation(
+        self,
+        model_id: str,
+        inputs: Dict[str, Any],
+        params: Dict[str, Any]
+    ) -> TaskResult:
+        """Segment image into regions/masks."""
+        image = inputs.get("image")
+        if not image:
+            raise ValueError("image-segmentation requires 'image' input (bytes)")
+
+        logger.info(f"🎭 Segmenting image: {len(image)} bytes")
+        client = self._get_client(model_id)
+
+        results = client.image_segmentation(image=image)
+
+        # Convert segmentation results to serializable format
+        segments = []
+        for r in results:
+            segment = {
+                "label": r.label,
+                "score": r.score if hasattr(r, 'score') else None,
+            }
+            # Mask is a PIL Image - convert to base64 if needed
+            if hasattr(r, 'mask') and r.mask is not None:
+                mask_buffer = io.BytesIO()
+                r.mask.save(mask_buffer, format="PNG")
+                segment["mask_base64"] = base64.b64encode(mask_buffer.getvalue()).decode('utf-8')
+            segments.append(segment)
+
+        logger.info(f"✅ Found {len(segments)} segments")
+        return TaskResult(
+            type=TaskResultType.JSON,
+            data=segments,
+            metadata={"count": len(segments)}
+        )
+
     async def _summarization(
         self,
         model_id: str,
         inputs: Dict[str, Any],
         params: Dict[str, Any]
     ) -> TaskResult:
-        """Summarize text."""
+        """Summarize text.
+
+        Note: The HuggingFace Inference API doesn't support generation parameters
+        (max_length, min_length) for summarization - it uses the model's defaults.
+        """
         text = inputs.get("text", "")
         if not text:
             raise ValueError("summarization requires 'text' input")
@@ -294,15 +458,9 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         logger.info(f"📝 Summarizing: {len(text)} chars")
         client = self._get_client(model_id)
 
-        # HuggingFace summarization uses generate_parameters for length control
-        generate_params = {
-            "max_length": int(params.get("max_length", 150)),
-            "min_length": int(params.get("min_length", 30))
-        }
-        result = client.summarization(
-            text=text,
-            generate_parameters=generate_params
-        )
+        # HuggingFace Inference API doesn't accept generation parameters
+        # The model uses its default settings for length control
+        result = client.summarization(text=text)
 
         summary = result.summary_text
         logger.info(f"✅ Summary: {len(summary)} chars")
@@ -311,6 +469,40 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
             type=TaskResultType.TEXT,
             data=summary,
             metadata={"original_length": len(text), "summary_length": len(summary)}
+        )
+
+    async def _translation(
+        self,
+        model_id: str,
+        inputs: Dict[str, Any],
+        params: Dict[str, Any]
+    ) -> TaskResult:
+        """Translate text between languages.
+
+        The source and target languages depend on the model used.
+        Common models: Helsinki-NLP/opus-mt-* series, facebook/nllb-200-*
+        """
+        text = inputs.get("text", "")
+        if not text:
+            raise ValueError("translation requires 'text' input")
+
+        # Get optional language parameters (model-dependent)
+        src_lang = inputs.get("src_lang") or params.get("src_lang")
+        tgt_lang = inputs.get("tgt_lang") or params.get("tgt_lang")
+
+        logger.info(f"🌐 Translating: '{text[:50]}...' ({src_lang or 'auto'} -> {tgt_lang or 'auto'})")
+        client = self._get_client(model_id)
+
+        # Note: src_lang/tgt_lang support depends on the model
+        result = client.translation(text=text, src_lang=src_lang, tgt_lang=tgt_lang)
+
+        translated = result.translation_text
+        logger.info(f"✅ Translated: {len(translated)} chars")
+
+        return TaskResult(
+            type=TaskResultType.TEXT,
+            data=translated,
+            metadata={"original_length": len(text), "translated_length": len(translated)}
         )
 
     async def _zero_shot_classification(
