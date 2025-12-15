@@ -34,11 +34,13 @@ from .image_processor import ImageProcessor
 from .agent_factory import AgentFactory, AgentConfig
 from .token_usage_extractor import TokenUsageExtractor
 from ..tools.skill_tool import SkillTool
+from ..tools.output_tool import OutputTool
 from ..clients import HuggingFaceInferenceClient, TaskResult
 from ..entities.output_mapping import (
     OutputMappingConfig, FieldMapping, OutputMappingMode, RowAction,
     extract_field_value, build_row_data, get_extension_for_mime
 )
+from .output_mapping_service import OutputMappingService, MappingContext
 
 logger = logging.getLogger(__name__)
 
@@ -395,11 +397,16 @@ class AgentExecutor:
                 # Download images if any (multimodal support)
                 pil_images = await self._download_images(context.images)
 
+                # Enhance instructions if skill has output mappings
+                task_instructions = context.task
+                if self._has_output_mappings(skill):
+                    task_instructions = self._enhance_instructions_for_outputs(skill)
+
                 # Execute the skill instructions
                 yield {
                     "status": "in_progress",
                     "output": json.dumps({
-                        "message": f"Executing: {context.task[:100]}...",
+                        "message": f"Executing: {task_instructions[:100]}...",
                         "images_loaded": len(pil_images)
                     }),
                     "error_message": "",
@@ -408,10 +415,19 @@ class AgentExecutor:
                 }
 
                 # Execute task with text + images (smolagents format)
-                result = agent.run(task=context.task, images=pil_images or None)
+                result = agent.run(task=task_instructions, images=pil_images or None)
 
                 # Extract token usage from result
                 token_usage_proto = self._extract_token_usage(result)
+
+                # Apply agent output mappings if OutputTool was used
+                if hasattr(context, 'output_tool') and context.output_tool and context.output_tool.was_called():
+                    await self._apply_agent_output_mappings(
+                        skill=skill,
+                        captured_values=context.output_tool.get_captured_values(),
+                        api_key=context.api_key,
+                        organization_id=context.organization_id
+                    )
 
                 # Final completion
                 duration_ms = int((time.time() - start_time) * 1000)
@@ -601,6 +617,34 @@ class AgentExecutor:
 
         return self.agent_factory.create_agent(agent_config)
 
+    def _has_output_mappings(self, skill: SkillConfig) -> bool:
+        """Check if skill has any outputs with output mappings configured."""
+        if not skill.outputs:
+            return False
+        for output in skill.outputs:
+            if output.HasField('output_mapping') and len(output.output_mapping.mappings) > 0:
+                return True
+        return False
+
+    def _enhance_instructions_for_outputs(self, skill: SkillConfig) -> str:
+        """Add output tool guidance to skill instructions."""
+        instructions = skill.instructions
+
+        outputs_with_mappings = [
+            o for o in skill.outputs
+            if o.HasField('output_mapping') and len(o.output_mapping.mappings) > 0
+        ]
+        if not outputs_with_mappings:
+            return instructions
+
+        output_names = [o.name for o in outputs_with_mappings]
+        format_hint = (
+            f"\n\n⚠️ REQUIRED: When you have completed the task, you MUST call the "
+            f"'submit_result' tool with your final outputs. The expected outputs are: {output_names}"
+        )
+
+        return instructions + format_hint
+
     async def _create_skill_agent(
         self,
         skill: SkillConfig,
@@ -627,6 +671,15 @@ class AgentExecutor:
             )
             tools.extend(skill_tools)
             logger.info(f"Added {len(skill_tools)} skills as tools for delegation")
+
+        # Add OutputTool if skill has output mappings
+        output_tool = None
+        if self._has_output_mappings(skill):
+            output_tool = OutputTool(skill_outputs=list(skill.outputs))
+            tools.append(output_tool)
+            # Store on context so we can check it after execution
+            context.output_tool = output_tool
+            logger.info(f"Added OutputTool for {len(skill.outputs)} outputs")
 
         # Extract skill model and agent type if present
         skill_model = skill.model if hasattr(skill, 'model') and skill.model else None
@@ -706,11 +759,25 @@ class AgentExecutor:
             org_model: Organization default model
 
         Returns:
-            Callable that executes a skill and returns result string
+            Callable that executes a skill and returns result string (or tuple with captured outputs)
         """
-        def execute_skill(skill_config: SkillConfig, runtime_inputs: Dict[str, Any]) -> str:
-            """Execute a skill synchronously (for task execution)."""
-            logger.info(f"🎯 Task executing skill: {skill_config.name}")
+        def execute_skill(
+            skill_config: SkillConfig,
+            runtime_inputs: Dict[str, Any],
+            capture_outputs: bool = False
+        ) -> Union[str, tuple]:
+            """
+            Execute a skill synchronously (for task/delegation execution).
+
+            Args:
+                skill_config: Skill configuration
+                runtime_inputs: Runtime inputs from caller
+                capture_outputs: If True, add OutputTool and return (result, captured_outputs)
+
+            Returns:
+                str if capture_outputs=False, tuple(str, dict|None) if capture_outputs=True
+            """
+            logger.info(f"🎯 Executing skill: {skill_config.name} (capture_outputs={capture_outputs})")
 
             try:
                 # Load skill's tools
@@ -718,12 +785,28 @@ class AgentExecutor:
                 if skill_config.tools:
                     skill_tools = self.tool_loader.load_tools(list(skill_config.tools))
 
+                # Add OutputTool if capturing outputs
+                output_tool = None
+                if capture_outputs and skill_config.outputs:
+                    output_tool = OutputTool(skill_outputs=list(skill_config.outputs))
+                    skill_tools.append(output_tool)
+                    logger.info(f"Added OutputTool for {len(list(skill_config.outputs))} outputs")
+
                 # Build task from instructions + inputs
                 task_parts = [skill_config.instructions]
                 if runtime_inputs:
                     task_parts.append("\n## Inputs:")
                     for key, value in runtime_inputs.items():
                         task_parts.append(f"- {key}: {value}")
+
+                # Add output instructions if capturing
+                if capture_outputs and skill_config.outputs:
+                    output_names = [o.name for o in skill_config.outputs]
+                    task_parts.append(
+                        f"\n\n⚠️ REQUIRED: When you have completed the task, you MUST call the "
+                        f"'submit_result' tool with your final outputs. The expected outputs are: {output_names}"
+                    )
+
                 task = "\n".join(task_parts)
 
                 # Create sub-agent with skill context from template
@@ -745,12 +828,22 @@ class AgentExecutor:
 
                 # Execute
                 result = sub_agent.run(task=task, reset=True)
-                logger.info(f"✅ Task skill {skill_config.name} completed")
-                return str(result)
+                logger.info(f"✅ Skill {skill_config.name} completed")
+
+                # Return with captured outputs if requested
+                if capture_outputs:
+                    captured = output_tool.get_captured_values() if output_tool and output_tool.was_called() else None
+                    if captured:
+                        logger.info(f"📤 Captured outputs: {list(captured.keys())}")
+                    return str(result), captured
+                else:
+                    return str(result)
 
             except Exception as e:
                 error_msg = f"Skill execution failed: {str(e)}"
-                logger.error(f"❌ Task skill {skill_config.name} failed: {e}")
+                logger.error(f"❌ Skill {skill_config.name} failed: {e}")
+                if capture_outputs:
+                    return error_msg, None
                 return error_msg
 
         return execute_skill
@@ -1030,3 +1123,72 @@ class AgentExecutor:
         except Exception as e:
             logger.error(f"Failed to parse upload response: {e}")
             return {"error": str(e), "filename": filename}
+
+    async def _apply_agent_output_mappings(
+        self,
+        skill: SkillConfig,
+        captured_values: Dict[str, Any],
+        api_key: Optional[str],
+        organization_id: Optional[str]
+    ) -> None:
+        """
+        Apply output mappings for agent mode skills using captured OutputTool values.
+
+        Args:
+            skill: SkillConfig with output definitions
+            captured_values: Values captured from OutputTool (keyed by output name)
+            api_key: API key for authenticated calls
+            organization_id: Organization ID for RLS context
+        """
+        if not api_key or not organization_id:
+            logger.warning("📊 Agent output mapping skipped: missing api_key or organization_id")
+            return
+
+        if not captured_values:
+            logger.debug("📊 Agent output mapping skipped: no values captured")
+            return
+
+        # Create mapping context
+        ctx = MappingContext(api_key=api_key, organization_id=organization_id)
+
+        # Get outputs with mappings
+        outputs_with_mappings = [
+            output for output in skill.outputs
+            if output.HasField('output_mapping') and len(output.output_mapping.mappings) > 0
+        ]
+
+        if not outputs_with_mappings:
+            logger.debug("No output mappings configured")
+            return
+
+        logger.info(f"📊 Applying {len(outputs_with_mappings)} agent output mappings")
+
+        for output in outputs_with_mappings:
+            output_name = output.name
+            output_value = captured_values.get(output_name)
+
+            if output_value is None:
+                logger.warning(f"No captured value for output '{output_name}'")
+                continue
+
+            try:
+                config = OutputMappingConfig.from_proto(output.output_mapping)
+
+                # Wrap simple values for field extraction
+                if not isinstance(output_value, dict):
+                    output_value = {"value": output_value}
+
+                # Apply mapping using shared service
+                success = await OutputMappingService.apply_mapping(
+                    ctx=ctx,
+                    config=config,
+                    data=output_value
+                )
+
+                if success:
+                    logger.info(f"✅ Applied output mapping for '{output_name}'")
+                else:
+                    logger.warning(f"⚠️ Output mapping for '{output_name}' returned no success")
+
+            except Exception as e:
+                logger.error(f"❌ Failed to apply output mapping for '{output_name}': {e}")

@@ -248,10 +248,48 @@ def _write_debug_prompt(name: str, content: str) -> None:
         logger.warning(f"⚠️ Failed to write debug prompt: {e}")
 
 
+def render_output_instructions(skill_outputs: List[Any]) -> str:
+    """
+    Render output capture instructions for agent mode skills.
+
+    When a skill has outputs with mappings, this template instructs the LLM
+    to call submit_result() with the expected outputs.
+
+    Args:
+        skill_outputs: List of skill output objects (proto or dict format)
+                      Each should have 'name', 'type', and optional 'description'
+
+    Returns:
+        Rendered output instructions string
+    """
+    if not skill_outputs:
+        return ""
+
+    # Convert protobuf outputs to dicts for template rendering
+    outputs_for_template = []
+    for output in skill_outputs:
+        if hasattr(output, 'name'):
+            # Proto object
+            outputs_for_template.append({
+                'name': output.name,
+                'type': getattr(output, 'type', 'text') or 'text',
+                'description': getattr(output, 'description', '') or ''
+            })
+        elif isinstance(output, dict):
+            # Already a dict
+            outputs_for_template.append(output)
+
+    if not outputs_for_template:
+        return ""
+
+    return render_template("components/output_capture.j2", outputs=outputs_for_template)
+
+
 def build_agent_instructions(
     tools: List[Any] = None,
     agent_type: str = "default",
     context_type: str = "interactive",
+    skill_outputs: List[Any] = None,
     **kwargs
 ) -> str:
     """
@@ -264,6 +302,7 @@ def build_agent_instructions(
         tools: List of tool objects (for dynamic tool instructions)
         agent_type: Type of agent ("default", "document_builder", "skill_builder", "skill_executor")
         context_type: Execution context ("interactive" or "autonomous")
+        skill_outputs: Optional list of skill outputs for output capture instructions
         **kwargs: Template variables (e.g., restricted_tools)
 
     Returns:
@@ -304,6 +343,13 @@ def build_agent_instructions(
             if tool_instructions:
                 base_instructions = f"{base_instructions}\n\n{tool_instructions}"
                 logger.debug(f"📝 Added tool instructions ({len(tool_instructions)} chars)")
+
+        # Output capture instructions (for skills with output mappings)
+        if skill_outputs:
+            output_instructions = render_output_instructions(skill_outputs)
+            if output_instructions:
+                base_instructions = f"{base_instructions}\n\n{output_instructions}"
+                logger.debug(f"📝 Added output capture instructions ({len(output_instructions)} chars)")
 
         # Log final size
         logger.info(f"📋 Instructions for {agent_type}: {len(base_instructions)} chars")

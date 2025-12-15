@@ -24,7 +24,7 @@ import concurrent.futures
 import logging
 import os
 import threading
-from typing import Any, Callable, Coroutine, Dict, Optional, Set, TYPE_CHECKING
+from typing import Any, Callable, Coroutine, Dict, Optional, Set, Tuple, Union, TYPE_CHECKING
 
 from smolagents import Tool
 from ..grpc.generated.agent_worker_pb2 import SkillConfig
@@ -116,6 +116,15 @@ class SkillTool(Tool):
         """Check if this skill uses operation execution (direct model invocation)."""
         # SkillConfig is a protobuf - execution_type field is always present (empty string if not set)
         return self.skill_config.execution_type == 'operation'
+
+    def _has_output_mappings(self) -> bool:
+        """Check if skill has any outputs with output mappings configured."""
+        if not self.skill_config.outputs:
+            return False
+        for output in self.skill_config.outputs:
+            if output.HasField('output_mapping') and len(output.output_mapping.mappings) > 0:
+                return True
+        return False
 
     def _run_async_in_thread(self, coro: Coroutine) -> Any:
         """
@@ -247,8 +256,25 @@ class SkillTool(Tool):
                 enriched_kwargs = self._inject_context_inputs(kwargs)
                 result = self._execute_operation(enriched_kwargs)
             else:
-                # Standard agent execution via callback
-                result = self.skill_executor(self.skill_config, kwargs)
+                # Agent mode execution via callback
+                # Check if we need to capture outputs for mapping
+                if self._has_output_mappings():
+                    # Request output capture from skill executor
+                    executor_result = self.skill_executor(self.skill_config, kwargs, capture_outputs=True)
+
+                    # Executor returns (result_str, captured_outputs) when capture_outputs=True
+                    if isinstance(executor_result, tuple):
+                        result, captured_outputs = executor_result
+                        # Apply output mappings with captured values
+                        if captured_outputs:
+                            self._run_async_in_thread(
+                                self._apply_agent_output_mappings(captured_outputs)
+                            )
+                    else:
+                        result = executor_result
+                else:
+                    # Standard agent execution without output capture
+                    result = self.skill_executor(self.skill_config, kwargs)
 
             logger.info(f"✅ Skill {self.name} completed successfully")
             return result
@@ -568,3 +594,73 @@ class SkillTool(Tool):
 
             except Exception as e:
                 logger.error(f"❌ Failed to apply output mapping for {output.name}: {e}")
+
+    async def _apply_agent_output_mappings(self, captured_values: Dict[str, Any]) -> None:
+        """
+        Apply output mappings for agent mode skills using captured OutputTool values.
+
+        Called when a delegated skill has output mappings configured and the
+        sub-agent's OutputTool has captured values.
+
+        Args:
+            captured_values: Values captured from OutputTool (keyed by output name)
+        """
+        # Check if we have auth for API calls
+        if not self.api_key or not self.organization_id:
+            logger.debug("No API auth available, skipping agent output mappings")
+            return
+
+        if not captured_values:
+            logger.debug("No captured values for agent output mappings")
+            return
+
+        # Create mapping context with auth
+        ctx = MappingContext(
+            api_key=self.api_key,
+            organization_id=str(self.organization_id)
+        )
+
+        # Get outputs with mappings
+        outputs_with_mappings = [
+            output for output in self.skill_config.outputs
+            if output.HasField('output_mapping') and output.output_mapping.mappings
+        ]
+
+        if not outputs_with_mappings:
+            logger.debug("No output mappings configured for agent mode")
+            return
+
+        logger.info(f"📊 Applying {len(outputs_with_mappings)} agent output mappings from delegation")
+
+        for output in outputs_with_mappings:
+            output_name = output.name
+            output_value = captured_values.get(output_name)
+
+            if output_value is None:
+                logger.warning(f"No captured value for output '{output_name}'")
+                continue
+
+            try:
+                config = OutputMappingConfig.from_proto(output.output_mapping)
+
+                # Wrap simple values for field extraction
+                # Use output_name as the key so source_field can reference it
+                if not isinstance(output_value, dict):
+                    data_for_mapping = {output_name: output_value}
+                else:
+                    data_for_mapping = output_value
+
+                # Apply mapping using shared service
+                success = await OutputMappingService.apply_mapping(
+                    ctx=ctx,
+                    config=config,
+                    data=data_for_mapping
+                )
+
+                if success:
+                    logger.info(f"✅ Applied agent output mapping for '{output_name}'")
+                else:
+                    logger.warning(f"⚠️ Agent output mapping for '{output_name}' returned no success")
+
+            except Exception as e:
+                logger.error(f"❌ Failed to apply agent output mapping for '{output_name}': {e}")
