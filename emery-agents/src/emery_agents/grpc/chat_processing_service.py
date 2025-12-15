@@ -1,28 +1,4 @@
-"""
-ChatProcessingService Implementation
-
-Stateful gRPC service for AI chat processing with persistent agent sessions.
-Database operations (sessions, message persistence, history) are handled by Next.js.
-
-AIDEV-NOTE: Session-based architecture with agent persistence:
-- SessionManager maintains agent instances in memory
-- Agents persist between messages (reset=False)
-- Conversation history restored from database after restart/timeout
-- Automatic cleanup (30 min idle, 4 hour max lifetime)
-
-AI Processing features:
-- LLM response generation
-- Tool execution
-- OAuth proxy operations
-
-All database operations remain in Next.js ChatApplicationService.
-
-AIDEV-NOTE: Refactored to use shared utilities:
-- ImageProcessor for image extraction
-- AgentFactory for agent creation
-- TokenUsageExtractor for token tracking
-- UnifiedToolLoader enhanced methods
-"""
+"""Stateful gRPC chat service. DB operations handled by Next.js."""
 
 import logging
 import os
@@ -167,67 +143,6 @@ def _cleanup_thread_pool():
 
 atexit.register(_cleanup_thread_pool)
 
-def _run_async_in_thread(coro: Coroutine[Any, Any, T]) -> T:
-    """
-    Run async coroutine in a shared thread pool to prevent deadlock.
-
-    This uses a shared thread pool instead of creating new ThreadPoolExecutor
-    for each call, and uses asyncio.run() to create fresh event loop in thread.
-
-    Args:
-        coro: Coroutine to run (with generic return type T)
-
-    Returns:
-        Result of the coroutine (type T)
-
-    Raises:
-        TimeoutError: If operation exceeds 30 second timeout
-        Exception: If async operation fails
-    """
-    try:
-        future = _async_thread_pool.submit(asyncio.run, coro)
-        return future.result(timeout=30.0)
-    except concurrent.futures.TimeoutError:
-        logger.error("Async operation timed out after 30 seconds")
-        raise TimeoutError("Operation exceeded 30 second timeout")
-    except Exception as e:
-        logger.error(f"Async operation failed: {e}")
-        raise
-
-
-async def _process_skill_content_async(content_parts: List['agent_worker_pb2.MessagePart']) -> tuple[List[Image.Image], List[str]]:
-    """
-    Process MessageParts for skill execution (images + files).
-
-    Uses shared proto_parts_to_smolagents_content for consistent processing,
-    then transforms the result to separate images and text for skill execution.
-
-    Args:
-        content_parts: List of MessagePart from skill_config.content
-
-    Returns:
-        Tuple of (images list, text_parts list)
-    """
-    # Use shared processing function to get MessageContentList
-    content_list = await proto_parts_to_smolagents_content(content_parts)
-
-    # Transform MessageContentList to (images, text_parts) format for skills
-    images = []
-    text_parts = []
-
-    for content_item in content_list:
-        if content_item["type"] == "image":
-            # Extract PIL Image from ImageContentPart
-            images.append(content_item["image"])
-        elif content_item["type"] == "text":
-            # Extract text from TextContentPart
-            # Add file prefix if this text came from file processing
-            text = content_item["text"]
-            # Note: File processing errors already include "[File: ...]" prefix from proto_parts_to_smolagents_content
-            text_parts.append(f"\n\n{text}")
-
-    return images, text_parts
-
 
 class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingServiceServicer):
     """
@@ -292,6 +207,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             )
             logger.info("✅ SkillExecutorService initialized successfully")
 
+            # Inference client for operation skills (lazy initialization)
+            self._inference_client: Optional[HuggingFaceInferenceClient] = None
+
             logger.info("✅ ChatProcessingService initialized successfully")
 
         except ImportError as e:
@@ -342,7 +260,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"📎 Extracted {len(file_attachments)} file attachments")
 
         # Extract tools and skills from AgentConfig
-        agent_config = request.agent_config if hasattr(request, 'agent_config') and request.agent_config else None
+        # ChatProcessingRequest is protobuf - message fields are None if not set
+        # Access directly and check truthiness
+        agent_config = request.agent_config if request.agent_config else None
 
         if agent_config:
             tools_count = len(agent_config.tools) if agent_config.tools else 0
@@ -394,7 +314,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 logger.info("🔧 No organization model specified, will use system default")
 
             # Extract user API key from request (for managed agents like skill_builder)
-            user_api_key = request.user_api_key if hasattr(request, 'user_api_key') and request.user_api_key else None
+            # Protobuf string field - empty string if not set
+            user_api_key = request.user_api_key or None
             if user_api_key:
                 logger.info(f"🔑 User API key provided for managed agents")
             else:
@@ -1062,7 +983,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         Returns:
             HuggingFaceInferenceClient instance
         """
-        if not hasattr(self, '_inference_client') or self._inference_client is None:
+        # Lazy initialization - _inference_client is None until first use
+        if self._inference_client is None:
             self._inference_client = HuggingFaceInferenceClient()
         return self._inference_client
 

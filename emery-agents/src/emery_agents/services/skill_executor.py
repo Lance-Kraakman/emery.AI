@@ -1,15 +1,5 @@
-"""
-SkillExecutorService - Shared skill execution logic
+"""Shared skill execution for agent and operation modes."""
 
-Consolidates skill execution from:
-- ChatProcessingService._create_skill_executor_callback()
-- AgentExecutor._create_skill_executor()
-
-Supports both agent mode (LLM orchestration) and operation mode (direct inference).
-"""
-
-import asyncio
-import concurrent.futures
 import json
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -20,39 +10,17 @@ from ..clients import HuggingFaceInferenceClient, TaskResult
 from ..grpc.generated import agent_worker_pb2
 from ..prompts import render_output_instructions
 from ..tools.output_tool import OutputTool
+from ..types import SkillExecutionResult
+from ..utils import run_async_in_thread
 from .agent_factory import AgentFactory, AgentConfig
 from .output_mapping_service import MappingContext, OutputMappingService
 from .tool_loader import UnifiedToolLoader
 
 logger = logging.getLogger(__name__)
 
-# Shared thread pool for async operations
-_async_thread_pool = concurrent.futures.ThreadPoolExecutor(
-    max_workers=10, thread_name_prefix="skill-executor"
-)
-
-
-def _run_async_in_thread(coro) -> Any:
-    """Run async coroutine in thread pool."""
-    try:
-        future = _async_thread_pool.submit(asyncio.run, coro)
-        return future.result(timeout=30.0)
-    except concurrent.futures.TimeoutError:
-        logger.error("Async operation timed out after 30 seconds")
-        raise TimeoutError("Operation exceeded 30 second timeout")
-    except Exception as e:
-        logger.error(f"Async operation failed: {e}")
-        raise
-
 
 class SkillExecutorService:
-    """
-    Shared skill execution service for chat and task modes.
-
-    Handles both:
-    - Agent mode: LLM orchestrates tool calls
-    - Operation mode: Direct inference API calls
-    """
+    """Executes skills via agent (LLM orchestration) or operation (direct inference)."""
 
     def __init__(
         self,
@@ -93,7 +61,7 @@ class SkillExecutorService:
         return_message_parts: bool = False,
         api_key: Optional[str] = None,
         organization_id: Optional[int] = None
-    ) -> Union[str, Tuple[str, Optional[Dict]]]:
+    ) -> Union[str, SkillExecutionResult]:
         """
         Execute a skill via agent or direct operation.
 
@@ -101,7 +69,7 @@ class SkillExecutorService:
             skill_config: Full skill definition
             runtime_inputs: Runtime inputs from caller
             org_model: Organization default model (fallback)
-            capture_outputs: If True, add OutputTool and return captured outputs
+            capture_outputs: If True, add OutputTool and return SkillExecutionResult with captured outputs
             attachments: Optional file attachments for skill context
             return_message_parts: If True, return MessageParts JSON (chat mode)
             api_key: API key for output mappings
@@ -109,7 +77,7 @@ class SkillExecutorService:
 
         Returns:
             str if capture_outputs=False
-            tuple(str, dict|None) if capture_outputs=True
+            SkillExecutionResult if capture_outputs=True
         """
         logger.info(f"🎯 Executing skill: {skill_config.name} (capture_outputs={capture_outputs})")
 
@@ -128,7 +96,7 @@ class SkillExecutorService:
             error_msg = f"Skill execution error: {str(e)}"
             logger.error(f"❌ Skill {skill_config.name} failed: {e}", exc_info=True)
             if capture_outputs:
-                return error_msg, None
+                return SkillExecutionResult(result=error_msg, captured_outputs=None)
             return error_msg
 
     def _execute_agent(
@@ -139,7 +107,7 @@ class SkillExecutorService:
         capture_outputs: bool,
         attachments: Optional[List[Any]],
         return_message_parts: bool
-    ) -> Union[str, Tuple[str, Optional[Dict]]]:
+    ) -> Union[str, SkillExecutionResult]:
         """Execute skill via LLM agent orchestration."""
 
         # 1. Load skill's tools
@@ -224,7 +192,7 @@ class SkillExecutorService:
                 logger.info(f"📤 Captured outputs from submit_result: {list(captured.keys())}")
             else:
                 logger.warning(f"⚠️ OutputTool was {'NOT ' if not was_called else ''}called, captured={captured}")
-            return result_json, captured
+            return SkillExecutionResult(result=result_json, captured_outputs=captured)
         else:
             return result_json
 
@@ -256,7 +224,7 @@ class SkillExecutorService:
             )
 
         # Execute synchronously (wrap async)
-        result: TaskResult = _run_async_in_thread(
+        result: TaskResult = run_async_in_thread(
             client.execute_task(
                 model_id=model_id,
                 task_type=task_type,
@@ -267,7 +235,7 @@ class SkillExecutorService:
 
         # Apply output mappings if configured
         if api_key and organization_id and self._has_output_mappings(skill_config):
-            _run_async_in_thread(
+            run_async_in_thread(
                 self._apply_operation_output_mappings(
                     skill_config, result, api_key, organization_id
                 )
@@ -296,7 +264,7 @@ class SkillExecutorService:
 
         try:
             from ..grpc.mappers.message_mapper import proto_parts_to_smolagents_content
-            content_list = _run_async_in_thread(
+            content_list = run_async_in_thread(
                 proto_parts_to_smolagents_content(skill_config.content)
             )
 
@@ -410,7 +378,7 @@ class SkillExecutorService:
             skill_config: 'agent_worker_pb2.SkillConfig',
             runtime_inputs: Dict[str, Any],
             capture_outputs: bool = False
-        ) -> Union[str, Tuple[str, Optional[Dict]]]:
+        ) -> Union[str, SkillExecutionResult]:
             return self.execute_skill(
                 skill_config=skill_config,
                 runtime_inputs=runtime_inputs,
