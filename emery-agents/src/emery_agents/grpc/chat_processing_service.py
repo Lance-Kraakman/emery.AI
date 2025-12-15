@@ -676,11 +676,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 # Create ToolCallingAgent with managed agents
                 # AIDEV-NOTE: InterruptAwareToolCallingAgent sets interrupt_switch=True
                 # when detecting interrupt from managed agent, breaking the loop
+                # Pass file_attachments so chat agent can see available files in session
                 agent = self._create_agent_with_model_provider(
                     smolagents_tools,
                     org_model=org_model,
                     has_images=has_images,
-                    managed_agents=[skill_builder_agent, document_builder_agent]
+                    managed_agents=[skill_builder_agent, document_builder_agent],
+                    session_attachments=file_attachments  # Current message files for initial agent context
                 )
 
                 logger.info(f"🧠 [MEMORY-DEBUG] New agent created, memory steps: {len(agent.memory.steps)}")
@@ -716,6 +718,16 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     if file_attachments:
                         self.session_manager.add_attachments(session_id, file_attachments)
                         logger.info(f"📎 Added {len(file_attachments)} attachments to session")
+
+                    # Also restore file attachments from conversation history (cold path)
+                    # This makes files from previous messages available to skills
+                    if conversation_history:
+                        history_attachments = self.session_manager.extract_file_attachments_from_history(
+                            conversation_history
+                        )
+                        if history_attachments:
+                            self.session_manager.add_attachments(session_id, history_attachments)
+                            logger.info(f"📎 Restored {len(history_attachments)} attachments from history")
 
             logger.info(f"🤖 Using ToolCallingAgent with {len(smolagents_tools)} tools")
             logger.info(f"🧠 [MEMORY-DEBUG] Final agent memory before execution: {len(agent.memory.steps)} steps")
@@ -754,18 +766,24 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             # Set execution context for skill tools to access file attachments
             # This enables _inject_context_inputs() in SkillTool to inject audio/image bytes
-            # Use ALL session attachments (not just current message) for cross-message file access
-            all_attachments = self.session_manager.get_attachments(session_id) if session_id else file_attachments
-            if all_attachments:
-                context = ExecutionContext(
-                    mode=ExecutionMode.INSTRUCTION,
-                    task=current_task,
-                    available_tools=[],
-                    images=[],  # Images already passed via smolagents images param
-                    attachments=all_attachments,  # All session files for skill context injection
-                )
-                AgentExecutor.set_current_context(context)
-                logger.info(f"📎 Set execution context with {len(all_attachments)} attachments (session total)")
+            #
+            # File selection logic:
+            # - attachments: Current message files (DEFAULT for skill inputs)
+            # - session_attachments: All session files (for explicit filename lookup)
+            #
+            # When LLM doesn't specify a filename → uses current message file
+            # When LLM specifies a filename → searches session_attachments by name
+            session_attachments = self.session_manager.get_attachments(session_id) if session_id else []
+            context = ExecutionContext(
+                mode=ExecutionMode.INSTRUCTION,
+                task=current_task,
+                available_tools=[],
+                images=[],  # Images already passed via smolagents images param
+                attachments=file_attachments or [],  # Current message files (default)
+                session_attachments=session_attachments,  # All session files (for explicit lookup)
+            )
+            AgentExecutor.set_current_context(context)
+            logger.info(f"📎 Set execution context: {len(file_attachments or [])} current, {len(session_attachments)} session files")
 
             # Use stream=True for real-time step-by-step progress
             # Pass images via official smolagents API (images parameter)
@@ -1043,22 +1061,32 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             org_model: Organization default model (used as fallback if skill has no model)
 
         Returns:
-            Callable that takes (SkillConfig, runtime_inputs) and returns result string
+            Callable that takes (SkillConfig, runtime_inputs, capture_outputs) and returns result
+            - When capture_outputs=False: returns result string
+            - When capture_outputs=True: returns (result_string, captured_outputs_dict)
         """
-        def execute_skill(skill_config: 'agent_worker_pb2.SkillConfig', runtime_inputs: Dict[str, Any]) -> str:
+        def execute_skill(
+            skill_config: 'agent_worker_pb2.SkillConfig',
+            runtime_inputs: Dict[str, Any],
+            capture_outputs: bool = False
+        ) -> str | tuple:
             """
             Execute a skill by creating a sub-agent.
 
             Args:
                 skill_config: Full skill definition from proto
                 runtime_inputs: Runtime inputs from LLM (matching skill.inputs)
+                capture_outputs: If True, add OutputTool and return (result, captured_outputs)
 
             Returns:
-                Skill execution result as string
+                Skill execution result as string (or tuple with captured outputs if capture_outputs=True)
             """
-            logger.info(f"🎯 Executing skill: {skill_config.name} with inputs: {list(runtime_inputs.keys())}")
+            logger.info(f"🎯 Executing skill: {skill_config.name} (capture_outputs={capture_outputs})")
 
             try:
+                # Import OutputTool for output capture
+                from ..tools.output_tool import OutputTool
+
                 # 1. Load skill's tools
                 skill_tools = []
                 if skill_config.tools:
@@ -1068,6 +1096,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         api_key_mode="user"
                     )
                     logger.info(f"🔧 Loaded {len(skill_tools)} tools for skill {skill_config.name}")
+
+                # Add OutputTool if capturing outputs
+                output_tool = None
+                if capture_outputs and skill_config.outputs:
+                    output_tool = OutputTool(skill_outputs=list(skill_config.outputs))
+                    skill_tools.append(output_tool)
+                    logger.info(f"📤 Added OutputTool for {len(list(skill_config.outputs))} outputs")
 
                 # 2. Process attachments from skill_config.content using shared utilities
                 images = []
@@ -1096,6 +1131,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 # Add text parts from attachments to task
                 task_parts.extend(text_parts)
+
+                # Add output instructions if capturing
+                if capture_outputs and skill_config.outputs:
+                    output_names = [o.name for o in skill_config.outputs]
+                    task_parts.append(
+                        f"\n\n⚠️ REQUIRED: When you have completed the task, you MUST call the "
+                        f"'submit_result' tool with your final outputs. The expected outputs are: {output_names}"
+                    )
 
                 task = "\n".join(task_parts)
                 logger.info(f"📝 Skill task: {task[:200]}...")
@@ -1188,11 +1231,21 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 result_json = json.dumps({'parts': serialized_parts})
                 logger.info(f"✅ Skill {skill_config.name} completed: {len(message_parts)} message parts")
-                return result_json
+
+                # Return with captured outputs if requested
+                if capture_outputs:
+                    captured = output_tool.get_captured_values() if output_tool and output_tool.was_called() else None
+                    if captured:
+                        logger.info(f"📤 Captured outputs: {list(captured.keys())}")
+                    return result_json, captured
+                else:
+                    return result_json
 
             except Exception as e:
                 error_msg = f"Skill execution error: {str(e)}"
                 logger.error(f"❌ Skill {skill_config.name} failed: {e}", exc_info=True)
+                if capture_outputs:
+                    return error_msg, None
                 return error_msg
 
         return execute_skill
@@ -1202,13 +1255,18 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         smolagents_tools: List[Any],
         org_model: Optional[str] = None,
         has_images: bool = False,
-        managed_agents: Optional[List[Any]] = None
+        managed_agents: Optional[List[Any]] = None,
+        session_attachments: Optional[List[Any]] = None
     ) -> 'InterruptAwareToolCallingAgent':
         """
         Create Chat Planner orchestrator agent with managed agents.
 
         Uses create_chat_planner_agent for proper template-based instructions
         and interrupt propagation from managed agents.
+
+        Args:
+            session_attachments: Optional list of file attachments available in session
+                                (displayed to agent for file reference awareness)
         """
         from ..agents.chat_planner_agent import create_chat_planner_agent
 
@@ -1225,7 +1283,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             model=model,
             managed_agents=managed_agents,
             context_type="interactive",
-            max_steps=10
+            max_steps=10,
+            session_attachments=session_attachments
         )
 
     def _create_skill_builder_agent(

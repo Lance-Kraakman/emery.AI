@@ -456,6 +456,13 @@ export function EmeryChat() {
   const [currentChatModel, setCurrentChatModel] = useState<string | undefined>()
   const [isClient, setIsClient] = useState(false)
 
+  // Sync currentChatModel with handler.selectedModel when it changes (e.g., when loading a chat)
+  useEffect(() => {
+    if (handler.selectedModel !== currentChatModel) {
+      setCurrentChatModel(handler.selectedModel)
+    }
+  }, [handler.selectedModel])
+
   // Tools state for @ tool selection
   const [selectedTools, setSelectedTools] = useState<ToolDTO[]>([])
 
