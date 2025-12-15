@@ -33,6 +33,7 @@ export const FIELD_TYPES = {
   AUTONUMBER: 'autonumber',
   LAST_UPDATED: 'last-updated',
   CREATED_AT: 'created-at',
+  JSON: 'json',  // Arbitrary JSON data (classification results, structured outputs)
 } as const
 
 /**
