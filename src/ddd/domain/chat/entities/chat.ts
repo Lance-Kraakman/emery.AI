@@ -12,7 +12,6 @@ import { ChatId, OrganizationId, UserId } from '@/ddd/domain/shared/value-object
 import type { DomainType } from '@/ddd/domain/shared/types/domain-type';
 
 export interface ChatContextMetadata {
-  ragIndexId?: string;
   contextType?: DomainType | 'organizations';
   domainSchema?: {
     id?: number;        // Domain entity ID (replaces domainId/tableId)
@@ -20,8 +19,6 @@ export interface ChatContextMetadata {
     type?: string;      // Additional type info if needed
     [key: string]: any; // Flexible domain-specific data
   };
-  primaryRagWeight?: number; // Weight for primary domain context (0.0-1.0)
-  lastRagUpdate?: string;
 }
 
 export type ChatStatus = 'active' | 'archived' | 'deleted';
@@ -213,11 +210,10 @@ export class ChatUtils {
    * Create context metadata for domain-connected chats
    */
   static createDomainContextMetadata(
-    domainType: DomainType, 
-    domainId: number, 
-    domainName: string, 
-    additionalSchema?: any, 
-    primaryWeight: number = 0.7
+    domainType: DomainType,
+    domainId: number,
+    domainName: string,
+    additionalSchema?: any
   ): ChatContextMetadata {
     return {
       contextType: domainType,
@@ -225,20 +221,16 @@ export class ChatUtils {
         id: domainId,
         name: domainName,
         ...additionalSchema
-      },
-      primaryRagWeight: primaryWeight,
-      lastRagUpdate: new Date().toISOString()
+      }
     };
   }
 
   /**
    * Create default context metadata for organization-wide chats
    */
-  static createOrganizationContextMetadata(ragIndexId?: string): ChatContextMetadata {
+  static createOrganizationContextMetadata(): ChatContextMetadata {
     return {
-      contextType: 'organizations',
-      ragIndexId,
-      lastRagUpdate: new Date().toISOString()
+      contextType: 'organizations'
     };
   }
 

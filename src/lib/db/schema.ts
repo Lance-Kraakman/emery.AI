@@ -38,7 +38,7 @@ export const databases = pgTable("databases", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
   slug: text("slug").notNull(), // URL-safe database identifier (unique per organization)
-  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata for RAG indexing
+  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata
   ownerId: uuid("owner_id").notNull().references(() => users.id), // Database owner - used for 'owned' scope permissions
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -88,7 +88,7 @@ export const tables = pgTable("tables", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
   s3Path: text("s3_path").notNull().unique(), // S3 path for table's Parquet data: org_{id}/db_{id}/table_{id}/
-  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata for RAG indexing
+  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata
   ownerId: uuid("owner_id").notNull().references(() => users.id), // Table owner - used for 'owned' scope permissions
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -158,7 +158,7 @@ export const fields = pgTable("fields", {
   tableId: integer("table_id").notNull().references(() => tables.id),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
-  type: text("type").notNull(), // text, number, boolean, email, url, date, file, relation
+  type: text("type").notNull(), // text, number, boolean, email, url, date, file, relation, json
   orderIndex: integer("order_index").default(0),
   required: boolean("required").default(false),
 
@@ -1137,6 +1137,7 @@ export const tasks = pgTable("tasks", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id), // Organization for RLS
   name: text("name").notNull(),
   instructions: jsonb("instructions").notNull(), // Task instructions with tools: {task: string, images?: ImageAttachment[], tools?: ToolConfig[], metadata?: Record<string, any>}
+  skillId: integer("skill_id").references(() => skills.id), // Optional skill to execute instead of raw instructions
   triggerContext: jsonb("trigger_context"), // What triggered this task: {type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL', scheduleName?: string, tableChange?: TableChangeEvent}
   status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed, cancelled, timeout
   result: jsonb("result"), // Final output data
@@ -1268,9 +1269,8 @@ export const chats = pgTable("chats", {
   // See /docs/model-selection-hierarchy.md for complete context-specific hierarchies
   model: text("model"), // Chat-specific model override (highest priority for chat messages)
 
-  // RAG and AI context
+  // AI context metadata
   contextMetadata: jsonb("context_metadata").$type<{
-    ragIndexId?: string;
     contextType?: 'tables' | 'agents' | 'files' | 'teams' | 'databases' | 'organizations' | 'tasks' | 'mixed';
     domainSchema?: {
       id?: number;        // Domain entity ID (replaces domainId/tableId)
@@ -1278,8 +1278,6 @@ export const chats = pgTable("chats", {
       type?: string;      // Additional type info if needed
       [key: string]: any; // Flexible domain-specific data
     };
-    primaryRagWeight?: number; // Weight for primary domain context (0.0-1.0)
-    lastRagUpdate?: string;
   }>(),
   
   // Status and lifecycle

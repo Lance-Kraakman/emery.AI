@@ -44,8 +44,6 @@ export interface ChatSessionDTO {
       type?: string
       [key: string]: any
     }
-    primaryRagWeight?: number
-    lastRagUpdate?: string
   }
 }
 
@@ -61,7 +59,6 @@ export interface ChatMessageDTO {
   
   // Optional metadata for UI features
   metadata?: {
-    ragSources?: any[]
     processingTime?: number
     modelUsed?: string
     [key: string]: any
