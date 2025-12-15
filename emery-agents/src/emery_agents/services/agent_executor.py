@@ -1,15 +1,4 @@
-"""
-Agent Executor Service (Simplified)
-
-Merged routing + execution logic without DDD interfaces.
-Combines CapabilityRoutingService + SmolAgentsExecutionRepository.
-
-AIDEV-NOTE: Refactored to use shared utilities:
-- ImageProcessor for image downloading
-- AgentFactory for agent creation
-- TokenUsageExtractor for token tracking
-- UnifiedToolLoader enhanced methods
-"""
+"""Executes agent tasks with routing and tool loading."""
 
 import logging
 import os
@@ -48,19 +37,9 @@ logger = logging.getLogger(__name__)
 
 
 class AgentExecutor:
-    """
-    Agent execution service combining routing and execution logic.
+    """Executes agent tasks. Uses thread-local context for SkillTool access."""
 
-    Simplified from DDD pattern - no interfaces, direct dependencies.
-
-    AIDEV-NOTE: Thread-local context storage allows SkillTool to access parent
-    context (images, attachments) when invoked from an agent. This enables
-    Direct mode skills to receive image/audio inputs from chat attachments.
-    """
-
-    # Thread-local storage for execution context
-    # Allows SkillTool.forward() to access parent context for injecting images/audio
-    _context_local = threading.local()
+    _context_local = threading.local()  # Shares context with SkillTool
 
     @classmethod
     def set_current_context(cls, context: Optional[ExecutionContext]) -> None:
@@ -188,50 +167,53 @@ class AgentExecutor:
 
         # Extract model overrides
         # Priority: skill model > request agent model > config default model
-        skill_model = skill.model if hasattr(skill, 'model') and skill.model else None
+        # SkillConfig is protobuf - string fields are empty string if not set
+        skill_model = skill.model or None
 
         # Read from request-level fields FIRST (set by frontend), then fallback to config
-        agent_model = None
-        if hasattr(request, 'agent_model') and request.agent_model:
-            agent_model = request.agent_model
-        elif hasattr(request.agent_config, 'default_model') and request.agent_config.default_model:
-            agent_model = request.agent_config.default_model
+        # TaskRequest is dataclass with Optional[str] fields - None if not set
+        agent_model = request.agent_model or (
+            request.agent_config.default_model or None
+        )
 
-        org_model = None
-        if hasattr(request, 'organization_model') and request.organization_model:
-            org_model = request.organization_model
+        org_model = request.organization_model or None
 
         # Extract attachments from skill definition (skill-level attachments)
-        skill_content = list(skill.content) if hasattr(skill, 'content') and skill.content else []
+        # Protobuf repeated fields are always present (empty list if not set)
+        skill_content = list(skill.content) if skill.content else []
 
         # Extract runtime input attachments (passed during invocation)
-        input_content = list(request.input_content) if hasattr(request, 'input_content') and request.input_content else []
+        # Protobuf repeated fields - access directly
+        input_content = list(request.input_content) if request.input_content else []
 
         # Merge skill-level and runtime attachments
         all_content = skill_content + input_content
 
         # Separate images and files from MessageParts
+        # MessagePart is protobuf - use HasField() for oneof fields
         images = []
         attachments = []
         for part in all_content:
-            if hasattr(part, 'image_url') and part.image_url:
+            if part.HasField('image_url') and part.image_url.url:
                 # Convert MessagePart.ImageUrlPart to ImageAttachment for compatibility
                 img_attachment = ImageAttachment(url=part.image_url.url)
                 images.append(img_attachment)
-            elif hasattr(part, 'file') and part.file:
+            elif part.HasField('file') and part.file:
                 # Files are already in the right format
                 attachments.append(part.file)
 
         # Get all available skills for delegation (excluding the current skill)
-        all_skills = list(request.agent_config.skills) if hasattr(request.agent_config, 'skills') else []
+        # Protobuf repeated field - always present
+        all_skills = list(request.agent_config.skills) if request.agent_config.skills else []
         available_skills = [s for s in all_skills if s.name != request.skill_name]
 
         return ExecutionContext(
             mode=ExecutionMode.SKILL,
             task=skill.instructions,  # Changed from 'instructions'
             available_tools=tool_names,
-            agent_id=request.agent_id if hasattr(request, 'agent_id') else None,
-            organization_id=request.organization_id if hasattr(request, 'organization_id') else None,
+            # TaskRequest is dataclass - agent_id and organization_id are required fields
+            agent_id=request.agent_id,
+            organization_id=request.organization_id,
             skill_name=request.skill_name,
             skill=skill,
             available_skills=available_skills,  # Skills that can be delegated to
@@ -248,28 +230,28 @@ class AgentExecutor:
         instruction_config = request.instruction_config
 
         # Extract tool names from instruction config
+        # instruction_config is protobuf InstructionConfig - tools is repeated field
         tool_names = []
-        if hasattr(instruction_config, 'tools') and instruction_config.tools:
+        if instruction_config.tools:
             tool_names = [tool.name for tool in instruction_config.tools]
 
         # Extract model overrides
         # Priority: instruction model > request agent model > config default model
-        instruction_model = instruction_config.model if hasattr(instruction_config, 'model') and instruction_config.model else None
+        # Protobuf string field - empty string if not set
+        instruction_model = instruction_config.model or None
 
         # Read from request-level fields FIRST (set by frontend), then fallback to config
-        agent_model = None
-        if hasattr(request, 'agent_model') and request.agent_model:
-            agent_model = request.agent_model
-        elif hasattr(request.agent_config, 'default_model') and request.agent_config.default_model:
-            agent_model = request.agent_config.default_model
+        # TaskRequest is dataclass with Optional[str] fields
+        agent_model = request.agent_model or (
+            request.agent_config.default_model or None
+        )
 
-        org_model = None
-        if hasattr(request, 'organization_model') and request.organization_model:
-            org_model = request.organization_model
+        org_model = request.organization_model or None
 
         # Extract images and attachments (new multimodal support)
-        images = list(instruction_config.images) if hasattr(instruction_config, 'images') and instruction_config.images else []
-        attachments = list(instruction_config.attachments) if hasattr(instruction_config, 'attachments') and instruction_config.attachments else []
+        # Protobuf repeated fields - always present (empty list if not set)
+        images = list(instruction_config.images) if instruction_config.images else []
+        attachments = list(instruction_config.attachments) if instruction_config.attachments else []
 
         return ExecutionContext(
             mode=ExecutionMode.INSTRUCTION,
@@ -277,8 +259,9 @@ class AgentExecutor:
             available_tools=tool_names,
             images=images,
             attachments=attachments,
-            agent_id=request.agent_id if hasattr(request, 'agent_id') else None,
-            organization_id=request.organization_id if hasattr(request, 'organization_id') else None,
+            # TaskRequest is dataclass - agent_id and organization_id are required fields
+            agent_id=request.agent_id,
+            organization_id=request.organization_id,
             skill_name=None,
             agent_model=agent_model or instruction_model,  # Prefer instruction model for direct execution
             org_model=org_model,
@@ -428,7 +411,8 @@ class AgentExecutor:
                 token_usage_proto = self._extract_token_usage(result)
 
                 # Apply agent output mappings if OutputTool was used
-                if hasattr(context, 'output_tool') and context.output_tool and context.output_tool.was_called():
+                # ExecutionContext is dataclass - output_tool is Optional field
+                if context.output_tool and context.output_tool.was_called():
                     await self._apply_agent_output_mappings(
                         skill=skill,
                         captured_values=context.output_tool.get_captured_values(),
@@ -687,8 +671,9 @@ class AgentExecutor:
             logger.info(f"Added OutputTool for {len(skill.outputs)} outputs")
 
         # Extract skill model and agent type if present
-        skill_model = skill.model if hasattr(skill, 'model') and skill.model else None
-        skill_agent_type = skill.agent_type if hasattr(skill, 'agent_type') and skill.agent_type else None
+        # SkillConfig is protobuf - string fields are empty string if not set
+        skill_model = skill.model or None
+        skill_agent_type = skill.agent_type or None
 
         # Create agent using AgentFactory with autonomous context
         agent_config = AgentConfig(
@@ -770,8 +755,10 @@ class AgentExecutor:
     def _extract_api_key_from_tools(self, tools: List[ToolConfig]) -> Optional[str]:
         """Extract user API key from tool configs (for output mappings)."""
         for tool in tools:
-            if hasattr(tool, 'config') and tool.config:
-                config = dict(tool.config) if hasattr(tool.config, 'items') else tool.config
+            # ToolConfig is protobuf - config is a map<string, string> field
+            # Protobuf maps are always present (empty dict if not set)
+            if tool.config:
+                config = dict(tool.config)
                 api_key = config.get('api_key')
                 if api_key and (api_key.startswith('user_') or api_key.startswith('agent_')):
                     return api_key

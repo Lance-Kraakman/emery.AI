@@ -1,10 +1,4 @@
-"""
-CRUD Tools Module
-
-AIDEV-NOTE: Comprehensive CRUD tools for Emery organization data management.
-Provides create, read, update, delete, and list operations for agents, documents,
-files, tables, and teams. Uses internal authentication and calls emery-api with RLS context.
-"""
+"""CRUD tools for agents, documents, files, tables, and teams."""
 
 import os
 import json
@@ -226,14 +220,7 @@ class BaseCrudTool(Tool):
     async def _make_async_api_request(self, endpoint: str, method: str = "GET", data: Optional[Dict] = None,
                                     auth_token: Optional[str] = None, organization_id: Optional[str] = None,
                                     deadline_ms: Optional[int] = None) -> Dict[str, Any]:
-        """
-        Make async API request with deadline propagation to prevent circular dependency deadlocks.
-        """
-        import time
-        import uuid
-        import threading
-        
-        # Generate unique call ID for tracking
+        """Make async API request with deadline propagation."""
         call_id = f"{str(uuid.uuid4())[:8]}"
         start_time = time.time()
         
@@ -363,7 +350,7 @@ class BaseCrudTool(Tool):
         )
 
 
-def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
+def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
     """Load Agent CRUD tool with method-specific routing."""
 
     class AgentCrudTool(BaseCrudTool):
@@ -460,7 +447,7 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
     return AgentCrudTool()
 
 
-def load_document_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
+def load_document_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
     """Load Document CRUD tool with method-specific routing."""
 
     # Capture auth in closure - NOT exposed to LLM via inputs schema
@@ -586,7 +573,7 @@ Available marks: bold, italic, underline, strike, code, link (with href attr), h
     return DocumentCrudTool()
 
 
-def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
+def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
     """Load File CRUD tool with method-specific routing.
 
     AIDEV-NOTE: Files are stored as field values in table rows, not as standalone entities.
@@ -685,7 +672,7 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
     return FileCrudTool()
 
 
-def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
+def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
     """
     Load comprehensive Table CRUD tool with table and row operations.
 
@@ -897,7 +884,7 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
     return TableCrudTool()
 
 
-def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
+def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
     """Load Team CRUD tool with method-specific routing."""
 
     class TeamCrudTool(BaseCrudTool):
@@ -993,7 +980,7 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
     return TeamCrudTool()
 
 
-def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
+def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
     """Load Database CRUD tool with method-specific routing."""
 
     class DatabaseCrudTool(BaseCrudTool):
@@ -1089,7 +1076,7 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
     return DatabaseCrudTool()
 
 
-def load_skill_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Any:
+def load_skill_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
     """
     Load Skill CRUD tool with method-specific routing.
 

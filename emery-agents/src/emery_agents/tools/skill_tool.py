@@ -1,70 +1,37 @@
-"""
-SkillTool - Executes skills as tools within the agent framework
+"""Wraps skills as smolagents tools with recursion protection."""
 
-This tool wraps a SkillConfig and executes it when called by the LLM.
-Uses lazy initialization to avoid circular dependencies.
-
-Includes recursion protection:
-- Prevents circular skill calls (A → B → A)
-- Enforces maximum nesting depth (MAX_DEPTH=10)
-
-AIDEV-NOTE: Supports two execution modes:
-- 'agent' (default): Creates sub-agent with LLM orchestration via smolagents
-- 'operation': Direct model invocation for single-task models (image gen, speech, etc.)
-
-AIDEV-NOTE: Output Mapping (Phase 2e)
-When skill outputs have mapping configuration, results are automatically saved to tables:
-- mode='create': Creates a new row with the output value
-- mode='update': Updates an existing row (specified by rowId)
-Binary outputs (images, audio) are uploaded to S3 first.
-"""
-
-import asyncio
-import concurrent.futures
+import json
 import logging
 import os
+import re
 import threading
-from typing import Any, Callable, Coroutine, Dict, Optional, Set, Tuple, Union, TYPE_CHECKING
+from io import BytesIO
+from typing import Any, Callable, Dict, Optional, Set, Union, TYPE_CHECKING
 
+from jinja2 import Template
 from smolagents import Tool
-from ..grpc.generated.agent_worker_pb2 import SkillConfig
-from ..services.output_mapping_service import OutputMappingService, MappingContext
+
 from ..entities.output_mapping import OutputMappingConfig
+from ..grpc.generated.agent_worker_pb2 import SkillConfig
+from ..services.file_processor import download_file
+from ..services.image_processor import ImageProcessor
+from ..services.output_mapping_service import OutputMappingService, MappingContext
+from ..types import SkillExecutionResult
+from ..utils import run_async_in_thread
 
 if TYPE_CHECKING:
     from ..clients import HuggingFaceInferenceClient
+    from ..services.agent_executor import AgentExecutor
 
 logger = logging.getLogger(__name__)
 
 
 class SkillTool(Tool):
-    """
-    Tool that executes a skill when called by the LLM.
+    """Executes a skill via callback. Thread-local call stack prevents circular calls."""
 
-    Uses lazy initialization: skill_config is stored at creation,
-    but the sub-agent is only created when forward() is called.
-    This avoids circular dependencies during tool loading.
-
-    Includes recursion protection:
-    - Class-level call stack tracks active skills to prevent circular calls
-    - MAX_DEPTH limits nesting to prevent runaway recursion
-
-    When the LLM calls this tool, it:
-    1. Takes the runtime inputs from the LLM
-    2. Calls the execution callback with skill_config + inputs
-    3. The callback creates a sub-agent and executes the skill
-    4. Returns the result as a string
-    """
-
-    # Maximum nesting depth for skill-calling-skill chains
     MAX_DEPTH = 10
-
-    # Thread-local storage for call stack (prevents cross-request contamination)
     _thread_local = threading.local()
-
-    # Skip smolagents' forward signature validation since skills have dynamic inputs
-    # This is the official pattern for tools with variable input schemas (see SpaceToolWrapper, LangChainToolWrapper)
-    skip_forward_signature_validation = True
+    skip_forward_signature_validation = True  # Dynamic inputs per smolagents pattern
 
     def __init__(
         self,
@@ -74,19 +41,6 @@ class SkillTool(Tool):
         api_key: Optional[str] = None,
         organization_id: Optional[int] = None
     ):
-        """
-        Initialize SkillTool with lazy execution.
-
-        Args:
-            skill_config: The full skill definition from proto
-            skill_executor: Callback function that executes the skill
-                          Takes (skill_config, runtime_inputs) -> result string
-            inference_client: Optional client for direct operation execution
-                             Required for skills with execution_type='operation'
-            api_key: Optional API key for output mapping (calls emery-api)
-            organization_id: Optional org ID for output mapping (RLS context)
-        """
-        # Call parent's __init__ to set is_initialized flag
         super().__init__()
 
         self.skill_config = skill_config
@@ -125,31 +79,6 @@ class SkillTool(Tool):
             if output.HasField('output_mapping') and len(output.output_mapping.mappings) > 0:
                 return True
         return False
-
-    def _run_async_in_thread(self, coro: Coroutine) -> Any:
-        """
-        Run an async coroutine from a sync context, handling nested event loops.
-
-        When running inside gRPC's async context, we can't use run_until_complete().
-        This method runs the coroutine in a separate thread with its own event loop.
-
-        Args:
-            coro: The coroutine to execute
-
-        Returns:
-            The result of the coroutine
-        """
-        def run_in_new_loop():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(coro)
-            finally:
-                loop.close()
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(run_in_new_loop)
-            return future.result(timeout=60)  # 60 second timeout for inference calls
 
     @classmethod
     def _get_call_stack(cls) -> Set[str]:
@@ -279,14 +208,16 @@ class SkillTool(Tool):
                 # Check if we need to capture outputs for mapping
                 if self._has_output_mappings():
                     # Request output capture from skill executor
+                    # Executor returns SkillExecutionResult when capture_outputs=True
                     executor_result = self.skill_executor(self.skill_config, kwargs, capture_outputs=True)
 
-                    # Executor returns (result_str, captured_outputs) when capture_outputs=True
-                    if isinstance(executor_result, tuple):
-                        result, captured_outputs = executor_result
+                    # Type check using isinstance with dataclass
+                    if isinstance(executor_result, SkillExecutionResult):
+                        result = executor_result.result
+                        captured_outputs = executor_result.captured_outputs
                         # Apply output mappings with captured values
                         if captured_outputs:
-                            self._run_async_in_thread(
+                            run_async_in_thread(
                                 self._apply_agent_output_mappings(captured_outputs)
                             )
                     else:
@@ -325,8 +256,6 @@ class SkillTool(Tool):
         Returns:
             Dict with substituted inputs ready for model execution
         """
-        from jinja2 import Template
-
         template_str = self.skill_config.instructions
         inputs_list = list(self.skill_config.inputs)
 
@@ -486,8 +415,7 @@ class SkillTool(Tool):
                     # No filename or not found - try current message attachments
                     for att in parent_context.attachments:
                         try:
-                            from ..services.file_processor import download_file
-                            file_bytes = self._run_async_in_thread(download_file(att.url))
+                            file_bytes = run_async_in_thread(download_file(att.url))
                             if file_bytes:
                                 logger.info(f"📄 Injected file from current message into '{input_name}'")
                                 break
@@ -504,14 +432,11 @@ class SkillTool(Tool):
         Download images from context and convert to bytes for HF API.
 
         REUSES: ImageProcessor.download_images_from_attachments()
-        Uses _run_async_in_thread() to avoid event loop conflicts in gRPC context.
+        Uses run_async_in_thread() to avoid event loop conflicts in gRPC context.
         """
-        from io import BytesIO
-        from ..services.image_processor import ImageProcessor
-
         try:
             # Use _run_async_in_thread to avoid "event loop already running" error
-            pil_images = self._run_async_in_thread(
+            pil_images = run_async_in_thread(
                 ImageProcessor.download_images_from_attachments(image_attachments)
             )
 
@@ -531,16 +456,14 @@ class SkillTool(Tool):
         Download audio from context attachments.
 
         REUSES: file_processor.download_file()
-        Uses _run_async_in_thread() to avoid event loop conflicts in gRPC context.
+        Uses run_async_in_thread() to avoid event loop conflicts in gRPC context.
         """
-        from ..services.file_processor import download_file
-
         for attachment in attachments:
             mime_type = getattr(attachment, 'mime_type', '') or ''
             if mime_type.startswith('audio/'):
                 try:
                     # Use _run_async_in_thread to avoid "event loop already running" error
-                    audio_bytes = self._run_async_in_thread(
+                    audio_bytes = run_async_in_thread(
                         download_file(attachment.url)
                     )
                     return audio_bytes
@@ -568,9 +491,6 @@ class SkillTool(Tool):
         Returns:
             File bytes if found and downloaded, None otherwise
         """
-        from ..services.file_processor import download_file
-        import re
-
         if not attachments or not filename:
             return None
 
@@ -606,7 +526,7 @@ class SkillTool(Tool):
                     # Download and return the file
                     try:
                         logger.info(f"📎 Found file by name: '{filename}' (occurrence {occurrence})")
-                        file_bytes = self._run_async_in_thread(
+                        file_bytes = run_async_in_thread(
                             download_file(attachment.url)
                         )
                         return file_bytes
@@ -669,7 +589,7 @@ class SkillTool(Tool):
         # Run async execution in sync context (smolagents tools are sync)
         # Use thread executor to avoid "event loop already running" error when
         # called from within gRPC's async context
-        result = self._run_async_in_thread(
+        result = run_async_in_thread(
             self.inference_client.execute_task(
                 model_id=model_id,
                 task_type=task_type,
@@ -679,13 +599,12 @@ class SkillTool(Tool):
         )
 
         # Apply output mappings if configured
-        self._run_async_in_thread(self._apply_output_mappings(result))
+        run_async_in_thread(self._apply_output_mappings(result))
 
         # Return result based on type
         if result.is_text:
             return str(result.data)
         elif result.is_structured:
-            import json
             return json.dumps(result.data)
         elif result.is_binary:
             # For binary results, return description with any mapped output info
