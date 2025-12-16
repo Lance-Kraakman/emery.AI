@@ -15,27 +15,38 @@ import type { DSGRow } from "@/app/mappers/dsg-mapper";
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field";
 
 /**
- * Convert row data from field names to field IDs
+ * Convert row data to use field IDs as keys
  *
- * AIDEV-NOTE: DSG grid sends data with field names as keys: { name: "value", age: 123 }
- * But Row.fromPlainObject expects numeric field IDs: { 6: "value", 7: 123 }
- * This function performs the conversion using the table's field definitions.
+ * AIDEV-NOTE: Supports two input formats:
+ * - keyType='name': DSG grid sends { name: "value", age: 123 } -> converted to { 6: "value", 7: 123 }
+ * - keyType='id': Agent output mapping sends { "6": "value" } -> passed through directly
  *
- * @param rowData - Row data with field names as keys
+ * @param rowData - Row data with field names or IDs as keys
  * @param tableFields - Table field definitions for mapping names to IDs
+ * @param keyType - Whether input keys are field names or IDs (default: 'name')
  * @returns Row data with numeric field IDs as keys
  */
 function convertFieldNamesToIds(
   rowData: Record<string, any>,
-  tableFields: readonly TableField[]
+  tableFields: readonly TableField[],
+  keyType: 'name' | 'id' = 'name'
 ): Record<string, any> {
   const convertedData: Record<string, any> = {};
 
   for (const field of tableFields) {
     if (field.name === 'id') continue; // Skip id field - it's handled separately
     const fieldKey = field.id.value.toString();
-    if (rowData[field.name] !== undefined) {
-      convertedData[fieldKey] = rowData[field.name];
+
+    if (keyType === 'id') {
+      // Keys are field IDs - use directly
+      if (rowData[fieldKey] !== undefined) {
+        convertedData[fieldKey] = rowData[fieldKey];
+      }
+    } else {
+      // Keys are field names - convert to IDs
+      if (rowData[field.name] !== undefined) {
+        convertedData[fieldKey] = rowData[field.name];
+      }
     }
   }
 
@@ -51,8 +62,8 @@ function convertFieldNamesToIds(
 export async function createRow(data: CreateRowCommand, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("table:manage");
-    const { tableId, data: rowData } = data;
-    
+    const { tableId, data: rowData, dataKeyType = 'name' } = data;
+
 
     if (!tableId) {
       return {
@@ -63,10 +74,10 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
 
     // Use table application service for row creation
     const tableAppService = getTableApplicationService();
-    
+
     // Get table to retrieve field information
     const table = await tableAppService.getTable(TableId.fromNumber(tableId));
-    
+
     if (!table) {
       return {
         success: false,
@@ -74,9 +85,9 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
       };
     }
 
-    // Convert field names to field IDs before creating Row entity
-    // AIDEV-NOTE: DSG sends { name: "value" }, Row.fromPlainObject expects { 6: "value" }
-    const convertedData = convertFieldNamesToIds(rowData || {}, table.fields);
+    // Convert field keys to field IDs before creating Row entity
+    // AIDEV-NOTE: DSG sends { name: "value" }, Agent sends { "1": "value" }
+    const convertedData = convertFieldNamesToIds(rowData || {}, table.fields, dataKeyType);
     const row = Row.fromPlainObject(convertedData, tableId, table.fields);
 
     // AIDEV-NOTE: Ensure we have a valid user ID
@@ -232,7 +243,7 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
     console.log('[updateRowData] Called with:', { tableId: data.tableId, rowId: data.rowId, data: data.data });
 
     const session = await requirePermission("table:manage");
-    const { tableId, rowId, data: rowData } = data;
+    const { tableId, rowId, data: rowData, dataKeyType = 'name' } = data;
 
     if (!tableId || !rowId) {
       console.log('[updateRowData] Missing tableId or rowId');
@@ -264,9 +275,22 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       RowId.fromString(rowId)
     );
 
+    // Convert field IDs to names if needed (agent sends IDs, DSG sends names)
+    let namedRowData = rowData;
+    if (dataKeyType === 'id') {
+      namedRowData = {};
+      for (const field of table.fields) {
+        const fieldKey = field.id.value.toString();
+        if (rowData[fieldKey] !== undefined) {
+          namedRowData[field.name] = rowData[fieldKey];
+        }
+      }
+      console.log('[updateRowData] Converted ID keys to names:', namedRowData);
+    }
+
     // Form data comes with field NAMES as keys (e.g., { email: "test@example.com" })
     // Use toNamedObject/fromNamedObject which both work with field names
-    let mergedData: Record<string, unknown> = { ...rowData, id: rowId };
+    let mergedData: Record<string, unknown> = { ...namedRowData, id: rowId };
 
     if (existingRow) {
       // toNamedObject returns field NAMES as keys
@@ -286,7 +310,7 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
 
       console.log('[updateRowData] Existing data (field names):', existingData);
       // Merge: existing + new changes (both use field names)
-      mergedData = { ...existingData, ...rowData, id: rowId };
+      mergedData = { ...existingData, ...namedRowData, id: rowId };
     }
 
     console.log('[updateRowData] Merged data:', mergedData);

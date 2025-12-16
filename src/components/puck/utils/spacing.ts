@@ -6,12 +6,10 @@
  */
 
 import type { ThemeConfig } from '@/ddd/domain/puck/value-objects/theme-config';
+import type { SpacingLevel } from '@/lib/types/spacing-types';
 
-/**
- * Spacing level (0-10)
- * Higher numbers = larger spacing
- */
-export type SpacingLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+// Re-export SpacingLevel for backward compatibility
+export type { SpacingLevel } from '@/lib/types/spacing-types';
 
 /**
  * Calculate spacing based on theme configuration
@@ -191,3 +189,142 @@ export const PX_TO_LEVEL_MAP: Record<number, SpacingLevel> = {
 export function migratePixelsToLevel(pxValue: number): SpacingLevel {
   return PX_TO_LEVEL_MAP[pxValue] || 4; // Default to 'base' if not found
 }
+
+// ============================================================================
+// Four-Sided Spacing & Radius CSS Computation
+// ============================================================================
+
+import type { FourSidedSpacing, FourCornerRadius } from '../types/spacing-types';
+
+/**
+ * Compute CSS styles for four-sided spacing (padding or margin)
+ *
+ * @param spacing - Four-sided spacing configuration
+ * @param theme - Theme configuration
+ * @param property - CSS property ('padding' or 'margin')
+ * @returns React CSSProperties object
+ *
+ * @example
+ * const styles = computeFourSidedCSS(padding, theme, 'padding');
+ * // { paddingTop: '1rem', paddingRight: '1rem', paddingBottom: '1rem', paddingLeft: '1rem' }
+ */
+export function computeFourSidedCSS(
+  spacing: FourSidedSpacing,
+  theme: ThemeConfig,
+  property: 'padding' | 'margin' = 'padding'
+): React.CSSProperties {
+  return {
+    [`${property}Top`]: getSpacing(spacing.top, theme),
+    [`${property}Right`]: getSpacing(spacing.right, theme),
+    [`${property}Bottom`]: getSpacing(spacing.bottom, theme),
+    [`${property}Left`]: getSpacing(spacing.left, theme),
+  } as React.CSSProperties;
+}
+
+/**
+ * Compute CSS styles for four-corner border radius
+ *
+ * @param radius - Four-corner radius configuration
+ * @param theme - Theme configuration
+ * @returns React CSSProperties object
+ *
+ * @example
+ * const styles = computeFourCornerRadiusCSS(radius, theme);
+ * // { borderTopLeftRadius: '0.5rem', borderTopRightRadius: '0.5rem', ... }
+ */
+export function computeFourCornerRadiusCSS(
+  radius: FourCornerRadius,
+  theme: ThemeConfig
+): React.CSSProperties {
+  return {
+    borderTopLeftRadius: getSpacing(radius.topLeft, theme),
+    borderTopRightRadius: getSpacing(radius.topRight, theme),
+    borderBottomRightRadius: getSpacing(radius.bottomRight, theme),
+    borderBottomLeftRadius: getSpacing(radius.bottomLeft, theme),
+  };
+}
+
+/**
+ * Compute shorthand CSS string for four-sided spacing
+ * Returns value in format: "top right bottom left"
+ *
+ * @param spacing - Four-sided spacing configuration
+ * @param theme - Theme configuration
+ * @returns CSS shorthand string
+ *
+ * @example
+ * const value = computeFourSidedShorthand(padding, theme);
+ * // "1rem 0.5rem 1rem 0.5rem"
+ */
+export function computeFourSidedShorthand(
+  spacing: FourSidedSpacing,
+  theme: ThemeConfig
+): string {
+  const top = getSpacing(spacing.top, theme);
+  const right = getSpacing(spacing.right, theme);
+  const bottom = getSpacing(spacing.bottom, theme);
+  const left = getSpacing(spacing.left, theme);
+
+  // Optimize shorthand format
+  if (top === right && right === bottom && bottom === left) {
+    return top; // All same: "1rem"
+  }
+  if (top === bottom && right === left) {
+    return `${top} ${right}`; // Vertical/horizontal: "1rem 0.5rem"
+  }
+  if (right === left) {
+    return `${top} ${right} ${bottom}`; // Top/horizontal/bottom: "1rem 0.5rem 2rem"
+  }
+  return `${top} ${right} ${bottom} ${left}`; // All different
+}
+
+/**
+ * Compute shorthand CSS string for four-corner radius
+ * Returns value in format: "topLeft topRight bottomRight bottomLeft"
+ *
+ * @param radius - Four-corner radius configuration
+ * @param theme - Theme configuration
+ * @returns CSS shorthand string
+ *
+ * @example
+ * const value = computeFourCornerRadiusShorthand(radius, theme);
+ * // "0.5rem 0.5rem 0.5rem 0.5rem"
+ */
+export function computeFourCornerRadiusShorthand(
+  radius: FourCornerRadius,
+  theme: ThemeConfig
+): string {
+  const tl = getSpacing(radius.topLeft, theme);
+  const tr = getSpacing(radius.topRight, theme);
+  const br = getSpacing(radius.bottomRight, theme);
+  const bl = getSpacing(radius.bottomLeft, theme);
+
+  // Optimize shorthand format
+  if (tl === tr && tr === br && br === bl) {
+    return tl; // All same
+  }
+  if (tl === br && tr === bl) {
+    return `${tl} ${tr}`; // Diagonal pairs
+  }
+  if (tr === bl) {
+    return `${tl} ${tr} ${br}`; // Top-left/sides/bottom-right
+  }
+  return `${tl} ${tr} ${br} ${bl}`; // All different
+}
+
+/**
+ * Spacing level labels for UI display
+ */
+export const SPACING_LEVEL_LABELS: Record<SpacingLevel, string> = {
+  0: 'None',
+  1: 'XS',
+  2: 'SM',
+  3: 'MD',
+  4: 'Base',
+  5: 'LG',
+  6: 'XL',
+  7: '2XL',
+  8: '3XL',
+  9: '4XL',
+  10: '5XL',
+};

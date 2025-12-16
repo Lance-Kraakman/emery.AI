@@ -12,7 +12,6 @@ import { ChatId, OrganizationId, UserId } from '@/ddd/domain/shared/value-object
 import type { DomainType } from '@/ddd/domain/shared/types/domain-type';
 
 export interface ChatContextMetadata {
-  ragIndexId?: string;
   contextType?: DomainType | 'organizations';
   domainSchema?: {
     id?: number;        // Domain entity ID (replaces domainId/tableId)
@@ -20,8 +19,6 @@ export interface ChatContextMetadata {
     type?: string;      // Additional type info if needed
     [key: string]: any; // Flexible domain-specific data
   };
-  primaryRagWeight?: number; // Weight for primary domain context (0.0-1.0)
-  lastRagUpdate?: string;
 }
 
 export type ChatStatus = 'active' | 'archived' | 'deleted';
@@ -33,6 +30,7 @@ export class Chat {
     private readonly _createdBy: UserId,
     private _title: string,
     private _description: string | undefined,
+    private _model: string | undefined,
     private _contextMetadata: ChatContextMetadata | undefined,
     private _status: ChatStatus,
     private _messageCount: number,
@@ -47,6 +45,7 @@ export class Chat {
   get createdBy(): UserId { return this._createdBy; }
   get title(): string { return this._title; }
   get description(): string | undefined { return this._description; }
+  get model(): string | undefined { return this._model; }
   get contextMetadata(): ChatContextMetadata | undefined { return this._contextMetadata; }
   get status(): ChatStatus { return this._status; }
   get messageCount(): number { return this._messageCount; }
@@ -96,6 +95,7 @@ export class Chat {
     createdBy: string;
     title: string;
     description?: string;
+    model?: string;
     contextMetadata?: ChatContextMetadata;
     status: ChatStatus;
     messageCount: number;
@@ -109,6 +109,7 @@ export class Chat {
       UserId.fromString(data.createdBy),
       data.title,
       data.description,
+      data.model,
       data.contextMetadata,
       data.status,
       data.messageCount,
@@ -125,6 +126,7 @@ export class Chat {
     createdBy: string;
     title: string;
     description?: string;
+    model?: string;
     contextMetadata?: ChatContextMetadata;
     status: ChatStatus;
     messageCount: number;
@@ -138,6 +140,7 @@ export class Chat {
       createdBy: this._createdBy.value,
       title: this._title,
       description: this._description,
+      model: this._model,
       contextMetadata: this._contextMetadata,
       status: this._status,
       messageCount: this._messageCount,
@@ -160,6 +163,7 @@ export interface CreateChatData {
 export interface UpdateChatData {
   title?: string;
   description?: string;
+  model?: string | null; // null to clear, undefined to keep unchanged
   contextMetadata?: ChatContextMetadata;
   status?: ChatStatus;
   lastMessageAt?: Date;
@@ -206,11 +210,10 @@ export class ChatUtils {
    * Create context metadata for domain-connected chats
    */
   static createDomainContextMetadata(
-    domainType: DomainType, 
-    domainId: number, 
-    domainName: string, 
-    additionalSchema?: any, 
-    primaryWeight: number = 0.7
+    domainType: DomainType,
+    domainId: number,
+    domainName: string,
+    additionalSchema?: any
   ): ChatContextMetadata {
     return {
       contextType: domainType,
@@ -218,20 +221,16 @@ export class ChatUtils {
         id: domainId,
         name: domainName,
         ...additionalSchema
-      },
-      primaryRagWeight: primaryWeight,
-      lastRagUpdate: new Date().toISOString()
+      }
     };
   }
 
   /**
    * Create default context metadata for organization-wide chats
    */
-  static createOrganizationContextMetadata(ragIndexId?: string): ChatContextMetadata {
+  static createOrganizationContextMetadata(): ChatContextMetadata {
     return {
-      contextType: 'organizations',
-      ragIndexId,
-      lastRagUpdate: new Date().toISOString()
+      contextType: 'organizations'
     };
   }
 

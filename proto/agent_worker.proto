@@ -131,13 +131,23 @@ message SkillConfig {
   repeated ToolConfig tools = 7;
   string model = 8;                    // Optional: model override for this skill
   repeated MessagePart content = 9;    // Skill-level attachments (images, files, text)
+  string agent_type = 10;              // Optional: "tool_calling" (default) or "code_agent"
+  string execution_type = 11;          // 'agent' (default) or 'operation'
+  TaskModelConfig task_model_config = 12; // Config for operation execution (when execution_type='operation')
+}
+
+// Configuration for operation execution (direct model invocation without LLM orchestration)
+message TaskModelConfig {
+  string model_id = 1;                 // HuggingFace model ID (e.g., 'black-forest-labs/FLUX.1-schnell')
+  string task_type = 2;                // Task type: text-to-image, speech-to-text, etc.
+  map<string, string> parameters = 3;  // Model-specific parameters (steps, guidance_scale, etc.)
 }
 
 // Skill input parameter
 message SkillInput {
   string name = 1;
   bool required = 2;
-  string type = 3;                     // text, image, file, audio, video, document
+  string type = 3;                     // text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document
   SkillInputFileConfig file_config = 4; // File configuration (for file-type inputs)
 }
 
@@ -151,9 +161,59 @@ message SkillInputFileConfig {
 // Skill output value
 message SkillOutput {
   string name = 1;
-  string type = 2;                     // text, image, file, audio, video, document
+  string type = 2;                     // text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document
+  OutputMappingConfig output_mapping = 3;  // Optional: path-based field mapping configuration
 }
 
+// Target field metadata - provides LLM guidance based on database field type
+message TargetFieldMetadata {
+  string field_type = 1;               // Database field type: "single-select", "multi-select", "number", "boolean", etc.
+  repeated string options = 2;         // For select fields: valid option values
+  optional int32 max_selections = 3;   // For multi-select: maximum allowed selections
+  optional string field_name = 4;      // Target field name (for display)
+}
+
+// =============================================================================
+// Multi-Table Output Mapping Types (typed references, no string parsing)
+// =============================================================================
+
+// Reference to a field from a previous table mapping result
+message TableReference {
+  int32 order = 1;                     // Which table mapping (1, 2, 3...)
+  string field = 2;                    // 'row_id' or field name from that table
+}
+
+// Typed field source - either a skill output or a reference to previous table
+message FieldSource {
+  oneof source {
+    string skill_output = 1;           // Direct skill output name (e.g., "company_name")
+    TableReference table_ref = 2;      // Reference to previous table operation result
+  }
+}
+
+// Field mapping within a table mapping - maps a typed source to a target field
+message FieldMapping {
+  FieldSource source = 1;              // Where to get the value (typed)
+  int32 target_field_id = 2;           // Which field to write to
+  TargetFieldMetadata target_field_metadata = 3;  // Optional: target field info for LLM guidance
+  bool append_mode = 4;                // When true, append to existing relation values instead of replacing
+}
+
+// Ordered operation for a single table
+message TableMapping {
+  int32 order = 1;                     // Execution order (1, 2, 3...)
+  int32 target_table_id = 2;           // Which table to write to
+  string row_action = 3;               // 'create' or 'update'
+  string row_id = 4;                   // For update mode - specific row ID
+  repeated FieldMapping mappings = 5;  // Field mappings for this table
+  int32 display_field_id = 6;          // Field to use for relation display value
+}
+
+// Output mapping configuration - multi-table support with typed references
+message OutputMappingConfig {
+  string mode = 1;                     // 'single_row' or 'multi_row'
+  repeated TableMapping table_mappings = 2;  // Ordered table operations
+}
 
 // Tool configuration
 message ToolConfig {
@@ -241,7 +301,7 @@ message ProcessMessageResponse {
   // Standard oneof pattern for different response types
   oneof response {
     ContentChunk content_chunk = 1;    // AI-generated streaming content
-    RagContext rag_context = 2;       // RAG sources and context
+    // Field 2 reserved (was: RagContext rag_context)
     ProcessingComplete complete = 3;   // Processing finished marker
     ProcessingError error = 4;        // Processing error
     StepProgress step_progress = 5;   // Real-time step execution progress
@@ -254,7 +314,6 @@ message ProcessMessageResponse {
 // AIDEV-NOTE: Multi-attachment support implemented (2025-01)
 // - ImageUrlPart: Vision model support (PIL Images → base64)
 // - FilePart: Text extraction from PDFs, audio transcription, documents
-// - Simple extraction approach (no embeddings/RAG initially)
 // - Files processed async in message_mapper.py using file_processor.py
 message MessagePart {
   oneof part {
@@ -290,21 +349,6 @@ message HistoryMessage {
 message ContentChunk {
   string content = 1;                // Text content chunk
   int32 sequence = 2;                // Sequence number for ordering
-}
-
-// RAG context information
-message RagContext {
-  repeated RagSource sources = 1;    // List of RAG sources used
-  string context_summary = 2;        // Summary of context used
-  int32 total_sources = 3;           // Total number of sources found
-}
-
-message RagSource {
-  string document_id = 1;            // Source document identifier
-  string title = 2;                  // Source document title
-  float similarity = 3;              // Similarity score
-  string domain_type = 4;            // Domain type (table, agent, file, etc.)
-  string excerpt = 5;                // Relevant text excerpt
 }
 
 // Processing completion marker

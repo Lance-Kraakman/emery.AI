@@ -98,6 +98,7 @@ export interface TaskConfig {
   organizationId: OrganizationId;
   name: string;
   instructions: TaskInstructions;
+  skillId?: number; // Optional - execute this skill instead of raw instructions
   triggerContext?: TriggerContext; // Optional - what triggered this task
   status?: TaskStatus;
   result?: any;
@@ -113,6 +114,7 @@ export interface CreateTaskData {
   agentId: AgentId;
   name: string;
   instructions: TaskInstructions; // Task configuration
+  skillId?: number; // Optional - execute this skill instead of raw instructions
   triggerContext?: TriggerContext; // What triggered this task
   createdBy?: UserId;
 }
@@ -124,6 +126,7 @@ export class Task {
     public readonly organizationId: OrganizationId,
     public readonly name: string,
     public readonly instructions: TaskInstructions,
+    public readonly skillId: number | null, // Optional skill to execute
     public readonly triggerContext: TriggerContext | null,
     private _status: TaskStatus,
     private _result: any | null,
@@ -154,6 +157,7 @@ export class Task {
       config.organizationId,
       config.name,
       config.instructions,
+      config.skillId || null,
       config.triggerContext || null,
       config.status || TaskStatus.pending(),
       config.result || null,
@@ -172,6 +176,7 @@ export class Task {
     organizationId: number;
     name: string;
     instructions: any; // JSONB from database
+    skillId?: number | null; // Optional skill reference
     triggerContext?: any; // JSONB from database
     status: string;
     result?: any;
@@ -188,6 +193,7 @@ export class Task {
       OrganizationId.fromNumber(data.organizationId),
       data.name,
       data.instructions as TaskInstructions,
+      data.skillId || null,
       data.triggerContext as TriggerContext | null || null,
       TaskStatus.fromString(data.status),
       data.result || null,
@@ -206,6 +212,7 @@ export class Task {
     organizationId: number;
     name: string;
     instructions: any;
+    skillId: number | null;
     triggerContext: TriggerContext | null;
     status: string;
     result: any;
@@ -222,6 +229,7 @@ export class Task {
       organizationId: this.organizationId.value,
       name: this.name,
       instructions: this.instructions,
+      skillId: this.skillId,
       triggerContext: this.triggerContext,
       status: this._status.value,
       result: this._result,
@@ -312,18 +320,9 @@ export class Task {
    * Append a log message to the task
    */
   appendLog(message: string): void {
-    console.log(`[TASK-ENTITY-DEBUG] appendLog called with message:`, message);
-    console.log(`[TASK-ENTITY-DEBUG] Current logs array length:`, this._logs.length);
-
     const timestamp = new Date().toISOString();
     const logEntry = `[${timestamp}] ${message}`;
-
-    console.log(`[TASK-ENTITY-DEBUG] Formatted log entry:`, logEntry);
-
     this._logs.push(logEntry);
-
-    console.log(`[TASK-ENTITY-DEBUG] New logs array length:`, this._logs.length);
-    console.log(`[TASK-ENTITY-DEBUG] All logs:`, this._logs);
   }
 
   /**

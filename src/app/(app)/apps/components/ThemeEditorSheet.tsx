@@ -44,6 +44,9 @@ import {
 } from "@/ddd/domain/puck/value-objects/theme-config";
 import { THEME_PRESETS, matchesPreset } from "@/components/puck/theme-presets";
 import { usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
+import { SpacingRadiusControl } from "@/components/puck/controls/SpacingRadiusControl";
+import type { FourSidedSpacing, FourCornerRadius } from "@/components/puck/types/spacing-types";
+import { DEFAULT_FOUR_SIDED_SPACING, DEFAULT_FOUR_CORNER_RADIUS } from "@/components/puck/types/spacing-types";
 
 export interface ThemeSidebarPanelProps {
   initialTheme?: ThemeConfigProps | undefined; // Theme config from DTO (app mode only)
@@ -420,7 +423,7 @@ export function ThemeSidebarPanel({
             <ChevronDown className="h-3 w-3 transition-transform duration-200 data-[state=open]:rotate-180" />
           </CollapsibleTrigger>
           <CollapsibleContent className="px-2 pb-1.5 pt-1 max-h-[400px] overflow-y-auto">
-            <div className="space-y-0.5">
+            <div className="space-y-2">
               <form.Field name="spacing.unit">
                 {(field) => (
                   <div className="space-y-0.5">
@@ -453,15 +456,40 @@ export function ThemeSidebarPanel({
                 )}
               </form.Field>
 
+              <form.Field name="spacing.defaultPadding">
+                {(field) => (
+                  <div className="space-y-0.5">
+                    <Label className="text-xs">Default Padding</Label>
+                    <SpacingRadiusControl
+                      mode="padding"
+                      value={field.state.value || DEFAULT_FOUR_SIDED_SPACING}
+                      onChange={(v) => field.handleChange(v as FourSidedSpacing)}
+                    />
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="spacing.defaultMargin">
+                {(field) => (
+                  <div className="space-y-0.5">
+                    <Label className="text-xs">Default Margin</Label>
+                    <SpacingRadiusControl
+                      mode="margin"
+                      value={field.state.value || { top: 0, right: 0, bottom: 0, left: 0, linked: true }}
+                      onChange={(v) => field.handleChange(v as FourSidedSpacing)}
+                    />
+                  </div>
+                )}
+              </form.Field>
+
               <form.Field name="borders.radius">
                 {(field) => (
                   <div className="space-y-0.5">
                     <Label className="text-xs">Border Radius</Label>
-                    <Input
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      placeholder="0.5rem"
-                      className="h-8 text-xs"
+                    <SpacingRadiusControl
+                      mode="radius"
+                      value={field.state.value || DEFAULT_FOUR_CORNER_RADIUS}
+                      onChange={(v) => field.handleChange(v as FourCornerRadius)}
                     />
                   </div>
                 )}

@@ -178,7 +178,7 @@ export class OAuthProxyApplicationService {
     console.log(`[PIPEDREAM-DEBUG] Service: ${service}, Action: ${action}`);
     console.log(`[PIPEDREAM-DEBUG] Params:`, JSON.stringify(params, null, 2));
 
-    // Check if the user has OAuth connections and get account ID
+    // Check if the user has Connections and get account ID
     let accountId: string | undefined;
     try {
       const accounts = await this.pipedreamClient.accounts.list({
@@ -187,7 +187,7 @@ export class OAuthProxyApplicationService {
       console.log(`[PIPEDREAM-DEBUG] User accounts:`, JSON.stringify(accounts, null, 2));
 
       if (!accounts || !Array.isArray(accounts.data) || accounts.data.length === 0) {
-        throw new Error(`No OAuth connections found for user. Please connect ${service} in the dashboard.`);
+        throw new Error(`No Connections found for user. Please connect ${service} in the dashboard.`);
       }
 
       // Find the account for this service
@@ -200,7 +200,7 @@ export class OAuthProxyApplicationService {
       console.log(`[PIPEDREAM-DEBUG] Using account ID: ${accountId} for service: ${service}`);
     } catch (accountError) {
       console.error(`[PIPEDREAM-DEBUG] Failed to list accounts:`, accountError);
-      throw new Error(`Failed to check OAuth connections: ${accountError instanceof Error ? accountError.message : 'Unknown error'}`);
+      throw new Error(`Failed to check Connections: ${accountError instanceof Error ? accountError.message : 'Unknown error'}`);
     }
 
     // Execute the action with correct Pipedream action ID
@@ -290,7 +290,7 @@ export class OAuthProxyApplicationService {
     console.log(`[PIPEDREAM-DEBUG] External user ID: ${externalUserId}`);
     console.log(`[PIPEDREAM-DEBUG] Params:`, JSON.stringify(params, null, 2));
 
-    // Check user's OAuth connections and get account ID
+    // Check user's Connections and get account ID
     let accountId: string | undefined;
     try {
       const accounts = await this.pipedreamClient.accounts.list({
@@ -299,7 +299,7 @@ export class OAuthProxyApplicationService {
       console.log(`[PIPEDREAM-DEBUG] User accounts:`, JSON.stringify(accounts, null, 2));
 
       if (!accounts || !Array.isArray(accounts.data) || accounts.data.length === 0) {
-        throw new Error(`No OAuth connections found for user. Please connect ${service} in the dashboard.`);
+        throw new Error(`No Connections found for user. Please connect ${service} in the dashboard.`);
       }
 
       // Find the account for this service
@@ -312,7 +312,7 @@ export class OAuthProxyApplicationService {
       console.log(`[PIPEDREAM-DEBUG] Using account ID: ${accountId} for service: ${service}`);
     } catch (accountError) {
       console.error(`[PIPEDREAM-DEBUG] Failed to list user accounts:`, accountError);
-      throw new Error(`Failed to check OAuth connections: ${accountError instanceof Error ? accountError.message : 'Unknown error'}`);
+      throw new Error(`Failed to check Connections: ${accountError instanceof Error ? accountError.message : 'Unknown error'}`);
     }
 
     // Execute the action with user's credentials

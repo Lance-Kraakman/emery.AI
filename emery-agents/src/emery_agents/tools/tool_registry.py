@@ -8,6 +8,9 @@ Now includes Pipedream tools for OAuth-backed integrations.
 
 import os
 from typing import Any, Dict, List
+
+from smolagents import Tool
+
 from ..grpc.generated.agent_worker_pb2 import ToolConfig
 from .base_tools import BASE_TOOLS
 from .mock_email_tools import EMAIL_TOOLS
@@ -66,7 +69,7 @@ class ToolRegistry:
         if PIPEDREAM_TOOLS:
             print(f"[TOOL-REGISTRY] Including {len(PIPEDREAM_TOOLS)} Pipedream OAuth tools")
     
-    def load_tool(self, tool_config: ToolConfig) -> Any:
+    def load_tool(self, tool_config: ToolConfig) -> Tool:
         """
         Load a tool instance from ToolConfig with CRUD routing support.
 

@@ -10,6 +10,40 @@
 import { toast } from 'sonner';
 import { createTask } from '@/app/actions/tasks';
 import type { Action, ActionContext, ActionLinkContext } from '../types/actions';
+import {
+  isDocumentArray,
+  isFileArray,
+} from '@/ddd/domain/tables/value-objects/field-values';
+
+/**
+ * Extract string value from complex field values
+ * Uses domain type guards for document/file arrays
+ */
+function extractStringValue(value: unknown): string {
+  if (value == null) return '';
+
+  // Document arrays → comma-separated IDs
+  if (isDocumentArray(value)) {
+    return value.map(doc => doc.id).join(',');
+  }
+
+  // File arrays → comma-separated IDs
+  if (isFileArray(value)) {
+    return value.map(file => file.id).join(',');
+  }
+
+  // Other arrays → comma-separated string values
+  if (Array.isArray(value)) {
+    return value.map(v => String(v)).join(',');
+  }
+
+  // Single object with id → extract id
+  if (typeof value === 'object' && 'id' in value) {
+    return String((value as { id: unknown }).id);
+  }
+
+  return String(value);
+}
 
 /**
  * Resolve dynamic values from action context
@@ -33,18 +67,26 @@ function resolveDynamicValue(
     return value;
   }
 
+  console.log('🔍 resolveDynamicValue called with value:', value);
+  console.log('🔍 context.rowData:', context.rowData);
+  console.log('🔍 context.rowData keys:', context.rowData ? Object.keys(context.rowData) : 'N/A');
+
   // Replace template variables: {rowData.id}, {formData.email}, {fieldName}, etc.
   return value.replace(/\{([^}]+)\}/g, (match, path) => {
+    console.log('🔍 Resolving variable:', path);
     // Check for shorthand notation (no dots = assume rowData)
     // e.g., {name} -> {rowData.name}
     const effectivePath = path.includes('.') ? path : `rowData.${path}`;
+    console.log('🔍 Effective path:', effectivePath);
 
     const parts = effectivePath.split('.');
     let current: any = context;
 
     for (const part of parts) {
+      console.log('🔍 Traversing part:', part, 'current type:', typeof current, 'part in current:', current && typeof current === 'object' ? part in current : 'N/A');
       if (current && typeof current === 'object' && part in current) {
         current = current[part];
+        console.log('🔍 Found! current is now:', current);
       } else {
         // If shorthand failed, try direct context access as fallback
         // e.g., {userId} should still work directly
@@ -54,12 +96,14 @@ function resolveDynamicValue(
             return String(directValue);
           }
         }
-        console.warn(`[resolveDynamicValue] Path not found: ${path}`);
+        console.warn(`[resolveDynamicValue] Path not found: ${path}`, 'current:', current, 'part:', part);
         return match; // Return original if path not found
       }
     }
 
-    return String(current);
+    console.log('🔍 Final resolved value:', current);
+
+    return extractStringValue(current);
   });
 }
 

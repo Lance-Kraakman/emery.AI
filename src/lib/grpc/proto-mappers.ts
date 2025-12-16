@@ -110,6 +110,7 @@ export function mapInstructionConfigToProto(instructionConfig: {
  * Supports both direct capability execution and instruction-based auto-routing
  *
  * AIDEV-NOTE: Updated for multimodal support (2025-01)
+ * AIDEV-NOTE: Updated for skill-based task execution (2025-01)
  */
 export function createTaskRequest(params: {
   taskId: string;
@@ -122,6 +123,25 @@ export function createTaskRequest(params: {
     attachments?: Array<{ type: string; url: string; filename: string; mimeType: string }>;
     tools?: ToolConfig[];
     metadata?: Record<string, any>;
+  };
+  // Optional skill to execute (for skill-based task execution)
+  skill?: {
+    id: number;
+    name: string;
+    description: string;
+    instructions: string;
+    inputs: Array<{ name: string; required: boolean; type?: string; fileConfig?: any; default?: any }>;
+    outputs: Array<{ name: string; type?: string; mapping?: any }>;
+    tools: Array<{ name: string; version?: string; config?: Record<string, any> }>;
+    content: Array<any>; // MessagePart[] - flexible to match ExecutionSkill
+    model: string | null;
+    agentType: string | null;
+    executionType: 'agent' | 'operation';
+    taskModelConfig?: {
+      modelId: string;
+      taskType: string;
+      parameters?: Record<string, any>;
+    };
   };
   agent: Agent;
   triggerData: Record<string, any>;
@@ -141,12 +161,26 @@ export function createTaskRequest(params: {
     payload: triggerPayload
   };
 
+  // Build the agent config, adding skill if provided
+  const agentConfig = mapAgentToProto(params.agent);
+
+  // If skill is provided, add it to the agent config's skills array
+  if (params.skill) {
+    agentConfig.skills = [mapSkillToProto(params.skill)];
+    console.log(`[PROTO-MAPPER] Added skill to agent config:`, {
+      skillId: params.skill.id,
+      skillName: params.skill.name,
+      executionType: params.skill.executionType,
+      hasTaskModelConfig: !!params.skill.taskModelConfig
+    });
+  }
+
   // Build the base request (using camelCase - generator handles wire format conversion)
   const request: TaskRequest = {
-    name: params.skillName || 'instruction_based_task',
+    name: params.skill?.name || params.skillName || 'instruction_based_task',
     taskId: params.taskId,
     agentId: params.agentId,
-    agentConfig: mapAgentToProto(params.agent),
+    agentConfig,
     triggerData: triggerData as any,
     organizationId: params.organizationId,
     ownerId: params.ownerId,
@@ -167,12 +201,17 @@ export function createTaskRequest(params: {
   });
 
   // Set execution mode (oneof field)
-  if (params.skillName) {
+  // Priority: skill-based > skillName > instructionConfig
+  if (params.skill) {
+    // Skill-based execution: use skill_name mode
+    request.skillName = params.skill.name;
+    console.log(`[PROTO-MAPPER] Using skill_name mode for skill: ${params.skill.name}`);
+  } else if (params.skillName) {
     request.skillName = params.skillName;
   } else if (params.instructionConfig) {
     request.instructionConfig = mapInstructionConfigToProto(params.instructionConfig);
   } else {
-    throw new Error('Either skillName or instructionConfig must be provided');
+    throw new Error('Either skill, skillName, or instructionConfig must be provided');
   }
 
   return request;
@@ -256,6 +295,158 @@ export function mapTriggerDataFromProto(triggerData: TriggerData): Record<string
   }
   
   return result;
+}
+
+// =============================================================================
+// Multi-Table Output Mapping Types (for proto mapping)
+// =============================================================================
+
+/** Typed field source - discriminated union */
+type FieldSourceDTO =
+  | { type: 'skill_output'; name: string }
+  | { type: 'table_ref'; order: number; field: string };
+
+/** Table mapping DTO for skill output mapping */
+interface TableMappingDTO {
+  order: number;
+  targetTableId: number;
+  rowAction: 'create' | 'update';
+  rowId?: string;
+  mappings: Array<{
+    source: FieldSourceDTO;
+    targetFieldId: number;
+    targetFieldMetadata?: {
+      fieldType: string;
+      options?: string[];
+      maxSelections?: number;
+      fieldName?: string;
+    };
+    appendMode?: boolean;
+  }>;
+  displayFieldId?: number;
+}
+
+/** Output mapping config DTO */
+interface OutputMappingConfigDTO {
+  mode: 'single_row' | 'multi_row';
+  tableMappings: TableMappingDTO[];
+}
+
+/**
+ * Map FieldSource to proto format
+ */
+function mapFieldSourceToProto(source: FieldSourceDTO): any {
+  if (source.type === 'skill_output') {
+    return { skillOutput: source.name };
+  } else {
+    return {
+      tableRef: {
+        order: source.order,
+        field: source.field
+      }
+    };
+  }
+}
+
+/**
+ * Map EnrichedSkill/ExecutionSkill to protobuf SkillConfig
+ * Used by both chat processing and task execution paths
+ */
+export function mapSkillToProto(skill: {
+  id: number;
+  name: string;
+  description: string;
+  instructions: string;
+  inputs: Array<{ name: string; required: boolean; type?: string; fileConfig?: any; default?: any }>;
+  outputs: Array<{
+    name: string;
+    type?: string;
+    outputMapping?: OutputMappingConfigDTO;
+  }>;
+  tools: Array<{ name: string; version?: string; config?: Record<string, any> }>;
+  content: Array<any>; // MessagePart[] - flexible to support various content formats
+  model: string | null;
+  agentType: string | null;
+  executionType: 'agent' | 'operation';
+  taskModelConfig?: {
+    modelId: string;
+    taskType: string;
+    parameters?: Record<string, any>;
+  };
+}): SkillConfigProto {
+  return {
+    id: skill.id,
+    name: skill.name,
+    description: skill.description || '',
+    instructions: skill.instructions || '',
+    inputs: skill.inputs.map(input => ({
+      name: input.name,
+      required: input.required,
+      type: input.type || 'text', // Default to 'text' for proto compatibility
+      fileConfig: input.fileConfig ? {
+        allowedMimeTypes: input.fileConfig.allowedMimeTypes || [],
+        maxSizeBytes: input.fileConfig.maxSizeBytes || 0,
+        multiple: input.fileConfig.multiple || false
+      } : undefined
+    })),
+    outputs: skill.outputs.map(output => ({
+      name: output.name,
+      type: output.type || 'text', // Default to 'text' for proto compatibility
+      outputMapping: output.outputMapping ? {
+        mode: output.outputMapping.mode || 'single_row',
+        tableMappings: output.outputMapping.tableMappings.map(tm => ({
+          order: tm.order,
+          targetTableId: tm.targetTableId,
+          rowAction: tm.rowAction || 'create',
+          rowId: tm.rowId || '',
+          displayFieldId: tm.displayFieldId || 0,
+          mappings: tm.mappings.map(m => ({
+            source: mapFieldSourceToProto(m.source),
+            targetFieldId: m.targetFieldId,
+            targetFieldMetadata: m.targetFieldMetadata ? {
+              fieldType: m.targetFieldMetadata.fieldType || '',
+              options: m.targetFieldMetadata.options || [],
+              maxSelections: m.targetFieldMetadata.maxSelections,
+              fieldName: m.targetFieldMetadata.fieldName || ''
+            } : undefined,
+            appendMode: m.appendMode || false
+          }))
+        }))
+      } : undefined
+    })),
+    tools: skill.tools.map(tool => mapToolToProto(
+      tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
+    )),
+    model: skill.model || '',
+    content: skill.content.map((part: any) => {
+      // Handle various content formats (MessagePart format)
+      if (part.text?.text || (part.type === 'text' && part.text)) {
+        return { text: { text: part.text?.text || part.text || '' } };
+      } else if (part.imageUrl?.url || (part.type === 'image_url' && part.imageUrl)) {
+        return { imageUrl: { url: part.imageUrl?.url || part.imageUrl || '' } };
+      } else if (part.file?.url || (part.type === 'file' && part.file)) {
+        const fileData = part.file;
+        return {
+          file: {
+            url: fileData?.url || '',
+            mimeType: fileData?.mimeType || '',
+            filename: fileData?.filename || '',
+            size: fileData?.size || 0
+          }
+        };
+      }
+      return { text: { text: '' } };
+    }),
+    agentType: skill.agentType || '',
+    executionType: skill.executionType || 'agent',
+    taskModelConfig: skill.taskModelConfig ? {
+      modelId: skill.taskModelConfig.modelId || '',
+      taskType: skill.taskModelConfig.taskType || '',
+      parameters: Object.fromEntries(
+        Object.entries(skill.taskModelConfig.parameters || {}).map(([k, v]) => [k, String(v)])
+      )
+    } : undefined
+  };
 }
 
 // AIDEV-TODO: Add validation functions to ensure proto message completeness

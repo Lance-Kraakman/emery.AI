@@ -42,3 +42,12 @@ export function useTheme(): ThemeConfig {
   const theme = useContext(ThemeContext);
   return theme || ThemeConfig.default();
 }
+
+/**
+ * useOptionalTheme - Hook to optionally access theme
+ * Returns null if not in a ThemeProvider, allowing conditional theming
+ * Use this in components that should only apply Puck themes when in Puck context
+ */
+export function useOptionalTheme(): ThemeConfig | null {
+  return useContext(ThemeContext);
+}

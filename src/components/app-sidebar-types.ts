@@ -27,6 +27,7 @@ export interface SkillData {
   name: string
   agentId: number | null
   agentName?: string
+  isSystem: boolean
 }
 
 export interface DatabaseData {

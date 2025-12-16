@@ -39,6 +39,7 @@ import {
   Mail,
   Phone,
   AlertCircle,
+  Braces,
 } from 'lucide-react';
 
 // Map field types to icons
@@ -58,6 +59,7 @@ const fieldTypeIcons: Record<FieldType, React.ReactNode> = {
   'created-at': <Clock className="h-3.5 w-3.5" />,
   'email': <Mail className="h-3.5 w-3.5" />,
   'phone': <Phone className="h-3.5 w-3.5" />,
+  'json': <Braces className="h-3.5 w-3.5" />,
 };
 
 // Human-readable type labels
@@ -77,6 +79,7 @@ const fieldTypeLabels: Record<FieldType, string> = {
   'created-at': 'Created At',
   'email': 'Email',
   'phone': 'Phone',
+  'json': 'JSON',
 };
 
 interface FieldSelectorFieldProps {

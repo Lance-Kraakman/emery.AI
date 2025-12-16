@@ -9,6 +9,7 @@ import {
   borderColorField,
   borderRadiusField
 } from "@/components/puck/fields/standard-fields";
+import type { FourCornerRadius } from "@/components/puck/types/spacing-types";
 import { withLayout, WithLayout } from "../../components/Layout";
 import { createLinkActionField, type LinkActionConfig } from "@/components/puck/custom-fields";
 
@@ -26,7 +27,7 @@ export type SignOutBlockProps = WithLayout<{
   buttonColor?: string;
   buttonTextColor?: string;
   borderColor?: string;
-  borderRadius?: string;
+  radius?: FourCornerRadius;
 }>;
 
 const SignOutBlockInternal: ComponentConfig<SignOutBlockProps> = {
@@ -98,7 +99,7 @@ const SignOutBlockInternal: ComponentConfig<SignOutBlockProps> = {
       label: "Button Text Color (Optional)",
     },
     borderColor: borderColorField,
-    borderRadius: borderRadiusField,
+    radius: borderRadiusField,
   },
   defaultProps: {
     buttonText: "Sign Out",
@@ -115,7 +116,7 @@ const SignOutBlockInternal: ComponentConfig<SignOutBlockProps> = {
     buttonColor: undefined,
     buttonTextColor: undefined,
     borderColor: undefined,
-    borderRadius: undefined,
+    radius: undefined,
   },
   render: (props) => {
     return <_SignOutBlock {...props} />;

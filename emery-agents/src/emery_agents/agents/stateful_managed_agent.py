@@ -1,11 +1,15 @@
 """
-StatefulManagedAgent - Managed agent with HITL state persistence.
+StatefulManagedAgent - CodeAgent with HITL state persistence.
 
 Overrides __call__ to pass reset=False, preserving memory between calls.
 This enables Human-in-the-Loop workflows where the agent:
 1. Creates a plan and interrupts
 2. User approves
 3. Agent resumes with full memory of the plan
+
+Uses CodeAgent (not ToolCallingAgent) for better planning capabilities.
+CodeAgent writes tool calls as Python code, enabling more flexible reasoning.
+executor_type="local" runs generated code in the same container.
 
 AIDEV-NOTE: Regular managed agents reset memory on each call because
 smolagents' MultiStepAgent.__call__ calls run() without passing reset=False.
@@ -16,9 +20,11 @@ import logging
 from typing import Any
 
 from jinja2 import Template, StrictUndefined
-from smolagents import ToolCallingAgent
+from smolagents import CodeAgent
 from smolagents.agents import RunResult
 from smolagents.utils import truncate_content
+
+from ..prompts import get_managed_agent_templates, get_planning_templates, get_hitl_templates
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +35,18 @@ def populate_template(template: str, variables: dict[str, Any]) -> str:
     return compiled_template.render(**variables)
 
 
-class StatefulManagedAgent(ToolCallingAgent):
+class StatefulManagedAgent(CodeAgent):
     """
     A managed agent that preserves memory between calls for HITL workflows.
 
-    Key difference from regular ToolCallingAgent:
+    Key difference from regular CodeAgent:
     - __call__ passes reset=False to run()
     - Memory persists between calls
     - Can track whether we're in "waiting for approval" state
+
+    Uses CodeAgent (not ToolCallingAgent) for better planning capabilities.
+    CodeAgent writes tool calls as Python code, which provides more flexible
+    reasoning for complex multi-step plans.
 
     Usage:
         agent = StatefulManagedAgent(tools=..., model=..., ...)
@@ -50,10 +60,28 @@ class StatefulManagedAgent(ToolCallingAgent):
         # agent.__call__("yes proceed") -> executes with full context
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, executor_type: str = "local", **kwargs):
+        super().__init__(*args, executor_type=executor_type, **kwargs)
         # Track HITL state
         self._waiting_for_approval = False
+
+        # Override managed_agent templates to use plain text instead of verbose markdown
+        # smolagents default forces "### 1. Task outcome (short version):" etc. which is too verbose
+        # Templates are in prompts/base/managed_agent_task.j2 and managed_agent_report.j2
+        self.prompt_templates["managed_agent"] = get_managed_agent_templates()
+
+        # Override planning templates with concise format
+        # smolagents default uses verbose "Here are the facts I know..." format
+        # Templates are in prompts/planning/
+        self.prompt_templates["planning"] = get_planning_templates()
+
+        # Load HITL resume templates for _build_resume_task
+        # Templates are in prompts/hitl/
+        self._hitl_templates = get_hitl_templates()
+
+        # Debug: Log system prompt to verify instructions are included
+        logger.info(f"📋 {self.__class__.__name__} system_prompt length: {len(self.system_prompt)}")
+        logger.info(f"📋 System prompt preview (first 500 chars):\n{self.system_prompt[:500]}")
 
     def __call__(self, task: str, **kwargs):
         """
@@ -170,32 +198,16 @@ class StatefulManagedAgent(ToolCallingAgent):
         if not plan_content:
             # Fallback - just pass approval through with generic instructions
             logger.warning(f"⚠️ No plan found in memory for resume, using generic instructions")
-            return f"""The user has approved. Now execute the requested changes.
-
-User said: "{approval}"
-
-IMPORTANT:
-- Use the skill_crud tool to make the changes
-- Do NOT just describe what you will do - actually do it
-- After making changes, verify by reading the skill again
-- Report actual success or failure with details"""
+            return populate_template(
+                self._hitl_templates["resume_fallback"],
+                {"approval": approval}
+            )
 
         # Build resume task with explicit execution instructions
-        return f"""The user has APPROVED your plan. Now EXECUTE the changes immediately.
-
-User said: "{approval}"
-
-YOUR PREVIOUS PLAN:
-{plan_content}
-
-CRITICAL INSTRUCTIONS:
-1. Do NOT create a new plan - the plan above is already approved
-2. Do NOT just describe what you will do
-3. IMMEDIATELY call skill_crud(method="update", skill_id=<id>, data={{...}}) with the exact changes from your plan
-4. After the update, call skill_crud(method="read", skill_id=<id>) to verify the changes were applied
-5. Then call final_answer with the actual result (success with details, or failure with error)
-
-Execute NOW - the user is waiting for the skill to be updated."""
+        return populate_template(
+            self._hitl_templates["resume_with_plan"],
+            {"approval": approval, "plan_content": plan_content}
+        )
 
     def _get_plan_from_memory(self) -> str | None:
         """

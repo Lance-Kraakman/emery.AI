@@ -36,7 +36,8 @@ class ExecutionContext:
 
     # Multimodal content (optional)
     images: List[ImageAttachment] = field(default_factory=list)       # Image URLs
-    attachments: List[FileAttachment] = field(default_factory=list)   # File metadata
+    attachments: List[FileAttachment] = field(default_factory=list)   # Current message files (default)
+    session_attachments: List[FileAttachment] = field(default_factory=list)  # All session files (for explicit lookup by name)
 
     # Optional context
     agent_id: Optional[AgentId] = None
@@ -48,9 +49,19 @@ class ExecutionContext:
     # Skill configuration for skill-based execution
     skill: Optional[SkillConfig] = None
 
+    # Available skills for delegation (skill-as-tool)
+    # When set, these skills can be invoked as tools by the executing agent
+    available_skills: List[SkillConfig] = field(default_factory=list)
+
     # Model selection hierarchy
     agent_model: Optional[str] = None
     org_model: Optional[str] = None
+
+    # API authentication for output mappings and managed agents
+    api_key: Optional[str] = None
+
+    # OutputTool reference for capturing agent outputs (set at runtime)
+    output_tool: Optional[Any] = None
 
     # Environment data
     environment: Dict[str, Any] = field(default_factory=dict)
@@ -73,13 +84,16 @@ class ExecutionContext:
             available_tools=tools,
             images=self.images,
             attachments=self.attachments,
+            session_attachments=self.session_attachments,
             agent_id=self.agent_id,
             organization_id=self.organization_id,
             skill_name=self.skill_name,
             max_steps=self.max_steps,
             timeout_seconds=self.timeout_seconds,
             skill=self.skill,
+            available_skills=self.available_skills,
             agent_model=self.agent_model,
             org_model=self.org_model,
+            api_key=self.api_key,
             environment=self.environment.copy()
         )

@@ -23,6 +23,21 @@ import postgres from "postgres";
 import * as cron from "node-cron";
 
 /**
+ * Timestamped logging helper for scheduler
+ */
+const log = (emoji: string, message: string) => {
+  console.log(`[${new Date().toISOString()}] ${emoji} ${message}`);
+};
+
+const logError = (emoji: string, message: string, error?: unknown) => {
+  console.error(`[${new Date().toISOString()}] ${emoji} ${message}`, error ?? '');
+};
+
+const logWarn = (emoji: string, message: string) => {
+  console.warn(`[${new Date().toISOString()}] ${emoji} ${message}`);
+};
+
+/**
  * Event-Driven Scheduler
  * Listens to PostgreSQL events and orchestrates task execution
  */
@@ -41,32 +56,32 @@ class EventDrivenScheduler {
   ) {}
 
   async start(): Promise<void> {
-    console.log('🚀 Starting Event-Driven Scheduler...');
-    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🗄️  Database: ${process.env.DATABASE_URL?.replace(/\/\/.*@/, '//***@')}`);
+    log('🚀', 'Starting Event-Driven Scheduler...');
+    log('📊', `Environment: ${process.env.NODE_ENV || 'development'}`);
+    log('🗄️', `Database: ${process.env.DATABASE_URL?.replace(/\/\/.*@/, '//***@')}`);
 
     try {
       // 1. Setup PostgreSQL event listeners
       await this.setupEventListeners();
-      console.log('✅ PostgreSQL event listeners configured');
+      log('✅', 'PostgreSQL event listeners configured');
 
       // 2. Start fallback timer for scheduled tasks (5 minutes)
       this.startFallbackTimer();
-      console.log('⏰ Fallback timer started (5 minute intervals)');
+      log('⏰', 'Fallback timer started (5 minute intervals)');
 
       // 3. Start hourly storage recalculation
       this.startStorageRecalculationCron();
-      console.log('💾 Storage recalculation cron started (hourly)');
+      log('💾', 'Storage recalculation cron started (hourly)');
 
       // 4. Process any existing queued tasks on startup
       await this.processQueuedTasks();
-      console.log('📋 Initial queue processed');
+      log('📋', 'Initial queue processed');
 
-      console.log('✅ Event-Driven Scheduler started successfully');
-      console.log('🎧 Listening for task_event and rag_reindex_needed events...');
+      log('✅', 'Event-Driven Scheduler started successfully');
+      log('🎧', 'Listening for task_event and rag_reindex_needed events...');
 
     } catch (error) {
-      console.error('❌ Failed to start scheduler:', error);
+      logError('❌', 'Failed to start scheduler:', error);
       throw error;
     }
   }
@@ -78,29 +93,29 @@ class EventDrivenScheduler {
     await this.notificationClient.listen('task_event', async (payload) => {
       try {
         const event = JSON.parse(payload);
-        console.log(`📨 Received task_event: taskId=${event.taskId}`);
+        log('📨', `Received task_event: taskId=${event.taskId}`);
         await this.handleTaskEvent(event);
       } catch (error) {
-        console.error('❌ Error handling task_event:', error);
+        logError('❌', 'Error handling task_event:', error);
       }
     });
 
-    console.log('🎧 Listening for task_event...');
+    log('🎧', 'Listening for task_event...');
   }
 
   private async handleTaskEvent(event: TaskEvent): Promise<void> {
     return withSystemContext(event.organizationId, async () => {
       if (!event.taskId) {
-        console.warn('⚠️ task_event missing taskId');
+        logWarn('⚠️', 'task_event missing taskId');
         return;
       }
       // This is a manual task execution
       const task = await this.taskRepository.findById(TaskId.fromString(event.taskId));
       if (task && task.isPending) {
         await this.agentTaskService.executeTask({ taskId: event.taskId });
-        console.log(`✅ Processed task ${event.taskId}`);
+        log('✅', `Processed task ${event.taskId}`);
       } else {
-        console.log(`⏭️ Skipping task ${event.taskId} (not found or not pending)`);
+        log('⏭️', `Skipping task ${event.taskId} (not found or not pending)`);
       }
     });
   }
@@ -113,14 +128,14 @@ class EventDrivenScheduler {
       try {
         // Process scheduled tasks (CALENDAR triggers)
         await this.processScheduledTasks();
-        
+
         // Handle timeouts
         await this.processTimeouts();
-        
+
         // Process retries
         await this.processRetries();
       } catch (error) {
-        console.error('❌ Error in fallback timer:', error);
+        logError('❌', 'Error in fallback timer:', error);
       }
     }, 300000); // 5 minutes
   }
@@ -128,10 +143,10 @@ class EventDrivenScheduler {
   private async processScheduledTasks(): Promise<void> {
     // Handle CALENDAR triggers
     const dueTasks = await this.schedulerService.getTasksDueForExecution();
-    
+
     if (dueTasks.length > 0) {
-      console.log(`⏰ Processing ${dueTasks.length} scheduled tasks`);
-      
+      log('⏰', `Processing ${dueTasks.length} scheduled tasks`);
+
       for (const task of dueTasks) {
         await withSystemContext(task.organizationId, async () => {
           try {
@@ -147,7 +162,7 @@ class EventDrivenScheduler {
             await this.taskRepository.create(createData);
             await this.agentTaskService.executeTask({ taskId: task.id.value });
           } catch (error) {
-            console.error(`❌ Failed to process scheduled task ${task.id.value}:`, error);
+            logError('❌', `Failed to process scheduled task ${task.id.value}:`, error);
           }
         });
       }
@@ -156,13 +171,13 @@ class EventDrivenScheduler {
 
   private async processQueuedTasks(): Promise<void> {
     const readyTasks = await this.taskQueueService.getReadyTasks(10);
-    
+
     for (const task of readyTasks) {
       await withSystemContext(task.organizationId, async () => {
         try {
           await this.agentTaskService.executeTask({ taskId: task.id.value });
         } catch (error) {
-          console.error(`❌ Failed to process queued task ${task.id.value}:`, error);
+          logError('❌', `Failed to process queued task ${task.id.value}:`, error);
         }
       });
     }
@@ -170,16 +185,16 @@ class EventDrivenScheduler {
 
   private async processTimeouts(): Promise<void> {
     const timedOutTasks = await this.taskQueueService.getTimedOutTasks();
-    
+
     for (const task of timedOutTasks) {
       await withSystemContext(task.organizationId, async () => {
         try {
           task.timeout();
           await this.taskRepository.update(task.id, { status: task.status.value });
           await this.taskQueueService.markTaskFailed(task.id, 'Task execution timed out');
-          console.log(`⏱️ Marked task ${task.id.value} as timed out`);
+          log('⏱️', `Marked task ${task.id.value} as timed out`);
         } catch (error) {
-          console.error(`❌ Failed to handle timeout for task ${task.id.value}:`, error);
+          logError('❌', `Failed to handle timeout for task ${task.id.value}:`, error);
         }
       });
     }
@@ -192,9 +207,9 @@ class EventDrivenScheduler {
       await withSystemContext(task.organizationId, async () => {
         try {
           await this.taskQueueService.enqueue(task, 2); // Higher priority for retries
-          console.log(`🔁 Requeued task ${task.id.value} for retry`);
+          log('🔁', `Requeued task ${task.id.value} for retry`);
         } catch (error) {
-          console.error(`❌ Failed to requeue retry task ${task.id.value}:`, error);
+          logError('❌', `Failed to requeue retry task ${task.id.value}:`, error);
         }
       });
     }
@@ -210,44 +225,35 @@ class EventDrivenScheduler {
       if (this.isShuttingDown) return;
 
       try {
-        console.log('💾 Starting hourly storage recalculation...');
+        log('💾', 'Starting hourly storage recalculation...');
 
         const result = await this.storageRecalculationService.recalculateAllOrganizations();
 
         if (result.success && result.data) {
           const { successCount, errorCount, discrepanciesFound, totalBytesRecalculated } = result.data;
 
-          console.log(
-            `✅ Storage recalculation complete: ` +
-            `${successCount} organizations processed, ` +
-            `${errorCount} errors, ` +
-            `${discrepanciesFound} discrepancies found, ` +
-            `${(totalBytesRecalculated / (1024 * 1024 * 1024)).toFixed(2)} GB total`
-          );
+          log('✅', `Storage recalculation complete: ${successCount} organizations processed, ${errorCount} errors, ${discrepanciesFound} discrepancies found, ${(totalBytesRecalculated / (1024 * 1024 * 1024)).toFixed(2)} GB total`);
 
           // Log errors if any
           if (result.data.errors.length > 0) {
-            console.error(
-              `⚠️ Storage recalculation had ${result.data.errors.length} errors:`,
-              result.data.errors
-            );
+            logError('⚠️', `Storage recalculation had ${result.data.errors.length} errors:`, result.data.errors);
           }
 
           // Log top discrepancies
           if (discrepanciesFound > 0) {
-            console.warn(`⚠️ Found ${discrepanciesFound} organizations with storage drift`);
+            logWarn('⚠️', `Found ${discrepanciesFound} organizations with storage drift`);
           }
         } else {
-          console.error('❌ Storage recalculation failed:', result.error);
+          logError('❌', 'Storage recalculation failed:', result.error);
         }
       } catch (error) {
-        console.error('❌ Error in storage recalculation cron:', error);
+        logError('❌', 'Error in storage recalculation cron:', error);
       }
     });
   }
 
   async shutdown(): Promise<void> {
-    console.log('🛑 Shutting down Event-Driven Scheduler...');
+    log('🛑', 'Shutting down Event-Driven Scheduler...');
     this.isShuttingDown = true;
 
     // Clear timers
@@ -265,7 +271,7 @@ class EventDrivenScheduler {
       await this.notificationClient.end();
     }
 
-    console.log('✅ Scheduler shutdown complete');
+    log('✅', 'Scheduler shutdown complete');
   }
 }
 
@@ -273,19 +279,19 @@ class EventDrivenScheduler {
 async function main() {
   // Environment validation
   if (!process.env.DATABASE_URL) {
-    console.error('❌ DATABASE_URL environment variable is required');
+    logError('❌', 'DATABASE_URL environment variable is required');
     process.exit(1);
   }
 
   // Initialize DI containers
   try {
     initializeDI(contextAwareDb);
-    console.log('✅ DI Container initialized for scheduler');
-    
+    log('✅', 'DI Container initialized for scheduler');
+
     taskSchedulingContainer.initialize(contextAwareDb, rawClient);
-    console.log('✅ TaskScheduling Container initialized for scheduler');
+    log('✅', 'TaskScheduling Container initialized for scheduler');
   } catch (error) {
-    console.error('❌ Failed to initialize DI containers:', error);
+    logError('❌', 'Failed to initialize DI containers:', error);
     process.exit(1);
   }
 
@@ -304,29 +310,29 @@ async function main() {
 
   // Handle unhandled rejections
   process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    logError('❌', 'Unhandled Rejection at:', { promise, reason });
     process.exit(1);
   });
 
   process.on('uncaughtException', (error) => {
-    console.error('❌ Uncaught Exception:', error);
+    logError('❌', 'Uncaught Exception:', error);
     process.exit(1);
   });
 
   // Start the scheduler
   try {
     await scheduler.start();
-    
+
     // Keep process alive
     await new Promise(() => {});
   } catch (error) {
-    console.error('❌ Fatal error:', error);
+    logError('❌', 'Fatal error:', error);
     process.exit(1);
   }
 }
 
 // Start the scheduler
 main().catch((error) => {
-  console.error('❌ Fatal error:', error);
+  logError('❌', 'Fatal error:', error);
   process.exit(1);
 });

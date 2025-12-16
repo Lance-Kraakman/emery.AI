@@ -534,6 +534,8 @@ export class TableGrpcMapper {
         return FieldType.FIELD_TYPE_EMAIL;
       case 'phone':
         return FieldType.FIELD_TYPE_PHONE;
+      case 'json':
+        return FieldType.FIELD_TYPE_JSON;
       default:
         return FieldType.FIELD_TYPE_UNSPECIFIED;
     }
@@ -574,6 +576,8 @@ export class TableGrpcMapper {
         return 'email';
       case FieldType.FIELD_TYPE_PHONE:
         return 'phone';
+      case FieldType.FIELD_TYPE_JSON:
+        return 'json';
       default:
         return 'text';
     }

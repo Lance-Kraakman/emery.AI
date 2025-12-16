@@ -9,7 +9,7 @@
  * with fine-grained reactivity and better performance characteristics.
  */
 
-import { Store } from '@tanstack/react-store'
+import { Store, useStore } from '@tanstack/react-store'
 import type { AgentDTO } from '@/app/mappers/agent-mapper'
 import type { TeamDTO } from '@/app/mappers/team-mapper'
 import type { TableDTO } from '@/app/mappers/table-mapper'
@@ -20,7 +20,17 @@ export interface DatabaseWithTables extends DatabaseDTO {
   tables: TableDTO[]
 }
 
+export type OrganizationPlan = 'free' | 'pro' | 'max' | 'enterprise'
+
+// Current organization with plan info (from getCurrentOrganization)
 export interface Organization {
+  id: number
+  name: string
+  plan: OrganizationPlan
+}
+
+// Basic organization info for available organizations list (from session)
+export interface OrganizationBasic {
   id: number
   name: string
 }
@@ -31,7 +41,7 @@ export interface User {
   name: string
   currentOrganizationId?: number
   needsSetup: boolean
-  availableOrganizations: Organization[]
+  availableOrganizations: OrganizationBasic[]
 }
 
 export interface AppState {
@@ -43,7 +53,7 @@ export interface AppState {
   // User and organization context
   user: User | null
   currentOrganization: Organization | null
-  availableOrganizations: Organization[]
+  availableOrganizations: OrganizationBasic[]
   
   // Loading and error states
   isLoading: boolean
@@ -336,9 +346,21 @@ export const appStateSelectors = {
   lastFetched: (state: AppState) => state.lastFetched,
   needsRefresh: (maxAge: number = 5 * 60 * 1000) => (state: AppState) => {
     const now = Date.now()
-    return Object.values(state.lastFetched).some(timestamp => 
+    return Object.values(state.lastFetched).some(timestamp =>
       !timestamp || (now - timestamp.getTime()) > maxAge
     )
-  }
+  },
+
+  // Organization plan selector
+  organizationPlan: (state: AppState): OrganizationPlan =>
+    state.currentOrganization?.plan ?? 'free'
+}
+
+/**
+ * Hook to get the current organization plan
+ * Returns 'free' as fallback if no organization is set
+ */
+export function useOrganizationPlan(): OrganizationPlan {
+  return useStore(appStateStore, appStateSelectors.organizationPlan)
 }
 

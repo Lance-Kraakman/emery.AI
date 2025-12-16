@@ -10,6 +10,9 @@
 import { useFieldValue, useIsInDataContext } from '@/components/puck/hooks/useFieldValue';
 import { cn } from '@/lib/utils';
 import styles from './styles.module.css';
+import type { FourCornerRadius } from '@/components/puck/types/spacing-types';
+import { useTheme } from '@/components/puck/theme-context';
+import { computeFourCornerRadiusCSS } from '@/components/puck/utils/spacing';
 
 export interface ImageFieldProps {
   fieldId?: number;
@@ -17,7 +20,7 @@ export interface ImageFieldProps {
   labelPosition?: 'top' | 'inline';
   size?: 'small' | 'medium' | 'large' | 'full';
   shape?: 'square' | 'circle' | 'rounded';
-  borderRadius?: string;
+  radius?: FourCornerRadius;
   borderWidth?: string;
   borderColor?: string;
   alt?: string;
@@ -51,7 +54,7 @@ export default function ImageField({
   labelPosition = 'top',
   size = 'medium',
   shape = 'rounded',
-  borderRadius,
+  radius,
   borderWidth,
   borderColor,
   alt = 'Image',
@@ -59,6 +62,7 @@ export default function ImageField({
   maxItems = 1,
 }: ImageFieldProps) {
   // All hooks must be called before any conditionals (React hooks rules)
+  const theme = useTheme();
   const isInContext = useIsInDataContext();
   const value = useFieldValue(fieldId ?? 0);
 
@@ -112,9 +116,12 @@ export default function ImageField({
     labelPosition === 'inline' && styles.inline
   );
 
+  // Compute radius styles from FourCornerRadius
+  const radiusStyles = radius ? computeFourCornerRadiusCSS(radius, theme) : {};
+
   // Custom border styles
   const imageStyles: React.CSSProperties = {
-    ...(borderRadius && { borderRadius }),
+    ...radiusStyles,
     ...(borderWidth && { borderWidth, borderStyle: 'solid' }),
     ...(borderColor && { borderColor }),
   };

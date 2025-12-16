@@ -1,11 +1,11 @@
 /**
  * ChatMessage Repository Interface
- * 
+ *
  * Defines the contract for chat message data persistence and retrieval.
- * Supports message ordering, threading, and RAG source tracking.
- * 
+ * Supports message ordering and threading.
+ *
  * AIDEV-NOTE: Repository interface for chat message domain - defines data access patterns
- * for conversation flow management and RAG source tracking
+ * for conversation flow management
  */
 
 import { ChatId, ChatMessageId } from '../../shared/value-objects';
@@ -63,11 +63,6 @@ export interface IChatMessageRepository {
   getMessageCount(chatId: ChatId): Promise<number>;
 
   /**
-   * Find messages with RAG sources
-   */
-  findMessagesWithRagSources(chatId: ChatId, limit?: number, offset?: number): Promise<ChatMessage[]>;
-
-  /**
    * Find messages by content search
    */
   searchMessageContent(chatId: ChatId, query: string, limit?: number, offset?: number): Promise<ChatMessage[]>;
@@ -90,7 +85,6 @@ export interface IChatMessageRepository {
     userMessages: number;
     assistantMessages: number;
     systemMessages: number;
-    messagesWithRag: number;
     averageProcessingTime: number | null;
   }>;
 

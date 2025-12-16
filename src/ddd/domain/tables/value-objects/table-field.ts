@@ -25,7 +25,8 @@ export type FieldType =
   | 'last-updated'
   | 'created-at'
   | 'email'
-  | 'phone';
+  | 'phone'
+  | 'json';  // Stores arbitrary JSON data (classification results, structured outputs, etc.)
 
 export interface EmbeddingFieldMetadata {
   embeddingSize: 384 | 768 | 1536 | 3072;
@@ -280,7 +281,8 @@ export class TableField {
       'last-updated': 'TIMESTAMP WITH TIME ZONE',
       'created-at': 'TIMESTAMP WITH TIME ZONE',
       'email': 'TEXT',
-      'phone': 'TEXT'
+      'phone': 'TEXT',
+      'json': 'JSONB'  // Arbitrary JSON data (classification results, structured outputs)
     };
 
     return typeMapping[this._type];

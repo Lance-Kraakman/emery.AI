@@ -7,6 +7,9 @@ import { Section } from "../../components/Section";
 import { PuckComponent, Slot } from "@measured/puck";
 import type { LinkActionConfig } from "../../custom-fields/link-action-field";
 import type { Action } from "../../types/actions";
+import type { FourSidedSpacing } from "../../types/spacing-types";
+import { useTheme } from "../../theme-context";
+import { computeFourSidedCSS } from "../../utils/spacing";
 
 const getClassName = getClassNameFactory("Hero", styles);
 
@@ -35,7 +38,7 @@ export type HeroProps = {
   title: string | ReactNode;
   description: string;
   align?: string;
-  paddingLevel?: string;
+  padding?: FourSidedSpacing;
   image?: {
     content?: Slot;
     mode?: "inline" | "background" | "custom";
@@ -60,7 +63,7 @@ export const Hero: PuckComponent<HeroProps> = ({
   title,
   description,
   buttons,
-  paddingLevel = "6",
+  padding,
   image,
   titleColor,
   subtitleColor,
@@ -71,7 +74,8 @@ export const Hero: PuckComponent<HeroProps> = ({
   subtitleFontWeight,
   puck,
 }) => {
-  const paddingValue = `var(--spacing-${paddingLevel}, 48px)`;
+  const theme = useTheme();
+  const paddingStyles = padding ? computeFourSidedCSS(padding, theme, 'padding') : { paddingTop: '48px', paddingBottom: '48px' };
 
   return (
     <Section
@@ -81,8 +85,7 @@ export const Hero: PuckComponent<HeroProps> = ({
         hasImageBackground: image?.mode === "background",
       })}
       style={{
-        paddingTop: paddingValue,
-        paddingBottom: paddingValue,
+        ...paddingStyles,
         ...(backgroundColor && { backgroundColor }),
       }}
     >

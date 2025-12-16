@@ -265,61 +265,54 @@ jobs:
             -c aws_account_id=${{ env.AWS_ACCOUNT_ID }} \
             -c region=${{ env.AWS_REGION }}
 
-      - name: Trigger Blue/Green Deployment
+      - name: Deploy Production Frontend (Blue/Green)
         if: success() && startsWith(github.ref, 'refs/tags/v')
+        env:
+          FRONTEND_IMAGE: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.deploy_config.outputs.image_tag }}
         run: |
-          # Get the latest task definition ARN
-          TASK_DEF_ARN=$(aws ecs describe-services \
-            --cluster ProductionEmeryCluster \
-            --services Production-Frontend \
-            --query 'services[0].taskDefinition' \
-            --output text)
+          echo "🔵🟢 Starting Blue/Green Deployment"
+          echo "📦 New image: ${FRONTEND_IMAGE}"
 
-          echo "📦 Task Definition: ${TASK_DEF_ARN}"
+          # Get current task definition and update only the image
+          # This preserves all other settings (env vars, secrets, resources, etc.)
+          aws ecs describe-task-definition \
+            --task-definition EmeryAppProductionProductionFrontendTaskDefA8A2BE3C \
+            --query 'taskDefinition' | \
+          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' | \
+          jq --arg IMG "${FRONTEND_IMAGE}" '.containerDefinitions[0].image = $IMG' \
+          > /tmp/task-definition.json
 
-          # Create AppSpec YAML content (no leading whitespace)
-          APPSPEC_CONTENT="version: 0.0
+          echo "📄 Task definition image updated to:"
+          cat /tmp/task-definition.json | jq -r '.containerDefinitions[0].image'
+
+          # Create AppSpec file (TaskDefinition placeholder will be auto-filled by aws ecs deploy)
+          cat > /tmp/appspec.yaml << 'EOF'
+          version: 0.0
           Resources:
             - TargetService:
                 Type: AWS::ECS::Service
                 Properties:
-                  TaskDefinition: ${TASK_DEF_ARN}
+                  TaskDefinition: <TASK_DEFINITION>
                   LoadBalancerInfo:
                     ContainerName: ProductionFrontendContainer
-                    ContainerPort: 3000"
+                    ContainerPort: 3000
+          EOF
 
-          echo "📄 AppSpec contents:"
-          echo "$APPSPEC_CONTENT"
-
-          # Create revision JSON file (avoids shell escaping issues)
-          jq -n --arg content "$APPSPEC_CONTENT" '{
-            revisionType: "AppSpecContent",
-            appSpecContent: {
-              content: $content
-            }
-          }' > /tmp/revision.json
-
-          echo "📄 Revision JSON:"
-          cat /tmp/revision.json
-
-          # Create CodeDeploy deployment
-          DEPLOYMENT_ID=$(aws deploy create-deployment \
-            --application-name Production-Frontend-BlueGreen \
-            --deployment-group-name Production-Frontend-DeploymentGroup \
-            --revision file:///tmp/revision.json \
-            --query 'deploymentId' \
-            --output text)
+          # Deploy using aws ecs deploy - this single command:
+          # 1. Registers the new task definition
+          # 2. Updates the AppSpec with the new task def ARN
+          # 3. Creates the CodeDeploy deployment
+          echo "🚀 Creating CodeDeploy deployment..."
+          aws ecs deploy \
+            --cluster ProductionEmeryCluster \
+            --service Production-Frontend \
+            --task-definition /tmp/task-definition.json \
+            --codedeploy-appspec /tmp/appspec.yaml \
+            --codedeploy-application Production-Frontend-BlueGreen \
+            --codedeploy-deployment-group Production-Frontend-DeploymentGroup
 
           echo ""
-          echo "🔵🟢 Blue/Green Deployment Created!"
-          echo "=================================="
-          echo "📋 Deployment ID: ${DEPLOYMENT_ID}"
-          echo ""
-          echo "🔗 View deployment:"
-          echo "   https://ap-southeast-2.console.aws.amazon.com/codesuite/codedeploy/deployments/${DEPLOYMENT_ID}"
-          echo ""
-          echo "⏳ Waiting for manual approval (1 hour timeout)"
+          echo "✅ Blue/Green deployment created!"
+          echo "🔗 View in console: https://ap-southeast-2.console.aws.amazon.com/codesuite/codedeploy/deployments"
           echo "🧪 Test green environment at ALB:3001 before approving"
-          echo ""
-          echo "✅ To APPROVE: aws deploy continue-deployment --deployment-id ${DEPLOYMENT_ID} --deployment-wait-type READY_WAIT"
-          echo "❌ To ROLLBACK: aws deploy stop-deployment --deployment-id ${DEPLOYMENT_ID} --auto-rollback-enabled"
+          echo "⏳ Deployment will wait up to 1 hour for manual approval"

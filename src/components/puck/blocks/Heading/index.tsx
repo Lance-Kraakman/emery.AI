@@ -60,9 +60,7 @@ const HeadingInternal: ComponentConfig<HeadingProps> = {
     backgroundColor: undefined,
     fontFamily: undefined,
     fontWeight: undefined,
-    layout: {
-      padding: "8px",
-    },
+    layout: {},
   },
   render: ({ align, text, size, level, textColor, backgroundColor, fontFamily, fontWeight }) => {
     return (

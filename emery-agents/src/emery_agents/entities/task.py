@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-from ..types import AgentId, OrganizationId, TaskId, OwnerId
+from ..types import AgentId, OrganizationId, TaskId, OwnerId, InstructionConfig
 
 
 @dataclass
@@ -30,7 +30,7 @@ class TaskRequest:
     timeout_seconds: int
     name: str
     skill_name: Optional[str] = None
-    instruction_config: Optional[Dict[str, Any]] = None  # Simplified from protobuf
+    instruction_config: Optional[InstructionConfig] = None
     organization_model: Optional[str] = None  # For model selection
     agent_model: Optional[str] = None  # For model selection
 

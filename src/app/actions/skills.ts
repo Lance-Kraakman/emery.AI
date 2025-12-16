@@ -40,6 +40,10 @@ export async function createSkill(command: {
   outputs: SkillOutput[];
   instructions: string;
   tools: ToolConfigDTO[];
+  model?: string | null;
+  agentType?: string | null; // "tool_calling" (default) or "code_agent"
+  executionType?: 'agent' | 'operation';
+  taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -55,8 +59,16 @@ export async function createSkill(command: {
       return { success: false, error: 'Skill name is required' };
     }
 
-    if (!command.instructions?.trim()) {
-      return { success: false, error: 'Instructions are required' };
+    const executionType = command.executionType || 'agent';
+
+    // Instructions required for agent execution, optional for operation mode
+    if (executionType !== 'operation' && !command.instructions?.trim()) {
+      return { success: false, error: 'Instructions are required for agent execution' };
+    }
+
+    // Task model config required for operation mode
+    if (executionType === 'operation' && !command.taskModelConfig) {
+      return { success: false, error: 'Task model configuration is required for operation execution' };
     }
 
     // Validate input names
@@ -122,6 +134,10 @@ export async function createOrganizationSkill(command: {
   outputs: SkillOutput[];
   instructions: string;
   tools: ToolConfigDTO[];
+  model?: string | null;
+  agentType?: string | null; // "tool_calling" (default) or "code_agent"
+  executionType?: 'agent' | 'operation';
+  taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -137,8 +153,16 @@ export async function createOrganizationSkill(command: {
       return { success: false, error: 'Skill name is required' };
     }
 
-    if (!command.instructions?.trim()) {
-      return { success: false, error: 'Instructions are required' };
+    const executionType = command.executionType || 'agent';
+
+    // Instructions required for agent execution, optional for operation mode
+    if (executionType !== 'operation' && !command.instructions?.trim()) {
+      return { success: false, error: 'Instructions are required for agent execution' };
+    }
+
+    // Task model config required for operation mode
+    if (executionType === 'operation' && !command.taskModelConfig) {
+      return { success: false, error: 'Task model configuration is required for operation execution' };
     }
 
     // Validate input names
@@ -164,7 +188,11 @@ export async function createOrganizationSkill(command: {
       inputs: command.inputs,
       outputs: command.outputs,
       instructions: command.instructions,
-      tools: command.tools
+      tools: command.tools,
+      model: command.model,
+      agentType: command.agentType,
+      executionType: command.executionType,  // Include execution type
+      taskModelConfig: command.taskModelConfig  // Include task model config
     });
 
     if (!result.success) {
@@ -206,6 +234,10 @@ export async function updateSkill(
     outputs?: SkillOutput[];
     instructions?: string;
     tools?: ToolConfigDTO[];
+    model?: string | null;
+    agentType?: string | null; // "tool_calling" (default) or "code_agent"
+    executionType?: 'agent' | 'operation';
+    taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> } | null;
     content?: MessagePart[]; // Skill-level attachments
   }
 ): Promise<Result<SkillDTO>> {
@@ -224,6 +256,11 @@ export async function updateSkill(
     }
 
     const skill = skillResult.data;
+
+    // Prevent editing of system skills
+    if (skill.isSystem) {
+      return { success: false, error: 'System skills cannot be edited. Duplicate this skill to create your own version.' };
+    }
 
     // Check appropriate permission based on skill type
     if (skill.agentId) {
@@ -270,6 +307,7 @@ export async function updateSkill(
 
 /**
  * Delete a skill
+ * System skills (isSystem=true) cannot be deleted
  */
 export async function deleteSkill(skillId: number): Promise<Result<void>> {
   try {
@@ -288,6 +326,11 @@ export async function deleteSkill(skillId: number): Promise<Result<void>> {
 
     const skill = skillResult.data;
     const agentId = skill.agentId?.value ?? null;
+
+    // Prevent deletion of system skills
+    if (skill.isSystem) {
+      return { success: false, error: 'System skills cannot be deleted. You can duplicate this skill to create your own version.' };
+    }
 
     // Check appropriate permission based on skill type
     if (skill.agentId) {
@@ -344,7 +387,7 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
     // Create new name with " (Copy)" suffix
     const newName = `${originalSkill.name} (Copy)`;
 
-    // Create the duplicate skill
+    // Create the duplicate skill (copy all settings including execution type)
     const createResult = await service.createSkill({
       agentId: originalSkill.agentId?.value || null,
       organizationId: originalSkill.organizationId.value,
@@ -353,7 +396,11 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
       inputs: originalSkill.inputs,
       outputs: originalSkill.outputs,
       instructions: originalSkill.instructions,
-      tools: originalSkill.tools
+      tools: originalSkill.tools,
+      model: originalSkill.model,
+      agentType: originalSkill.agentType,
+      executionType: originalSkill.executionType,
+      taskModelConfig: originalSkill.taskModelConfig
     });
 
     if (!createResult.success || !createResult.data) {

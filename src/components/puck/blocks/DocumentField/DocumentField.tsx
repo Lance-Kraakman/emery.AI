@@ -1,87 +1,32 @@
 'use client';
 
 /**
- * DocumentField - Field Block Component (Display Only)
+ * DocumentField - View Mode Component
  *
  * Displays document field values from the nearest data context.
  * Must be used inside DataBlock.
- * Documents are like files but with additional metadata (page count, status, etc.)
+ * For edit mode with edit buttons, see DocumentEditMode.
  */
 
 import { useFieldValue, useIsInDataContext } from '@/components/puck/hooks/useFieldValue';
 import { cn } from '@/lib/utils';
 import { FileText, Download, ExternalLink } from 'lucide-react';
 import styles from './styles.module.css';
-
-export interface DocumentFieldProps {
-  fieldId?: number;
-  label?: string;
-  labelPosition?: 'top' | 'inline';
-  displayStyle?: 'list' | 'card';
-  maxItems?: number;
-  showMetadata?: boolean;
-  showStatus?: boolean;
-  textColor?: string;
-  fontFamily?: string;
-}
-
-interface DocumentItem {
-  id: string;
-  name: string;
-  size?: number;
-  mimeType?: string;
-  s3Key?: string;
-  url?: string;
-  documentMetadata?: {
-    pageCount?: number;
-    status?: string;
-    processingError?: string;
-  };
-}
-
-function formatFileSize(bytes?: number): string {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function getDocumentUrl(doc: DocumentItem): string {
-  if (doc.s3Key) {
-    return `/api/files/stream?s3Key=${encodeURIComponent(doc.s3Key)}`;
-  }
-  if (doc.url) return doc.url;
-  return '#';
-}
-
-function getStatusColor(status?: string): string {
-  switch (status) {
-    case 'processed':
-    case 'complete':
-      return 'success';
-    case 'processing':
-    case 'pending':
-      return 'warning';
-    case 'failed':
-    case 'error':
-      return 'error';
-    default:
-      return 'default';
-  }
-}
+import type { DocumentFieldProps, DocumentItem } from './types';
+import { formatFileSize, getDocumentUrl, getStatusColor } from './types';
 
 export default function DocumentField({
   fieldId,
   label,
   labelPosition = 'top',
   displayStyle = 'list',
+  size = 'normal',
   maxItems = 5,
   showMetadata = true,
   showStatus = true,
   textColor,
   fontFamily,
 }: DocumentFieldProps) {
-  // All hooks must be called before any conditionals (React hooks rules)
   const isInContext = useIsInDataContext();
   const value = useFieldValue(fieldId ?? 0);
 
@@ -124,7 +69,8 @@ export default function DocumentField({
 
   const containerClass = cn(
     styles.documentField,
-    labelPosition === 'inline' && styles.inline
+    labelPosition === 'inline' && styles.inline,
+    size !== 'normal' && styles[size]
   );
 
   const customStyles: React.CSSProperties = {

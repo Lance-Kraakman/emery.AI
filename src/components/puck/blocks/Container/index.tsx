@@ -8,7 +8,11 @@ import {
   borderColorField,
   borderRadiusField,
   paddingField,
+  marginField,
 } from "../../fields/standard-fields";
+import type { FourSidedSpacing, FourCornerRadius } from "../../types/spacing-types";
+import { useTheme } from "../../theme-context";
+import { computeFourSidedCSS, computeFourCornerRadiusCSS } from "../../utils/spacing";
 
 const getClassName = getClassNameFactory("Container", styles);
 
@@ -19,8 +23,12 @@ export type ContainerProps = {
   stickyPosition?: "top" | "bottom";
   backgroundColor?: string;
   borderColor?: string;
-  borderRadius?: string;
-  paddingLevel?: string;
+  /** Per-corner border radius */
+  radius?: FourCornerRadius;
+  /** Per-side padding */
+  padding?: FourSidedSpacing;
+  /** Per-side margin */
+  margin?: FourSidedSpacing;
   children: Slot;
 };
 
@@ -64,8 +72,9 @@ export const ContainerInternal: ComponentConfig<ContainerProps> = {
     },
     backgroundColor: backgroundColorField,
     borderColor: borderColorField,
-    borderRadius: borderRadiusField,
-    paddingLevel: paddingField,
+    radius: borderRadiusField,
+    padding: paddingField,
+    margin: marginField,
     children: {
       type: "slot",
     },
@@ -77,8 +86,9 @@ export const ContainerInternal: ComponentConfig<ContainerProps> = {
     stickyPosition: "top",
     backgroundColor: undefined,
     borderColor: undefined,
-    borderRadius: undefined,
-    paddingLevel: undefined,
+    radius: undefined,
+    padding: undefined,
+    margin: undefined,
     children: [],
   },
   resolveFields: (data) => {
@@ -121,8 +131,9 @@ export const ContainerInternal: ComponentConfig<ContainerProps> = {
       },
       backgroundColor: backgroundColorField,
       borderColor: borderColorField,
-      borderRadius: borderRadiusField,
-      paddingLevel: paddingField,
+      radius: borderRadiusField,
+      padding: paddingField,
+      margin: marginField,
       children: {
         type: "slot",
       },
@@ -140,20 +151,29 @@ export const ContainerInternal: ComponentConfig<ContainerProps> = {
 
     return fields;
   },
-  render: ({
+  render: function ContainerRender({
     variant,
     shadow,
-    sticky,
-    stickyPosition = "top",
     backgroundColor,
     borderColor,
-    borderRadius,
-    paddingLevel,
+    radius,
+    padding,
+    margin,
     children: Children,
-  }) => {
-    const padding = paddingLevel
-      ? `calc(var(--theme-spacing-unit, 0.25rem) * ${paddingLevel})`
-      : undefined;
+  }) {
+    const theme = useTheme();
+
+    // Compute styles from FourSided/FourCorner values
+    const paddingStyles = padding ? computeFourSidedCSS(padding, theme, 'padding') : {};
+    const marginStyles = margin ? computeFourSidedCSS(margin, theme, 'margin') : {};
+    const radiusStyles = radius ? computeFourCornerRadiusCSS(radius, theme) : {};
+
+    // When horizontal margins are applied, calculate width to prevent overflow
+    // (Container has width: 100% in CSS, so margins would cause overflow without this)
+    const hasHorizontalMargin = margin && (margin.left > 0 || margin.right > 0);
+    const widthStyle = hasHorizontalMargin
+      ? { width: `calc(100% - ${marginStyles.marginLeft || '0px'} - ${marginStyles.marginRight || '0px'})` }
+      : {};
 
     // Determine effective shadow - card variant defaults to md if not specified
     const effectiveShadow = shadow ?? (variant === "card" ? "md" : "none");
@@ -167,13 +187,10 @@ export const ContainerInternal: ComponentConfig<ContainerProps> = {
         style={{
           ...(backgroundColor && { backgroundColor }),
           ...(borderColor && { borderColor }),
-          ...(borderRadius && { borderRadius }),
-          ...(padding && { padding }),
-          ...(sticky && {
-            position: "sticky",
-            [stickyPosition]: 0,
-            zIndex: 50,
-          }),
+          ...radiusStyles,
+          ...paddingStyles,
+          ...marginStyles,
+          ...widthStyle,
         }}
       >
         <Children />

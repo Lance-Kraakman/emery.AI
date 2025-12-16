@@ -326,7 +326,7 @@ export class DrizzleOrganizationRepository
       databaseId: data.databaseId,
       viewConfig: data.viewConfig as Record<string, any> | null,
       analysisCapabilities: data.analysisCapabilities,
-      plan: data.plan,
+      plan: data.plan as Organization['plan'],
       stripeCustomerId: data.stripeCustomerId,
       stripeSubscriptionId: data.stripeSubscriptionId,
       stripeSubscriptionStatus: data.stripeSubscriptionStatus,
@@ -336,6 +336,22 @@ export class DrizzleOrganizationRepository
       tokenQuotaMonthly: data.tokenQuotaMonthly,
       tokenUsageCurrentMonth: data.tokenUsageCurrentMonth,
       quotaResetAt: data.quotaResetAt,
+      // Credit system fields
+      creditBalance: data.creditBalance,
+      creditsUsedCurrentMonth: data.creditsUsedCurrentMonth,
+      creditsResetAt: data.creditsResetAt,
+      usageAllowanceCredits: data.usageAllowanceCredits,
+      spendingLimitUsd: data.spendingLimitUsd,
+      billingEmail: data.billingEmail,
+      currentPeriodStart: data.currentPeriodStart,
+      currentPeriodEnd: data.currentPeriodEnd,
+      // Storage tracking fields
+      storageQuotaBytes: data.storageQuotaBytes,
+      storageUsedBytes: data.storageUsedBytes,
+      databaseStorageBytes: data.databaseStorageBytes,
+      chatStorageBytes: data.chatStorageBytes,
+      skillStorageBytes: data.skillStorageBytes,
+      storageOverageNotifiedAt: data.storageOverageNotifiedAt,
       createdAt: data.createdAt
     };
   }
@@ -361,6 +377,22 @@ export class DrizzleOrganizationRepository
       tokenQuotaMonthly: organization.tokenQuotaMonthly,
       tokenUsageCurrentMonth: organization.tokenUsageCurrentMonth,
       quotaResetAt: organization.quotaResetAt,
+      // Credit system fields
+      creditBalance: organization.creditBalance,
+      creditsUsedCurrentMonth: organization.creditsUsedCurrentMonth,
+      creditsResetAt: organization.creditsResetAt,
+      usageAllowanceCredits: organization.usageAllowanceCredits,
+      spendingLimitUsd: organization.spendingLimitUsd,
+      billingEmail: organization.billingEmail,
+      currentPeriodStart: organization.currentPeriodStart,
+      currentPeriodEnd: organization.currentPeriodEnd,
+      // Storage tracking fields
+      storageQuotaBytes: organization.storageQuotaBytes,
+      storageUsedBytes: organization.storageUsedBytes,
+      databaseStorageBytes: organization.databaseStorageBytes,
+      chatStorageBytes: organization.chatStorageBytes,
+      skillStorageBytes: organization.skillStorageBytes,
+      storageOverageNotifiedAt: organization.storageOverageNotifiedAt,
       createdAt: organization.createdAt
     };
   }

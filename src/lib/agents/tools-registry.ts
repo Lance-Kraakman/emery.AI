@@ -533,7 +533,7 @@ export function getRequiredOAuthServices(): string[] {
 import { ConnectionDTO } from '@/app/mappers/connection-mapper';
 
 /**
- * Check if a tool is available for a user based on their OAuth connections.
+ * Check if a tool is available for a user based on their Connections.
  * This function now works with the normalized connection objects.
  *
  * @param toolName - The name of the tool to check.
@@ -564,7 +564,7 @@ export function isToolAvailableForUser(toolName: string, userConnections: Connec
 }
 
 /**
- * Get available tools for a user based on their OAuth connections.
+ * Get available tools for a user based on their Connections.
  *
  * @param userConnections - An array of the user's normalized connection objects.
  * @returns An array of tool definitions that are available to the user.
@@ -587,7 +587,7 @@ export function getUnavailableToolsForUser(userConnections: ConnectionDTO[]): To
 }
 
 // AIDEV-NOTE: This registry provides OAuth-aware tool management for agent workflows
-// AIDEV-NOTE: Tools are mapped to existing OAuth connections (gmail, slack, github, etc.)
+// AIDEV-NOTE: Tools are mapped to existing Connections (gmail, slack, github, etc.)
 // AIDEV-NOTE: Agent owners must have connected the required OAuth services to use those tools
 // AIDEV-TODO: Add validation for tool parameters and configurations
 // AIDEV-TODO: Consider adding tool versioning for backward compatibility
