@@ -1,0 +1,73 @@
+## Table & Row Operations
+
+### Available Operations
+
+**Table operations:**
+- `list_tables`: List all tables, optionally filter by `database_id`
+- `read_table`: Get table schema and metadata by `table_id`
+- `create_table`: Create new table `{name, database_id, description}`
+- `update_table`: Update table `{table_id, name, description}`
+- `delete_table`: Delete table (WARNING: deletes all rows!)
+
+**Row operations:**
+- `get_rows`: Query rows `{table_id, limit, offset, order_by, filters}`
+- `create_row`: Add row `{table_id, data: {field_name: value, ...}}`
+- `update_row`: Update row `{table_id, row_id, data: {...}}`
+- `delete_row`: Delete row `{table_id, row_id}`
+
+### Field Types and Formats
+
+When creating/updating rows, use correct value formats:
+
+| Field Type | Format | Example |
+|------------|--------|---------|
+| Text | String | `"Hello world"` |
+| Number | Numeric | `42` or `3.14` |
+| Date | ISO 8601 | `"2024-01-15"` or `"2024-01-15T10:30:00Z"` |
+| Boolean | true/false | `true` |
+| Single Select | String (must match option) | `"Option A"` |
+| Multi Select | Array of strings | `["Option A", "Option B"]` |
+| File | Object | `{"url": "...", "name": "file.pdf", "type": "application/pdf"}` |
+| Link | URL string | `"https://example.com"` |
+
+### Query Parameters
+
+**Filtering rows:**
+```json
+{
+  "filters": [
+    {"field": "status", "operator": "equals", "value": "active"},
+    {"field": "score", "operator": "greater_than", "value": 50}
+  ]
+}
+```
+
+**Operators:** `equals`, `not_equals`, `contains`, `greater_than`, `less_than`, `is_empty`, `is_not_empty`
+
+**Sorting:**
+```json
+{
+  "order_by": {"field": "created_at", "direction": "desc"}
+}
+```
+
+### Example: Query and Update Rows
+
+```
+1. Get table schema:
+   table_crud(method="read_table", table_id=42)
+
+2. Query existing rows:
+   table_crud(method="get_rows", table_id=42, limit=10)
+
+3. Update a row:
+   table_crud(method="update_row", table_id=42, row_id="row_abc",
+              data={"status": "completed", "score": 95})
+```
+
+### Important Notes
+
+- Row IDs are UUID strings, not numbers
+- Field names must match table schema exactly (case-sensitive)
+- Single/Multi Select values must match defined options
+- Dates should always be ISO 8601 format

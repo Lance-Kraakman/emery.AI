@@ -1,0 +1,9 @@
+## Available Files in This Conversation
+
+The following files have been shared in this conversation:
+{% for file in files %}
+- **{{ file.display_name }}** ({{ file.type }})
+{% endfor %}
+
+When calling skills that accept file inputs, you can specify which file to use by name.
+If not specified, the file from the current message will be used by default.

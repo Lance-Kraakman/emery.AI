@@ -1,0 +1,468 @@
+/**
+ * Puck Editor Theme - Official Approach
+ *
+ * Uses documented Puck theming methods:
+ * 1. CSS Variables for color theming (official)
+ * 2. overrides.puck wrapper for structural theming (official)
+ *
+ * AIDEV-NOTE: This must be imported AFTER @measured/puck/puck.css
+ */
+
+/* ============================================
+   THEME SPACING SCALE
+   ============================================
+
+   Exponential scale based on theme spacing config.
+   Uses --theme-spacing-unit (default: 0.25rem) as base.
+   Scale factor: 1.5x per level
+
+   Level 0: 4px   (none)
+   Level 1: 6px   (xs)
+   Level 2: 9px   (sm)
+   Level 3: 13px  (md)
+   Level 4: 20px  (base)
+   Level 5: 30px  (lg)
+   Level 6: 45px  (xl)
+   Level 7: 68px  (2xl)
+   Level 8: 100px (3xl)
+   Level 9: 152px (4xl)
+   Level 10: 228px (5xl)
+*/
+
+:root {
+  /* Spacing scale using CSS calc with theme base unit */
+  --spacing-0: calc(var(--theme-spacing-unit, 0.25rem) * 1);
+  --spacing-1: calc(var(--theme-spacing-unit, 0.25rem) * 1.5);
+  --spacing-2: calc(var(--theme-spacing-unit, 0.25rem) * 2.25);
+  --spacing-3: calc(var(--theme-spacing-unit, 0.25rem) * 3.375);
+  --spacing-4: calc(var(--theme-spacing-unit, 0.25rem) * 5.0625);
+  --spacing-5: calc(var(--theme-spacing-unit, 0.25rem) * 7.59375);
+  --spacing-6: calc(var(--theme-spacing-unit, 0.25rem) * 11.390625);
+  --spacing-7: calc(var(--theme-spacing-unit, 0.25rem) * 17.0859375);
+  --spacing-8: calc(var(--theme-spacing-unit, 0.25rem) * 25.62890625);
+  --spacing-9: calc(var(--theme-spacing-unit, 0.25rem) * 38.443359375);
+  --spacing-10: calc(var(--theme-spacing-unit, 0.25rem) * 57.6650390625);
+}
+
+/* ============================================
+   OFFICIAL: CSS Variable Overrides
+   ============================================ */
+
+:root {
+  /* Background colors - transparent to show animated background */
+  --puck-color-grey-12: transparent; /* Left sidebar background */
+  --puck-color-white: transparent; /* Right sidebar & header background */
+  --puck-color-grey-11: transparent; /* Canvas outer area */
+
+  /* Canvas dropzone - light gray for dark mode visibility */
+  --puck-color-grey-10: #f5f5f5; /* Canvas background (not white, easier to see components) */
+
+  /* Text colors for dark theme */
+  --puck-color-grey-01: hsl(var(--foreground)); /* Primary text */
+  --puck-color-grey-02: hsl(var(--foreground) / 0.95); /* Secondary text */
+  --puck-color-grey-03: hsl(var(--foreground) / 0.9); /* Tertiary text */
+  --puck-color-grey-04: hsl(var(--muted-foreground)); /* Muted text */
+  --puck-color-grey-05: hsl(var(--muted-foreground) / 0.8); /* Subtle text */
+  --puck-color-grey-06: hsl(var(--muted-foreground) / 0.7); /* Very subtle text */
+
+  /* Border colors */
+  --puck-color-grey-09: hsl(var(--border)); /* Standard borders */
+  --puck-color-grey-08: hsl(var(--border) / 0.7); /* Subtle borders */
+  --puck-color-grey-07: hsl(var(--border) / 0.5); /* Very subtle borders */
+
+  /* Accent/Primary colors */
+  --puck-color-azure-01: hsl(var(--primary) / 0.05);
+  --puck-color-azure-02: hsl(var(--primary) / 0.1);
+  --puck-color-azure-03: hsl(var(--primary) / 0.2);
+  --puck-color-azure-04: hsl(var(--primary) / 0.3);
+  --puck-color-azure-05: hsl(var(--primary) / 0.5);
+  --puck-color-azure-06: hsl(var(--primary) / 0.7);
+  --puck-color-azure-07: hsl(var(--primary)); /* Primary actions */
+  --puck-color-azure-08: hsl(var(--primary) / 0.9);
+  --puck-color-azure-09: hsl(var(--primary) / 0.8); /* Primary hover */
+  --puck-color-azure-10: hsl(var(--primary) / 1.1);
+  --puck-color-azure-11: hsl(var(--primary-foreground));
+
+  /* Destructive/Error colors */
+  --puck-color-red-07: hsl(var(--destructive));
+  --puck-color-red-09: hsl(var(--destructive) / 0.9);
+}
+
+/* ============================================
+   CANVAS ISOLATION: Fixed Light Mode Theme
+   ============================================
+
+   The canvas (iframe content) should always display
+   in consistent light mode colors, regardless of the
+   editor's theme. This prevents dark mode from affecting
+   the website preview.
+*/
+
+.puck-canvas-light-mode,
+.puck-canvas-light-mode * {
+  /* Force light mode colors - fixed values, don't use theme variables */
+  --puck-color-grey-01: #181818; /* Primary text - dark gray/black */
+  --puck-color-grey-02: #2d2d2d; /* Secondary text */
+  --puck-color-grey-03: #3d3d3d; /* Tertiary text */
+  --puck-color-grey-04: #6e6e6e; /* Muted text */
+  --puck-color-grey-05: #8f8f8f; /* Subtle text */
+  --puck-color-grey-06: #a3a3a3; /* Very subtle text */
+  --puck-color-black: #000000; /* True black */
+
+  /* Border colors - fixed light mode */
+  --puck-color-grey-09: #e0e0e0; /* Standard borders */
+  --puck-color-grey-08: #ececec; /* Subtle borders */
+  --puck-color-grey-07: #f5f5f5; /* Very subtle borders */
+
+  /* Background colors - fixed light mode */
+  --puck-color-grey-10: #f5f5f5; /* Canvas background */
+  --puck-color-grey-11: #fafafa; /* Canvas outer area */
+  --puck-color-grey-12: #ffffff; /* White */
+  --puck-color-white: #ffffff; /* Pure white */
+
+  /* Prevent dark mode class from affecting content */
+  color-scheme: light !important;
+}
+
+/* Force light mode text colors in canvas */
+.puck-canvas-light-mode {
+  color: #181818 !important;
+  background: #f5f5f5 !important;
+}
+
+/* Ensure all text elements in canvas use light mode colors */
+.puck-canvas-light-mode h1,
+.puck-canvas-light-mode h2,
+.puck-canvas-light-mode h3,
+.puck-canvas-light-mode h4,
+.puck-canvas-light-mode h5,
+.puck-canvas-light-mode h6,
+.puck-canvas-light-mode p,
+.puck-canvas-light-mode span,
+.puck-canvas-light-mode div,
+.puck-canvas-light-mode a,
+.puck-canvas-light-mode li,
+.puck-canvas-light-mode td,
+.puck-canvas-light-mode th {
+  color: inherit !important;
+}
+
+/* ============================================
+   OFFICIAL: Puck Wrapper Theme
+   ============================================ */
+
+.puck-themed-wrapper {
+  /* Ensure full height */
+  height: 100%;
+  width: 100%;
+
+  /* Apply backdrop blur to sidebars and header for frosted glass effect */
+  --sidebar-backdrop: blur(12px);
+}
+
+/* Sidebar transparency with frosted glass blur */
+.puck-themed-wrapper [class*="Sidebar"] {
+  background: transparent !important;
+  backdrop-filter: var(--sidebar-backdrop);
+  -webkit-backdrop-filter: var(--sidebar-backdrop);
+}
+
+/* Header transparency with frosted glass blur */
+.puck-themed-wrapper [class*="Header"] {
+  background: transparent !important;
+  backdrop-filter: var(--sidebar-backdrop);
+  -webkit-backdrop-filter: var(--sidebar-backdrop);
+}
+
+/* Left sidebar - component list drawer - must be transparent */
+.puck-themed-wrapper [class*="ComponentList"],
+.puck-themed-wrapper [class*="Drawer-left"] {
+  background: transparent !important;
+  backdrop-filter: var(--sidebar-backdrop);
+  -webkit-backdrop-filter: var(--sidebar-backdrop);
+}
+
+/* Header actions - our custom header */
+.puck-themed-wrapper [class*="HeaderActions"],
+.puck-themed-wrapper header {
+  background: transparent !important;
+}
+
+/* Target all header-related Puck elements for transparent background */
+.puck-themed-wrapper [class*="Header-header"],
+.puck-themed-wrapper [class*="Header-"] {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Component list sidebar - transparent background */
+.puck-themed-wrapper [class*="componentList-content"],
+.puck-themed-wrapper [class*="ComponentList-"] {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Component drawer items - semi-transparent with shadows */
+/* Target actual Puck class names with CSS modules hash */
+
+/* Target the background wrapper that contains the white background */
+[class*="Drawer-draggableBg"] {
+  background: transparent !important;
+}
+
+/* Component drawer items - no backgrounds */
+[class*="DrawerItem-draggable"] {
+  background-color: transparent !important;
+  /* backdrop-filter: blur(8px) !important; */
+  /* -webkit-backdrop-filter: blur(8px) !important; */
+  /* box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important; */
+  transition: all 0.2s ease-in-out !important;
+  /* border: 1px solid hsl(var(--border) / 0.3) !important; */
+}
+
+[class*="DrawerItem-draggable"]:hover {
+  background-color: hsl(var(--muted) / 0.1) !important;
+  /* box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important; */
+  /* transform: translateY(-1px); */
+}
+
+/* Buttons - minimal styling */
+.puck-themed-wrapper button {
+  /* box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); */
+  transition: all 0.2s ease-in-out;
+}
+
+.puck-themed-wrapper button:hover {
+  /* box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15); */
+  /* transform: translateY(-1px); */
+}
+
+/* Canvas dropzone - light gray background for dark mode visibility */
+.puck-themed-wrapper [class*="Frame-root"],
+.puck-themed-wrapper iframe {
+  background: #f5f5f5;
+  background-color: #f5f5f5;
+}
+
+/* Canvas outer container */
+.puck-themed-wrapper [class*="Canvas-root"] {
+  background: #f5f5f5;
+}
+
+/* Input fields - proper theming */
+.puck-themed-wrapper input,
+.puck-themed-wrapper textarea,
+.puck-themed-wrapper select {
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
+  border-radius: var(--radius-sm);
+}
+
+.puck-themed-wrapper input:focus,
+.puck-themed-wrapper textarea:focus,
+.puck-themed-wrapper select:focus {
+  border-color: hsl(var(--ring));
+  outline: 2px solid hsl(var(--ring) / 0.2);
+  outline-offset: 2px;
+}
+
+/* Scrollbars */
+.puck-themed-wrapper ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.puck-themed-wrapper ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.puck-themed-wrapper ::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+.puck-themed-wrapper ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Drag and drop zones */
+.puck-themed-wrapper [class*="DropZone"] {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.1);
+}
+
+.puck-themed-wrapper [class*="DropZone--isOver"] {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.2);
+}
+
+/* ============================================
+   POPUP/OVERLAY ELEMENTS - Solid Backgrounds
+   ============================================
+
+   Popup elements need solid backgrounds for readability
+   when they overlay other content. This includes modals,
+   dialogs, dropdowns, popovers, and autocomplete menus.
+*/
+
+/* Modal/Dialog overlays and containers */
+/* Apply solid backgrounds only to popup/modal drawers, not the permanent left sidebar */
+.puck-themed-wrapper [class*="Modal"],
+.puck-themed-wrapper [class*="Dialog"],
+.puck-themed-wrapper [class*="Drawer"]:not([class*="Drawer-left"]):not([class*="ComponentList"]),
+.puck-themed-wrapper [class*="Portal"] {
+  background: hsl(var(--background)) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Modal/Dialog content areas */
+.puck-themed-wrapper [class*="Modal"] [class*="Content"],
+.puck-themed-wrapper [class*="Dialog"] [class*="Content"],
+.puck-themed-wrapper [class*="Drawer"] [class*="Content"] {
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Dropdown menus and select options - solid backgrounds for popups */
+/* Target the actual ExternalInputModal that Puck uses */
+[class*="ExternalInputModal"],
+[class*="ExternalInputModal-grid"],
+[class*="Modal-inner"] {
+  background: hsl(var(--popover)) !important;
+  background-color: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Buttons inside modal - ensure proper contrast */
+[class*="ExternalInputModal"] button[class*="Button--primary"],
+[class*="Modal-inner"] button[class*="Button--primary"] {
+  background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  border: none !important;
+}
+
+[class*="ExternalInputModal"] button[class*="Button--primary"]:hover,
+[class*="Modal-inner"] button[class*="Button--primary"]:hover {
+  background: hsl(var(--primary) / 0.9) !important;
+}
+
+/* Additional selectors for other popup types */
+.puck-themed-wrapper [class*="Dropdown"],
+.puck-themed-wrapper [class*="Menu"],
+.puck-themed-wrapper [class*="Popover"],
+.puck-themed-wrapper [class*="Select"] [class*="Options"],
+.puck-themed-wrapper [class*="AutoComplete"] [class*="Options"] {
+  background: hsl(var(--popover)) !important;
+  background-color: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Dropdown/Menu items */
+.puck-themed-wrapper [class*="Dropdown"] [class*="Item"],
+.puck-themed-wrapper [class*="Menu"] [class*="Item"],
+.puck-themed-wrapper [class*="Option"],
+.puck-themed-wrapper [class*="ExternalInput"] [class*="Item"],
+.puck-themed-wrapper [class*="ExternalField"] [class*="Item"],
+.puck-themed-wrapper [class*="InputList"] li {
+  background: transparent;
+  transition: background 0.15s ease-in-out;
+}
+
+.puck-themed-wrapper [class*="Dropdown"] [class*="Item"]:hover,
+.puck-themed-wrapper [class*="Menu"] [class*="Item"]:hover,
+.puck-themed-wrapper [class*="Option"]:hover,
+.puck-themed-wrapper [class*="ExternalInput"] [class*="Item"]:hover,
+.puck-themed-wrapper [class*="ExternalField"] [class*="Item"]:hover,
+.puck-themed-wrapper [class*="InputList"] li:hover {
+  background: hsl(var(--accent)) !important;
+}
+
+/* Tooltip-like elements */
+.puck-themed-wrapper [class*="Tooltip"] {
+  background: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Modal backdrop/overlay */
+.puck-themed-wrapper [class*="Overlay"],
+.puck-themed-wrapper [class*="Backdrop"] {
+  background: rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* Ensure proper text contrast */
+.puck-themed-wrapper [class*="Sidebar"] *,
+.puck-themed-wrapper [class*="Header"] *,
+.puck-themed-wrapper [class*="Fields"] * {
+  color: hsl(var(--foreground));
+}
+
+/* Labels */
+.puck-themed-wrapper label {
+  color: hsl(var(--foreground));
+}
+
+/* Section headings - plain text category headers (LAYOUT, TYPOGRAPHY, etc.) */
+.puck-themed-wrapper [class*="SectionLabel"],
+.puck-themed-wrapper [class*="Heading"] {
+  color: hsl(var(--foreground));
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+}
+
+/* Accordion sections for categories - remove card styling */
+.puck-themed-wrapper [class*="Accordion"] {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.puck-themed-wrapper [class*="AccordionItem"] {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.puck-themed-wrapper [class*="AccordionTrigger"] {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  padding: 8px 12px;
+}
+
+.puck-themed-wrapper [class*="AccordionTrigger"]:hover {
+  background: hsl(var(--muted) / 0.3) !important;
+}
+
+.puck-themed-wrapper [class*="AccordionContent"] {
+  background: none !important;
+  border: none !important;
+}

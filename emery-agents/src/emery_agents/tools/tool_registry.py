@@ -1,329 +1,215 @@
 """
-Tool Registry for Smolagents Integration.
+Tool Registry Module
 
-This module provides a centralized registry for all available smolagents tools,
-mapping them to user-configurable tool types with proper type safety.
-
-AIDEV-NOTE: This registry supports both built-in smolagents tools and custom tool extensions.
-Each tool type corresponds to a specific task category from HuggingFace's task taxonomy.
+AIDEV-NOTE: Central tool registration and loading for all emery-agents tools.
+Replaces the massive tool_loader.py with a clean, modular approach.
+Now includes Pipedream tools for OAuth-backed integrations.
 """
 
-import logging
 import os
-from typing import Dict, List, Optional, Type, Any, Protocol, Tuple
-from dataclasses import dataclass
-from enum import Enum
+from typing import Any, Dict, List
 
-from smolagents import PythonInterpreterTool, DuckDuckGoSearchTool, SpeechToTextTool
+from smolagents import Tool
 
-logger = logging.getLogger(__name__)
+from ..grpc.generated.agent_worker_pb2 import ToolConfig
+from .base_tools import BASE_TOOLS
+from .mock_email_tools import EMAIL_TOOLS
+from .mock_data_tools import DATA_TOOLS
+from .organizational_tools import ORGANIZATIONAL_TOOLS
+from .api_tools import API_TOOLS
+from .crud_tools import CRUD_TOOLS
+from .embedding_tool import EmbeddingTool
 
-class ToolCategory(Enum):
-    """Tool categories based on HuggingFace task taxonomy."""
-    # Core AI Tasks
-    NATURAL_LANGUAGE_PROCESSING = "nlp"
-    COMPUTER_VISION = "cv" 
-    AUDIO = "audio"
-    MULTIMODAL = "multimodal"
-    
-    # System Tools
-    CODE_EXECUTION = "code"
-    WEB_SEARCH = "web"
-    FILE_OPERATIONS = "file"
-    DATA_PROCESSING = "data"
-    
-    # Integration Tools  
-    API_TOOLS = "api"
-    DATABASE_TOOLS = "database"
-    COMMUNICATION = "communication"
+# Conditionally import Pipedream tools based on environment
+USE_PIPEDREAM_TOOLS = os.getenv("USE_PIPEDREAM_TOOLS", "false").lower() == "true"
+if USE_PIPEDREAM_TOOLS:
+    try:
+        from .pipedream_tools import PIPEDREAM_TOOLS
+        print("[TOOL-REGISTRY] Pipedream tools enabled")
+    except ImportError as e:
+        print(f"[TOOL-REGISTRY] Warning: Failed to import Pipedream tools: {e}")
+        PIPEDREAM_TOOLS = {}
+else:
+    PIPEDREAM_TOOLS = {}
+    print("[TOOL-REGISTRY] Pipedream tools disabled (set USE_PIPEDREAM_TOOLS=true to enable)")
 
-class ToolType(Enum):
-    """Available tool types mapped to smolagents functionality."""
-    
-    # NLP Tools
-    TEXT_GENERATION = "text_generation"
-    TEXT_CLASSIFICATION = "text_classification" 
-    SUMMARIZATION = "summarization"
-    TRANSLATION = "translation"
-    QUESTION_ANSWERING = "question_answering"
-    SENTIMENT_ANALYSIS = "sentiment_analysis"
-    
-    # Computer Vision Tools
-    IMAGE_CLASSIFICATION = "image_classification"
-    IMAGE_GENERATION = "image_generation"
-    IMAGE_TO_TEXT = "image_to_text"
-    OBJECT_DETECTION = "object_detection"
-    IMAGE_SEGMENTATION = "image_segmentation"
-    
-    # Audio Tools
-    SPEECH_TO_TEXT = "speech_to_text"
-    TEXT_TO_SPEECH = "text_to_speech"
-    AUDIO_CLASSIFICATION = "audio_classification"
-    
-    # Multimodal Tools
-    VISUAL_QUESTION_ANSWERING = "visual_qa"
-    IMAGE_TEXT_TO_TEXT = "image_text_to_text"
-    
-    # System Tools
-    PYTHON_INTERPRETER = "python_repl"
-    WEB_SEARCH = "web_search"
-    FILE_READER = "file_reader"
-    FILE_WRITER = "file_writer"
-    
-    # Custom Integration Tools
-    PIPEDREAM_CONNECTOR = "pipedream_connector"
-    DATABASE_QUERY = "database_query"
-    EMAIL_SENDER = "email_sender"
-    SLACK_MESSENGER = "slack_messenger"
-
-@dataclass
-class ToolConfig:
-    """Enhanced tool configuration with validation and metadata."""
-    name: str
-    tool_type: ToolType
-    category: ToolCategory
-    description: str
-    version: Optional[str] = None
-    config: Optional[Dict[str, Any]] = None
-    required_env_vars: Optional[List[str]] = None
-    dependencies: Optional[List[str]] = None
-    is_custom: bool = False
-    
-    def validate_environment(self) -> bool:
-        """Validate that required environment variables are present."""
-        if not self.required_env_vars:
-            return True
-            
-        missing_vars = [var for var in self.required_env_vars if not os.getenv(var)]
-        if missing_vars:
-            logger.warning(f"Tool {self.name} missing required env vars: {missing_vars}")
-            return False
-        return True
-
-# AIDEV-NOTE: Tool configurations defined as data structures for clarity and maintainability
-BUILT_IN_TOOLS = [
-    # System Tools
-    ToolConfig(
-        name="Python Interpreter",
-        tool_type=ToolType.PYTHON_INTERPRETER,
-        category=ToolCategory.CODE_EXECUTION,
-        description="Execute Python code in a secure environment",
-        dependencies=["smolagents"]
-    ),
-    ToolConfig(
-        name="Web Search",
-        tool_type=ToolType.WEB_SEARCH,
-        category=ToolCategory.WEB_SEARCH,
-        description="Search the web using DuckDuckGo",
-        dependencies=["smolagents"]
-    ),
-    ToolConfig(
-        name="Speech to Text",
-        tool_type=ToolType.SPEECH_TO_TEXT,
-        category=ToolCategory.AUDIO,
-        description="Convert audio to text using Whisper",
-        dependencies=["smolagents"],
-        required_env_vars=["HF_TOKEN"]
-    ),
-]
-
-# HuggingFace Model-based Tools Configuration
-HF_NLP_TOOLS = [
-    (ToolType.TEXT_GENERATION, "Generate text using language models"),
-    (ToolType.TEXT_CLASSIFICATION, "Classify text into categories"),
-    (ToolType.SUMMARIZATION, "Summarize long text content"),
-    (ToolType.TRANSLATION, "Translate text between languages"),
-    (ToolType.QUESTION_ANSWERING, "Answer questions based on context"),
-    (ToolType.SENTIMENT_ANALYSIS, "Analyze sentiment in text"),
-]
-
-HF_CV_TOOLS = [
-    (ToolType.IMAGE_CLASSIFICATION, "Classify images into categories"),
-    (ToolType.IMAGE_GENERATION, "Generate images from text descriptions"),
-    (ToolType.IMAGE_TO_TEXT, "Generate text descriptions of images"),
-    (ToolType.OBJECT_DETECTION, "Detect objects in images"),
-    (ToolType.IMAGE_SEGMENTATION, "Segment images into regions"),
-]
-
-HF_AUDIO_TOOLS = [
-    (ToolType.TEXT_TO_SPEECH, "Convert text to speech"),
-    (ToolType.AUDIO_CLASSIFICATION, "Classify audio content"),
-]
-
-HF_MULTIMODAL_TOOLS = [
-    (ToolType.VISUAL_QUESTION_ANSWERING, "Answer questions about images"),
-    (ToolType.IMAGE_TEXT_TO_TEXT, "Process image and text to generate text"),
-]
-
-CUSTOM_INTEGRATION_TOOLS = [
-    ToolConfig(
-        name="Pipedream Connector",
-        tool_type=ToolType.PIPEDREAM_CONNECTOR,
-        category=ToolCategory.API_TOOLS,
-        description="Connect to external services via Pipedream",
-        dependencies=["requests"],
-        required_env_vars=["PIPEDREAM_API_KEY"],
-        is_custom=True
-    ),
-]
-
-class ToolFactory(Protocol):
-    """Protocol for tool factory functions."""
-    def __call__(self, config: ToolConfig) -> Any:
-        """Create a tool instance from configuration."""
-        ...
 
 class ToolRegistry:
-    """
-    Centralized registry for all available tools.
+    """Central registry for all emery-agents tools."""
     
-    AIDEV-NOTE: This registry automatically discovers smolagents tools
-    and provides a clean interface for tool configuration and instantiation.
-    """
     def __init__(self):
-        self._tool_configs: Dict[ToolType, ToolConfig] = {}
-        self._tool_factories: Dict[ToolType, ToolFactory] = {}
-        self._initialize_registry()
-    
-    def _initialize_registry(self) -> None:
-        """Initialize tool registry from configuration data."""
-        
-        # Register built-in tools
-        for tool_config in BUILT_IN_TOOLS:
-            self._tool_configs[tool_config.tool_type] = tool_config
-            self._tool_factories[tool_config.tool_type] = self._get_builtin_factory(tool_config.tool_type)
-        
-        # Register HuggingFace model tools
-        for tools_list, category in [
-            (HF_NLP_TOOLS, ToolCategory.NATURAL_LANGUAGE_PROCESSING),
-            (HF_CV_TOOLS, ToolCategory.COMPUTER_VISION),
-            (HF_AUDIO_TOOLS, ToolCategory.AUDIO),
-            (HF_MULTIMODAL_TOOLS, ToolCategory.MULTIMODAL),
-        ]:
-            for tool_type, description in tools_list:
-                config = ToolConfig(
-                    name=tool_type.value.replace("_", " ").title(),
-                    tool_type=tool_type,
-                    category=category,
-                    description=description,
-                    dependencies=["transformers", "torch"],
-                    required_env_vars=["HF_TOKEN"]
-                )
-                self._tool_configs[tool_type] = config
-                self._tool_factories[tool_type] = self._create_hf_model_tool
-        
-        # Register custom integration tools
-        for tool_config in CUSTOM_INTEGRATION_TOOLS:
-            self._tool_configs[tool_config.tool_type] = tool_config
-            self._tool_factories[tool_config.tool_type] = self._get_custom_factory(tool_config.tool_type)
-    
-    def _get_builtin_factory(self, tool_type: ToolType) -> ToolFactory:
-        """Get factory function for built-in smolagents tools."""
-        factories = {
-            ToolType.PYTHON_INTERPRETER: lambda config: PythonInterpreterTool(),
-            ToolType.WEB_SEARCH: lambda config: DuckDuckGoSearchTool(),
-            ToolType.SPEECH_TO_TEXT: lambda config: SpeechToTextTool(),
+        """Initialize tool registry with all tool modules."""
+        # AIDEV-NOTE: Combine all tool registries into single mapping
+        # Pipedream tools are added when USE_PIPEDREAM_TOOLS=true
+        # CRUD tools provide internal organization data management
+        self._tool_registry = {
+            **BASE_TOOLS,
+            **EMAIL_TOOLS,
+            **DATA_TOOLS,
+            **ORGANIZATIONAL_TOOLS,
+            **API_TOOLS,
+            **CRUD_TOOLS,  # Internal CRUD operations (agents, documents, files, tables, teams)
+            **PIPEDREAM_TOOLS,  # OAuth-backed integrations (Gmail, Slack, etc.)
+            "generate_embedding": lambda config: EmbeddingTool()  # AI embedding generation
         }
-        return factories.get(tool_type, lambda config: None)
+        
+        # Log registry statistics
+        tool_counts = {
+            "base": len(BASE_TOOLS),
+            "email": len(EMAIL_TOOLS),
+            "data": len(DATA_TOOLS),
+            "organizational": len(ORGANIZATIONAL_TOOLS),
+            "api": len(API_TOOLS),
+            "crud": len(CRUD_TOOLS),
+            "pipedream": len(PIPEDREAM_TOOLS),
+            "ai": 1  # generate_embedding
+        }
+        total_tools = sum(tool_counts.values())
+        print(f"[TOOL-REGISTRY] Initialized with {total_tools} tools")
+        if PIPEDREAM_TOOLS:
+            print(f"[TOOL-REGISTRY] Including {len(PIPEDREAM_TOOLS)} Pipedream OAuth tools")
     
-    def _get_custom_factory(self, tool_type: ToolType) -> ToolFactory:
-        """Get factory function for custom tools."""
-        def create_custom_tool(config: ToolConfig) -> Any:
-            if tool_type == ToolType.PIPEDREAM_CONNECTOR:
-                from .custom_tools import PipedreamConnectorTool
-                return PipedreamConnectorTool(config.config or {})
-            return None
-        
-        return create_custom_tool
-    
-    def _create_hf_model_tool(self, config: ToolConfig) -> Any:
-        """Create HuggingFace model-based tool."""
-        # AIDEV-TODO: Implement HuggingFace model tools using transformers pipeline
-        try:
-            from .hf_model_tools import create_hf_pipeline_tool
-            return create_hf_pipeline_tool(config)
-        except ImportError:
-            logger.warning(f"HF model tools not available for {config.name}")
-            return None
-    
-    def register_tool(self, config: ToolConfig, factory: ToolFactory) -> None:
-        """Register a new tool configuration and factory."""
-        self._tool_configs[config.tool_type] = config
-        self._tool_factories[config.tool_type] = factory
-        logger.info(f"Registered tool: {config.name} ({config.tool_type.value})")
-    
-    def get_available_tools(self, category: Optional[ToolCategory] = None) -> List[ToolConfig]:
-        """Get all available tool configurations, optionally filtered by category."""
-        tools = list(self._tool_configs.values())
-        if category:
-            tools = [tool for tool in tools if tool.category == category]
-        return tools
-    
-    def get_validated_tools(self, category: Optional[ToolCategory] = None) -> List[ToolConfig]:
-        """Get tools that pass environment validation."""
-        available_tools = self.get_available_tools(category)
-        return [tool for tool in available_tools if tool.validate_environment()]
-    
-    def create_tool_instance(self, tool_type: ToolType, config_override: Optional[Dict[str, Any]] = None) -> Any:
-        """Create a tool instance from registered configuration."""
-        if tool_type not in self._tool_configs:
-            raise ValueError(f"Tool type {tool_type.value} not registered")
-        
-        config = self._tool_configs[tool_type]
-        
-        # Apply configuration overrides
-        if config_override:
-            config = ToolConfig(
-                name=config.name,
-                tool_type=config.tool_type,
-                category=config.category,
-                description=config.description,
-                version=config.version,
-                config={**(config.config or {}), **config_override},
-                required_env_vars=config.required_env_vars,
-                dependencies=config.dependencies,
-                is_custom=config.is_custom
-            )
-        
-        if not config.validate_environment():
-            raise EnvironmentError(f"Environment validation failed for tool {config.name}")
-        
-        factory = self._tool_factories[tool_type]
-        tool_instance = factory(config)
-        
-        if tool_instance is None:
-            raise RuntimeError(f"Failed to create tool instance for {config.name}")
-        
-        return tool_instance
-    
-    def get_tools_for_agent_config(self, tool_configs: List[Dict[str, Any]]) -> List[Any]:
-        """Create tool instances from agent configuration."""
-        tools = []
-        for tool_config in tool_configs:
-            tool_name = tool_config.get("name")
-            
-            # Try to find matching tool type
-            tool_type = None
-            for registered_type, registered_config in self._tool_configs.items():
-                if (registered_config.name.lower() == tool_name.lower() or 
-                    registered_type.value == tool_name):
-                    tool_type = registered_type
-                    break
-            
-            if tool_type:
-                try:
-                    tool_instance = self.create_tool_instance(
-                        tool_type, 
-                        tool_config.get("config", {})
-                    )
-                    tools.append(tool_instance)
-                    logger.info(f"Created tool instance: {tool_name}")
-                except Exception as e:
-                    logger.warning(f"Failed to create tool {tool_name}: {e}")
-            else:
-                logger.warning(f"Unknown tool type: {tool_name}")
-        
-        return tools
+    def load_tool(self, tool_config: ToolConfig) -> Tool:
+        """
+        Load a tool instance from ToolConfig with CRUD routing support.
 
-# Global tool registry instance
-tool_registry = ToolRegistry()
+        Supports method-specific routing for CRUD tools:
+        - agent_create -> agent_crud with method="create"
+        - document_read -> document_crud with method="read"
+        - file_update -> file_crud with method="update"
+        - table_delete -> table_crud with method="delete"
+        - team_list -> team_crud with method="list"
+
+        Args:
+            tool_config: Tool configuration from protobuf
+
+        Returns:
+            Tool instance for smolagents
+
+        Raises:
+            ValueError: If tool not found or cannot be loaded
+        """
+        tool_name = tool_config.name.lower()
+
+        # AIDEV-NOTE: Handle CRUD routing - convert method-specific names to base CRUD tools
+        crud_routing = self._get_crud_routing(tool_name)
+        if crud_routing:
+            actual_tool_name, method = crud_routing
+            if actual_tool_name in self._tool_registry:
+                loader_func = self._tool_registry[actual_tool_name]
+                tool_instance = loader_func(tool_config)
+                # AIDEV-NOTE: Set the specific method for this CRUD operation
+                if hasattr(tool_instance, 'method'):
+                    tool_instance.method = method
+                return tool_instance
+
+        # Standard tool loading for non-CRUD tools
+        if tool_name not in self._tool_registry:
+            raise ValueError(f"Unknown tool: {tool_config.name}")
+
+        loader_func = self._tool_registry[tool_name]
+        return loader_func(tool_config)
+
+    def _get_crud_routing(self, tool_name: str) -> tuple[str, str] | None:
+        """
+        Get CRUD routing for method-specific tool names.
+
+        Args:
+            tool_name: Tool name from frontend (e.g., "emery-create-agent")
+
+        Returns:
+            Tuple of (base_tool_name, method) or None if not a CRUD tool
+        """
+        # AIDEV-NOTE: Explicit mapping - clear and maintainable
+        TOOL_ROUTING = {
+            # Agent operations
+            "emery-create-agent": ("agent_crud", "create"),
+            "emery-read-agent": ("agent_crud", "read"),
+            "emery-update-agent": ("agent_crud", "update"),
+            "emery-delete-agent": ("agent_crud", "delete"),
+            "emery-list-agents": ("agent_crud", "list"),
+
+            # Document operations
+            "emery-create-document": ("document_crud", "create"),
+            "emery-read-document": ("document_crud", "read"),
+            "emery-update-document": ("document_crud", "update"),
+            "emery-delete-document": ("document_crud", "delete"),
+            "emery-list-documents": ("document_crud", "list"),
+
+            # File operations
+            "emery-create-file": ("file_crud", "create"),
+            "emery-read-file": ("file_crud", "read"),
+            "emery-update-file": ("file_crud", "update"),
+            "emery-delete-file": ("file_crud", "delete"),
+            "emery-list-files": ("file_crud", "list"),
+
+            # Table operations
+            "emery-create-table": ("table_crud", "create_table"),
+            "emery-read-table": ("table_crud", "read_table"),
+            "emery-update-table": ("table_crud", "update_table"),
+            "emery-delete-table": ("table_crud", "delete_table"),
+            "emery-list-tables": ("table_crud", "list_tables"),
+
+            # Row operations (also use table_crud)
+            "emery-create-row": ("table_crud", "create_row"),
+            "emery-get-rows": ("table_crud", "get_rows"),
+            "emery-update-row": ("table_crud", "update_row"),
+            "emery-delete-row": ("table_crud", "delete_row"),
+
+            # Team operations
+            "emery-create-team": ("team_crud", "create"),
+            "emery-read-team": ("team_crud", "read"),
+            "emery-update-team": ("team_crud", "update"),
+            "emery-delete-team": ("team_crud", "delete"),
+            "emery-list-teams": ("team_crud", "list"),
+
+            # Database operations
+            "emery-create-database": ("database_crud", "create"),
+            "emery-read-database": ("database_crud", "read"),
+            "emery-update-database": ("database_crud", "update"),
+            "emery-delete-database": ("database_crud", "delete"),
+            "emery-list-databases": ("database_crud", "list"),
+        }
+
+        return TOOL_ROUTING.get(tool_name)
+    
+    def load_tools(self, tool_configs: List[ToolConfig]) -> List[Any]:
+        """Load multiple tools from configurations."""
+        return [self.load_tool(config) for config in tool_configs]
+    
+    def list_available_tools(self) -> List[str]:
+        """List all available tool names."""
+        return list(self._tool_registry.keys())
+    
+    def get_tool_info(self, tool_name: str) -> Dict[str, str]:
+        """Get information about a specific tool."""
+        tool_name_lower = tool_name.lower()
+        
+        if tool_name_lower not in self._tool_registry:
+            return {"error": f"Tool {tool_name} not found"}
+        
+        # Determine tool category
+        category = "unknown"
+        if tool_name_lower in BASE_TOOLS:
+            category = "base"
+        elif tool_name_lower in EMAIL_TOOLS:
+            category = "email"
+        elif tool_name_lower in DATA_TOOLS:
+            category = "data"
+        elif tool_name_lower in ORGANIZATIONAL_TOOLS:
+            category = "organizational"
+        elif tool_name_lower in API_TOOLS:
+            category = "api"
+        elif tool_name_lower in CRUD_TOOLS:
+            category = "crud"
+        elif tool_name_lower in PIPEDREAM_TOOLS:
+            category = "pipedream"
+        elif tool_name_lower == "generate_embedding":
+            category = "ai"
+        
+        return {
+            "name": tool_name,
+            "category": category,
+            "available": True
+        }
+

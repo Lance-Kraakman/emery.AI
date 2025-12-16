@@ -6,8 +6,8 @@ package emery.agents;
 service AgentWorker {
   // Execute a task and stream progress updates back to the API server
   rpc ExecuteTask(TaskRequest) returns (stream TaskProgress);
-  
-  // Get worker health status and available capabilities
+
+  // Get worker health status and available skills
   rpc GetWorkerInfo(Empty) returns (WorkerInfo);
   
   // Cancel a running task
@@ -19,7 +19,7 @@ message TaskRequest {
   string task_id = 1;              // Unique task identifier
   int32 agent_id = 2;              // Agent to execute the task
   oneof execution_mode {
-    string capability_name = 3;     // Direct capability execution
+    string skill_name = 3;          // Direct skill execution
     InstructionConfig instruction_config = 9; // Instruction-based execution with auto-routing
   }
   AgentConfig agent_config = 4;    // Complete agent configuration
@@ -27,18 +27,22 @@ message TaskRequest {
   string organization_id = 6;      // Organization for multi-tenant routing
   string owner_id = 7;             // Agent owner ID for OAuth credentials
   int32 timeout_seconds = 8;       // Task execution timeout (default: 300)
+  string name = 10;
+  string agent_model = 11;         // Agent default model (overrides organization model in hierarchy)
+  string organization_model = 12;  // Organization default model (fallback for agent model)
+  repeated MessagePart input_content = 13; // Runtime input attachments for skill execution
 }
 
+// AIDEV-NOTE: Simplified for single-instruction execution (removed step_id and step_type)
 // Streaming progress updates during task execution
 message TaskProgress {
   string task_id = 1;              // Task being updated
   TaskStatus status = 2;           // Current task status
-  string step_id = 3;              // Current step being executed
-  string step_type = 4;            // Type of step (TOOL_STEP, CODE_STEP)
-  string output_json = 5;          // Step output data as JSON
+  string output_json = 5;          // Execution output data as JSON
   string error_message = 6;        // Error details if failed
   int64 timestamp_ms = 7;          // Update timestamp
   float progress_percent = 8;      // Completion percentage (0-100)
+  TokenUsage token_usage = 9;      // Token usage for this task (set when completed)
 }
 
 // Task execution status enum
@@ -63,13 +67,13 @@ message CancelTaskResponse {
   string message = 2;
 }
 
-// Worker health and capability information
+// Worker health and skill information
 message WorkerInfo {
   string worker_id = 1;            // Unique worker instance ID
   string version = 2;              // Worker software version
   string organization_id = 3;      // Organization this worker serves
   WorkerStatus status = 4;         // Current worker status
-  repeated string capabilities = 5; // Available agent capabilities
+  repeated string skills = 5;      // Available agent skills
   int32 active_tasks = 6;          // Number of currently running tasks
   int32 max_concurrent_tasks = 7;  // Maximum concurrent task capacity
   int64 uptime_seconds = 8;        // Worker uptime
@@ -95,6 +99,14 @@ message ErrorResponse {
   string details = 3;              // Additional error details
 }
 
+// Token usage tracking for billing
+message TokenUsage {
+  string model_name = 1;             // Model used for this operation
+  int32 input_tokens = 2;            // Input/prompt tokens consumed
+  int32 output_tokens = 3;           // Output/completion tokens generated
+  int32 total_tokens = 4;            // Total tokens (input + output)
+  double cost_usd = 5;               // Estimated cost in USD
+}
 // Complete agent configuration
 message AgentConfig {
   string name = 1;
@@ -103,24 +115,104 @@ message AgentConfig {
   string persona = 4;
   repeated ToolConfig tools = 5;
   repeated ServerConfig servers = 6;
-  repeated CapabilityConfig capabilities = 7;
+  repeated SkillConfig skills = 7;
+  string default_model = 8;              // Agent-specific default model (overrides organization default)
 }
 
-// Capability configuration with steps
-message CapabilityConfig {
+// AIDEV-NOTE: Simplified single-instruction skill model (removed multi-step workflow)
+// Skill configuration with single instruction block
+message SkillConfig {
+  int32 id = 1;                        // Skill ID for unique identification
+  string name = 2;
+  string description = 3;
+  repeated SkillInput inputs = 4;
+  repeated SkillOutput outputs = 5;
+  string instructions = 6;
+  repeated ToolConfig tools = 7;
+  string model = 8;                    // Optional: model override for this skill
+  repeated MessagePart content = 9;    // Skill-level attachments (images, files, text)
+  string agent_type = 10;              // Optional: "tool_calling" (default) or "code_agent"
+  string execution_type = 11;          // 'agent' (default) or 'operation'
+  TaskModelConfig task_model_config = 12; // Config for operation execution (when execution_type='operation')
+}
+
+// Configuration for operation execution (direct model invocation without LLM orchestration)
+message TaskModelConfig {
+  string model_id = 1;                 // HuggingFace model ID (e.g., 'black-forest-labs/FLUX.1-schnell')
+  string task_type = 2;                // Task type: text-to-image, speech-to-text, etc.
+  map<string, string> parameters = 3;  // Model-specific parameters (steps, guidance_scale, etc.)
+}
+
+// Skill input parameter
+message SkillInput {
   string name = 1;
-  string description = 2;
-  repeated StepConfig steps = 3;
+  bool required = 2;
+  string type = 3;                     // text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document
+  SkillInputFileConfig file_config = 4; // File configuration (for file-type inputs)
 }
 
-// Individual step configuration
-message StepConfig {
-  string id = 1;
-  StepType type = 2;
-  string instructions = 3;
-  string model = 4;
-  repeated ToolConfig tools = 5;
-  repeated ServerConfig servers = 6;
+// File configuration for skill inputs
+message SkillInputFileConfig {
+  repeated string allowed_mime_types = 1;  // Allowed MIME types (e.g., ["image/*", "application/pdf"])
+  int64 max_size_bytes = 2;                // Maximum file size in bytes
+  bool multiple = 3;                        // Allow multiple files
+}
+
+// Skill output value
+message SkillOutput {
+  string name = 1;
+  string type = 2;                     // text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document
+  OutputMappingConfig output_mapping = 3;  // Optional: path-based field mapping configuration
+}
+
+// Target field metadata - provides LLM guidance based on database field type
+message TargetFieldMetadata {
+  string field_type = 1;               // Database field type: "single-select", "multi-select", "number", "boolean", etc.
+  repeated string options = 2;         // For select fields: valid option values
+  optional int32 max_selections = 3;   // For multi-select: maximum allowed selections
+  optional string field_name = 4;      // Target field name (for display)
+}
+
+// =============================================================================
+// Multi-Table Output Mapping Types (typed references, no string parsing)
+// =============================================================================
+
+// Reference to a field from a previous table mapping result
+message TableReference {
+  int32 order = 1;                     // Which table mapping (1, 2, 3...)
+  string field = 2;                    // 'row_id' or field name from that table
+}
+
+// Typed field source - either a skill output or a reference to previous table
+message FieldSource {
+  oneof source {
+    string skill_output = 1;           // Direct skill output name (e.g., "company_name")
+    TableReference table_ref = 2;      // Reference to previous table operation result
+  }
+}
+
+// Field mapping within a table mapping - maps a typed source to a target field
+message FieldMapping {
+  FieldSource source = 1;              // Where to get the value (typed)
+  int32 target_field_id = 2;           // Which field to write to
+  TargetFieldMetadata target_field_metadata = 3;  // Optional: target field info for LLM guidance
+  bool append_mode = 4;                // When true, append to existing relation values instead of replacing
+}
+
+// Ordered operation for a single table
+message TableMapping {
+  int32 order = 1;                     // Execution order (1, 2, 3...)
+  int32 target_table_id = 2;           // Which table to write to
+  string row_action = 3;               // 'create' or 'update'
+  string row_id = 4;                   // For update mode - specific row ID
+  repeated FieldMapping mappings = 5;  // Field mappings for this table
+  int32 display_field_id = 6;          // Field to use for relation display value
+}
+
+// Output mapping configuration - multi-table support with typed references
+message OutputMappingConfig {
+  string mode = 1;                     // 'single_row' or 'multi_row'
+  repeated TableMapping table_mappings = 2;  // Ordered table operations
 }
 
 // Tool configuration
@@ -130,17 +222,11 @@ message ToolConfig {
   map<string, string> config = 3;
 }
 
-// Server configuration  
+// Server configuration
 message ServerConfig {
   string name = 1;
   string endpoint = 2;
   map<string, string> config = 3;
-}
-
-// Step execution types
-enum StepType {
-  CODE_STEP = 0;
-  TOOL_STEP = 1;
 }
 
 // Trigger data payload
@@ -148,9 +234,176 @@ message TriggerData {
   map<string, string> payload = 1;
 }
 
-// Instruction-based execution configuration for auto-routing
+// AIDEV-NOTE: Task instruction format aligned with smolagents API
+// - task: Main text instruction → agent.run(task=...)
+// - images: Image URLs → downloaded → agent.run(images=[PIL.Image, ...])
+// - attachments: File metadata (preprocessed to text, already in task field)
 message InstructionConfig {
-  string instructions = 1;           // Natural language instructions
-  repeated ToolConfig tools = 2;     // Optional tools for this task
-  repeated ServerConfig servers = 3; // Optional servers for this task
+  string task = 1;                          // Main instruction text (required)
+  repeated ImageAttachment images = 2;       // Image URLs (optional)
+  repeated FileAttachment attachments = 3;   // File metadata (optional, for tracking)
+  repeated ToolConfig tools = 4;             // Optional tools for this task
+  repeated ServerConfig servers = 5;         // Optional servers for this task
+  string model = 6;                          // Optional: model override for this instruction
+}
+
+// Image attachment for task instructions
+message ImageAttachment {
+  string url = 1;      // S3 pre-signed URL or HTTP URL
+  string s3_key = 2;   // S3 key for reference (optional)
+}
+
+// File attachment metadata (files are preprocessed to text)
+message FileAttachment {
+  string type = 1;        // pdf, audio, document, text
+  string url = 2;         // S3 pre-signed URL
+  string filename = 3;    // Original filename
+  string mime_type = 4;   // MIME type
+}
+
+// gRPC Chat Processing Service - AI operations only (stateless)
+service ChatProcessingService {
+  // Process a message and stream AI response (no database operations)
+  rpc ProcessMessage(ProcessMessageRequest) returns (stream ProcessMessageResponse);
+
+  // Cancel an in-progress message processing
+  rpc CancelMessage(CancelMessageRequest) returns (CancelMessageResponse);
+}
+
+// Request for AI message processing
+message ProcessMessageRequest {
+  // Input message for AI processing (multimodal support)
+  repeated MessagePart message_parts = 1;  // User message content as structured parts (text + images)
+
+  string user_id = 2;                // User identifier for context
+  int32 organization_id = 3;         // Organization for multi-tenant routing
+
+  // Context for RAG and domain-specific processing
+  ChatContext context = 4;
+
+  // Conversation history (only used if session not in memory - for restoration after restart/timeout)
+  repeated HistoryMessage conversation_history = 5;
+
+  // Complete agent configuration (tools, skills, servers)
+  AgentConfig agent_config = 6;
+
+  string model = 7;                  // Optional: model override for this chat message
+
+  string message_id = 8;             // Unique message identifier for cancellation
+
+  string session_id = 9;             // Required: session identifier (chat_id from database)
+
+  string user_api_key = 10;          // User API key for internal service calls (skill_builder, etc.)
+}
+
+// Streaming response from AI processing
+message ProcessMessageResponse {
+  // Standard oneof pattern for different response types
+  oneof response {
+    ContentChunk content_chunk = 1;    // AI-generated streaming content
+    // Field 2 reserved (was: RagContext rag_context)
+    ProcessingComplete complete = 3;   // Processing finished marker
+    ProcessingError error = 4;        // Processing error
+    StepProgress step_progress = 5;   // Real-time step execution progress
+  }
+
+  int64 timestamp = 6;               // Response timestamp
+}
+
+// Multimodal message part (text, image, or file attachment)
+// AIDEV-NOTE: Multi-attachment support implemented (2025-01)
+// - ImageUrlPart: Vision model support (PIL Images → base64)
+// - FilePart: Text extraction from PDFs, audio transcription, documents
+// - Files processed async in message_mapper.py using file_processor.py
+message MessagePart {
+  oneof part {
+    TextPart text = 1;
+    ImageUrlPart image_url = 2;
+    FilePart file = 3;                // Generic file attachment (PDF, audio, documents, etc.)
+  }
+}
+
+message TextPart {
+  string text = 1;
+}
+
+message ImageUrlPart {
+  string url = 1;                    // Image URL (HTTP URL or S3 pre-signed URL)
+}
+
+message FilePart {
+  string url = 1;                    // File URL (S3 pre-signed URL)
+  string mime_type = 2;              // MIME type (application/pdf, audio/mpeg, etc.)
+  string filename = 3;               // Original filename
+  int64 size = 4;                    // File size in bytes
+}
+
+// Conversation history message with multimodal support
+message HistoryMessage {
+  string role = 1;                   // user, assistant, system
+  repeated MessagePart content_parts = 2;  // Message content as structured parts (text + images)
+  int64 timestamp = 3;               // when it was created
+}
+
+// Streaming content chunk
+message ContentChunk {
+  string content = 1;                // Text content chunk
+  int32 sequence = 2;                // Sequence number for ordering
+}
+
+// Processing completion marker
+message ProcessingComplete {
+  string model_used = 1;             // AI model used for generation (deprecated - use token_usage.model_name)
+  int32 total_tokens = 2;            // Total tokens processed (deprecated - use token_usage.total_tokens)
+  int32 processing_time_ms = 3;      // Processing time in milliseconds
+  map<string, string> metadata = 4;  // Additional processing metadata
+  TokenUsage token_usage = 5;        // Detailed token usage and cost tracking
+}
+
+// Processing error information
+message ProcessingError {
+  string error_code = 1;             // Error code (rate_limit, input_too_large, etc.)
+  string error_message = 2;          // User-friendly error message (no technical details)
+  map<string, string> error_details = 3; // Additional error context
+  // Error recovery metadata
+  string hint = 4;                   // Actionable hint for user (optional)
+  bool can_retry = 5;                // Can user retry this operation?
+  bool auto_retry = 6;               // Was this error auto-retried?
+  bool session_reset = 7;            // Was session reset due to this error?
+}
+
+// Real-time step execution progress (for stream=True agent execution)
+message StepProgress {
+  StepType step_type = 1;            // Type of step being executed
+  string step_name = 2;              // Human-readable step description
+  string content = 3;                // Step content/output
+  map<string, string> metadata = 4;  // Additional step metadata (tool name, arguments, etc.)
+  int32 step_index = 5;              // Step sequence number (0-indexed)
+}
+
+// Types of execution steps during agent processing
+enum StepType {
+  STEP_PLANNING = 0;     // Agent is planning next action
+  STEP_ACTION = 1;       // Agent is executing a tool/action
+  STEP_REASONING = 2;    // Agent is reasoning about results
+  STEP_FINAL = 3;        // Agent has reached final answer
+}
+
+// Request to cancel an in-progress message
+message CancelMessageRequest {
+  string message_id = 1;             // Message identifier to cancel
+  string user_id = 2;                // User requesting cancellation (for authorization)
+  int32 organization_id = 3;         // Organization context
+}
+
+// Response to message cancellation request
+message CancelMessageResponse {
+  bool success = 1;                  // Whether cancellation was successful
+  string message = 2;                // Status message
+}
+
+// Chat context configuration for AI processing
+message ChatContext {
+  string domain_type = 1;            // Domain type (tables, agents, files, teams, workflows)
+  int32 domain_id = 2;               // Domain entity identifier
 }

@@ -1,17 +1,14 @@
-"""Utility modules for Emery Agents system."""
+"""
+Shared utilities for emery-agents.
 
-from .prompts import (
-    PromptManager,
-    get_prompt_manager,
-    render_task_executor_selection,
-    render_capability_execution,
-    render_default_execution,
-)
+Modules:
+- _async_utils: Run async code from sync contexts
+- error_classifier: Classify and handle agent errors
+- error_messages: Error message templates
+"""
+
+from ._async_utils import run_async_in_thread
 
 __all__ = [
-    "PromptManager",
-    "get_prompt_manager", 
-    "render_task_executor_selection",
-    "render_capability_execution",
-    "render_default_execution",
+    "run_async_in_thread",
 ]

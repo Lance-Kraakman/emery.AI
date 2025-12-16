@@ -1,0 +1,104 @@
+{
+  "templateName": "Executive Summary Report",
+  "version": "2025.1",
+  "sections": [
+    {
+      "id": "key_points",
+      "title": "Key Points",
+      "description": "Most critical information for decision makers",
+      "fields": [
+        "client_identification",
+        "assessment_purpose",
+        "key_findings_summary",
+        "overall_recommendations"
+      ],
+      "wordLimit": 200
+    },
+    {
+      "id": "critical_decisions",
+      "title": "Critical Decisions Required",
+      "description": "Immediate decisions needed from stakeholders",
+      "fields": [
+        "urgent_decisions",
+        "decision_makers_involved",
+        "decision_timelines",
+        "consequences_of_delay"
+      ],
+      "wordLimit": 150
+    },
+    {
+      "id": "immediate_actions",
+      "title": "Immediate Actions Required",
+      "description": "Actions that must be taken within 30 days",
+      "fields": [
+        "priority_actions",
+        "responsible_parties",
+        "resource_requirements",
+        "completion_deadlines"
+      ],
+      "wordLimit": 200
+    },
+    {
+      "id": "strategic_recommendations",
+      "title": "Strategic Recommendations",
+      "description": "Long-term strategic direction and planning",
+      "fields": [
+        "primary_strategy",
+        "alternative_approaches",
+        "implementation_phases",
+        "success_indicators"
+      ],
+      "wordLimit": 250
+    },
+    {
+      "id": "financial_implications",
+      "title": "Financial Implications",
+      "description": "Cost analysis and funding considerations",
+      "fields": [
+        "immediate_costs",
+        "ongoing_expenses",
+        "funding_sources",
+        "cost_benefit_analysis"
+      ],
+      "wordLimit": 150
+    },
+    {
+      "id": "next_steps",
+      "title": "Next Steps",
+      "description": "Specific actions and timeline for implementation",
+      "fields": [
+        "step_by_step_actions",
+        "responsible_parties",
+        "target_completion_dates",
+        "review_schedule"
+      ],
+      "wordLimit": 200
+    }
+  ],
+  "expectedOutcome": {
+    "format": "Concise executive summary",
+    "length": "2-4 pages",
+    "totalWordLimit": 1150,
+    "deliverables": [
+      "Executive summary document",
+      "Action items list",
+      "Decision timeline",
+      "Key stakeholder contact list"
+    ]
+  },
+  "qualityIndicators": [
+    "Stays within word limits for each section",
+    "Clear and actionable recommendations",
+    "Specific timelines and responsible parties identified",
+    "Critical decisions clearly highlighted",
+    "Professional presentation suitable for executives",
+    "All key points from detailed reports captured concisely"
+  ],
+  "presentation": {
+    "style": "Executive briefing format",
+    "bulletPoints": "Maximum 5 per section",
+    "formatting": "Clear headings, professional layout",
+    "language": "Business appropriate, non-technical",
+    "audience": "Senior management, family decision makers"
+  }
+}

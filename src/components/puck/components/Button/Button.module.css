@@ -1,0 +1,102 @@
+.Button {
+  appearance: none;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--theme-border-radius, 4px);
+  color: var(--theme-background, #ffffff);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2, 8px);
+  letter-spacing: 0.05ch;
+  font-family: var(--theme-font-family, inherit);
+  font-size: var(--theme-font-sm, 14px);
+  font-weight: 400;
+  box-sizing: border-box;
+  line-height: 1;
+  text-align: center;
+  text-decoration: none;
+  transition: background-color 50ms ease-in;
+  cursor: pointer;
+  white-space: nowrap;
+  margin: 0;
+}
+
+.Button:hover,
+.Button:active {
+  transition: none;
+}
+
+.Button--medium {
+  min-height: 34px;
+  padding-bottom: 7px;
+  padding-inline-start: 19px;
+  padding-inline-end: 19px;
+  padding-top: 7px;
+}
+
+.Button--large {
+  padding-bottom: 11px;
+  padding-inline-start: 19px;
+  padding-inline-end: 19px;
+  padding-top: 11px;
+}
+
+.Button-icon {
+  margin-top: 2px;
+}
+
+.Button--primary {
+  background: var(--theme-primary, #2563eb);
+}
+
+.Button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--theme-primary, #2563eb) 70%, white);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .Button--primary:hover {
+    background-color: color-mix(in srgb, var(--theme-primary, #2563eb) 85%, black);
+  }
+}
+
+.Button--primary:active {
+  background-color: color-mix(in srgb, var(--theme-primary, #2563eb) 75%, black);
+}
+
+.Button--secondary {
+  border: 1px solid currentColor;
+  color: currentColor;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .Button--secondary:hover {
+    background-color: color-mix(in srgb, var(--theme-primary, #2563eb) 10%, transparent);
+    color: var(--theme-text, #000000);
+  }
+}
+
+.Button--secondary:active {
+  background-color: color-mix(in srgb, var(--theme-primary, #2563eb) 15%, transparent);
+  color: var(--theme-text, #000000);
+}
+
+.Button--flush {
+  border-radius: 0;
+}
+
+.Button--disabled,
+.Button--disabled:hover {
+  background-color: var(--theme-border, #e2e8f0);
+  color: var(--theme-text-muted, #64748b);
+  cursor: not-allowed;
+}
+
+.Button--fullWidth {
+  justify-content: center;
+  width: 100%;
+}
+
+.Button-spinner {
+  padding-inline-start: 8px;
+}

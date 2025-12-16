@@ -1,16 +1,10 @@
 """
-Tools module for Emery Agents.
+Tool modules for emery-agents.
 
-Provides a centralized tool registry and management system for smolagents integration.
+AIDEV-NOTE: Modular tool organization for better maintainability.
+Each module contains related tools with specific purposes.
 """
 
-from .tool_registry import tool_registry, ToolRegistry, ToolType, ToolCategory
-from .converters import ToolConfigConverter
+from .tool_registry import ToolRegistry
 
-__all__ = [
-    "tool_registry",
-    "ToolRegistry", 
-    "ToolType",
-    "ToolCategory",
-    "ToolConfigConverter",
-]
+__all__ = ["ToolRegistry"]

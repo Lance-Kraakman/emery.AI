@@ -2,46 +2,47 @@
 module.exports = {
     darkMode: ["class"],
     content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./lib/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/lib/**/*.{js,ts,jsx,tsx,mdx}",
+    "./node_modules/@llamaindex/chat-ui/**/*.{ts,tsx,js,jsx}",
   ],
   theme: {
-    container: {
-      center: true,
-      padding: "2rem",
-      screens: {
-        "2xl": "1400px",
-      },
-    },
+  	container: {
+  		center: true,
+  		padding: '2rem',
+  		screens: {
+  			'2xl': '1400px'
+  		}
+  	},
   	extend: {
-      spacing: {
-        '1': '0.25rem',
-        '2': '0.5rem',
-        '3': '0.75rem',
-        '4': '1rem',
-        '5': '1.25rem',
-        '6': '1.5rem',
-        '8': '2rem',
-        '10': '2.5rem',
-        '12': '3rem',
-        '16': '4rem',
-        '20': '5rem',
-        '24': '6rem',
-        '32': '8rem',
-      },
-      fontSize: {
-        'xs': '.75rem',
-        'sm': '.875rem',
-        'base': '1rem',
-        'lg': '1.125rem',
-        'xl': '1.25rem',
-        '2xl': '1.5rem',
-        '3xl': '1.875rem',
-        '4xl': '2.25rem',
-        '5xl': '3rem',
-      },
+  		spacing: {
+  			'1': '0.25rem',
+  			'2': '0.5rem',
+  			'3': '0.75rem',
+  			'4': '1rem',
+  			'5': '1.25rem',
+  			'6': '1.5rem',
+  			'8': '2rem',
+  			'10': '2.5rem',
+  			'12': '3rem',
+  			'16': '4rem',
+  			'20': '5rem',
+  			'24': '6rem',
+  			'32': '8rem'
+  		},
+  		fontSize: {
+  			xs: '.75rem',
+  			sm: '.875rem',
+  			base: '1rem',
+  			lg: '1.125rem',
+  			xl: '1.25rem',
+  			'2xl': '1.5rem',
+  			'3xl': '1.875rem',
+  			'4xl': '2.25rem',
+  			'5xl': '3rem'
+  		},
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
@@ -95,11 +96,11 @@ module.exports = {
   			}
   		},
   		borderRadius: {
-        xl: "var(--radius-xl)",
-        lg: "var(--radius-lg)",
-        md: "var(--radius-md)",
-        sm: "var(--radius-sm)",
-        DEFAULT: "var(--radius-md)",
+  			xl: 'var(--radius-xl)',
+  			lg: 'var(--radius-lg)',
+  			md: 'var(--radius-md)',
+  			sm: 'var(--radius-sm)',
+  			DEFAULT: 'var(--radius-md)'
   		},
   		keyframes: {
   			'accordion-down': {

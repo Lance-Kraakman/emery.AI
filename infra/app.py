@@ -3,7 +3,8 @@ import os
 
 import aws_cdk as cdk
 
-from infra.infra_stack import InfraStack
+from infra.data_stack import DataStack
+from infra.app_stack import AppStack
 
 
 app = cdk.App()
@@ -27,10 +28,25 @@ if not aws_account or not aws_region:
 # Define the CDK Environment object. All deployments will go to this account.
 cdk_env = cdk.Environment(account=aws_account, region=aws_region)
 
-# Create a unique stack name based on the environment
-stack_name = f"Emery-Infra-{env_name.capitalize()}"
+# Create stack names based on the environment
+data_stack_name = f"Emery-Data-{env_name.capitalize()}"
+app_stack_name = f"Emery-App-{env_name.capitalize()}"
 
-# Pass the environment name to the stack for resource prefixing
-InfraStack(app, stack_name, env_name=env_name, env=cdk_env)
+# Create the data stack first (VPC, database, S3, secrets)
+data_stack = DataStack(
+    app,
+    data_stack_name,
+    env_name=env_name,
+    env=cdk_env
+)
+
+# Create the app stack with reference to data stack (ECS services, load balancers, CloudFront)
+app_stack = AppStack(
+    app,
+    app_stack_name,
+    data_stack=data_stack,
+    env_name=env_name,
+    env=cdk_env
+)
 
 app.synth()
