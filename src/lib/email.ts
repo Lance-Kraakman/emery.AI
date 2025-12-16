@@ -6,7 +6,7 @@ export async function sendVerificationRequestEmail({ identifier: email, url }: {
   const { host } = new URL(url);
   try {
     await resend.emails.send({
-      from: 'onboarding@resend.dev',
+      from: 'welcome@braintable.app',
       to: email,
       subject: `Sign in to ${host}`,
       html: `<p>Click the link below to sign in to your account.</p><p><a href="${url}">Sign in</a></p>`,
@@ -23,9 +23,9 @@ export async function sendInvitationEmail(email: string, invitationLink: string)
 
   try {
     await resend.emails.send({
-      from: 'onboarding@resend.dev',
+      from: 'welcome@braintable.app',
       to: email,
-      subject: 'You have been invited to join an organization on Emery',
+      subject: 'You have been invited to join an organization on BrainTable',
       html: `
 <table width="100%" border="0" cellspacing="0" cellpadding="0">
   <tr>
@@ -33,14 +33,14 @@ export async function sendInvitationEmail(email: string, invitationLink: string)
       <table width="600" border="0" cellspacing="0" cellpadding="0" style="border-collapse: collapse; border: 1px solid #ddd;">
         <tr>
           <td align="center" style="padding: 40px 0; background-color: #f7f7f7;">
-            <img src="${imageUrl}" alt="Emery Mission" width="150" style="display: block;" />
+            <img src="${imageUrl}" alt="BrainTable Mission" width="150" style="display: block;" />
           </td>
         </tr>
         <tr>
           <td style="padding: 40px 30px;">
             <h1 style="color: #333; font-family: Arial, sans-serif;">You're Invited!</h1>
             <p style="color: #555; font-family: Arial, sans-serif; line-height: 1.6;">
-              You have been invited to join an organization on Emery. Click the button below to accept your invitation and get started.
+              You have been invited to join an organization on BrainTable. Click the button below to accept your invitation and get started.
             </p>
             <table border="0" cellspacing="0" cellpadding="0" style="margin-top: 30px;">
               <tr>
@@ -58,7 +58,7 @@ export async function sendInvitationEmail(email: string, invitationLink: string)
         </tr>
         <tr>
           <td align="center" style="padding: 20px 30px; background-color: #f7f7f7; color: #aaa; font-family: Arial, sans-serif; font-size: 12px;">
-            &copy; 2025 Emery. All rights reserved.
+            &copy; 2025 BrainTable. All rights reserved.
           </td>
         </tr>
       </table>
