@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from PIL import Image
 from smolagents.models import Model, ChatMessage, MessageRole
 from huggingface_hub import InferenceClient
+from huggingface_hub.errors import HfHubHTTPError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from .model_registry import (
     get_model_metadata,
@@ -172,6 +174,18 @@ class CustomInferenceModel(Model):
 
         return hf_tools
 
+    @retry(
+        stop=stop_after_attempt(10),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type(HfHubHTTPError),
+        before_sleep=lambda retry_state: logger.warning(
+            f"🔄 Retrying API call (attempt {retry_state.attempt_number}) after error"
+        )
+    )
+    def _call_chat_completion(self, **kwargs):
+        """Make chat completion call with retry logic for transient errors."""
+        return self.client.chat_completion(**kwargs)
+
     def generate(
         self,
         messages: List[Union[ChatMessage, Dict[str, Any]]],
@@ -237,7 +251,7 @@ class CustomInferenceModel(Model):
                 completion_kwargs["tools"] = hf_tools
                 completion_kwargs["tool_choice"] = "auto"  # Explicitly enable tool calling
 
-            response = self.client.chat_completion(**completion_kwargs)
+            response = self._call_chat_completion(**completion_kwargs)
 
             # Extract the content and usage information
             message = response.choices[0].message

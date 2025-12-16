@@ -11,6 +11,7 @@ import { createSkill, getSkillTemplate, uploadSkillAttachment, updateSkill } fro
 import { toast } from 'sonner';
 import { SkillEditor, type SkillFormData } from './SkillEditor';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import { useOrganizationPlan } from '@/stores/app-state.store';
 
 interface NewSkillViewProps {
   agent: AgentDTO;
@@ -19,6 +20,7 @@ interface NewSkillViewProps {
 
 export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
   const router = useRouter();
+  const organizationTier = useOrganizationPlan();
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(!!templateId);
   const [templateName, setTemplateName] = useState<string | null>(null);
@@ -190,6 +192,7 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
             agentId={agent.id}
             onSave={handleSave}
             isSaving={isSaving}
+            organizationTier={organizationTier}
           />
         )}
       </Card>

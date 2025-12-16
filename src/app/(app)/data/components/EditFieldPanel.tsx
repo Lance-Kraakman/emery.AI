@@ -63,6 +63,9 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
   const [defaultSelectOption, setDefaultSelectOption] = useState<number | undefined>()
   const [maxSelections, setMaxSelections] = useState<number | undefined>()
 
+  // Relation field config
+  const [allowMultiple, setAllowMultiple] = useState<boolean>(false)
+
   const [showTypeWarning, setShowTypeWarning] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -116,6 +119,13 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
         setMaxSelections(undefined)
       }
 
+      // Load relation config from metadata
+      if (field.type === 'relation' && field.metadata) {
+        setAllowMultiple(field.metadata.multiple === true)
+      } else {
+        setAllowMultiple(false)
+      }
+
       setShowTypeWarning(false)
     }
   }, [field])
@@ -143,6 +153,9 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
       setSelectOptions([])
       setDefaultSelectOption(undefined)
       setMaxSelections(undefined)
+    }
+    if (newType !== 'relation') {
+      setAllowMultiple(false)
     }
   }
 
@@ -184,6 +197,8 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
           options: selectOptions,
           maxSelections: maxSelections
         }
+      } else if (type === 'relation') {
+        metadata = { multiple: allowMultiple }
       }
 
       await onSave(field, {
@@ -258,25 +273,37 @@ export function EditFieldPanel({ field, isOpen, onClose, onSave, availableTables
             </Label>
           </div>
 
-          {/* Relation-specific: Table selector */}
+          {/* Relation-specific: Table selector and allow multiple */}
           {type === 'relation' && (
-            <div className="space-y-2">
-              <Label htmlFor="relatedTable">Related Table</Label>
-              <Select
-                value={relatedTableId?.toString()}
-                onValueChange={(val) => setRelatedTableId(parseInt(val))}
-              >
-                <SelectTrigger id="relatedTable">
-                  <SelectValue placeholder="Select table" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableTables.map((table: TableDTO) => (
-                    <SelectItem key={table.id} value={table.id.toString()}>
-                      {table.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="relatedTable">Related Table</Label>
+                <Select
+                  value={relatedTableId?.toString()}
+                  onValueChange={(val) => setRelatedTableId(parseInt(val))}
+                >
+                  <SelectTrigger id="relatedTable">
+                    <SelectValue placeholder="Select table" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableTables.map((table: TableDTO) => (
+                      <SelectItem key={table.id} value={table.id.toString()}>
+                        {table.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="allowMultiple"
+                  checked={allowMultiple}
+                  onCheckedChange={(checked) => setAllowMultiple(checked as boolean)}
+                />
+                <Label htmlFor="allowMultiple" className="text-sm font-normal cursor-pointer">
+                  Allow multiple relations
+                </Label>
+              </div>
             </div>
           )}
 

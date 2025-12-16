@@ -127,7 +127,7 @@ const RelationCell = ({ rowData, setRowData, columnData, focus, active, stopEdit
       isEditMode={true}
       compact={true}
       relatedTableId={field.relatedTableId ?? undefined}  // Convert null to undefined
-      multiple={false}
+      multiple={field.metadata?.multiple === true}
       required={field.required || false}
       focus={focus}
       onClose={() => stopEditing?.({ nextRow: false })}
