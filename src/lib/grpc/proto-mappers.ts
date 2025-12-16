@@ -297,6 +297,57 @@ export function mapTriggerDataFromProto(triggerData: TriggerData): Record<string
   return result;
 }
 
+// =============================================================================
+// Multi-Table Output Mapping Types (for proto mapping)
+// =============================================================================
+
+/** Typed field source - discriminated union */
+type FieldSourceDTO =
+  | { type: 'skill_output'; name: string }
+  | { type: 'table_ref'; order: number; field: string };
+
+/** Table mapping DTO for skill output mapping */
+interface TableMappingDTO {
+  order: number;
+  targetTableId: number;
+  rowAction: 'create' | 'update';
+  rowId?: string;
+  mappings: Array<{
+    source: FieldSourceDTO;
+    targetFieldId: number;
+    targetFieldMetadata?: {
+      fieldType: string;
+      options?: string[];
+      maxSelections?: number;
+      fieldName?: string;
+    };
+    appendMode?: boolean;
+  }>;
+  displayFieldId?: number;
+}
+
+/** Output mapping config DTO */
+interface OutputMappingConfigDTO {
+  mode: 'single_row' | 'multi_row';
+  tableMappings: TableMappingDTO[];
+}
+
+/**
+ * Map FieldSource to proto format
+ */
+function mapFieldSourceToProto(source: FieldSourceDTO): any {
+  if (source.type === 'skill_output') {
+    return { skillOutput: source.name };
+  } else {
+    return {
+      tableRef: {
+        order: source.order,
+        field: source.field
+      }
+    };
+  }
+}
+
 /**
  * Map EnrichedSkill/ExecutionSkill to protobuf SkillConfig
  * Used by both chat processing and task execution paths
@@ -310,12 +361,7 @@ export function mapSkillToProto(skill: {
   outputs: Array<{
     name: string;
     type?: string;
-    outputMapping?: {
-      mode: 'single_row' | 'multi_row';
-      rowAction?: 'create' | 'update';
-      rowId?: string;
-      mappings: Array<{ sourceField: string; targetTableId: number; targetFieldId: number }>;
-    };
+    outputMapping?: OutputMappingConfigDTO;
   }>;
   tools: Array<{ name: string; version?: string; config?: Record<string, any> }>;
   content: Array<any>; // MessagePart[] - flexible to support various content formats
@@ -348,12 +394,23 @@ export function mapSkillToProto(skill: {
       type: output.type || 'text', // Default to 'text' for proto compatibility
       outputMapping: output.outputMapping ? {
         mode: output.outputMapping.mode || 'single_row',
-        rowAction: output.outputMapping.rowAction || 'create',
-        rowId: output.outputMapping.rowId || '',
-        mappings: output.outputMapping.mappings.map(m => ({
-          sourceField: m.sourceField,
-          targetTableId: m.targetTableId,
-          targetFieldId: m.targetFieldId
+        tableMappings: output.outputMapping.tableMappings.map(tm => ({
+          order: tm.order,
+          targetTableId: tm.targetTableId,
+          rowAction: tm.rowAction || 'create',
+          rowId: tm.rowId || '',
+          displayFieldId: tm.displayFieldId || 0,
+          mappings: tm.mappings.map(m => ({
+            source: mapFieldSourceToProto(m.source),
+            targetFieldId: m.targetFieldId,
+            targetFieldMetadata: m.targetFieldMetadata ? {
+              fieldType: m.targetFieldMetadata.fieldType || '',
+              options: m.targetFieldMetadata.options || [],
+              maxSelections: m.targetFieldMetadata.maxSelections,
+              fieldName: m.targetFieldMetadata.fieldName || ''
+            } : undefined,
+            appendMode: m.appendMode || false
+          }))
         }))
       } : undefined
     })),

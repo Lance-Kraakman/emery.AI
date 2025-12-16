@@ -13,6 +13,7 @@ import { updateSkill, deleteSkill, uploadSkillAttachment } from '@/app/actions/s
 import { toast } from 'sonner';
 import { SkillEditor, type SkillFormData } from './SkillEditor';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import { useOrganizationPlan } from '@/stores/app-state.store';
 
 interface EditSkillViewProps {
   agent: AgentDTO;
@@ -21,6 +22,7 @@ interface EditSkillViewProps {
 
 export function EditSkillView({ agent, skill }: EditSkillViewProps) {
   const router = useRouter();
+  const organizationTier = useOrganizationPlan();
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -185,6 +187,7 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
           onChange={setFormData}
           agentId={agent.id}
           skillId={skill.id}
+          organizationTier={organizationTier}
         />
       </Card>
 

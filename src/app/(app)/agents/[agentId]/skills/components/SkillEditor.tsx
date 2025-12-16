@@ -46,7 +46,7 @@ interface SkillEditorProps {
   onSave?: () => void;
   isSaving?: boolean;
   agentDefaultModel?: string | null; // Agent's default model for inheritance display
-  organizationTier?: 'free' | 'pro' | 'enterprise'; // For filtering available models
+  organizationTier?: 'free' | 'pro' | 'max' | 'enterprise'; // For filtering available models
   availableModels?: string[]; // Organization's whitelist of allowed models
   isReadOnly?: boolean; // When true, disables all inputs (for system skills)
 }
@@ -134,50 +134,74 @@ export function SkillEditor({
     }));
 
   return (
-    <div className="space-y-6">
-      {/* Inline Name + Create Button */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
+    <div className="space-y-4">
+      {/* Compact Header: Name + Model + Create */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
           <div className="flex-1">
             <Input
               id="name"
               value={localValue.name}
               onChange={(e) => handleChange({ name: e.target.value })}
-              placeholder="e.g., Send Welcome Email, Generate Report, Analyze Data..."
-              className="text-base h-10"
+              placeholder="Skill name..."
+              className="h-9"
               disabled={isReadOnly}
             />
           </div>
+          {/* Model selector moved to header (Agent mode only) */}
+          {localValue.executionType !== 'operation' && (
+            <ModelSelector
+              value={localValue.model}
+              onChange={(model) => handleChange({ model })}
+              organizationTier={organizationTier}
+              availableModels={availableModels}
+              showInherit={true}
+              inheritLabel="Inherit"
+              inheritFromModel={agentDefaultModel || 'IBM Granite 3.3 8B'}
+              requiredCapabilities={['toolCalling']}
+              disabled={isReadOnly}
+              className="w-[180px] h-9"
+            />
+          )}
           {onSave && (
-            <Button onClick={onSave} disabled={isSaving} className="h-10">
-              <Save className="h-4 w-4 mr-2" />
-              {isSaving ? 'Creating...' : 'Create Skill'}
+            <Button onClick={onSave} disabled={isSaving} className="h-9">
+              <Save className="h-4 w-4 mr-1.5" />
+              {isSaving ? 'Saving...' : 'Save'}
             </Button>
           )}
         </div>
 
-        {/* Add Description Link (hide when read-only unless there's a description) */}
-        {!isReadOnly && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => setShowDescription(!showDescription)}
-          >
-            {showDescription ? (
-              <>
-                <ChevronUp className="h-3 w-3 mr-1" />
-                Hide description
-              </>
-            ) : (
-              <>
-                <ChevronDown className="h-3 w-3 mr-1" />
-                Add description
-              </>
-            )}
-          </Button>
-        )}
+        {/* Inline: Execution Toggle + Add Description */}
+        <div className="flex items-center gap-3">
+          <ExecutionTypeToggle
+            value={localValue.executionType || 'agent'}
+            onChange={(newMode) => {
+              const currentMode = localValue.executionType || 'agent';
+              if (currentMode === newMode) return;
+
+              // Save current state, restore target mode's saved state
+              if (currentMode === 'agent') {
+                setSavedAgentState({ inputs: localValue.inputs, outputs: localValue.outputs, instructions: localValue.instructions, tools: localValue.tools });
+                handleChange({ executionType: newMode, ...savedDirectState, tools: [] });
+              } else {
+                setSavedDirectState({ inputs: localValue.inputs, outputs: localValue.outputs, instructions: localValue.instructions, taskModelConfig: localValue.taskModelConfig });
+                handleChange({ executionType: newMode, ...savedAgentState, taskModelConfig: undefined });
+              }
+            }}
+            disabled={isReadOnly}
+          />
+          {!isReadOnly && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-auto py-0.5 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setShowDescription(!showDescription)}
+            >
+              {showDescription ? 'Hide description' : '+ Description'}
+            </Button>
+          )}
+        </div>
 
         {/* Collapsible Description */}
         {(showDescription || (isReadOnly && localValue.description)) && (
@@ -187,30 +211,11 @@ export function SkillEditor({
             onChange={(e) => handleChange({ description: e.target.value })}
             placeholder="Briefly describe what this skill does..."
             rows={2}
-            className="text-base"
+            className="text-sm"
             disabled={isReadOnly}
           />
         )}
       </div>
-
-      {/* Execution Type Toggle */}
-      <ExecutionTypeToggle
-        value={localValue.executionType || 'agent'}
-        onChange={(newMode) => {
-          const currentMode = localValue.executionType || 'agent';
-          if (currentMode === newMode) return;
-
-          // Save current state, restore target mode's saved state
-          if (currentMode === 'agent') {
-            setSavedAgentState({ inputs: localValue.inputs, outputs: localValue.outputs, instructions: localValue.instructions, tools: localValue.tools });
-            handleChange({ executionType: newMode, ...savedDirectState, tools: [] });
-          } else {
-            setSavedDirectState({ inputs: localValue.inputs, outputs: localValue.outputs, instructions: localValue.instructions, taskModelConfig: localValue.taskModelConfig });
-            handleChange({ executionType: newMode, ...savedAgentState, taskModelConfig: undefined });
-          }
-        }}
-        disabled={isReadOnly}
-      />
 
       {/* Conditional Form Based on Execution Type */}
       {localValue.executionType === 'operation' ? (
@@ -360,57 +365,30 @@ export function SkillEditor({
         isReadOnly={isReadOnly}
       />
 
-      {/* Advanced Settings Section */}
-      <div className="space-y-4 border-t pt-6">
-        {/* Model Selection */}
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">AI Model</Label>
-          <ModelSelector
-            value={localValue.model}
-            onChange={(model) => handleChange({ model })}
-            organizationTier={organizationTier}
-            availableModels={availableModels}
-            showInherit={true}
-            inheritLabel="Inherit from agent"
-            inheritFromModel={agentDefaultModel || 'IBM Granite 3.3 8B'}
-            requiredCapabilities={['toolCalling']}
-            disabled={isReadOnly}
-          />
-          <p className="text-xs text-muted-foreground">
-            Override the AI model used for this skill. Different models have different costs and capabilities.
-          </p>
-        </div>
-
-        {/* Agent Type Selection */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Label className="text-sm font-medium">Agent Type</Label>
-            <div className="group relative">
-              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-              <div className="invisible group-hover:visible absolute left-0 top-5 z-50 w-72 rounded-md bg-popover p-3 text-xs text-popover-foreground shadow-md border">
-                <p className="font-medium mb-1">Tool Calling (Default)</p>
-                <p className="text-muted-foreground mb-2">Calls tools using structured function calls. More reliable and predictable. Best for simple tasks and smaller models.</p>
-                <p className="font-medium mb-1">Code Agent</p>
-                <p className="text-muted-foreground">Writes Python code to execute tools. Better for complex multi-step reasoning with conditionals and loops. Works best with larger models.</p>
-              </div>
-            </div>
+      {/* Agent Type - Only show if non-default value needed */}
+      <div className="flex items-center gap-2">
+        <Label className="text-xs text-muted-foreground">Agent Type:</Label>
+        <Select
+          value={localValue.agentType || 'tool_calling'}
+          onValueChange={(agentType) => handleChange({ agentType: agentType === 'tool_calling' ? null : agentType })}
+          disabled={isReadOnly}
+        >
+          <SelectTrigger className="h-7 w-[140px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="tool_calling">Tool Calling</SelectItem>
+            <SelectItem value="code_agent">Code Agent</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="group relative">
+          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+          <div className="invisible group-hover:visible absolute left-0 top-5 z-50 w-72 rounded-md bg-popover p-3 text-xs text-popover-foreground shadow-md border">
+            <p className="font-medium mb-1">Tool Calling (Default)</p>
+            <p className="text-muted-foreground mb-2">Calls tools using structured function calls. More reliable and predictable.</p>
+            <p className="font-medium mb-1">Code Agent</p>
+            <p className="text-muted-foreground">Writes Python code to execute tools. Better for complex multi-step reasoning.</p>
           </div>
-          <Select
-            value={localValue.agentType || 'tool_calling'}
-            onValueChange={(agentType) => handleChange({ agentType: agentType === 'tool_calling' ? null : agentType })}
-            disabled={isReadOnly}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select agent type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="tool_calling">Tool Calling (Default)</SelectItem>
-              <SelectItem value="code_agent">Code Agent</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            How the AI executes tools. Tool Calling is recommended for most use cases.
-          </p>
         </div>
       </div>
         </>

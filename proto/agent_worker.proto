@@ -147,7 +147,7 @@ message TaskModelConfig {
 message SkillInput {
   string name = 1;
   bool required = 2;
-  string type = 3;                     // text, image, file, audio, video, document
+  string type = 3;                     // text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document
   SkillInputFileConfig file_config = 4; // File configuration (for file-type inputs)
 }
 
@@ -161,23 +161,58 @@ message SkillInputFileConfig {
 // Skill output value
 message SkillOutput {
   string name = 1;
-  string type = 2;                     // text, image, file, audio, video, document
+  string type = 2;                     // text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document
   OutputMappingConfig output_mapping = 3;  // Optional: path-based field mapping configuration
 }
 
-// Individual field mapping - maps a source path to a target table field
-message FieldMapping {
-  string source_field = 1;             // Field path: "label", "score", "box.xmin", "source.rowId"
-  int32 target_table_id = 2;           // Target table ID
-  int32 target_field_id = 3;           // Target field/column ID
+// Target field metadata - provides LLM guidance based on database field type
+message TargetFieldMetadata {
+  string field_type = 1;               // Database field type: "single-select", "multi-select", "number", "boolean", etc.
+  repeated string options = 2;         // For select fields: valid option values
+  optional int32 max_selections = 3;   // For multi-select: maximum allowed selections
+  optional string field_name = 4;      // Target field name (for display)
 }
 
-// Output mapping configuration - supports single-row and multi-row mapping modes
+// =============================================================================
+// Multi-Table Output Mapping Types (typed references, no string parsing)
+// =============================================================================
+
+// Reference to a field from a previous table mapping result
+message TableReference {
+  int32 order = 1;                     // Which table mapping (1, 2, 3...)
+  string field = 2;                    // 'row_id' or field name from that table
+}
+
+// Typed field source - either a skill output or a reference to previous table
+message FieldSource {
+  oneof source {
+    string skill_output = 1;           // Direct skill output name (e.g., "company_name")
+    TableReference table_ref = 2;      // Reference to previous table operation result
+  }
+}
+
+// Field mapping within a table mapping - maps a typed source to a target field
+message FieldMapping {
+  FieldSource source = 1;              // Where to get the value (typed)
+  int32 target_field_id = 2;           // Which field to write to
+  TargetFieldMetadata target_field_metadata = 3;  // Optional: target field info for LLM guidance
+  bool append_mode = 4;                // When true, append to existing relation values instead of replacing
+}
+
+// Ordered operation for a single table
+message TableMapping {
+  int32 order = 1;                     // Execution order (1, 2, 3...)
+  int32 target_table_id = 2;           // Which table to write to
+  string row_action = 3;               // 'create' or 'update'
+  string row_id = 4;                   // For update mode - specific row ID
+  repeated FieldMapping mappings = 5;  // Field mappings for this table
+  int32 display_field_id = 6;          // Field to use for relation display value
+}
+
+// Output mapping configuration - multi-table support with typed references
 message OutputMappingConfig {
   string mode = 1;                     // 'single_row' or 'multi_row'
-  string row_action = 2;               // 'create' or 'update' (for single_row mode)
-  string row_id = 3;                   // For update mode: specific row ID to update
-  repeated FieldMapping mappings = 4;  // Field mappings from output to table fields
+  repeated TableMapping table_mappings = 2;  // Ordered table operations
 }
 
 // Tool configuration

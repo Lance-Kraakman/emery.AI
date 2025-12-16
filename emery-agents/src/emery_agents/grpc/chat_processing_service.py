@@ -1,30 +1,7 @@
-"""
-ChatProcessingService Implementation
-
-Stateful gRPC service for AI chat processing with persistent agent sessions.
-Database operations (sessions, message persistence, history) are handled by Next.js.
-
-AIDEV-NOTE: Session-based architecture with agent persistence:
-- SessionManager maintains agent instances in memory
-- Agents persist between messages (reset=False)
-- Conversation history restored from database after restart/timeout
-- Automatic cleanup (30 min idle, 4 hour max lifetime)
-
-AI Processing features:
-- LLM response generation
-- Tool execution
-- OAuth proxy operations
-
-All database operations remain in Next.js ChatApplicationService.
-
-AIDEV-NOTE: Refactored to use shared utilities:
-- ImageProcessor for image extraction
-- AgentFactory for agent creation
-- TokenUsageExtractor for token tracking
-- UnifiedToolLoader enhanced methods
-"""
+"""Stateful gRPC chat service. DB operations handled by Next.js."""
 
 import logging
+import os
 import time
 import asyncio
 import concurrent.futures
@@ -38,6 +15,14 @@ import requests
 from smolagents import ToolCallingAgent, AgentText
 from smolagents.models import ChatMessage, MessageRole
 from smolagents.memory import ActionStep, PlanningStep, FinalAnswerStep
+
+from emery_agents.agents.interrupt_aware_agent import InterruptAwareToolCallingAgent
+from emery_agents.agents.chat_planner_agent import create_chat_planner_agent
+from emery_agents.agents.skill_builder_agent import create_skill_builder_agent
+from emery_agents.agents.document_builder_agent import create_document_builder_agent
+from emery_agents.clients import HuggingFaceInferenceClient
+from emery_agents.tools.crud_tools import load_skill_crud, load_document_crud
+from emery_agents.tools.tool_executor import create_tool_executor
 from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .mappers import ProtoMapper
 from .mappers.message_mapper import (
@@ -58,6 +43,7 @@ from ..services.image_processor import ImageProcessor
 from ..services.agent_factory import AgentFactory, AgentConfig
 from ..services.token_usage_extractor import TokenUsageExtractor
 from ..services.agent_executor import AgentExecutor
+from ..services.skill_executor import SkillExecutorService
 from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode
 
@@ -157,67 +143,6 @@ def _cleanup_thread_pool():
 
 atexit.register(_cleanup_thread_pool)
 
-def _run_async_in_thread(coro: Coroutine[Any, Any, T]) -> T:
-    """
-    Run async coroutine in a shared thread pool to prevent deadlock.
-
-    This uses a shared thread pool instead of creating new ThreadPoolExecutor
-    for each call, and uses asyncio.run() to create fresh event loop in thread.
-
-    Args:
-        coro: Coroutine to run (with generic return type T)
-
-    Returns:
-        Result of the coroutine (type T)
-
-    Raises:
-        TimeoutError: If operation exceeds 30 second timeout
-        Exception: If async operation fails
-    """
-    try:
-        future = _async_thread_pool.submit(asyncio.run, coro)
-        return future.result(timeout=30.0)
-    except concurrent.futures.TimeoutError:
-        logger.error("Async operation timed out after 30 seconds")
-        raise TimeoutError("Operation exceeded 30 second timeout")
-    except Exception as e:
-        logger.error(f"Async operation failed: {e}")
-        raise
-
-
-async def _process_skill_content_async(content_parts: List['agent_worker_pb2.MessagePart']) -> tuple[List[Image.Image], List[str]]:
-    """
-    Process MessageParts for skill execution (images + files).
-
-    Uses shared proto_parts_to_smolagents_content for consistent processing,
-    then transforms the result to separate images and text for skill execution.
-
-    Args:
-        content_parts: List of MessagePart from skill_config.content
-
-    Returns:
-        Tuple of (images list, text_parts list)
-    """
-    # Use shared processing function to get MessageContentList
-    content_list = await proto_parts_to_smolagents_content(content_parts)
-
-    # Transform MessageContentList to (images, text_parts) format for skills
-    images = []
-    text_parts = []
-
-    for content_item in content_list:
-        if content_item["type"] == "image":
-            # Extract PIL Image from ImageContentPart
-            images.append(content_item["image"])
-        elif content_item["type"] == "text":
-            # Extract text from TextContentPart
-            # Add file prefix if this text came from file processing
-            text = content_item["text"]
-            # Note: File processing errors already include "[File: ...]" prefix from proto_parts_to_smolagents_content
-            text_parts.append(f"\n\n{text}")
-
-    return images, text_parts
-
 
 class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingServiceServicer):
     """
@@ -236,7 +161,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
     
     def __init__(self, organization_id: str = ""):
         # Fail fast if HF_TOKEN is not provided
-        import os
         hf_token = os.getenv("HF_TOKEN")
         if not hf_token:
             raise EnvironmentError(
@@ -275,6 +199,16 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self.model_provider = SmolagentsModelProvider()
             self.agent_factory = AgentFactory(self.model_provider)
             logger.info("✅ AgentFactory initialized successfully")
+
+            # SkillExecutorService for shared skill execution logic
+            self.skill_executor_service = SkillExecutorService(
+                tool_loader=self.tool_registry,
+                agent_factory=self.agent_factory
+            )
+            logger.info("✅ SkillExecutorService initialized successfully")
+
+            # Inference client for operation skills (lazy initialization)
+            self._inference_client: Optional[HuggingFaceInferenceClient] = None
 
             logger.info("✅ ChatProcessingService initialized successfully")
 
@@ -326,7 +260,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"📎 Extracted {len(file_attachments)} file attachments")
 
         # Extract tools and skills from AgentConfig
-        agent_config = request.agent_config if hasattr(request, 'agent_config') and request.agent_config else None
+        # ChatProcessingRequest is protobuf - message fields are None if not set
+        # Access directly and check truthiness
+        agent_config = request.agent_config if request.agent_config else None
 
         if agent_config:
             tools_count = len(agent_config.tools) if agent_config.tools else 0
@@ -378,7 +314,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 logger.info("🔧 No organization model specified, will use system default")
 
             # Extract user API key from request (for managed agents like skill_builder)
-            user_api_key = request.user_api_key if hasattr(request, 'user_api_key') and request.user_api_key else None
+            # Protobuf string field - empty string if not set
+            user_api_key = request.user_api_key or None
             if user_api_key:
                 logger.info(f"🔑 User API key provided for managed agents")
             else:
@@ -757,10 +694,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # InterruptAwareToolCallingAgent handles interrupt propagation from managed agents
             logger.info("🚀 Executing ToolCallingAgent with stream=True...")
 
-            # Import smolagents step types for proper type checking
-            from smolagents.memory import ActionStep, PlanningStep, FinalAnswerStep
-            from smolagents import AgentText
-
             step_index = 0
             final_answer_text = ""
 
@@ -1010,7 +943,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         # Create skill execution callback if agent_config has skills
         skill_executor = None
         if agent_config and agent_config.skills:
-            skill_executor = self._create_skill_executor_callback(org_model=org_model)
+            skill_executor = self.skill_executor_service.create_executor_callback(
+                org_model=org_model,
+                return_message_parts=True,  # Chat mode returns MessageParts JSON
+                api_key=api_key,
+                organization_id=org_id
+            )
 
         # Create inference client for operation skills (direct HF API calls)
         # Check if any skills use operation execution type
@@ -1045,213 +983,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         Returns:
             HuggingFaceInferenceClient instance
         """
-        if not hasattr(self, '_inference_client') or self._inference_client is None:
-            from ..clients import HuggingFaceInferenceClient
+        # Lazy initialization - _inference_client is None until first use
+        if self._inference_client is None:
             self._inference_client = HuggingFaceInferenceClient()
         return self._inference_client
-
-    def _create_skill_executor_callback(self, org_model: Optional[str] = None):
-        """
-        Create a callback function for executing skills.
-
-        This callback is used by SkillTool to execute skills when called by the LLM.
-        It creates a sub-agent with the skill's tools and executes the skill's instructions.
-
-        Args:
-            org_model: Organization default model (used as fallback if skill has no model)
-
-        Returns:
-            Callable that takes (SkillConfig, runtime_inputs, capture_outputs) and returns result
-            - When capture_outputs=False: returns result string
-            - When capture_outputs=True: returns (result_string, captured_outputs_dict)
-        """
-        def execute_skill(
-            skill_config: 'agent_worker_pb2.SkillConfig',
-            runtime_inputs: Dict[str, Any],
-            capture_outputs: bool = False
-        ) -> str | tuple:
-            """
-            Execute a skill by creating a sub-agent.
-
-            Args:
-                skill_config: Full skill definition from proto
-                runtime_inputs: Runtime inputs from LLM (matching skill.inputs)
-                capture_outputs: If True, add OutputTool and return (result, captured_outputs)
-
-            Returns:
-                Skill execution result as string (or tuple with captured outputs if capture_outputs=True)
-            """
-            logger.info(f"🎯 Executing skill: {skill_config.name} (capture_outputs={capture_outputs})")
-
-            try:
-                # Import OutputTool for output capture
-                from ..tools.output_tool import OutputTool
-
-                # 1. Load skill's tools
-                skill_tools = []
-                if skill_config.tools:
-                    skill_tools = self.tool_registry.load_tools_from_configs(
-                        tool_configs=list(skill_config.tools),
-                        api_key=None,
-                        api_key_mode="user"
-                    )
-                    logger.info(f"🔧 Loaded {len(skill_tools)} tools for skill {skill_config.name}")
-
-                # Add OutputTool if capturing outputs
-                output_tool = None
-                if capture_outputs and skill_config.outputs:
-                    output_tool = OutputTool(skill_outputs=list(skill_config.outputs))
-                    skill_tools.append(output_tool)
-                    logger.info(f"📤 Added OutputTool for {len(list(skill_config.outputs))} outputs")
-
-                # 2. Process attachments from skill_config.content using shared utilities
-                images = []
-                text_parts = []
-
-                if skill_config.content:
-                    logger.info(f"📎 Processing {len(skill_config.content)} attachments from skill config")
-                    try:
-                        # Use shared async helper for consistent attachment processing
-                        # Run in separate thread since we're already in an async context
-                        images, text_parts = _run_async_in_thread(
-                            _process_skill_content_async(skill_config.content)
-                        )
-                        logger.info(f"✅ Processed: {len(images)} images, {len(text_parts)} text parts")
-                    except Exception as e:
-                        logger.error(f"❌ Failed to process attachments: {e}")
-
-                # 3. Build task from instructions + inputs + attachments
-                task_parts = [skill_config.instructions]
-
-                # Add runtime inputs to task
-                if runtime_inputs:
-                    task_parts.append(INPUTS_HEADER)
-                    for key, value in runtime_inputs.items():
-                        task_parts.append(f"- {key}: {value}")
-
-                # Add text parts from attachments to task
-                task_parts.extend(text_parts)
-
-                # Add output instructions if capturing (use template for detailed instructions)
-                if capture_outputs and skill_config.outputs:
-                    from ..prompts import render_output_instructions
-                    output_instructions = render_output_instructions(list(skill_config.outputs))
-                    if output_instructions:
-                        task_parts.append(f"\n\n{output_instructions}")
-                        logger.info(f"📤 Added output capture instructions ({len(output_instructions)} chars)")
-
-                task = "\n".join(task_parts)
-                logger.info(f"📝 Skill task: {task[:200]}...")
-                if images:
-                    logger.info(f"🖼️ Passing {len(images)} images to sub-agent")
-
-                # 4. Create sub-agent with skill's tools and correct has_images flag
-                has_images = bool(images)  # Calculate once for clarity
-
-                # Create sub-agent with autonomous context
-                agent_config = AgentConfig(
-                    tools=skill_tools,
-                    skill_model=skill_config.model if skill_config.model else None,
-                    org_model=org_model,
-                    has_images=has_images,
-                    max_steps=10,
-                    agent_name=f"skill_{skill_config.name}",
-                    agent_description=skill_config.description,
-                    enable_caching=False,
-                    context_type="autonomous"  # Use autonomous execution context
-                )
-                sub_agent = self.agent_factory.create_agent(agent_config)
-                logger.info(f"✨ Created sub-agent for skill {skill_config.name} (has_images={has_images})")
-
-                # 5. Execute skill with sub-agent
-                # When stream=False, run() returns the final output directly (not an iterable)
-                from smolagents.agent_types import AgentText, AgentImage, AgentAudio
-                import json
-
-                result = sub_agent.run(task=task, images=images if images else None, stream=False, reset=True)
-                logger.info(f"🔍 Skill output type: {type(result).__name__}")
-
-                # Create MessagePart based on output type
-                message_parts = []
-
-                if isinstance(result, AgentImage):
-                    # Image output - save to temp and create ImageUrlPart
-                    temp_path = result.to_string()  # Saves to temp directory
-                    logger.info(f"📸 Skill generated image: {temp_path}")
-                    # TODO: Upload image to S3 and get URL instead of temp path
-                    image_part = agent_worker_pb2.ImageUrlPart(url=temp_path)
-                    message_part = agent_worker_pb2.MessagePart(image_url=image_part)
-                    message_parts.append(message_part)
-
-                elif isinstance(result, AgentAudio):
-                    # Audio output - save to temp and create FilePart
-                    temp_path = result.to_string()  # Saves to temp directory
-                    logger.info(f"🔊 Skill generated audio: {temp_path}")
-                    # TODO: Upload audio to S3 and get URL instead of temp path
-                    file_part = agent_worker_pb2.FilePart(
-                        url=temp_path,
-                        mime_type="audio/wav",
-                        filename="audio.wav",
-                        size=0  # TODO: Get actual file size
-                    )
-                    message_part = agent_worker_pb2.MessagePart(file=file_part)
-                    message_parts.append(message_part)
-
-                elif isinstance(result, AgentText) or isinstance(result, str):
-                    # Text output - create TextPart
-                    text_content = str(result)
-                    logger.info(f"📝 Skill generated text: {text_content[:100]}...")
-                    text_part = agent_worker_pb2.TextPart(text=text_content)
-                    message_part = agent_worker_pb2.MessagePart(text=text_part)
-                    message_parts.append(message_part)
-
-                else:
-                    # Unknown type - convert to string
-                    text_content = str(result)
-                    logger.info(f"❓ Skill generated unknown type, converting to text: {text_content[:100]}...")
-                    text_part = agent_worker_pb2.TextPart(text=text_content)
-                    message_part = agent_worker_pb2.MessagePart(text=text_part)
-                    message_parts.append(message_part)
-
-                # Serialize MessageParts to JSON for now
-                # TODO: Update SkillTool and parent agent to handle MessagePart[] natively
-                serialized_parts = []
-                for part in message_parts:
-                    if part.HasField('text'):
-                        serialized_parts.append({'type': 'text', 'text': part.text.text})
-                    elif part.HasField('image_url'):
-                        serialized_parts.append({'type': 'image', 'url': part.image_url.url})
-                    elif part.HasField('file'):
-                        serialized_parts.append({
-                            'type': 'file',
-                            'url': part.file.url,
-                            'mime_type': part.file.mime_type,
-                            'filename': part.file.filename
-                        })
-
-                result_json = json.dumps({'parts': serialized_parts})
-                logger.info(f"✅ Skill {skill_config.name} completed: {len(message_parts)} message parts")
-
-                # Return with captured outputs if requested
-                if capture_outputs:
-                    was_called = output_tool.was_called() if output_tool else False
-                    captured = output_tool.get_captured_values() if output_tool and was_called else None
-                    if captured:
-                        logger.info(f"📤 Captured outputs from submit_result: {list(captured.keys())}")
-                    else:
-                        logger.warning(f"⚠️ OutputTool was {'NOT ' if not was_called else ''}called, captured={captured}")
-                    return result_json, captured
-                else:
-                    return result_json
-
-            except Exception as e:
-                error_msg = f"Skill execution error: {str(e)}"
-                logger.error(f"❌ Skill {skill_config.name} failed: {e}", exc_info=True)
-                if capture_outputs:
-                    return error_msg, None
-                return error_msg
-
-        return execute_skill
 
     def _create_agent_with_model_provider(
         self,
@@ -1260,7 +995,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         has_images: bool = False,
         managed_agents: Optional[List[Any]] = None,
         session_attachments: Optional[List[Any]] = None
-    ) -> 'InterruptAwareToolCallingAgent':
+    ) -> InterruptAwareToolCallingAgent:
         """
         Create Chat Planner orchestrator agent with managed agents.
 
@@ -1271,8 +1006,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             session_attachments: Optional list of file attachments available in session
                                 (displayed to agent for file reference awareness)
         """
-        from ..agents.chat_planner_agent import create_chat_planner_agent
-
         # Get model with smart vision selection
         model = self.model_provider.get_model(
             model_id=self.model_provider.resolve_model_selection(
@@ -1314,10 +1047,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         proper instructions. The sub-agent gets tool-specific docs from build_agent_instructions
         and executor rules from tool_executor.j2 template.
         """
-        from ..tools.crud_tools import load_skill_crud
-        from ..tools.tool_executor import create_tool_executor
-        from ..agents.skill_builder_agent import create_skill_builder_agent
-
         # Create the CRUD tool (will be wrapped by tool_executor)
         skill_crud_tool = load_skill_crud(None, api_key, org_id)
 
@@ -1364,10 +1093,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         proper instructions. The sub-agent gets tool-specific docs from build_agent_instructions
         and executor rules from tool_executor.j2 template.
         """
-        from ..tools.crud_tools import load_document_crud
-        from ..tools.tool_executor import create_tool_executor
-        from ..agents.document_builder_agent import create_document_builder_agent
-
         # Create the CRUD tool (will be wrapped by tool_executor)
         document_crud_tool = load_document_crud(None, api_key, org_id)
 
