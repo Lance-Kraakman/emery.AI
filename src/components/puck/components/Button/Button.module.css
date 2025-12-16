@@ -97,6 +97,24 @@
   width: 100%;
 }
 
+/* Container alignment for buttons */
+.Button-container {
+  display: flex;
+  width: 100%;
+}
+
+.Button-container--center {
+  justify-content: center;
+}
+
+.Button-container--left {
+  justify-content: flex-start;
+}
+
+.Button-container--right {
+  justify-content: flex-end;
+}
+
 .Button-spinner {
   padding-inline-start: 8px;
 }

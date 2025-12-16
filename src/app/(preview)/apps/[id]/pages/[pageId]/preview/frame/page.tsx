@@ -107,7 +107,10 @@ export default function PreviewFramePage() {
         setEffectiveTheme(computedTheme);
 
         // Resolve all component data
-        const resolved = await resolveAllData(rawData, config, queryParamsObject);
+        const resolved = await resolveAllData(rawData, config, {
+          ...queryParamsObject,
+          isPreview: true,        // Add this for Template component
+        });
         setResolvedData(resolved);
       } catch (error) {
         console.error('[PreviewFrame] Error loading/resolving data:', error);

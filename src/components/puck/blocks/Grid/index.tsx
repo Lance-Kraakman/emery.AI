@@ -4,7 +4,7 @@ import styles from "./styles.module.css";
 import { getClassNameFactory } from "@/components/puck/lib";
 import { Section } from "../../components/Section";
 import { withLayout } from "../../components/Layout";
-import { spacingField, paddingField } from "../../fields/standard-fields";
+import { spacingField, paddingField, justifyItemsField, alignItemsField } from "../../fields/standard-fields";
 import type { FourSidedSpacing } from "../../types/spacing-types";
 import { useTheme } from "../../theme-context";
 import { computeFourSidedShorthand } from "../../utils/spacing";
@@ -15,6 +15,8 @@ export type ItemStyle = "none" | "card" | "bordered" | "subtle";
 
 export type GridProps = {
   numColumns: number;
+  justifyItems: "start" | "center" | "end" | "stretch";
+  alignItems: "start" | "center" | "end" | "stretch";
   gap: string;
   itemStyle?: ItemStyle;
   itemPadding?: FourSidedSpacing;
@@ -29,6 +31,8 @@ export const GridInternal: ComponentConfig<GridProps> = {
       min: 1,
       max: 12,
     },
+    justifyItems: justifyItemsField,
+    alignItems: alignItemsField,
     gap: spacingField,
     itemStyle: {
       type: "select",
@@ -50,12 +54,14 @@ export const GridInternal: ComponentConfig<GridProps> = {
   },
   defaultProps: {
     numColumns: 4,
+    justifyItems: "start",
+    alignItems: "start",
     gap: "4",
     itemStyle: "none",
     itemPadding: undefined,
     items: [],
   },
-  render: function GridRender({ gap, numColumns, itemStyle, itemPadding, items: Items }) {
+  render: function GridRender({ gap, numColumns, justifyItems, alignItems, itemStyle, itemPadding, items: Items }) {
     const theme = useTheme();
     const hasItemStyle = itemStyle && itemStyle !== "none";
 
@@ -75,6 +81,8 @@ export const GridInternal: ComponentConfig<GridProps> = {
           style={{
             gap: `var(--spacing-${gap}, 24px)`,
             gridTemplateColumns: `repeat(${numColumns}, 1fr)`,
+            justifyItems,
+            alignItems,
             ...(itemPaddingStyle && {
               "--grid-item-padding": itemPaddingStyle,
             }),

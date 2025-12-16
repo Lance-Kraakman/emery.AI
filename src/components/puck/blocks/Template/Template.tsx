@@ -17,7 +17,7 @@ export const Template: PuckComponent<TemplateProps> = ({
   children: Children,
 }) => {
   return (
-    <Section>
+    <Section raw={true}>
       <Children className={getClassName()} />
     </Section>
   );
