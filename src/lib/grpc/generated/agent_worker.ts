@@ -400,28 +400,62 @@ export interface TargetFieldMetadata {
   fieldName?: string | undefined;
 }
 
-/** Individual field mapping - maps a source path to a target table field */
-export interface FieldMapping {
-  /** Field path: "label", "score", "box.xmin", "source.rowId" */
-  sourceField: string;
-  /** Target table ID */
-  targetTableId: number;
-  /** Target field/column ID */
-  targetFieldId: number;
-  /** Optional: target field info for LLM guidance */
-  targetFieldMetadata: TargetFieldMetadata | undefined;
+/** Reference to a field from a previous table mapping result */
+export interface TableReference {
+  /** Which table mapping (1, 2, 3...) */
+  order: number;
+  /** 'row_id' or field name from that table */
+  field: string;
 }
 
-/** Output mapping configuration - supports single-row and multi-row mapping modes */
+/** Typed field source - either a skill output or a reference to previous table */
+export interface FieldSource {
+  /** Direct skill output name (e.g., "company_name") */
+  skillOutput?:
+    | string
+    | undefined;
+  /** Reference to previous table operation result */
+  tableRef?: TableReference | undefined;
+}
+
+/** Field mapping within a table mapping - maps a typed source to a target field */
+export interface FieldMapping {
+  /** Where to get the value (typed) */
+  source:
+    | FieldSource
+    | undefined;
+  /** Which field to write to */
+  targetFieldId: number;
+  /** Optional: target field info for LLM guidance */
+  targetFieldMetadata:
+    | TargetFieldMetadata
+    | undefined;
+  /** When true, append to existing relation values instead of replacing */
+  appendMode: boolean;
+}
+
+/** Ordered operation for a single table */
+export interface TableMapping {
+  /** Execution order (1, 2, 3...) */
+  order: number;
+  /** Which table to write to */
+  targetTableId: number;
+  /** 'create' or 'update' */
+  rowAction: string;
+  /** For update mode - specific row ID */
+  rowId: string;
+  /** Field mappings for this table */
+  mappings: FieldMapping[];
+  /** Field to use for relation display value */
+  displayFieldId: number;
+}
+
+/** Output mapping configuration - multi-table support with typed references */
 export interface OutputMappingConfig {
   /** 'single_row' or 'multi_row' */
   mode: string;
-  /** 'create' or 'update' (for single_row mode) */
-  rowAction: string;
-  /** For update mode: specific row ID to update */
-  rowId: string;
-  /** Field mappings from output to table fields */
-  mappings: FieldMapping[];
+  /** Ordered table operations */
+  tableMappings: TableMapping[];
 }
 
 /** Tool configuration */
@@ -2766,23 +2800,177 @@ export const TargetFieldMetadata: MessageFns<TargetFieldMetadata> = {
   },
 };
 
+function createBaseTableReference(): TableReference {
+  return { order: 0, field: "" };
+}
+
+export const TableReference: MessageFns<TableReference> = {
+  encode(message: TableReference, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.order !== 0) {
+      writer.uint32(8).int32(message.order);
+    }
+    if (message.field !== "") {
+      writer.uint32(18).string(message.field);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TableReference {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTableReference();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.order = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.field = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TableReference {
+    return {
+      order: isSet(object.order) ? globalThis.Number(object.order) : 0,
+      field: isSet(object.field) ? globalThis.String(object.field) : "",
+    };
+  },
+
+  toJSON(message: TableReference): unknown {
+    const obj: any = {};
+    if (message.order !== 0) {
+      obj.order = Math.round(message.order);
+    }
+    if (message.field !== "") {
+      obj.field = message.field;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TableReference>, I>>(base?: I): TableReference {
+    return TableReference.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TableReference>, I>>(object: I): TableReference {
+    const message = createBaseTableReference();
+    message.order = object.order ?? 0;
+    message.field = object.field ?? "";
+    return message;
+  },
+};
+
+function createBaseFieldSource(): FieldSource {
+  return { skillOutput: undefined, tableRef: undefined };
+}
+
+export const FieldSource: MessageFns<FieldSource> = {
+  encode(message: FieldSource, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.skillOutput !== undefined) {
+      writer.uint32(10).string(message.skillOutput);
+    }
+    if (message.tableRef !== undefined) {
+      TableReference.encode(message.tableRef, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FieldSource {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFieldSource();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.skillOutput = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.tableRef = TableReference.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FieldSource {
+    return {
+      skillOutput: isSet(object.skillOutput) ? globalThis.String(object.skillOutput) : undefined,
+      tableRef: isSet(object.tableRef) ? TableReference.fromJSON(object.tableRef) : undefined,
+    };
+  },
+
+  toJSON(message: FieldSource): unknown {
+    const obj: any = {};
+    if (message.skillOutput !== undefined) {
+      obj.skillOutput = message.skillOutput;
+    }
+    if (message.tableRef !== undefined) {
+      obj.tableRef = TableReference.toJSON(message.tableRef);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FieldSource>, I>>(base?: I): FieldSource {
+    return FieldSource.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FieldSource>, I>>(object: I): FieldSource {
+    const message = createBaseFieldSource();
+    message.skillOutput = object.skillOutput ?? undefined;
+    message.tableRef = (object.tableRef !== undefined && object.tableRef !== null)
+      ? TableReference.fromPartial(object.tableRef)
+      : undefined;
+    return message;
+  },
+};
+
 function createBaseFieldMapping(): FieldMapping {
-  return { sourceField: "", targetTableId: 0, targetFieldId: 0, targetFieldMetadata: undefined };
+  return { source: undefined, targetFieldId: 0, targetFieldMetadata: undefined, appendMode: false };
 }
 
 export const FieldMapping: MessageFns<FieldMapping> = {
   encode(message: FieldMapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.sourceField !== "") {
-      writer.uint32(10).string(message.sourceField);
-    }
-    if (message.targetTableId !== 0) {
-      writer.uint32(16).int32(message.targetTableId);
+    if (message.source !== undefined) {
+      FieldSource.encode(message.source, writer.uint32(10).fork()).join();
     }
     if (message.targetFieldId !== 0) {
-      writer.uint32(24).int32(message.targetFieldId);
+      writer.uint32(16).int32(message.targetFieldId);
     }
     if (message.targetFieldMetadata !== undefined) {
-      TargetFieldMetadata.encode(message.targetFieldMetadata, writer.uint32(34).fork()).join();
+      TargetFieldMetadata.encode(message.targetFieldMetadata, writer.uint32(26).fork()).join();
+    }
+    if (message.appendMode !== false) {
+      writer.uint32(32).bool(message.appendMode);
     }
     return writer;
   },
@@ -2799,7 +2987,7 @@ export const FieldMapping: MessageFns<FieldMapping> = {
             break;
           }
 
-          message.sourceField = reader.string();
+          message.source = FieldSource.decode(reader, reader.uint32());
           continue;
         }
         case 2: {
@@ -2807,23 +2995,23 @@ export const FieldMapping: MessageFns<FieldMapping> = {
             break;
           }
 
-          message.targetTableId = reader.int32();
-          continue;
-        }
-        case 3: {
-          if (tag !== 24) {
-            break;
-          }
-
           message.targetFieldId = reader.int32();
           continue;
         }
-        case 4: {
-          if (tag !== 34) {
+        case 3: {
+          if (tag !== 26) {
             break;
           }
 
           message.targetFieldMetadata = TargetFieldMetadata.decode(reader, reader.uint32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.appendMode = reader.bool();
           continue;
         }
       }
@@ -2837,28 +3025,28 @@ export const FieldMapping: MessageFns<FieldMapping> = {
 
   fromJSON(object: any): FieldMapping {
     return {
-      sourceField: isSet(object.sourceField) ? globalThis.String(object.sourceField) : "",
-      targetTableId: isSet(object.targetTableId) ? globalThis.Number(object.targetTableId) : 0,
+      source: isSet(object.source) ? FieldSource.fromJSON(object.source) : undefined,
       targetFieldId: isSet(object.targetFieldId) ? globalThis.Number(object.targetFieldId) : 0,
       targetFieldMetadata: isSet(object.targetFieldMetadata)
         ? TargetFieldMetadata.fromJSON(object.targetFieldMetadata)
         : undefined,
+      appendMode: isSet(object.appendMode) ? globalThis.Boolean(object.appendMode) : false,
     };
   },
 
   toJSON(message: FieldMapping): unknown {
     const obj: any = {};
-    if (message.sourceField !== "") {
-      obj.sourceField = message.sourceField;
-    }
-    if (message.targetTableId !== 0) {
-      obj.targetTableId = Math.round(message.targetTableId);
+    if (message.source !== undefined) {
+      obj.source = FieldSource.toJSON(message.source);
     }
     if (message.targetFieldId !== 0) {
       obj.targetFieldId = Math.round(message.targetFieldId);
     }
     if (message.targetFieldMetadata !== undefined) {
       obj.targetFieldMetadata = TargetFieldMetadata.toJSON(message.targetFieldMetadata);
+    }
+    if (message.appendMode !== false) {
+      obj.appendMode = message.appendMode;
     }
     return obj;
   },
@@ -2868,18 +3056,162 @@ export const FieldMapping: MessageFns<FieldMapping> = {
   },
   fromPartial<I extends Exact<DeepPartial<FieldMapping>, I>>(object: I): FieldMapping {
     const message = createBaseFieldMapping();
-    message.sourceField = object.sourceField ?? "";
-    message.targetTableId = object.targetTableId ?? 0;
+    message.source = (object.source !== undefined && object.source !== null)
+      ? FieldSource.fromPartial(object.source)
+      : undefined;
     message.targetFieldId = object.targetFieldId ?? 0;
     message.targetFieldMetadata = (object.targetFieldMetadata !== undefined && object.targetFieldMetadata !== null)
       ? TargetFieldMetadata.fromPartial(object.targetFieldMetadata)
       : undefined;
+    message.appendMode = object.appendMode ?? false;
+    return message;
+  },
+};
+
+function createBaseTableMapping(): TableMapping {
+  return { order: 0, targetTableId: 0, rowAction: "", rowId: "", mappings: [], displayFieldId: 0 };
+}
+
+export const TableMapping: MessageFns<TableMapping> = {
+  encode(message: TableMapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.order !== 0) {
+      writer.uint32(8).int32(message.order);
+    }
+    if (message.targetTableId !== 0) {
+      writer.uint32(16).int32(message.targetTableId);
+    }
+    if (message.rowAction !== "") {
+      writer.uint32(26).string(message.rowAction);
+    }
+    if (message.rowId !== "") {
+      writer.uint32(34).string(message.rowId);
+    }
+    for (const v of message.mappings) {
+      FieldMapping.encode(v!, writer.uint32(42).fork()).join();
+    }
+    if (message.displayFieldId !== 0) {
+      writer.uint32(48).int32(message.displayFieldId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TableMapping {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTableMapping();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.order = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.targetTableId = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.rowAction = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.rowId = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.mappings.push(FieldMapping.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.displayFieldId = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TableMapping {
+    return {
+      order: isSet(object.order) ? globalThis.Number(object.order) : 0,
+      targetTableId: isSet(object.targetTableId) ? globalThis.Number(object.targetTableId) : 0,
+      rowAction: isSet(object.rowAction) ? globalThis.String(object.rowAction) : "",
+      rowId: isSet(object.rowId) ? globalThis.String(object.rowId) : "",
+      mappings: globalThis.Array.isArray(object?.mappings)
+        ? object.mappings.map((e: any) => FieldMapping.fromJSON(e))
+        : [],
+      displayFieldId: isSet(object.displayFieldId) ? globalThis.Number(object.displayFieldId) : 0,
+    };
+  },
+
+  toJSON(message: TableMapping): unknown {
+    const obj: any = {};
+    if (message.order !== 0) {
+      obj.order = Math.round(message.order);
+    }
+    if (message.targetTableId !== 0) {
+      obj.targetTableId = Math.round(message.targetTableId);
+    }
+    if (message.rowAction !== "") {
+      obj.rowAction = message.rowAction;
+    }
+    if (message.rowId !== "") {
+      obj.rowId = message.rowId;
+    }
+    if (message.mappings?.length) {
+      obj.mappings = message.mappings.map((e) => FieldMapping.toJSON(e));
+    }
+    if (message.displayFieldId !== 0) {
+      obj.displayFieldId = Math.round(message.displayFieldId);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TableMapping>, I>>(base?: I): TableMapping {
+    return TableMapping.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TableMapping>, I>>(object: I): TableMapping {
+    const message = createBaseTableMapping();
+    message.order = object.order ?? 0;
+    message.targetTableId = object.targetTableId ?? 0;
+    message.rowAction = object.rowAction ?? "";
+    message.rowId = object.rowId ?? "";
+    message.mappings = object.mappings?.map((e) => FieldMapping.fromPartial(e)) || [];
+    message.displayFieldId = object.displayFieldId ?? 0;
     return message;
   },
 };
 
 function createBaseOutputMappingConfig(): OutputMappingConfig {
-  return { mode: "", rowAction: "", rowId: "", mappings: [] };
+  return { mode: "", tableMappings: [] };
 }
 
 export const OutputMappingConfig: MessageFns<OutputMappingConfig> = {
@@ -2887,14 +3219,8 @@ export const OutputMappingConfig: MessageFns<OutputMappingConfig> = {
     if (message.mode !== "") {
       writer.uint32(10).string(message.mode);
     }
-    if (message.rowAction !== "") {
-      writer.uint32(18).string(message.rowAction);
-    }
-    if (message.rowId !== "") {
-      writer.uint32(26).string(message.rowId);
-    }
-    for (const v of message.mappings) {
-      FieldMapping.encode(v!, writer.uint32(34).fork()).join();
+    for (const v of message.tableMappings) {
+      TableMapping.encode(v!, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -2919,23 +3245,7 @@ export const OutputMappingConfig: MessageFns<OutputMappingConfig> = {
             break;
           }
 
-          message.rowAction = reader.string();
-          continue;
-        }
-        case 3: {
-          if (tag !== 26) {
-            break;
-          }
-
-          message.rowId = reader.string();
-          continue;
-        }
-        case 4: {
-          if (tag !== 34) {
-            break;
-          }
-
-          message.mappings.push(FieldMapping.decode(reader, reader.uint32()));
+          message.tableMappings.push(TableMapping.decode(reader, reader.uint32()));
           continue;
         }
       }
@@ -2950,10 +3260,8 @@ export const OutputMappingConfig: MessageFns<OutputMappingConfig> = {
   fromJSON(object: any): OutputMappingConfig {
     return {
       mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
-      rowAction: isSet(object.rowAction) ? globalThis.String(object.rowAction) : "",
-      rowId: isSet(object.rowId) ? globalThis.String(object.rowId) : "",
-      mappings: globalThis.Array.isArray(object?.mappings)
-        ? object.mappings.map((e: any) => FieldMapping.fromJSON(e))
+      tableMappings: globalThis.Array.isArray(object?.tableMappings)
+        ? object.tableMappings.map((e: any) => TableMapping.fromJSON(e))
         : [],
     };
   },
@@ -2963,14 +3271,8 @@ export const OutputMappingConfig: MessageFns<OutputMappingConfig> = {
     if (message.mode !== "") {
       obj.mode = message.mode;
     }
-    if (message.rowAction !== "") {
-      obj.rowAction = message.rowAction;
-    }
-    if (message.rowId !== "") {
-      obj.rowId = message.rowId;
-    }
-    if (message.mappings?.length) {
-      obj.mappings = message.mappings.map((e) => FieldMapping.toJSON(e));
+    if (message.tableMappings?.length) {
+      obj.tableMappings = message.tableMappings.map((e) => TableMapping.toJSON(e));
     }
     return obj;
   },
@@ -2981,9 +3283,7 @@ export const OutputMappingConfig: MessageFns<OutputMappingConfig> = {
   fromPartial<I extends Exact<DeepPartial<OutputMappingConfig>, I>>(object: I): OutputMappingConfig {
     const message = createBaseOutputMappingConfig();
     message.mode = object.mode ?? "";
-    message.rowAction = object.rowAction ?? "";
-    message.rowId = object.rowId ?? "";
-    message.mappings = object.mappings?.map((e) => FieldMapping.fromPartial(e)) || [];
+    message.tableMappings = object.tableMappings?.map((e) => TableMapping.fromPartial(e)) || [];
     return message;
   },
 };

@@ -5,20 +5,23 @@ Consolidates row creation/update logic used by both:
 - agent_executor.py (operation mode and agent mode)
 - skill_tool.py (delegation mode)
 
-AIDEV-NOTE: Created to eliminate code duplication (2025-01)
+AIDEV-NOTE: Redesigned for multi-table output mapping with typed references (2025-01)
 """
 
 import os
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
 from ..entities.output_mapping import (
     OutputMappingConfig,
     FieldMapping,
-    build_row_data,
+    FieldSource,
+    TableMapping,
+    TableMappingResult,
+    RowAction,
     get_extension_for_mime
 )
 
@@ -255,3 +258,315 @@ class OutputMappingService:
             except Exception as e:
                 logger.error(f"Error uploading to S3: {e}")
                 return None
+
+    # =========================================================================
+    # Multi-Table Output Mapping (typed references, ordered execution)
+    # =========================================================================
+
+    @staticmethod
+    async def apply_multi_table_mapping(
+        ctx: MappingContext,
+        config: OutputMappingConfig,
+        skill_outputs: Dict[str, Any]
+    ) -> List[TableMappingResult]:
+        """
+        Execute table mappings in order, passing results to subsequent operations.
+
+        Args:
+            ctx: Mapping context with auth and API URL
+            config: Output mapping configuration with table_mappings
+            skill_outputs: Captured skill output values (name → value)
+
+        Returns:
+            List of TableMappingResult for all executed operations
+        """
+        results: List[TableMappingResult] = []
+        results_by_order: Dict[int, TableMappingResult] = {}
+
+        # Sort table mappings by order
+        sorted_mappings = sorted(config.table_mappings, key=lambda m: m.order)
+
+        logger.info(f"📊 Executing {len(sorted_mappings)} table mappings")
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for table_mapping in sorted_mappings:
+                logger.info(f"📋 Processing table mapping #{table_mapping.order}: "
+                           f"table={table_mapping.target_table_id}, action={table_mapping.row_action}")
+
+                # Resolve field values using typed sources
+                row_data = OutputMappingService._resolve_field_values(
+                    table_mapping.mappings,
+                    skill_outputs,
+                    results_by_order
+                )
+
+                if not row_data:
+                    logger.warning(f"No data to map for table mapping #{table_mapping.order}")
+                    continue
+
+                # Execute the mapping (create/update row)
+                row_id, created_data = await OutputMappingService._execute_table_mapping(
+                    client, ctx, table_mapping, row_data
+                )
+
+                if row_id:
+                    # Store result for subsequent mappings
+                    result = TableMappingResult(
+                        order=table_mapping.order,
+                        table_id=table_mapping.target_table_id,
+                        row_id=row_id,
+                        row_data=created_data
+                    )
+                    results.append(result)
+                    results_by_order[table_mapping.order] = result
+                    logger.info(f"✅ Table mapping #{table_mapping.order} completed: row_id={row_id}")
+                else:
+                    logger.error(f"❌ Table mapping #{table_mapping.order} failed")
+
+        logger.info(f"📊 Multi-table mapping complete: {len(results)}/{len(sorted_mappings)} succeeded")
+        return results
+
+    @staticmethod
+    def _resolve_field_values(
+        mappings: List[FieldMapping],
+        skill_outputs: Dict[str, Any],
+        previous_results: Dict[int, TableMappingResult]
+    ) -> Dict[str, Any]:
+        """
+        Resolve typed field sources to actual values.
+
+        Args:
+            mappings: List of field mappings with typed sources
+            skill_outputs: Skill output values (name → value)
+            previous_results: Results from previous table operations (order → result)
+
+        Returns:
+            Dict mapping field_id (as string) to resolved value
+        """
+        resolved: Dict[str, Any] = {}
+
+        for mapping in mappings:
+            source = mapping.source
+            value = None
+
+            if source.type == 'skill_output':
+                # Direct skill output
+                value = skill_outputs.get(source.name)
+                logger.debug(f"Resolved skill_output '{source.name}' = {value}")
+
+            elif source.type == 'table_ref':
+                # Reference to previous table result
+                if source.order in previous_results:
+                    result = previous_results[source.order]
+                    if source.field == 'row_id':
+                        value = result.row_id
+                    else:
+                        # Look up field value from created row data
+                        value = result.row_data.get(source.field)
+                    logger.debug(f"Resolved table_ref order={source.order} field='{source.field}' = {value}")
+                else:
+                    logger.warning(f"Table ref order={source.order} not found in previous results")
+
+            if value is not None:
+                resolved[str(mapping.target_field_id)] = value
+
+        return resolved
+
+    @staticmethod
+    async def _fetch_row(
+        client: httpx.AsyncClient,
+        ctx: MappingContext,
+        table_id: int,
+        row_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetch existing row data from the API.
+
+        Args:
+            client: HTTP client
+            ctx: Mapping context with auth
+            table_id: Table ID
+            row_id: Row ID to fetch
+
+        Returns:
+            Row data dict with field values, or None if not found
+        """
+        url = f"{ctx.api_base_url}/rows"
+        params = {"tableId": str(table_id), "rowId": row_id}
+
+        try:
+            response = await client.get(url, headers=ctx.headers, params=params)
+            if response.status_code >= 400:
+                logger.warning(f"Failed to fetch row {row_id}: {response.status_code}")
+                return None
+
+            data = response.json()
+            # API returns { rows: [...], ... } format
+            rows = data.get('data', {}).get('rows', [])
+            if rows:
+                return rows[0]
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching row {row_id}: {e}")
+            return None
+
+    @staticmethod
+    def _merge_relation_values(
+        existing: List[Dict[str, Any]],
+        new_values: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Merge relation values, deduplicating by ID.
+
+        Args:
+            existing: Current relation values [{ id, value }, ...]
+            new_values: New relation values to append
+
+        Returns:
+            Merged list with duplicates removed (new values take precedence)
+        """
+        # Build map of existing by ID for deduplication
+        result_map: Dict[str, Dict[str, Any]] = {}
+
+        # Add existing values first
+        for item in existing:
+            item_id = str(item.get('id', ''))
+            if item_id:
+                result_map[item_id] = item
+
+        # Add/update with new values (overwrites if same ID)
+        for item in new_values:
+            item_id = str(item.get('id', ''))
+            if item_id:
+                result_map[item_id] = item
+
+        return list(result_map.values())
+
+    @staticmethod
+    async def _execute_table_mapping(
+        client: httpx.AsyncClient,
+        ctx: MappingContext,
+        table_mapping: TableMapping,
+        row_data: Dict[str, Any]
+    ) -> Tuple[Optional[str], Dict[str, Any]]:
+        """
+        Execute a single table mapping operation.
+
+        Args:
+            client: HTTP client
+            ctx: Mapping context
+            table_mapping: Table mapping configuration
+            row_data: Resolved field values to write
+
+        Returns:
+            Tuple of (row_id, created_data) or (None, {}) on failure
+        """
+        table_id = table_mapping.target_table_id
+
+        if table_mapping.row_action == RowAction.CREATE:
+            return await OutputMappingService._create_row_with_result(
+                client, ctx, table_id, row_data
+            )
+        elif table_mapping.row_action == RowAction.UPDATE and table_mapping.row_id:
+            final_row_data = row_data.copy()
+
+            # Handle append mode for relation fields
+            append_mappings = [m for m in table_mapping.mappings if m.append_mode]
+
+            if append_mappings:
+                # Fetch existing row data to merge with
+                existing_row = await OutputMappingService._fetch_row(
+                    client, ctx, table_id, table_mapping.row_id
+                )
+
+                if existing_row:
+                    for mapping in append_mappings:
+                        field_id = str(mapping.target_field_id)
+                        new_val = row_data.get(field_id)
+                        existing_val = existing_row.get(field_id, [])
+
+                        if new_val is not None:
+                            # Normalize to list format
+                            new_list = new_val if isinstance(new_val, list) else [new_val]
+                            existing_list = existing_val if isinstance(existing_val, list) else (
+                                [existing_val] if existing_val else []
+                            )
+
+                            # Merge and deduplicate
+                            merged = OutputMappingService._merge_relation_values(
+                                existing_list, new_list
+                            )
+                            final_row_data[field_id] = merged
+                            logger.debug(
+                                f"Merged relation field {field_id}: "
+                                f"{len(existing_list)} existing + {len(new_list)} new = {len(merged)} merged"
+                            )
+
+            success = await OutputMappingService._update_row(
+                client, ctx, table_id, table_mapping.row_id, final_row_data
+            )
+            if success:
+                return table_mapping.row_id, final_row_data
+            return None, {}
+        else:
+            logger.warning("Update mode requires row_id")
+            return None, {}
+
+    @staticmethod
+    async def _create_row_with_result(
+        client: httpx.AsyncClient,
+        ctx: MappingContext,
+        table_id: int,
+        row_data: Dict[str, Any]
+    ) -> Tuple[Optional[str], Dict[str, Any]]:
+        """
+        Create a row via API and return the created row_id and data.
+
+        Args:
+            client: HTTP client
+            ctx: Mapping context
+            table_id: Target table ID
+            row_data: Field data to create
+
+        Returns:
+            Tuple of (row_id, created_data) or (None, {}) on failure
+        """
+        url = f"{ctx.api_base_url}/rows"
+        # AIDEV-NOTE: dataKeyType='id' tells API that keys are field IDs, not field names
+        payload = {"tableId": table_id, "data": row_data, "dataKeyType": "id"}
+
+        try:
+            response = await client.post(url, headers=ctx.headers, json=payload)
+            if response.status_code >= 400:
+                logger.error(f"Failed to create row: {response.status_code} - {response.text}")
+                return None, {}
+
+            # Parse response to get created row_id
+            response_data = response.json()
+            created_row = response_data.get("row", {})
+            row_id = created_row.get("id")
+
+            if not row_id:
+                logger.error(f"Created row but no row_id in response: {response_data}")
+                return None, {}
+
+            logger.info(f"✅ Created row {row_id} in table {table_id}")
+            return row_id, row_data
+
+        except Exception as e:
+            logger.error(f"Error creating row: {e}")
+            return None, {}
+
+    @staticmethod
+    def _build_relation_value(row_id: str, display_value: str) -> Dict[str, Any]:
+        """
+        Build relation field value with ID and display value.
+
+        Args:
+            row_id: ID of the related row
+            display_value: Display text for the relation
+
+        Returns:
+            Dict with 'id' and 'value' keys for relation field storage
+        """
+        return {"id": row_id, "value": display_value}
