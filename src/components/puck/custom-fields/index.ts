@@ -19,13 +19,6 @@ export {
   type FieldMapping,
 } from "./field-mapping-field";
 
-// Filter Builder
-export {
-  createFilterBuilderField,
-  createSimpleFilterBuilderField,
-  type FilterCondition,
-} from "./filter-builder-field";
-
 // Sort Builder
 export {
   createSortBuilderField,
