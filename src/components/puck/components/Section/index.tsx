@@ -9,10 +9,25 @@ export type SectionProps = {
   children: ReactNode;
   maxWidth?: string;
   style?: CSSProperties;
+  raw?: boolean;
 };
 
 export const Section = forwardRef<HTMLDivElement, SectionProps>(
-  ({ children, className, maxWidth = "1280px", style = {} }, ref) => {
+  ({ children, className, maxWidth = "1280px", style = {}, raw = false }, ref) => {
+    if (raw) {
+      return (
+        <div
+          className={`${getClassName()}${getClassName("raw")}${className ? ` ${className}` : ""}`}
+          style={{
+            ...style,
+          }}
+          ref={ref}
+        >
+          {children}
+        </div>
+      );
+    }
+
     return (
       <div
         className={`${getClassName()}${className ? ` ${className}` : ""}`}

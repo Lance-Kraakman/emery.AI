@@ -37,6 +37,12 @@ interface ParentRowDataContextValue {
   getParentRowData: () => ParentRowData | null;
 
   /**
+   * Check if we have parent field metadata available
+   * Returns true even if rowData is empty but fields are available
+   */
+  hasParentFields: () => boolean;
+
+  /**
    * Resolve {rowData.fieldName} to actual value
    * Looks up the field by name, then gets the value by field ID
    */
@@ -98,11 +104,18 @@ export function ParentRowDataProvider({
     return parent.fields.map(f => f.name);
   };
 
+  const hasParentFields = (): boolean => {
+    const parent = parentStack[0];
+    if (!parent) return false;
+    return parent.fields.length > 0;
+  };
+
   return (
     <ParentRowDataContext.Provider
       value={{
         parentStack,
         getParentRowData,
+        hasParentFields,
         resolveRowDataVariable,
         getParentFieldNames,
       }}
@@ -123,8 +136,11 @@ export function ParentRowDataProvider({
  *   const parentContext = useParentRowData();
  *
  *   if (parentContext) {
- *     const parentId = parentContext.resolveRowDataVariable('id');
- *     // Use parentId to filter child data
+ *     // Check if parent fields are available (works even without row data)
+ *     if (parentContext.hasParentFields()) {
+ *       const parentId = parentContext.resolveRowDataVariable('id');
+ *       // Use parentId to filter child data
+ *     }
  *   }
  * }
  * ```

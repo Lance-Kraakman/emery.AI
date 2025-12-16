@@ -249,7 +249,9 @@ export class DIContainer {
       'puckAppRepository': 'IAppRepository',
       'puckPageRepository': 'IPuckPageRepository',
       'puckAppApplicationService': 'AppApplicationService',
-      'puckPageApplicationService': 'PuckPageApplicationService'
+      'puckPageApplicationService': 'PuckPageApplicationService',
+      'templateRepository': 'ITemplateRepository',
+      'templateApplicationService': 'TemplateApplicationService'
     };
 
     // Register all services from the module
@@ -383,8 +385,10 @@ export {
   // Puck services
   getAppRepository,
   getPuckPageRepository,
+  getTemplateRepository,
   getAppApplicationService,
   getPuckPageApplicationService,
+  getTemplateApplicationService,
 
   // View services
   getViewRepository,

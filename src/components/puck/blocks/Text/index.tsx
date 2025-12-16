@@ -4,7 +4,7 @@ import { AlignLeft } from "lucide-react";
 import { ComponentConfig } from "@measured/puck";
 import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
-import { typographySizeField, backgroundColorField, textColorField, fontFamilyField, fontWeightField } from "../../fields/standard-fields";
+import { typographySizeField, backgroundColorField, textColorField, fontFamilyField, fontWeightField, textAlignField } from "../../fields/standard-fields";
 import type { TypographySize } from "../../utils/typography";
 import styles from "./styles.module.css";
 
@@ -27,13 +27,8 @@ const TextInner: ComponentConfig<TextProps> = {
     },
     size: typographySizeField,
     align: {
-      type: "radio",
+      ...textAlignField,
       labelIcon: <AlignLeft size={16} />,
-      options: [
-        { label: "Left", value: "left" },
-        { label: "Center", value: "center" },
-        { label: "Right", value: "right" },
-      ],
     },
     textColor: textColorField,
     backgroundColor: backgroundColorField,

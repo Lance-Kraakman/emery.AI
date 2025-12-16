@@ -169,7 +169,7 @@ export async function POST(req: Request) {
       },
     });
 
-    // Create subscription
+    // Create subscription with invoicing (no payment method required)
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
       items: [
@@ -177,6 +177,9 @@ export async function POST(req: Request) {
           price: price.id,
         },
       ],
+      collection_method: 'send_invoice',
+      days_until_due: 30,
+      payment_behavior: 'default_incomplete',
       metadata: {
         organizationId: organizationId.toString(),
         tier: 'enterprise',

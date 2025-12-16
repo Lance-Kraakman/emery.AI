@@ -4,7 +4,7 @@ import styles from "./styles.module.css";
 import { getClassNameFactory } from "@/components/puck/lib";
 import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
-import { spacingField, paddingField } from "../../fields/standard-fields";
+import { spacingField, paddingField, justifyContentField, alignItemsField } from "../../fields/standard-fields";
 import type { FourSidedSpacing } from "../../types/spacing-types";
 import { useTheme } from "../../theme-context";
 import { computeFourSidedShorthand } from "../../utils/spacing";
@@ -15,6 +15,7 @@ export type ItemStyle = "none" | "card" | "bordered" | "subtle";
 
 export type FlexProps = WithLayout<{
   justifyContent: "start" | "center" | "end";
+  alignItems: "start" | "center" | "end" | "stretch";
   direction: "row" | "column";
   gap: string;
   wrap: "wrap" | "nowrap";
@@ -33,15 +34,8 @@ const FlexInternal: ComponentConfig<FlexProps> = {
         { label: "Column", value: "column" },
       ],
     },
-    justifyContent: {
-      label: "Justify Content",
-      type: "radio",
-      options: [
-        { label: "Start", value: "start" },
-        { label: "Center", value: "center" },
-        { label: "End", value: "end" },
-      ],
-    },
+    justifyContent: justifyContentField,
+    alignItems: alignItemsField,
     gap: spacingField,
     wrap: {
       label: "Wrap",
@@ -71,6 +65,7 @@ const FlexInternal: ComponentConfig<FlexProps> = {
   },
   defaultProps: {
     justifyContent: "start",
+    alignItems: "start",
     direction: "row",
     gap: "4",
     wrap: "wrap",
@@ -83,6 +78,7 @@ const FlexInternal: ComponentConfig<FlexProps> = {
   },
   render: function FlexRender({
     justifyContent,
+    alignItems,
     direction,
     gap,
     wrap,
@@ -107,6 +103,7 @@ const FlexInternal: ComponentConfig<FlexProps> = {
           })}
           style={{
             justifyContent,
+            alignItems,
             flexDirection: direction,
             gap: `var(--spacing-${gap}, 24px)`,
             flexWrap: wrap,

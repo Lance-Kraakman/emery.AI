@@ -789,8 +789,14 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
     selectedVariant: undefined,
     children: [],
   },
-  resolveData: async (data, { changed }) => {
-    // Only resolve when template or variant is explicitly changed by user
+  resolveData: async (data, { changed }, context?: { isPublicPage?: boolean; isPreview?: boolean }) => {
+    // In preview/public mode, preserve user edits - no API calls
+    if (context?.isPublicPage || context?.isPreview) {
+      console.log('[Template] Preview/Public mode - preserving user edits, no API calls');
+      return data;
+    }
+    
+    // Edit mode: Only resolve when template or variant is explicitly changed by user
     // Do NOT resolve on load - keep existing children (snapshot behavior)
     if (!changed.template && !changed.selectedVariant) {
       return data;
