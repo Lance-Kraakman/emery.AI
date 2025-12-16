@@ -110,24 +110,35 @@ export class Row {
 
 
   /**
-   * Convert row to plain object with numeric field IDs as keys
-   * AIDEV-NOTE: FieldValue.fieldId already contains numeric field IDs (e.g., "1", "10"),
-   * so no field lookup is needed! This makes the method much simpler and faster.
-   * @param fields - Table fields (not used anymore, kept for backward compatibility)
-   * @returns Object with numeric field ID keys: {id: "123", 1: "value", 10: "value"}
+   * Convert row to plain object with both numeric field IDs and field names as keys
+   * AIDEV-NOTE: Outputs both formats to support:
+   * - Field ID keys (e.g., {42: "value"}) for internal code
+   * - Field name keys (e.g., {document_id: "value"}) for action variable substitution
+   * @param fields - Table fields for ID-to-name mapping
+   * @returns Object with both keys: {id: "123", 42: "value", document_id: "value"}
    */
   toPlainObject(fields: readonly TableField[]): Record<string, any> {
     const obj: Record<string, any> = {
       id: this.id.value  // Include row ID in the returned data
     };
 
+    // Build fieldId -> fieldName map for reverse lookup
+    const fieldIdToName = new Map<string, string>();
+    for (const field of fields) {
+      fieldIdToName.set(field.id.value.toString(), field.name);
+    }
+
     for (const fieldValue of this.fieldValues) {
-      // fieldValue.fieldId already contains the numeric field ID!
       const value = fieldValue.value;
 
-      // Keep Date objects for protobuf serialization (gRPC handles timestamps natively)
-      // All types returned as-is (arrays, objects, strings, primitives, Dates)
+      // Add value with field ID as key (existing behavior)
       obj[fieldValue.fieldId] = value;
+
+      // Also add value with field NAME as key (for action variables like {document_id})
+      const fieldName = fieldIdToName.get(fieldValue.fieldId);
+      if (fieldName) {
+        obj[fieldName] = value;
+      }
     }
 
     return obj;

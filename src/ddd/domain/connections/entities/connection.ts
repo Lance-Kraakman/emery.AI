@@ -1,4 +1,4 @@
-// AIDEV-NOTE: Connection Entity - represents OAuth connections between users and external services
+// AIDEV-NOTE: Connection Entity - represents Connections between users and external services
 // Entity because it has identity (connectionId) and lifecycle (can be connected/disconnected)
 // Fetched from Pipedream API but represents a core business concept
 

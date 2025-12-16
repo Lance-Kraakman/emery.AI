@@ -23,7 +23,8 @@ import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
-import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository, getSkillApplicationService, getStorageQuotaApplicationService } from '@/ddd/application/di/container';
+import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository, getStorageQuotaApplicationService } from '@/ddd/application/di/container';
+import { getSkillEnrichmentService } from '@/ddd/application/di/getters';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 import type { CreateChatDTO, SendMessageDTO, ExecutionStep, ExecutionStepMetadata } from '@/app/dtos/chat.dto';
@@ -35,6 +36,7 @@ import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
 // Import shared chat utilities
 import { getMessageContent } from '@/lib/chat/message-helpers';
 import { processStepProgress, processContentChunk, processCompletion, encodeSSEEvent } from '@/lib/chat/event-processors';
+import { generateChatTitleFromMessage } from '@/lib/utils/chat-title';
 
 // Import gRPC client
 import { getChatProcessingClient, type StreamingChatResponse, type ChatProcessingOptions } from '@/lib/grpc/chat-processing-client';
@@ -97,6 +99,7 @@ export async function POST(req: NextRequest) {
     let messageId: string;
     let domainType: string | undefined;
     let domainId: number | undefined;
+    let requestModel: string | undefined;  // Model override from frontend
     let tools: any[] = [];
     let uploadedFiles: File[] = [];
 
@@ -120,6 +123,7 @@ export async function POST(req: NextRequest) {
       messageId = parsedData.messageId;
       domainType = parsedData.domainType;
       domainId = parsedData.domainId;
+      requestModel = parsedData.model;
       tools = parsedData.tools || [];
 
       // Extract uploaded files
@@ -141,6 +145,7 @@ export async function POST(req: NextRequest) {
       messageId = body.messageId;
       domainType = body.domainType;
       domainId = body.domainId;
+      requestModel = body.model;
       tools = body.tools || [];
 
       console.log('[CHAT-GRPC-API] [DEBUG] Received tools from frontend:', JSON.stringify(tools, null, 2));
@@ -235,9 +240,15 @@ export async function POST(req: NextRequest) {
     // Create or retrieve chat session
     if (!currentChatId && latestMessage) {
       console.log('[CHAT-GRPC-API] Creating new chat session');
+
+      // Generate title from first user message (lightweight heuristic)
+      const autoTitle = generateChatTitleFromMessage(latestMessage);
+      console.log(`[CHAT-GRPC-API] Auto-generated title: "${autoTitle}"`);
+
       const createChatDTO: CreateChatDTO = {
         organizationId: organizationId,
         createdBy: userId,
+        title: autoTitle,
         domainType: domainType as any,
         domainId: domainId ? domainId : undefined
       };
@@ -265,8 +276,20 @@ export async function POST(req: NextRequest) {
 
       if (chatHistory.success) {
         currentChat = chatHistory.data;
+        // Debug logging to diagnose model retrieval
+        console.log('[CHAT-GRPC-API] DEBUG - Retrieved chat data:', {
+          hasChatHistory: !!currentChat,
+          hasSession: !!currentChat?.session,
+          sessionModel: currentChat?.session?.model,
+          directModel: (currentChat as any)?.model
+        });
       }
     }
+
+    // Normalize currentChat to extract session for consistent access
+    // NEW chats: chatResult.data is ChatSessionDTO (no wrapper)
+    // EXISTING chats: chatHistory.data is ChatWithMessagesDTO (has session wrapper)
+    const chatSession = (currentChat as any)?.session || currentChat;
 
     // Upload attachments to S3 if present
     const attachmentMetadata: AnyAttachmentMetadata[] = [];
@@ -362,31 +385,53 @@ export async function POST(req: NextRequest) {
       });
 
       if (historyResult.success && historyResult.data?.messages) {
-        conversationHistory = historyResult.data.messages.map(msg => {
-          // Convert message with attachments to protobuf MessagePart format
-          const attachments = msg.metadata?.attachments || [];
-          const contentParts = messageWithAttachmentsToProtoParts(
-            msg.content,
-            attachments.map((att: any) => ({
-              type: att.type,
-              url: att.url,
-              mimeType: att.mimeType
-            }))
-          );
+        // Process messages with URL regeneration for attachments
+        conversationHistory = await Promise.all(
+          historyResult.data.messages.map(async (msg) => {
+            // Convert message with attachments to protobuf MessagePart format
+            const attachments = msg.metadata?.attachments || [];
 
-          return {
-            role: msg.role,
-            contentParts: contentParts,
-            timestamp: new Date(msg.createdAt).getTime()
-          };
-        });
-        console.log(`[CHAT-GRPC-API] Retrieved ${conversationHistory.length} historical messages`);
+            // Regenerate presigned URLs for attachments (they expire after 1 hour)
+            const refreshedAttachments = await Promise.all(
+              attachments.map(async (att: any) => {
+                if (att.s3Key) {
+                  try {
+                    // Generate fresh presigned URL from S3 key
+                    const freshUrl = await s3ChatAttachmentService.generateAttachmentUrl(att.s3Key);
+                    return { ...att, url: freshUrl };
+                  } catch (error) {
+                    console.warn(`[CHAT-GRPC-API] Failed to refresh URL for ${att.s3Key}:`, error);
+                    return att; // Fall back to stored URL
+                  }
+                }
+                return att;
+              })
+            );
+
+            const contentParts = messageWithAttachmentsToProtoParts(
+              msg.content,
+              refreshedAttachments.map((att: any) => ({
+                type: att.type,
+                url: att.url,
+                mimeType: att.mimeType
+              }))
+            );
+
+            return {
+              role: msg.role,
+              contentParts: contentParts,
+              timestamp: new Date(msg.createdAt).getTime()
+            };
+          })
+        );
+        console.log(`[CHAT-GRPC-API] Retrieved ${conversationHistory.length} historical messages (URLs refreshed)`);
       }
     }
 
     // 5. Determine processing options from contextMetadata or request params
-    let resolvedDomainType = currentChat?.contextMetadata?.contextType || domainType;
-    let resolvedDomainId = currentChat?.contextMetadata?.domainSchema?.id || domainId;
+    // Use normalized chatSession for consistent access across new/existing chats
+    let resolvedDomainType = chatSession?.contextMetadata?.contextType || domainType;
+    let resolvedDomainId = chatSession?.contextMetadata?.domainSchema?.id || domainId;
 
     // Convert 'organization' contextType to null for processing
     if (resolvedDomainType === 'organization') {
@@ -394,12 +439,23 @@ export async function POST(req: NextRequest) {
       resolvedDomainId = null;
     }
 
-    // 5.5 Get organization's default AI model
-    console.log('[CHAT-GRPC-API] Fetching organization default model');
+    // 5.5 Get AI model: request model takes priority over chat/organization defaults
+    console.log('[CHAT-GRPC-API] Fetching AI model configuration');
     const orgRepository = getOrganizationRepository();
     const organization = await orgRepository.findById(OrganizationId.fromNumber(organizationId));
-    const defaultModel = organization?.defaultModel || null;
-    console.log('[CHAT-GRPC-API] Organization default model:', defaultModel || 'not set (will use system default)');
+    const organizationModel = organization?.defaultModel || null;
+
+    // Model hierarchy: request.model → chat.model → organization.defaultModel → System Default
+    // requestModel: sent from frontend (for new chats with pre-selected model)
+    // chatSession.model: saved in database (for existing chats)
+    const chatModel = chatSession?.model || null;
+    const defaultModel = requestModel || chatModel || organizationModel;
+    console.log('[CHAT-GRPC-API] Model configuration:', {
+      requestModel: requestModel || 'not set',
+      chatModel: chatModel || 'not set',
+      organizationModel: organizationModel || 'not set',
+      resolved: defaultModel || 'will use system default'
+    });
 
     // 5.1 Separate skill references from regular tools BEFORE enrichment
     // This prevents skill_reference type from being overwritten during enrichment
@@ -487,53 +543,31 @@ export async function POST(req: NextRequest) {
     // Combine enriched regular tools with unchanged skill references
     const enrichedTools = [...enrichedRegularTools, ...skillReferenceTools];
 
-    // 5.2 Enrich skill references with full skill definitions
+    // 5.2 Enrich skill references with full skill definitions using SkillEnrichmentService
     let enrichedSkills: any[] = [];
     // Use the already-separated skillReferenceTools (preserves type: 'skill_reference')
     const skillTools = skillReferenceTools;
 
     if (skillTools.length > 0) {
       try {
-        console.log('[CHAT-GRPC-API] Loading skills by ID:', skillTools.map(s => s.config.skill_id));
+        const skillIds = skillTools.map(s => parseInt(s.config.skill_id, 10));
+        console.log('[CHAT-GRPC-API] Loading skills by ID:', skillIds);
 
-        const skillService = getSkillApplicationService();
-
-        for (const skillTool of skillTools) {
-          // Extract skill ID from config - MUST be provided by frontend
-          const skillId = parseInt(skillTool.config.skill_id, 10);
-
-          // Direct ID lookup - fast, no ambiguity
-          const skillResult = await skillService.getSkill(skillId);
-
-          if (skillResult.success && skillResult.data) {
-            const skill = skillResult.data;
-
-            // Convert skill to enriched format with full data
-            enrichedSkills.push({
-              id: skill.id,
-              name: skill.name,
-              description: skill.description,
-              instructions: skill.instructions,
-              inputs: skill.inputs,
-              outputs: skill.outputs,
-              tools: skill.tools,
-              content: skill.content || [], // Message parts (attachments)
-              model: skill.model || null // Model override for this skill
-            });
-
-            console.log('[CHAT-GRPC-API] Loaded skill by ID:', {
-              skillId: skillId,
-              name: skill.name,
-              hasInstructions: !!skill.instructions,
-              toolCount: skill.tools?.length || 0,
-              contentCount: skill.content?.length || 0
-            });
-          } else {
-            console.warn('[CHAT-GRPC-API] Skill not found for ID:', skillId);
-          }
-        }
+        // Use centralized SkillEnrichmentService for consistent skill loading
+        const skillEnrichmentService = getSkillEnrichmentService();
+        enrichedSkills = await skillEnrichmentService.enrichSkills(skillIds);
 
         console.log('[CHAT-GRPC-API] Enriched skills:', enrichedSkills.length);
+        for (const skill of enrichedSkills) {
+          console.log('[CHAT-GRPC-API] Loaded skill by ID:', {
+            skillId: skill.id,
+            name: skill.name,
+            executionType: skill.executionType,
+            hasInstructions: !!skill.instructions,
+            toolCount: skill.tools?.length || 0,
+            contentCount: skill.content?.length || 0
+          });
+        }
       } catch (error) {
         console.error('[CHAT-GRPC-API] Error loading skills:', error);
         // Continue without skills if enrichment fails
@@ -557,7 +591,6 @@ export async function POST(req: NextRequest) {
 
     // 6. Set up streaming response
     let fullAssistantResponse = '';
-    let ragSources: any[] = [];
     let collectedSteps: ExecutionStep[] = [];
 
     const responseStream = new TransformStream({
@@ -584,7 +617,6 @@ export async function POST(req: NextRequest) {
                 content: fullAssistantResponse.trim(),
                 role: 'assistant',
                 metadata: {
-                  ragSources: ragSources,
                   processingTime: Date.now() - startTime,
                   modelUsed: 'qwen-coder', // This will come from gRPC response
                   executionSteps: collectedSteps // Persist execution steps
@@ -604,15 +636,35 @@ export async function POST(req: NextRequest) {
     });
 
     // 7. Prepare current user message with attachments as MessagePart[]
-    const currentMessageParts: MessagePart[] = messages[messages.length - 1].parts || [
-      { type: 'text' as const, text: latestMessage }
-    ];
+    // AIDEV-NOTE: Frontend sends blob URLs for UI preview which cannot be downloaded server-side.
+    // We filter out blob URLs and use only S3 URLs from uploaded attachments.
+    const frontendParts: MessagePart[] = messages[messages.length - 1].parts || [];
 
-    // Add uploaded attachment URLs to message parts
+    // Filter out blob URLs from frontend parts (blob: URLs are browser-local and can't be downloaded)
+    // Keep only text parts from frontend, images/files will come from S3 uploads
+    const filteredParts: MessagePart[] = frontendParts.filter((part: any) => {
+      if (part.type === 'text') return true;
+      if (part.type === 'data-file' || part.type === 'image') {
+        const url = part.data?.url || part.image || '';
+        if (url.startsWith('blob:')) {
+          console.log('[CHAT-GRPC-API] Filtering out blob URL:', url.substring(0, 50) + '...');
+          return false;
+        }
+        return true;
+      }
+      return true;
+    });
+
+    // Start with filtered frontend parts, or create text-only if no parts
+    const currentMessageParts: MessagePart[] = filteredParts.length > 0
+      ? filteredParts
+      : [{ type: 'text' as const, text: latestMessage }];
+
+    // Add uploaded attachment URLs to message parts (these have real S3 URLs)
     // AIDEV-NOTE: Supports all attachment types (images, PDFs, audio, documents)
     // Python file_processor.py handles PDF text extraction and audio transcription
     if (attachmentMetadata.length > 0) {
-      console.log('[CHAT-GRPC-API] Adding attachment URLs to current message parts');
+      console.log('[CHAT-GRPC-API] Adding S3 attachment URLs to current message parts');
       for (const attachment of attachmentMetadata) {
         if (attachment.url) {
           currentMessageParts.push({
@@ -710,11 +762,6 @@ export async function POST(req: NextRequest) {
                 // Send content event to frontend
                 controller.enqueue(encodeSSEEvent(contentEvent));
 
-              } else if (response.type === 'rag_context' && response.ragContext) {
-                // Store RAG sources for later saving to database
-                ragSources = response.ragContext.sources || [];
-                console.log(`[CHAT-GRPC-API] Received RAG context with ${ragSources.length} sources`);
-
               } else if (response.type === 'complete' && response.complete) {
                 // AI processing completed
                 console.log(`[CHAT-GRPC-API] AI processing completed:`, {
@@ -749,8 +796,7 @@ export async function POST(req: NextRequest) {
                 const completionEvent = processCompletion(
                   response.complete.modelUsed,
                   response.complete.totalTokens,
-                  collectedSteps,
-                  ragSources
+                  collectedSteps
                 );
 
                 try {

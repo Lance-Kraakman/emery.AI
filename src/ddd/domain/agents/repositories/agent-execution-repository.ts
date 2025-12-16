@@ -8,6 +8,29 @@
  * infrastructure provides implementations (gRPC, local, HTTP, etc.)
  */
 
+/**
+ * Enriched skill for execution (from SkillEnrichmentService)
+ * Matches EnrichedSkill interface but defined here to avoid circular dependency
+ */
+export interface ExecutionSkill {
+  id: number;
+  name: string;
+  description: string;
+  instructions: string;
+  inputs: Array<{ name: string; required: boolean; type?: string; fileConfig?: any; default?: any }>;
+  outputs: Array<{ name: string; type?: string; mapping?: any }>;
+  tools: Array<{ name: string; version?: string; config?: Record<string, any> }>;
+  content: Array<any>; // MessagePart[] - flexible to avoid import
+  model: string | null;
+  agentType: string | null;
+  executionType: 'agent' | 'operation';
+  taskModelConfig?: {
+    modelId: string;
+    taskType: string;
+    parameters?: Record<string, any>;
+  };
+}
+
 export interface AgentExecutionRequest {
   agentId: number;
   instructions: string;
@@ -19,6 +42,7 @@ export interface AgentExecutionRequest {
   agentModel?: string; // Optional - agent's default model (overrides org model)
   organizationModel?: string; // Optional - organization's default model
   timeoutSeconds?: number;
+  skill?: ExecutionSkill; // Optional - skill to execute (enables skill_name mode)
   onProgress?: (logMessage: string) => void; // Callback for real-time log messages
 }
 

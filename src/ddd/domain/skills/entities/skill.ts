@@ -4,9 +4,37 @@ import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-i
 import { MessagePart } from '@/lib/grpc/generated/agent_worker';
 
 /**
- * Skill Input/Output Types
+ * Skill Execution Types
+ * - 'agent' (default): LLM orchestration with tools via smolagents
+ * - 'operation': Direct model invocation for single-task models (image gen, speech, etc.)
  */
-export type SkillParameterType = 'text' | 'image' | 'file' | 'audio' | 'video' | 'document';
+export type SkillExecutionType = 'agent' | 'operation';
+
+/**
+ * Task Model Configuration
+ * Used when executionType is 'operation' to bypass LLM orchestration
+ * taskType is stored as string for flexibility - validated at execution time
+ */
+export interface TaskModelConfig {
+  modelId: string;           // e.g., 'black-forest-labs/FLUX.1-schnell'
+  taskType: string;          // e.g., 'text-to-image', 'speech-to-text' - validated at execution
+  parameters?: Record<string, any>;  // Model-specific params (steps, guidance_scale, etc.)
+}
+
+/**
+ * Skill Input/Output Types
+ *
+ * Expanded to align with database field types for better LLM guidance.
+ * - Basic types: text, number, boolean, date, json
+ * - Format-specific: email, phone
+ * - Select types: single-select, multi-select (for constrained options)
+ * - Media types: image, file, audio, video, document
+ */
+export type SkillParameterType =
+  | 'text' | 'number' | 'boolean' | 'date' | 'json'
+  | 'email' | 'phone'
+  | 'single-select' | 'multi-select'
+  | 'image' | 'file' | 'audio' | 'video' | 'document';
 
 /**
  * File Configuration for file-type inputs
@@ -28,12 +56,63 @@ export interface SkillInput {
   default?: any; // Default value for @-mention insertion
 }
 
+// =============================================================================
+// Multi-Table Output Mapping Types (typed references, no string parsing)
+// =============================================================================
+
+/**
+ * Reference to a field from a previous table mapping result
+ */
+export interface TableReference {
+  order: number;            // Which table mapping (1, 2, 3...)
+  field: string;            // 'row_id' or field name from that table
+}
+
+/**
+ * Typed field source - either a skill output or a reference to previous table
+ * Discriminated union for type-safe source selection
+ */
+export type FieldSource =
+  | { type: 'skill_output'; name: string }
+  | { type: 'table_ref'; order: number; field: string };
+
+/**
+ * Field Mapping - maps a typed source to a target table field
+ */
+export interface FieldMapping {
+  source: FieldSource;                  // Where to get the value (typed)
+  targetFieldId: number;                // Destination field/column
+}
+
+/**
+ * Table Mapping - ordered operation for a single table
+ */
+export interface TableMapping {
+  order: number;                        // Execution order (1, 2, 3...)
+  targetTableId: number;                // Which table to write to
+  rowAction: 'create' | 'update';       // Create or update row
+  rowId?: string;                       // For update mode - specific row ID
+  mappings: FieldMapping[];             // Field mappings for this table
+  displayFieldId?: number;              // Field to use for relation display value
+}
+
+/**
+ * Output Mapping Configuration
+ * Multi-table support with typed references
+ */
+export interface OutputMappingConfig {
+  mode: 'single_row' | 'multi_row';
+  tableMappings: TableMapping[];        // Ordered table operations
+}
+
 /**
  * Skill Output Definition
  */
 export interface SkillOutput {
   name: string;
   type?: SkillParameterType;
+  description?: string;  // Description of what this output contains (shown in LLM instructions)
+  outputMapping?: OutputMappingConfig;  // Optional: path-based field mapping
 }
 
 /**
@@ -72,6 +151,10 @@ export interface Skill {
   readonly tools: ToolConfig[];
   readonly content?: MessagePart[]; // Skill-level attachments (images, files, text)
   readonly model?: string | null; // Optional: Override model for this skill
+  readonly agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  readonly executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
+  readonly taskModelConfig?: TaskModelConfig; // Config for operation execution
+  readonly isSystem: boolean; // System skills cannot be deleted by users
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -90,6 +173,9 @@ export interface CreateSkillProps {
   tools?: ToolConfig[];
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
+  agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
+  taskModelConfig?: TaskModelConfig; // Config for operation execution
 }
 
 /**
@@ -104,6 +190,9 @@ export interface UpdateSkillProps {
   tools?: ToolConfig[];
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
+  agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
+  taskModelConfig?: TaskModelConfig | null; // Config for operation execution (null to clear)
 }
 
 /**
@@ -128,8 +217,17 @@ export class SkillEntity {
     if (props.description && props.description.length > 1000) {
       throw new Error('Skill description must be 1000 characters or less');
     }
-    if (!props.instructions?.trim()) {
+
+    const executionType = props.executionType || 'agent';
+
+    // Instructions are required for agent execution, optional for operation mode
+    if (executionType === 'agent' && !props.instructions?.trim()) {
       throw new Error('Instructions are required and cannot be empty');
+    }
+
+    // Task model config is required for operation execution
+    if (executionType === 'operation' && !props.taskModelConfig) {
+      throw new Error('Task model configuration is required for operation execution');
     }
 
     // Validate input names
@@ -155,9 +253,12 @@ export class SkillEntity {
       description: props.description?.trim() || '',
       inputs: inputs,
       outputs: outputs,
-      instructions: props.instructions.trim(),
+      instructions: props.instructions?.trim() || '',
       tools: props.tools || [],
-      content: props.content
+      content: props.content,
+      executionType: executionType,
+      taskModelConfig: props.taskModelConfig,
+      isSystem: false // User-created skills are never system skills
     };
   }
 
@@ -181,8 +282,14 @@ export class SkillEntity {
       throw new Error('Skill description must be 1000 characters or less');
     }
 
-    if (updates.instructions !== undefined && !updates.instructions.trim()) {
-      throw new Error('Instructions cannot be empty');
+    // Determine final execution type
+    const finalExecutionType = updates.executionType !== undefined
+      ? updates.executionType
+      : skill.executionType || 'agent';
+
+    // Instructions validation depends on execution type
+    if (updates.instructions !== undefined && finalExecutionType === 'agent' && !updates.instructions.trim()) {
+      throw new Error('Instructions cannot be empty for agent execution');
     }
 
     // Validate input names if provided
@@ -212,6 +319,10 @@ export class SkillEntity {
       instructions: updates.instructions !== undefined ? updates.instructions.trim() : skill.instructions,
       tools: updates.tools !== undefined ? updates.tools : skill.tools,
       content: updates.content !== undefined ? updates.content : skill.content,
+      executionType: updates.executionType !== undefined ? updates.executionType : skill.executionType,
+      taskModelConfig: updates.taskModelConfig !== undefined
+        ? (updates.taskModelConfig === null ? undefined : updates.taskModelConfig)
+        : skill.taskModelConfig,
       updatedAt: new Date()
     };
   }
@@ -228,6 +339,20 @@ export class SkillEntity {
    */
   static isAgentScoped(skill: Skill): boolean {
     return skill.agentId !== null;
+  }
+
+  /**
+   * Check if skill uses operation execution (bypasses LLM orchestration)
+   */
+  static isOperation(skill: Skill): boolean {
+    return skill.executionType === 'operation';
+  }
+
+  /**
+   * Check if skill uses agent execution (LLM orchestration)
+   */
+  static isAgentExecution(skill: Skill): boolean {
+    return !skill.executionType || skill.executionType === 'agent';
   }
 
   /**

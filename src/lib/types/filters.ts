@@ -106,6 +106,7 @@ export const OPERATORS_BY_FIELD_TYPE = {
   autonumber: NUMBER_OPERATORS,  // Autonumbers are numeric
   'last-updated': DATE_OPERATORS,  // Timestamps are dates
   'created-at': DATE_OPERATORS,    // Timestamps are dates
+  json: TEXT_OPERATORS,  // JSON fields use text-like filtering (contains, etc.)
 } as const
 
 /**

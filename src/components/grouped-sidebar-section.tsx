@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { LucideIcon, Plus } from "lucide-react"
+import { LucideIcon, Plus, Lock, ChevronRight } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -36,6 +36,7 @@ interface GroupedSidebarSectionProps<T> {
   getGroupKey: (item: T) => string | number | null
   getGroupName: (item: T) => string | undefined
   isUngroupedItem: (item: T) => boolean
+  isSystemItem?: (item: T) => boolean  // For system items (read-only, grouped separately)
   // Actions
   onAdd: () => void
   addButtonLabel?: string
@@ -68,6 +69,7 @@ export function GroupedSidebarSection<T>({
   getGroupKey,
   getGroupName,
   isUngroupedItem,
+  isSystemItem = () => false,  // Default to no system items
   onAdd,
   addButtonLabel = `Add ${label.slice(0, -1)}`, // Remove trailing 's' for singular
   onRename,
@@ -76,6 +78,7 @@ export function GroupedSidebarSection<T>({
   onDelete,
 }: GroupedSidebarSectionProps<T>) {
   const [renamingItemId, setRenamingItemId] = React.useState<number | null>(null)
+  const [systemSectionOpen, setSystemSectionOpen] = React.useState(false)
 
   const hasActions = onRename || onDuplicate || onShare || onDelete
 
@@ -86,17 +89,22 @@ export function GroupedSidebarSection<T>({
     setRenamingItemId(null)
   }
 
-  // Separate ungrouped items (e.g., organization skills)
-  const ungroupedItems = items.filter(isUngroupedItem)
+  // Separate items into three categories:
+  // 1. System items (read-only, shown in collapsible section at bottom)
+  const systemItems = items.filter(item => isSystemItem(item))
 
-  // Group the remaining items
-  const groupedItems = items.filter(item => !isUngroupedItem(item))
+  // 2. Ungrouped items (organization skills, shown at top)
+  const ungroupedItems = items.filter(item => !isSystemItem(item) && isUngroupedItem(item))
+
+  // 3. Grouped items (agent skills, shown grouped by agent)
+  const groupedItems = items.filter(item => !isSystemItem(item) && !isUngroupedItem(item))
   const uniqueGroupKeys = Array.from(new Set(groupedItems.map(getGroupKey)))
 
   // Helper function to render an item with actions
   const renderItem = (item: T, className = "") => {
     const itemId = getItemId(item)
     const isRenaming = renamingItemId === itemId
+    const isSystem = isSystemItem(item)
 
     return (
       <SidebarMenuItem key={itemId} className="group">
@@ -122,7 +130,10 @@ export function GroupedSidebarSection<T>({
                   </span>
                 </Link>
               </SidebarMenuButton>
-              {hasActions && (
+              {/* System items: show lock icon instead of actions */}
+              {isSystem ? (
+                <Lock className="h-3 w-3 mr-2 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              ) : hasActions && (
                 <SidebarItemActions
                   onRename={onRename ? () => setRenamingItemId(itemId) : undefined}
                   onDuplicate={onDuplicate ? () => onDuplicate(item) : undefined}
@@ -166,6 +177,21 @@ export function GroupedSidebarSection<T>({
                   </div>
                 )
               })}
+
+              {/* System items section */}
+              {systemItems.length > 0 && (
+                <Collapsible open={systemSectionOpen} onOpenChange={setSystemSectionOpen} className="mt-2">
+                  <CollapsibleTrigger className="flex items-center gap-1 px-2 py-1 w-full text-xs text-muted-foreground font-medium hover:text-foreground transition-colors">
+                    <ChevronRight className={`h-3 w-3 transition-transform duration-200 ${systemSectionOpen ? 'rotate-90' : ''}`} />
+                    <Lock className="h-3 w-3" />
+                    <span>System</span>
+                    <span className="ml-auto text-[10px] opacity-60">{systemItems.length}</span>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    {systemItems.map(item => renderItem(item, "pl-4"))}
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
 
               {/* Add button */}
               <Button

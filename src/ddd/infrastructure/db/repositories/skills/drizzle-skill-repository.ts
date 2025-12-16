@@ -78,9 +78,13 @@ export class DrizzleSkillRepository implements ISkillRepository {
         description: props.description || '',
         inputs: props.inputs || [],
         outputs: props.outputs || [],
-        instructions: props.instructions,
+        instructions: props.instructions || '',
         tools: props.tools || [],
         content: props.content || null,
+        model: props.model ?? null,
+        agentType: props.agentType ?? null,
+        executionType: props.executionType || 'agent',
+        taskModelConfig: props.taskModelConfig || null,
         createdAt: now,
         updatedAt: now
       })
@@ -112,6 +116,18 @@ export class DrizzleSkillRepository implements ISkillRepository {
     }
     if (updates.content !== undefined) {
       updateData.content = updates.content;
+    }
+    if (updates.model !== undefined) {
+      updateData.model = updates.model;
+    }
+    if (updates.agentType !== undefined) {
+      updateData.agentType = updates.agentType;
+    }
+    if (updates.executionType !== undefined) {
+      updateData.executionType = updates.executionType;
+    }
+    if (updates.taskModelConfig !== undefined) {
+      updateData.taskModelConfig = updates.taskModelConfig;
     }
 
     const result = await this.db
@@ -187,6 +203,11 @@ export class DrizzleSkillRepository implements ISkillRepository {
       instructions: record.instructions || '',
       tools: record.tools || [],
       content: record.content || undefined,
+      model: record.model ?? null,
+      agentType: record.agentType ?? null,
+      executionType: record.executionType || 'agent',
+      taskModelConfig: record.taskModelConfig || undefined,
+      isSystem: record.isSystem ?? false,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     };

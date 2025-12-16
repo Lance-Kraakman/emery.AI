@@ -422,7 +422,7 @@ export function AppSidebar({
           onDelete={handleDeleteTeam}
         />
 
-        {/* Skills - Grouped by Organization and Agents */}
+        {/* Skills - Grouped by Organization and Agents, System skills at bottom */}
         <GroupedSidebarSection
           icon={Workflow}
           label="Skills"
@@ -446,7 +446,8 @@ export function AppSidebar({
           }}
           getGroupKey={(skill) => skill.agentId}
           getGroupName={(skill) => skill.agentName}
-          isUngroupedItem={(skill) => skill.agentId === null}
+          isUngroupedItem={(skill) => skill.agentId === null && !skill.isSystem}
+          isSystemItem={(skill) => skill.isSystem}
           onAdd={handleCreateSkill}
           addButtonLabel="Add Skill"
           onRename={handleRenameSkill}
@@ -516,7 +517,7 @@ export function AppSidebar({
                     <SidebarMenuButton asChild isActive={pathname === "/connections"} className="h-6">
                       <Link href="/connections">
                         <Plug className="h-4 w-4" />
-                        <span className="group-data-[collapsible=icon]:hidden">OAuth Connections</span>
+                        <span className="group-data-[collapsible=icon]:hidden">Connections</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

@@ -4,14 +4,12 @@ import {
   DefaultComponentProps,
   ObjectField,
 } from "@measured/puck";
-import { spacingOptions } from "../../options";
 import { getClassNameFactory } from "@/components/puck/lib";
 import styles from "./styles.module.css";
 
 const getClassName = getClassNameFactory("Layout", styles);
 
 type LayoutFieldProps = {
-  padding?: string;
   spanCol?: number;
   spanRow?: number;
   grow?: boolean;
@@ -50,11 +48,6 @@ export const layoutField: ObjectField<LayoutFieldProps> = {
         { label: "false", value: false },
       ],
     },
-    padding: {
-      type: "select",
-      label: "Vertical Padding",
-      options: [{ label: "0px", value: "0px" }, ...spacingOptions],
-    },
   },
 };
 
@@ -70,8 +63,6 @@ const Layout = forwardRef<HTMLDivElement, LayoutProps>(
           gridRow: layout?.spanRow
             ? `span ${Math.max(Math.min(layout.spanRow, 12), 1)}`
             : undefined,
-          paddingTop: layout?.padding,
-          paddingBottom: layout?.padding,
           flex: layout?.grow ? "1 1 0" : undefined,
           ...style,
         }}
@@ -101,7 +92,6 @@ export function withLayout<
       layout: {
         spanCol: 1,
         spanRow: 1,
-        padding: "0px",
         grow: false,
         ...componentConfig.defaultProps?.layout,
       },
@@ -115,7 +105,6 @@ export function withLayout<
             objectFields: {
               spanCol: layoutField.objectFields.spanCol,
               spanRow: layoutField.objectFields.spanRow,
-              padding: layoutField.objectFields.padding,
             },
           },
         };
@@ -127,31 +116,34 @@ export function withLayout<
             ...layoutField,
             objectFields: {
               grow: layoutField.objectFields.grow,
-              padding: layoutField.objectFields.padding,
             },
           },
         };
       }
 
-      return {
-        ...componentConfig.fields,
-        layout: {
-          ...layoutField,
-          objectFields: {
-            padding: layoutField.objectFields.padding,
-          },
-        },
-      };
+      // No layout fields needed outside Grid/Flex contexts
+      return componentConfig.fields;
     },
     inline: true,
-    render: (props) => (
-      <Layout
-        className={getClassName()}
-        layout={props.layout as LayoutFieldProps}
-        ref={props.puck.dragRef}
-      >
-        {componentConfig.render(props)}
-      </Layout>
-    ),
+    render: (props) => {
+      // Check if the component has sticky enabled - apply to outer Layout wrapper
+      const sticky = (props as any).sticky;
+      const stickyPosition = (props as any).stickyPosition || "top";
+
+      return (
+        <Layout
+          className={getClassName()}
+          layout={props.layout as LayoutFieldProps}
+          ref={props.puck.dragRef}
+          style={sticky ? {
+            position: "sticky",
+            [stickyPosition]: 0,
+            zIndex: 50,
+          } : undefined}
+        >
+          {componentConfig.render(props)}
+        </Layout>
+      );
+    },
   };
 }

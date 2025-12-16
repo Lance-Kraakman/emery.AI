@@ -1,0 +1,42 @@
+## Emery Platform Concepts
+
+### Skills
+AI-powered workflows that can be executed on demand or triggered automatically.
+- **name**: Display name shown to users
+- **description**: What the skill does (shown when selecting skills)
+- **instructions**: The prompt that defines the skill's behavior when executed
+- **inputs**: Array of input parameters users provide when running the skill
+  - Each input has: name, type (string/number/boolean), required, description
+- **outputs**: Array of output definitions describing what the skill returns
+  - Each output has: name, type, description
+- **tools**: Array of external integrations the skill can use (e.g., gmail_send_email, slack_send_message)
+- **model**: Optional AI model override (null uses organization default)
+
+### Tables & Data
+- **Tables**: Structured data containers with typed fields (like spreadsheets)
+- **Rows**: Individual records in tables
+- **Fields**: Columns with types including:
+  - Text, Number, Date, Boolean
+  - Single Select, Multi Select
+  - File, Image
+  - Link (references to other tables)
+- **Views**: Filtered/sorted perspectives on table data
+
+### Agents
+AI assistants configured for specific purposes.
+- Can have multiple skills attached
+- Have their own conversation context and memory
+- Can be shared across the organization
+- May have specific tools and integrations enabled
+
+### Integrations & Tools
+External services connected via OAuth or API keys:
+{% if available_integrations %}
+{% for integration in available_integrations %}
+- **{{ integration.name }}**: {{ integration.description }}
+{% endfor %}
+{% else %}
+- Gmail, Google Calendar, Google Sheets (OAuth)
+- Slack (OAuth)
+- Custom API tools configured by the organization
+{% endif %}

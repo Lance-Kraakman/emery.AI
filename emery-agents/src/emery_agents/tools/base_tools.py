@@ -1,16 +1,15 @@
-"""
-Base Tools Module
+"""Basic smolagents tools: Python REPL, web search, file reader, calculator."""
 
-AIDEV-NOTE: Basic smolagents tools for core functionality.
-Includes Python REPL, web search, file operations, and calculator.
-"""
+import math
+import re
+from typing import Optional
 
-from typing import Any
 from smolagents import Tool
+
 from ..grpc.generated.agent_worker_pb2 import ToolConfig
 
 
-def load_python_repl(config: ToolConfig) -> Any:
+def load_python_repl(config: ToolConfig) -> Tool:
     """Load Python REPL tool."""
     try:
         from smolagents import PythonInterpreterTool
@@ -19,7 +18,7 @@ def load_python_repl(config: ToolConfig) -> Any:
         raise ValueError("PythonInterpreterTool not available - check smolagents installation")
 
 
-def load_web_search(config: ToolConfig) -> Any:
+def load_web_search(config: ToolConfig) -> Tool:
     """Load web search tool."""
     try:
         from smolagents import DuckDuckGoSearchTool
@@ -28,7 +27,7 @@ def load_web_search(config: ToolConfig) -> Any:
         raise ValueError("DuckDuckGoSearchTool not available - check smolagents installation")
 
 
-def load_file_reader(config: ToolConfig) -> Any:
+def load_file_reader(config: ToolConfig) -> Tool:
     """Load file reader tool."""
     
     class FileReaderTool(Tool):
@@ -59,7 +58,7 @@ def load_file_reader(config: ToolConfig) -> Any:
     return FileReaderTool()
 
 
-def load_calculator(config: ToolConfig) -> Any:
+def load_calculator(config: ToolConfig) -> Tool:
     """Load calculator tool."""
 
     class CalculatorTool(Tool):
@@ -76,11 +75,6 @@ def load_calculator(config: ToolConfig) -> Any:
         def forward(self, expression: str) -> str:
             """Evaluate mathematical expression and return the result."""
             try:
-                # Import math functions for safer evaluation
-                import math
-                import re
-
-                # Basic safety check - only allow mathematical expressions
                 if re.search(r'[a-zA-Z_][a-zA-Z0-9_]*\s*\(', expression):
                     # Allow only specific math functions
                     allowed_functions = {
@@ -118,7 +112,7 @@ def load_calculator(config: ToolConfig) -> Any:
     return CalculatorTool()
 
 
-def load_document_reader_tool(config: ToolConfig) -> Any:
+def load_document_reader_tool(config: ToolConfig) -> Tool:
     """Load document reader tool for accessing organization documents."""
 
     class DocumentReaderTool(Tool):
@@ -143,10 +137,6 @@ def load_document_reader_tool(config: ToolConfig) -> Any:
         def forward(self, document_id: str, action: str = "read", search_query: str = "") -> str:
             """Read and analyze document based on the specified action."""
             try:
-                # AIDEV-NOTE: This is a simplified implementation for reference-execution mapping
-                # In production, this would integrate with the organization's document system
-                # For now, return a mock response showing the mapping works
-
                 if action == "read":
                     return f"✅ Document Reader: Successfully accessed document '{document_id}'\n\nThis would contain the full content of the document. The reference mapping from @doc:{document_id} to document_reader tool is working correctly."
 
@@ -167,7 +157,7 @@ def load_document_reader_tool(config: ToolConfig) -> Any:
     return DocumentReaderTool()
 
 
-def load_table_query_tool(config: ToolConfig) -> Any:
+def load_table_query_tool(config: ToolConfig) -> Tool:
     """Load table query tool for accessing organization table data."""
 
     class TableQueryTool(Tool):
@@ -192,10 +182,6 @@ def load_table_query_tool(config: ToolConfig) -> Any:
         def forward(self, table_name: str, query: str = "", limit: int = 100) -> str:
             """Query table data based on the specified parameters."""
             try:
-                # AIDEV-NOTE: This is a simplified implementation for reference-execution mapping
-                # In production, this would integrate with the organization's table/database system
-                # For now, return a mock response showing the mapping works
-
                 if not query:
                     return f"✅ Table Query: Successfully accessed table '{table_name}'\n\nTable Information:\n- Rows: Available\n- Columns: Available\n- Status: Ready for querying\n\nThe reference mapping from @table:{table_name} to table_query tool is working correctly."
 

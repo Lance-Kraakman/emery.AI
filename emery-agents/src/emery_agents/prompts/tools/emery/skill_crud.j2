@@ -1,0 +1,74 @@
+## Skill Management
+
+### Available Operations
+
+- `list`: Get all skills (returns id, name, description for each)
+- `read`: Get full skill details (`skill_id` required - MUST be numeric!)
+- `update`: Modify skill fields (`skill_id` required)
+
+### CRITICAL: skill_id Must Be Numeric
+
+```
+WRONG: skill_crud(method="read", skill_id="My Skill")  <- WILL FAIL!
+RIGHT: skill_crud(method="read", skill_id=42)          <- Use numeric ID
+```
+
+**Always list first**, then search results for matching name:
+```
+1. skill_crud(method="list") -> [{id: 42, name: "My Skill"}, ...]
+2. Find "My Skill" -> id is 42
+3. skill_crud(method="read", skill_id=42)
+```
+
+### Skill Structure
+
+```json
+{
+  "id": 42,
+  "name": "Email Summary Skill",
+  "description": "Summarizes email threads",
+  "instructions": "You are an email summarizer...",
+  "inputs": [
+    {"name": "email_thread", "type": "string", "required": true}
+  ],
+  "outputs": [
+    {"name": "summary", "type": "string"}
+  ],
+  "tools": ["gmail-send-email", "gmail-get-thread"],
+  "model": null
+}
+```
+
+### Updating Skills
+
+When updating a skill, you can modify:
+- `name`: Display name
+- `description`: Short description
+- `instructions`: System prompt/instructions for the skill
+- `inputs`: Array of input parameters
+- `outputs`: Array of output parameters
+- `tools`: Array of tool names the skill can use
+- `model`: Override model (null uses default)
+
+**For arrays (inputs, outputs, tools):** Provide the COMPLETE array, not just changes.
+
+### Example: Update Skill Instructions
+
+```
+1. List skills to find ID:
+   skill_crud(method="list")
+
+2. Read current skill (found ID 42):
+   skill_crud(method="read", skill_id=42)
+
+3. Update with new instructions:
+   skill_crud(method="update", skill_id=42,
+              instructions="New instructions here...")
+```
+
+### Name Matching Tips
+
+Users often refer to skills by partial or approximate names:
+- User says "email skill" -> Search for skills containing "email"
+- User says "my summary" -> Search for "summary" in name/description
+- Names are case-insensitive when searching

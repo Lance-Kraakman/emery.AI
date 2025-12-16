@@ -28,14 +28,21 @@ export class DrizzleTemplateRepository implements ITemplateRepository {
 
   async findByOrganization(organizationId: OrganizationId): Promise<Template[]> {
     try {
+      // Find org templates AND global system templates
       const records = await this.db.query.templates.findMany({
-        where: eq(templates.organizationId, organizationId.value)
+        where: or(
+          eq(templates.organizationId, organizationId.value),
+          eq(templates.isSystem, true)
+        )
       });
 
-      // Sort by name on the application side
+      // Sort: system templates first, then by name
       return records
         .map((record: any) => this.toDomain(record))
-        .sort((a: Template, b: Template) => a.name.localeCompare(b.name));
+        .sort((a: Template, b: Template) => {
+          if (a.isSystem !== b.isSystem) return a.isSystem ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
     } catch (error) {
       console.error('[DrizzleTemplateRepository] Error finding templates by organization:', error);
       throw error;
@@ -62,20 +69,29 @@ export class DrizzleTemplateRepository implements ITemplateRepository {
 
   async findByApp(organizationId: OrganizationId, appId: AppId): Promise<Template[]> {
     try {
-      // Find both org-wide templates AND app-specific templates for this app
+      // Find: global system templates + org-wide templates + app-specific templates
       const records = await this.db.query.templates.findMany({
-        where: and(
-          eq(templates.organizationId, organizationId.value),
-          or(
-            isNull(templates.appId),
-            eq(templates.appId, appId.value)
+        where: or(
+          // Global system templates
+          eq(templates.isSystem, true),
+          // Org templates (org-wide or app-specific)
+          and(
+            eq(templates.organizationId, organizationId.value),
+            or(
+              isNull(templates.appId),
+              eq(templates.appId, appId.value)
+            )
           )
         )
       });
 
+      // Sort: system templates first, then by name
       return records
         .map((record: any) => this.toDomain(record))
-        .sort((a: Template, b: Template) => a.name.localeCompare(b.name));
+        .sort((a: Template, b: Template) => {
+          if (a.isSystem !== b.isSystem) return a.isSystem ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
     } catch (error) {
       console.error('[DrizzleTemplateRepository] Error finding templates by app:', error);
       throw error;
@@ -189,6 +205,7 @@ export class DrizzleTemplateRepository implements ITemplateRepository {
       name: record.name,
       description: record.description,
       category: record.category,
+      isSystem: record.isSystem,
       thumbnailUrl: record.thumbnailUrl,
       data: record.data,
       variants: record.variants,

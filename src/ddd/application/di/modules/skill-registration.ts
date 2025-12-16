@@ -6,6 +6,7 @@
  * Registers repositories and services for skill domain:
  * - Skill repository
  * - Skill application service
+ * - Skill enrichment service (for unified skill loading across execution paths)
  */
 
 import type { ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
@@ -14,10 +15,12 @@ import type { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-re
 import { DrizzleSkillRepository } from '@/ddd/infrastructure/db/repositories/skills/drizzle-skill-repository';
 
 import { SkillApplicationService } from '@/ddd/application/services/skills/skill-application-service';
+import { SkillEnrichmentService } from '@/ddd/application/services/skills/skill-enrichment-service';
 
 export interface SkillServices {
   skillRepository: ISkillRepository;
   skillApplicationService: SkillApplicationService;
+  skillEnrichmentService: SkillEnrichmentService;
 }
 
 export interface SkillDependencies {
@@ -35,8 +38,14 @@ export function registerSkillServices(deps: SkillDependencies): SkillServices {
     skillRepository
   );
 
+  // Register enrichment service (for unified skill loading)
+  const skillEnrichmentService = new SkillEnrichmentService(
+    skillRepository
+  );
+
   return {
     skillRepository,
-    skillApplicationService
+    skillApplicationService,
+    skillEnrichmentService
   };
 }

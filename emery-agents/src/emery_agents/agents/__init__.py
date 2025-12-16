@@ -13,15 +13,18 @@ AIDEV-NOTE: Agents use native smolagents features:
 from .skill_builder_agent import (
     create_skill_builder_agent,
     create_planning_callback,
-    SKILL_BUILDER_INSTRUCTIONS,
+)
+from .document_builder_agent import (
+    create_document_builder_agent,
 )
 from .stateful_managed_agent import StatefulManagedAgent
-from .interrupt_aware_agent import InterruptAwareToolCallingAgent
+from .interrupt_aware_agent import InterruptAwareToolCallingAgent, InterruptAwareCodeAgent
 
 __all__ = [
     "create_skill_builder_agent",
     "create_planning_callback",
-    "SKILL_BUILDER_INSTRUCTIONS",
+    "create_document_builder_agent",
     "StatefulManagedAgent",
     "InterruptAwareToolCallingAgent",
+    "InterruptAwareCodeAgent",
 ]

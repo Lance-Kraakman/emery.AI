@@ -13,6 +13,7 @@ import { updateSkill, deleteSkill, uploadSkillAttachment } from '@/app/actions/s
 import { toast } from 'sonner';
 import { SkillEditor, type SkillFormData } from './SkillEditor';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import { useOrganizationPlan } from '@/stores/app-state.store';
 
 interface EditSkillViewProps {
   agent: AgentDTO;
@@ -21,6 +22,7 @@ interface EditSkillViewProps {
 
 export function EditSkillView({ agent, skill }: EditSkillViewProps) {
   const router = useRouter();
+  const organizationTier = useOrganizationPlan();
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -32,7 +34,9 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
     instructions: skill.instructions,
     tools: skill.tools,
     content: skill.content, // Load existing attachments
-    pendingAttachments: [] // Start with no pending attachments
+    pendingAttachments: [], // Start with no pending attachments
+    executionType: skill.executionType,
+    taskModelConfig: skill.taskModelConfig
   });
 
   const handleSave = async () => {
@@ -86,7 +90,9 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
         outputs: formData.outputs,
         instructions: formData.instructions,
         tools: formData.tools,
-        content: updatedContent // Include attachment metadata
+        content: updatedContent, // Include attachment metadata
+        executionType: formData.executionType,
+        taskModelConfig: formData.taskModelConfig
       });
 
       if (!result.success) {
@@ -181,6 +187,7 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
           onChange={setFormData}
           agentId={agent.id}
           skillId={skill.id}
+          organizationTier={organizationTier}
         />
       </Card>
 

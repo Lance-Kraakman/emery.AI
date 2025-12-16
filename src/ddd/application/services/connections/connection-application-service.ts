@@ -269,10 +269,10 @@ export class ConnectionApplicationService {
         };
       }
 
-      const tierConfig = getTierConfig(organization.tier || 'free');
+      const tierConfig = getTierConfig(organization.plan || 'free');
       if (!tierConfig.connectorsAllowed) {
-        logger.debug('Connectors not allowed for tier', {
-          tier: organization.tier,
+        logger.debug('Connectors not allowed for plan', {
+          plan: organization.plan,
           appName: appName.value
         });
         return {

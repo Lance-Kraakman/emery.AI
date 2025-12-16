@@ -35,6 +35,8 @@ import { getFileDisplayInfo } from '../types/chat-artifacts'
 import { getFileExtension } from '@/ddd/domain/tables/value-objects/file-viewer-types'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
 import { SaveToDatabaseDialog } from './SaveToDatabaseDialog'
+import { useOptionalTheme } from '@/components/puck/theme-context'
+import { getViewerContainerStyle, getThemedBackground, getThemedSectionStyle } from './theme-utils'
 
 const logger = createDebugLogger('CodeViewer')
 
@@ -75,6 +77,7 @@ export function CodeViewer({
   className = ''
 }: CodeViewerProps) {
   const { fileField, fileName, fileUrl, tableId, fieldId, rowId } = artifact.data
+  const theme = useOptionalTheme()
   const [content, setContent] = useState<string>('')
   const [originalContent, setOriginalContent] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -179,7 +182,7 @@ export function CodeViewer({
         formData.append('file', blob, fileName)
         formData.append('organizationId', '0') // Will be set by server from session
         formData.append('tableId', targetTableId.toString())
-        formData.append('fieldName', targetFieldId.toString())
+        formData.append('fieldId', targetFieldId.toString())
 
         // Upload file
         const uploadResponse = await fetch('/api/files/upload', {
@@ -202,7 +205,7 @@ export function CodeViewer({
         formData.append('file', blob, fileName)
         formData.append('organizationId', '0') // Will be set by server from session
         formData.append('tableId', targetTableId.toString())
-        formData.append('fieldName', targetFieldId.toString())
+        formData.append('fieldId', targetFieldId.toString())
 
         const uploadResponse = await fetch('/api/files/upload', {
           method: 'POST',
@@ -252,9 +255,15 @@ export function CodeViewer({
   }, [])
 
   return (
-    <div className={`h-full flex flex-col bg-card ${className}`}>
+    <div
+      className={`h-full flex flex-col ${!theme ? 'bg-card' : ''} ${className}`}
+      style={getViewerContainerStyle(theme)}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
+      <div
+        className={`flex items-center justify-between p-3 border-b ${!theme ? 'border-border bg-muted/10' : ''}`}
+        style={getThemedSectionStyle(theme)}
+      >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <Code className="w-5 h-5 text-purple-600 flex-shrink-0" />
           <div className="min-w-0 flex-1">
@@ -383,14 +392,20 @@ export function CodeViewer({
           />
         ) : (
           // Fallback to pre-formatted text for unsupported languages or view mode
-          <pre className="p-4 text-sm font-mono whitespace-pre-wrap break-words overflow-auto h-full bg-gray-50">
+          <pre
+            className={`p-4 text-sm font-mono whitespace-pre-wrap break-words overflow-auto h-full ${!theme ? 'bg-gray-50' : ''}`}
+            style={getThemedBackground(theme, 'surface')}
+          >
             {content}
           </pre>
         )}
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between p-3 border-t border-border bg-muted/10 text-xs text-muted-foreground flex-shrink-0">
+      <div
+        className={`flex items-center justify-between p-3 border-t text-xs flex-shrink-0 ${!theme ? 'border-border bg-muted/10 text-muted-foreground' : ''}`}
+        style={{ ...getThemedSectionStyle(theme), color: theme ? 'var(--theme-text-muted)' : undefined }}
+      >
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />

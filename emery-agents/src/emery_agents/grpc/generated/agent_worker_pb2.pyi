@@ -181,7 +181,7 @@ class AgentConfig(_message.Message):
     def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., skills: _Optional[_Iterable[_Union[SkillConfig, _Mapping]]] = ..., default_model: _Optional[str] = ...) -> None: ...
 
 class SkillConfig(_message.Message):
-    __slots__ = ("id", "name", "description", "inputs", "outputs", "instructions", "tools", "model", "content")
+    __slots__ = ("id", "name", "description", "inputs", "outputs", "instructions", "tools", "model", "content", "agent_type", "execution_type", "task_model_config")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -191,6 +191,9 @@ class SkillConfig(_message.Message):
     TOOLS_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
     CONTENT_FIELD_NUMBER: _ClassVar[int]
+    AGENT_TYPE_FIELD_NUMBER: _ClassVar[int]
+    EXECUTION_TYPE_FIELD_NUMBER: _ClassVar[int]
+    TASK_MODEL_CONFIG_FIELD_NUMBER: _ClassVar[int]
     id: int
     name: str
     description: str
@@ -200,7 +203,27 @@ class SkillConfig(_message.Message):
     tools: _containers.RepeatedCompositeFieldContainer[ToolConfig]
     model: str
     content: _containers.RepeatedCompositeFieldContainer[MessagePart]
-    def __init__(self, id: _Optional[int] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., inputs: _Optional[_Iterable[_Union[SkillInput, _Mapping]]] = ..., outputs: _Optional[_Iterable[_Union[SkillOutput, _Mapping]]] = ..., instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ..., content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ...) -> None: ...
+    agent_type: str
+    execution_type: str
+    task_model_config: TaskModelConfig
+    def __init__(self, id: _Optional[int] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., inputs: _Optional[_Iterable[_Union[SkillInput, _Mapping]]] = ..., outputs: _Optional[_Iterable[_Union[SkillOutput, _Mapping]]] = ..., instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ..., content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., agent_type: _Optional[str] = ..., execution_type: _Optional[str] = ..., task_model_config: _Optional[_Union[TaskModelConfig, _Mapping]] = ...) -> None: ...
+
+class TaskModelConfig(_message.Message):
+    __slots__ = ("model_id", "task_type", "parameters")
+    class ParametersEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    MODEL_ID_FIELD_NUMBER: _ClassVar[int]
+    TASK_TYPE_FIELD_NUMBER: _ClassVar[int]
+    PARAMETERS_FIELD_NUMBER: _ClassVar[int]
+    model_id: str
+    task_type: str
+    parameters: _containers.ScalarMap[str, str]
+    def __init__(self, model_id: _Optional[str] = ..., task_type: _Optional[str] = ..., parameters: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class SkillInput(_message.Message):
     __slots__ = ("name", "required", "type", "file_config")
@@ -225,12 +248,78 @@ class SkillInputFileConfig(_message.Message):
     def __init__(self, allowed_mime_types: _Optional[_Iterable[str]] = ..., max_size_bytes: _Optional[int] = ..., multiple: bool = ...) -> None: ...
 
 class SkillOutput(_message.Message):
-    __slots__ = ("name", "type")
+    __slots__ = ("name", "type", "output_mapping")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_MAPPING_FIELD_NUMBER: _ClassVar[int]
     name: str
     type: str
-    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ...) -> None: ...
+    output_mapping: OutputMappingConfig
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., output_mapping: _Optional[_Union[OutputMappingConfig, _Mapping]] = ...) -> None: ...
+
+class TargetFieldMetadata(_message.Message):
+    __slots__ = ("field_type", "options", "max_selections", "field_name")
+    FIELD_TYPE_FIELD_NUMBER: _ClassVar[int]
+    OPTIONS_FIELD_NUMBER: _ClassVar[int]
+    MAX_SELECTIONS_FIELD_NUMBER: _ClassVar[int]
+    FIELD_NAME_FIELD_NUMBER: _ClassVar[int]
+    field_type: str
+    options: _containers.RepeatedScalarFieldContainer[str]
+    max_selections: int
+    field_name: str
+    def __init__(self, field_type: _Optional[str] = ..., options: _Optional[_Iterable[str]] = ..., max_selections: _Optional[int] = ..., field_name: _Optional[str] = ...) -> None: ...
+
+class TableReference(_message.Message):
+    __slots__ = ("order", "field")
+    ORDER_FIELD_NUMBER: _ClassVar[int]
+    FIELD_FIELD_NUMBER: _ClassVar[int]
+    order: int
+    field: str
+    def __init__(self, order: _Optional[int] = ..., field: _Optional[str] = ...) -> None: ...
+
+class FieldSource(_message.Message):
+    __slots__ = ("skill_output", "table_ref")
+    SKILL_OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    TABLE_REF_FIELD_NUMBER: _ClassVar[int]
+    skill_output: str
+    table_ref: TableReference
+    def __init__(self, skill_output: _Optional[str] = ..., table_ref: _Optional[_Union[TableReference, _Mapping]] = ...) -> None: ...
+
+class FieldMapping(_message.Message):
+    __slots__ = ("source", "target_field_id", "target_field_metadata", "append_mode")
+    SOURCE_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_ID_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_METADATA_FIELD_NUMBER: _ClassVar[int]
+    APPEND_MODE_FIELD_NUMBER: _ClassVar[int]
+    source: FieldSource
+    target_field_id: int
+    target_field_metadata: TargetFieldMetadata
+    append_mode: bool
+    def __init__(self, source: _Optional[_Union[FieldSource, _Mapping]] = ..., target_field_id: _Optional[int] = ..., target_field_metadata: _Optional[_Union[TargetFieldMetadata, _Mapping]] = ..., append_mode: bool = ...) -> None: ...
+
+class TableMapping(_message.Message):
+    __slots__ = ("order", "target_table_id", "row_action", "row_id", "mappings", "display_field_id")
+    ORDER_FIELD_NUMBER: _ClassVar[int]
+    TARGET_TABLE_ID_FIELD_NUMBER: _ClassVar[int]
+    ROW_ACTION_FIELD_NUMBER: _ClassVar[int]
+    ROW_ID_FIELD_NUMBER: _ClassVar[int]
+    MAPPINGS_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_FIELD_ID_FIELD_NUMBER: _ClassVar[int]
+    order: int
+    target_table_id: int
+    row_action: str
+    row_id: str
+    mappings: _containers.RepeatedCompositeFieldContainer[FieldMapping]
+    display_field_id: int
+    def __init__(self, order: _Optional[int] = ..., target_table_id: _Optional[int] = ..., row_action: _Optional[str] = ..., row_id: _Optional[str] = ..., mappings: _Optional[_Iterable[_Union[FieldMapping, _Mapping]]] = ..., display_field_id: _Optional[int] = ...) -> None: ...
+
+class OutputMappingConfig(_message.Message):
+    __slots__ = ("mode", "table_mappings")
+    MODE_FIELD_NUMBER: _ClassVar[int]
+    TABLE_MAPPINGS_FIELD_NUMBER: _ClassVar[int]
+    mode: str
+    table_mappings: _containers.RepeatedCompositeFieldContainer[TableMapping]
+    def __init__(self, mode: _Optional[str] = ..., table_mappings: _Optional[_Iterable[_Union[TableMapping, _Mapping]]] = ...) -> None: ...
 
 class ToolConfig(_message.Message):
     __slots__ = ("name", "version", "config")
@@ -340,20 +429,18 @@ class ProcessMessageRequest(_message.Message):
     def __init__(self, message_parts: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., context: _Optional[_Union[ChatContext, _Mapping]] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., model: _Optional[str] = ..., message_id: _Optional[str] = ..., session_id: _Optional[str] = ..., user_api_key: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageResponse(_message.Message):
-    __slots__ = ("content_chunk", "rag_context", "complete", "error", "step_progress", "timestamp")
+    __slots__ = ("content_chunk", "complete", "error", "step_progress", "timestamp")
     CONTENT_CHUNK_FIELD_NUMBER: _ClassVar[int]
-    RAG_CONTEXT_FIELD_NUMBER: _ClassVar[int]
     COMPLETE_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
     STEP_PROGRESS_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     content_chunk: ContentChunk
-    rag_context: RagContext
     complete: ProcessingComplete
     error: ProcessingError
     step_progress: StepProgress
     timestamp: int
-    def __init__(self, content_chunk: _Optional[_Union[ContentChunk, _Mapping]] = ..., rag_context: _Optional[_Union[RagContext, _Mapping]] = ..., complete: _Optional[_Union[ProcessingComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., step_progress: _Optional[_Union[StepProgress, _Mapping]] = ..., timestamp: _Optional[int] = ...) -> None: ...
+    def __init__(self, content_chunk: _Optional[_Union[ContentChunk, _Mapping]] = ..., complete: _Optional[_Union[ProcessingComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., step_progress: _Optional[_Union[StepProgress, _Mapping]] = ..., timestamp: _Optional[int] = ...) -> None: ...
 
 class MessagePart(_message.Message):
     __slots__ = ("text", "image_url", "file")
@@ -406,30 +493,6 @@ class ContentChunk(_message.Message):
     content: str
     sequence: int
     def __init__(self, content: _Optional[str] = ..., sequence: _Optional[int] = ...) -> None: ...
-
-class RagContext(_message.Message):
-    __slots__ = ("sources", "context_summary", "total_sources")
-    SOURCES_FIELD_NUMBER: _ClassVar[int]
-    CONTEXT_SUMMARY_FIELD_NUMBER: _ClassVar[int]
-    TOTAL_SOURCES_FIELD_NUMBER: _ClassVar[int]
-    sources: _containers.RepeatedCompositeFieldContainer[RagSource]
-    context_summary: str
-    total_sources: int
-    def __init__(self, sources: _Optional[_Iterable[_Union[RagSource, _Mapping]]] = ..., context_summary: _Optional[str] = ..., total_sources: _Optional[int] = ...) -> None: ...
-
-class RagSource(_message.Message):
-    __slots__ = ("document_id", "title", "similarity", "domain_type", "excerpt")
-    DOCUMENT_ID_FIELD_NUMBER: _ClassVar[int]
-    TITLE_FIELD_NUMBER: _ClassVar[int]
-    SIMILARITY_FIELD_NUMBER: _ClassVar[int]
-    DOMAIN_TYPE_FIELD_NUMBER: _ClassVar[int]
-    EXCERPT_FIELD_NUMBER: _ClassVar[int]
-    document_id: str
-    title: str
-    similarity: float
-    domain_type: str
-    excerpt: str
-    def __init__(self, document_id: _Optional[str] = ..., title: _Optional[str] = ..., similarity: _Optional[float] = ..., domain_type: _Optional[str] = ..., excerpt: _Optional[str] = ...) -> None: ...
 
 class ProcessingComplete(_message.Message):
     __slots__ = ("model_used", "total_tokens", "processing_time_ms", "metadata", "token_usage")

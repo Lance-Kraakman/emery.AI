@@ -27,16 +27,18 @@ import { registerOverlayPortal } from '@measured/puck';
 import { RowDataProvider } from '@/components/puck/contexts/RowDataContext';
 import { DataLayoutProvider } from '@/components/puck/contexts/DataLayoutContext';
 import { EditableRowProvider } from '@/components/puck/contexts/EditableRowContext';
+import { ParentRowDataProvider } from '@/components/puck/contexts/ParentRowDataContext';
 import { useLinkContext } from '@/components/puck/link-context';
 import { useEditorUI } from '@/components/puck/contexts/EditorUIContext';
 import { usePagination } from './usePagination';
+import { useChildDataBlock } from './useChildDataBlock';
 import { updateRowData, createRow } from '@/app/actions/rows';
 import { Button } from '@/components/ui/button';
 import { Section } from '@/components/puck/components/Section';
 import { Pencil, Check, ChevronLeft, ChevronRight, Save, X, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
-import type { SingleRowFilterConfig } from '../../fields/SingleRowFilterField';
+import type { RowFilterConfig } from '../../fields/MultiFilterField';
 import { CreateRowDialog } from './CreateRowDialog';
 import styles from './styles.module.css';
 
@@ -59,8 +61,8 @@ export interface DataBlockProps {
   // View selection
   viewId?: number;
 
-  // Single mode: Filter-based row selection
-  singleRowFilter?: SingleRowFilterConfig;
+  // Row filter configuration (for both single and list modes)
+  rowFilter?: RowFilterConfig;
 
   // List mode options
   layout?: 'vertical' | 'grid' | 'horizontal';
@@ -96,7 +98,7 @@ export interface DataBlockProps {
 export default function DataBlock({
   mode = 'single',
   viewId,
-  singleRowFilter,
+  rowFilter,
   layout = 'vertical',
   columns = 2,
   gap = "4",
@@ -124,6 +126,18 @@ export default function DataBlock({
 
   // Get editing context (Puck editor vs preview/public)
   const { isEditing } = useLinkContext();
+
+  // ============================================
+  // CLIENT-SIDE DATA FETCHING (for rowData variables)
+  // ============================================
+  // When filter contains {rowData.x} variables, we need to fetch data client-side
+  // because the parent row data is only available at render time
+  const childData = useChildDataBlock({
+    viewId,
+    filterConfig: rowFilter,
+    pageSize: itemsPerPage,
+    mode,
+  });
 
   // ============================================
   // EDIT MODE STATE (simplified - form-based)
@@ -170,6 +184,17 @@ export default function DataBlock({
   useEffect(() => {
     setLocalRows(_rows);
   }, [_rows]);
+
+  // When using client-side fetching, sync from childData
+  useEffect(() => {
+    if (childData.needsClientFetch && !childData.loading) {
+      if (mode === 'single' && childData.resolvedRow) {
+        setLocalRowData(childData.resolvedRow);
+      } else if (mode === 'list' && childData.rows.length > 0) {
+        setLocalRows(childData.rows);
+      }
+    }
+  }, [childData.needsClientFetch, childData.loading, childData.resolvedRow, childData.rows, mode]);
 
   // Get edit state for a specific row (list mode)
   const getRowEditState = useCallback((rowId: string): RowEditState => {
@@ -335,12 +360,23 @@ export default function DataBlock({
     );
   }
 
-  // Error loading data
-  if (_error) {
+  // Error loading data (server-side or client-side)
+  if (_error || childData.error) {
     return (
       <Section>
         <div className={styles.error}>
-          <p className={styles.errorText}>Error loading data: {_error}</p>
+          <p className={styles.errorText}>Error loading data: {_error || childData.error}</p>
+        </div>
+      </Section>
+    );
+  }
+
+  // Loading state for client-side fetching (when using rowData variables)
+  if (childData.needsClientFetch && childData.loading) {
+    return (
+      <Section>
+        <div className={styles.empty}>
+          <p className={styles.emptyText}>Loading...</p>
         </div>
       </Section>
     );
@@ -357,8 +393,11 @@ export default function DataBlock({
   // SINGLE MODE: Show one record
   // ============================================
   if (mode === 'single') {
+    // Check for valid filter configuration
+    const hasValidFilter = rowFilter?.conditions?.some(c => c.field && c.value);
+
     // No filter configured - show help message
-    if (!singleRowFilter?.field || !singleRowFilter?.value) {
+    if (!hasValidFilter) {
       return (
         <Section>
           <div className={styles.empty}>
@@ -372,11 +411,17 @@ export default function DataBlock({
 
     // No data loaded - could be editor mode where variable isn't available
     if (!_resolvedRow) {
+      // Build a description of the filter for the message
+      const filterDesc = rowFilter?.conditions
+        ?.filter(c => c.field && c.value)
+        .map(c => `${c.field} ${c.operator || 'equals'} ${c.value}`)
+        .join(` ${rowFilter.logic?.toUpperCase() || 'AND'} `) || 'unknown';
+
       return (
         <Section>
           <div className={styles.empty}>
             <p className={styles.emptyText}>
-              No data found for filter: {singleRowFilter.field} {singleRowFilter.operator || 'equals'} {singleRowFilter.value}
+              No data found for filter: {filterDesc}
             </p>
           </div>
         </Section>
@@ -443,73 +488,75 @@ export default function DataBlock({
           {/* Content with row context - uses slot */}
           {wrapWithDataLayout(
             <RowDataProvider rowData={displayRow!} rowIndex={0}>
-              {editEnabled && singleEditState.isEditMode ? (
-                <EditableRowProvider
-                  isEditMode={singleEditState.isEditMode}
-                  isSaving={singleEditState.isSaving}
-                  tableId={_tableId ?? null}
-                  rowId={rowId}
-                  cancel={handleCancelSingle}
-                  setEditMode={handleSetEditModeSingle}
-                >
-                  <form onSubmit={handleSingleFormSubmit}>
+              <ParentRowDataProvider rowData={displayRow!} fields={_fields}>
+                {editEnabled && singleEditState.isEditMode ? (
+                  <EditableRowProvider
+                    isEditMode={singleEditState.isEditMode}
+                    isSaving={singleEditState.isSaving}
+                    tableId={_tableId ?? null}
+                    rowId={rowId}
+                    cancel={handleCancelSingle}
+                    setEditMode={handleSetEditModeSingle}
+                  >
+                    <form onSubmit={handleSingleFormSubmit}>
+                      <div className={styles.content}>
+                        {Children && <Children />}
+                      </div>
+                      {!isEditing && (
+                        <div className={styles.editControls}>
+                          <Button
+                            type="submit"
+                            size="sm"
+                            disabled={singleEditState.isSaving}
+                          >
+                            <Save className="h-4 w-4 mr-1" />
+                            {singleEditState.isSaving ? 'Saving...' : 'Save'}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={handleCancelSingle}
+                            disabled={singleEditState.isSaving}
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Cancel
+                          </Button>
+                        </div>
+                      )}
+                    </form>
+                  </EditableRowProvider>
+                ) : editEnabled ? (
+                  <EditableRowProvider
+                    isEditMode={false}
+                    isSaving={false}
+                    tableId={_tableId ?? null}
+                    rowId={rowId}
+                    cancel={handleCancelSingle}
+                    setEditMode={handleSetEditModeSingle}
+                  >
                     <div className={styles.content}>
                       {Children && <Children />}
                     </div>
                     {!isEditing && (
                       <div className={styles.editControls}>
                         <Button
-                          type="submit"
-                          size="sm"
-                          disabled={singleEditState.isSaving}
-                        >
-                          <Save className="h-4 w-4 mr-1" />
-                          {singleEditState.isSaving ? 'Saving...' : 'Save'}
-                        </Button>
-                        <Button
-                          type="button"
                           size="sm"
                           variant="ghost"
-                          onClick={handleCancelSingle}
-                          disabled={singleEditState.isSaving}
+                          onClick={() => handleSetEditModeSingle(true)}
                         >
-                          <X className="h-4 w-4 mr-1" />
-                          Cancel
+                          <Pencil className="h-4 w-4 mr-1" />
+                          Edit
                         </Button>
                       </div>
                     )}
-                  </form>
-                </EditableRowProvider>
-              ) : editEnabled ? (
-                <EditableRowProvider
-                  isEditMode={false}
-                  isSaving={false}
-                  tableId={_tableId ?? null}
-                  rowId={rowId}
-                  cancel={handleCancelSingle}
-                  setEditMode={handleSetEditModeSingle}
-                >
+                  </EditableRowProvider>
+                ) : (
                   <div className={styles.content}>
                     {Children && <Children />}
                   </div>
-                  {!isEditing && (
-                    <div className={styles.editControls}>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleSetEditModeSingle(true)}
-                      >
-                        <Pencil className="h-4 w-4 mr-1" />
-                        Edit
-                      </Button>
-                    </div>
-                  )}
-                </EditableRowProvider>
-              ) : (
-                <div className={styles.content}>
-                  {Children && <Children />}
-                </div>
-              )}
+                )}
+              </ParentRowDataProvider>
             </RowDataProvider>
           )}
         </div>
@@ -611,7 +658,9 @@ export default function DataBlock({
       return (
         <div key={(row.id as number) || index} className={styles.item}>
           <RowDataProvider rowData={row} rowIndex={index}>
-            {Children && <Children allow={disableDrops ? [] : undefined} />}
+            <ParentRowDataProvider rowData={row} fields={_fields}>
+              {Children && <Children allow={disableDrops ? [] : undefined} />}
+            </ParentRowDataProvider>
           </RowDataProvider>
         </div>
       );
@@ -624,16 +673,44 @@ export default function DataBlock({
     return (
       <div key={(row.id as number) || index} className={cn(styles.item, styles.editableItem)}>
         <RowDataProvider rowData={row} rowIndex={index}>
-          <EditableRowProvider
-            isEditMode={rowEditState.isEditMode}
-            isSaving={rowEditState.isSaving}
-            tableId={_tableId ?? null}
-            rowId={rowId}
-            cancel={cancelHandler}
-            setEditMode={setEditModeHandler}
-          >
-            {rowEditState.isEditMode ? (
-              <form onSubmit={(e) => handleRowFormSubmit(e, rowId)}>
+          <ParentRowDataProvider rowData={row} fields={_fields}>
+            <EditableRowProvider
+              isEditMode={rowEditState.isEditMode}
+              isSaving={rowEditState.isSaving}
+              tableId={_tableId ?? null}
+              rowId={rowId}
+              cancel={cancelHandler}
+              setEditMode={setEditModeHandler}
+            >
+              {rowEditState.isEditMode ? (
+                <form onSubmit={(e) => handleRowFormSubmit(e, rowId)}>
+                  <div className={styles.rowWrapper}>
+                    {/* Row content */}
+                    {Children && <Children allow={disableDrops ? [] : undefined} />}
+
+                    {/* Row edit controls */}
+                    <div className={styles.rowEditControls}>
+                      <Button
+                        type="submit"
+                        size="sm"
+                        variant="default"
+                        disabled={rowEditState.isSaving}
+                      >
+                        <Save className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={cancelHandler}
+                        disabled={rowEditState.isSaving}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                </form>
+              ) : (
                 <div className={styles.rowWrapper}>
                   {/* Row content */}
                   {Children && <Children allow={disableDrops ? [] : undefined} />}
@@ -641,44 +718,18 @@ export default function DataBlock({
                   {/* Row edit controls */}
                   <div className={styles.rowEditControls}>
                     <Button
-                      type="submit"
-                      size="sm"
-                      variant="default"
-                      disabled={rowEditState.isSaving}
-                    >
-                      <Save className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      type="button"
                       size="sm"
                       variant="ghost"
-                      onClick={cancelHandler}
-                      disabled={rowEditState.isSaving}
+                      onClick={() => setEditModeHandler(true)}
+                      className={styles.rowEditButton}
                     >
-                      <X className="h-3 w-3" />
+                      <Pencil className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
-              </form>
-            ) : (
-              <div className={styles.rowWrapper}>
-                {/* Row content */}
-                {Children && <Children allow={disableDrops ? [] : undefined} />}
-
-                {/* Row edit controls */}
-                <div className={styles.rowEditControls}>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setEditModeHandler(true)}
-                    className={styles.rowEditButton}
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </EditableRowProvider>
+              )}
+            </EditableRowProvider>
+          </ParentRowDataProvider>
         </RowDataProvider>
       </div>
     );
@@ -853,7 +904,9 @@ export default function DataBlock({
         <div className={styles.dataBlock}>
           {wrapWithDataLayout(
             <RowDataProvider rowData={_rows[0] || {}} rowIndex={0}>
-              <Children />
+              <ParentRowDataProvider rowData={_rows[0] || {}} fields={_fields}>
+                <Children />
+              </ParentRowDataProvider>
             </RowDataProvider>
           )}
           <div className="flex justify-center mt-4">
@@ -905,7 +958,9 @@ export default function DataBlock({
                     {mergedDisplayedRows.map((row, index) => (
                       <div key={(row.id as number) || index} className={styles.item}>
                         <RowDataProvider rowData={row} rowIndex={index}>
-                          {Children && <Children allow={[]} />}
+                          <ParentRowDataProvider rowData={row} fields={_fields}>
+                            {Children && <Children allow={[]} />}
+                          </ParentRowDataProvider>
                         </RowDataProvider>
                       </div>
                     ))}

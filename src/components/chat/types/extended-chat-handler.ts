@@ -65,4 +65,8 @@ export interface ExtendedChatHandler extends ChatHandler {
 
   // Cancellation
   cancelMessage?: () => Promise<void>
+
+  // Model selection (for new chats - locked after first message)
+  selectedModel?: string
+  setModel?: (model: string | undefined) => void
 }

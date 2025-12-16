@@ -334,13 +334,34 @@ export interface SkillConfig {
   model: string;
   /** Skill-level attachments (images, files, text) */
   content: MessagePart[];
+  /** Optional: "tool_calling" (default) or "code_agent" */
+  agentType: string;
+  /** 'agent' (default) or 'operation' */
+  executionType: string;
+  /** Config for operation execution (when execution_type='operation') */
+  taskModelConfig: TaskModelConfig | undefined;
+}
+
+/** Configuration for operation execution (direct model invocation without LLM orchestration) */
+export interface TaskModelConfig {
+  /** HuggingFace model ID (e.g., 'black-forest-labs/FLUX.1-schnell') */
+  modelId: string;
+  /** Task type: text-to-image, speech-to-text, etc. */
+  taskType: string;
+  /** Model-specific parameters (steps, guidance_scale, etc.) */
+  parameters: { [key: string]: string };
+}
+
+export interface TaskModelConfig_ParametersEntry {
+  key: string;
+  value: string;
 }
 
 /** Skill input parameter */
 export interface SkillInput {
   name: string;
   required: boolean;
-  /** text, image, file, audio, video, document */
+  /** text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document */
   type: string;
   /** File configuration (for file-type inputs) */
   fileConfig: SkillInputFileConfig | undefined;
@@ -359,8 +380,82 @@ export interface SkillInputFileConfig {
 /** Skill output value */
 export interface SkillOutput {
   name: string;
-  /** text, image, file, audio, video, document */
+  /** text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document */
   type: string;
+  /** Optional: path-based field mapping configuration */
+  outputMapping: OutputMappingConfig | undefined;
+}
+
+/** Target field metadata - provides LLM guidance based on database field type */
+export interface TargetFieldMetadata {
+  /** Database field type: "single-select", "multi-select", "number", "boolean", etc. */
+  fieldType: string;
+  /** For select fields: valid option values */
+  options: string[];
+  /** For multi-select: maximum allowed selections */
+  maxSelections?:
+    | number
+    | undefined;
+  /** Target field name (for display) */
+  fieldName?: string | undefined;
+}
+
+/** Reference to a field from a previous table mapping result */
+export interface TableReference {
+  /** Which table mapping (1, 2, 3...) */
+  order: number;
+  /** 'row_id' or field name from that table */
+  field: string;
+}
+
+/** Typed field source - either a skill output or a reference to previous table */
+export interface FieldSource {
+  /** Direct skill output name (e.g., "company_name") */
+  skillOutput?:
+    | string
+    | undefined;
+  /** Reference to previous table operation result */
+  tableRef?: TableReference | undefined;
+}
+
+/** Field mapping within a table mapping - maps a typed source to a target field */
+export interface FieldMapping {
+  /** Where to get the value (typed) */
+  source:
+    | FieldSource
+    | undefined;
+  /** Which field to write to */
+  targetFieldId: number;
+  /** Optional: target field info for LLM guidance */
+  targetFieldMetadata:
+    | TargetFieldMetadata
+    | undefined;
+  /** When true, append to existing relation values instead of replacing */
+  appendMode: boolean;
+}
+
+/** Ordered operation for a single table */
+export interface TableMapping {
+  /** Execution order (1, 2, 3...) */
+  order: number;
+  /** Which table to write to */
+  targetTableId: number;
+  /** 'create' or 'update' */
+  rowAction: string;
+  /** For update mode - specific row ID */
+  rowId: string;
+  /** Field mappings for this table */
+  mappings: FieldMapping[];
+  /** Field to use for relation display value */
+  displayFieldId: number;
+}
+
+/** Output mapping configuration - multi-table support with typed references */
+export interface OutputMappingConfig {
+  /** 'single_row' or 'multi_row' */
+  mode: string;
+  /** Ordered table operations */
+  tableMappings: TableMapping[];
 }
 
 /** Tool configuration */
@@ -472,11 +567,7 @@ export interface ProcessMessageResponse {
   contentChunk?:
     | ContentChunk
     | undefined;
-  /** RAG sources and context */
-  ragContext?:
-    | RagContext
-    | undefined;
-  /** Processing finished marker */
+  /** Field 2 reserved (was: RagContext rag_context) */
   complete?:
     | ProcessingComplete
     | undefined;
@@ -497,7 +588,6 @@ export interface ProcessMessageResponse {
  * AIDEV-NOTE: Multi-attachment support implemented (2025-01)
  * - ImageUrlPart: Vision model support (PIL Images → base64)
  * - FilePart: Text extraction from PDFs, audio transcription, documents
- * - Simple extraction approach (no embeddings/RAG initially)
  * - Files processed async in message_mapper.py using file_processor.py
  */
 export interface MessagePart {
@@ -545,29 +635,6 @@ export interface ContentChunk {
   content: string;
   /** Sequence number for ordering */
   sequence: number;
-}
-
-/** RAG context information */
-export interface RagContext {
-  /** List of RAG sources used */
-  sources: RagSource[];
-  /** Summary of context used */
-  contextSummary: string;
-  /** Total number of sources found */
-  totalSources: number;
-}
-
-export interface RagSource {
-  /** Source document identifier */
-  documentId: string;
-  /** Source document title */
-  title: string;
-  /** Similarity score */
-  similarity: number;
-  /** Domain type (table, agent, file, etc.) */
-  domainType: string;
-  /** Relevant text excerpt */
-  excerpt: string;
 }
 
 /** Processing completion marker */
@@ -1895,6 +1962,9 @@ function createBaseSkillConfig(): SkillConfig {
     tools: [],
     model: "",
     content: [],
+    agentType: "",
+    executionType: "",
+    taskModelConfig: undefined,
   };
 }
 
@@ -1926,6 +1996,15 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     }
     for (const v of message.content) {
       MessagePart.encode(v!, writer.uint32(74).fork()).join();
+    }
+    if (message.agentType !== "") {
+      writer.uint32(82).string(message.agentType);
+    }
+    if (message.executionType !== "") {
+      writer.uint32(90).string(message.executionType);
+    }
+    if (message.taskModelConfig !== undefined) {
+      TaskModelConfig.encode(message.taskModelConfig, writer.uint32(98).fork()).join();
     }
     return writer;
   },
@@ -2009,6 +2088,30 @@ export const SkillConfig: MessageFns<SkillConfig> = {
           message.content.push(MessagePart.decode(reader, reader.uint32()));
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.agentType = reader.string();
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.executionType = reader.string();
+          continue;
+        }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          message.taskModelConfig = TaskModelConfig.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2029,6 +2132,9 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
       model: isSet(object.model) ? globalThis.String(object.model) : "",
       content: globalThis.Array.isArray(object?.content) ? object.content.map((e: any) => MessagePart.fromJSON(e)) : [],
+      agentType: isSet(object.agentType) ? globalThis.String(object.agentType) : "",
+      executionType: isSet(object.executionType) ? globalThis.String(object.executionType) : "",
+      taskModelConfig: isSet(object.taskModelConfig) ? TaskModelConfig.fromJSON(object.taskModelConfig) : undefined,
     };
   },
 
@@ -2061,6 +2167,15 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     if (message.content?.length) {
       obj.content = message.content.map((e) => MessagePart.toJSON(e));
     }
+    if (message.agentType !== "") {
+      obj.agentType = message.agentType;
+    }
+    if (message.executionType !== "") {
+      obj.executionType = message.executionType;
+    }
+    if (message.taskModelConfig !== undefined) {
+      obj.taskModelConfig = TaskModelConfig.toJSON(message.taskModelConfig);
+    }
     return obj;
   },
 
@@ -2078,6 +2193,203 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.model = object.model ?? "";
     message.content = object.content?.map((e) => MessagePart.fromPartial(e)) || [];
+    message.agentType = object.agentType ?? "";
+    message.executionType = object.executionType ?? "";
+    message.taskModelConfig = (object.taskModelConfig !== undefined && object.taskModelConfig !== null)
+      ? TaskModelConfig.fromPartial(object.taskModelConfig)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseTaskModelConfig(): TaskModelConfig {
+  return { modelId: "", taskType: "", parameters: {} };
+}
+
+export const TaskModelConfig: MessageFns<TaskModelConfig> = {
+  encode(message: TaskModelConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.modelId !== "") {
+      writer.uint32(10).string(message.modelId);
+    }
+    if (message.taskType !== "") {
+      writer.uint32(18).string(message.taskType);
+    }
+    Object.entries(message.parameters).forEach(([key, value]) => {
+      TaskModelConfig_ParametersEntry.encode({ key: key as any, value }, writer.uint32(26).fork()).join();
+    });
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskModelConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTaskModelConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.modelId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.taskType = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          const entry3 = TaskModelConfig_ParametersEntry.decode(reader, reader.uint32());
+          if (entry3.value !== undefined) {
+            message.parameters[entry3.key] = entry3.value;
+          }
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TaskModelConfig {
+    return {
+      modelId: isSet(object.modelId) ? globalThis.String(object.modelId) : "",
+      taskType: isSet(object.taskType) ? globalThis.String(object.taskType) : "",
+      parameters: isObject(object.parameters)
+        ? Object.entries(object.parameters).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+          acc[key] = String(value);
+          return acc;
+        }, {})
+        : {},
+    };
+  },
+
+  toJSON(message: TaskModelConfig): unknown {
+    const obj: any = {};
+    if (message.modelId !== "") {
+      obj.modelId = message.modelId;
+    }
+    if (message.taskType !== "") {
+      obj.taskType = message.taskType;
+    }
+    if (message.parameters) {
+      const entries = Object.entries(message.parameters);
+      if (entries.length > 0) {
+        obj.parameters = {};
+        entries.forEach(([k, v]) => {
+          obj.parameters[k] = v;
+        });
+      }
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TaskModelConfig>, I>>(base?: I): TaskModelConfig {
+    return TaskModelConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TaskModelConfig>, I>>(object: I): TaskModelConfig {
+    const message = createBaseTaskModelConfig();
+    message.modelId = object.modelId ?? "";
+    message.taskType = object.taskType ?? "";
+    message.parameters = Object.entries(object.parameters ?? {}).reduce<{ [key: string]: string }>(
+      (acc, [key, value]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.String(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    return message;
+  },
+};
+
+function createBaseTaskModelConfig_ParametersEntry(): TaskModelConfig_ParametersEntry {
+  return { key: "", value: "" };
+}
+
+export const TaskModelConfig_ParametersEntry: MessageFns<TaskModelConfig_ParametersEntry> = {
+  encode(message: TaskModelConfig_ParametersEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskModelConfig_ParametersEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTaskModelConfig_ParametersEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TaskModelConfig_ParametersEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: TaskModelConfig_ParametersEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TaskModelConfig_ParametersEntry>, I>>(base?: I): TaskModelConfig_ParametersEntry {
+    return TaskModelConfig_ParametersEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TaskModelConfig_ParametersEntry>, I>>(
+    object: I,
+  ): TaskModelConfig_ParametersEntry {
+    const message = createBaseTaskModelConfig_ParametersEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
     return message;
   },
 };
@@ -2287,7 +2599,7 @@ export const SkillInputFileConfig: MessageFns<SkillInputFileConfig> = {
 };
 
 function createBaseSkillOutput(): SkillOutput {
-  return { name: "", type: "" };
+  return { name: "", type: "", outputMapping: undefined };
 }
 
 export const SkillOutput: MessageFns<SkillOutput> = {
@@ -2297,6 +2609,9 @@ export const SkillOutput: MessageFns<SkillOutput> = {
     }
     if (message.type !== "") {
       writer.uint32(18).string(message.type);
+    }
+    if (message.outputMapping !== undefined) {
+      OutputMappingConfig.encode(message.outputMapping, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -2324,6 +2639,14 @@ export const SkillOutput: MessageFns<SkillOutput> = {
           message.type = reader.string();
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.outputMapping = OutputMappingConfig.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2337,6 +2660,7 @@ export const SkillOutput: MessageFns<SkillOutput> = {
     return {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       type: isSet(object.type) ? globalThis.String(object.type) : "",
+      outputMapping: isSet(object.outputMapping) ? OutputMappingConfig.fromJSON(object.outputMapping) : undefined,
     };
   },
 
@@ -2348,6 +2672,9 @@ export const SkillOutput: MessageFns<SkillOutput> = {
     if (message.type !== "") {
       obj.type = message.type;
     }
+    if (message.outputMapping !== undefined) {
+      obj.outputMapping = OutputMappingConfig.toJSON(message.outputMapping);
+    }
     return obj;
   },
 
@@ -2358,6 +2685,605 @@ export const SkillOutput: MessageFns<SkillOutput> = {
     const message = createBaseSkillOutput();
     message.name = object.name ?? "";
     message.type = object.type ?? "";
+    message.outputMapping = (object.outputMapping !== undefined && object.outputMapping !== null)
+      ? OutputMappingConfig.fromPartial(object.outputMapping)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseTargetFieldMetadata(): TargetFieldMetadata {
+  return { fieldType: "", options: [], maxSelections: undefined, fieldName: undefined };
+}
+
+export const TargetFieldMetadata: MessageFns<TargetFieldMetadata> = {
+  encode(message: TargetFieldMetadata, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.fieldType !== "") {
+      writer.uint32(10).string(message.fieldType);
+    }
+    for (const v of message.options) {
+      writer.uint32(18).string(v!);
+    }
+    if (message.maxSelections !== undefined) {
+      writer.uint32(24).int32(message.maxSelections);
+    }
+    if (message.fieldName !== undefined) {
+      writer.uint32(34).string(message.fieldName);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TargetFieldMetadata {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTargetFieldMetadata();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.fieldType = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.options.push(reader.string());
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.maxSelections = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.fieldName = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TargetFieldMetadata {
+    return {
+      fieldType: isSet(object.fieldType) ? globalThis.String(object.fieldType) : "",
+      options: globalThis.Array.isArray(object?.options) ? object.options.map((e: any) => globalThis.String(e)) : [],
+      maxSelections: isSet(object.maxSelections) ? globalThis.Number(object.maxSelections) : undefined,
+      fieldName: isSet(object.fieldName) ? globalThis.String(object.fieldName) : undefined,
+    };
+  },
+
+  toJSON(message: TargetFieldMetadata): unknown {
+    const obj: any = {};
+    if (message.fieldType !== "") {
+      obj.fieldType = message.fieldType;
+    }
+    if (message.options?.length) {
+      obj.options = message.options;
+    }
+    if (message.maxSelections !== undefined) {
+      obj.maxSelections = Math.round(message.maxSelections);
+    }
+    if (message.fieldName !== undefined) {
+      obj.fieldName = message.fieldName;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TargetFieldMetadata>, I>>(base?: I): TargetFieldMetadata {
+    return TargetFieldMetadata.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TargetFieldMetadata>, I>>(object: I): TargetFieldMetadata {
+    const message = createBaseTargetFieldMetadata();
+    message.fieldType = object.fieldType ?? "";
+    message.options = object.options?.map((e) => e) || [];
+    message.maxSelections = object.maxSelections ?? undefined;
+    message.fieldName = object.fieldName ?? undefined;
+    return message;
+  },
+};
+
+function createBaseTableReference(): TableReference {
+  return { order: 0, field: "" };
+}
+
+export const TableReference: MessageFns<TableReference> = {
+  encode(message: TableReference, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.order !== 0) {
+      writer.uint32(8).int32(message.order);
+    }
+    if (message.field !== "") {
+      writer.uint32(18).string(message.field);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TableReference {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTableReference();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.order = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.field = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TableReference {
+    return {
+      order: isSet(object.order) ? globalThis.Number(object.order) : 0,
+      field: isSet(object.field) ? globalThis.String(object.field) : "",
+    };
+  },
+
+  toJSON(message: TableReference): unknown {
+    const obj: any = {};
+    if (message.order !== 0) {
+      obj.order = Math.round(message.order);
+    }
+    if (message.field !== "") {
+      obj.field = message.field;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TableReference>, I>>(base?: I): TableReference {
+    return TableReference.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TableReference>, I>>(object: I): TableReference {
+    const message = createBaseTableReference();
+    message.order = object.order ?? 0;
+    message.field = object.field ?? "";
+    return message;
+  },
+};
+
+function createBaseFieldSource(): FieldSource {
+  return { skillOutput: undefined, tableRef: undefined };
+}
+
+export const FieldSource: MessageFns<FieldSource> = {
+  encode(message: FieldSource, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.skillOutput !== undefined) {
+      writer.uint32(10).string(message.skillOutput);
+    }
+    if (message.tableRef !== undefined) {
+      TableReference.encode(message.tableRef, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FieldSource {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFieldSource();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.skillOutput = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.tableRef = TableReference.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FieldSource {
+    return {
+      skillOutput: isSet(object.skillOutput) ? globalThis.String(object.skillOutput) : undefined,
+      tableRef: isSet(object.tableRef) ? TableReference.fromJSON(object.tableRef) : undefined,
+    };
+  },
+
+  toJSON(message: FieldSource): unknown {
+    const obj: any = {};
+    if (message.skillOutput !== undefined) {
+      obj.skillOutput = message.skillOutput;
+    }
+    if (message.tableRef !== undefined) {
+      obj.tableRef = TableReference.toJSON(message.tableRef);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FieldSource>, I>>(base?: I): FieldSource {
+    return FieldSource.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FieldSource>, I>>(object: I): FieldSource {
+    const message = createBaseFieldSource();
+    message.skillOutput = object.skillOutput ?? undefined;
+    message.tableRef = (object.tableRef !== undefined && object.tableRef !== null)
+      ? TableReference.fromPartial(object.tableRef)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseFieldMapping(): FieldMapping {
+  return { source: undefined, targetFieldId: 0, targetFieldMetadata: undefined, appendMode: false };
+}
+
+export const FieldMapping: MessageFns<FieldMapping> = {
+  encode(message: FieldMapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      FieldSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    if (message.targetFieldId !== 0) {
+      writer.uint32(16).int32(message.targetFieldId);
+    }
+    if (message.targetFieldMetadata !== undefined) {
+      TargetFieldMetadata.encode(message.targetFieldMetadata, writer.uint32(26).fork()).join();
+    }
+    if (message.appendMode !== false) {
+      writer.uint32(32).bool(message.appendMode);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FieldMapping {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFieldMapping();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.source = FieldSource.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.targetFieldId = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.targetFieldMetadata = TargetFieldMetadata.decode(reader, reader.uint32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.appendMode = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FieldMapping {
+    return {
+      source: isSet(object.source) ? FieldSource.fromJSON(object.source) : undefined,
+      targetFieldId: isSet(object.targetFieldId) ? globalThis.Number(object.targetFieldId) : 0,
+      targetFieldMetadata: isSet(object.targetFieldMetadata)
+        ? TargetFieldMetadata.fromJSON(object.targetFieldMetadata)
+        : undefined,
+      appendMode: isSet(object.appendMode) ? globalThis.Boolean(object.appendMode) : false,
+    };
+  },
+
+  toJSON(message: FieldMapping): unknown {
+    const obj: any = {};
+    if (message.source !== undefined) {
+      obj.source = FieldSource.toJSON(message.source);
+    }
+    if (message.targetFieldId !== 0) {
+      obj.targetFieldId = Math.round(message.targetFieldId);
+    }
+    if (message.targetFieldMetadata !== undefined) {
+      obj.targetFieldMetadata = TargetFieldMetadata.toJSON(message.targetFieldMetadata);
+    }
+    if (message.appendMode !== false) {
+      obj.appendMode = message.appendMode;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FieldMapping>, I>>(base?: I): FieldMapping {
+    return FieldMapping.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FieldMapping>, I>>(object: I): FieldMapping {
+    const message = createBaseFieldMapping();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? FieldSource.fromPartial(object.source)
+      : undefined;
+    message.targetFieldId = object.targetFieldId ?? 0;
+    message.targetFieldMetadata = (object.targetFieldMetadata !== undefined && object.targetFieldMetadata !== null)
+      ? TargetFieldMetadata.fromPartial(object.targetFieldMetadata)
+      : undefined;
+    message.appendMode = object.appendMode ?? false;
+    return message;
+  },
+};
+
+function createBaseTableMapping(): TableMapping {
+  return { order: 0, targetTableId: 0, rowAction: "", rowId: "", mappings: [], displayFieldId: 0 };
+}
+
+export const TableMapping: MessageFns<TableMapping> = {
+  encode(message: TableMapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.order !== 0) {
+      writer.uint32(8).int32(message.order);
+    }
+    if (message.targetTableId !== 0) {
+      writer.uint32(16).int32(message.targetTableId);
+    }
+    if (message.rowAction !== "") {
+      writer.uint32(26).string(message.rowAction);
+    }
+    if (message.rowId !== "") {
+      writer.uint32(34).string(message.rowId);
+    }
+    for (const v of message.mappings) {
+      FieldMapping.encode(v!, writer.uint32(42).fork()).join();
+    }
+    if (message.displayFieldId !== 0) {
+      writer.uint32(48).int32(message.displayFieldId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TableMapping {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTableMapping();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.order = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.targetTableId = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.rowAction = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.rowId = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.mappings.push(FieldMapping.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.displayFieldId = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TableMapping {
+    return {
+      order: isSet(object.order) ? globalThis.Number(object.order) : 0,
+      targetTableId: isSet(object.targetTableId) ? globalThis.Number(object.targetTableId) : 0,
+      rowAction: isSet(object.rowAction) ? globalThis.String(object.rowAction) : "",
+      rowId: isSet(object.rowId) ? globalThis.String(object.rowId) : "",
+      mappings: globalThis.Array.isArray(object?.mappings)
+        ? object.mappings.map((e: any) => FieldMapping.fromJSON(e))
+        : [],
+      displayFieldId: isSet(object.displayFieldId) ? globalThis.Number(object.displayFieldId) : 0,
+    };
+  },
+
+  toJSON(message: TableMapping): unknown {
+    const obj: any = {};
+    if (message.order !== 0) {
+      obj.order = Math.round(message.order);
+    }
+    if (message.targetTableId !== 0) {
+      obj.targetTableId = Math.round(message.targetTableId);
+    }
+    if (message.rowAction !== "") {
+      obj.rowAction = message.rowAction;
+    }
+    if (message.rowId !== "") {
+      obj.rowId = message.rowId;
+    }
+    if (message.mappings?.length) {
+      obj.mappings = message.mappings.map((e) => FieldMapping.toJSON(e));
+    }
+    if (message.displayFieldId !== 0) {
+      obj.displayFieldId = Math.round(message.displayFieldId);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TableMapping>, I>>(base?: I): TableMapping {
+    return TableMapping.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TableMapping>, I>>(object: I): TableMapping {
+    const message = createBaseTableMapping();
+    message.order = object.order ?? 0;
+    message.targetTableId = object.targetTableId ?? 0;
+    message.rowAction = object.rowAction ?? "";
+    message.rowId = object.rowId ?? "";
+    message.mappings = object.mappings?.map((e) => FieldMapping.fromPartial(e)) || [];
+    message.displayFieldId = object.displayFieldId ?? 0;
+    return message;
+  },
+};
+
+function createBaseOutputMappingConfig(): OutputMappingConfig {
+  return { mode: "", tableMappings: [] };
+}
+
+export const OutputMappingConfig: MessageFns<OutputMappingConfig> = {
+  encode(message: OutputMappingConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.mode !== "") {
+      writer.uint32(10).string(message.mode);
+    }
+    for (const v of message.tableMappings) {
+      TableMapping.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OutputMappingConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseOutputMappingConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.mode = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.tableMappings.push(TableMapping.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): OutputMappingConfig {
+    return {
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
+      tableMappings: globalThis.Array.isArray(object?.tableMappings)
+        ? object.tableMappings.map((e: any) => TableMapping.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: OutputMappingConfig): unknown {
+    const obj: any = {};
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
+    if (message.tableMappings?.length) {
+      obj.tableMappings = message.tableMappings.map((e) => TableMapping.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<OutputMappingConfig>, I>>(base?: I): OutputMappingConfig {
+    return OutputMappingConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OutputMappingConfig>, I>>(object: I): OutputMappingConfig {
+    const message = createBaseOutputMappingConfig();
+    message.mode = object.mode ?? "";
+    message.tableMappings = object.tableMappings?.map((e) => TableMapping.fromPartial(e)) || [];
     return message;
   },
 };
@@ -3445,23 +4371,13 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
 };
 
 function createBaseProcessMessageResponse(): ProcessMessageResponse {
-  return {
-    contentChunk: undefined,
-    ragContext: undefined,
-    complete: undefined,
-    error: undefined,
-    stepProgress: undefined,
-    timestamp: 0,
-  };
+  return { contentChunk: undefined, complete: undefined, error: undefined, stepProgress: undefined, timestamp: 0 };
 }
 
 export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
   encode(message: ProcessMessageResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.contentChunk !== undefined) {
       ContentChunk.encode(message.contentChunk, writer.uint32(10).fork()).join();
-    }
-    if (message.ragContext !== undefined) {
-      RagContext.encode(message.ragContext, writer.uint32(18).fork()).join();
     }
     if (message.complete !== undefined) {
       ProcessingComplete.encode(message.complete, writer.uint32(26).fork()).join();
@@ -3491,14 +4407,6 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
           }
 
           message.contentChunk = ContentChunk.decode(reader, reader.uint32());
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.ragContext = RagContext.decode(reader, reader.uint32());
           continue;
         }
         case 3: {
@@ -3545,7 +4453,6 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
   fromJSON(object: any): ProcessMessageResponse {
     return {
       contentChunk: isSet(object.contentChunk) ? ContentChunk.fromJSON(object.contentChunk) : undefined,
-      ragContext: isSet(object.ragContext) ? RagContext.fromJSON(object.ragContext) : undefined,
       complete: isSet(object.complete) ? ProcessingComplete.fromJSON(object.complete) : undefined,
       error: isSet(object.error) ? ProcessingError.fromJSON(object.error) : undefined,
       stepProgress: isSet(object.stepProgress) ? StepProgress.fromJSON(object.stepProgress) : undefined,
@@ -3557,9 +4464,6 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     const obj: any = {};
     if (message.contentChunk !== undefined) {
       obj.contentChunk = ContentChunk.toJSON(message.contentChunk);
-    }
-    if (message.ragContext !== undefined) {
-      obj.ragContext = RagContext.toJSON(message.ragContext);
     }
     if (message.complete !== undefined) {
       obj.complete = ProcessingComplete.toJSON(message.complete);
@@ -3583,9 +4487,6 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     const message = createBaseProcessMessageResponse();
     message.contentChunk = (object.contentChunk !== undefined && object.contentChunk !== null)
       ? ContentChunk.fromPartial(object.contentChunk)
-      : undefined;
-    message.ragContext = (object.ragContext !== undefined && object.ragContext !== null)
-      ? RagContext.fromPartial(object.ragContext)
       : undefined;
     message.complete = (object.complete !== undefined && object.complete !== null)
       ? ProcessingComplete.fromPartial(object.complete)
@@ -4085,222 +4986,6 @@ export const ContentChunk: MessageFns<ContentChunk> = {
     const message = createBaseContentChunk();
     message.content = object.content ?? "";
     message.sequence = object.sequence ?? 0;
-    return message;
-  },
-};
-
-function createBaseRagContext(): RagContext {
-  return { sources: [], contextSummary: "", totalSources: 0 };
-}
-
-export const RagContext: MessageFns<RagContext> = {
-  encode(message: RagContext, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.sources) {
-      RagSource.encode(v!, writer.uint32(10).fork()).join();
-    }
-    if (message.contextSummary !== "") {
-      writer.uint32(18).string(message.contextSummary);
-    }
-    if (message.totalSources !== 0) {
-      writer.uint32(24).int32(message.totalSources);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): RagContext {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseRagContext();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.sources.push(RagSource.decode(reader, reader.uint32()));
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.contextSummary = reader.string();
-          continue;
-        }
-        case 3: {
-          if (tag !== 24) {
-            break;
-          }
-
-          message.totalSources = reader.int32();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): RagContext {
-    return {
-      sources: globalThis.Array.isArray(object?.sources) ? object.sources.map((e: any) => RagSource.fromJSON(e)) : [],
-      contextSummary: isSet(object.contextSummary) ? globalThis.String(object.contextSummary) : "",
-      totalSources: isSet(object.totalSources) ? globalThis.Number(object.totalSources) : 0,
-    };
-  },
-
-  toJSON(message: RagContext): unknown {
-    const obj: any = {};
-    if (message.sources?.length) {
-      obj.sources = message.sources.map((e) => RagSource.toJSON(e));
-    }
-    if (message.contextSummary !== "") {
-      obj.contextSummary = message.contextSummary;
-    }
-    if (message.totalSources !== 0) {
-      obj.totalSources = Math.round(message.totalSources);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<RagContext>, I>>(base?: I): RagContext {
-    return RagContext.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<RagContext>, I>>(object: I): RagContext {
-    const message = createBaseRagContext();
-    message.sources = object.sources?.map((e) => RagSource.fromPartial(e)) || [];
-    message.contextSummary = object.contextSummary ?? "";
-    message.totalSources = object.totalSources ?? 0;
-    return message;
-  },
-};
-
-function createBaseRagSource(): RagSource {
-  return { documentId: "", title: "", similarity: 0, domainType: "", excerpt: "" };
-}
-
-export const RagSource: MessageFns<RagSource> = {
-  encode(message: RagSource, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.documentId !== "") {
-      writer.uint32(10).string(message.documentId);
-    }
-    if (message.title !== "") {
-      writer.uint32(18).string(message.title);
-    }
-    if (message.similarity !== 0) {
-      writer.uint32(29).float(message.similarity);
-    }
-    if (message.domainType !== "") {
-      writer.uint32(34).string(message.domainType);
-    }
-    if (message.excerpt !== "") {
-      writer.uint32(42).string(message.excerpt);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): RagSource {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseRagSource();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.documentId = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.title = reader.string();
-          continue;
-        }
-        case 3: {
-          if (tag !== 29) {
-            break;
-          }
-
-          message.similarity = reader.float();
-          continue;
-        }
-        case 4: {
-          if (tag !== 34) {
-            break;
-          }
-
-          message.domainType = reader.string();
-          continue;
-        }
-        case 5: {
-          if (tag !== 42) {
-            break;
-          }
-
-          message.excerpt = reader.string();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): RagSource {
-    return {
-      documentId: isSet(object.documentId) ? globalThis.String(object.documentId) : "",
-      title: isSet(object.title) ? globalThis.String(object.title) : "",
-      similarity: isSet(object.similarity) ? globalThis.Number(object.similarity) : 0,
-      domainType: isSet(object.domainType) ? globalThis.String(object.domainType) : "",
-      excerpt: isSet(object.excerpt) ? globalThis.String(object.excerpt) : "",
-    };
-  },
-
-  toJSON(message: RagSource): unknown {
-    const obj: any = {};
-    if (message.documentId !== "") {
-      obj.documentId = message.documentId;
-    }
-    if (message.title !== "") {
-      obj.title = message.title;
-    }
-    if (message.similarity !== 0) {
-      obj.similarity = message.similarity;
-    }
-    if (message.domainType !== "") {
-      obj.domainType = message.domainType;
-    }
-    if (message.excerpt !== "") {
-      obj.excerpt = message.excerpt;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<RagSource>, I>>(base?: I): RagSource {
-    return RagSource.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<RagSource>, I>>(object: I): RagSource {
-    const message = createBaseRagSource();
-    message.documentId = object.documentId ?? "";
-    message.title = object.title ?? "";
-    message.similarity = object.similarity ?? 0;
-    message.domainType = object.domainType ?? "";
-    message.excerpt = object.excerpt ?? "";
     return message;
   },
 };

@@ -41,7 +41,7 @@ export default async function EditOrganizationSkillPage({ params }: PageProps) {
 
   return (
     <CenteredCanvasLayout>
-      <EditOrganizationSkillView skill={skill} />
+      <EditOrganizationSkillView skill={skill} isSystem={skill.isSystem} />
     </CenteredCanvasLayout>
   );
 }

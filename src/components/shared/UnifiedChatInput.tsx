@@ -21,6 +21,19 @@ import { ToolDropdown } from '@/components/chat/ToolDropdown';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { toolResolverService } from '@/ddd/domain/tools/services/tool-resolver-service';
 import { useChatInputState } from '@/hooks/useChatInputState';
+import { cn } from '@/lib/utils';
+
+// File validation constants - consolidated for paste, drag-drop, and file picker
+const FILE_CONFIG = {
+  maxSize: 50 * 1024 * 1024, // 50MB
+  acceptedTypes: [
+    'image/', 'audio/', 'video/',
+    'application/pdf', 'application/msword',
+    'application/vnd.openxmlformats-officedocument',
+    'text/'
+  ],
+  acceptAttribute: 'image/*,audio/*,video/*,.pdf,.doc,.docx,.txt'
+} as const;
 
 interface UnifiedChatInputProps<T = ToolDTO> {
   // Core text input
@@ -104,6 +117,7 @@ export function UnifiedChatInput<T = ToolDTO>({
   const [dropdownType, setDropdownType] = useState<'tools' | 'variables'>('tools');
   const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number; maxHeight?: number }>({ left: 0 });
   const [selectedIndex, setSelectedIndex] = useState(0); // For keyboard navigation in variable dropdown
+  const [isDragOver, setIsDragOver] = useState(false); // Visual feedback for drag-drop
   // Use tools prop directly - no local state to avoid sync issues
   const selectedTools = tools || [];
 
@@ -349,6 +363,22 @@ export function UnifiedChatInput<T = ToolDTO>({
     }
   };
 
+  // File validation helper - shared by file picker, paste, and drag-drop
+  const validateAndAddFile = (file: File) => {
+    if (file.size > FILE_CONFIG.maxSize) {
+      alert(`File ${file.name} is too large. Maximum size is 50MB.`);
+      return;
+    }
+
+    const isAccepted = FILE_CONFIG.acceptedTypes.some(type => file.type.startsWith(type));
+    if (!isAccepted) {
+      alert(`File type ${file.type || 'unknown'} is not supported.`);
+      return;
+    }
+
+    onAttachmentAdd?.(file);
+  };
+
   // File upload handlers
   const handleFileButtonClick = () => {
     fileInputRef.current?.click();
@@ -356,35 +386,47 @@ export function UnifiedChatInput<T = ToolDTO>({
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    files.forEach(file => {
-      // Validate file type and size
-      const maxSize = 50 * 1024 * 1024; // 50MB
-      if (file.size > maxSize) {
-        alert(`File ${file.name} is too large. Maximum size is 50MB.`);
-        return;
+    files.forEach(validateAndAddFile);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Paste handler - supports pasting images from clipboard (Ctrl+V / Cmd+V)
+  const handlePaste = (e: React.ClipboardEvent) => {
+    if (!enableAttachments || disabled) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          validateAndAddFile(file);
+        }
       }
-
-      // Accept images, audio, documents, and common file types
-      const acceptedTypes = [
-        'image/', 'audio/', 'video/',
-        'application/pdf', 'application/msword',
-        'application/vnd.openxmlformats-officedocument',
-        'text/'
-      ];
-
-      const isAccepted = acceptedTypes.some(type => file.type.startsWith(type));
-      if (!isAccepted) {
-        alert(`File type ${file.type} is not supported.`);
-        return;
-      }
-
-      onAttachmentAdd?.(file);
-    });
-
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
     }
+  };
+
+  // Drag-drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!enableAttachments || disabled) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (!enableAttachments || disabled) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    files.forEach(validateAndAddFile);
   };
 
   // Get icon for file type
@@ -429,7 +471,16 @@ export function UnifiedChatInput<T = ToolDTO>({
       {/* Help text */}
       {helpText && <p className="text-sm text-muted-foreground mb-2">{helpText}</p>}
 
-      <div className="relative">
+      <div
+        className={cn(
+          "relative",
+          isDragOver && "ring-2 ring-primary ring-offset-2 rounded-md"
+        )}
+        onPaste={handlePaste}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         {/* Attachment previews - show both existing and pending */}
         {enableAttachments && (existingAttachments.length > 0 || pendingAttachments.length > 0) && (
         <div className="mb-2 flex flex-wrap gap-2">
@@ -575,7 +626,7 @@ export function UnifiedChatInput<T = ToolDTO>({
             ref={fileInputRef}
             type="file"
             multiple
-            accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.txt"
+            accept={FILE_CONFIG.acceptAttribute}
             onChange={handleFileSelect}
             className="hidden"
           />

@@ -28,7 +28,7 @@ import { executePublicView } from "@/app/actions/public-pages";
 import { getFields } from "@/app/actions/fields";
 import { isPuckResolveContext } from "../../types/puck-context";
 import { createViewManagementField } from "../../custom-fields";
-import { SingleRowFilterField, type SingleRowFilterConfig } from "../../fields/SingleRowFilterField";
+import { MultiFilterField, type RowFilterConfig } from "../../fields/MultiFilterField";
 
 export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
   label: "Data",
@@ -159,11 +159,15 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
 
   defaultProps: {
     mode: "single",
-    singleRowFilter: {
-      field: "id",
-      operator: "eq",
-      valueType: "variable",
-      value: "{params.id}",
+    rowFilter: {
+      conditions: [{
+        id: crypto.randomUUID(),
+        field: "id",
+        operator: "eq",
+        valueType: "variable",
+        value: "{params.id}",
+      }],
+      logic: "and",
     },
     layout: "vertical",
     columns: 2,
@@ -177,7 +181,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
 
   /**
    * Conditional field visibility based on mode
-   * Also dynamically creates singleRowFilter field with viewId in closure
+   * Dynamically creates rowFilter field with viewId in closure
    */
   resolveFields: (data, { fields }) => {
     const mode = data.props.mode;
@@ -191,6 +195,22 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       viewId: fields.viewId,
     };
 
+    // Row filter field - shown for both single and list modes
+    const rowFilterField = {
+      rowFilter: {
+        type: "custom" as const,
+        label: "Row Filter",
+        render: ({ value, onChange }: { value: RowFilterConfig | undefined; onChange: (v: RowFilterConfig) => void }) => (
+          <MultiFilterField
+            key={viewId}  // Force remount when viewId changes
+            value={value}
+            onChange={onChange}
+            viewId={viewId}
+          />
+        ),
+      },
+    };
+
     // Edit mode fields (shown when viewId is selected)
     const editFields = viewId ? {
       editEnabled: fields.editEnabled,
@@ -198,21 +218,10 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     } : {};
 
     if (mode === 'single') {
-      // Single mode: dynamically create singleRowFilter with viewId in closure
+      // Single mode: just filter and children
       return {
         ...baseFields,
-        singleRowFilter: {
-          type: "custom" as const,
-          label: "Row Filter",
-          render: ({ value, onChange }: { value: SingleRowFilterConfig | undefined; onChange: (v: SingleRowFilterConfig) => void }) => (
-            <SingleRowFilterField
-              key={viewId}  // Force remount when viewId changes
-              value={value}
-              onChange={onChange}
-              viewId={viewId}
-            />
-          ),
-        },
+        ...rowFilterField,
         ...editFields,
         children: fields.children,
       };
@@ -221,6 +230,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     // List mode fields
     return {
       ...baseFields,
+      ...rowFilterField,
       layout: fields.layout,
       ...(layout === 'grid' && { columns: fields.columns }),
       gap: fields.gap,
@@ -319,13 +329,42 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       };
 
       // ============================================
+      // BUILD FILTERS FROM RowFilterConfig
+      // ============================================
+      // Helper to build additionalFilters from RowFilterConfig
+      // Skips conditions with {rowData.} pattern (handled client-side)
+      const buildAdditionalFilters = (filterConfig?: RowFilterConfig) => {
+        if (!filterConfig?.conditions?.length) return undefined;
+
+        const filters: Array<{ field: string; operator: string; value: unknown }> = [];
+        for (const condition of filterConfig.conditions) {
+          // Skip empty conditions
+          if (!condition.field || !condition.value) continue;
+
+          // Skip rowData variables (need client-side resolution)
+          if (typeof condition.value === 'string' && condition.value.includes('{rowData.')) {
+            continue;
+          }
+
+          filters.push({
+            field: condition.field,
+            operator: condition.operator || 'eq',
+            value: condition.value,
+          });
+        }
+
+        return filters.length > 0 ? filters : undefined;
+      };
+
+      // ============================================
       // SINGLE MODE: Filter-based row selection
       // ============================================
       if (props.mode === 'single') {
-        const filter = props.singleRowFilter;
+        const filterConfig = props.rowFilter;
 
-        // Validate filter configuration
-        if (!filter?.field || !filter?.value) {
+        // Validate filter configuration - need at least one complete condition
+        const hasValidCondition = filterConfig?.conditions?.some(c => c.field && c.value);
+        if (!hasValidCondition) {
           return {
             props: {
               ...props,
@@ -338,18 +377,14 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
           };
         }
 
-        // Build the filter for single row selection
-        // Variables like {params.product_id} are substituted in executeView/executePublicView
-        const singleRowFilter = [{
-          field: filter.field,
-          operator: filter.operator || 'eq',
-          value: filter.value,
-        }];
+        // Build filters from conditions (skips rowData variables)
+        const additionalFilters = buildAdditionalFilters(filterConfig);
 
         // Execute view with filter - fetch only 1 row
+        // TODO: Pass filterConfig.logic for AND/OR support when backend supports it
         const result = await doExecuteView(
           { pageSize: 1, offset: 0 },
-          singleRowFilter
+          additionalFilters
         );
 
         if (!result) {
@@ -400,10 +435,15 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       }
 
       // ============================================
-      // LIST MODE: Return paginated rows
+      // LIST MODE: Return paginated rows with optional filter
       // ============================================
       const pageSize = props.itemsPerPage || 10;
-      const result = await doExecuteView({ pageSize, offset: 0 });
+
+      // Build filters from rowFilter config (skips rowData variables)
+      const additionalFilters = buildAdditionalFilters(props.rowFilter);
+
+      // TODO: Pass props.rowFilter.logic for AND/OR support when backend supports it
+      const result = await doExecuteView({ pageSize, offset: 0 }, additionalFilters);
 
       if (!result) {
         console.error('[DataBlock.resolveData] Failed to execute view for list mode');

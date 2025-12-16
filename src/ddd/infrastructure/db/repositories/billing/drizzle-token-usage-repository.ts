@@ -158,16 +158,19 @@ export class DrizzleTokenUsageRepository implements ITokenUsageRepository {
 
   async updateOrganizationUsage(
     organizationId: OrganizationId,
-    totalTokens: number
+    totalTokens: number,
+    creditsUsed: number
   ): Promise<void> {
-    // CRITICAL: Update both token usage AND credit usage for billing
-    // creditsUsed is populated in tokenUsageLogs during create()
-    // Here we update the monthly counter for quota/limit enforcement
+    // Update both token usage AND credit usage for billing
+    // tokenUsageCurrentMonth = raw token count for analytics
+    // creditsUsedCurrentMonth = calculated credits for billing (NOT tokens!)
+    // Round credits to integer since column is integer type
+    const roundedCredits = Math.round(creditsUsed);
     await this.db
       .update(organizations)
       .set({
         tokenUsageCurrentMonth: sql`${organizations.tokenUsageCurrentMonth} + ${totalTokens}`,
-        creditsUsedCurrentMonth: sql`${organizations.creditsUsedCurrentMonth} + ${totalTokens}`,
+        creditsUsedCurrentMonth: sql`${organizations.creditsUsedCurrentMonth} + ${roundedCredits}`,
       })
       .where(eq(organizations.id, organizationId.value));
   }

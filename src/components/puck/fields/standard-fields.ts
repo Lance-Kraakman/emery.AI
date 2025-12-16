@@ -6,6 +6,8 @@
  */
 
 import { ColorFieldRenderer } from './ColorField';
+import { SpacingFieldRenderer, MarginFieldRenderer } from './SpacingFieldRenderer';
+import { RadiusFieldRenderer } from './RadiusFieldRenderer';
 
 /**
  * Standard background color field
@@ -58,13 +60,33 @@ export const typographySizeField = {
 };
 
 /**
- * Standard border radius field
- * Accepts CSS values (rem, px, etc.)
+ * Standard padding field - Figma-style with per-side control
+ * Uses FourSidedSpacing type with link/unlink functionality
+ */
+export const paddingField = {
+  type: "custom" as const,
+  label: "Padding",
+  render: SpacingFieldRenderer,
+};
+
+/**
+ * Standard margin field - Figma-style with per-side control
+ * Uses FourSidedSpacing type with link/unlink functionality
+ */
+export const marginField = {
+  type: "custom" as const,
+  label: "Margin",
+  render: MarginFieldRenderer,
+};
+
+/**
+ * Standard border radius field - Figma-style with per-corner control
+ * Uses FourCornerRadius type with link/unlink functionality
  */
 export const borderRadiusField = {
-  type: "text" as const,
-  label: "Border Radius (Optional)",
-  placeholder: "e.g., 0.5rem, 8px (leave empty for theme default)",
+  type: "custom" as const,
+  label: "Border Radius",
+  render: RadiusFieldRenderer,
 };
 
 /**
@@ -76,30 +98,6 @@ export const spacingField = {
   type: "select" as const,
   label: "Spacing",
   options: [
-    { value: "0", label: "None (0)" },
-    { value: "1", label: "XS (1)" },
-    { value: "2", label: "SM (2)" },
-    { value: "3", label: "MD (3)" },
-    { value: "4", label: "Base (4)" },
-    { value: "5", label: "LG (5)" },
-    { value: "6", label: "XL (6)" },
-    { value: "7", label: "2XL (7)" },
-    { value: "8", label: "3XL (8)" },
-    { value: "9", label: "4XL (9)" },
-    { value: "10", label: "5XL (10)" },
-  ],
-};
-
-/**
- * Standard padding field
- * Uses spacing scale (0-10) that calculates as: level × theme spacing unit
- * Example: level 4 with 0.25rem unit = 1rem padding
- */
-export const paddingField = {
-  type: "select" as const,
-  label: "Padding (Optional)",
-  options: [
-    { value: "", label: "Use Theme Default" },
     { value: "0", label: "None (0)" },
     { value: "1", label: "XS (1)" },
     { value: "2", label: "SM (2)" },
