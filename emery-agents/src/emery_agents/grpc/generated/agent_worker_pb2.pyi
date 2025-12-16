@@ -269,29 +269,57 @@ class TargetFieldMetadata(_message.Message):
     field_name: str
     def __init__(self, field_type: _Optional[str] = ..., options: _Optional[_Iterable[str]] = ..., max_selections: _Optional[int] = ..., field_name: _Optional[str] = ...) -> None: ...
 
+class TableReference(_message.Message):
+    __slots__ = ("order", "field")
+    ORDER_FIELD_NUMBER: _ClassVar[int]
+    FIELD_FIELD_NUMBER: _ClassVar[int]
+    order: int
+    field: str
+    def __init__(self, order: _Optional[int] = ..., field: _Optional[str] = ...) -> None: ...
+
+class FieldSource(_message.Message):
+    __slots__ = ("skill_output", "table_ref")
+    SKILL_OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    TABLE_REF_FIELD_NUMBER: _ClassVar[int]
+    skill_output: str
+    table_ref: TableReference
+    def __init__(self, skill_output: _Optional[str] = ..., table_ref: _Optional[_Union[TableReference, _Mapping]] = ...) -> None: ...
+
 class FieldMapping(_message.Message):
-    __slots__ = ("source_field", "target_table_id", "target_field_id", "target_field_metadata")
-    SOURCE_FIELD_FIELD_NUMBER: _ClassVar[int]
-    TARGET_TABLE_ID_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("source", "target_field_id", "target_field_metadata", "append_mode")
+    SOURCE_FIELD_NUMBER: _ClassVar[int]
     TARGET_FIELD_ID_FIELD_NUMBER: _ClassVar[int]
     TARGET_FIELD_METADATA_FIELD_NUMBER: _ClassVar[int]
-    source_field: str
-    target_table_id: int
+    APPEND_MODE_FIELD_NUMBER: _ClassVar[int]
+    source: FieldSource
     target_field_id: int
     target_field_metadata: TargetFieldMetadata
-    def __init__(self, source_field: _Optional[str] = ..., target_table_id: _Optional[int] = ..., target_field_id: _Optional[int] = ..., target_field_metadata: _Optional[_Union[TargetFieldMetadata, _Mapping]] = ...) -> None: ...
+    append_mode: bool
+    def __init__(self, source: _Optional[_Union[FieldSource, _Mapping]] = ..., target_field_id: _Optional[int] = ..., target_field_metadata: _Optional[_Union[TargetFieldMetadata, _Mapping]] = ..., append_mode: bool = ...) -> None: ...
 
-class OutputMappingConfig(_message.Message):
-    __slots__ = ("mode", "row_action", "row_id", "mappings")
-    MODE_FIELD_NUMBER: _ClassVar[int]
+class TableMapping(_message.Message):
+    __slots__ = ("order", "target_table_id", "row_action", "row_id", "mappings", "display_field_id")
+    ORDER_FIELD_NUMBER: _ClassVar[int]
+    TARGET_TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     ROW_ACTION_FIELD_NUMBER: _ClassVar[int]
     ROW_ID_FIELD_NUMBER: _ClassVar[int]
     MAPPINGS_FIELD_NUMBER: _ClassVar[int]
-    mode: str
+    DISPLAY_FIELD_ID_FIELD_NUMBER: _ClassVar[int]
+    order: int
+    target_table_id: int
     row_action: str
     row_id: str
     mappings: _containers.RepeatedCompositeFieldContainer[FieldMapping]
-    def __init__(self, mode: _Optional[str] = ..., row_action: _Optional[str] = ..., row_id: _Optional[str] = ..., mappings: _Optional[_Iterable[_Union[FieldMapping, _Mapping]]] = ...) -> None: ...
+    display_field_id: int
+    def __init__(self, order: _Optional[int] = ..., target_table_id: _Optional[int] = ..., row_action: _Optional[str] = ..., row_id: _Optional[str] = ..., mappings: _Optional[_Iterable[_Union[FieldMapping, _Mapping]]] = ..., display_field_id: _Optional[int] = ...) -> None: ...
+
+class OutputMappingConfig(_message.Message):
+    __slots__ = ("mode", "table_mappings")
+    MODE_FIELD_NUMBER: _ClassVar[int]
+    TABLE_MAPPINGS_FIELD_NUMBER: _ClassVar[int]
+    mode: str
+    table_mappings: _containers.RepeatedCompositeFieldContainer[TableMapping]
+    def __init__(self, mode: _Optional[str] = ..., table_mappings: _Optional[_Iterable[_Union[TableMapping, _Mapping]]] = ...) -> None: ...
 
 class ToolConfig(_message.Message):
     __slots__ = ("name", "version", "config")

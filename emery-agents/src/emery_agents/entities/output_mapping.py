@@ -1,13 +1,12 @@
 """
 Output Mapping Entities
 
-AIDEV-NOTE: Redesigned for path-based field mapping (2025-01)
-Supports single-row (classification) and multi-row (object detection) mapping modes.
-Maps structured model outputs (label, score, box.xmin, etc.) to table fields.
+AIDEV-NOTE: Redesigned for multi-table output mapping with typed references (2025-01)
+Supports ordered table operations with cross-table references for relations.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from enum import Enum
 import logging
 
@@ -21,52 +20,109 @@ class OutputMappingMode(str, Enum):
 
 
 class RowAction(str, Enum):
-    """Action for single-row mode."""
+    """Action for row operations."""
     CREATE = "create"
     UPDATE = "update"
 
 
+# =============================================================================
+# Multi-Table Output Mapping Types (typed references, no string parsing)
+# =============================================================================
+
+@dataclass
+class FieldSource:
+    """Typed source for a field value - either skill output or table reference."""
+    type: Literal['skill_output', 'table_ref']
+    name: Optional[str] = None      # For skill_output type
+    order: Optional[int] = None     # For table_ref type
+    field: Optional[str] = None     # For table_ref type
+
+    @classmethod
+    def from_proto(cls, proto_source) -> 'FieldSource':
+        """Create from protobuf FieldSource."""
+        # Check which oneof field is set
+        which_source = proto_source.WhichOneof('source')
+
+        if which_source == 'skill_output':
+            return cls(type='skill_output', name=proto_source.skill_output)
+        elif which_source == 'table_ref':
+            return cls(
+                type='table_ref',
+                order=proto_source.table_ref.order,
+                field=proto_source.table_ref.field
+            )
+        else:
+            raise ValueError(f"FieldSource must have skill_output or table_ref, got: {which_source}")
+
+
 @dataclass
 class FieldMapping:
-    """Maps a source output field to a target table field."""
-    source_field: str       # e.g., "label", "score", "box.xmin", "source.rowId"
-    target_table_id: int    # Destination table
+    """Maps a typed source to a target table field."""
+    source: FieldSource
     target_field_id: int    # Destination field/column
+    append_mode: bool = False  # When true, append to existing relation values instead of replacing
 
     @classmethod
     def from_proto(cls, proto_mapping) -> 'FieldMapping':
         """Create from protobuf FieldMapping."""
         return cls(
-            source_field=proto_mapping.source_field,
-            target_table_id=proto_mapping.target_table_id,
-            target_field_id=proto_mapping.target_field_id
+            source=FieldSource.from_proto(proto_mapping.source),
+            target_field_id=proto_mapping.target_field_id,
+            append_mode=proto_mapping.append_mode
         )
 
 
 @dataclass
+class TableMapping:
+    """Ordered operation for a single table."""
+    order: int                          # Execution order (1, 2, 3...)
+    target_table_id: int                # Which table to write to
+    row_action: RowAction               # Create or update
+    row_id: Optional[str]               # For update mode - specific row ID
+    mappings: List[FieldMapping]        # Field mappings for this table
+    display_field_id: Optional[int] = None  # Field to use for relation display value
+
+    @classmethod
+    def from_proto(cls, proto_mapping) -> 'TableMapping':
+        """Create from protobuf TableMapping."""
+        return cls(
+            order=proto_mapping.order,
+            target_table_id=proto_mapping.target_table_id,
+            row_action=RowAction(proto_mapping.row_action or 'create'),
+            row_id=proto_mapping.row_id if proto_mapping.row_id else None,
+            mappings=[FieldMapping.from_proto(m) for m in proto_mapping.mappings],
+            display_field_id=proto_mapping.display_field_id if proto_mapping.display_field_id else None
+        )
+
+
+@dataclass
+class TableMappingResult:
+    """Result of a table mapping operation."""
+    order: int
+    table_id: int
+    row_id: str
+    row_data: Dict[str, Any]  # Created/updated field values (field_id → value)
+
+
+@dataclass
 class OutputMappingConfig:
-    """Configuration for path-based output mapping."""
+    """Configuration for multi-table output mapping."""
     mode: OutputMappingMode
-    row_action: RowAction = RowAction.CREATE  # For single_row mode
-    row_id: Optional[str] = None              # For update mode
-    mappings: List[FieldMapping] = field(default_factory=list)
+    table_mappings: List[TableMapping] = field(default_factory=list)
 
     @classmethod
     def from_proto(cls, proto_config) -> 'OutputMappingConfig':
         """Create from protobuf OutputMappingConfig."""
         mode = OutputMappingMode(proto_config.mode or 'single_row')
-        row_action = RowAction(proto_config.row_action or 'create')
 
-        mappings = [
-            FieldMapping.from_proto(m)
-            for m in proto_config.mappings
+        table_mappings = [
+            TableMapping.from_proto(tm)
+            for tm in proto_config.table_mappings
         ]
 
         return cls(
             mode=mode,
-            row_action=row_action,
-            row_id=proto_config.row_id if proto_config.row_id else None,
-            mappings=mappings
+            table_mappings=table_mappings
         )
 
     @property
@@ -77,19 +133,9 @@ class OutputMappingConfig:
     def is_multi_row(self) -> bool:
         return self.mode == OutputMappingMode.MULTI_ROW
 
-    @property
-    def is_create(self) -> bool:
-        return self.row_action == RowAction.CREATE
-
-    @property
-    def is_update(self) -> bool:
-        return self.row_action == RowAction.UPDATE
-
-    def get_target_table_id(self) -> Optional[int]:
-        """Get the target table ID from the first mapping."""
-        if self.mappings:
-            return self.mappings[0].target_table_id
-        return None
+    def get_target_table_ids(self) -> List[int]:
+        """Get all target table IDs from table mappings."""
+        return [tm.target_table_id for tm in self.table_mappings]
 
 
 def extract_field_value(data: Any, field_path: str, context: Optional[Dict[str, Any]] = None) -> Any:

@@ -76,7 +76,7 @@ class SkillTool(Tool):
         if not self.skill_config.outputs:
             return False
         for output in self.skill_config.outputs:
-            if output.HasField('output_mapping') and len(output.output_mapping.mappings) > 0:
+            if output.HasField('output_mapping') and len(output.output_mapping.table_mappings) > 0:
                 return True
         return False
 
@@ -614,10 +614,11 @@ class SkillTool(Tool):
 
     async def _apply_output_mappings(self, result: "TaskResult") -> None:
         """
-        Apply output mappings to save skill results to tables.
+        Apply output mappings to save operation mode skill results to tables.
 
-        Uses shared OutputMappingService for consistent behavior across
-        agent_executor.py and skill_tool.py.
+        Uses shared OutputMappingService for consistent behavior.
+        For operation mode, the model result is wrapped as a pseudo "skill output"
+        named "result" for multi-table mapping.
 
         Args:
             result: The TaskResult from inference execution
@@ -627,17 +628,17 @@ class SkillTool(Tool):
             logger.debug("No API auth available, skipping output mappings")
             return
 
-        # Get outputs with output_mapping configured
+        # Get outputs with table_mappings configured
         outputs_with_mappings = [
             output for output in self.skill_config.outputs
-            if output.HasField('output_mapping') and output.output_mapping.mappings
+            if output.HasField('output_mapping') and output.output_mapping.table_mappings
         ]
 
         if not outputs_with_mappings:
             logger.debug("No output mappings configured")
             return
 
-        logger.info(f"📊 Applying {len(outputs_with_mappings)} output mappings")
+        logger.info(f"📊 Applying output mappings for operation mode skill")
 
         # Create mapping context with auth
         ctx = MappingContext(
@@ -645,43 +646,53 @@ class SkillTool(Tool):
             organization_id=str(self.organization_id)
         )
 
-        for output in outputs_with_mappings:
-            try:
-                config = OutputMappingConfig.from_proto(output.output_mapping)
+        # Prepare result data for mapping
+        # TEXT results are plain strings, STRUCTURED are dicts, BINARY get uploaded
+        if result.is_text:
+            result_value = str(result.data)
+        elif result.is_binary:
+            file_url = await OutputMappingService.upload_binary_to_s3(
+                ctx=ctx,
+                binary_data=result.data,
+                mime_type=result.metadata.get('mime_type', 'application/octet-stream'),
+                filename_prefix="output"
+            )
+            result_value = file_url if file_url else None
+        elif result.is_structured:
+            # For structured results (like classification), use as-is
+            result_value = result.data
+        else:
+            result_value = result.data
 
-                # Prepare data for mapping based on result type
-                # TEXT results are plain strings - wrap as {"text": ...} for field extraction
-                # STRUCTURED results are already dicts
-                # BINARY results get uploaded to S3 first
-                if result.is_text:
-                    data_for_mapping = {"text": result.data}
-                    logger.debug(f"Wrapped TEXT result for mapping: {str(result.data)[:100]}...")
-                elif result.is_binary:
-                    file_url = await OutputMappingService.upload_binary_to_s3(
-                        ctx=ctx,
-                        binary_data=result.data,
-                        mime_type=result.metadata.get('mime_type', 'application/octet-stream'),
-                        filename_prefix=output.name
-                    )
-                    data_for_mapping = {"url": file_url} if file_url else result.data
-                else:
-                    # STRUCTURED results are already dicts (classification, object detection, etc.)
-                    data_for_mapping = result.data
+        if result_value is None:
+            logger.warning("No result value to map")
+            return
 
-                # Apply mapping using shared service
-                success = await OutputMappingService.apply_mapping(
-                    ctx=ctx,
-                    config=config,
-                    data=data_for_mapping
-                )
+        # Wrap result as pseudo skill outputs for multi-table mapping
+        # The "result" key allows field sources like { type: 'skill_output', name: 'result' }
+        # For structured results, flatten to allow { type: 'skill_output', name: 'label' }
+        if isinstance(result_value, dict):
+            skill_outputs = result_value
+        else:
+            skill_outputs = {"result": result_value}
 
-                if success:
-                    logger.info(f"✅ Applied output mapping for '{output.name}'")
-                else:
-                    logger.warning(f"⚠️ Output mapping for '{output.name}' returned no success")
+        # Use first output's mapping config (contains all table mappings)
+        first_output = outputs_with_mappings[0]
 
-            except Exception as e:
-                logger.error(f"❌ Failed to apply output mapping for {output.name}: {e}")
+        try:
+            config = OutputMappingConfig.from_proto(first_output.output_mapping)
+
+            # Execute multi-table mapping
+            results = await OutputMappingService.apply_multi_table_mapping(
+                ctx=ctx,
+                config=config,
+                skill_outputs=skill_outputs
+            )
+
+            logger.info(f"✅ Operation mode output mapping complete: {len(results)} tables updated")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to apply operation output mappings: {e}")
 
     async def _apply_agent_output_mappings(self, captured_values: Dict[str, Any]) -> None:
         """
@@ -690,9 +701,10 @@ class SkillTool(Tool):
         Called when a delegated skill has output mappings configured and the
         sub-agent's OutputTool has captured values.
 
-        AIDEV-NOTE: The UI stores ALL field mappings on outputs[0].outputMapping,
-        and those mappings can reference any skill output as a source field.
-        So we pass ALL captured values to the mapping, not just one output's value.
+        AIDEV-NOTE: Multi-table output mapping with typed references (2025-01)
+        - UI stores all table mappings on outputs[0].outputMapping
+        - Table mappings are executed in order, with cross-table references
+        - Typed FieldSource (skill_output or table_ref) instead of string parsing
 
         Args:
             captured_values: Values captured from OutputTool (keyed by output name)
@@ -712,44 +724,32 @@ class SkillTool(Tool):
             organization_id=str(self.organization_id)
         )
 
-        # Get outputs with mappings
+        # Get first output with mappings (all table mappings stored on outputs[0])
         outputs_with_mappings = [
             output for output in self.skill_config.outputs
-            if output.HasField('output_mapping') and output.output_mapping.mappings
+            if output.HasField('output_mapping') and output.output_mapping.table_mappings
         ]
 
         if not outputs_with_mappings:
             logger.debug("No output mappings configured for agent mode")
             return
 
-        logger.info(f"📊 Applying {len(outputs_with_mappings)} agent output mappings from delegation")
-        logger.info(f"📤 Captured values available: {list(captured_values.keys())}")
+        # Use the first output's mapping config (contains all table mappings)
+        first_output = outputs_with_mappings[0]
+        logger.info(f"📊 Applying multi-table output mappings")
+        logger.info(f"📤 Captured skill outputs: {list(captured_values.keys())}")
 
-        for output in outputs_with_mappings:
-            output_name = output.name
+        try:
+            config = OutputMappingConfig.from_proto(first_output.output_mapping)
 
-            try:
-                config = OutputMappingConfig.from_proto(output.output_mapping)
+            # Execute multi-table mapping with typed sources
+            results = await OutputMappingService.apply_multi_table_mapping(
+                ctx=ctx,
+                config=config,
+                skill_outputs=captured_values
+            )
 
-                # Pass ALL captured values to the mapping
-                # UI stores all field mappings on outputs[0], and they can reference
-                # any skill output (e.g., isGay, name) as source fields
-                # The captured_values dict already has {output_name: value} for each output
-                data_for_mapping = captured_values
+            logger.info(f"✅ Multi-table mapping complete: {len(results)} tables updated")
 
-                logger.info(f"📋 Applying mapping for '{output_name}' with data: {data_for_mapping}")
-
-                # Apply mapping using shared service
-                success = await OutputMappingService.apply_mapping(
-                    ctx=ctx,
-                    config=config,
-                    data=data_for_mapping
-                )
-
-                if success:
-                    logger.info(f"✅ Applied agent output mapping for '{output_name}'")
-                else:
-                    logger.warning(f"⚠️ Agent output mapping for '{output_name}' returned no success")
-
-            except Exception as e:
-                logger.error(f"❌ Failed to apply agent output mapping for '{output_name}': {e}")
+        except Exception as e:
+            logger.error(f"❌ Failed to apply multi-table output mappings: {e}")

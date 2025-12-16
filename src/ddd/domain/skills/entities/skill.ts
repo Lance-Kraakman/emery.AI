@@ -56,25 +56,53 @@ export interface SkillInput {
   default?: any; // Default value for @-mention insertion
 }
 
+// =============================================================================
+// Multi-Table Output Mapping Types (typed references, no string parsing)
+// =============================================================================
+
 /**
- * Field Mapping - maps a source output field to a target table field
- * Used in path-based output mapping for structured model outputs
+ * Reference to a field from a previous table mapping result
+ */
+export interface TableReference {
+  order: number;            // Which table mapping (1, 2, 3...)
+  field: string;            // 'row_id' or field name from that table
+}
+
+/**
+ * Typed field source - either a skill output or a reference to previous table
+ * Discriminated union for type-safe source selection
+ */
+export type FieldSource =
+  | { type: 'skill_output'; name: string }
+  | { type: 'table_ref'; order: number; field: string };
+
+/**
+ * Field Mapping - maps a typed source to a target table field
  */
 export interface FieldMapping {
-  sourceField: string;       // e.g., "label", "score", "box.xmin", "source.rowId"
-  targetTableId: number;     // Destination table
-  targetFieldId: number;     // Destination field/column
+  source: FieldSource;                  // Where to get the value (typed)
+  targetFieldId: number;                // Destination field/column
+}
+
+/**
+ * Table Mapping - ordered operation for a single table
+ */
+export interface TableMapping {
+  order: number;                        // Execution order (1, 2, 3...)
+  targetTableId: number;                // Which table to write to
+  rowAction: 'create' | 'update';       // Create or update row
+  rowId?: string;                       // For update mode - specific row ID
+  mappings: FieldMapping[];             // Field mappings for this table
+  displayFieldId?: number;              // Field to use for relation display value
 }
 
 /**
  * Output Mapping Configuration
- * Supports single-row (classification) and multi-row (object detection) mapping modes
+ * Multi-table support with typed references
  */
 export interface OutputMappingConfig {
   mode: 'single_row' | 'multi_row';
-  rowAction?: 'create' | 'update';  // For single_row mode
-  rowId?: string;                    // For update mode - specific row to update
-  mappings: FieldMapping[];
+  tableMappings: TableMapping[];        // Ordered table operations
 }
 
 /**
