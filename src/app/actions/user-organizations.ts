@@ -13,6 +13,15 @@ import { SystemRoleType, SYSTEM_ROLES } from "@/ddd/domain/rbac/entities/role";
 import { contextManager } from '@/lib/db/context-manager';
 import { OrganizationMapper, type OrganizationDTO } from "@/app/mappers/organization-mapper";
 
+// Helper to map Role entities to simplified format for OrganizationDTO.userRoles
+function mapRoleToSimpleFormat(role: any): {id: number; name: string; isSystem: boolean} {
+  return {
+    id: role.id,
+    name: role.name,
+    isSystem: role.isSystem
+  };
+}
+
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 import type { 
@@ -186,7 +195,7 @@ export async function getUserOrganizations() {
         
         return {
           ...org,
-          userRoles: userRoles || [], // Multi-role array
+          userRoles: Array.isArray(userRoles) ? userRoles.map(mapRoleToSimpleFormat) : [], // Multi-role array as simple format
           isCurrentOrganization: org.id.value === session.user.currentOrganizationId,
           joinedAt: org.createdAt,
           hasRoleError: !userRoles || userRoles.length === 0 // Flag to indicate role loading error
@@ -235,7 +244,7 @@ export async function getCurrentOrganization(): Promise<OrganizationDTO | null> 
   // Convert to DTO to avoid serialization issues with Value Objects
   return OrganizationMapper.toDTO({
     ...organization,
-    userRoles: userRoles || [],
+    userRoles: Array.isArray(userRoles) ? userRoles.map(mapRoleToSimpleFormat) : [],
     hasRoleError: !userRoles || userRoles.length === 0 // Flag to indicate role loading error
   });
   } catch (error) {

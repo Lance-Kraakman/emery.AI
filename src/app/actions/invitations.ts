@@ -14,32 +14,35 @@ import { EmailAddress, OrganizationId, UserId } from "@/ddd/domain/shared/value-
 import { SystemRoleType, SYSTEM_ROLES } from "@/ddd/domain/rbac/entities/role";
 import { toInvitationDTO, toInvitationDTOs } from "@/app/mappers/invitation-mapper";
 import type { InvitationDTO } from "@/app/dtos/invitation.dto";
+import { OrganizationMapper, OrganizationMemberDTO } from "../mappers/organization-mapper";
 
 export async function inviteUser(formData: FormData): Promise<Result> {
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("users:manage");
-    const currentOrg = await requireCurrentOrganization();
-    const email = formData.get("email") as string;
-    const systemRole = formData.get("systemRole") as string;
+      const currentOrg = await requireCurrentOrganization();
+      const email = formData.get("email") as string;
+      // For now, use default Member role since we're migrating to multi-role
+      const roleIdsStr = formData.get("roleIds") as string;
+      const roleIds = roleIdsStr ? JSON.parse(roleIdsStr) as number[] : [4]; // Default to Member role
 
-    if (!email || !systemRole) {
-      return {
-        success: false,
-        error: "Email and system role are required"
+      if (!email) {
+        return {
+          success: false,
+          error: "Email is required"
+        };
+      }
+
+      const invitationApplicationService = getInvitationApplicationService();
+      
+      const command: SendInvitationCommand = {
+        organizationId: currentOrg.id,
+        invitedBy: session.user.id,
+        email,
+        roleIds: [4], // Default to Member role (ID 4) for now
+        expiryDays: 7, // Default to 7 days
+        sendEmail: true
       };
-    }
-
-    const invitationApplicationService = getInvitationApplicationService();
-    
-    const command: SendInvitationCommand = {
-      organizationId: currentOrg.id,
-      invitedBy: session.user.id,
-      email,
-      systemRole: systemRole as SystemRoleType,
-      expiryDays: 7, // Default to 7 days
-      sendEmail: true
-    };
 
     const result = await invitationApplicationService.sendInvitation(command);
 
@@ -115,7 +118,7 @@ export async function acceptInvitation(token: string): Promise<Result> {
 
 // AIDEV-NOTE: This functionality is now handled by the OrganizationRepository
 // through the getMembers method. Consider moving this to organization actions.
-export async function getOrganizationMembers(): Promise<Array<{id: string, name: string, email: string, systemRole: SystemRoleType | string}>> {
+export async function getOrganizationMembers(): Promise<Array<OrganizationMemberDTO>> {
   try {
     const session = await requirePermission("users:view");
     const currentOrg = await requireCurrentOrganization();
@@ -126,13 +129,7 @@ export async function getOrganizationMembers(): Promise<Array<{id: string, name:
     });
     
     // Convert domain objects to DTOs for UI
-    // TODO: Update DTOs to support multi-role instead of single systemRole
-    return members.map(member => ({
-      id: member.userId.value,
-      name: member.name || 'Unknown User',
-      email: member.email?.value || '',
-      systemRole: member.roles?.[0]?.name || 'Member' // Temporary fallback to first role
-    }));
+    return members.map(member => (OrganizationMapper.memberToDTO(member)));
   } catch (error) {
     console.error("Error fetching organization members:", error);
     return [];

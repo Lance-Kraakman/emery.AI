@@ -18,7 +18,7 @@ export function toInvitationDTO(invitation: Invitation): InvitationDTO {
     organizationId: invitation.organizationId.value,
     invitedBy: invitation.invitedBy.value,
     email: invitation.email.value,
-    systemRole: invitation.systemRole,
+    roleIds: invitation.roleIds,
     token: invitation.token.value,
     expiresAt: invitation.expiresAt,
     createdAt: invitation.createdAt,

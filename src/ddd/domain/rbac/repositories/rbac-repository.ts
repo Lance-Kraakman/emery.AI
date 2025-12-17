@@ -4,6 +4,7 @@
 import { Permission } from '@/ddd/domain/shared/value-objects/permission';
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { Role, CreateRoleData, UpdateRoleData } from '@/ddd/domain/rbac/entities/role';
+import type { PermissionDTO, RoleDTO } from '@/app/mappers/permission-mapper';
 
 export interface IRBACRepository {
   // Permission checking - core RBAC functionality
@@ -28,7 +29,9 @@ export interface IRBACRepository {
   
   // User permission queries
   getUserPermissions(userId: UserId, organizationId: OrganizationId): Promise<Permission[]>;
+  getUserPermissionsDTO(userId: UserId, organizationId: OrganizationId): Promise<PermissionDTO[]>;
   getUserRoles(userId: UserId, organizationId: OrganizationId): Promise<Role[]>;
+  getUserRolesDTO(userId: UserId, organizationId: OrganizationId): Promise<RoleDTO[]>;
   
   // Role management
   createRole(data: CreateRoleData): Promise<Role>;

@@ -41,9 +41,8 @@ export async function assignUserRoles(command: AssignUserRolesCommand): Promise<
       };
     }
 
-    // Check permission with explicit context instead of using wrapper
-    const permission = Permission.fromString("users:manage");
-    await authRequirePermission(session.user.id, permission, organizationId);
+    // Check permission using string to avoid Permission VO serialization
+    await authRequirePermission(session.user.id, "users:manage", organizationId);
     
     const userRoleService = getUserRoleApplicationService();
     const result = await userRoleService.updateMemberRoles({
@@ -183,14 +182,12 @@ export async function requirePermission(permissionString: string) {
   //   permission: permissionString
   // });
 
-  // Convert string permission to Permission object
-  const permission = Permission.fromString(permissionString);
-
+  // Use string permission directly to avoid Permission VO serialization
   // console.log("🛡️ requirePermission() - About to call RBAC requirePermission...");
 
   try {
     // Use explicit organization context from session instead of requireCurrentOrganization
-    await authRequirePermission(session.user.id, permission, session.user.currentOrganizationId);
+    await authRequirePermission(session.user.id, permissionString, session.user.currentOrganizationId);
 
     // console.log("✅ requirePermission() - Permission check PASSED");
     return session;
@@ -223,9 +220,9 @@ export async function requireResourcePermission(
     throw new Error("No current organization selected");
   }
 
-  // Convert string permission to Permission object
+  // Convert string permission to Permission object for repository call
   const permission = Permission.fromString(permissionString);
-
+  
   try {
     const rbacRepository = getRBACRepository();
 

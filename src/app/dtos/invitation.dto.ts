@@ -13,7 +13,7 @@ import type { SystemRoleType } from "@/ddd/domain/rbac/entities/role";
  */
 export interface SendInvitationDTO {
   email: string;
-  systemRole: SystemRoleType;
+  roleIds: number[];
   organizationId: number;
   invitedBy: string;
   expiryDays?: number;
@@ -28,7 +28,7 @@ export interface InvitationDTO {
   organizationId: number;
   invitedBy: string;
   email: string;
-  systemRole: SystemRoleType;
+  roleIds: number[];
   token: string;
   expiresAt: Date;
   createdAt: Date | null;

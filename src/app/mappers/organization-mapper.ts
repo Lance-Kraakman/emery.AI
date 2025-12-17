@@ -1,4 +1,5 @@
 import { Organization, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
+import { RoleDTO } from './permission-mapper';
 
 export interface OrganizationDTO {
   id: number;
@@ -28,8 +29,8 @@ export interface OrganizationMemberDTO {
   userId: string;
   name?: string | null;
   email?: string | null;
-  systemRole: string;
   joinedAt?: Date | null;
+  roles: Array<{id: number; name: string; isSystem: boolean}>; // Full role objects
   hasRoleError?: boolean;
 }
 
@@ -68,7 +69,11 @@ export class OrganizationMapper {
       userId: member.userId.value,
       name: member.name,
       email: member.email?.value || null,
-      systemRole: member.roles && member.roles.length > 0 ? member.roles[0].name : 'No Roles', // Temp fallback for legacy DTO
+      roles: member.roles.map(r => ({
+        id: r.id,
+        name: r.name,
+        isSystem: r.isSystem
+      })), // Full role objects
       joinedAt: member.joinedAt,
       hasRoleError: false // TODO: Add roleError to OrganizationMember domain if needed
     };
