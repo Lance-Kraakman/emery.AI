@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Loader2, Save, X, User, Pencil, Sparkles } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { OrganizationMemberDTO } from '@/app/mappers/organization-mapper';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import { UserSelect } from '@/components/ui/UserSelect';
 import { getOrganizationMembers } from '@/app/actions/invitations';
@@ -42,6 +43,16 @@ interface User {
   name: string;
   email: string;
   systemRole?: string;
+}
+
+// Map OrganizationMemberDTO to User interface
+function mapOrganizationMemberToUser(member: OrganizationMemberDTO): User {
+  return {
+    id: member.userId,
+    name: member.name || 'Unknown User',
+    email: member.email || '',
+    systemRole: member.roles.length > 0 ? member.roles[0].name : 'Member'
+  };
 }
 
 export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoModalProps) {
@@ -106,7 +117,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
 
       // Load organization members
       const members = await getOrganizationMembers();
-      setUsers(members || []);
+      const mappedUsers = members ? members.map(mapOrganizationMemberToUser) : [];
+      setUsers(mappedUsers);
 
     } catch (error) {
       console.error('Error loading users and permissions:', error);

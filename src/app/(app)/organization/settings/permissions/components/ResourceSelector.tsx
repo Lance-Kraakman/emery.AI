@@ -78,7 +78,7 @@ export function ResourceSelector({
             fetchedResources = members.map(member => ({
               id: member.userId, // Already a string UUID after DTO mapping
               name: member.name || 'Unknown User',
-              description: member.systemRole || 'Member'
+              description: member.roles.length > 0 ? member.roles[0].name : 'Member'
             }));
             break;
           case 'app':

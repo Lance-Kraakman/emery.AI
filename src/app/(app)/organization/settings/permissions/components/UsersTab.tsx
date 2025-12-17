@@ -20,20 +20,9 @@ import { getOrganizationMembers, getPendingInvitations, inviteUser } from "@/app
 import { assignUserRoles } from "@/app/actions/permissions";
 import { getOrganizationRolesForSelection, type CustomRole } from "@/app/actions/roles";
 import { EntityMultiSelect } from "./EntityMultiSelect";
-import type { OrganizationMember } from "@/ddd/domain/organizations/entities/organization";
 
 import type { InvitationDTO } from "@/app/dtos/invitation.dto";
-
-
-// DTO for UI layer - converts domain OrganizationMember to UI-friendly format
-interface OrganizationMemberDTO {
-  id: string; // userId.value  
-  name: string;
-  email: string;
-  roles: Array<{id: number; name: string; isSystem: boolean}>; // Multiple roles only
-  teams?: string[];
-  lastActive?: Date;
-}
+import { OrganizationMemberDTO } from '@/app/mappers/organization-mapper';
 
 export function UsersTab() {
   const [members, setMembers] = useState<OrganizationMemberDTO[]>([]);
@@ -78,7 +67,7 @@ export function UsersTab() {
 
       if (!isMounted) return; // Check again after async operations
 
-      setMembers([]); // Temporary fix until service is updated
+      setMembers(membersData);
       setPendingInvitations(invitationsData || []);
     } catch (error) {
       console.error("Error loading users data:", error);
@@ -314,10 +303,10 @@ function MembersTable({ members, roleUpdating, onRoleChange, availableRoles }: M
             <EntityMultiSelect
               entityType="role"
               selectedIds={selectedRoleIds}
-              onSelectionChange={(newIds) => onRoleChange(member.id, newIds as number[])}
-              disabled={roleUpdating === member.id}
+              onSelectionChange={(newIds) => onRoleChange(member.userId, newIds as number[])}
+              disabled={roleUpdating === member.userId}
               placeholder="Select roles..."
-              fetchOptions={async () => 
+              fetchOptions={async () =>
                 availableRoles.map(role => ({
                   id: role.id,
                   name: role.name,
@@ -326,32 +315,10 @@ function MembersTable({ members, roleUpdating, onRoleChange, availableRoles }: M
                 }))
               }
             />
-            {roleUpdating === member.id && <Loader2 className="w-4 h-4 animate-spin" />}
+            {roleUpdating === member.userId && <Loader2 className="w-4 h-4 animate-spin" />}
           </div>
         );
       },
-    }),
-    columnHelper.accessor('teams', {
-      header: 'Teams',
-      cell: ({ getValue }) => (
-        <div className="flex gap-1 flex-wrap">
-          {getValue()?.map((team) => (
-            <Badge key={team} variant="outline" className="text-xs">
-              {team}
-            </Badge>
-          )) || (
-            <span className="text-muted-foreground text-sm">No teams</span>
-          )}
-        </div>
-      ),
-    }),
-    columnHelper.accessor('lastActive', {
-      header: 'Last Active',
-      cell: ({ getValue }) => (
-        <span className="text-sm text-muted-foreground">
-          {getValue() ? new Date(getValue()!).toLocaleDateString() : 'Never'}
-        </span>
-      ),
     }),
   ], [roleUpdating, onRoleChange, availableRoles]);
 

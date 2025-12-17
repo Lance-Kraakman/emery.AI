@@ -16,6 +16,7 @@ import type { OrganizationMember } from '@/ddd/domain/organizations/entities/org
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 import type { Result } from '@/ddd/domain/shared/result';
+import { RoleDTO, toRoleDTO } from '@/app/mappers/permission-mapper';
 
 export interface AddUserToOrganizationCommand {
   userId: string;
@@ -104,11 +105,12 @@ export class UserRoleApplicationService {
         }
       }
 
+
+
       // Create user-organization relationship
       const userOrganizationData: CreateUserOrganizationData = {
         userId: UserId.fromString(command.userId),
         organizationId: OrganizationId.fromNumber(command.organizationId),
-        systemRole: SYSTEM_ROLES.MEMBER // Default placeholder - actual roles stored in user_roles
       };
 
       const userOrganization = await this.userRepository.addUserToOrganization(userOrganizationData);
@@ -202,9 +204,9 @@ export class UserRoleApplicationService {
   /**
    * Get a user's multiple roles within a specific organization
    */
-  async getUserOrganizationRoles(userId: UserId, organizationId: OrganizationId): Promise<any[]> {
+  async getUserOrganizationRoles(userId: UserId, organizationId: OrganizationId): Promise<RoleDTO[]> {
     try {
-      const roles = await this.rbacRepository.getUserRoles(userId, organizationId);
+      const roles = await this.rbacRepository.getUserRolesDTO(userId, organizationId);
       return roles;
     } catch (error) {
       console.error("Error getting user organization roles:", error);
