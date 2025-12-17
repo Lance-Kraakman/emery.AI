@@ -126,11 +126,12 @@ export async function getOrganizationMembers(): Promise<Array<{id: string, name:
     });
     
     // Convert domain objects to DTOs for UI
+    // TODO: Update DTOs to support multi-role instead of single systemRole
     return members.map(member => ({
       id: member.userId.value,
       name: member.name || 'Unknown User',
       email: member.email?.value || '',
-      systemRole: member.systemRole
+      systemRole: member.roles?.[0]?.name || 'Member' // Temporary fallback to first role
     }));
   } catch (error) {
     console.error("Error fetching organization members:", error);

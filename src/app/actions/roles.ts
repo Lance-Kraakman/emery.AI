@@ -1,63 +1,34 @@
 'use server';
 
-// AIDEV-NOTE: Server Actions for custom role management in RBAC system
+// Server Actions for role management in RBAC system
 // Handles CRUD operations for organization-specific roles and their permissions
 
+// Export types for use in components
+export type { 
+  CustomRole, 
+  CreateRoleCommand, 
+  UpdateRoleCommand, 
+  RoleResult, 
+  RoleSelectionOption 
+} from './types';
+
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "./permissions";
-import { requireCurrentOrganization } from "./user-organizations";
-import { withAuthContext } from '@/lib/auth/with-context';
-import type { Result } from "./types";
 import { db } from '@/lib/db/client';
 import { roles, permissions, rolePermissions, userRoles } from '@/lib/db/schema';
-import { eq, and, or, isNull, sql } from 'drizzle-orm';
-import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
-import { getRBACRepository } from '@/ddd/application/di/container';
-import { Permission } from '@/ddd/domain/shared/value-objects/permission';
-
-export interface CustomRole {
-  id: number;
-  name: string;
-  description: string | null;
-  isSystem: boolean;
-  createdAt: Date;
-  permissionCount: number;
-  userCount: number;
-  permissions?: Array<{
-    id: number;
-    resource: string;
-    action: string;
-    description: string | null;
-  }>;
-}
-
-export interface CreateRoleCommand {
-  name: string;
-  description?: string;
-  permissionIds: number[]; // Legacy - for backward compatibility
-  permissionAssignments?: Array<{
-    permissionId: number;
-    resourceType?: 'agent' | 'team' | 'user' | null;
-    resourceScope: 'all' | 'specific' | 'owned' | 'team';
-    resourceIds?: number[];
-  }>;
-}
-
-export interface UpdateRoleCommand {
-  id: number;
-  name: string;
-  description?: string;
-  permissionIds: number[]; // Legacy - for backward compatibility
-  permissionAssignments?: Array<{
-    permissionId: number;
-    resourceType?: 'agent' | 'team' | 'user' | null;
-    resourceScope: 'all' | 'specific' | 'owned' | 'team';
-    resourceIds?: number[];
-  }>;
-}
+import { eq, and, or, isNull, sql, ne } from 'drizzle-orm';
+import type { 
+  CustomRole, 
+  CreateRoleCommand, 
+  UpdateRoleCommand, 
+  RoleResult as Result, 
+  RoleSelectionOption 
+} from './types';
+import { withAuthContext } from '@/lib/auth/with-context';
+import { requirePermission } from './permissions';
+import { requireCurrentOrganization } from './user-organizations';
 
 /**
- * Get all roles for the current organization (system + custom)
+ * Get all roles for the current organization (system + custom) with counts
  */
 export async function getOrganizationRoles(): Promise<CustomRole[]> {
   return withAuthContext(async () => {
@@ -84,7 +55,6 @@ export async function getOrganizationRoles(): Promise<CustomRole[]> {
             ),
             // Include custom roles for this org
             eq(roles.organizationId, currentOrg.id)
-          )
           )
         );
 
@@ -118,87 +88,18 @@ export async function getOrganizationRoles(): Promise<CustomRole[]> {
         })
       );
 
-return rolesWithCounts;
-  } catch (error) {
-    console.error("Error fetching organization roles:", error);
-    return [];
-  }
-});
-
-/**
- * Get organization roles for EntityMultiSelect component
- */
-export async function getOrganizationRolesForSelection(): Promise<Array<{id: number; name: string; description: string; isSystem: boolean}>> {
-  return withAuthContext(async () => {
-    try {
-      const session = await requirePermission("users:view");
-      const currentOrg = await requireCurrentOrganization();
-
-      const rolesData = await db
-        .select({
-          id: roles.id,
-          name: roles.name,
-          description: roles.description,
-          isSystem: roles.isSystem,
-        })
-        .from(roles)
-        .where(
-          or(
-            and(eq(roles.isSystem, true), isNull(roles.organizationId)),
-            eq(roles.organizationId, currentOrg.id)
-          )
-        );
-
-      return rolesData;
-    } catch (error) {
-      console.error("Error fetching organization roles for selection:", error);
-      return [];
-    }
-  });
-}
-
-/**
- * Get organization roles for EntityMultiSelect component
- */
-export async function getOrganizationRolesForSelection(): Promise<Array<{id: number; name: string; description: string; isSystem: boolean}>> {
-export async function getOrganizationRolesForSelection(): Promise<Array<{id: number; name: string; description: string; isSystem: boolean}>> {
-  return withAuthContext(async () => {
-    try {
-      const session = await requirePermission("users:view");
-      const currentOrg = await requireCurrentOrganization();
-
-      const rolesData = await db
-        .select({
-          id: roles.id,
-          name: roles.name,
-          description: roles.description,
-          isSystem: roles.isSystem,
-        })
-        .from(roles)
-        .where(
-          // Include system roles (isSystem = true, organizationId = null)
-            and(
-              eq(roles.isSystem, true),
-              isNull(roles.organizationId)
-            ),
-            // Include custom roles for this org
-            eq(roles.organizationId, currentOrg.id)
-          )
-        );
-
-      return rolesData;
+      return rolesWithCounts;
     } catch (error) {
       console.error("Error fetching organization roles:", error);
       return [];
     }
   });
 }
-});
 
 /**
  * Get organization roles for EntityMultiSelect component
  */
-export async function getOrganizationRolesForSelection(): Promise<Array<{id: number; name: string; description: string; isSystem: boolean}>> {
+export async function getOrganizationRolesForSelection(): Promise<RoleSelectionOption[]> {
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("users:view");
@@ -219,83 +120,23 @@ export async function getOrganizationRolesForSelection(): Promise<Array<{id: num
           )
         );
 
-      return rolesData;
+      return rolesData.map((role: any) => ({
+        id: role.id,
+        name: role.name,
+        description: role.description || '',
+        isSystem: role.isSystem ?? false,
+      }));
     } catch (error) {
       console.error("Error fetching organization roles for selection:", error);
       return [];
     }
   });
-}
-
-/**
- * Get organization roles for EntityMultiSelect component
- */
-export async function getOrganizationRolesForSelection(): Promise<Array<{id: number; name: string; description: string; isSystem: boolean}>> {
-  return withAuthContext(async () => {
-    try {
-      const session = await requirePermission("users:view");
-      const currentOrg = await requireCurrentOrganization();
-
-      const rolesData = await db
-        .select({
-          id: roles.id,
-          name: roles.name,
-          description: roles.description,
-          isSystem: roles.isSystem,
-        })
-        .from(roles)
-        .where(
-          or(
-            and(eq(roles.isSystem, true), isNull(roles.organizationId)),
-            eq(roles.organizationId, currentOrg.id)
-          )
-        );
-
-      return rolesData;
-    } catch (error) {
-      console.error("Error fetching organization roles for selection:", error);
-      return [];
-    }
-  });
-}
-
-/**
- * Get organization roles for EntityMultiSelect component
- */
-export async function getOrganizationRolesForSelection(): Promise<Array<{id: number; name: string; description: string; isSystem: boolean}>> {
-  return withAuthContext(async () => {
-    try {
-      const session = await requirePermission("users:view");
-      const currentOrg = await requireCurrentOrganization();
-
-      const rolesData = await db
-        .select({
-          id: roles.id,
-          name: roles.name,
-          description: roles.description,
-          isSystem: roles.isSystem,
-        })
-        .from(roles)
-        .where(
-          or(
-            and(eq(roles.isSystem, true), isNull(roles.organizationId)),
-            eq(roles.organizationId, currentOrg.id)
-          )
-        );
-
-      return rolesData;
-    } catch (error) {
-      console.error("Error fetching organization roles for selection:", error);
-      return [];
-    }
-  });
-}
 }
 
 /**
  * Get all available permissions for role creation/editing
  */
-export async function getAvailablePermissions() {
+export async function getAvailablePermissions(): Promise<Array<{id: number; resource: string; action: string; description: string | null}>> {
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("users:view");
@@ -368,8 +209,16 @@ export async function getRoleDetails(roleId: number): Promise<CustomRole | null>
         .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
         .where(eq(rolePermissions.roleId, roleId));
 
-      // TODO: Count users with this role
-      const userCount = 0; // Placeholder
+      // Get user count for this role in current organization
+      const userCountResult = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(userRoles)
+        .where(and(
+          eq(userRoles.roleId, roleId),
+          eq(userRoles.organizationId, currentOrg.id)
+        ));
+      
+      const userCount = userCountResult[0]?.count || 0;
 
       return {
         ...role[0],
@@ -595,15 +444,12 @@ export async function updateCustomRole(formData: FormData): Promise<Result> {
           and(
             eq(roles.name, name),
             eq(roles.organizationId, currentOrg.id),
-            // Exclude current role from name conflict check
-            // Using != instead of neq since neq might not be available
-            // TODO: Use proper neq operator if available in this version
-            // neq(roles.id, roleId)
+            ne(roles.id, roleId) // Exclude current role from name conflict check
           )
         )
         .limit(1);
 
-      if (nameConflict[0] && nameConflict[0].id !== roleId) {
+      if (nameConflict[0]) {
         return {
           success: false,
           error: "A role with this name already exists in your organization"
@@ -722,19 +568,21 @@ export async function deleteCustomRole(roleId: number): Promise<Result> {
         };
       }
 
-      // TODO: Check if any users are assigned to this role
-      // When user_roles table is fully integrated, add this check:
-      // const assignedUsers = await db
-      //   .select({ count: userRoles.id })
-      //   .from(userRoles)
-      //   .where(eq(userRoles.roleId, roleId));
-      //
-      // if (assignedUsers.length > 0) {
-      //   return {
-      //     success: false,
-      //     error: `Cannot delete role "${existingRole[0].name}" - it is assigned to ${assignedUsers.length} user(s). Please reassign these users to other roles first.`
-      //   };
-      // }
+      // Check if any users are assigned to this role
+      const assignedUsers = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(userRoles)
+        .where(and(
+          eq(userRoles.roleId, roleId),
+          eq(userRoles.organizationId, currentOrg.id)
+        ));
+
+      if (assignedUsers[0]?.count > 0) {
+        return {
+          success: false,
+          error: `Cannot delete role "${existingRole[0].name}" - it is assigned to ${assignedUsers[0]?.count} user(s). Please reassign these users to other roles first.`
+        };
+      }
 
       // Delete role and its permissions in transaction
       await db.transaction(async (tx: any) => {

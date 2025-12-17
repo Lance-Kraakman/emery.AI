@@ -133,6 +133,68 @@ export interface CreateTaskData {
 
 // CreateRoleData moved to domain entities: @/lib/domain/entities/role
 
+// Role management types
+import type { Role } from "@/ddd/domain/rbac/entities/role";
+
+// Interface for role selection in EntityMultiSelect component
+export interface RoleSelectionOption {
+  id: number;
+  name: string;
+  description: string;
+  isSystem: boolean;
+}
+
+// Extended role interface for UI with additional metadata
+export type CustomRole = {
+  id: number;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  createdAt: Date;
+  permissionCount: number;
+  userCount: number;
+  permissions?: Array<{
+    id: number;
+    resource: string;
+    action: string;
+    description: string | null;
+  }>;
+};
+
+// Result interface for server actions
+export interface RoleResult<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+// Role creation command interface
+export interface CreateRoleCommand {
+  name: string;
+  description?: string;
+  permissionIds: number[]; // Legacy - for backward compatibility
+  permissionAssignments?: Array<{
+    permissionId: number;
+    resourceType?: 'agent' | 'team' | 'user' | null;
+    resourceScope: 'all' | 'specific' | 'owned' | 'team';
+    resourceIds?: number[];
+  }>;
+}
+
+// Role update command interface
+export interface UpdateRoleCommand {
+  id: number;
+  name: string;
+  description?: string;
+  permissionIds: number[]; // Legacy - for backward compatibility
+  permissionAssignments?: Array<{
+    permissionId: number;
+    resourceType?: 'agent' | 'team' | 'user' | null;
+    resourceScope: 'all' | 'specific' | 'owned' | 'team';
+    resourceIds?: number[];
+  }>;
+}
+
 export interface TeamMembershipData {
   teamId: number;
   userId: string;
