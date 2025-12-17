@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { UserPlus, Crown, Shield, User, Loader2, Eye, Users as TeamIcon } from "lucide-react";
 import { getOrganizationMembers, getPendingInvitations, inviteUser } from "@/app/actions/invitations";
 import { assignUserRoles } from "@/app/actions/permissions";
+import { getOrganizationRolesForSelection, type CustomRole } from "@/app/actions/roles";
 import { EntityMultiSelect } from "./EntityMultiSelect";
 import type { OrganizationMember } from "@/ddd/domain/organizations/entities/organization";
 
@@ -43,7 +44,7 @@ export function UsersTab() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(true);
-  const [availableRoles, setAvailableRoles] = useState<CustomRole[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<{id: number; name: string; description: string; isSystem: boolean}[]>([]);
 
   useEffect(() => {
     loadData();
@@ -182,13 +183,13 @@ export function UsersTab() {
             <EntityMultiSelect
               entityType="role"
               selectedIds={inviteRoles}
-              onSelectionChange={setInviteRoles}
+              onSelectionChange={(selectedIds) => setInviteRoles(selectedIds as number[])}
               placeholder="Select roles for new member..."
               fetchOptions={async () => 
                 availableRoles.map(role => ({
                   id: role.id,
                   name: role.name,
-                  type: 'role' as any, // Will fix later
+                  type: 'role' as const, // Will fix later
                   description: role.description || ''
                 }))
               }
@@ -219,8 +220,6 @@ export function UsersTab() {
               members={members}
               roleUpdating={roleUpdating}
               onRoleChange={handleRoleChange}
-              getRoleIcon={getRoleIcon}
-              getRoleBadgeVariant={getRoleBadgeVariant}
               availableRoles={availableRoles}
             />
           )}
@@ -242,7 +241,7 @@ export function UsersTab() {
                       {invitation.email}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      Role: {invitation.systemRole || 'Member'}
+                      Role: Member
                     </p>
                   </div>
                   <Badge variant="outline">Pending</Badge>
@@ -315,14 +314,14 @@ function MembersTable({ members, roleUpdating, onRoleChange, availableRoles }: M
             <EntityMultiSelect
               entityType="role"
               selectedIds={selectedRoleIds}
-              onSelectionChange={(newIds) => onRoleChange(member.id, newIds)}
+              onSelectionChange={(newIds) => onRoleChange(member.id, newIds as number[])}
               disabled={roleUpdating === member.id}
               placeholder="Select roles..."
               fetchOptions={async () => 
                 availableRoles.map(role => ({
                   id: role.id,
                   name: role.name,
-                  type: 'role' as any, // Will fix later
+                  type: 'role' as const, // Will fix later
                   description: role.description || ''
                 }))
               }
@@ -354,37 +353,7 @@ function MembersTable({ members, roleUpdating, onRoleChange, availableRoles }: M
         </span>
       ),
     }),
-    columnHelper.display({
-      id: 'actions',
-      header: 'Actions',
-      cell: ({ row }) => {
-        const member = row.original;
-        return (
-          <div className="flex items-center gap-2">
-            <Select
-              value={member.systemRole}
-              onValueChange={(newRole) => onRoleChange(member.id, newRole as SystemRoleType)}
-              disabled={roleUpdating === member.id}
-            >
-              <SelectTrigger className="w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SYSTEM_ROLES.VIEWER}>Viewer</SelectItem>
-                <SelectItem value={SYSTEM_ROLES.MEMBER}>Member</SelectItem>
-                <SelectItem value={SYSTEM_ROLES.TEAM_LEAD}>Team Lead</SelectItem>
-                <SelectItem value={SYSTEM_ROLES.ORGANIZATION_ADMIN}>Organization Admin</SelectItem>
-                <SelectItem value={SYSTEM_ROLES.ORGANIZATION_OWNER}>Organization Owner</SelectItem>
-              </SelectContent>
-            </Select>
-            {roleUpdating === member.id && (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            )}
-          </div>
-        );
-      },
-    }),
-  ], [roleUpdating, onRoleChange, getRoleIcon, getRoleBadgeVariant]);
+  ], [roleUpdating, onRoleChange, availableRoles]);
 
   const table = useReactTable({
     data: members,

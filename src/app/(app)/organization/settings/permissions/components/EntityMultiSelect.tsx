@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Check, ChevronsUpDown, X, Users, Bot, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type EntityType = 'user' | 'agent' | 'team';
+export type EntityType = 'user' | 'agent' | 'team' | 'role';
 
 export interface EntityOption {
   id: string | number;
@@ -32,7 +32,8 @@ interface EntityMultiSelectProps {
 const entityConfig = {
   user: { icon: User, label: 'Users', color: 'bg-blue-100 text-blue-800' },
   agent: { icon: Bot, label: 'Agents', color: 'bg-green-100 text-green-800' },
-  team: { icon: Users, label: 'Teams', color: 'bg-purple-100 text-purple-800' }
+  team: { icon: Users, label: 'Teams', color: 'bg-purple-100 text-purple-800' },
+  role: { icon: User, label: 'Roles', color: 'bg-orange-100 text-orange-800' }
 };
 
 export function EntityMultiSelect({

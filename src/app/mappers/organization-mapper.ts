@@ -15,7 +15,7 @@ export interface OrganizationDTO {
   stripeSubscriptionStatus?: string | null;
   analysisCapabilities?: any | null; // Keep complex nested objects as-is for now
   createdAt?: Date | null;
-  userRole?: string; // Added for getCurrentOrganization response
+  userRoles?: Array<{id: number; name: string; isSystem: boolean}>; // Multi-role support
   hasRoleError?: boolean; // Added for getCurrentOrganization response
 }
 
@@ -34,7 +34,7 @@ export interface OrganizationMemberDTO {
 }
 
 export class OrganizationMapper {
-  static toDTO(organization: Organization & { userRole?: string; hasRoleError?: boolean }): OrganizationDTO {
+  static toDTO(organization: Organization & { userRoles?: Array<{id: number; name: string; isSystem: boolean}>; hasRoleError?: boolean }): OrganizationDTO {
     return {
       id: organization.id.value,
       name: organization.name.value,
@@ -50,7 +50,7 @@ export class OrganizationMapper {
       stripeSubscriptionStatus: organization.stripeSubscriptionStatus,
       analysisCapabilities: organization.analysisCapabilities,
       createdAt: organization.createdAt,
-      userRole: organization.userRole,
+      userRoles: organization.userRoles,
       hasRoleError: organization.hasRoleError
     };
   }
@@ -68,9 +68,9 @@ export class OrganizationMapper {
       userId: member.userId.value,
       name: member.name,
       email: member.email?.value || null,
-      systemRole: typeof member.systemRole === 'string' ? member.systemRole : member.systemRole,
+      systemRole: member.roles && member.roles.length > 0 ? member.roles[0].name : 'No Roles', // Temp fallback for legacy DTO
       joinedAt: member.joinedAt,
-      hasRoleError: member.hasRoleError
+      hasRoleError: false // TODO: Add roleError to OrganizationMember domain if needed
     };
   }
 }
