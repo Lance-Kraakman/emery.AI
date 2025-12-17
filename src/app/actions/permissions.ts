@@ -15,50 +15,48 @@ import { headers } from "next/headers";
 import { extractApiKeyFromHeader } from "@/lib/auth/user-api-keys";
 import { authenticateWithApiKey } from "@/lib/auth/test-auth";
 
-export async function assignUserRole(userId: string, role: SystemRoleType): Promise<Result> {
+export interface AssignUserRolesCommand {
+  userId: string;
+  roleIds: number[];
+  organizationId?: number;
+}
+
+export async function assignUserRoles(command: AssignUserRolesCommand): Promise<Result> {
   try {
     const session = await requireAuth();
     
-    if (!session.user.currentOrganizationId) {
+    const organizationId = command.organizationId || session.user.currentOrganizationId;
+    
+    if (!organizationId) {
       return {
         success: false,
         error: "No current organization selected"
       };
     }
     
+    if (!command.userId) {
+      return {
+        success: false,
+        error: "User ID is required"
+      };
+    }
+
     // Check permission with explicit context instead of using wrapper
     const permission = Permission.fromString("users:manage");
-    await authRequirePermission(session.user.id, permission, session.user.currentOrganizationId);
+    await authRequirePermission(session.user.id, permission, organizationId);
     
-    const currentOrgId = session.user.currentOrganizationId;
-    
-    if (!userId || !role) {
-      return {
-        success: false,
-        error: "User ID and role are required"
-      };
-    }
-
-    // Validate role is one of the allowed roles
-    if (!Object.values(SYSTEM_ROLES).includes(role)) {
-      return {
-        success: false,
-        error: `Invalid role: ${role}. Must be one of: ${Object.values(SYSTEM_ROLES).join(', ')}`
-      };
-    }
-
     const userRoleService = getUserRoleApplicationService();
-    const result = await userRoleService.updateMemberRole({
-      userId,
-      organizationId: currentOrgId,
-      newSystemRole: role,
+    const result = await userRoleService.updateMemberRoles({
+      userId: command.userId,
+      organizationId,
+      roleIds: command.roleIds,
       updatedBy: session.user.id
     });
 
     if (!result.success) {
       return {
         success: false,
-        error: result.error || "Failed to assign user role"
+        error: result.error || "Failed to assign user roles"
       };
     }
 
@@ -67,13 +65,13 @@ export async function assignUserRole(userId: string, role: SystemRoleType): Prom
     
     return {
       success: true,
-      data: { message: `Role ${role} assigned successfully` }
+      data: { message: "Roles assigned successfully" }
     };
   } catch (error) {
-    console.error("Error assigning user role:", error);
+    console.error("Error assigning user roles:", error);
     return {
       success: false,
-      error: "Failed to assign user role",
+      error: "Failed to assign user roles",
     };
   }
 }

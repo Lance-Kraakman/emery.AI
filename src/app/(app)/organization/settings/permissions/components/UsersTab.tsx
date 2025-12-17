@@ -17,20 +17,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { UserPlus, Crown, Shield, User, Loader2, Eye, Users as TeamIcon } from "lucide-react";
 import { getOrganizationMembers, getPendingInvitations, inviteUser } from "@/app/actions/invitations";
-import { assignUserRole } from "@/app/actions/permissions";
+import { assignUserRoles } from "@/app/actions/permissions";
+import { EntityMultiSelect } from "./EntityMultiSelect";
 import type { OrganizationMember } from "@/ddd/domain/organizations/entities/organization";
-import { SYSTEM_ROLES, type SystemRoleType } from "@/ddd/domain/rbac/entities/role";
+
 import type { InvitationDTO } from "@/app/dtos/invitation.dto";
+
 
 // DTO for UI layer - converts domain OrganizationMember to UI-friendly format
 interface OrganizationMemberDTO {
   id: string; // userId.value  
   name: string;
   email: string;
-  systemRole: SystemRoleType | string; // SystemRoleType or error message
+  roles: Array<{id: number; name: string; isSystem: boolean}>; // Multiple roles only
   teams?: string[];
   lastActive?: Date;
-  hasRoleError?: boolean; // Flag to indicate role loading error
 }
 
 export function UsersTab() {
@@ -38,13 +39,27 @@ export function UsersTab() {
   const [pendingInvitations, setPendingInvitations] = useState<InvitationDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<SystemRoleType>(SYSTEM_ROLES.MEMBER);
+  const [inviteRoles, setInviteRoles] = useState<number[]>([]);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(true);
+  const [availableRoles, setAvailableRoles] = useState<CustomRole[]>([]);
 
   useEffect(() => {
     loadData();
+    
+    // Load available roles for EntityMultiSelect
+    const loadRoles = async () => {
+      try {
+        
+        const roles = await getOrganizationRolesForSelection();
+        setAvailableRoles(roles);
+      } catch (error) {
+        console.error("Error loading available roles:", error);
+      }
+    };
+    loadRoles();
+    
     return () => {
       setIsMounted(false);
     };
@@ -62,7 +77,7 @@ export function UsersTab() {
 
       if (!isMounted) return; // Check again after async operations
 
-      setMembers(membersData || []);
+      setMembers([]); // Temporary fix until service is updated
       setPendingInvitations(invitationsData || []);
     } catch (error) {
       console.error("Error loading users data:", error);
@@ -86,7 +101,7 @@ export function UsersTab() {
     try {
       const formData = new FormData();
       formData.append("email", inviteEmail);
-      formData.append("systemRole", inviteRole);
+      formData.append("roleIds", JSON.stringify(inviteRoles));
 
       const result = await inviteUser(formData);
 
@@ -94,7 +109,7 @@ export function UsersTab() {
 
       if (result.success) {
         setInviteEmail("");
-        setInviteRole(SYSTEM_ROLES.MEMBER);
+        setInviteRoles([]);
         await loadData(); // Refresh data
       } else {
         console.error("Failed to invite user:", result.error);
@@ -108,11 +123,14 @@ export function UsersTab() {
     }
   };
 
-  const handleRoleChange = async (userId: string, newRole: SystemRoleType) => {
+  const handleRoleChange = async (userId: string, roleIds: number[]) => {
     if (!isMounted) return;
     setRoleUpdating(userId);
     try {
-      const result = await assignUserRole(userId, newRole as any);
+      const result = await assignUserRoles({
+      userId,
+      roleIds: roleIds || []
+    });
 
       if (!isMounted) return; // Check after async operation
 
@@ -130,49 +148,7 @@ export function UsersTab() {
     }
   };
 
-  const getRoleIcon = (role: SystemRoleType | string) => {
-    // Handle error case - if role is not a valid SystemRoleType, return default icon
-    if (!Object.values(SYSTEM_ROLES).includes(role as SystemRoleType)) {
-      return <User className="w-4 h-4" />;
-    }
-    
-    switch (role as SystemRoleType) {
-      case SYSTEM_ROLES.ORGANIZATION_OWNER:
-        return <Crown className="w-4 h-4" />;
-      case SYSTEM_ROLES.ORGANIZATION_ADMIN:
-        return <Shield className="w-4 h-4" />;
-      case SYSTEM_ROLES.TEAM_LEAD:
-        return <TeamIcon className="w-4 h-4" />;
-      case SYSTEM_ROLES.MEMBER:
-        return <User className="w-4 h-4" />;
-      case SYSTEM_ROLES.VIEWER:
-        return <Eye className="w-4 h-4" />;
-      default:
-        return <User className="w-4 h-4" />;
-    }
-  };
-
-  const getRoleBadgeVariant = (role: SystemRoleType | string) => {
-    // Handle error case - if role is not a valid SystemRoleType, return default variant
-    if (!Object.values(SYSTEM_ROLES).includes(role as SystemRoleType)) {
-      return 'outline' as const;
-    }
-    
-    switch (role as SystemRoleType) {
-      case SYSTEM_ROLES.ORGANIZATION_OWNER:
-        return 'default' as const;
-      case SYSTEM_ROLES.ORGANIZATION_ADMIN:
-        return 'secondary' as const;
-      case SYSTEM_ROLES.TEAM_LEAD:
-        return 'destructive' as const;
-      case SYSTEM_ROLES.MEMBER:
-        return 'outline' as const;
-      case SYSTEM_ROLES.VIEWER:
-        return 'secondary' as const;
-      default:
-        return 'outline' as const;
-    }
-  };
+  
 
   if (loading) {
     return (
@@ -203,18 +179,20 @@ export function UsersTab() {
               required
               className="flex-1"
             />
-            <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as SystemRoleType)}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select a role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SYSTEM_ROLES.VIEWER}>Viewer</SelectItem>
-                <SelectItem value={SYSTEM_ROLES.MEMBER}>Member</SelectItem>
-                <SelectItem value={SYSTEM_ROLES.TEAM_LEAD}>Team Lead</SelectItem>
-                <SelectItem value={SYSTEM_ROLES.ORGANIZATION_ADMIN}>Organization Admin</SelectItem>
-                <SelectItem value={SYSTEM_ROLES.ORGANIZATION_OWNER}>Organization Owner</SelectItem>
-              </SelectContent>
-            </Select>
+            <EntityMultiSelect
+              entityType="role"
+              selectedIds={inviteRoles}
+              onSelectionChange={setInviteRoles}
+              placeholder="Select roles for new member..."
+              fetchOptions={async () => 
+                availableRoles.map(role => ({
+                  id: role.id,
+                  name: role.name,
+                  type: 'role' as any, // Will fix later
+                  description: role.description || ''
+                }))
+              }
+            />
             <Button type="submit" disabled={inviteLoading || !inviteEmail.trim()}>
               {inviteLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -243,6 +221,7 @@ export function UsersTab() {
               onRoleChange={handleRoleChange}
               getRoleIcon={getRoleIcon}
               getRoleBadgeVariant={getRoleBadgeVariant}
+              availableRoles={availableRoles}
             />
           )}
         </CardContent>
@@ -281,12 +260,11 @@ export function UsersTab() {
 interface MembersTableProps {
   members: OrganizationMemberDTO[];
   roleUpdating: string | null;
-  onRoleChange: (userId: string, newRole: SystemRoleType) => void;
-  getRoleIcon: (role: SystemRoleType | string) => React.JSX.Element;
-  getRoleBadgeVariant: (role: SystemRoleType | string) => 'default' | 'secondary' | 'destructive' | 'outline';
+  onRoleChange: (userId: string, roleIds: number[]) => void;
+  availableRoles: Array<{id: number; name: string; description: string; isSystem: boolean}>;
 }
 
-function MembersTable({ members, roleUpdating, onRoleChange, getRoleIcon, getRoleBadgeVariant }: MembersTableProps) {
+function MembersTable({ members, roleUpdating, onRoleChange, availableRoles }: MembersTableProps) {
   const columnHelper = createColumnHelper<OrganizationMemberDTO>();
 
   const columns = useMemo(() => [
@@ -299,20 +277,58 @@ function MembersTable({ members, roleUpdating, onRoleChange, getRoleIcon, getRol
         </div>
       ),
     }),
-    columnHelper.accessor('systemRole', {
-      header: 'Role',
+    columnHelper.display({
+      id: 'assignedRoles',
+      header: 'Current Roles',
       cell: ({ row }) => {
         const member = row.original;
-        return member.hasRoleError ? (
-          <Badge variant="destructive" className="flex items-center gap-1 w-fit">
-            <span className="text-xs">⚠️</span>
-            Error loading role
-          </Badge>
-        ) : (
-          <Badge variant={getRoleBadgeVariant(member.systemRole)} className="flex items-center gap-1 w-fit">
-            {getRoleIcon(member.systemRole)}
-            {member.systemRole}
-          </Badge>
+        const roles = member.roles || [];
+        
+        if (roles.length === 0) {
+          return <span className="text-muted-foreground text-sm">No roles assigned</span>;
+        }
+        
+        return (
+          <div className="flex gap-1 flex-wrap">
+            {roles.map((role) => (
+              <Badge 
+                key={role.id} 
+                variant={role.isSystem ? 'default' : 'secondary'} 
+                className="text-xs"
+              >
+                {role.name}
+              </Badge>
+            ))}
+          </div>
+        );
+      },
+    }),
+    columnHelper.display({
+      id: 'actions',
+      header: 'Roles',
+      cell: ({ row }) => {
+        const member = row.original;
+        const selectedRoleIds = member.roles?.map(r => r.id) || [];
+        
+        return (
+          <div className="flex items-center gap-2 min-w-[200px]">
+            <EntityMultiSelect
+              entityType="role"
+              selectedIds={selectedRoleIds}
+              onSelectionChange={(newIds) => onRoleChange(member.id, newIds)}
+              disabled={roleUpdating === member.id}
+              placeholder="Select roles..."
+              fetchOptions={async () => 
+                availableRoles.map(role => ({
+                  id: role.id,
+                  name: role.name,
+                  type: 'role' as any, // Will fix later
+                  description: role.description || ''
+                }))
+              }
+            />
+            {roleUpdating === member.id && <Loader2 className="w-4 h-4 animate-spin" />}
+          </div>
         );
       },
     }),
