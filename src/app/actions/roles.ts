@@ -85,6 +85,7 @@ export async function getOrganizationRoles(): Promise<CustomRole[]> {
             // Include custom roles for this org
             eq(roles.organizationId, currentOrg.id)
           )
+          )
         );
 
       // Get permission counts and user counts for each role
@@ -117,12 +118,178 @@ export async function getOrganizationRoles(): Promise<CustomRole[]> {
         })
       );
 
-      return rolesWithCounts;
+return rolesWithCounts;
+  } catch (error) {
+    console.error("Error fetching organization roles:", error);
+    return [];
+  }
+});
+
+/**
+ * Get organization roles for EntityMultiSelect component
+ */
+export async function getOrganizationRolesForSelection(): Promise<Array<{id: number; name: string; description: string; isSystem: boolean}>> {
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("users:view");
+      const currentOrg = await requireCurrentOrganization();
+
+      const rolesData = await db
+        .select({
+          id: roles.id,
+          name: roles.name,
+          description: roles.description,
+          isSystem: roles.isSystem,
+        })
+        .from(roles)
+        .where(
+          or(
+            and(eq(roles.isSystem, true), isNull(roles.organizationId)),
+            eq(roles.organizationId, currentOrg.id)
+          )
+        );
+
+      return rolesData;
+    } catch (error) {
+      console.error("Error fetching organization roles for selection:", error);
+      return [];
+    }
+  });
+}
+
+/**
+ * Get organization roles for EntityMultiSelect component
+ */
+export async function getOrganizationRolesForSelection(): Promise<Array<{id: number; name: string; description: string; isSystem: boolean}>> {
+export async function getOrganizationRolesForSelection(): Promise<Array<{id: number; name: string; description: string; isSystem: boolean}>> {
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("users:view");
+      const currentOrg = await requireCurrentOrganization();
+
+      const rolesData = await db
+        .select({
+          id: roles.id,
+          name: roles.name,
+          description: roles.description,
+          isSystem: roles.isSystem,
+        })
+        .from(roles)
+        .where(
+          // Include system roles (isSystem = true, organizationId = null)
+            and(
+              eq(roles.isSystem, true),
+              isNull(roles.organizationId)
+            ),
+            // Include custom roles for this org
+            eq(roles.organizationId, currentOrg.id)
+          )
+        );
+
+      return rolesData;
     } catch (error) {
       console.error("Error fetching organization roles:", error);
       return [];
     }
   });
+}
+});
+
+/**
+ * Get organization roles for EntityMultiSelect component
+ */
+export async function getOrganizationRolesForSelection(): Promise<Array<{id: number; name: string; description: string; isSystem: boolean}>> {
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("users:view");
+      const currentOrg = await requireCurrentOrganization();
+
+      const rolesData = await db
+        .select({
+          id: roles.id,
+          name: roles.name,
+          description: roles.description,
+          isSystem: roles.isSystem,
+        })
+        .from(roles)
+        .where(
+          or(
+            and(eq(roles.isSystem, true), isNull(roles.organizationId)),
+            eq(roles.organizationId, currentOrg.id)
+          )
+        );
+
+      return rolesData;
+    } catch (error) {
+      console.error("Error fetching organization roles for selection:", error);
+      return [];
+    }
+  });
+}
+
+/**
+ * Get organization roles for EntityMultiSelect component
+ */
+export async function getOrganizationRolesForSelection(): Promise<Array<{id: number; name: string; description: string; isSystem: boolean}>> {
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("users:view");
+      const currentOrg = await requireCurrentOrganization();
+
+      const rolesData = await db
+        .select({
+          id: roles.id,
+          name: roles.name,
+          description: roles.description,
+          isSystem: roles.isSystem,
+        })
+        .from(roles)
+        .where(
+          or(
+            and(eq(roles.isSystem, true), isNull(roles.organizationId)),
+            eq(roles.organizationId, currentOrg.id)
+          )
+        );
+
+      return rolesData;
+    } catch (error) {
+      console.error("Error fetching organization roles for selection:", error);
+      return [];
+    }
+  });
+}
+
+/**
+ * Get organization roles for EntityMultiSelect component
+ */
+export async function getOrganizationRolesForSelection(): Promise<Array<{id: number; name: string; description: string; isSystem: boolean}>> {
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("users:view");
+      const currentOrg = await requireCurrentOrganization();
+
+      const rolesData = await db
+        .select({
+          id: roles.id,
+          name: roles.name,
+          description: roles.description,
+          isSystem: roles.isSystem,
+        })
+        .from(roles)
+        .where(
+          or(
+            and(eq(roles.isSystem, true), isNull(roles.organizationId)),
+            eq(roles.organizationId, currentOrg.id)
+          )
+        );
+
+      return rolesData;
+    } catch (error) {
+      console.error("Error fetching organization roles for selection:", error);
+      return [];
+    }
+  });
+}
 }
 
 /**

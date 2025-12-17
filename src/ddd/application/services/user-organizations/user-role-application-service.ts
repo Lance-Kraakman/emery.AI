@@ -20,14 +20,14 @@ import type { Result } from '@/ddd/domain/shared/result';
 export interface AddUserToOrganizationCommand {
   userId: string;
   organizationId: number;
-  systemRole: SystemRoleType; // RBAC system role (required)
+  roleIds: number[]; // Array of role IDs for multi-role assignment
   invitedBy?: string;
 }
 
-export interface UpdateMemberRoleCommand {
+export interface UpdateMemberRolesCommand {
   userId: string;
   organizationId: number;
-  newSystemRole: SystemRoleType;
+  roleIds: number[];
   updatedBy: string;
 }
 
@@ -44,7 +44,7 @@ export interface RemoveUserFromOrganizationCommand {
 
 export interface OrganizationMemberFilters {
   organizationId: number;
-  systemRole?: SystemRoleType; // Updated to RBAC system role
+  systemRole?: SystemRoleType; // Optional filter for specific role name (works with multiple roles)
   searchQuery?: string;
   includeUserDetails?: boolean;
 }
@@ -61,7 +61,7 @@ export class UserRoleApplicationService {
   ) {}
 
   /**
-   * Add a user to an organization with a specific role
+   * Add a user to an organization with specific roles
    */
   async addUserToOrganization(command: AddUserToOrganizationCommand): Promise<UserOrganizationApplicationResult<UserOrganization>> {
     try {
@@ -91,38 +91,44 @@ export class UserRoleApplicationService {
         };
       }
 
+      // Validate all roles exist and belong to organization or are system roles
+      const roles = await this.rbacRepository.findRolesByOrganization(OrganizationId.fromNumber(command.organizationId));
+      const validRoleIds = roles.map((r: any) => r.id);
+      
+      for (const roleId of command.roleIds) {
+        if (!validRoleIds.includes(roleId)) {
+          return {
+            success: false,
+            error: `Role ID ${roleId} is not valid for this organization`
+          };
+        }
+      }
+
       // Create user-organization relationship
       const userOrganizationData: CreateUserOrganizationData = {
         userId: UserId.fromString(command.userId),
         organizationId: OrganizationId.fromNumber(command.organizationId),
-        systemRole: command.systemRole
+        systemRole: SYSTEM_ROLES.MEMBER // Default placeholder - actual roles stored in user_roles
       };
 
       const userOrganization = await this.userRepository.addUserToOrganization(userOrganizationData);
 
-      // Now assign the role in the RBAC system
+      // Assign all specified roles in the RBAC system
       try {
-        // Get all roles for the organization (including system roles)
-        const roles = await this.rbacRepository.findRolesByOrganization(OrganizationId.fromNumber(command.organizationId));
-        
-        // Find the system role by name
-        const systemRole = roles.find((r: any) => r.name === command.systemRole && r.isSystem);
-        
-        if (systemRole) {
-          // Assign the role to the user
+        for (const roleId of command.roleIds) {
           await this.rbacRepository.assignRole(
             UserId.fromString(command.userId),
-            systemRole.id,
+            roleId,
             OrganizationId.fromNumber(command.organizationId)
           );
-          console.log(`✅ Assigned role ${command.systemRole} (ID: ${systemRole.id}) to user ${command.userId} in org ${command.organizationId}`);
-        } else {
-          console.error(`⚠️ System role '${command.systemRole}' not found in organization ${command.organizationId}. User added without role assignment.`);
-          // Continue anyway - user is added to org, just without role
         }
+        console.log(`✅ Assigned ${command.roleIds.length} roles to user ${command.userId} in org ${command.organizationId}`);
       } catch (roleError) {
-        console.error('Error assigning role after adding user to organization:', roleError);
-        // Don't fail the whole operation - user is already added to org
+        console.error('Error assigning roles after adding user to organization:', roleError);
+        return {
+          success: false,
+          error: "Failed to assign roles to user"
+        };
       }
 
       return {
@@ -139,40 +145,44 @@ export class UserRoleApplicationService {
   }
 
   /**
-   * Update a user's role within an organization
+   * Update a user's multiple roles within an organization
    */
-  async updateMemberRole(command: UpdateMemberRoleCommand): Promise<UserOrganizationApplicationResult<UserOrganization>> {
+  async updateMemberRoles(command: UpdateMemberRolesCommand): Promise<UserOrganizationApplicationResult<UserOrganization>> {
     try {
       // Validate inputs
-      if (!command.userId || !command.organizationId || !command.newSystemRole) {
+      if (!command.userId || !command.organizationId) {
         return {
           success: false,
-          error: "User ID, Organization ID, and new role are required"
+          error: "User ID and Organization ID are required"
         };
       }
 
-      // Validate role is one of the allowed system roles
-      if (!Object.values(SYSTEM_ROLES).includes(command.newSystemRole)) {
-        return {
-          success: false,
-          error: `Invalid role: ${command.newSystemRole}. Must be one of: ${Object.values(SYSTEM_ROLES).join(', ')}`
-        };
+      // Validate all roles exist and belong to organization or are system roles
+      const roles = await this.rbacRepository.findRolesByOrganization(OrganizationId.fromNumber(command.organizationId));
+      const validRoleIds = roles.map((r: any) => r.id);
+      
+      for (const roleId of command.roleIds) {
+        if (!validRoleIds.includes(roleId)) {
+          return {
+            success: false,
+            error: `Role ID ${roleId} is not valid for this organization`
+          };
+        }
       }
 
-      // TODO: Update user role via RBAC system
-      // const updatedUser = await this.rbacRepository.setUserRoles(
-      //   UserId.fromString(command.userId),
-      //   [roleId], // Need to get role ID from SystemRoleType
-      //   OrganizationId.fromNumber(command.organizationId)
-      // );
-      // For now, return success without actual update
+      // Set user roles (replaces existing roles)
+      await this.rbacRepository.setUserRoles(
+        UserId.fromString(command.userId),
+        command.roleIds,
+        OrganizationId.fromNumber(command.organizationId)
+      );
 
       // Return a UserOrganization-like response
       const userOrganization: UserOrganization = {
         id: 0, // Will be set by repository
         userId: UserId.fromString(command.userId),
         organizationId: OrganizationId.fromNumber(command.organizationId),
-        systemRole: command.newSystemRole,
+        systemRole: SYSTEM_ROLES.MEMBER, // Placeholder for display purposes - actual roles stored in user_roles
         createdAt: new Date()
       };
 
@@ -181,42 +191,28 @@ export class UserRoleApplicationService {
         data: userOrganization
       };
     } catch (error) {
-      console.error("Error updating member role:", error);
+      console.error("Error updating member roles:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to update member role"
+        error: error instanceof Error ? error.message : "Failed to update member roles"
       };
     }
   }
 
   /**
-   * Get a user's role within a specific organization
+   * Get a user's multiple roles within a specific organization
    */
-  async getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<SystemRoleType | null> {
+  async getUserOrganizationRoles(userId: UserId, organizationId: OrganizationId): Promise<any[]> {
     try {
-      // Get user's roles from RBAC system
       const roles = await this.rbacRepository.getUserRoles(userId, organizationId);
-      
-      if (roles.length === 0) {
-        console.log(`⚠️ No roles found for user ${userId.value} in organization ${organizationId.value}`);
-        return null;
-      }
-      
-      // Return the first system role found (users should have exactly one role per org)
-      const systemRole = roles.find(r => r.isSystem);
-      if (systemRole) {
-        // console.log(`Found system role '${systemRole.name}' for user ${userId.value} in org ${organizationId.value}`);
-        return systemRole.name as SystemRoleType;
-      }
-
-      // If no system role, return the first role's name
-      // console.log(`Using first role '${roles[0].name}' for user ${userId.value} in org ${organizationId.value}`);
-      return roles[0].name as SystemRoleType;
+      return roles;
     } catch (error) {
-      console.error("Error getting user organization role:", error);
-      return null;
+      console.error("Error getting user organization roles:", error);
+      return [];
     }
   }
+
+  
 
   /**
    * Switch user's current organization
@@ -304,27 +300,32 @@ export class UserRoleApplicationService {
       
       let members = await Promise.all(
         users.map(async (user) => {
-          // Get the user's actual role from RBAC system
-          const userRole = await this.getUserOrganizationRole(user.id, organizationId);
+          // Get the user's actual roles from RBAC system
+          const userRoles = await this.getUserOrganizationRoles(user.id, organizationId);
           
-          if (!userRole) {
-            console.error(`⚠️ No role found for user ${user.id.value} in organization ${organizationId.value}. This indicates a data integrity issue.`);
+          if (!userRoles.length) {
+            console.error(`⚠️ No roles found for user ${user.id.value} in organization ${organizationId.value}. This indicates a data integrity issue.`);
           }
           
           return {
             userId: user.id,
             name: user.name,
             email: user.email,
-            systemRole: userRole || "Error loading role", // Show error message instead of crashing
             joinedAt: user.createdAt,
-            hasRoleError: !userRole // Flag to indicate role loading error
+            roles: userRoles.map(role => ({
+              id: role.id,
+              name: role.name,
+              isSystem: role.isSystem
+            }))
           };
         })
       );
 
-      // Apply system role filter
+      // Apply role filter (works with multiple roles)
       if (filters.systemRole) {
-        members = members.filter(member => member.systemRole === filters.systemRole);
+        members = members.filter(member => 
+          member.roles.some(role => role.name === filters.systemRole)
+        );
       }
 
       // Apply search filter

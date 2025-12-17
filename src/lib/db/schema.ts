@@ -589,6 +589,9 @@ export const userRoles = pgTable("user_roles", {
   assignedAt: timestamp("assigned_at").defaultNow(),
 }, (table) => [
   unique("unique_user_role_org").on(table.userId, table.roleId, table.organizationId),
+  index("userRoles_user_org_idx").on(table.userId, table.organizationId),
+  index("userRoles_user_idx").on(table.userId),
+  index("userRoles_org_idx").on(table.organizationId),
   pgPolicy("user_roles_tenant_isolation", {
     as: "permissive",
     for: "all",
