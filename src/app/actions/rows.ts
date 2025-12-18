@@ -36,17 +36,20 @@ function convertFieldNamesToIds(
   for (const field of tableFields) {
     if (field.name === 'id') continue; // Skip id field - it's handled separately
     const fieldKey = field.id.value.toString();
+    const sourceKey = keyType === 'id' ? fieldKey : field.name;
 
-    if (keyType === 'id') {
-      // Keys are field IDs - use directly
-      if (rowData[fieldKey] !== undefined) {
-        convertedData[fieldKey] = rowData[fieldKey];
+    if (rowData[sourceKey] !== undefined) {
+      let value = rowData[sourceKey];
+
+      // Convert date strings to Date objects for date fields
+      // AIDEV-NOTE: Python output mapping sends dates as ISO strings (e.g., "1942-06-14")
+      // Delta Lake expects Date objects for timestamp columns
+      if ((field.type === 'date' || field.type === 'last-updated' || field.type === 'created-at')
+          && typeof value === 'string' && value) {
+        value = new Date(value);
       }
-    } else {
-      // Keys are field names - convert to IDs
-      if (rowData[field.name] !== undefined) {
-        convertedData[fieldKey] = rowData[field.name];
-      }
+
+      convertedData[fieldKey] = value;
     }
   }
 

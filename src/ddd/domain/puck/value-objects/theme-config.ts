@@ -51,11 +51,25 @@ export interface ThemeBorders {
   width: string;
 }
 
+export interface ThemeAlignment {
+  /** Default text alignment for text components */
+  defaultTextAlign: "left" | "center" | "right" | "justify";
+  /** Default horizontal alignment for flex containers */
+  defaultJustifyContent: "start" | "center" | "end" | "space-between" | "space-around";
+  /** Default vertical alignment for flex containers */
+  defaultAlignItems: "start" | "center" | "end" | "stretch";
+  /** Default horizontal alignment for grid containers */
+  defaultJustifyItems: "start" | "center" | "end" | "stretch";
+  /** Default vertical alignment for grid containers */
+  defaultAlignContent: "start" | "center" | "end" | "stretch";
+}
+
 export interface ThemeConfigProps {
   colors: ThemeColors;
   typography: ThemeTypography;
   spacing: ThemeSpacing;
   borders: ThemeBorders;
+  alignment: ThemeAlignment;
 }
 
 /**
@@ -90,6 +104,13 @@ export const DEFAULT_THEME: ThemeConfigProps = {
     radius: DEFAULT_FOUR_CORNER_RADIUS,
     width: '1px',
   },
+  alignment: {
+    defaultTextAlign: 'left',
+    defaultJustifyContent: 'start',
+    defaultAlignItems: 'start',
+    defaultJustifyItems: 'start',
+    defaultAlignContent: 'start',
+  },
 };
 
 /**
@@ -111,6 +132,7 @@ export class ThemeConfig {
       typography: { ...DEFAULT_THEME.typography, ...props.typography },
       spacing: { ...DEFAULT_THEME.spacing, ...props.spacing },
       borders: { ...DEFAULT_THEME.borders, ...props.borders },
+      alignment: { ...DEFAULT_THEME.alignment, ...props.alignment },
     };
     return new ThemeConfig(config);
   }
@@ -141,6 +163,7 @@ export class ThemeConfig {
       typography: { ...base._config.typography, ...override._config.typography },
       spacing: { ...base._config.spacing, ...override._config.spacing },
       borders: { ...base._config.borders, ...override._config.borders },
+      alignment: { ...base._config.alignment, ...override._config.alignment },
     };
     return new ThemeConfig(merged);
   }
@@ -303,7 +326,29 @@ export class ThemeConfig {
       // Keep shorthand for backward compat (uses top-left as default)
       '--theme-border-radius': getSpacingValue(radius.topLeft),
       '--theme-border-width': this._config.borders.width,
+
+      // Alignment defaults
+      '--theme-text-align': this._config.alignment.defaultTextAlign,
+      '--theme-justify-content': this.mapFlexValue(this._config.alignment.defaultJustifyContent),
+      '--theme-align-items': this.mapFlexValue(this._config.alignment.defaultAlignItems),
+      '--theme-justify-items': this.mapFlexValue(this._config.alignment.defaultJustifyItems),
+      '--theme-align-content': this.mapFlexValue(this._config.alignment.defaultAlignContent),
     };
+  }
+
+  /**
+   * Map puck alignment values to CSS flexbox values
+   */
+  private mapFlexValue(value: string): string {
+    const flexMap: Record<string, string> = {
+      'start': 'flex-start',
+      'end': 'flex-end',
+      'center': 'center',
+      'stretch': 'stretch',
+      'space-between': 'space-between',
+      'space-around': 'space-around',
+    };
+    return flexMap[value] || value;
   }
 
   /**
@@ -330,6 +375,10 @@ export class ThemeConfig {
 
   get borders(): ThemeBorders {
     return { ...this._config.borders };
+  }
+
+  get alignment(): ThemeAlignment {
+    return { ...this._config.alignment };
   }
 
   /**

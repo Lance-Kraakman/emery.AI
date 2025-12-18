@@ -109,6 +109,11 @@ export class RowMapper {
         // Select fields store option IDs as numbers or strings
         // Return as-is since the value is already the option ID
         return value;
+      case 'email':
+      case 'phone':
+      case 'json':
+        // Email/phone are stored as TEXT, json as JSONB - pass through as-is
+        return value;
       default:
         console.warn(`Unknown field type: ${fieldType}, returning value as-is`);
         return value;

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Loader2, Save, X, User, Pencil, Sparkles } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import { OrganizationMapper, type UserDTO } from '@/app/mappers/organization-mapper';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import { UserSelect } from '@/components/ui/UserSelect';
 import { getOrganizationMembers } from '@/app/actions/invitations';
@@ -37,13 +38,6 @@ interface FormData {
   defaultModel?: string | null;
 }
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  systemRole?: string;
-}
-
 export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoModalProps) {
   const { data: session } = useSession();
   const organizationPlan = useOrganizationPlan();
@@ -58,7 +52,7 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
   });
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserDTO[]>([]);
   const [canManageAgents, setCanManageAgents] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [currentOwnerName, setCurrentOwnerName] = useState<string>('Unknown User');
@@ -106,7 +100,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
 
       // Load organization members
       const members = await getOrganizationMembers();
-      setUsers(members || []);
+      const mappedUsers = members ? members.map(OrganizationMapper.memberToUser) : [];
+      setUsers(mappedUsers);
 
     } catch (error) {
       console.error('Error loading users and permissions:', error);

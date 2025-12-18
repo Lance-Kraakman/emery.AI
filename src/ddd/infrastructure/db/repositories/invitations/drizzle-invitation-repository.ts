@@ -62,7 +62,7 @@ export class DrizzleInvitationRepository
 
     return results[0] ? this.mapToEntity({
       ...results[0].invitation,
-      systemRole: results[0].roleName || SYSTEM_ROLES.MEMBER
+      roleIds: [results[0].invitation.roleId || 4]
     }) : null;
   }
 
@@ -79,7 +79,7 @@ export class DrizzleInvitationRepository
 
     return results[0] ? this.mapToEntity({
       ...results[0].invitation,
-      systemRole: results[0].roleName || SYSTEM_ROLES.MEMBER
+      roleIds: [results[0].invitation.roleId || 4]
     }) : null;
   }
 
@@ -99,21 +99,19 @@ export class DrizzleInvitationRepository
 
     return results[0] ? this.mapToEntity({
       ...results[0].invitation,
-      systemRole: results[0].roleName || SYSTEM_ROLES.MEMBER
+      roleIds: [results[0].invitation.roleId || 4]
     }) : null;
   }
 
   async create(data: CreateInvitationData): Promise<Invitation> {
     const token = await this.generateUniqueToken();
     
-    if (!data.systemRole) {
-      throw new Error('systemRole is required - legacy role support removed');
+    if (!data.roleIds || data.roleIds.length === 0) {
+      throw new Error('At least one role ID is required');
     }
     
-    const roleId = await this.getSystemRoleId(data.systemRole);
-    if (!roleId) {
-      throw new Error(`System role '${data.systemRole}' not found. Please run RBAC seeding first.`);
-    }
+    // For now, use the first role ID (legacy support for single role)
+    const roleId = data.roleIds[0];
     
     const insertData = {
       organizationId: data.organizationId.value,
@@ -138,7 +136,7 @@ export class DrizzleInvitationRepository
 
     return this.mapToEntity({
       ...results[0],
-      systemRole: roleResult[0]?.name || data.systemRole
+      roleIds: [results[0].roleId] // For now, single role ID support
     });
   }
 
@@ -155,10 +153,10 @@ export class DrizzleInvitationRepository
       .where(eq(invitations.id, id.value))
       .returning();
 
-    // For now, return with the role as 'member' during transition
+    // For now, return with default role IDs during transition
     return this.mapToEntity({
       ...results[0],
-      systemRole: data.systemRole || SYSTEM_ROLES.MEMBER
+      roleIds: [results[0].roleId] // For now, single role ID support
     });
   }
 
@@ -178,7 +176,7 @@ export class DrizzleInvitationRepository
 
     return results.map((result: InvitationWithRole) => this.mapToEntity({
       ...result.invitation,
-      systemRole: result.roleName || SYSTEM_ROLES.MEMBER
+      roleIds: [result.invitation.roleId || 4] // Use roleId from invitation or default to Member
     }));
   }
 
@@ -228,7 +226,7 @@ export class DrizzleInvitationRepository
 
     return results.map((result: InvitationWithRole) => this.mapToEntity({
       ...result.invitation,
-      systemRole: result.roleName || SYSTEM_ROLES.MEMBER
+      roleIds: [result.invitation.roleId || 4] // Use roleId from invitation or default to Member
     }));
   }
 
@@ -311,7 +309,7 @@ export class DrizzleInvitationRepository
           organizationId: organizationIdVO,
           invitedBy: data.invitedBy,
           email: emailVO,
-          systemRole: invitationData.systemRole || data.defaultRole || SYSTEM_ROLES.MEMBER,
+          roleIds: [4], // Default to Member role ID
           expiresAt: data.expiresAt
         });
 
@@ -500,14 +498,14 @@ export class DrizzleInvitationRepository
     return result[0]?.id || null;
   }
 
-  // Helper method to map database result to domain entity
-  private mapToEntity(data: InvitationRow & { systemRole?: string }): Invitation {
+// Helper method to map database result to domain entity
+  private mapToEntity(data: InvitationRow & { roleIds?: number[] }): Invitation {
     return Invitation.fromPersistence({
       id: data.id,
       organizationId: data.organizationId,
       invitedBy: data.invitedBy,
       email: data.email,
-      systemRole: data.systemRole || SYSTEM_ROLES.MEMBER,
+      roleIds: data.roleIds || [data.roleId || 4], // Use roleIds or fallback to roleId or default to Member
       token: data.token,
       expiresAt: data.expiresAt,
       createdAt: data.createdAt

@@ -62,6 +62,52 @@ export interface UpdateQueryParamsAction {
 }
 
 /**
+ * Action to set a value in a state container
+ */
+export interface SetStateAction {
+  type: 'setState';
+  /** State container name */
+  container: string;
+  /** Variable key */
+  key: string;
+  /** Value to set (can use templates like {rowData.field}) */
+  value: string | number | boolean;
+}
+
+/**
+ * Action to toggle a UI state flag (boolean)
+ */
+export interface ToggleUIStateAction {
+  type: 'toggleUIState';
+  /** State container name */
+  container: string;
+  /** UI flag key */
+  key: string;
+}
+
+/**
+ * Action to set a UI state flag to a specific value
+ */
+export interface SetUIStateAction {
+  type: 'setUIState';
+  /** State container name */
+  container: string;
+  /** UI flag key */
+  key: string;
+  /** Value to set */
+  value: boolean;
+}
+
+/**
+ * Action to reset a state container to its initial values
+ */
+export interface ResetStateAction {
+  type: 'resetState';
+  /** State container name */
+  container: string;
+}
+
+/**
  * Union type of all possible actions
  */
 export type Action =
@@ -69,7 +115,11 @@ export type Action =
   | NavigateAction
   | OpenUrlAction
   | NotificationAction
-  | UpdateQueryParamsAction;
+  | UpdateQueryParamsAction
+  | SetStateAction
+  | ToggleUIStateAction
+  | SetUIStateAction
+  | ResetStateAction;
 
 /**
  * Link context for URL construction in actions
@@ -87,6 +137,17 @@ export interface ActionLinkContext {
   isEditing?: boolean;
   /** Whether we're in preview mode */
   isPreview?: boolean;
+}
+
+/**
+ * State context interface for action execution
+ * Provides access to state operations without importing the full context
+ */
+export interface ActionStateContext {
+  setValue: (container: string, key: string, value: unknown) => void;
+  toggleUIState: (container: string, key: string) => void;
+  setUIState: (container: string, key: string, value: boolean) => void;
+  resetContainer: (container: string) => void;
 }
 
 /**
@@ -111,4 +172,7 @@ export interface ActionContext {
 
   /** Link context for URL construction */
   linkContext?: ActionLinkContext;
+
+  /** State context for state actions */
+  stateContext?: ActionStateContext;
 }

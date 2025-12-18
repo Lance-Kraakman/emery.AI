@@ -192,3 +192,85 @@ export const labelPositionField = {
     { value: "inline", label: "Inline" },
   ],
 };
+
+/**
+ * Standard text alignment field
+ * Controls horizontal text alignment for text-containing components
+ */
+export const textAlignField = {
+  type: "radio" as const,
+  label: "Text Alignment",
+  options: [
+    { label: "Left", value: "left" },
+    { label: "Center", value: "center" },
+    { label: "Right", value: "right" },
+    { label: "Justify", value: "justify" },
+  ],
+  defaultValue: "left",
+};
+
+/**
+ * Standard horizontal alignment field for flex containers
+ * Controls justify-content property
+ */
+export const justifyContentField = {
+  type: "radio" as const,
+  label: "Horizontal Alignment",
+  options: [
+    { label: "Start", value: "start" },
+    { label: "Center", value: "center" },
+    { label: "End", value: "end" },
+    { label: "Space Between", value: "space-between" },
+    { label: "Space Around", value: "space-around" },
+  ],
+  defaultValue: "start",
+};
+
+/**
+ * Standard vertical alignment field for flex containers
+ * Controls align-items property
+ */
+export const alignItemsField = {
+  type: "radio" as const,
+  label: "Vertical Alignment",
+  options: [
+    { label: "Start", value: "start" },
+    { label: "Center", value: "center" },
+    { label: "End", value: "end" },
+    { label: "Stretch", value: "stretch" },
+  ],
+  defaultValue: "start",
+};
+
+/**
+ * Standard self alignment field for flex/grid items
+ * Controls align-self property
+ */
+export const alignSelfField = {
+  type: "radio" as const,
+  label: "Self Alignment",
+  options: [
+    { label: "Auto", value: "auto" },
+    { label: "Start", value: "start" },
+    { label: "Center", value: "center" },
+    { label: "End", value: "end" },
+    { label: "Stretch", value: "stretch" },
+  ],
+  defaultValue: "auto",
+};
+
+/**
+ * Standard grid horizontal alignment field
+ * Controls justify-items property
+ */
+export const justifyItemsField = {
+  type: "radio" as const,
+  label: "Horizontal Alignment",
+  options: [
+    { label: "Start", value: "start" },
+    { label: "Center", value: "center" },
+    { label: "End", value: "end" },
+    { label: "Stretch", value: "stretch" },
+  ],
+  defaultValue: "start",
+};

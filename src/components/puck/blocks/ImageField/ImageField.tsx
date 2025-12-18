@@ -11,7 +11,7 @@ import { useFieldValue, useIsInDataContext } from '@/components/puck/hooks/useFi
 import { cn } from '@/lib/utils';
 import styles from './styles.module.css';
 import type { FourCornerRadius } from '@/components/puck/types/spacing-types';
-import { useTheme } from '@/components/puck/theme-context';
+import { useTheme } from '@/components/puck/contexts/PageContext';
 import { computeFourCornerRadiusCSS } from '@/components/puck/utils/spacing';
 
 export interface ImageFieldProps {

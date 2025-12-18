@@ -9,14 +9,24 @@ import { getUserRoleApplicationService, getUserRepository, getOrganizationReposi
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
-import { SystemRoleType, SYSTEM_ROLES } from "@/ddd/domain/rbac/entities/role";
+import { SystemRoleType, SYSTEM_ROLES, SYSTEM_ROLE_IDS } from "@/ddd/domain/rbac/entities/role";
 import { contextManager } from '@/lib/db/context-manager';
 import { OrganizationMapper, type OrganizationDTO } from "@/app/mappers/organization-mapper";
+
+// Helper to map Role entities to simplified format for OrganizationDTO.userRoles
+function mapRoleToSimpleFormat(role: any): {id: number; name: string; isSystem: boolean} {
+  return {
+    id: role.id,
+    name: role.name,
+    isSystem: role.isSystem
+  };
+}
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
 import type { 
   AddUserToOrganizationCommand,
+  UpdateMemberRolesCommand,
   SwitchOrganizationCommand,
   RemoveUserFromOrganizationCommand,
   OrganizationMemberFilters
@@ -68,7 +78,7 @@ export async function switchCurrentOrganization(organizationId: number): Promise
   });
 }
 
-export async function joinOrganization(organizationId: number, systemRole: SystemRoleType = 'Member'): Promise<Result> {
+export async function joinOrganization(organizationId: number, roleIds: number[] = []): Promise<Result> {
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("users:manage");
@@ -85,7 +95,7 @@ export async function joinOrganization(organizationId: number, systemRole: Syste
     const command: AddUserToOrganizationCommand = {
       userId: session.user.id,
       organizationId,
-      systemRole
+      roleIds: roleIds.length > 0 ? roleIds : [SYSTEM_ROLE_IDS.MEMBER]
     };
 
     const result = await userOrganizationApplicationService.addUserToOrganization(command);
@@ -174,21 +184,21 @@ export async function getUserOrganizations() {
     const userRoleApplicationService = getUserRoleApplicationService();
     const organizationsWithRoles = await Promise.all(
       organizations.map(async (org) => {
-        const userRole = await userRoleApplicationService.getUserOrganizationRole(
+        const userRoles = await userRoleApplicationService.getUserOrganizationRoles(
           UserId.fromString(session.user.id),
           org.id
         );
         
-        if (!userRole) {
-          console.error(`⚠️ No role found for user ${session.user.id} in organization ${org.id.value}. This indicates a data integrity issue.`);
+        if (!userRoles || userRoles.length === 0) {
+          console.error(`⚠️ No roles found for user ${session.user.id} in organization ${org.id.value}. This indicates a data integrity issue.`);
         }
         
         return {
           ...org,
-          userRole: userRole || "Error loading role", // Show error message instead of crashing
+          userRoles: Array.isArray(userRoles) ? userRoles.map(mapRoleToSimpleFormat) : [], // Multi-role array as simple format
           isCurrentOrganization: org.id.value === session.user.currentOrganizationId,
           joinedAt: org.createdAt,
-          hasRoleError: !userRole // Flag to indicate role loading error
+          hasRoleError: !userRoles || userRoles.length === 0 // Flag to indicate role loading error
         };
       })
     );
@@ -219,23 +229,23 @@ export async function getCurrentOrganization(): Promise<OrganizationDTO | null> 
     return null;
   }
 
-  // Get the user's role in this organization
-  const userRole = await userRoleApplicationService.getUserOrganizationRole(
+  // Get the user's roles in this organization
+  const userRoles = await userRoleApplicationService.getUserOrganizationRoles(
     UserId.fromString(session.user.id), 
     OrganizationId.fromNumber(session.user.currentOrganizationId)
   );
   
   // AIDEV-NOTE: Role lookup for organization context
   
-  if (!userRole) {
-    console.error(`⚠️ No role found for user ${session.user.id} in current organization ${session.user.currentOrganizationId}. This indicates a data integrity issue.`);
+  if (!userRoles || userRoles.length === 0) {
+    console.error(`⚠️ No roles found for user ${session.user.id} in current organization ${session.user.currentOrganizationId}. This indicates a data integrity issue.`);
   }
 
   // Convert to DTO to avoid serialization issues with Value Objects
   return OrganizationMapper.toDTO({
     ...organization,
-    userRole: userRole || "Error loading role", // Show error message instead of crashing
-    hasRoleError: !userRole // Flag to indicate role loading error
+    userRoles: Array.isArray(userRoles) ? userRoles.map(mapRoleToSimpleFormat) : [],
+    hasRoleError: !userRoles || userRoles.length === 0 // Flag to indicate role loading error
   });
   } catch (error) {
     console.error("Error fetching current organization:", error);
@@ -282,7 +292,7 @@ export async function addUserToOrganization(userId: string, organizationId: numb
     const command: AddUserToOrganizationCommand = {
       userId,
       organizationId,
-      systemRole,
+      roleIds: [SYSTEM_ROLE_IDS.MEMBER],
       invitedBy: session.user.id
     };
 
@@ -401,28 +411,28 @@ export async function getOrganizationMembers(organizationId?: number, searchQuer
 /**
  * Update user role in organization (admin function)
  */
-export async function updateUserRole(userId: string, organizationId: number, newRole: string): Promise<Result> {
+export async function updateUserRole(userId: string, organizationId: number, roleIds: number[]): Promise<Result> {
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("users:manage");
-    
-    if (!userId || !organizationId || !newRole) {
-      return {
-        success: false,
-        error: "User ID, Organization ID, and new role are required"
+
+      if (!userId || !organizationId || !roleIds) {
+        return {
+          success: false,
+          error: "User ID, organization ID, and role IDs are required"
+        };
+      }
+
+      const userOrganizationApplicationService = getUserRoleApplicationService();
+      
+      const command: UpdateMemberRolesCommand = {
+        userId,
+        organizationId,
+        roleIds,
+        updatedBy: session.user.id
       };
-    }
 
-    const userOrganizationApplicationService = getUserRoleApplicationService();
-    
-    const command = {
-      userId,
-      organizationId,
-      newSystemRole: newRole as SystemRoleType,
-      updatedBy: session.user.id
-    };
-
-    const result = await userOrganizationApplicationService.updateMemberRole(command);
+      const result = await userOrganizationApplicationService.updateMemberRoles(command);
 
     if (!result.success) {
       return {

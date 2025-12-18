@@ -1,36 +1,76 @@
 'use client';
 
 /**
- * useChildDataBlock - Hook for child DataBlocks that need parent row data in filters
+ * useChildDataBlock - Hook for child DataBlocks that need dynamic data in filters
  *
- * When a child DataBlock has a filter using {rowData.fieldName}, the filter
- * value can't be resolved server-side (parent row is only known at render time).
- * This hook detects such filters and fetches data client-side with resolved values.
+ * Handles client-side data fetching when filters reference:
+ * - {rowData.fieldName} - Parent row data (nested DataBlocks)
+ * - {state.container.key} - State container values (dynamic filtering)
  *
- * Usage:
- * - Detects {rowData.fieldName} pattern in filter conditions
- * - Uses useParentRowData() to resolve variable values
+ * Also handles client-side sorting when sortConfig includes dynamic state values.
+ *
+ * Features:
+ * - Detects {rowData.fieldName} and {state.container.key} patterns
+ * - Subscribes to state containers for reactive re-fetch
+ * - Uses useParentRowData() for row data resolution
  * - Fetches data client-side via executeView server action
+ * - Applies client-side sorting for static and dynamic sort configs
  * - Returns rows, loading state, and error info
  */
 
-import { useState, useEffect, useMemo } from 'react';
-import { useParentRowData } from '@/components/puck/contexts/ParentRowDataContext';
+import { useState, useEffect, useMemo, useReducer, useCallback } from 'react';
+import { useParentRowData } from '@/components/puck/contexts/RowDataContext';
+import { useStateContext } from '@/components/puck/contexts/StateContext';
 import { executeView } from '@/app/actions/views';
 import type { RowFilterConfig, FilterCondition } from '../../fields/MultiFilterField';
+import type { RowSortConfig, SortCondition } from '../../fields/MultiSortField';
 
 /** Regex to match {rowData.fieldName} pattern */
 const ROW_DATA_VAR_REGEX = /\{rowData\.(\w+)\}/g;
+
+/** Regex to match {state.container.key} pattern */
+const STATE_VAR_REGEX = /\{state\.([^.}]+)\.([^}]+)\}/g;
 
 /** Check if a condition has rowData variables */
 function hasRowDataVariable(condition: FilterCondition): boolean {
   return typeof condition.value === 'string' && condition.value.includes('{rowData.');
 }
 
+/** Check if a condition has state variables */
+function hasStateVariable(condition: FilterCondition): boolean {
+  return typeof condition.value === 'string' && condition.value.includes('{state.');
+}
+
 /** Check if any condition in the filter config has rowData variables */
 function filterHasRowDataVariables(filterConfig?: RowFilterConfig): boolean {
   if (!filterConfig?.conditions?.length) return false;
   return filterConfig.conditions.some(hasRowDataVariable);
+}
+
+/** Check if any condition in the filter config has state variables */
+function filterHasStateVariables(filterConfig?: RowFilterConfig): boolean {
+  if (!filterConfig?.conditions?.length) return false;
+  return filterConfig.conditions.some(hasStateVariable);
+}
+
+/** Extract state container names from filter config */
+function extractStateContainers(filterConfig?: RowFilterConfig): Set<string> {
+  const containers = new Set<string>();
+  if (!filterConfig?.conditions?.length) return containers;
+
+  for (const condition of filterConfig.conditions) {
+    if (typeof condition.value !== 'string') continue;
+
+    // Reset regex lastIndex
+    STATE_VAR_REGEX.lastIndex = 0;
+
+    let match;
+    while ((match = STATE_VAR_REGEX.exec(condition.value)) !== null) {
+      containers.add(match[1]); // Container name is first capture group
+    }
+  }
+
+  return containers;
 }
 
 /**
@@ -46,11 +86,65 @@ function resolveRowDataVariables(
   });
 }
 
+/**
+ * Resolve all {state.container.key} variables in a string value
+ */
+function resolveStateVariables(
+  value: string,
+  getStateValue: (container: string, key: string) => unknown
+): string {
+  // Reset regex lastIndex
+  STATE_VAR_REGEX.lastIndex = 0;
+
+  return value.replace(STATE_VAR_REGEX, (_, container, key) => {
+    const resolved = getStateValue(container, key);
+    return resolved !== undefined && resolved !== null ? String(resolved) : '';
+  });
+}
+
 interface UseChildDataBlockProps {
   viewId?: number;
   filterConfig?: RowFilterConfig;
+  sortConfig?: RowSortConfig;
   pageSize: number;
   mode: 'single' | 'list';
+}
+
+/**
+ * Sort rows by the given sort conditions
+ */
+function sortRows(
+  rows: Record<string, unknown>[],
+  conditions: Array<{ field: string; direction: 'asc' | 'desc' }>
+): Record<string, unknown>[] {
+  if (!conditions.length) return rows;
+
+  return [...rows].sort((a, b) => {
+    for (const condition of conditions) {
+      const aVal = a[condition.field];
+      const bVal = b[condition.field];
+
+      // Handle null/undefined
+      if (aVal == null && bVal == null) continue;
+      if (aVal == null) return condition.direction === 'asc' ? -1 : 1;
+      if (bVal == null) return condition.direction === 'asc' ? 1 : -1;
+
+      // Compare values
+      let comparison = 0;
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        comparison = aVal.localeCompare(bVal);
+      } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+        comparison = aVal - bVal;
+      } else {
+        comparison = String(aVal).localeCompare(String(bVal));
+      }
+
+      if (comparison !== 0) {
+        return condition.direction === 'desc' ? -comparison : comparison;
+      }
+    }
+    return 0;
+  });
 }
 
 interface UseChildDataBlockResult {
@@ -98,15 +192,103 @@ interface UseChildDataBlockResult {
 export function useChildDataBlock({
   viewId,
   filterConfig,
+  sortConfig,
   pageSize,
   mode,
 }: UseChildDataBlockProps): UseChildDataBlockResult {
   const parentContext = useParentRowData();
+  const stateContext = useStateContext();
 
-  // Check if we need client-side fetching
+  // Force re-render counter for state subscriptions
+  const [refetchTrigger, forceRefetch] = useReducer(x => x + 1, 0);
+
+  // Check if we need client-side fetching (rowData or state variables)
   const needsClientFetch = useMemo(() => {
-    return filterHasRowDataVariables(filterConfig);
+    return filterHasRowDataVariables(filterConfig) || filterHasStateVariables(filterConfig);
   }, [filterConfig]);
+
+  // Extract state containers for subscription
+  const stateContainersInFilters = useMemo(() => {
+    return extractStateContainers(filterConfig);
+  }, [filterConfig]);
+
+  // Also extract from sort config
+  const stateContainersInSort = useMemo(() => {
+    const containers = new Set<string>();
+    if (sortConfig?.dynamicField) {
+      const [container] = sortConfig.dynamicField.split('.');
+      if (container) containers.add(container);
+    }
+    if (sortConfig?.dynamicDirection) {
+      const [container] = sortConfig.dynamicDirection.split('.');
+      if (container) containers.add(container);
+    }
+    return containers;
+  }, [sortConfig]);
+
+  // Combined state containers
+  const allStateContainers = useMemo(() => {
+    return new Set([...stateContainersInFilters, ...stateContainersInSort]);
+  }, [stateContainersInFilters, stateContainersInSort]);
+
+  // Subscribe to state containers for reactive re-fetch
+  useEffect(() => {
+    if (!stateContext || allStateContainers.size === 0) return;
+
+    const unsubscribers: Array<() => void> = [];
+
+    allStateContainers.forEach(container => {
+      const unsub = stateContext.subscribe(container, forceRefetch);
+      unsubscribers.push(unsub);
+    });
+
+    return () => {
+      unsubscribers.forEach(unsub => unsub());
+    };
+  }, [stateContext, allStateContainers]);
+
+  // Resolve sort conditions (static + dynamic from state)
+  const resolvedSortConditions = useMemo(() => {
+    if (!sortConfig) return [];
+
+    const conditions: Array<{ field: string; direction: 'asc' | 'desc' }> = [];
+
+    // Add static sort conditions
+    for (const condition of sortConfig.conditions || []) {
+      if (condition.field) {
+        conditions.push({
+          field: condition.field,
+          direction: condition.direction || 'asc',
+        });
+      }
+    }
+
+    // Add dynamic sort from state (overrides static if set)
+    if (sortConfig.dynamicField && stateContext) {
+      const [container, key] = sortConfig.dynamicField.split('.');
+      const dynamicFieldValue = stateContext.getValue(container, key);
+
+      if (dynamicFieldValue && typeof dynamicFieldValue === 'string') {
+        // Get dynamic direction
+        let direction: 'asc' | 'desc' = 'asc';
+        if (sortConfig.dynamicDirection) {
+          const [dirContainer, dirKey] = sortConfig.dynamicDirection.split('.');
+          const dirValue = stateContext.getValue(dirContainer, dirKey);
+          if (dirValue === 'desc' || dirValue === 'descending') {
+            direction = 'desc';
+          }
+        }
+
+        // Prepend dynamic sort (takes precedence)
+        conditions.unshift({
+          field: dynamicFieldValue,
+          direction,
+        });
+      }
+    }
+
+    return conditions;
+  }, [sortConfig, stateContext]);
 
   // State for client-fetched data
   const [data, setData] = useState<{
@@ -121,9 +303,9 @@ export function useChildDataBlock({
     error: null,
   });
 
-  // Build resolved filters with parent row data substituted
+  // Build resolved filters with parent row data and state variables substituted
   const resolvedFilters = useMemo(() => {
-    if (!needsClientFetch || !parentContext || !filterConfig?.conditions?.length) {
+    if (!needsClientFetch || !filterConfig?.conditions?.length) {
       return null;
     }
 
@@ -133,20 +315,48 @@ export function useChildDataBlock({
       if (!condition.field || !condition.value) continue;
 
       let resolvedValue: unknown = condition.value;
+      let couldNotResolve = false;
 
-      // Resolve {rowData.x} variables
-      if (typeof condition.value === 'string' && condition.value.includes('{rowData.')) {
-        const resolved = resolveRowDataVariables(
-          condition.value,
-          parentContext.resolveRowDataVariable
-        );
-        resolvedValue = resolved;
+      if (typeof condition.value === 'string') {
+        let valueStr = condition.value;
 
-        // Skip if variable couldn't be resolved
-        if (resolved === '' || resolved === condition.value) {
-          console.warn(`[useChildDataBlock] Could not resolve: ${condition.value}`);
-          continue;
+        // Resolve {rowData.x} variables
+        if (valueStr.includes('{rowData.')) {
+          if (!parentContext) {
+            // Need parent context but don't have it
+            console.warn(`[useChildDataBlock] No parent context for: ${condition.value}`);
+            couldNotResolve = true;
+          } else {
+            const resolved = resolveRowDataVariables(
+              valueStr,
+              parentContext.resolveRowDataVariable
+            );
+            // Check if variable was resolved
+            if (resolved === '' || resolved === valueStr) {
+              console.warn(`[useChildDataBlock] Could not resolve rowData: ${condition.value}`);
+              couldNotResolve = true;
+            }
+            valueStr = resolved;
+          }
         }
+
+        // Resolve {state.x.y} variables
+        if (valueStr.includes('{state.') && stateContext) {
+          const resolved = resolveStateVariables(valueStr, stateContext.getValue);
+          // Check if variable was resolved
+          if (resolved.includes('{state.')) {
+            console.warn(`[useChildDataBlock] Could not resolve state: ${condition.value}`);
+            couldNotResolve = true;
+          }
+          valueStr = resolved;
+        }
+
+        resolvedValue = valueStr;
+      }
+
+      // Skip conditions that couldn't be resolved
+      if (couldNotResolve) {
+        continue;
       }
 
       filters.push({
@@ -157,7 +367,8 @@ export function useChildDataBlock({
     }
 
     return filters.length > 0 ? filters : null;
-  }, [needsClientFetch, parentContext, filterConfig]);
+    // Include refetchTrigger to re-compute when state changes trigger a refetch
+  }, [needsClientFetch, parentContext, filterConfig, stateContext, refetchTrigger]);
 
   // Fetch data when filters are resolved
   useEffect(() => {
@@ -215,11 +426,18 @@ export function useChildDataBlock({
     return () => {
       cancelled = true;
     };
-  }, [needsClientFetch, viewId, resolvedFilters, pageSize, mode]);
+    // refetchTrigger is included to force re-fetch when state changes
+  }, [needsClientFetch, viewId, resolvedFilters, pageSize, mode, refetchTrigger]);
+
+  // Apply client-side sorting
+  const sortedRows = useMemo(() => {
+    if (!resolvedSortConditions.length) return data.rows;
+    return sortRows(data.rows, resolvedSortConditions);
+  }, [data.rows, resolvedSortConditions]);
 
   return {
-    rows: data.rows,
-    resolvedRow: mode === 'single' ? data.rows[0] : undefined,
+    rows: sortedRows,
+    resolvedRow: mode === 'single' ? sortedRows[0] : undefined,
     totalCount: data.totalCount,
     loading: data.loading,
     error: data.error,

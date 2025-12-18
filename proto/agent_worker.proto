@@ -183,11 +183,23 @@ message TableReference {
   string field = 2;                    // 'row_id' or field name from that table
 }
 
-// Typed field source - either a skill output or a reference to previous table
+// Typed field source - skill output, skill input, or reference to previous table
 message FieldSource {
   oneof source {
     string skill_output = 1;           // Direct skill output name (e.g., "company_name")
     TableReference table_ref = 2;      // Reference to previous table operation result
+    string skill_input = 3;            // Direct skill input name (e.g., "patient_id")
+  }
+}
+
+// Source for row ID in update mode - determines which row to update
+message RowIdSource {
+  oneof source {
+    string static_id = 1;              // Hardcoded row ID
+    string skill_input = 2;            // Name of skill input containing row ID
+    string skill_output = 3;           // Name of skill output containing row ID
+    TableReference table_ref = 4;      // Reference to previous table (e.g., row_id from Table #1)
+    bool use_source_row = 5;           // Use the triggering row's ID (for table-triggered skills)
   }
 }
 
@@ -204,14 +216,15 @@ message TableMapping {
   int32 order = 1;                     // Execution order (1, 2, 3...)
   int32 target_table_id = 2;           // Which table to write to
   string row_action = 3;               // 'create' or 'update'
-  string row_id = 4;                   // For update mode - specific row ID
+  RowIdSource row_id_source = 4;       // For update mode - typed source for row ID
   repeated FieldMapping mappings = 5;  // Field mappings for this table
   int32 display_field_id = 6;          // Field to use for relation display value
+  string mode = 7;                     // Per-table mode: 'single_row' or 'multi_row'
 }
 
 // Output mapping configuration - multi-table support with typed references
 message OutputMappingConfig {
-  string mode = 1;                     // 'single_row' or 'multi_row'
+  string mode = 1;                     // Default mode: 'single_row' or 'multi_row' (used if table doesn't specify)
   repeated TableMapping table_mappings = 2;  // Ordered table operations
 }
 

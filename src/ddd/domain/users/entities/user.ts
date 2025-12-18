@@ -70,6 +70,6 @@ export interface UserOrganization {
 export interface CreateUserOrganizationData {
   userId: UserId;
   organizationId: OrganizationId;
-  systemRole: SystemRoleType;         // Required RBAC system role
+  // roles: UserRole
 }
 

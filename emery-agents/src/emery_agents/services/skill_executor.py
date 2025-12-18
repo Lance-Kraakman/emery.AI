@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from PIL import Image
 
 from ..clients import HuggingFaceInferenceClient, TaskResult
+from ..entities.skill_io import SkillOutputValue
 from ..grpc.generated import agent_worker_pb2
 from ..prompts import render_output_instructions
 from ..tools.output_tool import OutputTool, build_target_field_metadata_from_mappings
@@ -47,7 +48,7 @@ class SkillExecutorService:
         if not skill_config.outputs:
             return False
         for output in skill_config.outputs:
-            if output.HasField('output_mapping') and len(output.output_mapping.mappings) > 0:
+            if output.HasField('output_mapping') and len(output.output_mapping.table_mappings) > 0:
                 return True
         return False
 
@@ -343,7 +344,7 @@ class SkillExecutorService:
 
         outputs_with_mappings = [
             output for output in skill_config.outputs
-            if output.HasField('output_mapping') and len(output.output_mapping.mappings) > 0
+            if output.HasField('output_mapping') and len(output.output_mapping.table_mappings) > 0
         ]
 
         if not outputs_with_mappings:
@@ -353,25 +354,31 @@ class SkillExecutorService:
 
         ctx = MappingContext(api_key=api_key, organization_id=str(organization_id))
 
-        for output in outputs_with_mappings:
-            try:
-                config = OutputMappingConfig.from_proto(output.output_mapping)
+        # Convert TaskResult to SkillOutputValue list (same pattern as skill_tool.py)
+        skill_outputs: List[SkillOutputValue] = []
+        if result.is_structured and isinstance(result.data, dict):
+            for name, value in result.data.items():
+                skill_outputs.append(SkillOutputValue(name=name, value=value))
+        elif result.is_structured and isinstance(result.data, list):
+            skill_outputs.append(SkillOutputValue(name="result", value=result.data))
+        elif result.is_text:
+            skill_outputs.append(SkillOutputValue(name="text", value=str(result.data)))
+        else:
+            skill_outputs.append(SkillOutputValue(name="value", value=result.data))
 
-                # Prepare data for mapping
-                if result.is_structured and isinstance(result.data, list) and result.data:
-                    data = result.data[0] if config.is_single_row else result.data
-                elif result.is_structured:
-                    data = result.data
-                elif result.is_text:
-                    data = {'text': str(result.data)}
-                else:
-                    continue
+        # Use first output's mapping config (UI stores all table mappings on outputs[0])
+        first_output = outputs_with_mappings[0]
 
-                await OutputMappingService.apply_mapping(ctx=ctx, config=config, data=data)
-                logger.info(f"✅ Applied output mapping for '{output.name}'")
-
-            except Exception as e:
-                logger.error(f"❌ Failed to apply output mapping for {output.name}: {e}")
+        try:
+            config = OutputMappingConfig.from_proto(first_output.output_mapping)
+            results = await OutputMappingService.apply_multi_table_mapping(
+                ctx=ctx,
+                config=config,
+                skill_outputs=skill_outputs
+            )
+            logger.info(f"✅ Operation output mapping complete: {len(results)} tables updated")
+        except Exception as e:
+            logger.error(f"❌ Failed to apply operation output mapping: {e}")
 
     def create_executor_callback(
         self,

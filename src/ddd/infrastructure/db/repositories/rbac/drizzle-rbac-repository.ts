@@ -18,6 +18,7 @@ import type {
   UpdateRoleData,
   SYSTEM_ROLES 
 } from '@/ddd/domain/rbac/entities/role';
+import { PermissionDTO, RoleDTO, toPermissionDTOFromRow, toRoleDTO } from '@/app/mappers/permission-mapper';
 import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
 
 type RoleRow = InferSelectModel<typeof roles>;
@@ -189,7 +190,51 @@ export class DrizzleRBACRepository implements IRBACRepository {
         eq(userRoles.organizationId, organizationId.value)
       ));
 
-    return result.map((r: PermissionRow) => new Permission(r.resource as any, r.action as any));
+return result.map((r: PermissionRow) => new Permission(r.resource as any, r.action as any));
+  }
+
+  // User permission queries (DTO versions)
+  async getUserPermissionsDTO(userId: UserId, organizationId: OrganizationId): Promise<PermissionDTO[]> {
+    const result = await this.db
+      .select({
+        id: permissions.id,
+        resource: permissions.resource,
+        action: permissions.action,
+        description: permissions.description
+      })
+      .from(userRoles)
+      .innerJoin(rolePermissions, eq(userRoles.roleId, rolePermissions.roleId))
+      .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+      .where(and(
+        eq(userRoles.userId, userId.value),
+        eq(userRoles.organizationId, organizationId.value)
+      ));
+
+    return result.map((row: any) => toPermissionDTOFromRow(row));
+  }
+
+  async getUserRolesDTO(userId: UserId, organizationId: OrganizationId): Promise<RoleDTO[]> {
+    const result = await this.db
+      .select({
+        role: roles,
+        permissions: sql<string[]>`array_agg(${permissions.resource} || ':' || ${permissions.action})`
+      })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .leftJoin(rolePermissions, eq(roles.id, rolePermissions.roleId))
+      .leftJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+      .where(and(
+        eq(userRoles.userId, userId.value),
+        eq(userRoles.organizationId, organizationId.value)
+      ))
+      .groupBy(roles.id);
+
+    return result.map((r: { role: RoleRow; permissions: string[] }) => {
+      // Convert permission strings to Permission objects first, then to DTOs
+      const permissionStrings = r.permissions || [];
+      const roleEntity = this.mapToRoleEntity(r.role, permissionStrings);
+      return toRoleDTO(roleEntity);
+    });
   }
 
   async getUserRoles(userId: UserId, organizationId: OrganizationId): Promise<Role[]> {
@@ -441,7 +486,7 @@ export class DrizzleRBACRepository implements IRBACRepository {
           eq(userRoles.userId, userId.value),
           eq(userRoles.organizationId, organizationId.value)
         ));
-      
+
       // Add new roles
       if (roleIds.length > 0) {
         await tx
@@ -453,6 +498,18 @@ export class DrizzleRBACRepository implements IRBACRepository {
           })));
       }
     });
+  }
+
+  async countUsersWithRole(roleId: number, organizationId: OrganizationId): Promise<number> {
+    const result = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(userRoles)
+      .where(and(
+        eq(userRoles.roleId, roleId),
+        eq(userRoles.organizationId, organizationId.value)
+      ));
+
+    return Number(result[0]?.count ?? 0);
   }
 
   // Resource-specific permission assignment to roles

@@ -11,7 +11,7 @@ import {
   marginField,
 } from "../../fields/standard-fields";
 import type { FourSidedSpacing, FourCornerRadius } from "../../types/spacing-types";
-import { useTheme } from "../../theme-context";
+import { useTheme } from "../../contexts/PageContext";
 import { computeFourSidedCSS, computeFourCornerRadiusCSS } from "../../utils/spacing";
 
 const getClassName = getClassNameFactory("Container", styles);

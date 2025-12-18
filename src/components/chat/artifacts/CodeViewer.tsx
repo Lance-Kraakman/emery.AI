@@ -35,7 +35,7 @@ import { getFileDisplayInfo } from '../types/chat-artifacts'
 import { getFileExtension } from '@/ddd/domain/tables/value-objects/file-viewer-types'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
 import { SaveToDatabaseDialog } from './SaveToDatabaseDialog'
-import { useOptionalTheme } from '@/components/puck/theme-context'
+import { useOptionalTheme } from '@/components/puck/contexts/PageContext'
 import { getViewerContainerStyle, getThemedBackground, getThemedSectionStyle } from './theme-utils'
 
 const logger = createDebugLogger('CodeViewer')

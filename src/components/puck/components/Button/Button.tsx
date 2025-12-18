@@ -23,6 +23,7 @@ export const Button = ({
   tabIndex,
   newTab,
   fullWidth,
+  containerAlignment,
   icon,
   size = "medium",
   loading: loadingProp = false,
@@ -39,6 +40,7 @@ export const Button = ({
   tabIndex?: number;
   newTab?: boolean;
   fullWidth?: boolean;
+  containerAlignment?: "left" | "center" | "right";
   icon?: ReactNode;
   size?: "medium" | "large";
   loading?: boolean;
@@ -103,6 +105,18 @@ export const Button = ({
       )}
     </ElementType>
   );
+
+  // Wrap button in container if containerAlignment is specified
+  if (containerAlignment && !fullWidth) {
+    return (
+      <div className={getClassName({
+        container: true,
+        [`container-${containerAlignment}`]: true,
+      })}>
+        {el}
+      </div>
+    );
+  }
 
   return el;
 };
