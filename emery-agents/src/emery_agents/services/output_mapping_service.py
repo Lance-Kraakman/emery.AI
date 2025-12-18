@@ -686,7 +686,7 @@ class OutputMappingService:
 
             # Parse response to get created row_id
             response_data = response.json()
-            created_row = response_data.get("row", {})
+            created_row = response_data.get("data", {})
             row_id = created_row.get("id")
 
             if not row_id:
