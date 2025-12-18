@@ -13,7 +13,7 @@ import {
   Shield
 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import type { OrganizationMemberDTO } from '@/app/mappers/organization-mapper';
+import { OrganizationMapper, type UserDTO } from '@/app/mappers/organization-mapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfigurationCard } from './ConfigurationCard';
@@ -34,28 +34,11 @@ interface AgentDetailsPanelProps {
   onUpdate?: () => void;
 }
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  systemRole?: string;
-}
-
-// Map OrganizationMemberDTO to User interface
-function mapOrganizationMemberToUser(member: OrganizationMemberDTO): User {
-  return {
-    id: member.userId,
-    name: member.name || 'Unknown User',
-    email: member.email || '',
-    systemRole: member.roles.length > 0 ? member.roles[0].name : 'Member'
-  };
-}
-
 export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   const router = useRouter();
   const { openModal } = useModal();
   const [ownerName, setOwnerName] = useState<string>('Loading...');
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserDTO[]>([]);
   const [isScheduleManagerOpen, setIsScheduleManagerOpen] = useState(false);
   const [delegationCount, setDelegationCount] = useState<number>(0);
 
@@ -72,10 +55,10 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   const loadOwnerName = async () => {
     try {
       const members = await getOrganizationMembers();
-      const mappedUsers = members ? members.map(mapOrganizationMemberToUser) : [];
+      const mappedUsers = members ? members.map(OrganizationMapper.memberToUser) : [];
       setUsers(mappedUsers);
       const owner = mappedUsers?.find(u => u.id === agent.ownerId);
-      setOwnerName(owner?.name || 'Unknown User');
+      setOwnerName(owner ? `${owner.name} (${OrganizationMapper.getPrimaryRoleName(owner.roles)})` : 'Unknown User');
     } catch (error) {
       console.error('Error loading owner name:', error);
       setOwnerName('Unknown User');

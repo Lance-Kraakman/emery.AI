@@ -301,17 +301,26 @@ export function mapTriggerDataFromProto(triggerData: TriggerData): Record<string
 // Multi-Table Output Mapping Types (for proto mapping)
 // =============================================================================
 
-/** Typed field source - discriminated union */
+/** Typed field source - discriminated union (skill output, skill input, or table ref) */
 type FieldSourceDTO =
   | { type: 'skill_output'; name: string }
+  | { type: 'skill_input'; name: string }
   | { type: 'table_ref'; order: number; field: string };
+
+/** Row ID source - determines which row to update */
+type RowIdSourceDTO =
+  | { type: 'static'; staticId: string }
+  | { type: 'skill_input'; skillInput: string }
+  | { type: 'skill_output'; skillOutput: string }
+  | { type: 'table_ref'; tableRef: { order: number; field: string } }
+  | { type: 'source_row' };
 
 /** Table mapping DTO for skill output mapping */
 interface TableMappingDTO {
   order: number;
   targetTableId: number;
   rowAction: 'create' | 'update';
-  rowId?: string;
+  rowIdSource?: RowIdSourceDTO;
   mappings: Array<{
     source: FieldSourceDTO;
     targetFieldId: number;
@@ -324,6 +333,7 @@ interface TableMappingDTO {
     appendMode?: boolean;
   }>;
   displayFieldId?: number;
+  mode?: 'single_row' | 'multi_row';
 }
 
 /** Output mapping config DTO */
@@ -334,17 +344,53 @@ interface OutputMappingConfigDTO {
 
 /**
  * Map FieldSource to proto format
+ * Returns null for invalid sources so callers can filter them out
  */
-function mapFieldSourceToProto(source: FieldSourceDTO): any {
+function mapFieldSourceToProto(source: FieldSourceDTO | undefined | null): any | null {
+  if (!source || !source.type) {
+    console.warn('[PROTO-MAPPER] FieldSource is undefined or has no type - skipping mapping');
+    return null;
+  }
+
   if (source.type === 'skill_output') {
     return { skillOutput: source.name };
-  } else {
+  } else if (source.type === 'skill_input') {
+    return { skillInput: source.name };
+  } else if (source.type === 'table_ref') {
     return {
       tableRef: {
         order: source.order,
         field: source.field
       }
     };
+  }
+
+  console.warn(`[PROTO-MAPPER] Unknown FieldSource type: ${(source as any).type} - skipping mapping`);
+  return null;
+}
+
+/**
+ * Map RowIdSource to proto format
+ */
+function mapRowIdSourceToProto(source: RowIdSourceDTO): any {
+  switch (source.type) {
+    case 'static':
+      return { staticId: source.staticId };
+    case 'skill_input':
+      return { skillInput: source.skillInput };
+    case 'skill_output':
+      return { skillOutput: source.skillOutput };
+    case 'table_ref':
+      return {
+        tableRef: {
+          order: source.tableRef.order,
+          field: source.tableRef.field
+        }
+      };
+    case 'source_row':
+      return { useSourceRow: true };
+    default:
+      return undefined;
   }
 }
 
@@ -398,19 +444,26 @@ export function mapSkillToProto(skill: {
           order: tm.order,
           targetTableId: tm.targetTableId,
           rowAction: tm.rowAction || 'create',
-          rowId: tm.rowId || '',
+          rowIdSource: tm.rowIdSource ? mapRowIdSourceToProto(tm.rowIdSource) : undefined,
           displayFieldId: tm.displayFieldId || 0,
-          mappings: tm.mappings.map(m => ({
-            source: mapFieldSourceToProto(m.source),
-            targetFieldId: m.targetFieldId,
-            targetFieldMetadata: m.targetFieldMetadata ? {
-              fieldType: m.targetFieldMetadata.fieldType || '',
-              options: m.targetFieldMetadata.options || [],
-              maxSelections: m.targetFieldMetadata.maxSelections,
-              fieldName: m.targetFieldMetadata.fieldName || ''
-            } : undefined,
-            appendMode: m.appendMode || false
-          }))
+          mode: tm.mode || '',
+          mappings: tm.mappings
+            .map(m => {
+              const source = mapFieldSourceToProto(m.source);
+              if (!source) return null; // Skip mappings with invalid sources
+              return {
+                source,
+                targetFieldId: m.targetFieldId,
+                targetFieldMetadata: m.targetFieldMetadata ? {
+                  fieldType: m.targetFieldMetadata.fieldType || '',
+                  options: m.targetFieldMetadata.options || [],
+                  maxSelections: m.targetFieldMetadata.maxSelections,
+                  fieldName: m.targetFieldMetadata.fieldName || ''
+                } : undefined,
+                appendMode: m.appendMode || false
+              };
+            })
+            .filter((m): m is NonNullable<typeof m> => m !== null)
         }))
       } : undefined
     })),

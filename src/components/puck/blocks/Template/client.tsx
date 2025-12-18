@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ComponentConfig, Slot } from "@measured/puck";
 import { generateId } from "@/components/puck/lib/generate-id";
 import TemplateComponent, { TemplateProps } from "./Template";
-import { useLinkContext } from "../../link-context";
+import { useLinkContext } from "../../contexts/PageContext";
 import {
   getTemplates,
   createTemplate,

@@ -18,9 +18,7 @@ import { getApp } from "@/app/actions/puck-apps";
 import { getCurrentOrganization } from "@/app/actions/user-organizations";
 import { Loading } from "@/components/ui/loading";
 import { ThemeConfig } from "@/ddd/domain/puck/value-objects/theme-config";
-import { ThemeProvider } from "@/components/puck/theme-context";
-import { LinkContextProvider } from "@/components/puck/link-context";
-import { QueryParamProvider } from "@/components/puck/contexts/QueryParamContext";
+import { PageContextProvider } from "@/components/puck/contexts/PageContext";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
 import type { OrganizationDTO } from "@/app/mappers/organization-mapper";
@@ -141,26 +139,24 @@ export default function PreviewFramePage() {
   const themeStyles = effectiveTheme.toCSSVariables();
 
   return (
-    <QueryParamProvider params={queryParamsObject}>
-      <LinkContextProvider
-        value={{
-          orgSlug: organization?.slug ?? undefined,
-          appSlug: app.slug,
-          appId: app.id,
-          pages,
-          isEditing: false,
-          isPreview: true,
-        }}
+    <PageContextProvider
+      value={{
+        orgSlug: organization?.slug ?? undefined,
+        appSlug: app.slug,
+        appId: app.id,
+        pages,
+        isEditing: false,
+        isPreview: true,
+        params: queryParamsObject,
+        theme: effectiveTheme,
+      }}
+    >
+      <div
+        className="min-h-screen bg-white"
+        style={themeStyles as React.CSSProperties}
       >
-        <ThemeProvider value={effectiveTheme}>
-          <div
-            className="min-h-screen bg-white"
-            style={themeStyles as React.CSSProperties}
-          >
-            <Render config={config} data={resolvedData} />
-          </div>
-        </ThemeProvider>
-      </LinkContextProvider>
-    </QueryParamProvider>
+        <Render config={config} data={resolvedData} />
+      </div>
+    </PageContextProvider>
   );
 }

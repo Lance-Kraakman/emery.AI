@@ -11,7 +11,7 @@ import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import type { SendInvitationCommand, AcceptInvitationCommand } from "@/ddd/application/services/invitations/invitation-application-service";
 import { EmailAddress, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
-import { SystemRoleType, SYSTEM_ROLES } from "@/ddd/domain/rbac/entities/role";
+import { SystemRoleType, SYSTEM_ROLES, SYSTEM_ROLE_IDS } from "@/ddd/domain/rbac/entities/role";
 import { toInvitationDTO, toInvitationDTOs } from "@/app/mappers/invitation-mapper";
 import type { InvitationDTO } from "@/app/dtos/invitation.dto";
 import { OrganizationMapper, OrganizationMemberDTO } from "../mappers/organization-mapper";
@@ -24,7 +24,7 @@ export async function inviteUser(formData: FormData): Promise<Result> {
       const email = formData.get("email") as string;
       // For now, use default Member role since we're migrating to multi-role
       const roleIdsStr = formData.get("roleIds") as string;
-      const roleIds = roleIdsStr ? JSON.parse(roleIdsStr) as number[] : [4]; // Default to Member role
+      const roleIds = roleIdsStr ? JSON.parse(roleIdsStr) as number[] : [SYSTEM_ROLE_IDS.MEMBER];
 
       if (!email) {
         return {
@@ -39,7 +39,7 @@ export async function inviteUser(formData: FormData): Promise<Result> {
         organizationId: currentOrg.id,
         invitedBy: session.user.id,
         email,
-        roleIds: [4], // Default to Member role (ID 4) for now
+        roleIds: roleIds.length > 0 ? roleIds : [SYSTEM_ROLE_IDS.MEMBER],
         expiryDays: 7, // Default to 7 days
         sendEmail: true
       };
@@ -71,8 +71,6 @@ export async function inviteUser(formData: FormData): Promise<Result> {
 
 export async function acceptInvitation(token: string): Promise<Result> {
   try {
-    const session = await requirePermission("users:invite");
-    
     if (!token) {
       return {
         success: false,
@@ -81,12 +79,49 @@ export async function acceptInvitation(token: string): Promise<Result> {
     }
 
     const invitationApplicationService = getInvitationApplicationService();
-    
+
+    // First, get the invitation to find the email (token is the authentication)
+    const invitationResult = await invitationApplicationService.getInvitationByToken(token);
+    if (!invitationResult.success || !invitationResult.data) {
+      return {
+        success: false,
+        error: invitationResult.error || "Invalid or expired invitation"
+      };
+    }
+
+    const invitation = invitationResult.data;
+
+    // Try to get session if user is logged in (optional)
+    const { getSessionSafe } = await import("./permissions");
+    const session = await getSessionSafe();
+
+    // Determine the accepting user's email
+    // If logged in, verify email matches; if not logged in, use invitation email (token validates the request)
+    let acceptingUserEmail: string;
+    let userName: string | undefined;
+
+    if (session?.user?.email) {
+      // User is logged in - verify email matches
+      if (session.user.email.toLowerCase() !== invitation.email.value.toLowerCase()) {
+        return {
+          success: false,
+          error: "You must be signed in with the email address this invitation was sent to"
+        };
+      }
+      acceptingUserEmail = session.user.email;
+      userName = session.user.name || undefined;
+    } else {
+      // User is NOT logged in - the token authenticates the request
+      // Use the email from the invitation itself
+      acceptingUserEmail = invitation.email.value;
+      userName = undefined;
+    }
+
     const command: AcceptInvitationCommand = {
       token,
-      acceptingUserEmail: session.user.email || '',
+      acceptingUserEmail,
       userData: {
-        name: session.user.name || undefined
+        name: userName
       }
     };
 
@@ -101,7 +136,7 @@ export async function acceptInvitation(token: string): Promise<Result> {
 
     revalidatePath("/organization/settings/users");
     revalidatePath("/dashboard"); // User may now have access to new organization
-    
+
     return {
       success: true,
       data: result.data,

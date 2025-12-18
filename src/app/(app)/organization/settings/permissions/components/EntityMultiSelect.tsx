@@ -22,7 +22,9 @@ export interface EntityOption {
 interface EntityMultiSelectProps {
   entityType: EntityType;
   selectedIds: (string | number)[];
-  onSelectionChange: (selectedIds: (string | number)[]) => void;
+  onSelectionChange?: (selectedIds: (string | number)[]) => void;
+  batchMode?: boolean;
+  onBatchApply?: (selectedIds: (string | number)[]) => void;
   placeholder?: string;
   disabled?: boolean;
   fetchOptions: () => Promise<EntityOption[]>;
@@ -40,6 +42,8 @@ export function EntityMultiSelect({
   entityType,
   selectedIds,
   onSelectionChange,
+  batchMode = false,
+  onBatchApply,
   placeholder = `Select ${entityType}s...`,
   disabled = false,
   fetchOptions,
@@ -49,6 +53,8 @@ export function EntityMultiSelect({
   const [options, setOptions] = useState<EntityOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchValue, setSearchValue] = useState('');
+  const [pendingSelections, setPendingSelections] = useState<(string | number)[]>(selectedIds);
+  const [hasChanges, setHasChanges] = useState(false);
 
   const config = entityConfig[entityType];
   const Icon = config.icon;
@@ -71,8 +77,9 @@ export function EntityMultiSelect({
     }
   }, [open, entityType, fetchOptions, options.length]);
 
-  const selectedOptions = options.filter(option => 
-    selectedIds.includes(option.id)
+  const displaySelectedIds = batchMode ? pendingSelections : selectedIds;
+  const selectedOptions = options.filter(option =>
+    displaySelectedIds.includes(option.id)
   );
 
   const filteredOptions = options.filter(option =>
@@ -80,18 +87,53 @@ export function EntityMultiSelect({
   );
 
   const toggleSelection = (optionId: string | number) => {
-    const newSelection = selectedIds.includes(optionId)
-      ? selectedIds.filter(id => id !== optionId)
-      : [...selectedIds, optionId];
-    onSelectionChange(newSelection);
+    const currentSelection = batchMode ? pendingSelections : selectedIds;
+    const newSelection = currentSelection.includes(optionId)
+      ? currentSelection.filter(id => id !== optionId)
+      : [...currentSelection, optionId];
+
+    if (batchMode) {
+      setPendingSelections(newSelection);
+      setHasChanges(true);
+      onBatchApply?.(newSelection);
+    } else {
+      onSelectionChange?.(newSelection);
+    }
   };
 
   const removeSelection = (optionId: string | number) => {
-    onSelectionChange(selectedIds.filter(id => id !== optionId));
+    const currentSelection = batchMode ? pendingSelections : selectedIds;
+    const newSelection = currentSelection.filter(id => id !== optionId);
+
+    if (batchMode) {
+      setPendingSelections(newSelection);
+      setHasChanges(true);
+      onBatchApply?.(newSelection);
+    } else {
+      onSelectionChange?.(newSelection);
+    }
   };
 
   const clearAll = () => {
-    onSelectionChange([]);
+    if (batchMode) {
+      setPendingSelections([]);
+      setHasChanges(true);
+      onBatchApply?.([]);
+    } else {
+      onSelectionChange?.([]);
+    }
+  };
+
+  // Handle apply in batch mode
+  const handleApply = () => {
+    onSelectionChange?.(pendingSelections);
+    setHasChanges(false);
+  };
+
+  // Handle cancel in batch mode
+  const handleCancel = () => {
+    setPendingSelections(selectedIds);
+    setHasChanges(false);
   };
 
   return (
@@ -196,6 +238,26 @@ export function EntityMultiSelect({
             </Command>
           </PopoverContent>
         </Popover>
+      )}
+
+      {/* Batch mode apply/cancel buttons */}
+      {batchMode && hasChanges && (
+        <div className="flex gap-2 justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCancel}
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleApply}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            Apply Changes
+          </Button>
+        </div>
       )}
     </div>
   );

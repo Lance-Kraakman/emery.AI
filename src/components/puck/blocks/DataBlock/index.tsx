@@ -29,6 +29,7 @@ import { getFields } from "@/app/actions/fields";
 import { isPuckResolveContext } from "../../types/puck-context";
 import { createViewManagementField } from "../../custom-fields";
 import { MultiFilterField, type RowFilterConfig } from "../../fields/MultiFilterField";
+import { MultiSortField, type RowSortConfig } from "../../fields/MultiSortField";
 
 export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
   label: "Data",
@@ -169,6 +170,11 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       }],
       logic: "and",
     },
+    sortConfig: {
+      conditions: [],
+      dynamicField: undefined,
+      dynamicDirection: undefined,
+    },
     layout: "vertical",
     columns: 2,
     gap: "4",
@@ -211,6 +217,22 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       },
     };
 
+    // Sort config field - shown for list mode only
+    const sortConfigField = {
+      sortConfig: {
+        type: "custom" as const,
+        label: "Sort",
+        render: ({ value, onChange }: { value: RowSortConfig | undefined; onChange: (v: RowSortConfig) => void }) => (
+          <MultiSortField
+            key={viewId}  // Force remount when viewId changes
+            value={value}
+            onChange={onChange}
+            viewId={viewId}
+          />
+        ),
+      },
+    };
+
     // Edit mode fields (shown when viewId is selected)
     const editFields = viewId ? {
       editEnabled: fields.editEnabled,
@@ -231,6 +253,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     return {
       ...baseFields,
       ...rowFilterField,
+      ...sortConfigField,
       layout: fields.layout,
       ...(layout === 'grid' && { columns: fields.columns }),
       gap: fields.gap,

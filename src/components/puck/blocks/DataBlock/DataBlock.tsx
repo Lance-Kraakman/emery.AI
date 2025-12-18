@@ -27,8 +27,7 @@ import { registerOverlayPortal } from '@measured/puck';
 import { RowDataProvider } from '@/components/puck/contexts/RowDataContext';
 import { DataLayoutProvider } from '@/components/puck/contexts/DataLayoutContext';
 import { EditableRowProvider } from '@/components/puck/contexts/EditableRowContext';
-import { ParentRowDataProvider } from '@/components/puck/contexts/ParentRowDataContext';
-import { useLinkContext } from '@/components/puck/link-context';
+import { useLinkContext } from '@/components/puck/contexts/PageContext';
 import { useEditorUI } from '@/components/puck/contexts/EditorUIContext';
 import { usePagination } from './usePagination';
 import { useChildDataBlock } from './useChildDataBlock';
@@ -39,6 +38,7 @@ import { Pencil, Check, ChevronLeft, ChevronRight, Save, X, Plus } from 'lucide-
 import { cn } from '@/lib/utils';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { RowFilterConfig } from '../../fields/MultiFilterField';
+import type { RowSortConfig } from '../../fields/MultiSortField';
 import { CreateRowDialog } from './CreateRowDialog';
 import styles from './styles.module.css';
 
@@ -63,6 +63,9 @@ export interface DataBlockProps {
 
   // Row filter configuration (for both single and list modes)
   rowFilter?: RowFilterConfig;
+
+  // Row sort configuration (for list mode)
+  sortConfig?: RowSortConfig;
 
   // List mode options
   layout?: 'vertical' | 'grid' | 'horizontal';
@@ -99,6 +102,7 @@ export default function DataBlock({
   mode = 'single',
   viewId,
   rowFilter,
+  sortConfig,
   layout = 'vertical',
   columns = 2,
   gap = "4",
@@ -135,6 +139,7 @@ export default function DataBlock({
   const childData = useChildDataBlock({
     viewId,
     filterConfig: rowFilter,
+    sortConfig,
     pageSize: itemsPerPage,
     mode,
   });
@@ -487,8 +492,7 @@ export default function DataBlock({
         <div className={styles.dataBlock}>
           {/* Content with row context - uses slot */}
           {wrapWithDataLayout(
-            <RowDataProvider rowData={displayRow!} rowIndex={0}>
-              <ParentRowDataProvider rowData={displayRow!} fields={_fields}>
+            <RowDataProvider rowData={displayRow!} rowIndex={0} fields={_fields}>
                 {editEnabled && singleEditState.isEditMode ? (
                   <EditableRowProvider
                     isEditMode={singleEditState.isEditMode}
@@ -556,7 +560,6 @@ export default function DataBlock({
                     {Children && <Children />}
                   </div>
                 )}
-              </ParentRowDataProvider>
             </RowDataProvider>
           )}
         </div>
@@ -657,10 +660,8 @@ export default function DataBlock({
     if (!editEnabled || !withEditControls) {
       return (
         <div key={(row.id as number) || index} className={styles.item}>
-          <RowDataProvider rowData={row} rowIndex={index}>
-            <ParentRowDataProvider rowData={row} fields={_fields}>
-              {Children && <Children allow={disableDrops ? [] : undefined} />}
-            </ParentRowDataProvider>
+          <RowDataProvider rowData={row} rowIndex={index} fields={_fields}>
+            {Children && <Children allow={disableDrops ? [] : undefined} />}
           </RowDataProvider>
         </div>
       );
@@ -672,8 +673,7 @@ export default function DataBlock({
     // With edit controls - wrap in EditableRowProvider
     return (
       <div key={(row.id as number) || index} className={cn(styles.item, styles.editableItem)}>
-        <RowDataProvider rowData={row} rowIndex={index}>
-          <ParentRowDataProvider rowData={row} fields={_fields}>
+        <RowDataProvider rowData={row} rowIndex={index} fields={_fields}>
             <EditableRowProvider
               isEditMode={rowEditState.isEditMode}
               isSaving={rowEditState.isSaving}
@@ -729,7 +729,6 @@ export default function DataBlock({
                 </div>
               )}
             </EditableRowProvider>
-          </ParentRowDataProvider>
         </RowDataProvider>
       </div>
     );
@@ -903,10 +902,8 @@ export default function DataBlock({
       <Section>
         <div className={styles.dataBlock}>
           {wrapWithDataLayout(
-            <RowDataProvider rowData={_rows[0] || {}} rowIndex={0}>
-              <ParentRowDataProvider rowData={_rows[0] || {}} fields={_fields}>
-                <Children />
-              </ParentRowDataProvider>
+            <RowDataProvider rowData={_rows[0] || {}} rowIndex={0} fields={_fields}>
+              <Children />
             </RowDataProvider>
           )}
           <div className="flex justify-center mt-4">
@@ -957,10 +954,8 @@ export default function DataBlock({
                   >
                     {mergedDisplayedRows.map((row, index) => (
                       <div key={(row.id as number) || index} className={styles.item}>
-                        <RowDataProvider rowData={row} rowIndex={index}>
-                          <ParentRowDataProvider rowData={row} fields={_fields}>
-                            {Children && <Children allow={[]} />}
-                          </ParentRowDataProvider>
+                        <RowDataProvider rowData={row} rowIndex={index} fields={_fields}>
+                          {Children && <Children allow={[]} />}
                         </RowDataProvider>
                       </div>
                     ))}

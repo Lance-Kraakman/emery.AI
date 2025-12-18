@@ -8,7 +8,7 @@ import { PuckComponent, Slot } from "@measured/puck";
 import type { LinkActionConfig } from "../../custom-fields/link-action-field";
 import type { Action } from "../../types/actions";
 import type { FourSidedSpacing } from "../../types/spacing-types";
-import { useTheme } from "../../theme-context";
+import { useTheme } from "../../contexts/PageContext";
 import { computeFourSidedCSS } from "../../utils/spacing";
 
 const getClassName = getClassNameFactory("Hero", styles);

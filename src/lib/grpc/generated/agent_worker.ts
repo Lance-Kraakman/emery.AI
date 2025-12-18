@@ -408,14 +408,40 @@ export interface TableReference {
   field: string;
 }
 
-/** Typed field source - either a skill output or a reference to previous table */
+/** Typed field source - skill output, skill input, or reference to previous table */
 export interface FieldSource {
   /** Direct skill output name (e.g., "company_name") */
   skillOutput?:
     | string
     | undefined;
   /** Reference to previous table operation result */
-  tableRef?: TableReference | undefined;
+  tableRef?:
+    | TableReference
+    | undefined;
+  /** Direct skill input name (e.g., "patient_id") */
+  skillInput?: string | undefined;
+}
+
+/** Source for row ID in update mode - determines which row to update */
+export interface RowIdSource {
+  /** Hardcoded row ID */
+  staticId?:
+    | string
+    | undefined;
+  /** Name of skill input containing row ID */
+  skillInput?:
+    | string
+    | undefined;
+  /** Name of skill output containing row ID */
+  skillOutput?:
+    | string
+    | undefined;
+  /** Reference to previous table (e.g., row_id from Table #1) */
+  tableRef?:
+    | TableReference
+    | undefined;
+  /** Use the triggering row's ID (for table-triggered skills) */
+  useSourceRow?: boolean | undefined;
 }
 
 /** Field mapping within a table mapping - maps a typed source to a target field */
@@ -442,17 +468,21 @@ export interface TableMapping {
   targetTableId: number;
   /** 'create' or 'update' */
   rowAction: string;
-  /** For update mode - specific row ID */
-  rowId: string;
+  /** For update mode - typed source for row ID */
+  rowIdSource:
+    | RowIdSource
+    | undefined;
   /** Field mappings for this table */
   mappings: FieldMapping[];
   /** Field to use for relation display value */
   displayFieldId: number;
+  /** Per-table mode: 'single_row' or 'multi_row' */
+  mode: string;
 }
 
 /** Output mapping configuration - multi-table support with typed references */
 export interface OutputMappingConfig {
-  /** 'single_row' or 'multi_row' */
+  /** Default mode: 'single_row' or 'multi_row' (used if table doesn't specify) */
   mode: string;
   /** Ordered table operations */
   tableMappings: TableMapping[];
@@ -2877,7 +2907,7 @@ export const TableReference: MessageFns<TableReference> = {
 };
 
 function createBaseFieldSource(): FieldSource {
-  return { skillOutput: undefined, tableRef: undefined };
+  return { skillOutput: undefined, tableRef: undefined, skillInput: undefined };
 }
 
 export const FieldSource: MessageFns<FieldSource> = {
@@ -2887,6 +2917,9 @@ export const FieldSource: MessageFns<FieldSource> = {
     }
     if (message.tableRef !== undefined) {
       TableReference.encode(message.tableRef, writer.uint32(18).fork()).join();
+    }
+    if (message.skillInput !== undefined) {
+      writer.uint32(26).string(message.skillInput);
     }
     return writer;
   },
@@ -2914,6 +2947,14 @@ export const FieldSource: MessageFns<FieldSource> = {
           message.tableRef = TableReference.decode(reader, reader.uint32());
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.skillInput = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2927,6 +2968,7 @@ export const FieldSource: MessageFns<FieldSource> = {
     return {
       skillOutput: isSet(object.skillOutput) ? globalThis.String(object.skillOutput) : undefined,
       tableRef: isSet(object.tableRef) ? TableReference.fromJSON(object.tableRef) : undefined,
+      skillInput: isSet(object.skillInput) ? globalThis.String(object.skillInput) : undefined,
     };
   },
 
@@ -2937,6 +2979,9 @@ export const FieldSource: MessageFns<FieldSource> = {
     }
     if (message.tableRef !== undefined) {
       obj.tableRef = TableReference.toJSON(message.tableRef);
+    }
+    if (message.skillInput !== undefined) {
+      obj.skillInput = message.skillInput;
     }
     return obj;
   },
@@ -2950,6 +2995,139 @@ export const FieldSource: MessageFns<FieldSource> = {
     message.tableRef = (object.tableRef !== undefined && object.tableRef !== null)
       ? TableReference.fromPartial(object.tableRef)
       : undefined;
+    message.skillInput = object.skillInput ?? undefined;
+    return message;
+  },
+};
+
+function createBaseRowIdSource(): RowIdSource {
+  return {
+    staticId: undefined,
+    skillInput: undefined,
+    skillOutput: undefined,
+    tableRef: undefined,
+    useSourceRow: undefined,
+  };
+}
+
+export const RowIdSource: MessageFns<RowIdSource> = {
+  encode(message: RowIdSource, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.staticId !== undefined) {
+      writer.uint32(10).string(message.staticId);
+    }
+    if (message.skillInput !== undefined) {
+      writer.uint32(18).string(message.skillInput);
+    }
+    if (message.skillOutput !== undefined) {
+      writer.uint32(26).string(message.skillOutput);
+    }
+    if (message.tableRef !== undefined) {
+      TableReference.encode(message.tableRef, writer.uint32(34).fork()).join();
+    }
+    if (message.useSourceRow !== undefined) {
+      writer.uint32(40).bool(message.useSourceRow);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RowIdSource {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRowIdSource();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.staticId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.skillInput = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.skillOutput = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.tableRef = TableReference.decode(reader, reader.uint32());
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.useSourceRow = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RowIdSource {
+    return {
+      staticId: isSet(object.staticId) ? globalThis.String(object.staticId) : undefined,
+      skillInput: isSet(object.skillInput) ? globalThis.String(object.skillInput) : undefined,
+      skillOutput: isSet(object.skillOutput) ? globalThis.String(object.skillOutput) : undefined,
+      tableRef: isSet(object.tableRef) ? TableReference.fromJSON(object.tableRef) : undefined,
+      useSourceRow: isSet(object.useSourceRow) ? globalThis.Boolean(object.useSourceRow) : undefined,
+    };
+  },
+
+  toJSON(message: RowIdSource): unknown {
+    const obj: any = {};
+    if (message.staticId !== undefined) {
+      obj.staticId = message.staticId;
+    }
+    if (message.skillInput !== undefined) {
+      obj.skillInput = message.skillInput;
+    }
+    if (message.skillOutput !== undefined) {
+      obj.skillOutput = message.skillOutput;
+    }
+    if (message.tableRef !== undefined) {
+      obj.tableRef = TableReference.toJSON(message.tableRef);
+    }
+    if (message.useSourceRow !== undefined) {
+      obj.useSourceRow = message.useSourceRow;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RowIdSource>, I>>(base?: I): RowIdSource {
+    return RowIdSource.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RowIdSource>, I>>(object: I): RowIdSource {
+    const message = createBaseRowIdSource();
+    message.staticId = object.staticId ?? undefined;
+    message.skillInput = object.skillInput ?? undefined;
+    message.skillOutput = object.skillOutput ?? undefined;
+    message.tableRef = (object.tableRef !== undefined && object.tableRef !== null)
+      ? TableReference.fromPartial(object.tableRef)
+      : undefined;
+    message.useSourceRow = object.useSourceRow ?? undefined;
     return message;
   },
 };
@@ -3069,7 +3247,15 @@ export const FieldMapping: MessageFns<FieldMapping> = {
 };
 
 function createBaseTableMapping(): TableMapping {
-  return { order: 0, targetTableId: 0, rowAction: "", rowId: "", mappings: [], displayFieldId: 0 };
+  return {
+    order: 0,
+    targetTableId: 0,
+    rowAction: "",
+    rowIdSource: undefined,
+    mappings: [],
+    displayFieldId: 0,
+    mode: "",
+  };
 }
 
 export const TableMapping: MessageFns<TableMapping> = {
@@ -3083,14 +3269,17 @@ export const TableMapping: MessageFns<TableMapping> = {
     if (message.rowAction !== "") {
       writer.uint32(26).string(message.rowAction);
     }
-    if (message.rowId !== "") {
-      writer.uint32(34).string(message.rowId);
+    if (message.rowIdSource !== undefined) {
+      RowIdSource.encode(message.rowIdSource, writer.uint32(34).fork()).join();
     }
     for (const v of message.mappings) {
       FieldMapping.encode(v!, writer.uint32(42).fork()).join();
     }
     if (message.displayFieldId !== 0) {
       writer.uint32(48).int32(message.displayFieldId);
+    }
+    if (message.mode !== "") {
+      writer.uint32(58).string(message.mode);
     }
     return writer;
   },
@@ -3131,7 +3320,7 @@ export const TableMapping: MessageFns<TableMapping> = {
             break;
           }
 
-          message.rowId = reader.string();
+          message.rowIdSource = RowIdSource.decode(reader, reader.uint32());
           continue;
         }
         case 5: {
@@ -3150,6 +3339,14 @@ export const TableMapping: MessageFns<TableMapping> = {
           message.displayFieldId = reader.int32();
           continue;
         }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.mode = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3164,11 +3361,12 @@ export const TableMapping: MessageFns<TableMapping> = {
       order: isSet(object.order) ? globalThis.Number(object.order) : 0,
       targetTableId: isSet(object.targetTableId) ? globalThis.Number(object.targetTableId) : 0,
       rowAction: isSet(object.rowAction) ? globalThis.String(object.rowAction) : "",
-      rowId: isSet(object.rowId) ? globalThis.String(object.rowId) : "",
+      rowIdSource: isSet(object.rowIdSource) ? RowIdSource.fromJSON(object.rowIdSource) : undefined,
       mappings: globalThis.Array.isArray(object?.mappings)
         ? object.mappings.map((e: any) => FieldMapping.fromJSON(e))
         : [],
       displayFieldId: isSet(object.displayFieldId) ? globalThis.Number(object.displayFieldId) : 0,
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
     };
   },
 
@@ -3183,14 +3381,17 @@ export const TableMapping: MessageFns<TableMapping> = {
     if (message.rowAction !== "") {
       obj.rowAction = message.rowAction;
     }
-    if (message.rowId !== "") {
-      obj.rowId = message.rowId;
+    if (message.rowIdSource !== undefined) {
+      obj.rowIdSource = RowIdSource.toJSON(message.rowIdSource);
     }
     if (message.mappings?.length) {
       obj.mappings = message.mappings.map((e) => FieldMapping.toJSON(e));
     }
     if (message.displayFieldId !== 0) {
       obj.displayFieldId = Math.round(message.displayFieldId);
+    }
+    if (message.mode !== "") {
+      obj.mode = message.mode;
     }
     return obj;
   },
@@ -3203,9 +3404,12 @@ export const TableMapping: MessageFns<TableMapping> = {
     message.order = object.order ?? 0;
     message.targetTableId = object.targetTableId ?? 0;
     message.rowAction = object.rowAction ?? "";
-    message.rowId = object.rowId ?? "";
+    message.rowIdSource = (object.rowIdSource !== undefined && object.rowIdSource !== null)
+      ? RowIdSource.fromPartial(object.rowIdSource)
+      : undefined;
     message.mappings = object.mappings?.map((e) => FieldMapping.fromPartial(e)) || [];
     message.displayFieldId = object.displayFieldId ?? 0;
+    message.mode = object.mode ?? "";
     return message;
   },
 };

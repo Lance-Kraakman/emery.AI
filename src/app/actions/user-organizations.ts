@@ -9,7 +9,7 @@ import { getUserRoleApplicationService, getUserRepository, getOrganizationReposi
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
-import { SystemRoleType, SYSTEM_ROLES } from "@/ddd/domain/rbac/entities/role";
+import { SystemRoleType, SYSTEM_ROLES, SYSTEM_ROLE_IDS } from "@/ddd/domain/rbac/entities/role";
 import { contextManager } from '@/lib/db/context-manager';
 import { OrganizationMapper, type OrganizationDTO } from "@/app/mappers/organization-mapper";
 
@@ -95,7 +95,7 @@ export async function joinOrganization(organizationId: number, roleIds: number[]
     const command: AddUserToOrganizationCommand = {
       userId: session.user.id,
       organizationId,
-      roleIds: roleIds.length > 0 ? roleIds : [4] // Default to Member role ID (assuming ID 4 = Member)
+      roleIds: roleIds.length > 0 ? roleIds : [SYSTEM_ROLE_IDS.MEMBER]
     };
 
     const result = await userOrganizationApplicationService.addUserToOrganization(command);
@@ -292,7 +292,7 @@ export async function addUserToOrganization(userId: string, organizationId: numb
     const command: AddUserToOrganizationCommand = {
       userId,
       organizationId,
-      roleIds: [4], // Default to Member role
+      roleIds: [SYSTEM_ROLE_IDS.MEMBER],
       invitedBy: session.user.id
     };
 

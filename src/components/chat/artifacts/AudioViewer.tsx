@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import type { FileArtifact } from '../types/chat-artifacts'
 import { getFileDisplayInfo } from '../types/chat-artifacts'
-import { useOptionalTheme } from '@/components/puck/theme-context'
+import { useOptionalTheme } from '@/components/puck/contexts/PageContext'
 import { getViewerContainerStyle, getThemedBackground, getThemedSectionStyle } from './theme-utils'
 
 interface AudioViewerProps {

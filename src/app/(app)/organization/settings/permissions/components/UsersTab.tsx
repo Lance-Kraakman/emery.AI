@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   useReactTable, 
   getCoreRowModel, 
@@ -20,6 +20,7 @@ import { getOrganizationMembers, getPendingInvitations, inviteUser } from "@/app
 import { assignUserRoles } from "@/app/actions/permissions";
 import { getOrganizationRolesForSelection, type CustomRole } from "@/app/actions/roles";
 import { EntityMultiSelect } from "./EntityMultiSelect";
+import { RoleDisplay } from "@/components/ui/RoleDisplay";
 
 import type { InvitationDTO } from "@/app/dtos/invitation.dto";
 import { OrganizationMemberDTO } from '@/app/mappers/organization-mapper';
@@ -34,6 +35,55 @@ export function UsersTab() {
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(true);
   const [availableRoles, setAvailableRoles] = useState<{id: number; name: string; description: string; isSystem: boolean}[]>([]);
+
+  // Batch role assignment state
+  const [pendingRoleChanges, setPendingRoleChanges] = useState<Record<string, number[]>>({});
+  const hasPendingChanges = Object.keys(pendingRoleChanges).length > 0;
+
+  // Batch role assignment handlers
+  const handleRoleSelection = useCallback((userId: string, selectedRoleIds: number[]) => {
+    setPendingRoleChanges(prev => ({
+      ...prev,
+      [userId]: selectedRoleIds
+    }));
+  }, []);
+
+  const handleApplyAllChanges = useCallback(async () => {
+    if (!hasPendingChanges) return;
+
+    try {
+      setRoleUpdating('all');
+
+      // Apply changes for all modified users
+      const results = await Promise.all(
+        Object.entries(pendingRoleChanges).map(async ([userId, roleIds]) => {
+          console.log('Applying role changes:', { userId, roleIds });
+          const result = await assignUserRoles({ userId, roleIds });
+          console.log('Role assignment result:', { userId, result });
+          return { userId, result };
+        })
+      );
+
+      // Check for any failures
+      const failures = results.filter(r => !r.result.success);
+      if (failures.length > 0) {
+        console.error('Some role assignments failed:', failures);
+      }
+
+      setPendingRoleChanges({});
+
+      // Refresh the data
+      await loadData();
+    } catch (error) {
+      console.error('Error applying role changes:', error);
+    } finally {
+      setRoleUpdating(null);
+    }
+  }, [hasPendingChanges, pendingRoleChanges]);
+
+  const handleDiscardChanges = useCallback(() => {
+    setPendingRoleChanges({});
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -205,15 +255,60 @@ export function UsersTab() {
               No members found. Invite some users to get started!
             </div>
           ) : (
-            <MembersTable 
+            <MembersTable
               members={members}
               roleUpdating={roleUpdating}
-              onRoleChange={handleRoleChange}
+              onRoleSelection={handleRoleSelection}
+              pendingRoleChanges={pendingRoleChanges}
               availableRoles={availableRoles}
             />
           )}
         </CardContent>
       </Card>
+
+      {/* Batch Role Operations */}
+      {hasPendingChanges && (
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-yellow-800">
+                  Unsaved Role Changes
+                </h3>
+                <p className="text-sm text-yellow-700 mt-1">
+                  {Object.keys(pendingRoleChanges).length} user(s) have pending role changes.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDiscardChanges}
+                  disabled={roleUpdating === 'all'}
+                  className="border-yellow-300 text-yellow-700 hover:bg-yellow-100"
+                >
+                  Discard All
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleApplyAllChanges}
+                  disabled={roleUpdating === 'all'}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {roleUpdating === 'all' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Applying...
+                    </>
+                  ) : (
+                    `Apply All Changes (${Object.keys(pendingRoleChanges).length})`
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Pending Invitations */}
       {pendingInvitations.length > 0 && (
@@ -223,19 +318,27 @@ export function UsersTab() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {pendingInvitations.map((invitation) => (
-                <div key={invitation.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div>
-                    <p className="font-medium">
-                      {invitation.email}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Role: Member
-                    </p>
+              {pendingInvitations.map((invitation) => {
+                // Map roleIds to role objects for display
+                const invitationRoles = invitation.roleIds
+                  .map(roleId => availableRoles.find(r => r.id === roleId))
+                  .filter((r): r is {id: number; name: string; description: string; isSystem: boolean} => r !== undefined)
+                  .map(r => ({ id: r.id, name: r.name, isSystem: r.isSystem }));
+
+                return (
+                  <div key={invitation.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <p className="font-medium">
+                        {invitation.email}
+                      </p>
+                      <div className="text-sm text-muted-foreground mt-1">
+                        <RoleDisplay roles={invitationRoles} variant="text" />
+                      </div>
+                    </div>
+                    <Badge variant="outline">Pending</Badge>
                   </div>
-                  <Badge variant="outline">Pending</Badge>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -248,11 +351,13 @@ export function UsersTab() {
 interface MembersTableProps {
   members: OrganizationMemberDTO[];
   roleUpdating: string | null;
-  onRoleChange: (userId: string, roleIds: number[]) => void;
+  onRoleSelection?: (userId: string, roleIds: number[]) => void;
+  onRoleChange?: (userId: string, roleIds: number[]) => void;
+  pendingRoleChanges?: Record<string, number[]>;
   availableRoles: Array<{id: number; name: string; description: string; isSystem: boolean}>;
 }
 
-function MembersTable({ members, roleUpdating, onRoleChange, availableRoles }: MembersTableProps) {
+function MembersTable({ members, roleUpdating, onRoleSelection, onRoleChange, pendingRoleChanges = {}, availableRoles }: MembersTableProps) {
   const columnHelper = createColumnHelper<OrganizationMemberDTO>();
 
   const columns = useMemo(() => [
@@ -270,25 +375,7 @@ function MembersTable({ members, roleUpdating, onRoleChange, availableRoles }: M
       header: 'Current Roles',
       cell: ({ row }) => {
         const member = row.original;
-        const roles = member.roles || [];
-        
-        if (roles.length === 0) {
-          return <span className="text-muted-foreground text-sm">No roles assigned</span>;
-        }
-        
-        return (
-          <div className="flex gap-1 flex-wrap">
-            {roles.map((role) => (
-              <Badge 
-                key={role.id} 
-                variant={role.isSystem ? 'default' : 'secondary'} 
-                className="text-xs"
-              >
-                {role.name}
-              </Badge>
-            ))}
-          </div>
-        );
+        return <RoleDisplay roles={member.roles || []} variant="badge" />;
       },
     }),
     columnHelper.display({
@@ -296,31 +383,41 @@ function MembersTable({ members, roleUpdating, onRoleChange, availableRoles }: M
       header: 'Roles',
       cell: ({ row }) => {
         const member = row.original;
-        const selectedRoleIds = member.roles?.map(r => r.id) || [];
-        
+        const currentRoleIds = member.roles?.map(r => r.id) || [];
+        const pendingRoleIds = pendingRoleChanges[member.userId] || currentRoleIds;
+        const hasPendingChanges = pendingRoleChanges[member.userId] !== undefined;
+
         return (
           <div className="flex items-center gap-2 min-w-[200px]">
             <EntityMultiSelect
               entityType="role"
-              selectedIds={selectedRoleIds}
-              onSelectionChange={(newIds) => onRoleChange(member.userId, newIds as number[])}
-              disabled={roleUpdating === member.userId}
+              selectedIds={pendingRoleIds}
+              onBatchApply={(newIds) => onRoleSelection?.(member.userId, newIds as number[])}
+              batchMode={true}
+              disabled={roleUpdating === member.userId || roleUpdating === 'all'}
               placeholder="Select roles..."
               fetchOptions={async () =>
                 availableRoles.map(role => ({
                   id: role.id,
                   name: role.name,
-                  type: 'role' as const, // Will fix later
+                  type: 'role' as const,
                   description: role.description || ''
                 }))
               }
             />
+
+            {hasPendingChanges && (
+              <Badge variant="outline" className="text-yellow-600 border-yellow-400">
+                Modified
+              </Badge>
+            )}
+
             {roleUpdating === member.userId && <Loader2 className="w-4 h-4 animate-spin" />}
           </div>
         );
       },
     }),
-  ], [roleUpdating, onRoleChange, availableRoles]);
+  ], [roleUpdating, pendingRoleChanges, onRoleSelection, availableRoles]);
 
   const table = useReactTable({
     data: members,

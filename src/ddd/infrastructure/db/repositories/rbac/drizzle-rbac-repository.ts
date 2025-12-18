@@ -486,7 +486,7 @@ return result.map((r: PermissionRow) => new Permission(r.resource as any, r.acti
           eq(userRoles.userId, userId.value),
           eq(userRoles.organizationId, organizationId.value)
         ));
-      
+
       // Add new roles
       if (roleIds.length > 0) {
         await tx
@@ -498,6 +498,18 @@ return result.map((r: PermissionRow) => new Permission(r.resource as any, r.acti
           })));
       }
     });
+  }
+
+  async countUsersWithRole(roleId: number, organizationId: OrganizationId): Promise<number> {
+    const result = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(userRoles)
+      .where(and(
+        eq(userRoles.roleId, roleId),
+        eq(userRoles.organizationId, organizationId.value)
+      ));
+
+    return Number(result[0]?.count ?? 0);
   }
 
   // Resource-specific permission assignment to roles
