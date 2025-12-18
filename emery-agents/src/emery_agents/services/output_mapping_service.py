@@ -23,8 +23,7 @@ from ..entities.output_mapping import (
     TableMappingResult,
     RowAction,
     RowIdSource,
-    get_extension_for_mime,
-    build_row_data_from_item
+    get_extension_for_mime
 )
 from ..entities.skill_io import SkillInputValue, SkillOutputValue, RowMappingContext
 
@@ -53,124 +52,10 @@ class MappingContext:
 
 
 class OutputMappingService:
-    """Service for applying output mappings to database tables."""
+    """Service for applying output mappings to database tables.
 
-    @staticmethod
-    async def apply_mapping(
-        ctx: MappingContext,
-        config: OutputMappingConfig,
-        data: Any,
-        context: Optional[Dict[str, Any]] = None
-    ) -> bool:
-        """
-        Apply output mapping based on mode.
-
-        Args:
-            ctx: Mapping context with auth and API URL
-            config: Output mapping configuration
-            data: Result data to map (dict, list, or simple value)
-            context: Additional context (source row info, etc.)
-
-        Returns:
-            True if mapping was applied successfully
-        """
-        if config.is_single_row:
-            return await OutputMappingService._apply_single_row(ctx, config, data, context)
-        elif config.is_multi_row:
-            return await OutputMappingService._apply_multi_row(ctx, config, data, context)
-        return False
-
-    @staticmethod
-    async def _apply_single_row(
-        ctx: MappingContext,
-        config: OutputMappingConfig,
-        data: Any,
-        context: Optional[Dict[str, Any]] = None
-    ) -> bool:
-        """Apply single-row mapping (top result only)."""
-        # Get first item if data is a list
-        item = data[0] if isinstance(data, list) and data else data
-
-        # Wrap simple values for field extraction
-        if not isinstance(item, dict):
-            item = {"value": item}
-
-        row_data = build_row_data_from_item(item, config.mappings, context)
-
-        if not row_data:
-            logger.warning("No data to map for single-row mode")
-            return False
-
-        table_id = config.get_target_table_id()
-        if not table_id:
-            logger.warning("No target table ID in mappings")
-            return False
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            if config.is_create:
-                return await OutputMappingService._create_row(client, ctx, table_id, row_data)
-            elif config.is_update and config.row_id:
-                return await OutputMappingService._update_row(client, ctx, table_id, config.row_id, row_data)
-            else:
-                logger.warning("Update mode requires row_id")
-                return False
-
-    @staticmethod
-    async def _apply_multi_row(
-        ctx: MappingContext,
-        config: OutputMappingConfig,
-        data: Any,
-        context: Optional[Dict[str, Any]] = None
-    ) -> bool:
-        """Apply multi-row mapping (one row per item)."""
-        items = data if isinstance(data, list) else [data]
-        table_id = config.get_target_table_id()
-
-        if not table_id:
-            logger.warning("No target table ID in mappings")
-            return False
-
-        success_count = 0
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            for i, item in enumerate(items):
-                # Wrap simple values
-                if not isinstance(item, dict):
-                    item = {"value": item}
-
-                row_data = build_row_data_from_item(item, config.mappings, context)
-                logger.info(f"📋 Item {i}: {item}, mappings: {[(m.source.name if m.source else None, m.target_field_id) for m in config.mappings]}, row_data: {row_data}")
-
-                if row_data:
-                    if await OutputMappingService._create_row(client, ctx, table_id, row_data):
-                        success_count += 1
-                else:
-                    logger.warning(f"No data to map for item {i} - item={item}, mappings={[(m.source.name if m.source else None, m.target_field_id) for m in config.mappings]}")
-
-        logger.info(f"Multi-row mapping: created {success_count}/{len(items)} rows")
-        return success_count > 0
-
-    @staticmethod
-    async def _create_row(
-        client: httpx.AsyncClient,
-        ctx: MappingContext,
-        table_id: int,
-        row_data: Dict[str, Any]
-    ) -> bool:
-        """Create a row via API."""
-        url = f"{ctx.api_base_url}/rows"
-        # AIDEV-NOTE: dataKeyType='id' tells API that keys are field IDs, not field names
-        payload = {"tableId": table_id, "data": row_data, "dataKeyType": "id"}
-
-        try:
-            response = await client.post(url, headers=ctx.headers, json=payload)
-            if response.status_code >= 400:
-                logger.error(f"Failed to create row: {response.status_code} - {response.text}")
-                return False
-            logger.info(f"✅ Created row in table {table_id}")
-            return True
-        except Exception as e:
-            logger.error(f"Error creating row: {e}")
-            return False
+    Primary API: apply_multi_table_mapping() for multi-table output mapping.
+    """
 
     @staticmethod
     async def _update_row(
@@ -188,12 +73,20 @@ class OutputMappingService:
         try:
             response = await client.put(url, headers=ctx.headers, json=payload)
             if response.status_code >= 400:
-                logger.error(f"Failed to update row: {response.status_code} - {response.text}")
+                logger.error(
+                    f"❌ Failed to update row {row_id} in table {table_id}: "
+                    f"HTTP {response.status_code} - {response.text[:500]}\n"
+                    f"   Payload: {payload}"
+                )
                 return False
             logger.info(f"✅ Updated row {row_id} in table {table_id}")
             return True
         except Exception as e:
-            logger.error(f"Error updating row: {e}")
+            logger.error(
+                f"❌ Exception updating row {row_id} in table {table_id}: {e}\n"
+                f"   Payload: {payload}",
+                exc_info=True
+            )
             return False
 
     @staticmethod
@@ -398,9 +291,24 @@ class OutputMappingService:
                         results_by_order[table_mapping.order] = result
                         logger.info(f"✅ Table mapping #{table_mapping.order} completed: row_id={row_id}")
                     else:
-                        logger.error(f"❌ Table mapping #{table_mapping.order} failed")
+                        logger.error(
+                            f"❌ Table mapping #{table_mapping.order} failed: "
+                            f"table={table_mapping.target_table_id}, action={table_mapping.row_action}, "
+                            f"row_data_fields={list(row_data.keys())}"
+                        )
 
-        logger.info(f"📊 Multi-table mapping complete: {len(results)}/{len(sorted_mappings)} succeeded")
+        # Summary with failure details
+        succeeded_orders = [r.order for r in results]
+        failed_orders = [m.order for m in sorted_mappings if m.order not in succeeded_orders]
+
+        if failed_orders:
+            logger.warning(
+                f"📊 Multi-table mapping complete: {len(results)}/{len(sorted_mappings)} succeeded. "
+                f"Failed orders: {failed_orders}"
+            )
+        else:
+            logger.info(f"📊 Multi-table mapping complete: {len(results)}/{len(sorted_mappings)} succeeded")
+
         return results
 
     @staticmethod
@@ -485,7 +393,14 @@ class OutputMappingService:
                     if out.name == source.name:
                         value = out.value
                         break
-                logger.debug(f"Resolved skill_output '{source.name}' = {value}")
+                if value is not None:
+                    logger.debug(f"Resolved skill_output '{source.name}' = {value}")
+                else:
+                    available_outputs = [o.name for o in skill_outputs]
+                    logger.warning(
+                        f"⚠️ skill_output '{source.name}' not found for field {mapping.target_field_id}. "
+                        f"Available outputs: {available_outputs}"
+                    )
 
             elif source.type == 'skill_input':
                 # Direct skill input (pass-through)
@@ -493,7 +408,14 @@ class OutputMappingService:
                     if inp.name == source.name:
                         value = inp.value
                         break
-                logger.debug(f"Resolved skill_input '{source.name}' = {value}")
+                if value is not None:
+                    logger.debug(f"Resolved skill_input '{source.name}' = {value}")
+                else:
+                    available_inputs = [i.name for i in skill_inputs]
+                    logger.warning(
+                        f"⚠️ skill_input '{source.name}' not found for field {mapping.target_field_id}. "
+                        f"Available inputs: {available_inputs}"
+                    )
 
             elif source.type == 'table_ref':
                 # Reference to previous table result
@@ -504,26 +426,25 @@ class OutputMappingService:
                     else:
                         # Look up field value from created row data
                         value = result.row_data.get(source.field)
-                    logger.debug(f"Resolved table_ref order={source.order} field='{source.field}' = {value}")
+                    if value is not None:
+                        logger.debug(f"Resolved table_ref order={source.order} field='{source.field}' = {value}")
+                    else:
+                        available_fields = list(result.row_data.keys())
+                        logger.warning(
+                            f"⚠️ table_ref field '{source.field}' not found in table #{source.order} result. "
+                            f"Available fields: {available_fields}"
+                        )
                 else:
-                    logger.warning(f"Table ref order={source.order} not found in previous results")
+                    available_orders = list(previous_results.keys())
+                    logger.warning(
+                        f"⚠️ table_ref order={source.order} not found for field {mapping.target_field_id}. "
+                        f"Available orders: {available_orders}"
+                    )
 
             if value is not None:
-                # AIDEV-NOTE: Wrap relation field values in the expected array format
-                # Relation fields expect [{"id": row_id, "value": display_text}]
-                # Detect relation fields via:
-                # 1. Explicit target_field_type='relation' from metadata
-                # 2. Heuristic: table_ref with field='row_id' is almost always for relations
-                is_relation = mapping.target_field_type == 'relation'
-                is_likely_relation = (
-                    source.type == 'table_ref' and
-                    source.field == 'row_id' and
-                    isinstance(value, str) and
-                    mapping.target_field_type is None  # No explicit type, infer from pattern
-                )
-
-                if (is_relation or is_likely_relation) and isinstance(value, str):
-                    # Single row_id string -> wrap in relation array format
+                # Wrap relation field values in expected array format [{"id": row_id, "value": ""}]
+                # Requires explicit target_field_type='relation' from targetFieldMetadata
+                if mapping.target_field_type == 'relation' and isinstance(value, str):
                     value = [OutputMappingService._build_relation_value(value, "")]
                     logger.debug(f"Wrapped relation value for field {mapping.target_field_id}: {value}")
 
@@ -699,7 +620,11 @@ class OutputMappingService:
         try:
             response = await client.post(url, headers=ctx.headers, json=payload)
             if response.status_code >= 400:
-                logger.error(f"Failed to create row: {response.status_code} - {response.text}")
+                logger.error(
+                    f"❌ Failed to create row in table {table_id}: "
+                    f"HTTP {response.status_code} - {response.text[:500]}\n"
+                    f"   Payload: {payload}"
+                )
                 return None, {}
 
             # Parse response to get created row_id
@@ -708,14 +633,21 @@ class OutputMappingService:
             row_id = created_row.get("id")
 
             if not row_id:
-                logger.error(f"Created row but no row_id in response: {response_data}")
+                logger.error(
+                    f"❌ Created row in table {table_id} but no row_id in response: {response_data}\n"
+                    f"   Payload was: {payload}"
+                )
                 return None, {}
 
             logger.info(f"✅ Created row {row_id} in table {table_id}")
             return row_id, row_data
 
         except Exception as e:
-            logger.error(f"Error creating row: {e}")
+            logger.error(
+                f"❌ Exception creating row in table {table_id}: {e}\n"
+                f"   Payload: {payload}",
+                exc_info=True
+            )
             return None, {}
 
     @staticmethod
