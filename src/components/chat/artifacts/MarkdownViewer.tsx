@@ -34,7 +34,7 @@ import type { FileArtifact } from '../types/chat-artifacts'
 import { getFileDisplayInfo } from '../types/chat-artifacts'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
 import { SaveToDatabaseDialog } from './SaveToDatabaseDialog'
-import { useOptionalTheme } from '@/components/puck/theme-context'
+import { useOptionalTheme } from '@/components/puck/contexts/PageContext'
 import { getViewerContainerStyle, getThemedSectionStyle } from './theme-utils'
 
 const logger = createDebugLogger('MarkdownViewer')

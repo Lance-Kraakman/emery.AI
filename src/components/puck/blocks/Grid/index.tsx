@@ -6,7 +6,7 @@ import { Section } from "../../components/Section";
 import { withLayout } from "../../components/Layout";
 import { spacingField, paddingField, justifyItemsField, alignItemsField } from "../../fields/standard-fields";
 import type { FourSidedSpacing } from "../../types/spacing-types";
-import { useTheme } from "../../theme-context";
+import { useTheme } from "../../contexts/PageContext";
 import { computeFourSidedShorthand } from "../../utils/spacing";
 
 const getClassName = getClassNameFactory("Grid", styles);

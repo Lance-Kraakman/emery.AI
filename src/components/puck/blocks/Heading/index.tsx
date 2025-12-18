@@ -1,3 +1,5 @@
+'use client';
+
 import React from "react";
 
 import { ComponentConfig } from "@measured/puck";
@@ -6,6 +8,7 @@ import type { HeadingProps as _HeadingProps } from "@/components/puck/components
 import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
 import { typographySizeField, backgroundColorField, textColorField, fontFamilyField, fontWeightField, textAlignField } from "../../fields/standard-fields";
+import { useInterpolatedText } from "../../hooks/useInterpolatedText";
 
 export type HeadingProps = WithLayout<{
   align: "left" | "center" | "right";
@@ -27,6 +30,44 @@ const levelOptions = [
   { label: "5", value: "5" },
   { label: "6", value: "6" },
 ];
+
+/**
+ * Heading render component - supports variable interpolation
+ * Text like "Welcome {state.user.name}!" becomes "Welcome John!"
+ */
+function HeadingRender({
+  align,
+  text,
+  size,
+  level,
+  textColor,
+  backgroundColor,
+  fontFamily,
+  fontWeight,
+}: HeadingProps) {
+  // Interpolate variables in text
+  const interpolatedText = useInterpolatedText(text);
+
+  return (
+    <Section>
+      <_Heading size={size} rank={level as any}>
+        <span
+          style={{
+            display: "block",
+            textAlign: align,
+            width: "100%",
+            ...(textColor && { color: textColor }),
+            ...(backgroundColor && { backgroundColor }),
+            ...(fontFamily && { fontFamily }),
+            ...(fontWeight && { fontWeight }),
+          }}
+        >
+          {interpolatedText}
+        </span>
+      </_Heading>
+    </Section>
+  );
+}
 
 const HeadingInternal: ComponentConfig<HeadingProps> = {
   fields: {
@@ -55,27 +96,7 @@ const HeadingInternal: ComponentConfig<HeadingProps> = {
     fontWeight: undefined,
     layout: {},
   },
-  render: ({ align, text, size, level, textColor, backgroundColor, fontFamily, fontWeight }) => {
-    return (
-      <Section>
-        <_Heading size={size} rank={level as any}>
-          <span
-            style={{
-              display: "block",
-              textAlign: align,
-              width: "100%",
-              ...(textColor && { color: textColor }),
-              ...(backgroundColor && { backgroundColor }),
-              ...(fontFamily && { fontFamily }),
-              ...(fontWeight && { fontWeight }),
-            }}
-          >
-            {text}
-          </span>
-        </_Heading>
-      </Section>
-    );
-  },
+  render: HeadingRender,
 };
 
 export const Heading = withLayout(HeadingInternal);

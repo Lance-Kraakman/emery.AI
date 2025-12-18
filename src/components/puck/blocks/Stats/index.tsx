@@ -6,7 +6,7 @@ import { getClassNameFactory } from "@/components/puck/lib";
 import { Section } from "../../components/Section";
 import { backgroundColorField, textColorField, fontFamilyField, fontWeightField, borderRadiusField, paddingField } from "../../fields/standard-fields";
 import type { FourSidedSpacing, FourCornerRadius } from "../../types/spacing-types";
-import { useTheme } from "../../theme-context";
+import { useTheme } from "../../contexts/PageContext";
 import { computeFourSidedCSS, computeFourCornerRadiusCSS } from "../../utils/spacing";
 
 const getClassName = getClassNameFactory("Stats", styles);

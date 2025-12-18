@@ -42,7 +42,7 @@ import { cn } from '@/lib/utils';
 import { getFields } from '@/app/actions/fields';
 import { getView } from '@/app/actions/views';
 import { usePageVariablesContext } from '../contexts/PageVariablesContext';
-import { useParentRowData } from '../contexts/ParentRowDataContext';
+import { useParentRowData } from '../contexts/RowDataContext';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { PageVariable } from '@/components/puck/types';
 import {

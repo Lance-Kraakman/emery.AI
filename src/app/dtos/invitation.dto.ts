@@ -6,8 +6,6 @@
  * Following the pattern established in agent.dto.ts and team.dto.ts
  */
 
-import type { SystemRoleType } from "@/ddd/domain/rbac/entities/role";
-
 /**
  * DTO for sending a new invitation
  */

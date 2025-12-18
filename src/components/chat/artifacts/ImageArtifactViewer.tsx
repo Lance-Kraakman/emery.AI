@@ -24,7 +24,7 @@ import {
 } from 'lucide-react'
 import type { ImageAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
-import { useOptionalTheme } from '@/components/puck/theme-context'
+import { useOptionalTheme } from '@/components/puck/contexts/PageContext'
 import { getViewerContainerStyle, getThemedBackground, getThemedSectionStyle } from './theme-utils'
 
 const logger = createDebugLogger('ImageArtifactViewer')

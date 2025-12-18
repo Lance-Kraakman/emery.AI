@@ -14,7 +14,7 @@ import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-reposi
 import type { UserOrganization, CreateUserOrganizationData } from '@/ddd/domain/users/entities/user';
 import type { OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
-import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import { SystemRoleType, SYSTEM_ROLES, SYSTEM_ROLE_IDS } from '@/ddd/domain/rbac/entities/role';
 import type { Result } from '@/ddd/domain/shared/result';
 import { RoleDTO, toRoleDTO } from '@/app/mappers/permission-mapper';
 
@@ -93,9 +93,10 @@ export class UserRoleApplicationService {
       }
 
       // Validate all roles exist and belong to organization or are system roles
-      const roles = await this.rbacRepository.findRolesByOrganization(OrganizationId.fromNumber(command.organizationId));
-      const validRoleIds = roles.map((r: any) => r.id);
-      
+      const orgRoles = await this.rbacRepository.findRolesByOrganization(OrganizationId.fromNumber(command.organizationId));
+      const systemRoles = await this.rbacRepository.getSystemRoles();
+      const validRoleIds = [...orgRoles, ...systemRoles].map((r: any) => r.id);
+
       for (const roleId of command.roleIds) {
         if (!validRoleIds.includes(roleId)) {
           return {
@@ -151,8 +152,11 @@ export class UserRoleApplicationService {
    */
   async updateMemberRoles(command: UpdateMemberRolesCommand): Promise<UserOrganizationApplicationResult<UserOrganization>> {
     try {
+      logger.debug('updateMemberRoles called', { command });
+
       // Validate inputs
       if (!command.userId || !command.organizationId) {
+        logger.debug('updateMemberRoles: Missing userId or organizationId');
         return {
           success: false,
           error: "User ID and Organization ID are required"
@@ -160,11 +164,14 @@ export class UserRoleApplicationService {
       }
 
       // Validate all roles exist and belong to organization or are system roles
-      const roles = await this.rbacRepository.findRolesByOrganization(OrganizationId.fromNumber(command.organizationId));
-      const validRoleIds = roles.map((r: any) => r.id);
-      
+      const orgRoles = await this.rbacRepository.findRolesByOrganization(OrganizationId.fromNumber(command.organizationId));
+      const systemRoles = await this.rbacRepository.getSystemRoles();
+      const validRoleIds = [...orgRoles, ...systemRoles].map((r: any) => r.id);
+      logger.debug('updateMemberRoles: Valid role IDs for org', { validRoleIds, requestedRoleIds: command.roleIds });
+
       for (const roleId of command.roleIds) {
         if (!validRoleIds.includes(roleId)) {
+          logger.debug('updateMemberRoles: Invalid role ID', { roleId, validRoleIds });
           return {
             success: false,
             error: `Role ID ${roleId} is not valid for this organization`
@@ -172,12 +179,45 @@ export class UserRoleApplicationService {
         }
       }
 
+      // Business rule: Organization must always have at least one Owner
+      const organizationId = OrganizationId.fromNumber(command.organizationId);
+      const currentRoles = await this.rbacRepository.getUserRoles(
+        UserId.fromString(command.userId),
+        organizationId
+      );
+      const currentRoleIds = currentRoles.map(r => r.id);
+      const isRemovingOwner = currentRoleIds.includes(SYSTEM_ROLE_IDS.ORGANIZATION_OWNER) &&
+                              !command.roleIds.includes(SYSTEM_ROLE_IDS.ORGANIZATION_OWNER);
+
+      if (isRemovingOwner) {
+        const ownerCount = await this.rbacRepository.countUsersWithRole(
+          SYSTEM_ROLE_IDS.ORGANIZATION_OWNER,
+          organizationId
+        );
+
+        if (ownerCount <= 1) {
+          logger.debug('updateMemberRoles: Cannot remove last Organization Owner');
+          return {
+            success: false,
+            error: "Cannot remove the Organization Owner role. At least one member must have this role. Please assign another member as Owner first."
+          };
+        }
+      }
+
+      logger.debug('updateMemberRoles: Calling setUserRoles', {
+        userId: command.userId,
+        roleIds: command.roleIds,
+        organizationId: command.organizationId
+      });
+
       // Set user roles (replaces existing roles)
       await this.rbacRepository.setUserRoles(
         UserId.fromString(command.userId),
         command.roleIds,
         OrganizationId.fromNumber(command.organizationId)
       );
+
+      logger.debug('updateMemberRoles: setUserRoles completed successfully');
 
       // Return a UserOrganization-like response
       const userOrganization: UserOrganization = {
@@ -193,7 +233,7 @@ export class UserRoleApplicationService {
         data: userOrganization
       };
     } catch (error) {
-      console.error("Error updating member roles:", error);
+      logger.error("Error updating member roles:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to update member roles"

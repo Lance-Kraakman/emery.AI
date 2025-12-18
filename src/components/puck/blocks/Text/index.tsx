@@ -1,3 +1,5 @@
+'use client';
+
 import React from "react";
 import { AlignLeft } from "lucide-react";
 
@@ -5,6 +7,7 @@ import { ComponentConfig } from "@measured/puck";
 import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
 import { typographySizeField, backgroundColorField, textColorField, fontFamilyField, fontWeightField, textAlignField } from "../../fields/standard-fields";
+import { useInterpolatedText } from "../../hooks/useInterpolatedText";
 import type { TypographySize } from "../../utils/typography";
 import styles from "./styles.module.css";
 
@@ -18,6 +21,42 @@ export type TextProps = WithLayout<{
   fontWeight?: string;
   maxWidth?: string;
 }>;
+
+/**
+ * Text render component - supports variable interpolation
+ * Text like "Hello {state.user.name}!" becomes "Hello John!"
+ */
+function TextRender({
+  align,
+  textColor,
+  backgroundColor,
+  fontFamily,
+  fontWeight,
+  text,
+  size,
+  maxWidth,
+}: TextProps) {
+  // Interpolate variables in text (e.g., {state.x.y}, {params.id})
+  const interpolatedText = useInterpolatedText(text);
+
+  return (
+    <Section maxWidth={maxWidth}>
+      <p
+        className={styles.text}
+        data-size={size}
+        style={{
+          textAlign: align,
+          ...(textColor && { color: textColor }),
+          ...(backgroundColor && { backgroundColor }),
+          ...(fontFamily && { fontFamily }),
+          ...(fontWeight && { fontWeight }),
+        }}
+      >
+        {interpolatedText}
+      </p>
+    </Section>
+  );
+}
 
 const TextInner: ComponentConfig<TextProps> = {
   fields: {
@@ -48,25 +87,7 @@ const TextInner: ComponentConfig<TextProps> = {
     fontFamily: undefined,
     fontWeight: undefined,
   },
-  render: ({ align, textColor, backgroundColor, fontFamily, fontWeight, text, size, maxWidth }) => {
-    return (
-      <Section maxWidth={maxWidth}>
-        <p
-          className={styles.text}
-          data-size={size}
-          style={{
-            textAlign: align,
-            ...(textColor && { color: textColor }),
-            ...(backgroundColor && { backgroundColor }),
-            ...(fontFamily && { fontFamily }),
-            ...(fontWeight && { fontWeight }),
-          }}
-        >
-          {text}
-        </p>
-      </Section>
-    );
-  },
+  render: TextRender,
 };
 
 export const Text = withLayout(TextInner);

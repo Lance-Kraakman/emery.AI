@@ -12,9 +12,7 @@ import { config } from "@/components/puck/config"
 import type { PageDTO } from "@/app/mappers/puck-page-mapper"
 import type { AppDTO } from "@/app/mappers/puck-app-mapper"
 import { ThemeConfig } from "@/ddd/domain/puck/value-objects/theme-config"
-import { LinkContextProvider } from "@/components/puck/link-context"
-import { QueryParamProvider } from "@/components/puck/contexts/QueryParamContext"
-import { ThemeProvider } from "@/components/puck/theme-context"
+import { PageContextProvider } from "@/components/puck/contexts/PageContext"
 import { Loading } from "@/components/ui/loading"
 
 interface PublicPageRendererProps {
@@ -96,26 +94,24 @@ export function PublicPageRenderer({ page, app, orgSlug, appSlug, pages }: Publi
   const effectiveTheme = pageTheme ? ThemeConfig.merge(appTheme, pageTheme) : appTheme
 
   return (
-    <QueryParamProvider params={queryParamsObject}>
-      <LinkContextProvider
-        value={{
-          orgSlug,
-          appSlug,
-          appId: app.id,
-          pages,
-          isEditing: false,
-          isPreview: false,
-        }}
-      >
-        <ThemeProvider value={effectiveTheme}>
-          <div className="min-h-screen w-full">
-            <Render
-              config={config}
-              data={resolvedData}
-            />
-          </div>
-        </ThemeProvider>
-      </LinkContextProvider>
-    </QueryParamProvider>
+    <PageContextProvider
+      value={{
+        orgSlug,
+        appSlug,
+        appId: app.id,
+        pages,
+        isEditing: false,
+        isPreview: false,
+        params: queryParamsObject,
+        theme: effectiveTheme,
+      }}
+    >
+      <div className="min-h-screen w-full">
+        <Render
+          config={config}
+          data={resolvedData}
+        />
+      </div>
+    </PageContextProvider>
   )
 }

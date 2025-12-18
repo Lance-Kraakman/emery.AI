@@ -23,27 +23,32 @@ export interface AssignUserRolesCommand {
 
 export async function assignUserRoles(command: AssignUserRolesCommand): Promise<Result> {
   try {
+    console.log('assignUserRoles called with:', command);
     const session = await requireAuth();
-    
+
     const organizationId = command.organizationId || session.user.currentOrganizationId;
-    
+
     if (!organizationId) {
+      console.log('assignUserRoles: No organization ID');
       return {
         success: false,
         error: "No current organization selected"
       };
     }
-    
+
     if (!command.userId) {
+      console.log('assignUserRoles: No user ID');
       return {
         success: false,
         error: "User ID is required"
       };
     }
 
+    console.log('assignUserRoles: Checking permission for org', organizationId);
     // Check permission using string to avoid Permission VO serialization
     await authRequirePermission(session.user.id, "users:manage", organizationId);
-    
+
+    console.log('assignUserRoles: Permission check passed, calling updateMemberRoles');
     const userRoleService = getUserRoleApplicationService();
     const result = await userRoleService.updateMemberRoles({
       userId: command.userId,
@@ -51,6 +56,8 @@ export async function assignUserRoles(command: AssignUserRolesCommand): Promise<
       roleIds: command.roleIds,
       updatedBy: session.user.id
     });
+
+    console.log('assignUserRoles: updateMemberRoles result:', result);
 
     if (!result.success) {
       return {
@@ -61,7 +68,7 @@ export async function assignUserRoles(command: AssignUserRolesCommand): Promise<
 
     revalidatePath('/dashboard');
     revalidatePath('/organization/settings/users');
-    
+
     return {
       success: true,
       data: { message: "Roles assigned successfully" }

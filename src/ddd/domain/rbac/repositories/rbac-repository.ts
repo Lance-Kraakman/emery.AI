@@ -69,6 +69,9 @@ export interface IRBACRepository {
   assignRole(userId: UserId, roleId: number, organizationId: OrganizationId): Promise<void>;
   removeRole(userId: UserId, roleId: number, organizationId: OrganizationId): Promise<void>;
   setUserRoles(userId: UserId, roleIds: number[], organizationId: OrganizationId): Promise<void>;
+
+  // Role membership queries
+  countUsersWithRole(roleId: number, organizationId: OrganizationId): Promise<number>;
   
   // Permission seeding and management
   getAllPermissions(): Promise<Permission[]>;

@@ -34,6 +34,17 @@ export interface OrganizationMemberDTO {
   hasRoleError?: boolean;
 }
 
+/**
+ * Simple user DTO for UI components that need basic user info with roles
+ * Used by agent components for owner selection, etc.
+ */
+export interface UserDTO {
+  id: string;
+  name: string;
+  email: string;
+  roles: Array<{id: number; name: string; isSystem: boolean}>;
+}
+
 export class OrganizationMapper {
   static toDTO(organization: Organization & { userRoles?: Array<{id: number; name: string; isSystem: boolean}>; hasRoleError?: boolean }): OrganizationDTO {
     return {
@@ -77,5 +88,27 @@ export class OrganizationMapper {
       joinedAt: member.joinedAt,
       hasRoleError: false // TODO: Add roleError to OrganizationMember domain if needed
     };
+  }
+
+  /**
+   * Convert OrganizationMemberDTO to simplified UserDTO for UI components
+   * Used by agent components that need user data with roles
+   */
+  static memberToUser(member: OrganizationMemberDTO): UserDTO {
+    return {
+      id: member.userId,
+      name: member.name || 'Unknown User',
+      email: member.email || '',
+      roles: member.roles
+    };
+  }
+
+  /**
+   * Get the primary role name from a user's roles
+   * Primary role is the first system role, or first role if no system roles
+   */
+  static getPrimaryRoleName(roles: Array<{id: number; name: string; isSystem: boolean}>): string {
+    const primaryRole = roles.find(r => r.isSystem) || roles[0];
+    return primaryRole?.name || 'Member';
   }
 }
