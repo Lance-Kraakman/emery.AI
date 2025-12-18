@@ -30,6 +30,8 @@ submit_result(
   → Provide date in ISO format (YYYY-MM-DD)
 {%- elif output.target.field_type == 'email' or output.type == 'email' %}
   → Provide a valid email address
+{%- elif output.target.field_type == 'phone' or output.type == 'phone' %}
+  → Provide phone in E.164 format (+[country code][number], e.g., +61291234567)
 {%- elif output.target.field_type == 'json' or output.type == 'json' %}
   → Provide a JSON object or array
 {%- elif output.description %}
