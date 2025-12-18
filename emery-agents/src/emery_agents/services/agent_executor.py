@@ -28,7 +28,7 @@ from ..clients import HuggingFaceInferenceClient, TaskResult
 from .skill_executor import SkillExecutorService
 from ..entities.output_mapping import (
     OutputMappingConfig, FieldMapping, OutputMappingMode, RowAction,
-    extract_field_value, build_row_data, get_extension_for_mime
+    extract_field_value, build_row_data_from_item, get_extension_for_mime
 )
 from ..prompts import render_output_instructions
 from .output_mapping_service import OutputMappingService, MappingContext
@@ -410,12 +410,14 @@ class AgentExecutor:
                 # Extract token usage from result
                 token_usage_proto = self._extract_token_usage(result)
 
-                # Apply agent output mappings if OutputTool was used
-                # ExecutionContext is dataclass - output_tool is Optional field
+                # Get captured outputs if OutputTool was used
+                captured_outputs = None
                 if context.output_tool and context.output_tool.was_called():
+                    captured_outputs = context.output_tool.get_captured_values()
+                    # Apply agent output mappings
                     await self._apply_agent_output_mappings(
                         skill=skill,
-                        captured_values=context.output_tool.get_captured_values(),
+                        captured_values=captured_outputs,
                         api_key=context.api_key,
                         organization_id=context.organization_id
                     )
@@ -428,7 +430,8 @@ class AgentExecutor:
                         "result": str(result),
                         "message": "Task completed successfully",
                         "duration_ms": duration_ms,
-                        "skill": skill.name
+                        "skill": skill.name,
+                        "captured_outputs": captured_outputs
                     }),
                     "error_message": "",
                     "timestamp_ms": int(time.time() * 1000),
@@ -931,7 +934,7 @@ class AgentExecutor:
             return
 
         # Build row data from mappings
-        row_data = build_row_data(item, config.mappings, context)
+        row_data = build_row_data_from_item(item, config.mappings, context)
 
         if not row_data:
             logger.warning("No data extracted from mappings")
@@ -990,7 +993,7 @@ class AgentExecutor:
         created_count = 0
 
         for item in items:
-            row_data = build_row_data(item, config.mappings, context)
+            row_data = build_row_data_from_item(item, config.mappings, context)
             if not row_data:
                 continue
 

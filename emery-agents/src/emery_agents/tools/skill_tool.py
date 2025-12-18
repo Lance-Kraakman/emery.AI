@@ -12,6 +12,7 @@ from jinja2 import Template
 from smolagents import Tool
 
 from ..entities.output_mapping import OutputMappingConfig
+from ..entities.skill_io import SkillInputValue, SkillOutputValue, RowMappingContext
 from ..grpc.generated.agent_worker_pb2 import SkillConfig
 from ..services.file_processor import download_file
 from ..services.image_processor import ImageProcessor
@@ -668,13 +669,14 @@ class SkillTool(Tool):
             logger.warning("No result value to map")
             return
 
-        # Wrap result as pseudo skill outputs for multi-table mapping
-        # The "result" key allows field sources like { type: 'skill_output', name: 'result' }
+        # Convert result to typed skill outputs for multi-table mapping
         # For structured results, flatten to allow { type: 'skill_output', name: 'label' }
+        skill_outputs: list[SkillOutputValue] = []
         if isinstance(result_value, dict):
-            skill_outputs = result_value
+            for name, value in result_value.items():
+                skill_outputs.append(SkillOutputValue(name=name, value=value))
         else:
-            skill_outputs = {"result": result_value}
+            skill_outputs.append(SkillOutputValue(name="result", value=result_value))
 
         # Use first output's mapping config (contains all table mappings)
         first_output = outputs_with_mappings[0]
@@ -739,6 +741,12 @@ class SkillTool(Tool):
         logger.info(f"📊 Applying multi-table output mappings")
         logger.info(f"📤 Captured skill outputs: {list(captured_values.keys())}")
 
+        # Convert captured values to typed skill outputs
+        skill_outputs: list[SkillOutputValue] = [
+            SkillOutputValue(name=name, value=value)
+            for name, value in captured_values.items()
+        ]
+
         try:
             config = OutputMappingConfig.from_proto(first_output.output_mapping)
 
@@ -746,7 +754,7 @@ class SkillTool(Tool):
             results = await OutputMappingService.apply_multi_table_mapping(
                 ctx=ctx,
                 config=config,
-                skill_outputs=captured_values
+                skill_outputs=skill_outputs
             )
 
             logger.info(f"✅ Multi-table mapping complete: {len(results)} tables updated")
