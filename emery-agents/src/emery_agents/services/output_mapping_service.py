@@ -509,6 +509,24 @@ class OutputMappingService:
                     logger.warning(f"Table ref order={source.order} not found in previous results")
 
             if value is not None:
+                # AIDEV-NOTE: Wrap relation field values in the expected array format
+                # Relation fields expect [{"id": row_id, "value": display_text}]
+                # Detect relation fields via:
+                # 1. Explicit target_field_type='relation' from metadata
+                # 2. Heuristic: table_ref with field='row_id' is almost always for relations
+                is_relation = mapping.target_field_type == 'relation'
+                is_likely_relation = (
+                    source.type == 'table_ref' and
+                    source.field == 'row_id' and
+                    isinstance(value, str) and
+                    mapping.target_field_type is None  # No explicit type, infer from pattern
+                )
+
+                if (is_relation or is_likely_relation) and isinstance(value, str):
+                    # Single row_id string -> wrap in relation array format
+                    value = [OutputMappingService._build_relation_value(value, "")]
+                    logger.debug(f"Wrapped relation value for field {mapping.target_field_id}: {value}")
+
                 resolved[str(mapping.target_field_id)] = value
 
         return resolved

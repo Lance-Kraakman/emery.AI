@@ -101,6 +101,7 @@ class FieldMapping:
     source: FieldSource
     target_field_id: int    # Destination field/column
     append_mode: bool = False  # When true, append to existing relation values instead of replacing
+    target_field_type: Optional[str] = None  # Field type (e.g., 'relation', 'text', 'number')
 
     @classmethod
     def from_proto(cls, proto_mapping) -> Optional['FieldMapping']:
@@ -113,10 +114,16 @@ class FieldMapping:
             logger.warning(f"Skipping FieldMapping with invalid source for field {proto_mapping.target_field_id}")
             return None
 
+        # Extract target field type from metadata if available
+        target_field_type = None
+        if proto_mapping.HasField('target_field_metadata'):
+            target_field_type = proto_mapping.target_field_metadata.field_type or None
+
         return cls(
             source=source,
             target_field_id=proto_mapping.target_field_id,
-            append_mode=proto_mapping.append_mode
+            append_mode=proto_mapping.append_mode,
+            target_field_type=target_field_type
         )
 
 
