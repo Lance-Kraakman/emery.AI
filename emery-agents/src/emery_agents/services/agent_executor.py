@@ -28,8 +28,9 @@ from ..clients import HuggingFaceInferenceClient, TaskResult
 from .skill_executor import SkillExecutorService
 from ..entities.output_mapping import (
     OutputMappingConfig, FieldMapping, OutputMappingMode, RowAction,
-    extract_field_value, build_row_data_from_item, get_extension_for_mime
+    extract_field_value, get_extension_for_mime
 )
+from ..entities.skill_io import SkillOutputValue
 from ..prompts import render_output_instructions
 from .output_mapping_service import OutputMappingService, MappingContext
 
@@ -616,7 +617,7 @@ class AgentExecutor:
         if not skill.outputs:
             return False
         for output in skill.outputs:
-            if output.HasField('output_mapping') and len(output.output_mapping.mappings) > 0:
+            if output.HasField('output_mapping') and len(output.output_mapping.table_mappings) > 0:
                 return True
         return False
 
@@ -626,7 +627,7 @@ class AgentExecutor:
 
         outputs_with_mappings = [
             o for o in skill.outputs
-            if o.HasField('output_mapping') and len(o.output_mapping.mappings) > 0
+            if o.HasField('output_mapping') and len(o.output_mapping.table_mappings) > 0
         ]
         if not outputs_with_mappings:
             return instructions
@@ -859,10 +860,10 @@ class AgentExecutor:
             logger.warning("📊 Output mapping skipped: missing api_key or organization_id")
             return
 
-        # Get outputs with mappings (new structure uses output_mapping)
+        # Get outputs with table_mappings configured
         outputs_with_mappings = [
             output for output in skill.outputs
-            if output.HasField('output_mapping') and len(output.output_mapping.mappings) > 0
+            if output.HasField('output_mapping') and len(output.output_mapping.table_mappings) > 0
         ]
 
         if not outputs_with_mappings:
@@ -871,143 +872,34 @@ class AgentExecutor:
 
         logger.info(f"📊 Applying {len(outputs_with_mappings)} output mappings")
 
-        # Get API base URL
-        nextjs_base = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
-        api_base_url = f"{nextjs_base}/api"
+        # Create mapping context
+        ctx = MappingContext(api_key=api_key, organization_id=organization_id)
 
-        # Build context for field extraction (source row info for linking)
-        context = {'source': {'rowId': source_row_id}} if source_row_id else None
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "X-Organization-ID": str(organization_id),
-                "Content-Type": "application/json"
-            }
-
-            for output in outputs_with_mappings:
-                try:
-                    config = OutputMappingConfig.from_proto(output.output_mapping)
-                    await self._apply_output_mapping(
-                        client, config, result, headers, api_base_url, context
-                    )
-                except Exception as e:
-                    logger.error(f"❌ Failed to apply output mapping for {output.name}: {e}")
-
-    async def _apply_output_mapping(
-        self,
-        client: httpx.AsyncClient,
-        config: OutputMappingConfig,
-        result: TaskResult,
-        headers: Dict[str, str],
-        api_base_url: str,
-        context: Optional[Dict[str, Any]] = None
-    ) -> None:
-        """Apply output mapping based on mode (single_row or multi_row)."""
-
-        if config.is_single_row:
-            await self._apply_single_row_mapping(client, config, result, headers, api_base_url, context)
-        elif config.is_multi_row:
-            await self._apply_multi_row_mapping(client, config, result, headers, api_base_url, context)
-        else:
-            logger.warning(f"Unknown mapping mode: {config.mode}")
-
-    async def _apply_single_row_mapping(
-        self,
-        client: httpx.AsyncClient,
-        config: OutputMappingConfig,
-        result: TaskResult,
-        headers: Dict[str, str],
-        api_base_url: str,
-        context: Optional[Dict[str, Any]] = None
-    ) -> None:
-        """Apply single-row mapping (e.g., classification top result)."""
-        # Get the data item to extract from
-        if result.is_structured and isinstance(result.data, list) and len(result.data) > 0:
-            item = result.data[0]  # Take first item for single_row mode
-        elif result.is_structured:
-            item = result.data
+        # Convert TaskResult to SkillOutputValue list (same pattern as skill_tool.py)
+        skill_outputs: List[SkillOutputValue] = []
+        if result.is_structured and isinstance(result.data, dict):
+            for name, value in result.data.items():
+                skill_outputs.append(SkillOutputValue(name=name, value=value))
+        elif result.is_structured and isinstance(result.data, list):
+            skill_outputs.append(SkillOutputValue(name="result", value=result.data))
         elif result.is_text:
-            item = {'text': str(result.data)}
+            skill_outputs.append(SkillOutputValue(name="text", value=str(result.data)))
         else:
-            logger.warning("Unsupported result type for single_row mapping")
-            return
+            skill_outputs.append(SkillOutputValue(name="value", value=result.data))
 
-        # Build row data from mappings
-        row_data = build_row_data_from_item(item, config.mappings, context)
+        # Use first output's mapping config (UI stores all table mappings on outputs[0])
+        first_output = outputs_with_mappings[0]
 
-        if not row_data:
-            logger.warning("No data extracted from mappings")
-            return
-
-        table_id = config.get_target_table_id()
-        if not table_id:
-            logger.warning("No target table ID found in mappings")
-            return
-
-        url = f"{api_base_url}/rows"
-
-        if config.is_create:
-            payload = {"tableId": table_id, "data": row_data}
-            logger.info(f"📝 Creating row in table {table_id} with {len(row_data)} fields")
-            response = await client.post(url, headers=headers, json=payload)
-            if response.status_code >= 400:
-                logger.error(f"Failed to create row: {response.status_code} - {response.text[:200]}")
-            else:
-                logger.info(f"✅ Created row in table {table_id}")
-
-        elif config.is_update and config.row_id:
-            payload = {"tableId": table_id, "rowId": config.row_id, "data": row_data}
-            logger.info(f"📝 Updating row {config.row_id} in table {table_id}")
-            response = await client.put(url, headers=headers, json=payload)
-            if response.status_code >= 400:
-                logger.error(f"Failed to update row: {response.status_code} - {response.text[:200]}")
-            else:
-                logger.info(f"✅ Updated row {config.row_id}")
-
-    async def _apply_multi_row_mapping(
-        self,
-        client: httpx.AsyncClient,
-        config: OutputMappingConfig,
-        result: TaskResult,
-        headers: Dict[str, str],
-        api_base_url: str,
-        context: Optional[Dict[str, Any]] = None
-    ) -> None:
-        """Apply multi-row mapping (e.g., object detection - one row per detection)."""
-        # Get array of items to iterate
-        if result.is_structured and isinstance(result.data, list):
-            items = result.data
-        elif result.is_structured:
-            items = [result.data]
-        else:
-            logger.warning("Multi-row mapping requires structured array result")
-            return
-
-        table_id = config.get_target_table_id()
-        if not table_id:
-            logger.warning("No target table ID found in mappings")
-            return
-
-        url = f"{api_base_url}/rows"
-        created_count = 0
-
-        for item in items:
-            row_data = build_row_data_from_item(item, config.mappings, context)
-            if not row_data:
-                continue
-
-            payload = {"tableId": table_id, "data": row_data}
-            try:
-                response = await client.post(url, headers=headers, json=payload)
-                if response.status_code >= 400:
-                    logger.error(f"Failed to create row: {response.status_code}")
-                else:
-                    created_count += 1
-            except Exception as e:
-                logger.error(f"Error creating row: {e}")
-
-        logger.info(f"✅ Created {created_count}/{len(items)} rows in table {table_id}")
+        try:
+            config = OutputMappingConfig.from_proto(first_output.output_mapping)
+            results = await OutputMappingService.apply_multi_table_mapping(
+                ctx=ctx,
+                config=config,
+                skill_outputs=skill_outputs
+            )
+            logger.info(f"✅ Task output mapping complete: {len(results)} tables updated")
+        except Exception as e:
+            logger.error(f"❌ Failed to apply task output mapping: {e}")
 
     async def _upload_binary_to_s3(
         self,
@@ -1073,10 +965,10 @@ class AgentExecutor:
         # Create mapping context
         ctx = MappingContext(api_key=api_key, organization_id=organization_id)
 
-        # Get outputs with mappings
+        # Get outputs with table_mappings configured
         outputs_with_mappings = [
             output for output in skill.outputs
-            if output.HasField('output_mapping') and len(output.output_mapping.mappings) > 0
+            if output.HasField('output_mapping') and len(output.output_mapping.table_mappings) > 0
         ]
 
         if not outputs_with_mappings:
@@ -1085,32 +977,26 @@ class AgentExecutor:
 
         logger.info(f"📊 Applying {len(outputs_with_mappings)} agent output mappings")
 
-        for output in outputs_with_mappings:
-            output_name = output.name
-            output_value = captured_values.get(output_name)
+        # Convert captured values to SkillOutputValue list
+        skill_outputs: List[SkillOutputValue] = []
+        for name, value in captured_values.items():
+            if isinstance(value, dict):
+                # Flatten dict values into separate outputs
+                for k, v in value.items():
+                    skill_outputs.append(SkillOutputValue(name=k, value=v))
+            else:
+                skill_outputs.append(SkillOutputValue(name=name, value=value))
 
-            if output_value is None:
-                logger.warning(f"No captured value for output '{output_name}'")
-                continue
+        # Use first output's mapping config (UI stores all table mappings on outputs[0])
+        first_output = outputs_with_mappings[0]
 
-            try:
-                config = OutputMappingConfig.from_proto(output.output_mapping)
-
-                # Wrap simple values for field extraction
-                if not isinstance(output_value, dict):
-                    output_value = {"value": output_value}
-
-                # Apply mapping using shared service
-                success = await OutputMappingService.apply_mapping(
-                    ctx=ctx,
-                    config=config,
-                    data=output_value
-                )
-
-                if success:
-                    logger.info(f"✅ Applied output mapping for '{output_name}'")
-                else:
-                    logger.warning(f"⚠️ Output mapping for '{output_name}' returned no success")
-
-            except Exception as e:
-                logger.error(f"❌ Failed to apply output mapping for '{output_name}': {e}")
+        try:
+            config = OutputMappingConfig.from_proto(first_output.output_mapping)
+            results = await OutputMappingService.apply_multi_table_mapping(
+                ctx=ctx,
+                config=config,
+                skill_outputs=skill_outputs
+            )
+            logger.info(f"✅ Agent output mapping complete: {len(results)} tables updated")
+        except Exception as e:
+            logger.error(f"❌ Failed to apply agent output mapping: {e}")
