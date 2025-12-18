@@ -260,7 +260,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 0.375,   // 0.375 credits per 1K input tokens
       outputCreditsPerK: 1.5,    // 1.5 credits per 1K output tokens
     },
-    tier: 'pro',             // Pro tier only
+    tier: 'free',
     category: 'balanced',
     endpoint: {
       type: 'inference-api',
@@ -358,7 +358,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 0.75,
       outputCreditsPerK: 2.0,
     },
-    tier: 'pro',
+    tier: 'free',
     category: 'balanced',
     endpoint: {
       type: 'inference-api',
@@ -388,7 +388,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 0.75,
       outputCreditsPerK: 2.0,
     },
-    tier: 'pro',
+    tier: 'free',
     category: 'balanced',
     endpoint: {
       type: 'inference-api',
@@ -418,7 +418,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 0.75,
       outputCreditsPerK: 2.0,
     },
-    tier: 'pro',
+    tier: 'free',
     category: 'balanced',
     endpoint: {
       type: 'inference-api',
@@ -486,7 +486,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 1.5,
       outputCreditsPerK: 3.0,
     },
-    tier: 'pro',
+    tier: 'free',
     category: 'advanced',
     endpoint: {
       type: 'inference-api',
@@ -516,7 +516,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 1.25,
       outputCreditsPerK: 2.5,
     },
-    tier: 'pro',
+    tier: 'free',
     category: 'advanced',
     endpoint: {
       type: 'inference-api',
@@ -546,7 +546,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 1.25,
       outputCreditsPerK: 5.0,
     },
-    tier: 'max',
+    tier: 'free',
     category: 'advanced',
     endpoint: {
       type: 'inference-api',
@@ -580,7 +580,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 1.0,
       outputCreditsPerK: 2.5,
     },
-    tier: 'pro',
+    tier: 'free',
     category: 'balanced',
     endpoint: {
       type: 'inference-api',
@@ -610,7 +610,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 1.5,
       outputCreditsPerK: 3.0,
     },
-    tier: 'max',
+    tier: 'free',
     category: 'advanced',
     endpoint: {
       type: 'inference-api',
@@ -645,7 +645,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 0,
       outputCreditsPerK: 0.5, // Per image
     },
-    tier: 'pro',
+    tier: 'free',
     category: 'fast',
     endpoint: {
       type: 'inference-api',
@@ -675,7 +675,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 0,
       outputCreditsPerK: 1.0, // Per image
     },
-    tier: 'pro',
+    tier: 'free',
     category: 'balanced',
     endpoint: {
       type: 'inference-api',
@@ -710,7 +710,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 0,
       outputCreditsPerK: 5.0, // Per video
     },
-    tier: 'pro',
+    tier: 'free',
     category: 'balanced',
     endpoint: {
       type: 'inference-api',
@@ -805,7 +805,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 0.1, // Per 1K characters
       outputCreditsPerK: 0,
     },
-    tier: 'pro',
+    tier: 'free',
     category: 'balanced',
     endpoint: {
       type: 'inference-api',

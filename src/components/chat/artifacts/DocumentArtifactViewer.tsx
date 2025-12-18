@@ -26,7 +26,7 @@ import { TipTapDocumentEditor } from '@/components/shared/TipTapDocumentEditor';
 import { updateTiptapDocumentContent } from '@/app/actions/artifacts';
 import styles from './DocumentArtifactViewer.module.css';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
-import { useOptionalTheme } from '@/components/puck/theme-context';
+import { useOptionalTheme } from '@/components/puck/contexts/PageContext';
 import type { CSSProperties } from 'react';
 
 const logger = createDebugLogger('DocumentArtifactViewer');

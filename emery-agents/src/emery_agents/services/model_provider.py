@@ -6,6 +6,7 @@ Integrates with model registry for pricing, capabilities, and access control.
 Supports model selection hierarchy: skill > agent > organization > default.
 """
 
+import asyncio
 import os
 import logging
 import base64
@@ -17,7 +18,7 @@ from PIL import Image
 from smolagents.models import Model, ChatMessage, MessageRole
 from huggingface_hub import InferenceClient
 from huggingface_hub.errors import HfHubHTTPError
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, retry_if_not_exception_type
 
 from .model_registry import (
     get_model_metadata,
@@ -177,7 +178,10 @@ class CustomInferenceModel(Model):
     @retry(
         stop=stop_after_attempt(10),
         wait=wait_exponential(multiplier=1, min=1, max=10),
-        retry=retry_if_exception_type(HfHubHTTPError),
+        retry=(
+            retry_if_exception_type(HfHubHTTPError)
+            & retry_if_not_exception_type((asyncio.CancelledError, GeneratorExit, KeyboardInterrupt))
+        ),
         before_sleep=lambda retry_state: logger.warning(
             f"🔄 Retrying API call (attempt {retry_state.attempt_number}) after error"
         )

@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { getInvitationApplicationService, getUserRepository } from '@/ddd/application/di/container';
 import { OrganizationId, UserId, EmailAddress, InvitationToken } from '@/ddd/domain/shared/value-objects';
-import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import { SystemRoleType,  } from '@/ddd/domain/rbac/entities/role';
 import type { SendInvitationCommand, AcceptInvitationCommand, BulkInvitationCommand } from '@/ddd/application/services/invitations/invitation-application-service';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';
@@ -15,7 +15,7 @@ interface SendInvitationTestInput {
   organizationId: number;
   invitedBy: string;
   email: string;
-  systemRole: SystemRoleType;
+  roleIds: Array<number>;
   expiryDays?: number;
   sendEmail?: boolean;
 }
@@ -51,7 +51,7 @@ function createSendInvitationTestCases(context: TestContext): TestCase<SendInvit
         organizationId: context.organizationId.value,
         invitedBy: context.ownerUserId.value,
         email: `newuser-${uniqueId}@example.com`,
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         sendEmail: false // Disable email sending in tests
       },
       expected: { success: true }
@@ -62,7 +62,7 @@ function createSendInvitationTestCases(context: TestContext): TestCase<SendInvit
         organizationId: context.organizationId.value,
         invitedBy: context.ownerUserId.value,
         email: 'invalid-email',
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         sendEmail: false
       },
       expected: { success: false, error: 'Invalid email format' }
@@ -73,7 +73,7 @@ function createSendInvitationTestCases(context: TestContext): TestCase<SendInvit
         organizationId: context.organizationId.value,
         invitedBy: context.ownerUserId.value,
         email: `another-${uniqueId}@example.com`,
-        systemRole: 'invalid_role' as SystemRoleType,
+        roleIds: [999], // Invalid role ID
         sendEmail: false
       },
       expected: { success: false, error: 'Invalid role' }
@@ -84,7 +84,7 @@ function createSendInvitationTestCases(context: TestContext): TestCase<SendInvit
         organizationId: context.organizationId.value,
         invitedBy: context.ownerUserId.value,
         email: `duplicate-${uniqueId}@example.com`,
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         sendEmail: false
       },
       expected: { success: false, error: 'already exists' }
@@ -95,7 +95,7 @@ function createSendInvitationTestCases(context: TestContext): TestCase<SendInvit
         organizationId: context.organizationId.value,
         invitedBy: context.ownerUserId.value,
         email: `existing-${uniqueId}@example.com`, // Will be added as member before test
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         sendEmail: false
       },
       expected: { success: false, error: 'already a member' }
@@ -163,7 +163,7 @@ describe('Invitation Application Service Integration Tests', () => {
           organizationId: testContext.organizationId.value,
           invitedBy: testContext.ownerUserId.value,
           email: duplicateTestCase.input.email,
-          systemRole: SYSTEM_ROLES.MEMBER,
+          roleIds: [4],
           sendEmail: false
         });
       }
@@ -179,7 +179,6 @@ describe('Invitation Application Service Integration Tests', () => {
         await userRepository.addUserToOrganization({
           userId: existingUser.id,
           organizationId: testContext.organizationId,
-          systemRole: SYSTEM_ROLES.MEMBER
         });
       }
       
@@ -192,7 +191,6 @@ describe('Invitation Application Service Integration Tests', () => {
           organizationId: command.organizationId,
           invitedBy: command.invitedBy,
           email: command.email,
-          systemRole: command.systemRole
         });
 
         const result = await invitationService.sendInvitation(command);
@@ -235,7 +233,7 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: testContext.ownerUserId.value,
         email: testEmail,
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         sendEmail: false
       });
       
@@ -279,7 +277,7 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: testContext.ownerUserId.value,
         email: correctEmail,
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         sendEmail: false
       });
       
@@ -307,7 +305,7 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: testContext.ownerUserId.value,
         email: expiredEmail,
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         expiryDays: -1, // Already expired
         sendEmail: false
       });
@@ -338,11 +336,10 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: testContext.ownerUserId.value,
         invitations: [
-          { email: EmailAddress.fromString(`bulk1-${Math.random().toString(36).substring(7)}@example.com`), systemRole: SYSTEM_ROLES.MEMBER },
-          { email: EmailAddress.fromString(`bulk2-${Math.random().toString(36).substring(7)}@example.com`), systemRole: SYSTEM_ROLES.ORGANIZATION_ADMIN },
+          { email: EmailAddress.fromString(`bulk1-${Math.random().toString(36).substring(7)}@example.com`)},
+          { email: EmailAddress.fromString(`bulk2-${Math.random().toString(36).substring(7)}@example.com`)  },
           { email: EmailAddress.fromString(`bulk3-${Math.random().toString(36).substring(7)}@example.com`) }  // Should use default role
         ],
-        defaultSystemRole: SYSTEM_ROLES.MEMBER,
         sendEmail: false
       };
       
@@ -372,7 +369,7 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: testContext.ownerUserId.value,
         email: existingBulkEmail,
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         sendEmail: false
       });
       
@@ -380,9 +377,9 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: testContext.ownerUserId.value,
         invitations: [
-          { email: EmailAddress.fromString(`new-bulk-${uniqueId}@example.com`), systemRole: SYSTEM_ROLES.MEMBER },
-          { email: EmailAddress.fromString(existingBulkEmail), systemRole: SYSTEM_ROLES.MEMBER }, // Will fail - duplicate
-          { email: EmailAddress.fromString(`another-new-${uniqueId}@example.com`), systemRole: SYSTEM_ROLES.ORGANIZATION_ADMIN }
+          { email: EmailAddress.fromString(`new-bulk-${uniqueId}@example.com`) },
+          { email: EmailAddress.fromString(existingBulkEmail) }, // Will fail - duplicate
+          { email: EmailAddress.fromString(`another-new-${uniqueId}@example.com`) }
         ],
         sendEmail: false
       };
@@ -407,7 +404,7 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: testContext.ownerUserId.value,
         email: 'torevoke@example.com',
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         sendEmail: false
       });
       
@@ -435,7 +432,7 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: testContext.ownerUserId.value,
         email: 'toresend@example.com',
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         sendEmail: false
       });
       
@@ -465,7 +462,7 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: testContext.ownerUserId.value,
         email: 'pending1@example.com',
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         sendEmail: false
       });
       
@@ -473,7 +470,7 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: testContext.ownerUserId.value,
         email: 'pending2@example.com',
-        systemRole: SYSTEM_ROLES.ORGANIZATION_ADMIN,
+        roleIds: [4],
         sendEmail: false
       });
       
@@ -495,7 +492,7 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: testContext.ownerUserId.value,
         email: 'stats1@example.com',
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         sendEmail: false
       });
       
@@ -503,7 +500,7 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: testContext.ownerUserId.value,
         email: 'stats2@example.com',
-        systemRole: SYSTEM_ROLES.ORGANIZATION_ADMIN,
+        roleIds: [4],
         sendEmail: false
       });
       
@@ -511,7 +508,7 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: testContext.ownerUserId.value,
         email: 'stats3@example.com',
-        systemRole: SYSTEM_ROLES.ORGANIZATION_OWNER,
+        roleIds: [4],
         sendEmail: false
       });
       
@@ -561,7 +558,6 @@ describe('Invitation Application Service Integration Tests', () => {
       await userRepository.addUserToOrganization({
         userId: memberUser.id,
         organizationId: testContext.organizationId,
-        systemRole: SYSTEM_ROLES.MEMBER
       });
       
       // Try to send invitation as a regular member
@@ -569,7 +565,7 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: memberUser.id.value,
         email: 'newuser@example.com',
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         sendEmail: false
       });
       
@@ -592,7 +588,6 @@ describe('Invitation Application Service Integration Tests', () => {
       await userRepository.addUserToOrganization({
         userId: adminUser.id,
         organizationId: testContext.organizationId,
-        systemRole: SYSTEM_ROLES.ORGANIZATION_ADMIN
       });
       
       // Send invitation as admin
@@ -600,7 +595,7 @@ describe('Invitation Application Service Integration Tests', () => {
         organizationId: testContext.organizationId.value,
         invitedBy: adminUser.id.value,
         email: 'fromadmin@example.com',
-        systemRole: SYSTEM_ROLES.MEMBER,
+        roleIds: [4],
         sendEmail: false
       });
       

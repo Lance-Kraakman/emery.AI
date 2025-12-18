@@ -97,9 +97,8 @@ export interface OrganizationMember {
   userId: UserId;
   name?: string | null;
   email?: EmailAddress | null;
-  systemRole: SystemRoleType | string; // RBAC system role or error message
+  roles: Array<{id: number; name: string; isSystem: boolean}>; // Multiple roles as single source of truth
   joinedAt?: Date | null;
-  hasRoleError?: boolean; // Flag to indicate role loading error
 }
 
 // Analysis capabilities for organizations

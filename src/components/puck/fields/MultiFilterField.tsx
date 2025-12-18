@@ -42,7 +42,7 @@ import { cn } from '@/lib/utils';
 import { getFields } from '@/app/actions/fields';
 import { getView } from '@/app/actions/views';
 import { usePageVariablesContext } from '../contexts/PageVariablesContext';
-import { useParentRowData } from '../contexts/ParentRowDataContext';
+import { useParentRowData } from '../contexts/RowDataContext';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { PageVariable } from '@/components/puck/types';
 import {
@@ -139,6 +139,9 @@ export function MultiFilterField({
 
   // Get parent row data context for {rowData.x} variables
   const parentContext = useParentRowData();
+
+  // Check if we have parent field metadata available (works even without row data)
+  const hasParentFields = parentContext?.hasParentFields() || parentFieldsProp.length > 0;
 
   // Use parent fields from context if available, otherwise use prop
   const parentFields = parentContext?.getParentRowData()?.fields || parentFieldsProp;
@@ -271,6 +274,7 @@ export function MultiFilterField({
               condition={condition}
               fields={fields}
               parentFields={parentFields}
+              hasParentFields={hasParentFields}
               pageVariables={pageVariables}
               addPageVariable={addPageVariable}
               onChange={(updates) => updateCondition(condition.id, updates)}
@@ -305,6 +309,7 @@ interface FilterConditionRowProps {
   condition: FilterCondition;
   fields: FieldDTO[];
   parentFields: FieldDTO[];
+  hasParentFields: boolean;
   pageVariables: PageVariable[];
   addPageVariable?: (variable: PageVariable) => Promise<void>;
   onChange: (updates: Partial<FilterCondition>) => void;
@@ -315,6 +320,7 @@ function FilterConditionRow({
   condition,
   fields,
   parentFields,
+  hasParentFields,
   pageVariables,
   addPageVariable,
   onChange,
@@ -470,7 +476,7 @@ function FilterConditionRow({
                   Page Variable
                 </Label>
               </div>
-              {parentFields.length > 0 && (
+              {hasParentFields && (
                 <div className="flex items-center space-x-1">
                   <RadioGroupItem value="parentRow" id={`${condition.id}-parentRow`} className="h-3 w-3" />
                   <Label htmlFor={`${condition.id}-parentRow`} className="text-[10px] font-normal cursor-pointer">

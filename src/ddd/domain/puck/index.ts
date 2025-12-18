@@ -7,14 +7,17 @@ export { AppSlug } from './value-objects/app-slug';
 export { PageSlug } from './value-objects/page-slug';
 export { PageOrder } from './value-objects/page-order';
 export { PuckData, type PuckDataStructure } from './value-objects/puck-data';
+export { TemplateId } from './value-objects/template-id';
 
 // Entities
 export { App } from './entities/app';
 export { PuckPage } from './entities/puck-page';
+export { Template } from './entities/template';
 
 // Repository Interfaces
 export type { IAppRepository } from './repositories/app-repository';
 export type { IPuckPageRepository } from './repositories/puck-page-repository';
+export type { ITemplateRepository } from './repositories/template-repository';
 
 // Domain Services
 export { AppSlugGenerator } from './services/app-slug-generator';

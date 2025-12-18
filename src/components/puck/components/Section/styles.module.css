@@ -1,4 +1,4 @@
-.Section:not(.Section .Section) {
+w.Section:not(.Section .Section) {
   padding-inline-start: 16px;
   padding-inline-end: 16px;
 }
@@ -20,4 +20,21 @@
 .Section .Section .Section-inner {
   margin-inline-start: 0;
   margin-inline-end: 0;
+}
+
+.Section-raw {
+  padding-inline-start: 16px;
+  padding-inline-end: 16px;
+}
+
+@media (min-width: 768px) {
+  .Section-raw {
+    padding-inline-start: 24px;
+    padding-inline-end: 24px;
+  }
+}
+
+.Section .Section-raw {
+  padding-inline-start: 0;
+  padding-inline-end: 0;
 }

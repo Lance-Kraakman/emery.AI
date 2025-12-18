@@ -6,14 +6,12 @@
  * Following the pattern established in agent.dto.ts and team.dto.ts
  */
 
-import type { SystemRoleType } from "@/ddd/domain/rbac/entities/role";
-
 /**
  * DTO for sending a new invitation
  */
 export interface SendInvitationDTO {
   email: string;
-  systemRole: SystemRoleType;
+  roleIds: number[];
   organizationId: number;
   invitedBy: string;
   expiryDays?: number;
@@ -28,7 +26,7 @@ export interface InvitationDTO {
   organizationId: number;
   invitedBy: string;
   email: string;
-  systemRole: SystemRoleType;
+  roleIds: number[];
   token: string;
   expiresAt: Date;
   createdAt: Date | null;

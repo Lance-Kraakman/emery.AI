@@ -15,65 +15,69 @@ import { headers } from "next/headers";
 import { extractApiKeyFromHeader } from "@/lib/auth/user-api-keys";
 import { authenticateWithApiKey } from "@/lib/auth/test-auth";
 
-export async function assignUserRole(userId: string, role: SystemRoleType): Promise<Result> {
+export interface AssignUserRolesCommand {
+  userId: string;
+  roleIds: number[];
+  organizationId?: number;
+}
+
+export async function assignUserRoles(command: AssignUserRolesCommand): Promise<Result> {
   try {
+    console.log('assignUserRoles called with:', command);
     const session = await requireAuth();
-    
-    if (!session.user.currentOrganizationId) {
+
+    const organizationId = command.organizationId || session.user.currentOrganizationId;
+
+    if (!organizationId) {
+      console.log('assignUserRoles: No organization ID');
       return {
         success: false,
         error: "No current organization selected"
       };
     }
-    
-    // Check permission with explicit context instead of using wrapper
-    const permission = Permission.fromString("users:manage");
-    await authRequirePermission(session.user.id, permission, session.user.currentOrganizationId);
-    
-    const currentOrgId = session.user.currentOrganizationId;
-    
-    if (!userId || !role) {
+
+    if (!command.userId) {
+      console.log('assignUserRoles: No user ID');
       return {
         success: false,
-        error: "User ID and role are required"
+        error: "User ID is required"
       };
     }
 
-    // Validate role is one of the allowed roles
-    if (!Object.values(SYSTEM_ROLES).includes(role)) {
-      return {
-        success: false,
-        error: `Invalid role: ${role}. Must be one of: ${Object.values(SYSTEM_ROLES).join(', ')}`
-      };
-    }
+    console.log('assignUserRoles: Checking permission for org', organizationId);
+    // Check permission using string to avoid Permission VO serialization
+    await authRequirePermission(session.user.id, "users:manage", organizationId);
 
+    console.log('assignUserRoles: Permission check passed, calling updateMemberRoles');
     const userRoleService = getUserRoleApplicationService();
-    const result = await userRoleService.updateMemberRole({
-      userId,
-      organizationId: currentOrgId,
-      newSystemRole: role,
+    const result = await userRoleService.updateMemberRoles({
+      userId: command.userId,
+      organizationId,
+      roleIds: command.roleIds,
       updatedBy: session.user.id
     });
+
+    console.log('assignUserRoles: updateMemberRoles result:', result);
 
     if (!result.success) {
       return {
         success: false,
-        error: result.error || "Failed to assign user role"
+        error: result.error || "Failed to assign user roles"
       };
     }
 
     revalidatePath('/dashboard');
     revalidatePath('/organization/settings/users');
-    
+
     return {
       success: true,
-      data: { message: `Role ${role} assigned successfully` }
+      data: { message: "Roles assigned successfully" }
     };
   } catch (error) {
-    console.error("Error assigning user role:", error);
+    console.error("Error assigning user roles:", error);
     return {
       success: false,
-      error: "Failed to assign user role",
+      error: "Failed to assign user roles",
     };
   }
 }
@@ -185,14 +189,12 @@ export async function requirePermission(permissionString: string) {
   //   permission: permissionString
   // });
 
-  // Convert string permission to Permission object
-  const permission = Permission.fromString(permissionString);
-
+  // Use string permission directly to avoid Permission VO serialization
   // console.log("🛡️ requirePermission() - About to call RBAC requirePermission...");
 
   try {
     // Use explicit organization context from session instead of requireCurrentOrganization
-    await authRequirePermission(session.user.id, permission, session.user.currentOrganizationId);
+    await authRequirePermission(session.user.id, permissionString, session.user.currentOrganizationId);
 
     // console.log("✅ requirePermission() - Permission check PASSED");
     return session;
@@ -225,9 +227,9 @@ export async function requireResourcePermission(
     throw new Error("No current organization selected");
   }
 
-  // Convert string permission to Permission object
+  // Convert string permission to Permission object for repository call
   const permission = Permission.fromString(permissionString);
-
+  
   try {
     const rbacRepository = getRBACRepository();
 

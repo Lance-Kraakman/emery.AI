@@ -1,4 +1,4 @@
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, or, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
 import { Skill, CreateSkillProps, UpdateSkillProps } from '@/ddd/domain/skills/entities/skill';
@@ -39,7 +39,12 @@ export class DrizzleSkillRepository implements ISkillRepository {
     const results = await this.db
       .select()
       .from(skills)
-      .where(eq(skills.agentId, agentId.value));
+      .where(
+        or(
+          eq(skills.agentId, agentId.value),
+          eq(skills.isSystem, true)
+        )
+      );
 
     return results.map(record => this.toDomain(record));
   }
@@ -49,9 +54,12 @@ export class DrizzleSkillRepository implements ISkillRepository {
       .select()
       .from(skills)
       .where(
-        and(
-          eq(skills.organizationId, organizationId.value),
-          isNull(skills.agentId)
+        or(
+          and(
+            eq(skills.organizationId, organizationId.value),
+            isNull(skills.agentId)
+          ),
+          eq(skills.isSystem, true)
         )
       );
 
@@ -62,7 +70,12 @@ export class DrizzleSkillRepository implements ISkillRepository {
     const results = await this.db
       .select()
       .from(skills)
-      .where(eq(skills.organizationId, organizationId.value));
+      .where(
+        or(
+          eq(skills.organizationId, organizationId.value),
+          eq(skills.isSystem, true)
+        )
+      );
 
     return results.map(record => this.toDomain(record));
   }
@@ -179,11 +192,15 @@ export class DrizzleSkillRepository implements ISkillRepository {
       .select()
       .from(skills)
       .where(
-        and(
-          eq(skills.organizationId, organizationId.value),
-          isNull(skills.agentId)
+        or(
+          and(
+                eq(skills.organizationId, organizationId.value),
+                isNull(skills.agentId)
+              ),
+          eq(skills.isSystem, true)
         )
-      );
+      )
+      ;
 
     return results.length;
   }

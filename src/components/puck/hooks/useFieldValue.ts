@@ -21,7 +21,7 @@
  */
 
 import { useRowData } from '@/components/puck/contexts/RowDataContext';
-import { useQueryParams } from '@/components/puck/contexts/QueryParamContext';
+import { useQueryParams } from '@/components/puck/contexts/PageContext';
 
 /**
  * Get field value from nearest context

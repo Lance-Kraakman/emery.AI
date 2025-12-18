@@ -12,7 +12,7 @@ import React from "react";
 import styles from "./styles.module.css";
 import type { TypographySize } from "../../utils/typography";
 import type { FourSidedSpacing, FourCornerRadius } from "../../types/spacing-types";
-import { useTheme } from "../../theme-context";
+import { useTheme } from "../../contexts/PageContext";
 import { computeFourSidedCSS, computeFourCornerRadiusCSS } from "../../utils/spacing";
 
 export interface MetricBlockProps {

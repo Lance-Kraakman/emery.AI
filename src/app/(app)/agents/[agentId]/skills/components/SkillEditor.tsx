@@ -256,6 +256,7 @@ export function SkillEditor({
               onOutputsChange={(outputs) => handleChange({ outputs })}
               executionType="operation"
               taskType={localValue.taskModelConfig?.taskType}
+              skillInputs={localValue.inputs}
               isReadOnly={isReadOnly}
             />
           )}
@@ -362,6 +363,7 @@ export function SkillEditor({
         onOutputsChange={(outputs) => handleChange({ outputs })}
         executionType="agent"
         skillOutputs={localValue.outputs}
+        skillInputs={localValue.inputs}
         isReadOnly={isReadOnly}
       />
 

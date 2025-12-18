@@ -2,7 +2,7 @@ name: Build & Deploy
 
 on:
   push:
-    branches: [main, develop]
+    branches: [develop]  # main disabled - staging not in use
     tags:
       - 'v*.*.*'
   pull_request:
@@ -26,8 +26,9 @@ jobs:
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v*.*.* ]]; then
             echo "env_name=production" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref_name }}" = "main" ]; then
-            echo "env_name=staging" >> $GITHUB_OUTPUT
+          # Staging disabled - uncomment to re-enable
+          # elif [ "${{ github.ref_name }}" = "main" ]; then
+          #   echo "env_name=staging" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref_name }}" = "develop" ]; then
             echo "env_name=dev" >> $GITHUB_OUTPUT
           else
@@ -188,9 +189,8 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       (github.event_name == 'push' && github.ref_name == 'develop') ||
-      (github.event_name == 'push' && github.ref_name == 'main') ||
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
-    environment: ${{ github.ref_name == 'develop' && 'dev' || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }}
+    environment: ${{ github.ref_name == 'develop' && 'dev' || 'production' }}
     permissions:
       id-token: write
       contents: read
@@ -237,9 +237,10 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/v*.*.* ]]; then
             ENV_NAME="production"
             IMAGE_TAG="tag-${{ github.sha }}"
-          elif [ "${{ github.ref_name }}" = "main" ]; then
-            ENV_NAME="staging"
-            IMAGE_TAG="${{ github.ref_name }}-${{ github.sha }}"
+          # Staging disabled - uncomment to re-enable
+          # elif [ "${{ github.ref_name }}" = "main" ]; then
+          #   ENV_NAME="staging"
+          #   IMAGE_TAG="${{ github.ref_name }}-${{ github.sha }}"
           else
             ENV_NAME="dev"
             IMAGE_TAG="${{ github.ref_name }}-${{ github.sha }}"

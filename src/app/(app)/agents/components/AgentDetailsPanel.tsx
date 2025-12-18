@@ -13,6 +13,7 @@ import {
   Shield
 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import { OrganizationMapper, type UserDTO } from '@/app/mappers/organization-mapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfigurationCard } from './ConfigurationCard';
@@ -33,18 +34,11 @@ interface AgentDetailsPanelProps {
   onUpdate?: () => void;
 }
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  systemRole?: string;
-}
-
 export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   const router = useRouter();
   const { openModal } = useModal();
   const [ownerName, setOwnerName] = useState<string>('Loading...');
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserDTO[]>([]);
   const [isScheduleManagerOpen, setIsScheduleManagerOpen] = useState(false);
   const [delegationCount, setDelegationCount] = useState<number>(0);
 
@@ -61,9 +55,10 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   const loadOwnerName = async () => {
     try {
       const members = await getOrganizationMembers();
-      setUsers(members || []);
-      const owner = members?.find(u => u.id === agent.ownerId);
-      setOwnerName(owner?.name || 'Unknown User');
+      const mappedUsers = members ? members.map(OrganizationMapper.memberToUser) : [];
+      setUsers(mappedUsers);
+      const owner = mappedUsers?.find(u => u.id === agent.ownerId);
+      setOwnerName(owner ? `${owner.name} (${OrganizationMapper.getPrimaryRoleName(owner.roles)})` : 'Unknown User');
     } catch (error) {
       console.error('Error loading owner name:', error);
       setOwnerName('Unknown User');
