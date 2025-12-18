@@ -21,8 +21,8 @@ const SYSTEM_TEMPLATES = [
         gap: "4",
         wrap: "nowrap",
         items: [
-          { type: "Heading", props: { text: "Welcome to Your Site", size: "4xl", align: "left" } },
-          { type: "Text", props: { text: "A powerful platform for building amazing experiences. Get started today and see what you can create.", size: "lg", align: "left" } },
+          { type: "Heading", props: { text: "Welcome to Your Site", size: "4xl", textAlign: "left" } },
+          { type: "Text", props: { text: "A powerful platform for building amazing experiences. Get started today and see what you can create.", size: "lg", textAlign: "left" } },
           { type: "Flex", props: { direction: "row", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
             { type: "Button", props: { label: "Get Started", variant: "primary", actions: [] } },
             { type: "Button", props: { label: "Learn More", variant: "secondary", actions: [] } },
@@ -44,8 +44,8 @@ const SYSTEM_TEMPLATES = [
             gap: "4",
             wrap: "nowrap",
             items: [
-              { type: "Heading", props: { text: "Welcome to Your Site", size: "4xl", align: "left" } },
-              { type: "Text", props: { text: "A powerful platform for building amazing experiences. Get started today and see what you can create.", size: "lg", align: "left" } },
+              { type: "Heading", props: { text: "Welcome to Your Site", size: "4xl", textAlign: "left" } },
+              { type: "Text", props: { text: "A powerful platform for building amazing experiences. Get started today and see what you can create.", size: "lg", textAlign: "left" } },
               { type: "Flex", props: { direction: "row", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
                 { type: "Button", props: { label: "Get Started", variant: "primary", actions: [] } },
                 { type: "Button", props: { label: "Learn More", variant: "secondary", actions: [] } },
@@ -66,8 +66,8 @@ const SYSTEM_TEMPLATES = [
             gap: "4",
             wrap: "nowrap",
             items: [
-              { type: "Heading", props: { text: "Welcome to Your Site", size: "4xl", align: "center" } },
-              { type: "Text", props: { text: "A powerful platform for building amazing experiences. Get started today and see what you can create.", size: "lg", align: "center" } },
+              { type: "Heading", props: { text: "Welcome to Your Site", size: "4xl", textAlign: "center" } },
+              { type: "Text", props: { text: "A powerful platform for building amazing experiences. Get started today and see what you can create.", size: "lg", textAlign: "center" } },
               { type: "Flex", props: { direction: "row", justifyContent: "center", gap: "2", wrap: "nowrap", items: [
                 { type: "Button", props: { label: "Get Started", variant: "primary", actions: [] } },
                 { type: "Button", props: { label: "Learn More", variant: "secondary", actions: [] } },
@@ -90,7 +90,7 @@ const SYSTEM_TEMPLATES = [
         gap: "4",
         wrap: "nowrap",
         items: [
-          { type: "Heading", props: { text: "LOGO", size: "xl", align: "left" } },
+          { type: "Heading", props: { text: "LOGO", size: "xl", textAlign: "left" } },
           { type: "Flex", props: { direction: "row", justifyContent: "start", gap: "2", wrap: "nowrap", layout: { grow: true }, items: [
             { type: "Button", props: { label: "Home", variant: "secondary", actions: [] } },
             { type: "Button", props: { label: "About", variant: "secondary", actions: [] } },
@@ -114,7 +114,7 @@ const SYSTEM_TEMPLATES = [
             gap: "4",
             wrap: "nowrap",
             items: [
-              { type: "Heading", props: { text: "LOGO", size: "xl", align: "left" } },
+              { type: "Heading", props: { text: "LOGO", size: "xl", textAlign: "left" } },
               { type: "Flex", props: { direction: "row", justifyContent: "start", gap: "2", wrap: "nowrap", layout: { grow: true }, items: [
                 { type: "Button", props: { label: "Home", variant: "secondary", actions: [] } },
                 { type: "Button", props: { label: "About", variant: "secondary", actions: [] } },
@@ -137,7 +137,7 @@ const SYSTEM_TEMPLATES = [
             gap: "2",
             wrap: "nowrap",
             items: [
-              { type: "Heading", props: { text: "LOGO", size: "xl", align: "center" } },
+              { type: "Heading", props: { text: "LOGO", size: "xl", textAlign: "center" } },
               { type: "Flex", props: { direction: "row", justifyContent: "center", gap: "2", wrap: "nowrap", items: [
                 { type: "Button", props: { label: "Home", variant: "secondary", actions: [] } },
                 { type: "Button", props: { label: "About", variant: "secondary", actions: [] } },
@@ -159,7 +159,7 @@ const SYSTEM_TEMPLATES = [
             gap: "4",
             wrap: "nowrap",
             items: [
-              { type: "Heading", props: { text: "LOGO", size: "xl", align: "left", layout: { grow: true } } },
+              { type: "Heading", props: { text: "LOGO", size: "xl", textAlign: "left", layout: { grow: true } } },
               { type: "Button", props: { label: "Contact", variant: "primary", actions: [] } },
             ],
           },
@@ -181,25 +181,25 @@ const SYSTEM_TEMPLATES = [
         items: [
           { type: "Flex", props: { direction: "row", justifyContent: "start", gap: "8", wrap: "wrap", items: [
             { type: "Flex", props: { direction: "column", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
-              { type: "Heading", props: { text: "Product", size: "sm", align: "left" } },
-              { type: "Text", props: { text: "Features", size: "sm", align: "left" } },
-              { type: "Text", props: { text: "Pricing", size: "sm", align: "left" } },
-              { type: "Text", props: { text: "FAQ", size: "sm", align: "left" } },
+              { type: "Heading", props: { text: "Product", size: "sm", textAlign: "left" } },
+              { type: "Text", props: { text: "Features", size: "sm", textAlign: "left" } },
+              { type: "Text", props: { text: "Pricing", size: "sm", textAlign: "left" } },
+              { type: "Text", props: { text: "FAQ", size: "sm", textAlign: "left" } },
             ]}},
             { type: "Flex", props: { direction: "column", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
-              { type: "Heading", props: { text: "Company", size: "sm", align: "left" } },
-              { type: "Text", props: { text: "About", size: "sm", align: "left" } },
-              { type: "Text", props: { text: "Blog", size: "sm", align: "left" } },
-              { type: "Text", props: { text: "Careers", size: "sm", align: "left" } },
+              { type: "Heading", props: { text: "Company", size: "sm", textAlign: "left" } },
+              { type: "Text", props: { text: "About", size: "sm", textAlign: "left" } },
+              { type: "Text", props: { text: "Blog", size: "sm", textAlign: "left" } },
+              { type: "Text", props: { text: "Careers", size: "sm", textAlign: "left" } },
             ]}},
             { type: "Flex", props: { direction: "column", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
-              { type: "Heading", props: { text: "Support", size: "sm", align: "left" } },
-              { type: "Text", props: { text: "Help Center", size: "sm", align: "left" } },
-              { type: "Text", props: { text: "Contact", size: "sm", align: "left" } },
-              { type: "Text", props: { text: "Status", size: "sm", align: "left" } },
+              { type: "Heading", props: { text: "Support", size: "sm", textAlign: "left" } },
+              { type: "Text", props: { text: "Help Center", size: "sm", textAlign: "left" } },
+              { type: "Text", props: { text: "Contact", size: "sm", textAlign: "left" } },
+              { type: "Text", props: { text: "Status", size: "sm", textAlign: "left" } },
             ]}},
           ]}},
-          { type: "Text", props: { text: "© 2025 Your Company. All rights reserved.", size: "sm", align: "left" } },
+          { type: "Text", props: { text: "© 2025 Your Company. All rights reserved.", size: "sm", textAlign: "left" } },
         ],
       },
     }],
@@ -219,25 +219,25 @@ const SYSTEM_TEMPLATES = [
             items: [
               { type: "Flex", props: { direction: "row", justifyContent: "start", gap: "8", wrap: "wrap", items: [
                 { type: "Flex", props: { direction: "column", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
-                  { type: "Heading", props: { text: "Product", size: "sm", align: "left" } },
-                  { type: "Text", props: { text: "Features", size: "sm", align: "left" } },
-                  { type: "Text", props: { text: "Pricing", size: "sm", align: "left" } },
-                  { type: "Text", props: { text: "FAQ", size: "sm", align: "left" } },
+                  { type: "Heading", props: { text: "Product", size: "sm", textAlign: "left" } },
+                  { type: "Text", props: { text: "Features", size: "sm", textAlign: "left" } },
+                  { type: "Text", props: { text: "Pricing", size: "sm", textAlign: "left" } },
+                  { type: "Text", props: { text: "FAQ", size: "sm", textAlign: "left" } },
                 ]}},
                 { type: "Flex", props: { direction: "column", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
-                  { type: "Heading", props: { text: "Company", size: "sm", align: "left" } },
-                  { type: "Text", props: { text: "About", size: "sm", align: "left" } },
-                  { type: "Text", props: { text: "Blog", size: "sm", align: "left" } },
-                  { type: "Text", props: { text: "Careers", size: "sm", align: "left" } },
+                  { type: "Heading", props: { text: "Company", size: "sm", textAlign: "left" } },
+                  { type: "Text", props: { text: "About", size: "sm", textAlign: "left" } },
+                  { type: "Text", props: { text: "Blog", size: "sm", textAlign: "left" } },
+                  { type: "Text", props: { text: "Careers", size: "sm", textAlign: "left" } },
                 ]}},
                 { type: "Flex", props: { direction: "column", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
-                  { type: "Heading", props: { text: "Support", size: "sm", align: "left" } },
-                  { type: "Text", props: { text: "Help Center", size: "sm", align: "left" } },
-                  { type: "Text", props: { text: "Contact", size: "sm", align: "left" } },
-                  { type: "Text", props: { text: "Status", size: "sm", align: "left" } },
+                  { type: "Heading", props: { text: "Support", size: "sm", textAlign: "left" } },
+                  { type: "Text", props: { text: "Help Center", size: "sm", textAlign: "left" } },
+                  { type: "Text", props: { text: "Contact", size: "sm", textAlign: "left" } },
+                  { type: "Text", props: { text: "Status", size: "sm", textAlign: "left" } },
                 ]}},
               ]}},
-              { type: "Text", props: { text: "© 2025 Your Company. All rights reserved.", size: "sm", align: "left" } },
+              { type: "Text", props: { text: "© 2025 Your Company. All rights reserved.", size: "sm", textAlign: "left" } },
             ],
           },
         }],
@@ -254,9 +254,9 @@ const SYSTEM_TEMPLATES = [
             gap: "4",
             wrap: "nowrap",
             items: [
-              { type: "Heading", props: { text: "Your Company", size: "xl", align: "center" } },
-              { type: "Text", props: { text: "Building amazing experiences together.", size: "base", align: "center" } },
-              { type: "Text", props: { text: "© 2025 Your Company. All rights reserved.", size: "sm", align: "center" } },
+              { type: "Heading", props: { text: "Your Company", size: "xl", textAlign: "center" } },
+              { type: "Text", props: { text: "Building amazing experiences together.", size: "base", textAlign: "center" } },
+              { type: "Text", props: { text: "© 2025 Your Company. All rights reserved.", size: "sm", textAlign: "center" } },
             ],
           },
         }],
@@ -267,7 +267,7 @@ const SYSTEM_TEMPLATES = [
         description: "Simple copyright",
         data: [{
           type: "Text",
-          props: { text: "© 2025 Your Company. All rights reserved.", size: "sm", align: "center" },
+          props: { text: "© 2025 Your Company. All rights reserved.", size: "sm", textAlign: "center" },
         }],
       },
     ],
@@ -284,11 +284,11 @@ const SYSTEM_TEMPLATES = [
         gap: "6",
         wrap: "wrap",
         items: [
-          { type: "Text", props: { text: "Logo 1", size: "lg", align: "center" } },
-          { type: "Text", props: { text: "Logo 2", size: "lg", align: "center" } },
-          { type: "Text", props: { text: "Logo 3", size: "lg", align: "center" } },
-          { type: "Text", props: { text: "Logo 4", size: "lg", align: "center" } },
-          { type: "Text", props: { text: "Logo 5", size: "lg", align: "center" } },
+          { type: "Text", props: { text: "Logo 1", size: "lg", textAlign: "center" } },
+          { type: "Text", props: { text: "Logo 2", size: "lg", textAlign: "center" } },
+          { type: "Text", props: { text: "Logo 3", size: "lg", textAlign: "center" } },
+          { type: "Text", props: { text: "Logo 4", size: "lg", textAlign: "center" } },
+          { type: "Text", props: { text: "Logo 5", size: "lg", textAlign: "center" } },
         ],
       },
     }],
@@ -305,11 +305,11 @@ const SYSTEM_TEMPLATES = [
             gap: "6",
             wrap: "wrap",
             items: [
-              { type: "Text", props: { text: "Logo 1", size: "lg", align: "center" } },
-              { type: "Text", props: { text: "Logo 2", size: "lg", align: "center" } },
-              { type: "Text", props: { text: "Logo 3", size: "lg", align: "center" } },
-              { type: "Text", props: { text: "Logo 4", size: "lg", align: "center" } },
-              { type: "Text", props: { text: "Logo 5", size: "lg", align: "center" } },
+              { type: "Text", props: { text: "Logo 1", size: "lg", textAlign: "center" } },
+              { type: "Text", props: { text: "Logo 2", size: "lg", textAlign: "center" } },
+              { type: "Text", props: { text: "Logo 3", size: "lg", textAlign: "center" } },
+              { type: "Text", props: { text: "Logo 4", size: "lg", textAlign: "center" } },
+              { type: "Text", props: { text: "Logo 5", size: "lg", textAlign: "center" } },
             ],
           },
         }],
@@ -329,20 +329,20 @@ const SYSTEM_TEMPLATES = [
         wrap: "wrap",
         items: [
           { type: "Flex", props: { direction: "column", justifyContent: "center", gap: "1", wrap: "nowrap", items: [
-            { type: "Heading", props: { text: "10,000+", size: "3xl", align: "center" } },
-            { type: "Text", props: { text: "Users", size: "sm", align: "center" } },
+            { type: "Heading", props: { text: "10,000+", size: "3xl", textAlign: "center" } },
+            { type: "Text", props: { text: "Users", size: "sm", textAlign: "center" } },
           ]}},
           { type: "Flex", props: { direction: "column", justifyContent: "center", gap: "1", wrap: "nowrap", items: [
-            { type: "Heading", props: { text: "$1M+", size: "3xl", align: "center" } },
-            { type: "Text", props: { text: "Revenue", size: "sm", align: "center" } },
+            { type: "Heading", props: { text: "$1M+", size: "3xl", textAlign: "center" } },
+            { type: "Text", props: { text: "Revenue", size: "sm", textAlign: "center" } },
           ]}},
           { type: "Flex", props: { direction: "column", justifyContent: "center", gap: "1", wrap: "nowrap", items: [
-            { type: "Heading", props: { text: "50+", size: "3xl", align: "center" } },
-            { type: "Text", props: { text: "Countries", size: "sm", align: "center" } },
+            { type: "Heading", props: { text: "50+", size: "3xl", textAlign: "center" } },
+            { type: "Text", props: { text: "Countries", size: "sm", textAlign: "center" } },
           ]}},
           { type: "Flex", props: { direction: "column", justifyContent: "center", gap: "1", wrap: "nowrap", items: [
-            { type: "Heading", props: { text: "99.9%", size: "3xl", align: "center" } },
-            { type: "Text", props: { text: "Uptime", size: "sm", align: "center" } },
+            { type: "Heading", props: { text: "99.9%", size: "3xl", textAlign: "center" } },
+            { type: "Text", props: { text: "Uptime", size: "sm", textAlign: "center" } },
           ]}},
         ],
       },
@@ -361,20 +361,20 @@ const SYSTEM_TEMPLATES = [
             wrap: "wrap",
             items: [
               { type: "Flex", props: { direction: "column", justifyContent: "center", gap: "1", wrap: "nowrap", items: [
-                { type: "Heading", props: { text: "10,000+", size: "3xl", align: "center" } },
-                { type: "Text", props: { text: "Users", size: "sm", align: "center" } },
+                { type: "Heading", props: { text: "10,000+", size: "3xl", textAlign: "center" } },
+                { type: "Text", props: { text: "Users", size: "sm", textAlign: "center" } },
               ]}},
               { type: "Flex", props: { direction: "column", justifyContent: "center", gap: "1", wrap: "nowrap", items: [
-                { type: "Heading", props: { text: "$1M+", size: "3xl", align: "center" } },
-                { type: "Text", props: { text: "Revenue", size: "sm", align: "center" } },
+                { type: "Heading", props: { text: "$1M+", size: "3xl", textAlign: "center" } },
+                { type: "Text", props: { text: "Revenue", size: "sm", textAlign: "center" } },
               ]}},
               { type: "Flex", props: { direction: "column", justifyContent: "center", gap: "1", wrap: "nowrap", items: [
-                { type: "Heading", props: { text: "50+", size: "3xl", align: "center" } },
-                { type: "Text", props: { text: "Countries", size: "sm", align: "center" } },
+                { type: "Heading", props: { text: "50+", size: "3xl", textAlign: "center" } },
+                { type: "Text", props: { text: "Countries", size: "sm", textAlign: "center" } },
               ]}},
               { type: "Flex", props: { direction: "column", justifyContent: "center", gap: "1", wrap: "nowrap", items: [
-                { type: "Heading", props: { text: "99.9%", size: "3xl", align: "center" } },
-                { type: "Text", props: { text: "Uptime", size: "sm", align: "center" } },
+                { type: "Heading", props: { text: "99.9%", size: "3xl", textAlign: "center" } },
+                { type: "Text", props: { text: "Uptime", size: "sm", textAlign: "center" } },
               ]}},
             ],
           },
@@ -394,8 +394,8 @@ const SYSTEM_TEMPLATES = [
         padding: { top: 6, right: 6, bottom: 6, left: 6, linked: true },
         children: [
           { type: "Flex", props: { direction: "column", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
-            { type: "Heading", props: { text: "Card Title", size: "xl", align: "left" } },
-            { type: "Text", props: { text: "This is a description for the card. Add your own content here.", size: "base", align: "left" } },
+            { type: "Heading", props: { text: "Card Title", size: "xl", textAlign: "left" } },
+            { type: "Text", props: { text: "This is a description for the card. Add your own content here.", size: "base", textAlign: "left" } },
           ]}},
         ],
       },
@@ -414,8 +414,8 @@ const SYSTEM_TEMPLATES = [
             padding: { top: 6, right: 6, bottom: 6, left: 6, linked: true },
             children: [
               { type: "Flex", props: { direction: "column", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
-                { type: "Heading", props: { text: "Card Title", size: "xl", align: "left" } },
-                { type: "Text", props: { text: "This is a description for the card. Add your own content here.", size: "base", align: "left" } },
+                { type: "Heading", props: { text: "Card Title", size: "xl", textAlign: "left" } },
+                { type: "Text", props: { text: "This is a description for the card. Add your own content here.", size: "base", textAlign: "left" } },
               ]}},
             ],
           },
@@ -433,8 +433,8 @@ const SYSTEM_TEMPLATES = [
             padding: { top: 6, right: 6, bottom: 6, left: 6, linked: true },
             children: [
               { type: "Flex", props: { direction: "column", justifyContent: "start", gap: "2", wrap: "nowrap", items: [
-                { type: "Heading", props: { text: "Card Title", size: "xl", align: "left" } },
-                { type: "Text", props: { text: "This is a description for the card. Add your own content here.", size: "base", align: "left" } },
+                { type: "Heading", props: { text: "Card Title", size: "xl", textAlign: "left" } },
+                { type: "Text", props: { text: "This is a description for the card. Add your own content here.", size: "base", textAlign: "left" } },
               ]}},
             ],
           },

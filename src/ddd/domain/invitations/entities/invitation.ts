@@ -16,29 +16,29 @@ export class Invitation {
     private readonly _organizationId: OrganizationId,
     private readonly _invitedBy: UserId,     // UUID reference to users.id
     private _email: EmailAddress,
-    private _systemRole: SystemRoleType,     // RBAC system role
+    private _roleIds: number[],     // Array of role IDs to assign (replaces systemRole)
     private readonly _token: InvitationToken,  // Unique invitation token
     private _expiresAt: Date,
     private readonly _createdAt: Date | null
   ) {}
 
-  // Getters
+// Getters
   get id(): InvitationId { return this._id; }
   get organizationId(): OrganizationId { return this._organizationId; }
   get invitedBy(): UserId { return this._invitedBy; }
   get email(): EmailAddress { return this._email; }
-  get systemRole(): SystemRoleType { return this._systemRole; }
+  get roleIds(): number[] { return this._roleIds; }
   get token(): InvitationToken { return this._token; }
-  get expiresAt(): Date { return new Date(this._expiresAt); }
-  get createdAt(): Date | null { return this._createdAt ? new Date(this._createdAt) : null; }
+  get expiresAt(): Date { return this._expiresAt; }
+  get createdAt(): Date | null { return this._createdAt; }
 
-  // Business methods
+  // Setters
   updateEmail(newEmail: EmailAddress): void {
     this._email = newEmail;
   }
 
-  updateSystemRole(newSystemRole: SystemRoleType): void {
-    this._systemRole = newSystemRole;
+  updateRoleIds(newRoleIds: number[]): void {
+    this._roleIds = newRoleIds;
   }
 
   updateExpirationDate(newExpiresAt: Date): void {
@@ -85,7 +85,7 @@ export class Invitation {
     organizationId: number;
     invitedBy: string;
     email: string;
-    systemRole: string;
+    roleIds: number[];
     token: string;
     expiresAt: Date;
     createdAt?: Date | null;
@@ -95,7 +95,7 @@ export class Invitation {
       OrganizationId.fromNumber(data.organizationId),
       UserId.fromString(data.invitedBy),
       EmailAddress.fromString(data.email),
-      data.systemRole as SystemRoleType,
+      data.roleIds,
       InvitationToken.fromString(data.token),
       data.expiresAt,
       data.createdAt || null
@@ -108,7 +108,7 @@ export class Invitation {
     organizationId: number;
     invitedBy: string;
     email: string;
-    systemRole: string;
+    roleIds: number[];
     token: string;
     expiresAt: Date;
     createdAt: Date | null;
@@ -118,7 +118,7 @@ export class Invitation {
       organizationId: this._organizationId.value,
       invitedBy: this._invitedBy.value,
       email: this._email.value,
-      systemRole: this._systemRole,
+      roleIds: this._roleIds,
       token: this._token.value,
       expiresAt: this._expiresAt,
       createdAt: this._createdAt
@@ -130,13 +130,13 @@ export interface CreateInvitationData {
   organizationId: OrganizationId;
   invitedBy: UserId;
   email: EmailAddress;
-  systemRole: SystemRoleType;              // Required RBAC system role
+  roleIds: number[];              // Array of role IDs to assign (replaces systemRole)
   expiresAt?: Date;                        // defaults to 7 days from now
 }
 
 export interface UpdateInvitationData {
   email?: EmailAddress;
-  systemRole?: SystemRoleType;             // RBAC system role
+  roleIds?: number[];             // Array of role IDs to assign
   expiresAt?: Date;
 }
 
@@ -209,9 +209,9 @@ export interface BulkInvitationData {
   invitedBy: UserId;
   invitations: Array<{
     email: EmailAddress;
-    systemRole?: SystemRoleType;
+    roleIds?: number[]; // Array of role IDs for multi-role assignment
   }>;
-  defaultRole?: SystemRoleType;            // Default role for invitations without specific role
+  defaultRoleIds?: number[];            // Default role IDs for invitations without specific roles
   expiresAt?: Date;
 }
 

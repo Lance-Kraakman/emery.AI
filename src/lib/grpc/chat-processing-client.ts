@@ -25,6 +25,7 @@ import type {
   MessagePart
 } from './generated/agent_worker';
 import { toProtoMessageParts } from './mappers/message-part-mapper';
+import { mapSkillToProto } from './proto-mappers';
 
 // Load protobuf definition
 const PROTO_PATH = path.join(process.cwd(), 'proto', 'agent_worker.proto');
@@ -150,31 +151,10 @@ export class ChatProcessingClient {
     // Combine system tools and skill reference tools
     const allTools = [...systemTools, ...skillReferenceTools];
 
-    // Build full SkillConfig definitions
-    const skillConfigs = (options.skills || []).map(skill => ({
-      id: skill.id,  // Include skill ID
-      name: skill.name,
-      description: skill.description || '',
-      inputs: skill.inputs || [],
-      outputs: skill.outputs || [],
-      instructions: skill.instructions || '',
-      tools: (skill.tools || []).map((t: any) => ({
-        name: t.name,
-        version: '',
-        config: t.config || {}
-      })),
-      model: skill.model || '',
-      agentType: skill.agentType || '',  // "tool_calling" (default) or "code_agent"
-      content: skill.content || [],
-      executionType: skill.executionType || 'agent',  // 'agent' (default) or 'operation'
-      taskModelConfig: skill.taskModelConfig ? {
-        modelId: skill.taskModelConfig.modelId || '',
-        taskType: skill.taskModelConfig.taskType || '',
-        parameters: Object.fromEntries(
-          Object.entries(skill.taskModelConfig.parameters || {}).map(([k, v]) => [k, String(v)])
-        )
-      } : undefined
-    }));
+    // Build full SkillConfig definitions using proto mapper
+    // AIDEV-NOTE: mapSkillToProto properly converts outputMapping.source fields to proto format
+    // (skill_output/skill_input/table_ref oneof fields) which Python expects
+    const skillConfigs = (options.skills || []).map(skill => mapSkillToProto(skill));
 
     const agentConfig = {
       name: '', // Chat agents don't have a specific name

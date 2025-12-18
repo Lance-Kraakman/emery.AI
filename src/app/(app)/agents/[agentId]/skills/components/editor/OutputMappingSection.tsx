@@ -23,8 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectGroup, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import type { SkillOutput, OutputMappingConfig, FieldMapping, TableMapping, FieldSource } from '@/app/mappers/skill-mapper';
+import type { SkillOutput, SkillInput, OutputMappingConfig, FieldMapping, TableMapping, FieldSource, RowIdSource } from '@/app/mappers/skill-mapper';
 import type { TableDTO } from '@/app/mappers/table-mapper';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import { getTables } from '@/app/actions/tables';
@@ -67,6 +66,13 @@ function createSkillOutputSource(name: string): FieldSource {
 }
 
 /**
+ * Create a FieldSource from skill input name
+ */
+function createSkillInputSource(name: string): FieldSource {
+  return { type: 'skill_input', name };
+}
+
+/**
  * Create a FieldSource from table reference
  */
 function createTableRefSource(order: number, field: string): FieldSource {
@@ -79,6 +85,8 @@ function createTableRefSource(order: number, field: string): FieldSource {
 function getFieldSourceLabel(source: FieldSource): string {
   if (source.type === 'skill_output') {
     return source.name;
+  } else if (source.type === 'skill_input') {
+    return `[input] ${source.name}`;
   } else {
     return `Table #${source.order} → ${source.field}`;
   }
@@ -89,7 +97,9 @@ function getFieldSourceLabel(source: FieldSource): string {
  */
 function serializeFieldSource(source: FieldSource): string {
   if (source.type === 'skill_output') {
-    return `skill:${source.name}`;
+    return `output:${source.name}`;
+  } else if (source.type === 'skill_input') {
+    return `input:${source.name}`;
   } else {
     return `table:${source.order}:${source.field}`;
   }
@@ -99,21 +109,65 @@ function serializeFieldSource(source: FieldSource): string {
  * Deserialize string to FieldSource
  */
 function deserializeFieldSource(value: string): FieldSource | null {
-  if (value.startsWith('skill:')) {
-    return { type: 'skill_output', name: value.slice(6) };
+  if (value.startsWith('output:')) {
+    return { type: 'skill_output', name: value.slice(7) };
+  } else if (value.startsWith('input:')) {
+    return { type: 'skill_input', name: value.slice(6) };
   } else if (value.startsWith('table:')) {
     const parts = value.slice(6).split(':');
     if (parts.length >= 2) {
       return { type: 'table_ref', order: parseInt(parts[0]), field: parts.slice(1).join(':') };
     }
   }
+  // Backwards compat: handle old 'skill:' prefix
+  if (value.startsWith('skill:')) {
+    return { type: 'skill_output', name: value.slice(6) };
+  }
   return null;
+}
+
+/**
+ * Serialize RowIdSource to string for Select value
+ */
+function serializeRowIdSource(source: RowIdSource | undefined): string {
+  if (!source) return '';
+  switch (source.type) {
+    case 'static': return `static:${source.staticId}`;
+    case 'skill_input': return `input:${source.skillInput}`;
+    case 'skill_output': return `output:${source.skillOutput}`;
+    case 'table_ref': return `table:${source.tableRef?.order}:${source.tableRef?.field}`;
+    case 'source_row': return 'source_row';
+    default: return '';
+  }
+}
+
+/**
+ * Deserialize string to RowIdSource
+ */
+function deserializeRowIdSource(value: string): RowIdSource | undefined {
+  if (!value) return undefined;
+  if (value === 'source_row') {
+    return { type: 'source_row' };
+  } else if (value.startsWith('input:')) {
+    return { type: 'skill_input', skillInput: value.slice(6) };
+  } else if (value.startsWith('output:')) {
+    return { type: 'skill_output', skillOutput: value.slice(7) };
+  } else if (value.startsWith('table:')) {
+    const parts = value.slice(6).split(':');
+    if (parts.length >= 2) {
+      return { type: 'table_ref', tableRef: { order: parseInt(parts[0]), field: parts.slice(1).join(':') } };
+    }
+  } else if (value.startsWith('static:')) {
+    return { type: 'static', staticId: value.slice(7) };
+  }
+  return undefined;
 }
 
 interface FieldSourceSelectorProps {
   value: FieldSource | null;
   onChange: (source: FieldSource) => void;
   skillOutputs: OutputFieldDef[];
+  skillInputs?: SkillInput[];
   previousTableMappings: TableMapping[];
   tableFieldsMap: Map<number, FieldDTO[]>;
   disabled?: boolean;
@@ -123,6 +177,7 @@ function FieldSourceSelector({
   value,
   onChange,
   skillOutputs,
+  skillInputs = [],
   previousTableMappings,
   tableFieldsMap,
   disabled
@@ -142,11 +197,23 @@ function FieldSourceSelector({
         <SelectValue placeholder="Select source..." />
       </SelectTrigger>
       <SelectContent>
+        {/* Skill Inputs group */}
+        {skillInputs.length > 0 && (
+          <SelectGroup>
+            <SelectLabel className="text-[10px]">Skill Inputs</SelectLabel>
+            {skillInputs.map((input) => (
+              <SelectItem key={`input:${input.name}`} value={`input:${input.name}`}>
+                {input.name}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+
         {/* Skill Outputs group */}
         <SelectGroup>
           <SelectLabel className="text-[10px]">Skill Outputs</SelectLabel>
           {skillOutputs.map((output) => (
-            <SelectItem key={`skill:${output.field}`} value={`skill:${output.field}`}>
+            <SelectItem key={`output:${output.field}`} value={`output:${output.field}`}>
               {output.field}
             </SelectItem>
           ))}
@@ -181,6 +248,7 @@ function FieldSourceSelector({
 interface FieldMappingRowProps {
   mapping: FieldMapping;
   skillOutputs: OutputFieldDef[];
+  skillInputs?: SkillInput[];
   previousTableMappings: TableMapping[];
   targetFields: FieldDTO[];
   tableFieldsMap: Map<number, FieldDTO[]>;
@@ -192,6 +260,7 @@ interface FieldMappingRowProps {
 function FieldMappingRow({
   mapping,
   skillOutputs,
+  skillInputs = [],
   previousTableMappings,
   targetFields,
   tableFieldsMap,
@@ -213,6 +282,7 @@ function FieldMappingRow({
         value={mapping.source}
         onChange={(source) => onUpdate({ ...mapping, source })}
         skillOutputs={skillOutputs}
+        skillInputs={skillInputs}
         previousTableMappings={previousTableMappings}
         tableFieldsMap={tableFieldsMap}
         disabled={isReadOnly}
@@ -223,7 +293,21 @@ function FieldMappingRow({
       {/* Target field selector */}
       <Select
         value={mapping.targetFieldId?.toString()}
-        onValueChange={(value) => onUpdate({ ...mapping, targetFieldId: parseInt(value) })}
+        onValueChange={(value) => {
+          const fieldId = parseInt(value);
+          const field = targetFields.find(f => f.id === fieldId);
+          onUpdate({
+            ...mapping,
+            targetFieldId: fieldId,
+            // AIDEV-NOTE: Include field type metadata so Python knows how to format values
+            // Critical for relation fields which need [{"id": row_id, "value": ""}] format
+            targetFieldMetadata: field ? {
+              fieldType: field.type,
+              fieldName: field.name,
+              options: (field.metadata as { options?: Array<{ name: string }> })?.options?.map(o => o.name) || []
+            } : undefined
+          });
+        }}
         disabled={isReadOnly || targetFields.length === 0}
       >
         <SelectTrigger className="w-[130px] h-7 text-[11px]">
@@ -275,6 +359,7 @@ interface TableMappingCardProps {
   tables: TableDTO[];
   tableFieldsMap: Map<number, FieldDTO[]>;
   skillOutputs: OutputFieldDef[];
+  skillInputs?: SkillInput[];
   previousTableMappings: TableMapping[];
   onUpdate: (tm: TableMapping) => void;
   onRemove: () => void;
@@ -290,6 +375,7 @@ function TableMappingCard({
   tables,
   tableFieldsMap,
   skillOutputs,
+  skillInputs = [],
   previousTableMappings,
   onUpdate,
   onRemove,
@@ -322,6 +408,38 @@ function TableMappingCard({
     onUpdate({ ...tableMapping, mappings: newMappings });
   };
 
+  // Auto-map: match skill outputs to table fields by name
+  const handleAutoMap = () => {
+    const autoMappings: FieldMapping[] = [];
+    const existingTargetIds = new Set(tableMapping.mappings.map(m => m.targetFieldId));
+
+    skillOutputs.forEach((output) => {
+      const matchingField = targetFields.find(
+        f => f.name.toLowerCase() === output.field.toLowerCase() && !existingTargetIds.has(f.id)
+      );
+      if (matchingField) {
+        autoMappings.push({
+          source: { type: 'skill_output', name: output.field },
+          targetFieldId: matchingField.id,
+          // AIDEV-NOTE: Include field type metadata so Python knows how to format values
+          targetFieldMetadata: {
+            fieldType: matchingField.type,
+            fieldName: matchingField.name,
+            options: (matchingField.metadata as { options?: Array<{ name: string }> })?.options?.map(o => o.name) || []
+          }
+        });
+        existingTargetIds.add(matchingField.id);
+      }
+    });
+
+    if (autoMappings.length > 0) {
+      onUpdate({
+        ...tableMapping,
+        mappings: [...tableMapping.mappings, ...autoMappings]
+      });
+    }
+  };
+
   return (
     <Card className="border-muted">
       <CardHeader className="py-2 px-3 flex flex-row items-center justify-between cursor-pointer" onClick={() => setExpanded(!expanded)}>
@@ -342,6 +460,11 @@ function TableMappingCard({
           <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 bg-muted rounded">
             {tableMapping.rowAction}
           </span>
+          {tableMapping.mode && (
+            <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 bg-muted rounded">
+              {tableMapping.mode === 'multi_row' ? 'multi' : 'single'}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           {!isReadOnly && (
@@ -359,7 +482,7 @@ function TableMappingCard({
 
       {expanded && (
         <CardContent className="py-2 px-3 space-y-2">
-          {/* Table and action selectors */}
+          {/* Table, action, and mode selectors */}
           <div className="flex items-center gap-2 flex-wrap">
             <Select
               value={tableMapping.targetTableId?.toString()}
@@ -391,7 +514,71 @@ function TableMappingCard({
                 <SelectItem value="update">Update</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* Per-table mode selector */}
+            <Select
+              value={tableMapping.mode || 'single_row'}
+              onValueChange={(value) => onUpdate({ ...tableMapping, mode: value as 'single_row' | 'multi_row' })}
+              disabled={isReadOnly}
+            >
+              <SelectTrigger className="h-7 w-[80px] text-[11px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="single_row">Single</SelectItem>
+                <SelectItem value="multi_row">Multi</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+
+          {/* Row ID source selector for update mode */}
+          {tableMapping.rowAction === 'update' && (
+            <div className="flex items-center gap-2">
+              <Label className="text-[10px] text-muted-foreground">Row ID from:</Label>
+              <Select
+                value={serializeRowIdSource(tableMapping.rowIdSource)}
+                onValueChange={(v) => onUpdate({ ...tableMapping, rowIdSource: deserializeRowIdSource(v) })}
+                disabled={isReadOnly}
+              >
+                <SelectTrigger className="h-7 w-[160px] text-[11px]">
+                  <SelectValue placeholder="Select source..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="source_row">Source Row</SelectItem>
+                  {skillInputs.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px]">Skill Inputs</SelectLabel>
+                      {skillInputs.map((input) => (
+                        <SelectItem key={`input:${input.name}`} value={`input:${input.name}`}>
+                          Input: {input.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {skillOutputs.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px]">Skill Outputs</SelectLabel>
+                      {skillOutputs.map((output) => (
+                        <SelectItem key={`output:${output.field}`} value={`output:${output.field}`}>
+                          Output: {output.field}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {previousTableMappings.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px]">Table References</SelectLabel>
+                      {previousTableMappings.map((tm) => (
+                        <SelectItem key={`table:${tm.order}:row_id`} value={`table:${tm.order}:row_id`}>
+                          Table #{tm.order} → row_id
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Field mappings */}
           <div className="space-y-1.5">
@@ -400,6 +587,7 @@ function TableMappingCard({
                 key={index}
                 mapping={mapping}
                 skillOutputs={skillOutputs}
+                skillInputs={skillInputs}
                 previousTableMappings={previousTableMappings}
                 targetFields={targetFields}
                 tableFieldsMap={tableFieldsMap}
@@ -409,16 +597,29 @@ function TableMappingCard({
               />
             ))}
             {!isReadOnly && tableMapping.targetTableId > 0 && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={handleAddMapping}
-                className="h-6 px-2 text-[11px]"
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                Add Field
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleAddMapping}
+                  className="h-6 px-2 text-[11px]"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Field
+                </Button>
+                {targetFields.length > 0 && tableMapping.mappings.length === 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleAutoMap}
+                    className="h-6 px-2 text-[11px]"
+                  >
+                    Auto-map
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         </CardContent>
@@ -463,6 +664,7 @@ interface OutputMappingSectionProps {
   onOutputsChange: (outputs: SkillOutput[]) => void;
   taskType?: string;
   skillOutputs?: SkillOutput[];
+  skillInputs?: SkillInput[];
   executionType?: 'agent' | 'operation';
   isReadOnly?: boolean;
 }
@@ -480,6 +682,7 @@ export function OutputMappingSection({
   onOutputsChange,
   taskType,
   skillOutputs,
+  skillInputs = [],
   executionType = 'operation',
   isReadOnly
 }: OutputMappingSectionProps) {
@@ -660,38 +863,17 @@ export function OutputMappingSection({
           </div>
         </div>
 
-        {!loading && tables.length > 0 && (
-          <>
-            {/* Mode toggle */}
-            <RadioGroup
-              value={outputMapping?.mode || 'single_row'}
-              onValueChange={(value) => handleModeChange(value as 'single_row' | 'multi_row')}
-              className="flex gap-1"
-              disabled={isReadOnly}
-            >
-              <div className="flex items-center">
-                <RadioGroupItem value="single_row" id="single_row" className="h-3 w-3" />
-                <Label htmlFor="single_row" className="text-[11px] cursor-pointer pl-1">Single</Label>
-              </div>
-              <div className="flex items-center">
-                <RadioGroupItem value="multi_row" id="multi_row" className="h-3 w-3" />
-                <Label htmlFor="multi_row" className="text-[11px] cursor-pointer pl-1">Multi</Label>
-              </div>
-            </RadioGroup>
-
-            {!isReadOnly && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleAddTableMapping}
-                className="h-6 px-2 text-[11px]"
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                Add Table
-              </Button>
-            )}
-          </>
+        {!loading && tables.length > 0 && !isReadOnly && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleAddTableMapping}
+            className="h-6 px-2 text-[11px]"
+          >
+            <Plus className="h-3 w-3 mr-1" />
+            Add Table
+          </Button>
         )}
       </div>
 
@@ -719,6 +901,7 @@ export function OutputMappingSection({
                   tables={tables}
                   tableFieldsMap={tableFieldsMap}
                   skillOutputs={sourceFields}
+                  skillInputs={skillInputs}
                   previousTableMappings={outputMapping?.tableMappings?.slice(0, index) || []}
                   onUpdate={(updated) => handleUpdateTableMapping(index, updated)}
                   onRemove={() => handleRemoveTableMapping(index)}

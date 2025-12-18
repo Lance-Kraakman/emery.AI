@@ -75,10 +75,21 @@ export function ResourceSelector({
             break;
           case 'user':
             const members = await getOrganizationMembers();
+// Helper function for role description in compact display
+function getRoleDescriptionForResource(roles: Array<{id: number; name: string; isSystem: boolean}>): string {
+  if (roles.length === 0) return 'Member';
+  if (roles.length === 1) return roles[0].name;
+
+  // For multiple roles, show primary + count
+  const primaryRole = roles.find(r => r.isSystem) || roles[0];
+  const additionalCount = roles.length - 1;
+  return `${primaryRole.name}${additionalCount > 0 ? ` +${additionalCount}` : ''}`;
+}
+
             fetchedResources = members.map(member => ({
               id: member.userId, // Already a string UUID after DTO mapping
               name: member.name || 'Unknown User',
-              description: member.systemRole || 'Member'
+              description: getRoleDescriptionForResource(member.roles)
             }));
             break;
           case 'app':

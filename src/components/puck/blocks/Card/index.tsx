@@ -8,7 +8,7 @@ import dynamicIconImports from "lucide-react/dynamicIconImports";
 import { withLayout, WithLayout } from "../../components/Layout";
 import { backgroundColorField, textColorField, fontFamilyField, fontWeightField, borderRadiusField, borderWidthField, paddingField } from "../../fields/standard-fields";
 import type { FourSidedSpacing, FourCornerRadius } from "../../types/spacing-types";
-import { useTheme } from "../../theme-context";
+import { useTheme } from "../../contexts/PageContext";
 import { computeFourSidedCSS, computeFourCornerRadiusCSS } from "../../utils/spacing";
 
 const getClassName = getClassNameFactory("Card", styles);

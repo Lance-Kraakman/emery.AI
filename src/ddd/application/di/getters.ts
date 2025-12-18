@@ -43,8 +43,11 @@ import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-t
 
 import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-repository';
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
+import type { ITemplateRepository } from '@/ddd/domain/puck/repositories/template-repository';
+export type { ITemplateRepository } from '@/ddd/domain/puck/repositories/template-repository';
 import type { AppApplicationService } from '@/ddd/application/services/puck/app-application-service';
 import type { PuckPageApplicationService } from '@/ddd/application/services/puck/puck-page-application-service';
+import type { TemplateApplicationService } from '@/ddd/application/services/puck/template-application-service';
 import type { ViewRepository as IViewRepository } from '@/ddd/domain/views/repositories/view-repository';
 import type { ViewApplicationService } from '@/ddd/application/services/views/view-application-service';
 import type { ITokenUsageRepository } from '@/ddd/domain/billing/repositories/token-usage-repository';
@@ -104,8 +107,10 @@ type ServiceMap = {
   // Puck Services
   AppRepository: IAppRepository;
   PuckPageRepository: IPuckPageRepository;
+  TemplateRepository: ITemplateRepository;
   AppApplicationService: AppApplicationService;
   PuckPageApplicationService: PuckPageApplicationService;
+  TemplateApplicationService: TemplateApplicationService;
 
   // Data Source Services
   ViewRepository: IViewRepository;
@@ -138,6 +143,7 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
     'ConnectionRepository': 'IConnectionRepository',
     'AppRepository': 'IAppRepository',
     'PuckPageRepository': 'IPuckPageRepository',
+    'TemplateRepository': 'ITemplateRepository',
     'ViewRepository': 'ViewRepository',
     'TokenUsageRepository': 'ITokenUsageRepository',
     'InvoiceRepository': 'IInvoiceRepository',
@@ -240,10 +246,12 @@ export const getOAuthProxyApplicationService = (): OAuthProxyApplicationService 
 // Puck domain repository getters
 export const getAppRepository = createGetter('AppRepository');
 export const getPuckPageRepository = createGetter('PuckPageRepository');
+export const getTemplateRepository = createGetter('TemplateRepository');
 
 // Puck application service getters
 export const getAppApplicationService = createGetter('AppApplicationService');
 export const getPuckPageApplicationService = createGetter('PuckPageApplicationService');
+export const getTemplateApplicationService = createGetter('TemplateApplicationService');
 
 // Data Source domain repository getters
 export const getViewRepository = createGetter('ViewRepository');

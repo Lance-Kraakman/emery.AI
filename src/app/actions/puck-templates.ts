@@ -14,8 +14,8 @@ import { OrganizationId, UserId } from "@/ddd/domain/shared/value-objects"
 import { AppId } from "@/ddd/domain/puck/value-objects/app-id"
 import { TemplateId } from "@/ddd/domain/puck/value-objects/template-id"
 import { Template, type TemplateData, type TemplateVariant } from "@/ddd/domain/puck/entities/template"
-import { DrizzleTemplateRepository } from "@/ddd/infrastructure/db/repositories/puck/drizzle-template-repository"
-import { db } from "@/lib/db/client"
+import { getTemplateApplicationService } from "@/ddd/application/di/container"
+import type { CreateTemplateCommand, UpdateTemplateCommand } from "@/ddd/application/services/puck/template-application-service"
 
 // DTO for transferring template data to the client
 export interface TemplateDTO {
@@ -99,18 +99,34 @@ export async function getTemplates(appId?: number): Promise<Result<TemplateDTO[]
     await requirePermission("apps:view");
     const currentOrg = await requireCurrentOrganization();
 
-    const templateRepository = new DrizzleTemplateRepository(db);
+    const templateApplicationService = getTemplateApplicationService();
 
     let templates: Template[];
     if (appId) {
-      templates = await templateRepository.findByApp(
+      const result = await templateApplicationService.getTemplatesForApp(
         OrganizationId.fromNumber(currentOrg.id),
         AppId.fromNumber(appId)
       );
+      if (!result.success) {
+        return {
+          success: false,
+          error: ActionError.database('fetch templates'),
+          errorCode: 'DATABASE'
+        };
+      }
+      templates = result.data!;
     } else {
-      templates = await templateRepository.findByOrganization(
+      const result = await templateApplicationService.getTemplatesForOrganization(
         OrganizationId.fromNumber(currentOrg.id)
       );
+      if (!result.success) {
+        return {
+          success: false,
+          error: ActionError.database('fetch templates'),
+          errorCode: 'DATABASE'
+        };
+      }
+      templates = result.data!;
     }
 
     return {
@@ -142,10 +158,10 @@ export async function getTemplate(id: number): Promise<Result<TemplateDTO>> {
 
     await requirePermission("apps:view");
 
-    const templateRepository = new DrizzleTemplateRepository(db);
-    const template = await templateRepository.findById(TemplateId.fromNumber(id));
+    const templateApplicationService = getTemplateApplicationService();
+    const result = await templateApplicationService.getTemplate(TemplateId.fromNumber(id));
 
-    if (!template) {
+    if (!result.success || !result.data) {
       return {
         success: false,
         error: ActionError.notFound('Template', id),
@@ -155,7 +171,7 @@ export async function getTemplate(id: number): Promise<Result<TemplateDTO>> {
 
     return {
       success: true,
-      data: toDTO(template)
+      data: toDTO(result.data)
     };
   } catch (error) {
     console.error('[getTemplate] Error:', error);
@@ -183,15 +199,23 @@ export async function getTemplatesByCategory(category: string): Promise<Result<T
     await requirePermission("apps:view");
     const currentOrg = await requireCurrentOrganization();
 
-    const templateRepository = new DrizzleTemplateRepository(db);
-    const templates = await templateRepository.findByCategory(
+    const templateApplicationService = getTemplateApplicationService();
+    const result = await templateApplicationService.getTemplatesByCategory(
       OrganizationId.fromNumber(currentOrg.id),
       category
     );
 
+    if (!result.success) {
+      return {
+        success: false,
+        error: ActionError.database('fetch templates by category'),
+        errorCode: 'DATABASE'
+      };
+    }
+
     return {
       success: true,
-      data: templates.map(toDTO)
+      data: result.data!.map(toDTO)
     };
   } catch (error) {
     console.error('[getTemplatesByCategory] Error:', error);
@@ -208,12 +232,21 @@ export async function getTemplatesByCategory(category: string): Promise<Result<T
  */
 export async function createTemplate(data: z.infer<typeof createTemplateSchema>): Promise<Result<TemplateDTO>> {
   try {
-    const session = await requirePermission("apps:manage");
+    const session = await auth();
+    if (!session?.user) {
+      return {
+        success: false,
+        error: ActionError.permission('create template'),
+        errorCode: 'PERMISSION'
+      };
+    }
+
+    await requirePermission("apps:manage");
     const currentOrg = await requireCurrentOrganization();
 
     const validatedData = createTemplateSchema.parse(data);
 
-    const template = Template.create({
+    const createCommand: CreateTemplateCommand = {
       name: validatedData.name,
       description: validatedData.description,
       category: validatedData.category,
@@ -222,16 +255,24 @@ export async function createTemplate(data: z.infer<typeof createTemplateSchema>)
       organizationId: OrganizationId.fromNumber(currentOrg.id),
       appId: validatedData.appId ? AppId.fromNumber(validatedData.appId) : null,
       createdBy: UserId.fromString(session.user.id)
-    });
+    };
 
-    const templateRepository = new DrizzleTemplateRepository(db);
-    const created = await templateRepository.create(template);
+    const templateApplicationService = getTemplateApplicationService();
+    const result = await templateApplicationService.createTemplate(createCommand);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: ActionError.database('create template'),
+        errorCode: 'DATABASE'
+      };
+    }
 
     revalidatePath('/apps');
 
     return {
       success: true,
-      data: toDTO(created)
+      data: toDTO(result.data!)
     };
   } catch (error) {
     console.error('[createTemplate] Error:', error);
@@ -278,47 +319,30 @@ export async function updateTemplate(data: z.infer<typeof updateTemplateSchema>)
 
     await requirePermission("apps:manage");
 
-    const templateRepository = new DrizzleTemplateRepository(db);
+    const templateApplicationService = getTemplateApplicationService();
+    const result = await templateApplicationService.updateTemplate({
+      id: TemplateId.fromNumber(validatedData.id),
+      name: validatedData.name,
+      description: validatedData.description,
+      category: validatedData.category,
+      data: validatedData.data as TemplateData,
+      variants: validatedData.variants as TemplateVariant[] | undefined,
+      updatedBy: UserId.fromString(session.user.id)
+    });
 
-    const template = await templateRepository.findById(TemplateId.fromNumber(validatedData.id));
-    if (!template) {
+    if (!result.success) {
       return {
         success: false,
-        error: ActionError.notFound('Template', validatedData.id),
-        errorCode: 'NOT_FOUND'
+        error: ActionError.database('update template'),
+        errorCode: 'DATABASE'
       };
     }
-
-    // Check if user can update this template (creator or org manager)
-    const isCreator = template.wasCreatedBy(UserId.fromString(session.user.id));
-    if (!isCreator) {
-      // Non-creators need apps:manage permission (checked above)
-    }
-
-    // Update fields
-    if (validatedData.name) {
-      template.updateName(validatedData.name);
-    }
-    if (validatedData.description !== undefined) {
-      template.updateDescription(validatedData.description);
-    }
-    if (validatedData.category !== undefined) {
-      template.updateCategory(validatedData.category);
-    }
-    if (validatedData.data) {
-      template.updateData(validatedData.data as TemplateData);
-    }
-    if (validatedData.variants !== undefined) {
-      template.updateVariants(validatedData.variants as TemplateVariant[]);
-    }
-
-    const updated = await templateRepository.update(template);
 
     revalidatePath('/apps');
 
     return {
       success: true,
-      data: toDTO(updated)
+      data: toDTO(result.data!)
     };
   } catch (error) {
     console.error('[updateTemplate] Error:', error);
@@ -363,33 +387,16 @@ export async function deleteTemplate(id: number): Promise<Result<{ message: stri
 
     await requirePermission("apps:manage");
 
-    const templateRepository = new DrizzleTemplateRepository(db);
+    const templateApplicationService = getTemplateApplicationService();
+    const result = await templateApplicationService.deleteTemplate(TemplateId.fromNumber(id));
 
-    const template = await templateRepository.findById(TemplateId.fromNumber(id));
-    if (!template) {
+    if (!result.success) {
       return {
         success: false,
-        error: ActionError.notFound('Template', id),
-        errorCode: 'NOT_FOUND'
+        error: ActionError.database('delete template'),
+        errorCode: 'DATABASE'
       };
     }
-
-    // Block deletion of system templates
-    if (template.isSystem) {
-      return {
-        success: false,
-        error: 'System templates cannot be deleted',
-        errorCode: 'PERMISSION'
-      };
-    }
-
-    // Check if user can delete this template (creator or org manager)
-    const isCreator = template.wasCreatedBy(UserId.fromString(session.user.id));
-    if (!isCreator) {
-      // Non-creators need apps:manage permission (checked above)
-    }
-
-    await templateRepository.delete(TemplateId.fromNumber(id));
 
     revalidatePath('/apps');
 
@@ -431,10 +438,10 @@ export async function deleteVariant(templateId: number, variantId: string): Prom
 
     await requirePermission("apps:manage");
 
-    const templateRepository = new DrizzleTemplateRepository(db);
+    const templateApplicationService = getTemplateApplicationService();
+    const result = await templateApplicationService.getTemplate(TemplateId.fromNumber(templateId));
 
-    const template = await templateRepository.findById(TemplateId.fromNumber(templateId));
-    if (!template) {
+    if (!result.success || !result.data) {
       return {
         success: false,
         error: ActionError.notFound('Template', templateId),
@@ -442,16 +449,30 @@ export async function deleteVariant(templateId: number, variantId: string): Prom
       };
     }
 
+    const template = result.data!;
+
     // Remove the variant
     template.removeVariant(variantId);
 
-    const updated = await templateRepository.update(template);
+    const updateResult = await templateApplicationService.updateTemplate({
+      id: TemplateId.fromNumber(templateId),
+      variants: template.variants,
+      updatedBy: UserId.fromString(session.user.id)
+    });
+
+    if (!updateResult.success) {
+      return {
+        success: false,
+        error: ActionError.database('delete variant'),
+        errorCode: 'DATABASE'
+      };
+    }
 
     revalidatePath('/apps');
 
     return {
       success: true,
-      data: toDTO(updated)
+      data: toDTO(updateResult.data!)
     };
   } catch (error) {
     console.error('[deleteVariant] Error:', error);

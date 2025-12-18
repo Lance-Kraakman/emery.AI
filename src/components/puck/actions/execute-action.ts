@@ -320,6 +320,56 @@ export async function executeAction(
         break;
       }
 
+      case 'setState': {
+        // Set a value in a state container
+        if (!context.stateContext) {
+          console.warn('[setState] No state context available');
+          break;
+        }
+
+        // Resolve dynamic value if it's a string template
+        let resolvedValue: unknown = action.value;
+        if (typeof action.value === 'string') {
+          resolvedValue = resolveDynamicValue(action.value, context);
+        }
+
+        context.stateContext.setValue(action.container, action.key, resolvedValue);
+        break;
+      }
+
+      case 'toggleUIState': {
+        // Toggle a UI state flag
+        if (!context.stateContext) {
+          console.warn('[toggleUIState] No state context available');
+          break;
+        }
+
+        context.stateContext.toggleUIState(action.container, action.key);
+        break;
+      }
+
+      case 'setUIState': {
+        // Set a UI state flag to a specific value
+        if (!context.stateContext) {
+          console.warn('[setUIState] No state context available');
+          break;
+        }
+
+        context.stateContext.setUIState(action.container, action.key, action.value);
+        break;
+      }
+
+      case 'resetState': {
+        // Reset a state container to initial values
+        if (!context.stateContext) {
+          console.warn('[resetState] No state context available');
+          break;
+        }
+
+        context.stateContext.resetContainer(action.container);
+        break;
+      }
+
       default: {
         // Type guard to ensure all action types are handled
         const _exhaustive: never = action;

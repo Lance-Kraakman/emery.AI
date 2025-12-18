@@ -5,7 +5,7 @@ import { quotes } from "./quotes";
 import { AutoField, FieldLabel } from "@measured/puck";
 import { Link2 } from "lucide-react";
 import HeroComponent, { HeroProps } from "./Hero";
-import { backgroundColorField, textColorField, fontFamilyField, fontWeightField, paddingField } from "../../fields/standard-fields";
+import { backgroundColorField, textColorField, fontFamilyField, fontWeightField, paddingField, textAlignField } from "../../fields/standard-fields";
 import type { FourSidedSpacing } from "../../types/spacing-types";
 import { createLinkActionField } from "../../custom-fields";
 
@@ -103,7 +103,7 @@ export const Hero: ComponentConfig<HeroProps> = {
       },
     },
     align: {
-      type: "radio",
+      ...textAlignField,
       options: [
         { label: "left", value: "left" },
         { label: "center", value: "center" },

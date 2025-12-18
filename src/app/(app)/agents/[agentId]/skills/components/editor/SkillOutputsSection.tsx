@@ -1,11 +1,41 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import type { SkillOutput } from '@/app/mappers/skill-mapper';
+import type { TableDTO } from '@/app/mappers/table-mapper';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import { getTables } from '@/app/actions/tables';
+import { getFields } from '@/app/actions/fields';
+
+// Map table field types to skill output types
+// Returns null for read-only/system fields that shouldn't be mapped
+const fieldTypeToOutputType: Record<FieldType, SkillOutput['type'] | null> = {
+  'text': 'text',
+  'number': 'number',
+  'boolean': 'boolean',
+  'date': 'date',
+  'single-select': 'single-select',
+  'multi-select': 'multi-select',
+  'file': 'file',
+  'document': 'document',
+  'email': 'email',
+  'phone': 'phone',
+  'json': 'json',
+  'relation': 'text',  // Relations output display value as text
+  // Read-only/system fields - skip these
+  'embedding': null,
+  'autonumber': null,
+  'last-updated': null,
+  'created-at': null,
+};
 
 interface SkillOutputsSectionProps {
   outputs: SkillOutput[];
@@ -22,6 +52,106 @@ export function SkillOutputsSection({
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [formData, setFormData] = useState<SkillOutput>({ name: '', type: 'text' });
   const formRef = useRef<HTMLDivElement>(null);
+
+  // Table picker state
+  const [showTablePicker, setShowTablePicker] = useState(false);
+  const [tables, setTables] = useState<TableDTO[]>([]);
+  const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
+  const [fields, setFields] = useState<FieldDTO[]>([]);
+  const [selectedFieldIds, setSelectedFieldIds] = useState<Set<number>>(new Set());
+  const [loadingTables, setLoadingTables] = useState(false);
+  const [loadingFields, setLoadingFields] = useState(false);
+
+  // Fetch tables when popover opens
+  useEffect(() => {
+    if (showTablePicker && tables.length === 0 && !loadingTables) {
+      setLoadingTables(true);
+      getTables()
+        .then(setTables)
+        .finally(() => setLoadingTables(false));
+    }
+  }, [showTablePicker, tables.length, loadingTables]);
+
+  // Fetch fields when table is selected
+  useEffect(() => {
+    if (selectedTableId) {
+      setLoadingFields(true);
+      setFields([]);
+      setSelectedFieldIds(new Set());
+      getFields(selectedTableId)
+        .then((fetchedFields) => {
+          if (Array.isArray(fetchedFields)) {
+            // Filter to only writeable fields (those with non-null output type mapping)
+            // Also exclude the system 'id' field
+            const writeableFields = fetchedFields.filter(
+              (f) => f.name !== 'id' && fieldTypeToOutputType[f.type as FieldType] !== null
+            );
+            setFields(writeableFields);
+          }
+        })
+        .finally(() => setLoadingFields(false));
+    }
+  }, [selectedTableId]);
+
+  // Handle adding selected fields as outputs
+  const handleAddFromTable = () => {
+    if (selectedFieldIds.size === 0) return;
+
+    const existingNames = new Set(outputs.map((o) => o.name));
+    const newOutputs: SkillOutput[] = [];
+
+    fields
+      .filter((f) => selectedFieldIds.has(f.id))
+      .forEach((field) => {
+        let name = field.name;
+        // Handle duplicates by adding suffix
+        if (existingNames.has(name)) {
+          let suffix = 2;
+          while (existingNames.has(`${field.name}_${suffix}`)) {
+            suffix++;
+          }
+          name = `${field.name}_${suffix}`;
+        }
+        existingNames.add(name);
+
+        const outputType = fieldTypeToOutputType[field.type as FieldType] || 'text';
+        newOutputs.push({
+          name,
+          type: outputType,
+          description: field.type === 'relation' ? `Relation from ${field.name}` : undefined,
+        });
+      });
+
+    onOutputsChange([...outputs, ...newOutputs]);
+
+    // Reset picker state
+    setShowTablePicker(false);
+    setSelectedTableId(null);
+    setFields([]);
+    setSelectedFieldIds(new Set());
+  };
+
+  // Toggle field selection
+  const handleFieldToggle = (fieldId: number) => {
+    setSelectedFieldIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(fieldId)) {
+        next.delete(fieldId);
+      } else {
+        next.add(fieldId);
+      }
+      return next;
+    });
+  };
+
+  // Select/deselect all fields
+  const handleSelectAll = () => {
+    if (selectedFieldIds.size === fields.length) {
+      setSelectedFieldIds(new Set());
+    } else {
+      setSelectedFieldIds(new Set(fields.map((f) => f.id)));
+    }
+  };
 
   const handleAdd = () => {
     if (!formData.name.trim()) return;
@@ -208,16 +338,113 @@ export function SkillOutputsSection({
             />
           </div>
         ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-[26px] text-[11px] px-2"
-            onClick={() => setShowAddForm(true)}
-          >
-            <Plus className="h-3 w-3 mr-1" />
-            Add
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-[26px] text-[11px] px-2"
+              onClick={() => setShowAddForm(true)}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add
+            </Button>
+            <Popover open={showTablePicker} onOpenChange={setShowTablePicker}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-[26px] text-[11px] px-2"
+                >
+                  <Database className="h-3 w-3 mr-1" />
+                  From Table
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-3" align="start">
+                <div className="space-y-3">
+                  {/* Table selector */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Select Table</Label>
+                    {loadingTables ? (
+                      <div className="text-xs text-muted-foreground py-2">Loading tables...</div>
+                    ) : tables.length === 0 ? (
+                      <div className="text-xs text-muted-foreground py-2">No tables available</div>
+                    ) : (
+                      <Select
+                        value={selectedTableId?.toString() || ''}
+                        onValueChange={(v) => setSelectedTableId(parseInt(v))}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select a table..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {tables.map((table) => (
+                            <SelectItem key={table.id} value={table.id.toString()}>
+                              {table.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+
+                  {/* Field checkboxes */}
+                  {selectedTableId && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-medium">Select Fields</Label>
+                        {fields.length > 0 && (
+                          <button
+                            type="button"
+                            className="text-[10px] text-muted-foreground hover:text-foreground"
+                            onClick={handleSelectAll}
+                          >
+                            {selectedFieldIds.size === fields.length ? 'Deselect all' : 'Select all'}
+                          </button>
+                        )}
+                      </div>
+                      {loadingFields ? (
+                        <div className="text-xs text-muted-foreground py-2">Loading fields...</div>
+                      ) : fields.length === 0 ? (
+                        <div className="text-xs text-muted-foreground py-2">No writeable fields</div>
+                      ) : (
+                        <div className="max-h-48 overflow-y-auto space-y-1 border rounded-md p-2">
+                          {fields.map((field) => (
+                            <label
+                              key={field.id}
+                              className="flex items-center gap-2 py-1 px-1 hover:bg-muted/50 rounded cursor-pointer"
+                            >
+                              <Checkbox
+                                checked={selectedFieldIds.has(field.id)}
+                                onCheckedChange={() => handleFieldToggle(field.id)}
+                              />
+                              <span className="text-xs flex-1">{field.name}</span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {field.type}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Add button */}
+                  {selectedFieldIds.size > 0 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="w-full h-8 text-xs"
+                      onClick={handleAddFromTable}
+                    >
+                      Add {selectedFieldIds.size} output{selectedFieldIds.size !== 1 ? 's' : ''}
+                    </Button>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
         )
       )}
     </div>

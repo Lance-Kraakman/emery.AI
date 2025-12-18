@@ -47,12 +47,24 @@ export interface TableReference {
 }
 
 /**
- * Typed field source - either a skill output or a reference to previous table
+ * Typed field source - skill output, skill input, or reference to previous table
  * Discriminated union for type-safe source selection
  */
 export type FieldSource =
   | { type: 'skill_output'; name: string }
+  | { type: 'skill_input'; name: string }
   | { type: 'table_ref'; order: number; field: string };
+
+/**
+ * Source for row ID in update mode - determines which row to update
+ * Discriminated union for type-safe row ID resolution
+ */
+export type RowIdSource =
+  | { type: 'static'; staticId: string }
+  | { type: 'skill_input'; skillInput: string }
+  | { type: 'skill_output'; skillOutput: string }
+  | { type: 'table_ref'; tableRef: TableReference }
+  | { type: 'source_row' };
 
 /**
  * DTO for Field Mapping
@@ -73,9 +85,10 @@ export interface TableMapping {
   order: number;                               // Execution order (1, 2, 3...)
   targetTableId: number;                       // Which table to write to
   rowAction: 'create' | 'update';              // Create or update row
-  rowId?: string;                              // For update mode - specific row ID
+  rowIdSource?: RowIdSource;                   // For update mode - typed source for row ID
   mappings: FieldMapping[];                    // Field mappings for this table
   displayFieldId?: number;                     // Field to use for relation display value
+  mode?: 'single_row' | 'multi_row';           // Per-table mode (overrides config default)
 }
 
 /**

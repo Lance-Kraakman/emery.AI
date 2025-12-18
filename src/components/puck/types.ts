@@ -42,6 +42,9 @@ import { LinkFieldProps } from "./blocks/LinkField/LinkField";
 import type { LoginBlockProps } from "./blocks/LoginBlock";
 import type { SignOutBlockProps } from "./blocks/SignOutBlock";
 import type { EditorBlockProps } from "./blocks/EditorBlock/types";
+import type { StateBlockProps } from "./blocks/StateBlock";
+import type { ConditionalBlockProps } from "./blocks/ConditionalBlock";
+import type { DialogBlockProps } from "./blocks/DialogBlock";
 
 import { RootProps } from "./root";
 
@@ -85,6 +88,9 @@ export type Components = {
   HeaderBlock: HeaderBlockProps;
   FooterBlock: FooterBlockProps;
   DataBlock: DataBlockProps;
+  StateBlock: StateBlockProps;
+  ConditionalBlock: ConditionalBlockProps;
+  DialogBlock: DialogBlockProps;
   TableBlock: TableBlockProps;
   MetricBlock: MetricBlockProps;
   ChartBlock: ChartBlockProps;

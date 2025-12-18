@@ -17,7 +17,7 @@ export interface TemplateVariant {
 }
 import type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
-import type { SkillParameterType, SkillInputFileConfig } from '@/ddd/domain/skills/entities/skill';
+import type { SkillParameterType, SkillInputFileConfig, SkillOutput } from '@/ddd/domain/skills/entities/skill';
 
 // AIDEV-NOTE: Authenticated user role for RLS policies
 export const authenticatedRole = pgRole('authenticated', {
@@ -589,6 +589,9 @@ export const userRoles = pgTable("user_roles", {
   assignedAt: timestamp("assigned_at").defaultNow(),
 }, (table) => [
   unique("unique_user_role_org").on(table.userId, table.roleId, table.organizationId),
+  index("userRoles_user_org_idx").on(table.userId, table.organizationId),
+  index("userRoles_user_idx").on(table.userId),
+  index("userRoles_org_idx").on(table.organizationId),
   pgPolicy("user_roles_tenant_isolation", {
     as: "permissive",
     for: "all",
@@ -988,10 +991,7 @@ export const skills = pgTable("skills", {
     fileConfig?: SkillInputFileConfig;
     default?: any;
   }>>().default([]),
-  outputs: jsonb("outputs").$type<Array<{
-    name: string;
-    type?: SkillParameterType;
-  }>>().default([]),
+  outputs: jsonb("outputs").$type<SkillOutput[]>().default([]),
   instructions: text("instructions").notNull().default(''),
   tools: jsonb("tools").default('[]').notNull(),
   content: jsonb("content").$type<MessagePart[]>(), // Skill-level attachments (images, files, text)
@@ -1041,30 +1041,32 @@ export const skills = pgTable("skills", {
     for: "select",
     to: "public",
     using: sql`
-      organization_id = current_setting('app.current_organization_id')::integer
-      AND (
-        (agent_id IS NOT NULL AND EXISTS (
-          SELECT 1 FROM agents a
-          WHERE a.id = agent_id
-          AND (
-            a.owner_id = current_setting('app.current_user_id')::uuid
-            OR user_has_permission(
-              current_setting('app.current_user_id')::uuid,
-              'agents:view',
-              a.organization_id,
-              'agent',
-              a.id
+      is_system = true OR (
+        organization_id = current_setting('app.current_organization_id')::integer
+        AND (
+          (agent_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM agents a
+            WHERE a.id = agent_id
+            AND (
+              a.owner_id = current_setting('app.current_user_id')::uuid
+              OR user_has_permission(
+                current_setting('app.current_user_id')::uuid,
+                'agents:view',
+                a.organization_id,
+                'agent',
+                a.id
+              )
             )
-          )
-        ))
-        OR
-        (agent_id IS NULL AND user_has_permission(
-          current_setting('app.current_user_id')::uuid,
-          'skills:view',
-          organization_id,
-          'skill',
-          id
-        ))
+          ))
+          OR
+          (agent_id IS NULL AND user_has_permission(
+            current_setting('app.current_user_id')::uuid,
+            'skills:view',
+            organization_id,
+            'skill',
+            id
+          ))
+        )
       )
     `
   }),
@@ -1073,57 +1075,61 @@ export const skills = pgTable("skills", {
     for: "all",
     to: "public",
     using: sql`
-      organization_id = current_setting('app.current_organization_id')::integer
-      AND (
-        (agent_id IS NOT NULL AND EXISTS (
-          SELECT 1 FROM agents a
-          WHERE a.id = agent_id
-          AND (
-            a.owner_id = current_setting('app.current_user_id')::uuid
-            OR user_has_permission(
-              current_setting('app.current_user_id')::uuid,
-              'agents:manage',
-              a.organization_id,
-              'agent',
-              a.id
+      is_system = true OR (
+        organization_id = current_setting('app.current_organization_id')::integer
+        AND (
+          (agent_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM agents a
+            WHERE a.id = agent_id
+            AND (
+              a.owner_id = current_setting('app.current_user_id')::uuid
+              OR user_has_permission(
+                current_setting('app.current_user_id')::uuid,
+                'agents:manage',
+                a.organization_id,
+                'agent',
+                a.id
+              )
             )
-          )
-        ))
-        OR
-        (agent_id IS NULL AND user_has_permission(
-          current_setting('app.current_user_id')::uuid,
-          'skills:manage',
-          organization_id,
-          'skill',
-          id
-        ))
+          ))
+          OR
+          (agent_id IS NULL AND user_has_permission(
+            current_setting('app.current_user_id')::uuid,
+            'skills:manage',
+            organization_id,
+            'skill',
+            id
+          ))
+        )
       )
     `,
     withCheck: sql`
-      organization_id = current_setting('app.current_organization_id')::integer
-      AND (
-        (agent_id IS NOT NULL AND EXISTS (
-          SELECT 1 FROM agents a
-          WHERE a.id = agent_id
-          AND (
-            a.owner_id = current_setting('app.current_user_id')::uuid
-            OR user_has_permission(
-              current_setting('app.current_user_id')::uuid,
-              'agents:manage',
-              a.organization_id,
-              'agent',
-              a.id
+      is_system = true OR (
+        organization_id = current_setting('app.current_organization_id')::integer
+        AND (
+          (agent_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM agents a
+            WHERE a.id = agent_id
+            AND (
+              a.owner_id = current_setting('app.current_user_id')::uuid
+              OR user_has_permission(
+                current_setting('app.current_user_id')::uuid,
+                'agents:manage',
+                a.organization_id,
+                'agent',
+                a.id
+              )
             )
-          )
-        ))
-        OR
-        (agent_id IS NULL AND user_has_permission(
-          current_setting('app.current_user_id')::uuid,
-          'skills:manage',
-          organization_id,
-          'skill',
-          id
-        ))
+          ))
+          OR
+          (agent_id IS NULL AND user_has_permission(
+            current_setting('app.current_user_id')::uuid,
+            'skills:manage',
+            organization_id,
+            'skill',
+            id
+          ))
+        )
       )
     `
   }),

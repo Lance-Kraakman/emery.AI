@@ -22,6 +22,13 @@ const nextConfig = {
     'canvas',
     'pdfjs-dist'
   ],
+
+  // Increase Server Actions body size limit from 1MB to 5MB
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '5mb'
+    }
+  },
   
   webpack: (config, { isServer }) => {
     // Externalize DuckDB and its dependencies from webpack bundling

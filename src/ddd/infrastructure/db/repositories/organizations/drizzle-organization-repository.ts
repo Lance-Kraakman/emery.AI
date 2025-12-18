@@ -85,7 +85,8 @@ export class DrizzleOrganizationRepository
   }
 
   async getMembers(organizationId: OrganizationId): Promise<OrganizationMember[]> {
-    const result = await this.db
+    // Get basic member info
+    const membersResult = await this.db
       .select({
         userId: userOrganizations.userId,
         name: users.name,
@@ -96,7 +97,38 @@ export class DrizzleOrganizationRepository
       .leftJoin(users, eq(userOrganizations.userId, users.id))
       .where(eq(userOrganizations.organizationId, organizationId.value));
 
-    throw new Error('getMembers() not implemented for RBAC system. Use permission-based queries instead.');
+    // Get roles for all members in this organization
+    const rolesResult = await this.db
+      .select({
+        userId: userRoles.userId,
+        roleId: roles.id,
+        roleName: roles.name,
+        isSystem: roles.isSystem,
+      })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(eq(userRoles.organizationId, organizationId.value));
+
+    // Group roles by userId
+    const rolesByUser = new Map<string, Array<{id: number; name: string; isSystem: boolean}>>();
+    for (const role of rolesResult) {
+      const existing = rolesByUser.get(role.userId) || [];
+      existing.push({
+        id: role.roleId,
+        name: role.roleName,
+        isSystem: role.isSystem,
+      });
+      rolesByUser.set(role.userId, existing);
+    }
+
+    // Map to OrganizationMember with roles
+    return membersResult.map((member: { userId: string; name: string | null; email: string | null; joinedAt: Date | null }) => ({
+      userId: UserId.fromString(member.userId),
+      name: member.name,
+      email: member.email ? EmailAddress.fromString(member.email) : null,
+      joinedAt: member.joinedAt,
+      roles: rolesByUser.get(member.userId) || [],
+    }));
   }
 
   async create(data: CreateOrganizationData): Promise<Organization> {

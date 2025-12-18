@@ -13,7 +13,7 @@
 
 import React, { createContext, useContext, type ReactNode } from 'react';
 import { useRowData } from './RowDataContext';
-import { useLinkContext } from '../link-context';
+import { useLinkContext } from './PageContext';
 import type { ActionContext as ActionContextType } from '../types/actions';
 
 const ActionContext = createContext<Partial<ActionContextType>>({});

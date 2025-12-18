@@ -16,9 +16,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { Loading } from "@/components/ui/loading";
 import { toast } from "sonner";
-import { ThemeProvider } from "@/components/puck/theme-context";
-import { LinkContextProvider } from "@/components/puck/link-context";
-import { QueryParamProvider } from "@/components/puck/contexts/QueryParamContext";
+import { PageContextProvider } from "@/components/puck/contexts/PageContext";
 import { PuckEditorThemeProvider, usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 import { PuckSession } from "@/lib/puck/session-storage";
 import { EditorDataLayoutProvider } from "@/components/puck/contexts/EditorDataLayoutProvider";
@@ -222,62 +220,86 @@ export default function PageEditPage() {
   }
 
   return (
-    <QueryParamProvider params={queryParamsObject}>
-      <PuckEditorThemeProvider pageId={pageId} page={page} app={app}>
-        <LinkContextProvider
-          value={{
-            orgSlug: organization?.slug ?? undefined,
-            appSlug: app.slug,
-            appId: app.id,
-            pages: pages,
-            isEditing: true,
-            isPreview: false,
+    <PuckEditorThemeProvider pageId={pageId} page={page} app={app}>
+      <EditorPageContextWrapper
+        orgSlug={organization?.slug ?? undefined}
+        appSlug={app.slug}
+        appId={app.id}
+        pages={pages}
+        params={queryParamsObject}
+      >
+        <Puck
+          config={config}
+          data={initialData}
+          iframe={{
+            enabled: true,
+            waitForStyles: true,
           }}
         >
-          <ThemeProviderWrapper>
-            <Puck
-              config={config}
-              data={initialData}
-              iframe={{
-                enabled: true,
-                waitForStyles: true,
-              }}
-            >
-              <PageVariablesProvider
-                pageVariables={page.pageVariables || []}
+          <PageVariablesProvider
+            pageVariables={page.pageVariables || []}
+            pageId={pageId}
+            onAddPageVariable={async (variable) => {
+              const updatedVariables = [...(page.pageVariables || []), variable];
+              await handleSavePageVariables(updatedVariables);
+            }}
+          >
+            <EditorDataLayoutProvider>
+              <PuckEditorLayout
                 pageId={pageId}
-                onAddPageVariable={async (variable) => {
-                  const updatedVariables = [...(page.pageVariables || []), variable];
-                  await handleSavePageVariables(updatedVariables);
-                }}
-              >
-                <EditorDataLayoutProvider>
-                  <PuckEditorLayout
-                    pageId={pageId}
-                    appId={appId}
-                    page={page}
-                    app={app}
-                    organization={organization}
-                    loadedFromSessionStorage={loadedFromSessionStorage}
-                    setLoadedFromSessionStorage={setLoadedFromSessionStorage}
-                    onPublish={handlePublish}
-                    onSavePageSettings={handleSavePageSettings}
-                    onSaveAccessSettings={handleSaveAccessSettings}
-                    onSavePageVariables={handleSavePageVariables}
-                    themeMode="page"
-                  />
-                </EditorDataLayoutProvider>
-              </PageVariablesProvider>
-            </Puck>
-          </ThemeProviderWrapper>
-      </LinkContextProvider>
+                appId={appId}
+                page={page}
+                app={app}
+                organization={organization}
+                loadedFromSessionStorage={loadedFromSessionStorage}
+                setLoadedFromSessionStorage={setLoadedFromSessionStorage}
+                onPublish={handlePublish}
+                onSavePageSettings={handleSavePageSettings}
+                onSaveAccessSettings={handleSaveAccessSettings}
+                onSavePageVariables={handleSavePageVariables}
+                themeMode="page"
+              />
+            </EditorDataLayoutProvider>
+          </PageVariablesProvider>
+        </Puck>
+      </EditorPageContextWrapper>
     </PuckEditorThemeProvider>
-    </QueryParamProvider>
   );
 }
 
-// Wrapper component to provide theme from context to Puck components
-function ThemeProviderWrapper({ children }: { children: ReactNode }) {
+// Wrapper component that reads theme from PuckEditorThemeProvider and provides unified PageContext
+interface EditorPageContextWrapperProps {
+  children: ReactNode;
+  orgSlug?: string;
+  appSlug: string;
+  appId: number;
+  pages: PageDTO[];
+  params: Record<string, string | string[]>;
+}
+
+function EditorPageContextWrapper({
+  children,
+  orgSlug,
+  appSlug,
+  appId,
+  pages,
+  params,
+}: EditorPageContextWrapperProps) {
   const { currentTheme } = usePuckEditorTheme();
-  return <ThemeProvider value={currentTheme}>{children}</ThemeProvider>;
+  return (
+    <PageContextProvider
+      value={{
+        orgSlug,
+        appSlug,
+        appId,
+        pages,
+        isEditing: true,
+        isPreview: false,
+        params,
+        theme: currentTheme,
+      }}
+    >
+      {children}
+    </PageContextProvider>
+  );
 }

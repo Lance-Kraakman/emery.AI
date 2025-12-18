@@ -35,7 +35,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { useTipTapDocument } from './useTipTapDocument';
-import { useOptionalTheme } from '@/components/puck/theme-context';
+import { useOptionalTheme } from '@/components/puck/contexts/PageContext';
 import styles from './TipTapDocumentEditor.module.css';
 
 /**

@@ -330,6 +330,20 @@
       "when": 1765695782100,
       "tag": "0046_magenta_iron_man",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1765921804727,
+      "tag": "0047_glamorous_charles_xavier",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1765930206164,
+      "tag": "0048_short_demogoblin",
+      "breakpoints": true
     }
   ]
 }

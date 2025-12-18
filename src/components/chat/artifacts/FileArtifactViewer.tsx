@@ -41,7 +41,7 @@ import { OfficeViewer } from './OfficeViewer'
 import { AudioViewer } from './AudioViewer'
 import { VideoViewer } from './VideoViewer'
 import { PdfViewer } from './PdfViewer'
-import { useOptionalTheme } from '@/components/puck/theme-context'
+import { useOptionalTheme } from '@/components/puck/contexts/PageContext'
 import { getViewerContainerStyle, getThemedBackground, getThemedSectionStyle } from './theme-utils'
 
 const logger = createDebugLogger('FileArtifactViewer')

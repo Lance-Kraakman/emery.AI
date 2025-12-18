@@ -1,4 +1,5 @@
 import { Organization, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
+import { RoleDTO } from './permission-mapper';
 
 export interface OrganizationDTO {
   id: number;
@@ -15,7 +16,7 @@ export interface OrganizationDTO {
   stripeSubscriptionStatus?: string | null;
   analysisCapabilities?: any | null; // Keep complex nested objects as-is for now
   createdAt?: Date | null;
-  userRole?: string; // Added for getCurrentOrganization response
+  userRoles?: Array<{id: number; name: string; isSystem: boolean}>; // Multi-role support
   hasRoleError?: boolean; // Added for getCurrentOrganization response
 }
 
@@ -28,13 +29,24 @@ export interface OrganizationMemberDTO {
   userId: string;
   name?: string | null;
   email?: string | null;
-  systemRole: string;
   joinedAt?: Date | null;
+  roles: Array<{id: number; name: string; isSystem: boolean}>; // Full role objects
   hasRoleError?: boolean;
 }
 
+/**
+ * Simple user DTO for UI components that need basic user info with roles
+ * Used by agent components for owner selection, etc.
+ */
+export interface UserDTO {
+  id: string;
+  name: string;
+  email: string;
+  roles: Array<{id: number; name: string; isSystem: boolean}>;
+}
+
 export class OrganizationMapper {
-  static toDTO(organization: Organization & { userRole?: string; hasRoleError?: boolean }): OrganizationDTO {
+  static toDTO(organization: Organization & { userRoles?: Array<{id: number; name: string; isSystem: boolean}>; hasRoleError?: boolean }): OrganizationDTO {
     return {
       id: organization.id.value,
       name: organization.name.value,
@@ -50,7 +62,7 @@ export class OrganizationMapper {
       stripeSubscriptionStatus: organization.stripeSubscriptionStatus,
       analysisCapabilities: organization.analysisCapabilities,
       createdAt: organization.createdAt,
-      userRole: organization.userRole,
+      userRoles: organization.userRoles,
       hasRoleError: organization.hasRoleError
     };
   }
@@ -68,9 +80,35 @@ export class OrganizationMapper {
       userId: member.userId.value,
       name: member.name,
       email: member.email?.value || null,
-      systemRole: typeof member.systemRole === 'string' ? member.systemRole : member.systemRole,
+      roles: member.roles.map(r => ({
+        id: r.id,
+        name: r.name,
+        isSystem: r.isSystem
+      })), // Full role objects
       joinedAt: member.joinedAt,
-      hasRoleError: member.hasRoleError
+      hasRoleError: false // TODO: Add roleError to OrganizationMember domain if needed
     };
+  }
+
+  /**
+   * Convert OrganizationMemberDTO to simplified UserDTO for UI components
+   * Used by agent components that need user data with roles
+   */
+  static memberToUser(member: OrganizationMemberDTO): UserDTO {
+    return {
+      id: member.userId,
+      name: member.name || 'Unknown User',
+      email: member.email || '',
+      roles: member.roles
+    };
+  }
+
+  /**
+   * Get the primary role name from a user's roles
+   * Primary role is the first system role, or first role if no system roles
+   */
+  static getPrimaryRoleName(roles: Array<{id: number; name: string; isSystem: boolean}>): string {
+    const primaryRole = roles.find(r => r.isSystem) || roles[0];
+    return primaryRole?.name || 'Member';
   }
 }

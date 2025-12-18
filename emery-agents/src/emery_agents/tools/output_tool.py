@@ -203,8 +203,8 @@ def build_target_field_metadata_from_mappings(
     """
     Extract target field metadata from skill output mappings.
 
-    Extracts target_field_metadata from each output's output_mapping.mappings
-    and creates a lookup dict by output name.
+    With multi-table output mapping, we iterate through table_mappings
+    and their nested mappings to find target_field_metadata.
 
     Args:
         skill_outputs: List of proto SkillOutput objects with output_mapping
@@ -218,19 +218,27 @@ def build_target_field_metadata_from_mappings(
         name = output.name
         output_mapping = output.output_mapping
 
-        if not name or not output_mapping or not output_mapping.mappings:
+        # Check for table_mappings (multi-table structure)
+        if not name or not output_mapping or not output_mapping.table_mappings:
             continue
 
-        # Use first mapping with metadata (typically one mapping per output)
-        for mapping in output_mapping.mappings:
-            tfm = mapping.target_field_metadata
-            if tfm and tfm.field_type:
-                metadata[name] = TargetFieldMetadata(
-                    field_type=tfm.field_type,
-                    options=list(tfm.options) if tfm.options else None,
-                    max_selections=tfm.max_selections or None,
-                    field_name=tfm.field_name or None
-                )
-                break
+        # Iterate through table mappings to find field metadata
+        for table_mapping in output_mapping.table_mappings:
+            if not table_mapping.mappings:
+                continue
+
+            for mapping in table_mapping.mappings:
+                tfm = mapping.target_field_metadata
+                if tfm and tfm.field_type:
+                    metadata[name] = TargetFieldMetadata(
+                        field_type=tfm.field_type,
+                        options=list(tfm.options) if tfm.options else None,
+                        max_selections=tfm.max_selections or None,
+                        field_name=tfm.field_name or None
+                    )
+                    break
+
+            if name in metadata:
+                break  # Found metadata for this output
 
     return metadata
