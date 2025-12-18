@@ -278,12 +278,28 @@ class TableReference(_message.Message):
     def __init__(self, order: _Optional[int] = ..., field: _Optional[str] = ...) -> None: ...
 
 class FieldSource(_message.Message):
-    __slots__ = ("skill_output", "table_ref")
+    __slots__ = ("skill_output", "table_ref", "skill_input")
     SKILL_OUTPUT_FIELD_NUMBER: _ClassVar[int]
     TABLE_REF_FIELD_NUMBER: _ClassVar[int]
+    SKILL_INPUT_FIELD_NUMBER: _ClassVar[int]
     skill_output: str
     table_ref: TableReference
-    def __init__(self, skill_output: _Optional[str] = ..., table_ref: _Optional[_Union[TableReference, _Mapping]] = ...) -> None: ...
+    skill_input: str
+    def __init__(self, skill_output: _Optional[str] = ..., table_ref: _Optional[_Union[TableReference, _Mapping]] = ..., skill_input: _Optional[str] = ...) -> None: ...
+
+class RowIdSource(_message.Message):
+    __slots__ = ("static_id", "skill_input", "skill_output", "table_ref", "use_source_row")
+    STATIC_ID_FIELD_NUMBER: _ClassVar[int]
+    SKILL_INPUT_FIELD_NUMBER: _ClassVar[int]
+    SKILL_OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    TABLE_REF_FIELD_NUMBER: _ClassVar[int]
+    USE_SOURCE_ROW_FIELD_NUMBER: _ClassVar[int]
+    static_id: str
+    skill_input: str
+    skill_output: str
+    table_ref: TableReference
+    use_source_row: bool
+    def __init__(self, static_id: _Optional[str] = ..., skill_input: _Optional[str] = ..., skill_output: _Optional[str] = ..., table_ref: _Optional[_Union[TableReference, _Mapping]] = ..., use_source_row: bool = ...) -> None: ...
 
 class FieldMapping(_message.Message):
     __slots__ = ("source", "target_field_id", "target_field_metadata", "append_mode")
@@ -298,20 +314,22 @@ class FieldMapping(_message.Message):
     def __init__(self, source: _Optional[_Union[FieldSource, _Mapping]] = ..., target_field_id: _Optional[int] = ..., target_field_metadata: _Optional[_Union[TargetFieldMetadata, _Mapping]] = ..., append_mode: bool = ...) -> None: ...
 
 class TableMapping(_message.Message):
-    __slots__ = ("order", "target_table_id", "row_action", "row_id", "mappings", "display_field_id")
+    __slots__ = ("order", "target_table_id", "row_action", "row_id_source", "mappings", "display_field_id", "mode")
     ORDER_FIELD_NUMBER: _ClassVar[int]
     TARGET_TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     ROW_ACTION_FIELD_NUMBER: _ClassVar[int]
-    ROW_ID_FIELD_NUMBER: _ClassVar[int]
+    ROW_ID_SOURCE_FIELD_NUMBER: _ClassVar[int]
     MAPPINGS_FIELD_NUMBER: _ClassVar[int]
     DISPLAY_FIELD_ID_FIELD_NUMBER: _ClassVar[int]
+    MODE_FIELD_NUMBER: _ClassVar[int]
     order: int
     target_table_id: int
     row_action: str
-    row_id: str
+    row_id_source: RowIdSource
     mappings: _containers.RepeatedCompositeFieldContainer[FieldMapping]
     display_field_id: int
-    def __init__(self, order: _Optional[int] = ..., target_table_id: _Optional[int] = ..., row_action: _Optional[str] = ..., row_id: _Optional[str] = ..., mappings: _Optional[_Iterable[_Union[FieldMapping, _Mapping]]] = ..., display_field_id: _Optional[int] = ...) -> None: ...
+    mode: str
+    def __init__(self, order: _Optional[int] = ..., target_table_id: _Optional[int] = ..., row_action: _Optional[str] = ..., row_id_source: _Optional[_Union[RowIdSource, _Mapping]] = ..., mappings: _Optional[_Iterable[_Union[FieldMapping, _Mapping]]] = ..., display_field_id: _Optional[int] = ..., mode: _Optional[str] = ...) -> None: ...
 
 class OutputMappingConfig(_message.Message):
     __slots__ = ("mode", "table_mappings")
