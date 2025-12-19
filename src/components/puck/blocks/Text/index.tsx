@@ -8,6 +8,7 @@ import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
 import { typographySizeField, backgroundColorField, textColorField, fontFamilyField, fontWeightField, textAlignField } from "../../fields/standard-fields";
 import { useInterpolatedText } from "../../hooks/useInterpolatedText";
+import { createVariableTextField } from "../../custom-fields";
 import type { TypographySize } from "../../utils/typography";
 import styles from "./styles.module.css";
 
@@ -60,10 +61,7 @@ function TextRender({
 
 const TextInner: ComponentConfig<TextProps> = {
   fields: {
-    text: {
-      type: "textarea",
-      contentEditable: true,
-    },
+    text: createVariableTextField({ label: 'Text', multiline: true }),
     size: typographySizeField,
     align: {
       ...textAlignField,

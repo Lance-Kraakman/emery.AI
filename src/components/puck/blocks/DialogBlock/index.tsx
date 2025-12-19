@@ -14,6 +14,7 @@ import { useInterpolatedText } from '../../hooks/useInterpolatedText';
 import {
   createStateContainerField,
   createStateKeyField,
+  createVariableTextField,
 } from '../../custom-fields';
 
 /**
@@ -184,14 +185,8 @@ export const DialogBlock: ComponentConfig<DialogBlockProps> = {
       containerProp: 'stateContainer',
       filterType: 'uiState', // Only show UI state flags for dialogs
     }),
-    title: {
-      type: 'text',
-      label: 'Title',
-    },
-    description: {
-      type: 'textarea',
-      label: 'Description',
-    },
+    title: createVariableTextField({ label: 'Title' }),
+    description: createVariableTextField({ label: 'Description', multiline: true }),
     size: {
       type: 'select',
       label: 'Size',

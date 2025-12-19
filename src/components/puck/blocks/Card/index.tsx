@@ -10,6 +10,8 @@ import { backgroundColorField, textColorField, fontFamilyField, fontWeightField,
 import type { FourSidedSpacing, FourCornerRadius } from "../../types/spacing-types";
 import { useTheme } from "../../contexts/PageContext";
 import { computeFourSidedCSS, computeFourCornerRadiusCSS } from "../../utils/spacing";
+import { createVariableTextField } from "../../custom-fields";
+import { useInterpolatedText } from "../../hooks/useInterpolatedText";
 
 const getClassName = getClassNameFactory("Card", styles);
 
@@ -48,14 +50,8 @@ export type CardProps = WithLayout<{
 
 const CardInner: ComponentConfig<CardProps> = {
   fields: {
-    title: {
-      type: "text",
-      contentEditable: true,
-    },
-    description: {
-      type: "textarea",
-      contentEditable: true,
-    },
+    title: createVariableTextField({ label: 'Title' }),
+    description: createVariableTextField({ label: 'Description', multiline: true }),
     icon: {
       type: "select",
       options: iconOptions,
@@ -114,6 +110,9 @@ const CardInner: ComponentConfig<CardProps> = {
   },
   render: function CardRender({ title, icon, description, mode, titleColor, textColor, backgroundColor, titleFontFamily, titleFontWeight, textFontFamily, textFontWeight, radius, borderWidth, padding }) {
     const theme = useTheme();
+    // Interpolate variables in title and description
+    const interpolatedTitle = useInterpolatedText(title);
+    const interpolatedDescription = useInterpolatedText(description);
 
     // Compute styles from FourSided/FourCorner values
     const paddingStyles = padding ? computeFourSidedCSS(padding, theme, 'padding') : {};
@@ -140,7 +139,7 @@ const CardInner: ComponentConfig<CardProps> = {
               ...(titleFontWeight && { fontWeight: titleFontWeight }),
             }}
           >
-            {title}
+            {interpolatedTitle}
           </div>
           <div
             className={getClassName("description")}
@@ -150,7 +149,7 @@ const CardInner: ComponentConfig<CardProps> = {
               ...(textFontWeight && { fontWeight: textFontWeight }),
             }}
           >
-            {description}
+            {interpolatedDescription}
           </div>
         </div>
       </div>
