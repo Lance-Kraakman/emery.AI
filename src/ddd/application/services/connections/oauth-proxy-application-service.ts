@@ -173,18 +173,12 @@ export class OAuthProxyApplicationService {
       throw new Error(`Unsupported action: ${service}.${action}`);
     }
 
-    console.log(`[PIPEDREAM-DEBUG] Trying to execute action for user ${ownerId.value}`);
-    console.log(`[PIPEDREAM-DEBUG] External user ID: ${externalUserId}`);
-    console.log(`[PIPEDREAM-DEBUG] Service: ${service}, Action: ${action}`);
-    console.log(`[PIPEDREAM-DEBUG] Params:`, JSON.stringify(params, null, 2));
-
     // Check if the user has Connections and get account ID
     let accountId: string | undefined;
     try {
       const accounts = await this.pipedreamClient.accounts.list({
         external_user_id: externalUserId
       });
-      console.log(`[PIPEDREAM-DEBUG] User accounts:`, JSON.stringify(accounts, null, 2));
 
       if (!accounts || !Array.isArray(accounts.data) || accounts.data.length === 0) {
         throw new Error(`No Connections found for user. Please connect ${service} in the dashboard.`);
@@ -197,9 +191,8 @@ export class OAuthProxyApplicationService {
       }
 
       accountId = account.id;
-      console.log(`[PIPEDREAM-DEBUG] Using account ID: ${accountId} for service: ${service}`);
     } catch (accountError) {
-      console.error(`[PIPEDREAM-DEBUG] Failed to list accounts:`, accountError);
+      console.error('[OAUTH-PROXY] Failed to list accounts:', accountError instanceof Error ? accountError.message : 'Unknown error');
       throw new Error(`Failed to check Connections: ${accountError instanceof Error ? accountError.message : 'Unknown error'}`);
     }
 
@@ -214,52 +207,24 @@ export class OAuthProxyApplicationService {
         }
       };
 
-      console.log(`[PIPEDREAM-DEBUG] Using action ID: ${actionId}`);
-      console.log(`[PIPEDREAM-DEBUG] Full request payload:`, JSON.stringify({
-        id: actionId,
-        external_user_id: externalUserId,
-        configured_props: configuredProps
-      }, null, 2));
-
       const result = await this.pipedreamClient.actions.run({
         id: actionId,
         external_user_id: externalUserId,
         configured_props: configuredProps,
       });
 
-      console.log(`[PIPEDREAM-DEBUG] Raw Pipedream result:`, JSON.stringify(result, null, 2));
-
       // Check if Pipedream returned an error in the response
       // Pipedream returns errors in os array with k: "error"
       if (result.os && Array.isArray(result.os)) {
         const errorEntry = result.os.find((entry: any) => entry.k === 'error');
         if (errorEntry && errorEntry.err) {
-          console.log(`[PIPEDREAM-DEBUG] ❌ Pipedream action failed with error in response`);
-          console.log(`[PIPEDREAM-DEBUG] Error name:`, errorEntry.err.name);
-          console.log(`[PIPEDREAM-DEBUG] Error message:`, errorEntry.err.message);
           throw new Error(`Pipedream action failed: ${errorEntry.err.message}`);
         }
       }
 
-      console.log(`[PIPEDREAM-DEBUG] ✅ Success with action ID: ${actionId}`);
       return result;
 
     } catch (error: any) {
-      console.log(`[PIPEDREAM-DEBUG] ❌ Failed with action ID: ${actionId}`);
-      console.log(`[PIPEDREAM-DEBUG] Error type:`, error.constructor.name);
-      console.log(`[PIPEDREAM-DEBUG] Error message:`, error.message);
-      console.log(`[PIPEDREAM-DEBUG] Error stack:`, error.stack);
-
-      if (error.response) {
-        console.log(`[PIPEDREAM-DEBUG] Response status:`, error.response.status);
-        console.log(`[PIPEDREAM-DEBUG] Response headers:`, JSON.stringify(error.response.headers, null, 2));
-        console.log(`[PIPEDREAM-DEBUG] Response data:`, JSON.stringify(error.response.data, null, 2));
-      }
-
-      if (error.data) {
-        console.log(`[PIPEDREAM-DEBUG] Error data:`, JSON.stringify(error.data, null, 2));
-      }
-
       throw new Error(`${service} ${action} failed: ${error.message}`);
     }
   }
@@ -286,17 +251,12 @@ export class OAuthProxyApplicationService {
       throw new Error(`Unsupported action: ${service}.${action}`);
     }
 
-    console.log(`[PIPEDREAM-DEBUG] User ${userId.value} executing ${actionId}`);
-    console.log(`[PIPEDREAM-DEBUG] External user ID: ${externalUserId}`);
-    console.log(`[PIPEDREAM-DEBUG] Params:`, JSON.stringify(params, null, 2));
-
     // Check user's Connections and get account ID
     let accountId: string | undefined;
     try {
       const accounts = await this.pipedreamClient.accounts.list({
         external_user_id: externalUserId
       });
-      console.log(`[PIPEDREAM-DEBUG] User accounts:`, JSON.stringify(accounts, null, 2));
 
       if (!accounts || !Array.isArray(accounts.data) || accounts.data.length === 0) {
         throw new Error(`No Connections found for user. Please connect ${service} in the dashboard.`);
@@ -309,9 +269,8 @@ export class OAuthProxyApplicationService {
       }
 
       accountId = account.id;
-      console.log(`[PIPEDREAM-DEBUG] Using account ID: ${accountId} for service: ${service}`);
     } catch (accountError) {
-      console.error(`[PIPEDREAM-DEBUG] Failed to list user accounts:`, accountError);
+      console.error('[OAUTH-PROXY] Failed to list user accounts:', accountError instanceof Error ? accountError.message : 'Unknown error');
       throw new Error(`Failed to check Connections: ${accountError instanceof Error ? accountError.message : 'Unknown error'}`);
     }
 
@@ -326,51 +285,24 @@ export class OAuthProxyApplicationService {
         }
       };
 
-      console.log(`[PIPEDREAM-DEBUG] Full user request payload:`, JSON.stringify({
-        id: actionId,
-        external_user_id: externalUserId,
-        configured_props: configuredProps
-      }, null, 2));
-
       const result = await this.pipedreamClient.actions.run({
         id: actionId,
         external_user_id: externalUserId,
         configured_props: configuredProps,
       });
 
-      console.log(`[PIPEDREAM-DEBUG] Raw Pipedream result:`, JSON.stringify(result, null, 2));
-
       // Check if Pipedream returned an error in the response
       // Pipedream returns errors in os array with k: "error"
       if (result.os && Array.isArray(result.os)) {
         const errorEntry = result.os.find((entry: any) => entry.k === 'error');
         if (errorEntry && errorEntry.err) {
-          console.log(`[PIPEDREAM-DEBUG] ❌ Pipedream action failed with error in response`);
-          console.log(`[PIPEDREAM-DEBUG] Error name:`, errorEntry.err.name);
-          console.log(`[PIPEDREAM-DEBUG] Error message:`, errorEntry.err.message);
           throw new Error(`Pipedream action failed: ${errorEntry.err.message}`);
         }
       }
 
-      console.log(`[PIPEDREAM-DEBUG] ✅ User action succeeded`);
       return result;
 
     } catch (error: any) {
-      console.log(`[PIPEDREAM-DEBUG] ❌ User action failed`);
-      console.log(`[PIPEDREAM-DEBUG] Error type:`, error.constructor.name);
-      console.log(`[PIPEDREAM-DEBUG] Error message:`, error.message);
-      console.log(`[PIPEDREAM-DEBUG] Error stack:`, error.stack);
-
-      if (error.response) {
-        console.log(`[PIPEDREAM-DEBUG] Response status:`, error.response.status);
-        console.log(`[PIPEDREAM-DEBUG] Response headers:`, JSON.stringify(error.response.headers, null, 2));
-        console.log(`[PIPEDREAM-DEBUG] Response data:`, JSON.stringify(error.response.data, null, 2));
-      }
-
-      if (error.data) {
-        console.log(`[PIPEDREAM-DEBUG] Error data:`, JSON.stringify(error.data, null, 2));
-      }
-
       throw new Error(`${service} ${action} failed: ${error.message}`);
     }
   }

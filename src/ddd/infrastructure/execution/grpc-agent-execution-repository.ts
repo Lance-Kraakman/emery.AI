@@ -77,21 +77,6 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         organizationModel: organizationModel || undefined // Pass organization model for hierarchy
       });
 
-      // AIDEV-DEBUG: Log what we're actually sending to Python
-      console.log('[GRPC-DEBUG] TaskRequest being sent:', JSON.stringify({
-        taskId: taskRequest.taskId,
-        agentId: taskRequest.agentId,
-        hasSkillName: !!taskRequest.skillName,
-        skillName: taskRequest.skillName,
-        hasInstructionConfig: !!taskRequest.instructionConfig,
-        instructionConfig: taskRequest.instructionConfig,
-        instructionsText: instructions,
-        toolsCount: tools?.length || 0,
-        organizationId: taskRequest.organizationId,
-        agentModel: taskRequest.agentModel,
-        organizationModel: taskRequest.organizationModel,
-        skillsInAgentConfig: taskRequest.agentConfig?.skills?.length || 0
-      }, null, 2));
 
       // 5. Initialize execution tracking
       let finalStatus: 'completed' | 'failed' | 'in_progress' = 'in_progress';
@@ -112,21 +97,12 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       await workerClient.executeTask(taskRequest as any, async (progress: TaskProgress) => {
         console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Status: ${progress.status} (${progress.progressPercent}%)`);
 
-        // DEBUG: Log full TaskProgress object
-        console.log(`[GRPC-DEBUG] TaskProgress received:`, JSON.stringify(progress, null, 2));
-        console.log(`[GRPC-DEBUG] outputJson content:`, progress.outputJson);
-
         // Create log message from TaskProgress (simplified - no step info)
         const logMessage = `${progress.status} - ${progress.progressPercent}% ${progress.outputJson ? `| Output: ${progress.outputJson.substring(0, 200)}${progress.outputJson.length > 200 ? '...' : ''}` : ''}${progress.errorMessage ? ` | Error: ${progress.errorMessage}` : ''}`;
 
-        console.log(`[GRPC-DEBUG] Formatted log message:`, logMessage);
-
         // Send log to callback if provided
         if (onProgress) {
-          console.log(`[GRPC-DEBUG] Calling onProgress callback`);
           onProgress(logMessage);
-        } else {
-          console.log(`[GRPC-DEBUG] No onProgress callback provided`);
         }
 
         // Map proto progress to TypeScript types
