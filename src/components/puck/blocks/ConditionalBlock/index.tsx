@@ -5,6 +5,10 @@ import { ComponentConfig } from '@measured/puck';
 import { useStateContext } from '../../contexts/StateContext';
 import { useRowData } from '../../contexts/RowDataContext';
 import { usePageContext } from '../../contexts/PageContext';
+import {
+  createStateContainerField,
+  createStateKeyField,
+} from '../../custom-fields';
 
 /**
  * Comparison operators for conditions
@@ -183,14 +187,7 @@ export const ConditionalBlock: ComponentConfig<ConditionalBlockProps> = {
         { value: 'rowData', label: 'Row Data' },
       ],
     },
-    container: {
-      type: 'text',
-      label: 'State Container',
-    },
-    key: {
-      type: 'text',
-      label: 'Variable Key',
-    },
+    // container and key are now created dynamically in resolveFields
     paramName: {
       type: 'text',
       label: 'Parameter Name',
@@ -243,9 +240,18 @@ export const ConditionalBlock: ComponentConfig<ConditionalBlockProps> = {
     // Source-specific fields
     let sourceFields = {};
     if (sourceType === 'state' || sourceType === 'uiState') {
+      // Determine filter type based on sourceType
+      const filterType = sourceType === 'uiState' ? 'uiState' : 'all';
+
       sourceFields = {
-        container: fields.container,
-        key: fields.key,
+        container: createStateContainerField({
+          label: 'State Container',
+        }),
+        key: createStateKeyField({
+          label: sourceType === 'uiState' ? 'UI State Flag' : 'Variable Key',
+          containerProp: 'container',
+          filterType,
+        }),
       };
     } else if (sourceType === 'params') {
       sourceFields = {
