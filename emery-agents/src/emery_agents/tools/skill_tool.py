@@ -221,6 +221,8 @@ class SkillTool(Tool):
                             run_async_in_thread(
                                 self._apply_agent_output_mappings(captured_outputs)
                             )
+                            # Include captured outputs in result for parent agent visibility
+                            result = self._build_result_with_outputs(result, captured_outputs)
                     else:
                         result = executor_result
                 else:
@@ -695,6 +697,41 @@ class SkillTool(Tool):
 
         except Exception as e:
             logger.error(f"❌ Failed to apply operation output mappings: {e}")
+
+    def _build_result_with_outputs(self, original_result: str, captured: Dict[str, Any]) -> str:
+        """
+        Build a result string that includes captured outputs for parent agent visibility.
+
+        The parent agent needs to know what was extracted so it can summarize to the user.
+        Plain text format is more robust for LLM consumption than JSON.
+
+        Args:
+            original_result: The skill's final answer (often generic like "Data submitted successfully")
+            captured: Dict of captured output values from OutputTool
+
+        Returns:
+            Formatted result string with extracted data visible
+        """
+        if not captured:
+            return original_result
+
+        # Build readable output list
+        output_lines = []
+        for name, value in captured.items():
+            # Truncate long values to keep result readable
+            str_value = str(value)
+            if len(str_value) > 200:
+                str_value = str_value[:200] + "..."
+            output_lines.append(f"- {name}: {str_value}")
+
+        outputs_text = "\n".join(output_lines)
+
+        return f"""Skill completed successfully.
+
+Extracted data:
+{outputs_text}
+
+Data has been saved to the configured tables."""
 
     async def _apply_agent_output_mappings(self, captured_values: Dict[str, Any]) -> None:
         """
