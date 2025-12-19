@@ -9,13 +9,16 @@
  * Supports:
  * - {fieldName} - Row data fields from DataBlock context
  * - {params.name} - Page variables (defined at page level) and URL query parameters
+ * - {state.container.key} - State variables from StateBlocks on the page
  *
  * Uses DataLayoutContext to get available fields and sample values.
  * Uses PageVariablesContext to get defined page variables.
+ * Uses Puck's appState to scan for StateBlocks.
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { createUsePuck } from '@measured/puck';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -26,14 +29,66 @@ import {
 import { cn } from '@/lib/utils';
 import { useDataLayoutContext } from '../contexts/DataLayoutContext';
 import { usePageVariables } from '../contexts/PageVariablesContext';
-import { Database, Link2, Variable, ChevronRight } from 'lucide-react';
+import { Database, Variable, ChevronRight, Box } from 'lucide-react';
+import type { StateVariable, UIStateFlag } from '../types/state';
+
+const usePuck = createUsePuck();
+
+interface StateBlockData {
+  name: string;
+  variables: StateVariable[];
+  uiState: UIStateFlag[];
+}
+
+/**
+ * Recursively find all StateBlocks in page content
+ */
+function findStateBlocks(content: unknown[]): StateBlockData[] {
+  const stateBlocks: StateBlockData[] = [];
+  const seenNames = new Set<string>();
+
+  function traverse(items: unknown[]) {
+    for (const item of items) {
+      if (typeof item !== 'object' || item === null) continue;
+
+      const typedItem = item as Record<string, unknown>;
+
+      if (typedItem.type === 'StateBlock' && typedItem.props) {
+        const props = typedItem.props as Record<string, unknown>;
+        const name = props.name as string | undefined;
+
+        if (name && !seenNames.has(name)) {
+          seenNames.add(name);
+          stateBlocks.push({
+            name,
+            variables: (props.variables as StateVariable[]) || [],
+            uiState: (props.uiState as UIStateFlag[]) || [],
+          });
+        }
+      }
+
+      // Traverse props for nested components (slots)
+      if (typedItem.props) {
+        const props = typedItem.props as Record<string, unknown>;
+        for (const val of Object.values(props)) {
+          if (Array.isArray(val)) {
+            traverse(val);
+          }
+        }
+      }
+    }
+  }
+
+  traverse(content);
+  return stateBlocks;
+}
 
 interface VariableOption {
   variable: string;
   label: string;
   sampleValue?: string;
   description?: string;
-  group: 'fields' | 'pageVars' | 'params';
+  group: 'fields' | 'pageVars' | 'params' | 'state';
 }
 
 interface VariableAutocompleteInputProps {
@@ -68,6 +123,20 @@ export function VariableAutocompleteInput({
   const dataContext = useDataLayoutContext();
   const pageVariables = usePageVariables();
   const searchParams = useSearchParams();
+
+  // Get page data for StateBlocks (may be null if not in Puck editor)
+  let appStateData: { content?: unknown[] } | null = null;
+  try {
+    appStateData = usePuck((s) => s.appState.data);
+  } catch {
+    // Not in Puck editor context - that's fine
+  }
+
+  // Find StateBlocks on the page
+  const stateBlocks = useMemo(() => {
+    if (!appStateData?.content) return [];
+    return findStateBlocks(appStateData.content as unknown[]);
+  }, [appStateData?.content]);
 
   // Build list of available variables
   const options = useMemo<VariableOption[]>(() => {
@@ -121,8 +190,30 @@ export function VariableAutocompleteInput({
       }
     });
 
+    // Add state variables from StateBlocks
+    for (const stateBlock of stateBlocks) {
+      // Add variables
+      for (const variable of stateBlock.variables) {
+        result.push({
+          variable: `state.${stateBlock.name}.${variable.name}`,
+          label: `${stateBlock.name}.${variable.name}`,
+          description: variable.description || `${variable.type} variable`,
+          group: 'state',
+        });
+      }
+      // Add UI state flags
+      for (const flag of stateBlock.uiState) {
+        result.push({
+          variable: `state.${stateBlock.name}.${flag.name}`,
+          label: `${stateBlock.name}.${flag.name}`,
+          description: flag.description || 'UI state flag',
+          group: 'state',
+        });
+      }
+    }
+
     return result;
-  }, [dataContext?.fields, dataContext?.sampleRow, pageVariables, searchParams]);
+  }, [dataContext?.fields, dataContext?.sampleRow, pageVariables, searchParams, stateBlocks]);
 
   // Filter options based on search text
   const filteredOptions = useMemo(() => {
@@ -140,7 +231,8 @@ export function VariableAutocompleteInput({
     const fields = filteredOptions.filter((o) => o.group === 'fields');
     const pageVars = filteredOptions.filter((o) => o.group === 'pageVars');
     const params = filteredOptions.filter((o) => o.group === 'params');
-    return { fields, pageVars, params };
+    const state = filteredOptions.filter((o) => o.group === 'state');
+    return { fields, pageVars, params, state };
   }, [filteredOptions]);
 
   // Find the start of the current variable being typed
@@ -256,7 +348,7 @@ export function VariableAutocompleteInput({
     setSelectedIndex(0);
   }, [filteredOptions.length]);
 
-  const hasNoContext = !dataContext?.fields?.length && pageVariables.length === 0 && searchParams.size === 0;
+  const hasNoContext = !dataContext?.fields?.length && pageVariables.length === 0 && searchParams.size === 0 && stateBlocks.length === 0;
   const hasNoMatches = filteredOptions.length === 0 && !hasNoContext;
 
   // Common input props
@@ -416,6 +508,49 @@ export function VariableAutocompleteInput({
                     {option.sampleValue !== undefined && (
                       <span className="text-xs text-muted-foreground truncate max-w-[100px]">
                         {option.sampleValue}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* State Variables */}
+          {groupedOptions.state.length > 0 && (
+            <div className={cn("p-1", (groupedOptions.fields.length > 0 || groupedOptions.pageVars.length > 0 || groupedOptions.params.length > 0) && "border-t")}>
+              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                <Box className="h-3 w-3" />
+                State Variables
+              </div>
+              {groupedOptions.state.map((option, idx) => {
+                const globalIdx = groupedOptions.fields.length + groupedOptions.pageVars.length + groupedOptions.params.length + idx;
+                const isSelected = selectedIndex === globalIdx;
+                return (
+                  <button
+                    key={option.variable}
+                    type="button"
+                    className={cn(
+                      'w-full flex items-center justify-between px-2 py-1.5 text-sm rounded-sm cursor-pointer',
+                      isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
+                    )}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleOptionClick(option);
+                    }}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onMouseEnter={() => setSelectedIndex(globalIdx)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                      <code className="text-xs bg-muted px-1 rounded">
+                        {`{${option.variable}}`}
+                      </code>
+                    </div>
+                    {option.description && (
+                      <span className="text-xs text-muted-foreground truncate max-w-[100px]">
+                        {option.description}
                       </span>
                     )}
                   </button>
