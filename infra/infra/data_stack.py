@@ -41,6 +41,23 @@ class DataStack(Stack):
             nat_gateways=1,
         )
 
+        # ========== VPC ENDPOINTS ==========
+        # S3 Gateway Endpoint - FREE, routes S3 traffic through VPC instead of NAT
+        self.vpc.add_gateway_endpoint(
+            f"{prefix}S3Endpoint",
+            service=ec2.GatewayVpcEndpointAwsService.S3,
+        )
+
+        # ECR Endpoints - ~$7/month but saves $50+ in NAT data transfer for image pulls
+        self.vpc.add_interface_endpoint(
+            f"{prefix}EcrApiEndpoint",
+            service=ec2.InterfaceVpcEndpointAwsService.ECR,
+        )
+        self.vpc.add_interface_endpoint(
+            f"{prefix}EcrDkrEndpoint",
+            service=ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER,
+        )
+
         # ========== DATABASE ==========
         # Create parameter group to allow non-SSL connections and preload extensions
         db_parameter_group = rds.ParameterGroup(

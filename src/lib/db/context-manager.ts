@@ -32,7 +32,6 @@ class ContextManager {
    * Clear RLS context - subsequent operations will use normal database client
    */
   clearContext(): void {
-    console.log('🔍 CONTEXT-MANAGER: Clearing context');
     this.context = null;
   }
 

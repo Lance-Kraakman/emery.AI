@@ -105,6 +105,27 @@ class AppStack(Stack):
         custom_domain = domain_config.get(env_name, {}).get("domain")
         certificate_arn = domain_config.get(env_name, {}).get("certificate_arn")
 
+        # ========== ENVIRONMENT-SPECIFIC RESOURCE SIZING ==========
+        # Configure resources based on environment needs
+        sizing_config = {
+            "production": {
+                "frontend_min_capacity": 2,   # HA for paying users
+                "chat_cpu": 512,              # 0.5 vCPU - LLM calls are I/O bound
+                "chat_memory": 1024,          # 1 GB sufficient for chat
+            },
+            "staging": {
+                "frontend_min_capacity": 1,
+                "chat_cpu": 512,
+                "chat_memory": 1024,
+            },
+            "dev": {
+                "frontend_min_capacity": 1,   # Single task for dev
+                "chat_cpu": 512,
+                "chat_memory": 1024,
+            }
+        }
+        sizing = sizing_config.get(env_name, sizing_config["dev"])
+
         # Import the ACM certificate (created in us-east-1 for CloudFront)
         certificate = None
         if certificate_arn:
@@ -244,7 +265,7 @@ class AppStack(Stack):
         # AIDEV-NOTE: Configure auto-scaling for frontend service
         # Web application that needs to scale based on user traffic
         frontend_scaling = frontend_service.service.auto_scale_task_count(
-            min_capacity=2,  # Run 2 tasks minimum for HA across AZs
+            min_capacity=sizing["frontend_min_capacity"],  # Environment-specific
             max_capacity=20  # Can scale up to 20 tasks during traffic spikes
         )
 
@@ -495,8 +516,8 @@ class AppStack(Stack):
             self, f"{prefix}AgentChatService",
             cluster=cluster,
             service_name=f"{prefix}-Agent-Chat",
-            cpu=1024,  # 1 vCPU for AI processing
-            memory_limit_mib=2048,  # 2 GB for chat and agent execution
+            cpu=sizing["chat_cpu"],  # Environment-specific - LLM calls are I/O bound
+            memory_limit_mib=sizing["chat_memory"],  # Environment-specific
             desired_count=1,  # Start with 1 task, scale up as needed
             task_image_options=ecs_patterns.NetworkLoadBalancedTaskImageOptions(
                 image=self._get_agent_image(),

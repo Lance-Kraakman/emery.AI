@@ -9,6 +9,7 @@ import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
 import { typographySizeField, backgroundColorField, textColorField, fontFamilyField, fontWeightField, textAlignField } from "../../fields/standard-fields";
 import { useInterpolatedText } from "../../hooks/useInterpolatedText";
+import { createVariableTextField } from "../../custom-fields";
 
 export type HeadingProps = WithLayout<{
   align: "left" | "center" | "right";
@@ -71,10 +72,7 @@ function HeadingRender({
 
 const HeadingInternal: ComponentConfig<HeadingProps> = {
   fields: {
-    text: {
-      type: "textarea",
-      contentEditable: true,
-    },
+    text: createVariableTextField({ label: 'Text', multiline: true }),
     size: typographySizeField,
     level: {
       type: "select",
