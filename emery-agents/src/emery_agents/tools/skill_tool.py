@@ -1,5 +1,6 @@
 """Wraps skills as smolagents tools with recursion protection."""
 
+import hashlib
 import json
 import logging
 import os
@@ -98,6 +99,33 @@ class SkillTool(Tool):
         """Reset the call stack. Called at the start of a new request."""
         cls._thread_local.call_stack = set()
 
+    @classmethod
+    def _get_result_cache(cls) -> Dict[str, str]:
+        """Get thread-local cache of (call_key → result) for memoization.
+
+        Prevents duplicate skill calls with identical inputs within a single
+        request. The parent agent (chat planner) sometimes calls the same
+        skill twice by mistake - memoization returns the cached result.
+        """
+        if not hasattr(cls._thread_local, 'result_cache'):
+            cls._thread_local.result_cache = {}
+        return cls._thread_local.result_cache
+
+    @classmethod
+    def reset_result_cache(cls) -> None:
+        """Reset the result cache. Called at the start of a new request."""
+        cls._thread_local.result_cache = {}
+
+    def _make_call_key(self, kwargs: Dict[str, Any]) -> str:
+        """Create a unique key for this skill call (for memoization).
+
+        Combines skill name with a hash of sorted inputs to create a
+        deterministic key that identifies this specific call.
+        """
+        inputs_str = json.dumps(kwargs, sort_keys=True, default=str)
+        inputs_hash = hashlib.md5(inputs_str.encode()).hexdigest()[:16]
+        return f"{self.skill_config.name}:{inputs_hash}"
+
     def _build_inputs_schema(self) -> Dict[str, Dict[str, str]]:
         """
         Convert SkillConfig.inputs to smolagents tool input schema.
@@ -192,6 +220,13 @@ class SkillTool(Tool):
             logger.error(f"📊 {error_msg}")
             return f"Error: {error_msg}"
 
+        # Check memoization cache - return cached result for duplicate calls
+        call_key = self._make_call_key(kwargs)
+        cache = self._get_result_cache()
+        if call_key in cache:
+            logger.info(f"♻️ Returning cached result for {self.name} (same inputs, preventing duplicate)")
+            return cache[call_key]
+
         execution_mode = "operation" if self._is_operation else "agent"
         logger.info(f"🎯 Executing skill: {self.name} ({execution_mode}, depth: {current_depth + 1}/{self.MAX_DEPTH}) with inputs: {list(kwargs.keys())}")
 
@@ -230,11 +265,14 @@ class SkillTool(Tool):
                     result = self.skill_executor(self.skill_config, kwargs)
 
             logger.info(f"✅ Skill {self.name} completed successfully")
+            # Cache the result for memoization (prevents duplicate calls)
+            cache[call_key] = result
             return result
 
         except Exception as e:
             error_msg = f"Skill execution failed: {str(e)}"
             logger.error(f"❌ Skill {self.name} failed: {e}", exc_info=True)
+            # Don't cache errors - allow retry
             return error_msg
 
         finally:

@@ -22,6 +22,7 @@ from emery_agents.agents.skill_builder_agent import create_skill_builder_agent
 from emery_agents.agents.document_builder_agent import create_document_builder_agent
 from emery_agents.clients import HuggingFaceInferenceClient
 from emery_agents.tools.crud_tools import load_skill_crud, load_document_crud
+from emery_agents.tools.skill_tool import SkillTool
 from emery_agents.tools.tool_executor import create_tool_executor
 from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .mappers import ProtoMapper
@@ -558,6 +559,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         AIDEV-NOTE: Accepts smolagents ChatMessage objects with PIL Image support.
         Smolagents handles conversion to HuggingFace API format internally.
         """
+
+        # Reset thread-local state for new request
+        # Prevents stale data from previous requests on thread reuse
+        SkillTool.reset_call_stack()
+        SkillTool.reset_result_cache()
 
         try:
             # 1. Convert protobuf tools to smolagents tools
