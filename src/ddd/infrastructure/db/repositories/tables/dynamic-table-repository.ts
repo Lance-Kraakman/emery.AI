@@ -1,15 +1,18 @@
 /**
  * Dynamic Table Repository
- * 
+ *
  * Infrastructure repository implementation coordinating:
  * - PostgreSQL metadata (tables table) via Drizzle
  * - S3 Arrow data storage
  * - Pure data access layer - no business logic
- * 
+ *
  * AIDEV-NOTE: Hybrid repository implementation using both Drizzle and S3,
  * focused on data access only. Business logic handled by DynamicTableService.
  */
 import type { DbClient } from '@/lib/db/client';
+import { createDebugLogger } from '@/lib/utils/debug-logger';
+
+const logger = createDebugLogger('TableRepo');
 import { tables, fields } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
@@ -87,7 +90,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       }
 
       // 5. Return the created table entity
-      console.log(`[TableService] Created table: ${tableEntity.name} (ID: ${tableEntity.id})`);
+      logger.debug('Created table', { name: tableEntity.name, id: tableEntity.id });
 
       return tableEntity;
 
@@ -172,14 +175,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         const tableFields = fieldRecords.map((fieldRecord: FieldRow) => {
           // Debug logging for select fields
           if (fieldRecord.type === 'single-select' || fieldRecord.type === 'multi-select') {
-            console.log('[dynamic-table-repository] Reading select field from DB:', {
+            logger.debug('Reading select field', {
               fieldName: fieldRecord.name,
               fieldType: fieldRecord.type,
-              hasFieldConfig: !!fieldRecord.fieldConfig,
-              fieldConfigKeys: fieldRecord.fieldConfig ? Object.keys(fieldRecord.fieldConfig) : [],
-              hasOptions: fieldRecord.fieldConfig?.options ? true : false,
-              optionsCount: Array.isArray(fieldRecord.fieldConfig?.options) ? fieldRecord.fieldConfig.options.length : 0,
-              options: fieldRecord.fieldConfig?.options
+              optionsCount: Array.isArray(fieldRecord.fieldConfig?.options) ? fieldRecord.fieldConfig.options.length : 0
             });
           }
 
@@ -249,11 +248,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   async update(id: TableId, data: Partial<DynamicTable>): Promise<DynamicTable> {
     try {
-      console.log(`[TableRepository.update] Called for table ${id.value}`, {
+      logger.debug('Updating table', {
+        tableId: id.value,
         hasFields: !!data.fields,
-        fieldCount: data.fields?.length,
-        hasName: !!data.name,
-        hasMetadata: !!data.metadata
+        fieldCount: data.fields?.length
       });
 
       // Update table metadata
@@ -273,10 +271,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       // If fields are provided in the data, sync them to the database
       // This handles the case where table.addField() was called and fields need to be persisted
       if (data.fields) {
-        console.log(`[TableRepository.update] Syncing ${data.fields.length} fields`);
+        logger.debug('Syncing fields', { count: data.fields.length });
         await this.syncTableFields(id, data.fields);
-      } else {
-        console.log(`[TableRepository.update] ⚠️ NO FIELDS PROVIDED - skipping syncTableFields`);
       }
 
       // Reload the table with its fields to return the complete entity
@@ -314,10 +310,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           ));
       }
 
-      console.log(`[TableService] Updated ${fieldOrders.length} field orders for table ${tableId.value}`);
+      logger.debug('Updated field orders', { count: fieldOrders.length });
 
     } catch (error) {
-      console.error('[TableService] Error updating field orders:', error);
+      logger.error('Error updating field orders', error);
       throw error;
     }
   }
@@ -350,11 +346,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         !tableFields.some(tf => tf.id.value === f.id)
       );
 
-      console.log('[syncTableFields] Field change summary', {
-        fieldsToAdd: fieldsToAdd.length,
-        fieldsToUpdate: fieldsToUpdate.length,
-        fieldsToDelete: fieldsToDelete.length,
-        updateFieldNames: fieldsToUpdate.map(f => f.name)
+      logger.debug('Field changes', {
+        add: fieldsToAdd.length,
+        update: fieldsToUpdate.length,
+        delete: fieldsToDelete.length
       });
 
       // Insert new fields into PostgreSQL and get real IDs
@@ -403,11 +398,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         // Replace the field in the original array with updated field containing real ID
         fieldsToAdd[i] = updatedField;
         
-        console.log('[syncTableFields] Created field with PostgreSQL ID:', {
-          fieldName: field.name,
-          postgresId: insertedField[0].id,
-          domainId: updatedField.id.value
-        });
+        logger.debug('Created field', { name: field.name, id: insertedField[0].id });
       }
 
       // CRITICAL FIX: Update existing fields with new metadata/config
@@ -428,17 +419,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           };
         }
 
-        console.log('[syncTableFields] Updating field:', {
-          fieldName: field.name,
-          fieldType: field.type,
-          hasMetadata: !!field.metadata,
-          metadataKeys: field.metadata ? Object.keys(field.metadata) : [],
-          hasMetadataContent,
-          hasOptions: field.metadata?.options ? true : false,
-          optionsCount: Array.isArray(field.metadata?.options) ? field.metadata.options.length : 0,
-          fieldConfigIsNull: fieldConfig === null,
-          fieldConfig
-        });
+        logger.debug('Updating field', { name: field.name, type: field.type });
 
         await this.db.update(fields)
           .set({
@@ -450,56 +431,28 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           .where(eq(fields.id, existingField.id));
       }
 
-      if (fieldsToAdd.length > 0) {
-        console.log(`[TableService] Inserted ${fieldsToAdd.length} new fields to PostgreSQL for table ${tableId.value}`);
-      }
-      if (fieldsToUpdate.length > 0) {
-        console.log(`[TableService] Updated ${fieldsToUpdate.length} existing fields in PostgreSQL for table ${tableId.value}`);
-      }
-
       // Delete removed fields from PostgreSQL
       for (const fieldToDelete of fieldsToDelete) {
-        console.log(`[TableService] BEFORE PostgreSQL delete - Field ${fieldToDelete.name} (ID: ${fieldToDelete.id}) exists in DB`);
-
         await this.db.delete(fields)
           .where(eq(fields.id, fieldToDelete.id));
-
-        // Verify deletion
-        const verifyDeleted = await this.db.query.fields.findFirst({
-          where: eq(fields.id, fieldToDelete.id)
-        });
-        console.log(`[TableService] AFTER PostgreSQL delete - Field ${fieldToDelete.name} ${verifyDeleted ? '❌ STILL EXISTS' : '✅ successfully removed'}`);
       }
 
-      // CRITICAL FIX: Sync schema changes to Delta Lake storage using specific field operations
-      // This ensures fields are immediately available for sorting/filtering
+      // Sync schema changes to Delta Lake storage
       const fullTable = await this.findById(tableId);
       if (fullTable && this.datalake) {
         // Add new fields to Delta Lake
         for (const field of fieldsToAdd) {
           const addResult = await this.datalake.addField(fullTable, field);
           if (!addResult.success) {
-            console.warn(`[TableService] Warning: Failed to add field ${field.name} to Delta Lake: ${addResult.error}`);
-          } else {
-            console.log(`[TableService] Successfully added field ${field.name} to Delta Lake`);
+            console.warn(`[TableRepo] Failed to add field ${field.name} to Delta Lake: ${addResult.error}`);
           }
         }
 
         // Update existing fields in Delta Lake
-        console.log(`[syncTableFields] Updating ${fieldsToUpdate.length} fields in Delta Lake`);
         for (const field of fieldsToUpdate) {
-          console.log('[syncTableFields] Calling datalake.updateField', {
-            fieldName: field.name,
-            fieldId: field.id.value,
-            fieldType: field.type,
-            hasMetadata: !!field.metadata
-          });
-
           const updateResult = await this.datalake.updateField(fullTable, field);
           if (!updateResult.success) {
-            console.warn(`[TableService] Warning: Failed to update field ${field.name} in Delta Lake: ${updateResult.error}`);
-          } else {
-            console.log(`[TableService] Successfully updated field ${field.name} in Delta Lake`);
+            console.warn(`[TableRepo] Failed to update field ${field.name} in Delta Lake: ${updateResult.error}`);
           }
         }
 
@@ -507,27 +460,9 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         for (const fieldToDelete of fieldsToDelete) {
           const deleteResult = await this.datalake.deleteField(fullTable, fieldToDelete.id.value);
           if (!deleteResult.success) {
-            console.warn(`[TableService] Warning: Failed to delete field ${fieldToDelete.name} from Delta Lake: ${deleteResult.error}`);
-          } else {
-            console.log(`[TableService] ✅ Delta Lake delete succeeded for field ${fieldToDelete.name} (ID: ${fieldToDelete.id.value})`);
-
-            // END-TO-END VERIFICATION: Re-fetch schema to confirm deletion persisted
-            const verifyResult = await this.datalake.getFields(fullTable);
-            if (verifyResult.success && verifyResult.data) {
-              const stillExists = verifyResult.data.some(f => f.id.value === fieldToDelete.id.value);
-              const fieldNames = verifyResult.data.map(f => f.name);
-              console.log(`[TableService] Delta Lake verification: Field ${fieldToDelete.name} ${stillExists ? '❌ STILL EXISTS' : '✅ confirmed deleted'}`);
-              console.log(`[TableService] Current Delta schema fields: [${fieldNames.join(', ')}]`);
-            } else {
-              console.warn(`[TableService] Could not verify deletion - getFields failed: ${verifyResult.error}`);
-            }
+            console.warn(`[TableRepo] Failed to delete field ${fieldToDelete.name} from Delta Lake: ${deleteResult.error}`);
           }
         }
-
-        const totalChanges = fieldsToAdd.length + fieldsToUpdate.length + fieldsToDelete.length;
-        console.log(`[TableService] Successfully synced ${totalChanges} field changes to Delta Lake`);
-      } else {
-        console.warn(`[TableService] Could not sync to Delta Lake - table or datalake repository unavailable`);
       }
     } catch (error) {
       console.error('[TableService] Error syncing table fields:', error);
@@ -556,10 +491,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       // 4. Delete table from PostgreSQL
       await this.db.delete(tables).where(eq(tables.id, id.value));
 
-      console.log(`[TableService] Deleted table: ${tableRecord.name} (ID: ${id})`);
+      logger.debug('Deleted table', { name: tableRecord.name, id: id.value });
 
     } catch (error) {
-      console.error('[TableService] Error deleting table:', error);
+      logger.error('Error deleting table', error);
       throw error;
     }
   }
@@ -701,7 +636,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         throw new Error(`Failed to update rows: ${result.error}`);
       }
 
-      console.log(`[DynamicTableRepository] Updated ${updates.length} rows in table ${table.name} using Delta Lake merge`);
+      logger.debug('Updated rows', { count: updates.length, tableId: table.id });
 
       // 4. Return the updated Row entities
       return updatedRows;
@@ -730,10 +665,10 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         throw new Error(`Failed to delete rows: ${result.error}`);
       }
 
-      console.log(`[DynamicTableRepository] Deleted ${rowIds.length} rows using Delta Lake delete`);
+      logger.debug('Deleted rows', { count: rowIds.length });
 
     } catch (error) {
-      console.error('[DynamicTableRepository] Error deleting rows:', error);
+      logger.error('Error deleting rows', error);
       throw error;
     }
   }
