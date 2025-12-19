@@ -18,6 +18,9 @@
  */
 
 import type { Row } from '@/ddd/domain/tables/value-objects/row';
+import { createDebugLogger } from '@/lib/utils/debug-logger';
+
+const logger = createDebugLogger('RowSerializer');
 import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import type {
   FileArrayFieldValue,
@@ -135,11 +138,9 @@ export class RowSerializer {
   private static serializeFieldValue(value: any, field: TableField): SerializedFieldValue {
     // Log multi-select serialization for debugging
     if (field.type === 'multi-select') {
-      console.log('[RowSerializer.serializeFieldValue] Multi-select field', {
+      logger.debug('Serializing multi-select', {
         fieldName: field.name,
         fieldId: field.id.value,
-        value,
-        valueType: typeof value,
         isArray: Array.isArray(value)
       });
     }
@@ -281,31 +282,16 @@ export class RowSerializer {
   ): string | number | boolean | Date | FileArrayFieldValue | DocumentArrayFieldValue | RelationArrayFieldValue | null {
     // Log multi-select deserialization for debugging
     if (field.type === 'multi-select') {
-      console.log('[RowSerializer.deserializeFieldValue] Multi-select field', {
+      logger.debug('Deserializing multi-select', {
         fieldName: field.name,
         fieldId: field.id.value,
-        value,
-        valueType: typeof value,
-        isArray: Array.isArray(value),
-        isNull: value === null,
-        isUndefined: value === undefined
+        isNull: value === null
       });
     }
 
     // Complex types: unwrap JSON and validate
     if (this.isComplexFieldType(field.type)) {
       const result = this.unwrapComplexFieldFromStorage(value, field);
-
-      // Log multi-select deserialization result
-      if (field.type === 'multi-select') {
-        console.log('[RowSerializer.deserializeFieldValue] Multi-select unwrap result', {
-          fieldName: field.name,
-          result,
-          resultType: typeof result,
-          isArray: Array.isArray(result)
-        });
-      }
-
       return result;
     }
 
