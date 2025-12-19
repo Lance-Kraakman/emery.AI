@@ -48,3 +48,15 @@ export { createActionsField } from "./actions-field";
 
 // Variable Label (for dynamic labels with {fieldName} support)
 export { createVariableLabelField } from "./variable-label-field";
+
+// State Container Selection (for ConditionalBlock, DialogBlock)
+export {
+  createStateContainerField,
+  type StateContainerFieldConfig,
+} from "./state-container-field";
+
+// State Key Selection (for ConditionalBlock, DialogBlock)
+export {
+  createStateKeyField,
+  type StateKeyFieldConfig,
+} from "./state-key-field";
