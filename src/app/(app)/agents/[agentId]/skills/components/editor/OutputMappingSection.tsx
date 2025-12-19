@@ -776,12 +776,52 @@ export function OutputMappingSection({
         }
       }
       setTableFieldsMap(newMap);
+
+      // AIDEV-NOTE: Enrich mappings with targetFieldMetadata if missing (fixes relation field wrapping)
+      // This ensures existing mappings loaded from saved config get the field type metadata
+      // that Python needs to format relation values as [{"id": row_id, "value": ""}]
+      if (outputMapping?.tableMappings && newMap.size > 0) {
+        let needsUpdate = false;
+        const enrichedTableMappings = outputMapping.tableMappings.map(tm => {
+          const tableFields = newMap.get(tm.targetTableId) || [];
+          const enrichedMappings = tm.mappings.map(mapping => {
+            // If targetFieldMetadata is missing but targetFieldId exists, look up the field
+            if (!mapping.targetFieldMetadata && mapping.targetFieldId) {
+              const field = tableFields.find(f => f.id === mapping.targetFieldId);
+              if (field) {
+                needsUpdate = true;
+                return {
+                  ...mapping,
+                  targetFieldMetadata: {
+                    fieldType: field.type,
+                    fieldName: field.name,
+                    options: (field.metadata as { options?: Array<{ name: string }> })?.options?.map(o => o.name) || []
+                  }
+                };
+              }
+            }
+            return mapping;
+          });
+          return { ...tm, mappings: enrichedMappings };
+        });
+
+        // Only update if we actually enriched something to avoid infinite loop
+        if (needsUpdate) {
+          const newOutputs = outputs.map((o, i) =>
+            i === 0 ? { ...o, outputMapping: { ...outputMapping, tableMappings: enrichedTableMappings } } : o
+          );
+          onOutputsChange(newOutputs);
+        }
+      }
     };
 
     if (tableIds.size > 0) {
       fetchFields();
     }
-  }, [outputMapping?.tableMappings]);
+  // Note: We intentionally exclude outputs and onOutputsChange from deps to avoid infinite loop
+  // The enrichment only needs to run when tableMappings structure changes, not on every callback update
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(outputMapping?.tableMappings?.map(tm => ({ id: tm.targetTableId, mappings: tm.mappings.map(m => m.targetFieldId) })))]);
 
   // Show info message if no outputs defined (agent mode only)
   if (executionType === 'agent' && (!skillOutputs || skillOutputs.length === 0)) {
