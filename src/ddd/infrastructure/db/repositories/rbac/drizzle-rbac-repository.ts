@@ -2,6 +2,9 @@
 // Handles permission checking, role management, and user-role assignments
 
 import { eq, and, inArray, sql } from 'drizzle-orm';
+import { createDebugLogger } from '@/lib/utils/debug-logger';
+
+const logger = createDebugLogger('RBAC');
 import type { InferSelectModel } from 'drizzle-orm';
 import type { DbClient } from '@/lib/db/client';
 import { 
@@ -109,37 +112,30 @@ export class DrizzleRBACRepository implements IRBACRepository {
     `);
 
     const hasPermission = result[0]?.has_permission === true;
-    console.log("🔍 DrizzleRBACRepository.hasResourcePermission() - Result:", {
-      hasPermission,
-      query: "user_has_permission with resource parameters"
-    });
+    logger.debug('hasResourcePermission result', { hasPermission });
 
     return hasPermission;
   }
 
   async requireResourcePermission(
-    userId: UserId, 
-    permission: Permission, 
-    organizationId: OrganizationId, 
-    resourceType: string, 
+    userId: UserId,
+    permission: Permission,
+    organizationId: OrganizationId,
+    resourceType: string,
     resourceId?: number
   ): Promise<void> {
-    console.log("🛡️ DrizzleRBACRepository.requireResourcePermission() - Starting check");
-    
     const hasAccess = await this.hasResourcePermission(userId, permission, organizationId, resourceType, resourceId);
-    
+
     if (!hasAccess) {
-      console.error("🚫 DrizzleRBACRepository.requireResourcePermission() - ACCESS DENIED");
+      logger.error('ACCESS DENIED', { permission: permission.toString(), resourceType, resourceId });
       throw new Error(`Resource permission denied: ${permission.toString()} for ${resourceType}${resourceId ? `:${resourceId}` : ''}`);
     }
-    
-    console.log("✅ DrizzleRBACRepository.requireResourcePermission() - ACCESS GRANTED");
   }
   
   // DEBUG method to show user's roles and permissions
   private async debugUserPermissions(userId: UserId, organizationId: OrganizationId): Promise<void> {
-    console.log("🔍 DEBUG - User roles and permissions:");
-    
+    logger.debug('User roles and permissions check');
+
     // Get user roles
     const userRolesResult = await this.db
       .select({
@@ -153,9 +149,9 @@ export class DrizzleRBACRepository implements IRBACRepository {
         eq(userRoles.userId, userId.value),
         eq(userRoles.organizationId, organizationId.value)
       ));
-      
-    console.log("🔍 DEBUG - User roles:", userRolesResult);
-    
+
+    logger.debug('User roles', userRolesResult);
+
     // Get user permissions
     const userPermissionsResult = await this.db
       .select({
@@ -171,8 +167,8 @@ export class DrizzleRBACRepository implements IRBACRepository {
         eq(userRoles.userId, userId.value),
         eq(userRoles.organizationId, organizationId.value)
       ));
-      
-    console.log("🔍 DEBUG - User permissions:", userPermissionsResult);
+
+    logger.debug('User permissions', userPermissionsResult);
   }
 
   // User permission queries

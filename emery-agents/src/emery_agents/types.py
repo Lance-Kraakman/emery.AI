@@ -104,6 +104,19 @@ class SkillExecutionResult:
 
 
 @dataclass
+class SkillCallResult:
+    """Cached result from a skill execution for memoization.
+
+    Used to prevent duplicate skill calls with identical inputs within
+    a single request. The parent agent (chat planner) sometimes calls
+    the same skill twice by mistake - memoization returns the cached
+    result instead of re-executing.
+    """
+    call_key: str  # hash of skill_name + inputs
+    result: str    # the skill's return value
+
+
+@dataclass
 class ToolInput:
     """Tool input definition."""
     name: str

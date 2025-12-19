@@ -9,7 +9,7 @@ import {
   borderColorField,
   borderRadiusField
 } from "@/components/puck/fields/standard-fields";
-import { createLinkActionField, type LinkActionConfig } from "@/components/puck/custom-fields";
+import { createLinkActionField, createVariableTextField, type LinkActionConfig } from "@/components/puck/custom-fields";
 import type { FourCornerRadius } from "@/components/puck/types/spacing-types";
 
 export type LoginBlockProps = {
@@ -31,14 +31,8 @@ export type LoginBlockProps = {
 export const LoginBlock: ComponentConfig<LoginBlockProps> = {
   label: "Login",
   fields: {
-    title: {
-      type: "text",
-      label: "Title",
-    },
-    description: {
-      type: "textarea",
-      label: "Description",
-    },
+    title: createVariableTextField({ label: 'Title' }),
+    description: createVariableTextField({ label: 'Description', multiline: true }),
     showGithub: {
       type: "radio",
       label: "Show GitHub Login",

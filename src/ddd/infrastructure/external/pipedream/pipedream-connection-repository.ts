@@ -18,57 +18,21 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
       }
       
       const externalUserId = getExternalUserId(userId.value);
-      console.log(`[ConnectionRepo] Fetching connections for user ${userId.value} (external: ${externalUserId})`);
-      
-      const response = await pipedreamClient.accounts.list({ 
-        external_user_id: externalUserId 
+
+      const response = await pipedreamClient.accounts.list({
+        external_user_id: externalUserId
       });
-      
+
       // Handle different response structures from Pipedream SDK
       const accounts = Array.isArray(response) ? response : (response?.data || []);
-      console.log(`[ConnectionRepo] Received ${accounts.length} accounts from Pipedream`);
-      console.log(`[ConnectionRepo] Raw Pipedream accounts:`, accounts.map(a => ({
-        id: a.id,
-        app: a.app,
-        appType: typeof a.app,
-        appNameSlug: a.app?.name_slug,
-        status: a.status
-      })));
 
-      // Debug Google services specifically
-      const googleAccounts = accounts.filter(a =>
-        (typeof a.app === 'string' && a.app.includes('google')) ||
-        (typeof a.app === 'object' && a.app?.name_slug?.includes('google'))
-      );
-      if (googleAccounts.length > 0) {
-        console.log(`[ConnectionRepo] 🔍 Found ${googleAccounts.length} Google service accounts:`,
-          googleAccounts.map(a => ({
-            id: a.id,
-            app: a.app,
-            name_slug: a.app?.name_slug,
-            status: a.status
-          }))
-        );
-      }
-      
       return accounts
-        .filter(account => {
-          const isValid = PipedreamConnectionMapper.isValidPipedreamAccount(account);
-          if (!isValid) {
-            console.warn(`[ConnectionRepo] Skipping invalid account:`, account);
-          }
-          return isValid;
-        })
+        .filter(account => PipedreamConnectionMapper.isValidPipedreamAccount(account))
         .map(account => {
           try {
-            console.log(`[ConnectionRepo] Mapping account ${account.id} for app '${account.app}'`);
-            const domainEntity = PipedreamConnectionMapper.toDomainEntity(userId, account);
-            console.log(`[ConnectionRepo] Successfully mapped to domain entity: app='${domainEntity.appName.value}', status='${domainEntity.status}'`);
-            return domainEntity;
+            return PipedreamConnectionMapper.toDomainEntity(userId, account);
           } catch (error: unknown) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            console.error(`[ConnectionRepo] Failed to map account ${account.id} for app '${account.app}':`, errorMessage);
-            console.error(`[ConnectionRepo] Raw account data:`, account);
+            console.error(`[ConnectionRepo] Failed to map account ${account.id}:`, error instanceof Error ? error.message : 'Unknown error');
             return null;
           }
         })
@@ -88,7 +52,6 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
       }
 
       const externalUserId = getExternalUserId(userId.value);
-      console.log(`[ConnectionRepo] Fetching paginated connections for user ${userId.value} (limit: ${options.limit}, after: ${options.after || 'none'})`);
 
       // Build pagination parameters for Pipedream API
       const params: any = {
@@ -126,23 +89,14 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
         accounts = [];
       }
 
-      console.log(`[ConnectionRepo] Received ${accounts.length} accounts from Pipedream (hasMore: ${hasMore}, nextCursor: ${nextCursor || 'none'})`);
-
       // Map and filter accounts to domain entities
       const connections = accounts
-        .filter(account => {
-          const isValid = PipedreamConnectionMapper.isValidPipedreamAccount(account);
-          if (!isValid) {
-            console.warn(`[ConnectionRepo] Skipping invalid account:`, account);
-          }
-          return isValid;
-        })
+        .filter(account => PipedreamConnectionMapper.isValidPipedreamAccount(account))
         .map(account => {
           try {
             return PipedreamConnectionMapper.toDomainEntity(userId, account);
           } catch (error: unknown) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            console.error(`[ConnectionRepo] Failed to map account ${account.id}:`, errorMessage);
+            console.error(`[ConnectionRepo] Failed to map account ${account.id}:`, error instanceof Error ? error.message : 'Unknown error');
             return null;
           }
         })
@@ -162,23 +116,7 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
 
   async findByUserAndApp(userId: UserId, appName: AppName): Promise<Connection | null> {
     const connections = await this.findByUserId(userId);
-
-    // Enhanced debugging for connection matching
-    console.log(`[ConnectionRepo] Looking for ${appName.value} connection for user ${userId.value}`);
-    console.log(`[ConnectionRepo] Available connections: [${connections.map(c => `${c.appName.value}:${c.status}`).join(', ')}]`);
-
-    const connection = connections.find(conn => {
-      const matches = conn.appName.value === appName.value;
-      console.log(`[ConnectionRepo] Comparing '${conn.appName.value}' === '${appName.value}': ${matches}`);
-      return matches;
-    });
-
-    if (connection) {
-      console.log(`[ConnectionRepo] Found ${appName.value} connection for user ${userId.value}: ${connection.accountName} (status: ${connection.status})`);
-    } else {
-      console.log(`[ConnectionRepo] No ${appName.value} connection found for user ${userId.value}`);
-    }
-
+    const connection = connections.find(conn => conn.appName.value === appName.value);
     return connection || null;
   }
   
@@ -189,14 +127,6 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
       }
       
       const externalUserId = getExternalUserId(userId.value);
-      console.log(`[ConnectionRepo] Generating connection URL for user ${userId.value}, app ${appName.value}`);
-
-      // Enhanced debug logging for Google Sheets issues
-      if (appName.value === 'google-sheets') {
-        console.log(`[ConnectionRepo] 🔍 GOOGLE SHEETS DEBUG - Starting token creation`);
-        console.log(`[ConnectionRepo] 🔍 External user ID: ${externalUserId}`);
-        console.log(`[ConnectionRepo] 🔍 Redirect URL: ${redirectUrl}`);
-      }
 
       const tokenResult = await pipedreamClient.tokens.create({
         external_user_id: externalUserId,
@@ -204,11 +134,6 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
         success_redirect_uri: redirectUrl,
       });
 
-      // Enhanced debug logging for Google Sheets
-      if (appName.value === 'google-sheets') {
-        console.log(`[ConnectionRepo] 🔍 GOOGLE SHEETS DEBUG - Token result:`, JSON.stringify(tokenResult, null, 2));
-      }
-      
       // Handle different response structures from Pipedream SDK
       const baseConnectUrl = tokenResult.connect_link_url || 
                             (tokenResult as any).connectUrl || 
@@ -227,18 +152,7 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
         connectUrl.searchParams.set('success_redirect_uri', redirectUrl);
       }
 
-      const finalUrl = connectUrl.toString();
-
-      // Enhanced debug logging for Google Sheets
-      if (appName.value === 'google-sheets') {
-        console.log(`[ConnectionRepo] 🔍 GOOGLE SHEETS DEBUG - Base URL: ${baseConnectUrl}`);
-        console.log(`[ConnectionRepo] 🔍 GOOGLE SHEETS DEBUG - Final URL: ${finalUrl}`);
-        console.log(`[ConnectionRepo] 🔍 GOOGLE SHEETS DEBUG - App param: ${appName.value}`);
-      } else {
-        console.log(`[ConnectionRepo] Generated connection URL: ${finalUrl.substring(0, 100)}...`);
-      }
-
-      return finalUrl;
+      return connectUrl.toString();
       
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -253,15 +167,11 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
         throw new Error('Pipedream client not available');
       }
       
-      console.log(`[ConnectionRepo] Disconnecting connection ${connectionId.value}`);
-      
       // Try SDK method first (preferred)
       try {
-        const result = await (pipedreamClient.accounts as any).delete(connectionId.value);
-        console.log(`[ConnectionRepo] Successfully disconnected ${connectionId.value} via SDK:`, result);
+        await (pipedreamClient.accounts as any).delete(connectionId.value);
         return;
       } catch (sdkError) {
-        console.warn(`[ConnectionRepo] SDK disconnect failed, trying direct API:`, sdkError);
         // Fallback to direct API call
         await this.directApiDisconnect(connectionId.value);
       }
@@ -276,11 +186,8 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
   async hasActiveConnection(userId: UserId, appName: AppName): Promise<boolean> {
     try {
       const connection = await this.findByUserAndApp(userId, appName);
-      const isActive = connection?.status === ConnectionStatus.ACTIVE || 
-                      connection?.status === ConnectionStatus.CONNECTED;
-      
-      console.log(`[ConnectionRepo] User ${userId.value} has active ${appName.value} connection: ${isActive}`);
-      return isActive;
+      return connection?.status === ConnectionStatus.ACTIVE ||
+             connection?.status === ConnectionStatus.CONNECTED;
     } catch (error) {
       console.error(`[ConnectionRepo] Error checking active connection for ${appName.value}:`, error);
       return false;
@@ -308,19 +215,13 @@ export class PipedreamConnectionRepository implements IConnectionRepository {
           'Content-Type': 'application/json',
         },
       });
-      
-      console.log(`[ConnectionRepo] Direct API response status: ${response.status}`);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[ConnectionRepo] Direct API error response: ${errorText}`);
         throw new Error(`Direct API disconnect failed: ${response.status} ${errorText}`);
       }
-      
-      console.log(`[ConnectionRepo] Successfully disconnected ${accountId} via direct API`);
-      
+
     } catch (error) {
-      console.error(`[ConnectionRepo] Direct API disconnect error:`, error);
       throw error;
     }
   }

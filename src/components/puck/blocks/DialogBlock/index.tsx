@@ -11,6 +11,11 @@ import {
 } from '@/components/ui/dialog';
 import { useStateContext } from '../../contexts/StateContext';
 import { useInterpolatedText } from '../../hooks/useInterpolatedText';
+import {
+  createStateContainerField,
+  createStateKeyField,
+  createVariableTextField,
+} from '../../custom-fields';
 
 /**
  * Dialog size options
@@ -172,22 +177,16 @@ function DialogBlockComponent({
 export const DialogBlock: ComponentConfig<DialogBlockProps> = {
   label: 'Dialog',
   fields: {
-    stateContainer: {
-      type: 'text',
+    stateContainer: createStateContainerField({
       label: 'State Container',
-    },
-    stateKey: {
-      type: 'text',
+    }),
+    stateKey: createStateKeyField({
       label: 'State Key (UI State)',
-    },
-    title: {
-      type: 'text',
-      label: 'Title',
-    },
-    description: {
-      type: 'textarea',
-      label: 'Description',
-    },
+      containerProp: 'stateContainer',
+      filterType: 'uiState', // Only show UI state flags for dialogs
+    }),
+    title: createVariableTextField({ label: 'Title' }),
+    description: createVariableTextField({ label: 'Description', multiline: true }),
     size: {
       type: 'select',
       label: 'Size',

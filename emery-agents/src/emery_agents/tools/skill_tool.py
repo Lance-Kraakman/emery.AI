@@ -1,5 +1,6 @@
 """Wraps skills as smolagents tools with recursion protection."""
 
+import hashlib
 import json
 import logging
 import os
@@ -98,6 +99,33 @@ class SkillTool(Tool):
         """Reset the call stack. Called at the start of a new request."""
         cls._thread_local.call_stack = set()
 
+    @classmethod
+    def _get_result_cache(cls) -> Dict[str, str]:
+        """Get thread-local cache of (call_key → result) for memoization.
+
+        Prevents duplicate skill calls with identical inputs within a single
+        request. The parent agent (chat planner) sometimes calls the same
+        skill twice by mistake - memoization returns the cached result.
+        """
+        if not hasattr(cls._thread_local, 'result_cache'):
+            cls._thread_local.result_cache = {}
+        return cls._thread_local.result_cache
+
+    @classmethod
+    def reset_result_cache(cls) -> None:
+        """Reset the result cache. Called at the start of a new request."""
+        cls._thread_local.result_cache = {}
+
+    def _make_call_key(self, kwargs: Dict[str, Any]) -> str:
+        """Create a unique key for this skill call (for memoization).
+
+        Combines skill name with a hash of sorted inputs to create a
+        deterministic key that identifies this specific call.
+        """
+        inputs_str = json.dumps(kwargs, sort_keys=True, default=str)
+        inputs_hash = hashlib.md5(inputs_str.encode()).hexdigest()[:16]
+        return f"{self.skill_config.name}:{inputs_hash}"
+
     def _build_inputs_schema(self) -> Dict[str, Dict[str, str]]:
         """
         Convert SkillConfig.inputs to smolagents tool input schema.
@@ -192,6 +220,13 @@ class SkillTool(Tool):
             logger.error(f"📊 {error_msg}")
             return f"Error: {error_msg}"
 
+        # Check memoization cache - return cached result for duplicate calls
+        call_key = self._make_call_key(kwargs)
+        cache = self._get_result_cache()
+        if call_key in cache:
+            logger.info(f"♻️ Returning cached result for {self.name} (same inputs, preventing duplicate)")
+            return cache[call_key]
+
         execution_mode = "operation" if self._is_operation else "agent"
         logger.info(f"🎯 Executing skill: {self.name} ({execution_mode}, depth: {current_depth + 1}/{self.MAX_DEPTH}) with inputs: {list(kwargs.keys())}")
 
@@ -221,6 +256,8 @@ class SkillTool(Tool):
                             run_async_in_thread(
                                 self._apply_agent_output_mappings(captured_outputs)
                             )
+                            # Include captured outputs in result for parent agent visibility
+                            result = self._build_result_with_outputs(result, captured_outputs)
                     else:
                         result = executor_result
                 else:
@@ -228,11 +265,14 @@ class SkillTool(Tool):
                     result = self.skill_executor(self.skill_config, kwargs)
 
             logger.info(f"✅ Skill {self.name} completed successfully")
+            # Cache the result for memoization (prevents duplicate calls)
+            cache[call_key] = result
             return result
 
         except Exception as e:
             error_msg = f"Skill execution failed: {str(e)}"
             logger.error(f"❌ Skill {self.name} failed: {e}", exc_info=True)
+            # Don't cache errors - allow retry
             return error_msg
 
         finally:
@@ -695,6 +735,41 @@ class SkillTool(Tool):
 
         except Exception as e:
             logger.error(f"❌ Failed to apply operation output mappings: {e}")
+
+    def _build_result_with_outputs(self, original_result: str, captured: Dict[str, Any]) -> str:
+        """
+        Build a result string that includes captured outputs for parent agent visibility.
+
+        The parent agent needs to know what was extracted so it can summarize to the user.
+        Plain text format is more robust for LLM consumption than JSON.
+
+        Args:
+            original_result: The skill's final answer (often generic like "Data submitted successfully")
+            captured: Dict of captured output values from OutputTool
+
+        Returns:
+            Formatted result string with extracted data visible
+        """
+        if not captured:
+            return original_result
+
+        # Build readable output list
+        output_lines = []
+        for name, value in captured.items():
+            # Truncate long values to keep result readable
+            str_value = str(value)
+            if len(str_value) > 200:
+                str_value = str_value[:200] + "..."
+            output_lines.append(f"- {name}: {str_value}")
+
+        outputs_text = "\n".join(output_lines)
+
+        return f"""Skill completed successfully.
+
+Extracted data:
+{outputs_text}
+
+Data has been saved to the configured tables."""
 
     async def _apply_agent_output_mappings(self, captured_values: Dict[str, Any]) -> None:
         """

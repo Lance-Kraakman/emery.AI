@@ -37,11 +37,6 @@ export async function GET(request: NextRequest): Promise<Response> {
       worker_discovery: {
         addresses,
         health_checks: healthChecks,
-        environment_variables: {
-          WORKER_ADDRESS: process.env.WORKER_ADDRESS || null,
-          WORKER_HOST: process.env.WORKER_HOST || 'localhost',
-          WORKER_BASE_PORT: process.env.WORKER_BASE_PORT || '50051',
-        },
       },
     });
 
