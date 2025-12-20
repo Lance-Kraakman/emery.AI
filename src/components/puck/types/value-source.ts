@@ -1,15 +1,11 @@
 /**
  * ValueSource Type System
  *
- * Provides type-safe value references for Puck component configuration.
+ * AIDEV-NOTE: Provides type-safe value references for Puck component configuration.
  * Instead of string patterns like "{params.id}", we use typed objects
  * that can be resolved at runtime.
  *
- * This enables:
- * - Type-safe value references (no runtime string parsing)
- * - Clear separation between data values and display text
- * - Easier debugging (value sources are explicit objects)
- * - IDE autocomplete and validation
+ * State now uses a flat namespace - {state.key} instead of {state.container.key}
  */
 
 /**
@@ -22,7 +18,6 @@ export interface StaticValueSource {
 
 /**
  * URL params value - from query string (?id=123)
- * Resolved server-side when available, client-side otherwise
  */
 export interface ParamsValueSource {
   type: 'params';
@@ -32,7 +27,6 @@ export interface ParamsValueSource {
 
 /**
  * Row data value - from parent DataBlock row
- * Only available inside a DataBlock iteration
  */
 export interface RowDataValueSource {
   type: 'rowData';
@@ -41,20 +35,16 @@ export interface RowDataValueSource {
 }
 
 /**
- * State value - from a StateBlock container
- * Only available within a StateBlock scope (client-side only)
+ * State value - from page state (flat namespace)
  */
 export interface StateValueSource {
   type: 'state';
-  /** StateBlock container name */
-  container: string;
-  /** Variable key within the container */
+  /** Variable key (flat namespace - no container) */
   key: string;
 }
 
 /**
  * Form data value - from form submission context
- * Only available during action execution
  */
 export interface FormDataValueSource {
   type: 'formData';
@@ -104,10 +94,10 @@ export function rowDataValue(field: string): RowDataValueSource {
 }
 
 /**
- * Helper to create a state value source
+ * Helper to create a state value source (flat namespace)
  */
-export function stateValue(container: string, key: string): StateValueSource {
-  return { type: 'state', container, key };
+export function stateValue(key: string): StateValueSource {
+  return { type: 'state', key };
 }
 
 /**
@@ -119,15 +109,14 @@ export function formDataValue(field: string): FormDataValueSource {
 
 /**
  * Resolution context for resolving ValueSources
- * Different sources require different context to be available
  */
 export interface ValueResolutionContext {
   /** URL query parameters */
   params?: Record<string, string | string[] | undefined>;
   /** Parent row data resolver */
   resolveRowData?: (field: string) => unknown;
-  /** State container value getter */
-  getStateValue?: (container: string, key: string) => unknown;
+  /** State value getter (flat namespace) */
+  getStateValue?: (key: string) => unknown;
   /** Form data (during action execution) */
   formData?: Record<string, unknown>;
 }
@@ -159,10 +148,10 @@ export function resolveValueSource(
 
     case 'state':
       if (!context.getStateValue) {
-        console.warn(`[ValueSource] No state context available for: ${source.container}.${source.key}`);
+        console.warn(`[ValueSource] No state context available for: ${source.key}`);
         return undefined;
       }
-      return context.getStateValue(source.container, source.key);
+      return context.getStateValue(source.key);
 
     case 'formData':
       if (!context.formData) {
@@ -178,12 +167,13 @@ export function resolveValueSource(
 }
 
 /**
- * Convert a legacy string pattern to ValueSource (for migration)
+ * Convert a string pattern to ValueSource
  *
  * Handles patterns like:
  * - "{params.id}" -> ParamsValueSource
  * - "{rowData.field}" -> RowDataValueSource
- * - "{state.container.key}" -> StateValueSource
+ * - "{state.key}" -> StateValueSource (flat namespace)
+ * - "{formData.field}" -> FormDataValueSource
  * - Plain strings -> StaticValueSource
  */
 export function stringPatternToValueSource(pattern: string): ValueSource {
@@ -199,10 +189,10 @@ export function stringPatternToValueSource(pattern: string): ValueSource {
     return rowDataValue(rowDataMatch[1]);
   }
 
-  // Match {state.container.key}
-  const stateMatch = pattern.match(/^\{state\.(\w+)\.(\w+)\}$/);
+  // Match {state.key} (flat namespace - just one key)
+  const stateMatch = pattern.match(/^\{state\.(\w+)\}$/);
   if (stateMatch) {
-    return stateValue(stateMatch[1], stateMatch[2]);
+    return stateValue(stateMatch[1]);
   }
 
   // Match {formData.field}

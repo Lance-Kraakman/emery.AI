@@ -321,7 +321,7 @@ export async function executeAction(
       }
 
       case 'setState': {
-        // Set a value in a state container
+        // Set a value in page state (flat namespace)
         if (!context.stateContext) {
           console.warn('[setState] No state context available');
           break;
@@ -333,40 +333,40 @@ export async function executeAction(
           resolvedValue = resolveDynamicValue(action.value, context);
         }
 
-        context.stateContext.setValue(action.container, action.key, resolvedValue);
+        context.stateContext.setValue(action.key, resolvedValue);
         break;
       }
 
-      case 'toggleUIState': {
-        // Toggle a UI state flag
+      case 'toggleUIFlag': {
+        // Toggle a UI flag (flat namespace)
         if (!context.stateContext) {
-          console.warn('[toggleUIState] No state context available');
+          console.warn('[toggleUIFlag] No state context available');
           break;
         }
 
-        context.stateContext.toggleUIState(action.container, action.key);
+        context.stateContext.toggleUIFlag(action.key);
         break;
       }
 
-      case 'setUIState': {
-        // Set a UI state flag to a specific value
+      case 'setUIFlag': {
+        // Set a UI flag to a specific value (flat namespace)
         if (!context.stateContext) {
-          console.warn('[setUIState] No state context available');
+          console.warn('[setUIFlag] No state context available');
           break;
         }
 
-        context.stateContext.setUIState(action.container, action.key, action.value);
+        context.stateContext.setUIFlag(action.key, action.value);
         break;
       }
 
       case 'resetState': {
-        // Reset a state container to initial values
+        // Reset all state to initial values
         if (!context.stateContext) {
           console.warn('[resetState] No state context available');
           break;
         }
 
-        context.stateContext.resetContainer(action.container);
+        context.stateContext.resetState();
         break;
       }
 

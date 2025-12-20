@@ -3,10 +3,11 @@
 /**
  * PageContext - Unified Page-Level Context for Puck
  *
- * Consolidates three separate contexts into one:
- * - LinkContext: org/app/page routing context
- * - QueryParamContext: URL query parameters
- * - ThemeContext: Theme configuration
+ * AIDEV-NOTE: Consolidates page-level data into one context:
+ * - Routing: org/app/page slugs for URL construction
+ * - Query params: URL parameters
+ * - Theme: Theme configuration
+ * - Page state config: Client-side state configuration
  *
  * This simplifies the provider hierarchy and makes page-level data
  * accessible through a single hook.
@@ -15,6 +16,7 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import type { PageDTO } from '@/app/mappers/puck-page-mapper';
 import { ThemeConfig } from '@/ddd/domain/puck/value-objects/theme-config';
+import type { PageStateConfig } from '@/components/puck/types/state';
 
 /**
  * Query parameter types
@@ -46,6 +48,10 @@ export interface PageContextValue {
   // Theme (from ThemeContext)
   /** Theme configuration */
   theme: ThemeConfig;
+
+  // Page state config (for StateProvider initialization)
+  /** Page state configuration (variables, UI flags, persistence) */
+  pageState?: PageStateConfig;
 }
 
 /**
@@ -158,6 +164,13 @@ export function useQueryParam<T = string>(
  */
 export function useTheme(): ThemeConfig {
   return usePageContext().theme;
+}
+
+/**
+ * usePageState - Hook to get page state configuration
+ */
+export function usePageState(): PageStateConfig | undefined {
+  return usePageContext().pageState;
 }
 
 /**

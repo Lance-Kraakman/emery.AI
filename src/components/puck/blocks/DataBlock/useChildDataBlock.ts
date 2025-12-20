@@ -3,15 +3,15 @@
 /**
  * useChildDataBlock - Hook for child DataBlocks that need dynamic data in filters
  *
- * Handles client-side data fetching when filters reference:
+ * AIDEV-NOTE: Handles client-side data fetching when filters reference:
  * - {rowData.fieldName} - Parent row data (nested DataBlocks)
- * - {state.container.key} - State container values (dynamic filtering)
+ * - {state.key} - State values (flat namespace, dynamic filtering)
  *
  * Also handles client-side sorting when sortConfig includes dynamic state values.
  *
  * Features:
- * - Detects {rowData.fieldName} and {state.container.key} patterns
- * - Subscribes to state containers for reactive re-fetch
+ * - Detects {rowData.fieldName} and {state.key} patterns
+ * - Subscribes to state changes for reactive re-fetch
  * - Uses useParentRowData() for row data resolution
  * - Fetches data client-side via executeView server action
  * - Applies client-side sorting for static and dynamic sort configs
@@ -28,8 +28,8 @@ import type { RowSortConfig, SortCondition } from '../../fields/MultiSortField';
 /** Regex to match {rowData.fieldName} pattern */
 const ROW_DATA_VAR_REGEX = /\{rowData\.(\w+)\}/g;
 
-/** Regex to match {state.container.key} pattern */
-const STATE_VAR_REGEX = /\{state\.([^.}]+)\.([^}]+)\}/g;
+/** Regex to match {state.key} pattern (flat namespace) */
+const STATE_VAR_REGEX = /\{state\.([^}]+)\}/g;
 
 /** Check if a condition has rowData variables */
 function hasRowDataVariable(condition: FilterCondition): boolean {
@@ -53,25 +53,6 @@ function filterHasStateVariables(filterConfig?: RowFilterConfig): boolean {
   return filterConfig.conditions.some(hasStateVariable);
 }
 
-/** Extract state container names from filter config */
-function extractStateContainers(filterConfig?: RowFilterConfig): Set<string> {
-  const containers = new Set<string>();
-  if (!filterConfig?.conditions?.length) return containers;
-
-  for (const condition of filterConfig.conditions) {
-    if (typeof condition.value !== 'string') continue;
-
-    // Reset regex lastIndex
-    STATE_VAR_REGEX.lastIndex = 0;
-
-    let match;
-    while ((match = STATE_VAR_REGEX.exec(condition.value)) !== null) {
-      containers.add(match[1]); // Container name is first capture group
-    }
-  }
-
-  return containers;
-}
 
 /**
  * Resolve all {rowData.fieldName} variables in a string value
@@ -87,17 +68,17 @@ function resolveRowDataVariables(
 }
 
 /**
- * Resolve all {state.container.key} variables in a string value
+ * Resolve all {state.key} variables in a string value (flat namespace)
  */
 function resolveStateVariables(
   value: string,
-  getStateValue: (container: string, key: string) => unknown
+  getStateValue: (key: string) => unknown
 ): string {
   // Reset regex lastIndex
   STATE_VAR_REGEX.lastIndex = 0;
 
-  return value.replace(STATE_VAR_REGEX, (_, container, key) => {
-    const resolved = getStateValue(container, key);
+  return value.replace(STATE_VAR_REGEX, (_, key) => {
+    const resolved = getStateValue(key);
     return resolved !== undefined && resolved !== null ? String(resolved) : '';
   });
 }
@@ -207,45 +188,21 @@ export function useChildDataBlock({
     return filterHasRowDataVariables(filterConfig) || filterHasStateVariables(filterConfig);
   }, [filterConfig]);
 
-  // Extract state containers for subscription
-  const stateContainersInFilters = useMemo(() => {
-    return extractStateContainers(filterConfig);
-  }, [filterConfig]);
+  // Check if filters or sort config have state references
+  const hasStateReferences = useMemo(() => {
+    if (filterHasStateVariables(filterConfig)) return true;
+    if (sortConfig?.dynamicField) return true;
+    if (sortConfig?.dynamicDirection) return true;
+    return false;
+  }, [filterConfig, sortConfig]);
 
-  // Also extract from sort config
-  const stateContainersInSort = useMemo(() => {
-    const containers = new Set<string>();
-    if (sortConfig?.dynamicField) {
-      const [container] = sortConfig.dynamicField.split('.');
-      if (container) containers.add(container);
-    }
-    if (sortConfig?.dynamicDirection) {
-      const [container] = sortConfig.dynamicDirection.split('.');
-      if (container) containers.add(container);
-    }
-    return containers;
-  }, [sortConfig]);
-
-  // Combined state containers
-  const allStateContainers = useMemo(() => {
-    return new Set([...stateContainersInFilters, ...stateContainersInSort]);
-  }, [stateContainersInFilters, stateContainersInSort]);
-
-  // Subscribe to state containers for reactive re-fetch
+  // Subscribe to state changes for reactive re-fetch (flat namespace - one subscription)
   useEffect(() => {
-    if (!stateContext || allStateContainers.size === 0) return;
+    if (!stateContext || !hasStateReferences) return;
 
-    const unsubscribers: Array<() => void> = [];
-
-    allStateContainers.forEach(container => {
-      const unsub = stateContext.subscribe(container, forceRefetch);
-      unsubscribers.push(unsub);
-    });
-
-    return () => {
-      unsubscribers.forEach(unsub => unsub());
-    };
-  }, [stateContext, allStateContainers]);
+    const unsub = stateContext.subscribe(forceRefetch);
+    return unsub;
+  }, [stateContext, hasStateReferences]);
 
   // Resolve sort conditions (static + dynamic from state)
   const resolvedSortConditions = useMemo(() => {
@@ -264,16 +221,15 @@ export function useChildDataBlock({
     }
 
     // Add dynamic sort from state (overrides static if set)
+    // Note: dynamicField is now just a key name (flat namespace)
     if (sortConfig.dynamicField && stateContext) {
-      const [container, key] = sortConfig.dynamicField.split('.');
-      const dynamicFieldValue = stateContext.getValue(container, key);
+      const dynamicFieldValue = stateContext.getValue(sortConfig.dynamicField);
 
       if (dynamicFieldValue && typeof dynamicFieldValue === 'string') {
         // Get dynamic direction
         let direction: 'asc' | 'desc' = 'asc';
         if (sortConfig.dynamicDirection) {
-          const [dirContainer, dirKey] = sortConfig.dynamicDirection.split('.');
-          const dirValue = stateContext.getValue(dirContainer, dirKey);
+          const dirValue = stateContext.getValue(sortConfig.dynamicDirection);
           if (dirValue === 'desc' || dirValue === 'descending') {
             direction = 'desc';
           }
@@ -340,7 +296,7 @@ export function useChildDataBlock({
           }
         }
 
-        // Resolve {state.x.y} variables
+        // Resolve {state.key} variables (flat namespace)
         if (valueStr.includes('{state.') && stateContext) {
           const resolved = resolveStateVariables(valueStr, stateContext.getValue);
           // Check if variable was resolved
