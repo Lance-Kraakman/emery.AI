@@ -21,7 +21,6 @@ import { LoginBlock } from "./blocks/LoginBlock";
 import { SignOutBlock } from "./blocks/SignOutBlock";
 import { LinkBlockConfig } from "./blocks/LinkBlock";
 import { DataBlockConfig } from "./blocks/DataBlock";
-import { StateBlock } from "./blocks/StateBlock";
 import { ConditionalBlock } from "./blocks/ConditionalBlock";
 import { DialogBlock } from "./blocks/DialogBlock";
 import TextFieldConfig from "./blocks/TextField";
@@ -60,7 +59,7 @@ export const config: UserConfig = {
     },
     data: {
       title: "Data",
-      components: ["DataBlock", "StateBlock", "TableBlock", "MetricBlock", "ChartBlock", "FormBlock"],
+      components: ["DataBlock", "TableBlock", "MetricBlock", "ChartBlock", "FormBlock"],
     },
     logic: {
       title: "Logic",
@@ -97,7 +96,6 @@ export const config: UserConfig = {
     HeaderBlock,
     FooterBlock,
     DataBlock: DataBlockConfig,
-    StateBlock,
     ConditionalBlock,
     DialogBlock,
     TableBlock: TableBlockConfig,

@@ -3,18 +3,20 @@
 /**
  * useResolveVariables
  *
- * Hook to resolve {variable} templates in strings at render time.
+ * AIDEV-NOTE: Hook to resolve {variable} templates in strings at render time.
+ * Uses flat namespace for state - {state.key} not {state.container.key}
+ *
  * Supports:
  * - {fieldName} - Shorthand for current row data field
  * - {rowData.fieldName} - Explicit row data access
  * - {params.name} - URL query parameter
- * - {state.container.key} - State container value
+ * - {state.key} - State value (flat namespace)
  *
  * @example
  * ```tsx
  * const resolveVariables = useResolveVariables();
  * const resolvedLabel = resolveVariables("View {name}"); // "View iPhone 15"
- * const stateLabel = resolveVariables("Count: {state.cart.count}"); // "Count: 3"
+ * const stateLabel = resolveVariables("Count: {state.count}"); // "Count: 3"
  * ```
  */
 
@@ -26,16 +28,10 @@ import { useStateContext } from '../contexts/StateContext';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 
 /**
- * Extract state containers referenced in a template
+ * Check if template has state references
  */
-function extractStateContainers(template: string): Set<string> {
-  const containers = new Set<string>();
-  const pattern = /\{state\.([^.}]+)\.[^}]+\}/g;
-  let match;
-  while ((match = pattern.exec(template)) !== null) {
-    containers.add(match[1]);
-  }
-  return containers;
+function hasStateReferences(template: string): boolean {
+  return /\{state\.[^}]+\}/.test(template);
 }
 
 /**
@@ -71,7 +67,7 @@ function formatValue(value: unknown): string {
  * @param rowData - Row data for field resolution (keyed by field ID)
  * @param fields - Field metadata for name→id conversion
  * @param params - Query parameters for param resolution
- * @param getStateValue - Function to get state values
+ * @param getStateValue - Function to get state values (flat namespace)
  * @returns Resolved string with variables replaced
  */
 function resolveTemplate(
@@ -79,20 +75,16 @@ function resolveTemplate(
   rowData: Record<string, unknown> | undefined,
   fields: FieldDTO[] | undefined,
   params: URLSearchParams,
-  getStateValue?: (container: string, key: string) => unknown
+  getStateValue?: (key: string) => unknown
 ): string {
   if (!template) return template;
 
   return template.replace(/\{([^}]+)\}/g, (match, path) => {
-    // Handle {state.container.key} syntax
+    // Handle {state.key} syntax (flat namespace)
     if (path.startsWith('state.') && getStateValue) {
-      const parts = path.substring(6).split('.');
-      if (parts.length >= 2) {
-        const container = parts[0];
-        const key = parts.slice(1).join('.');
-        const value = getStateValue(container, key);
-        if (value !== undefined) return formatValue(value);
-      }
+      const key = path.substring(6); // Remove 'state.' prefix
+      const value = getStateValue(key);
+      if (value !== undefined) return formatValue(value);
       return match;
     }
 
@@ -142,13 +134,9 @@ export function useResolveVariables() {
   // Force re-render counter for state subscriptions
   const [, forceUpdate] = useReducer(x => x + 1, 0);
 
-  // We can't subscribe to specific containers since we don't know what
-  // templates will be passed. Instead, we re-render on any state change.
-  // This is a trade-off for the flexibility of imperative resolution.
-  // For better performance, use useInterpolatedText with a known template.
-
-  const resolve = useCallback(
-    (template: string): string => {
+  // Create the resolver function
+  const resolveVariables = useCallback(
+    (template: string) => {
       return resolveTemplate(
         template,
         rowContext?.rowData ?? undefined,
@@ -160,16 +148,13 @@ export function useResolveVariables() {
     [rowContext?.rowData, dataContext?.fields, searchParams, stateContext?.getValue]
   );
 
-  return resolve;
+  return resolveVariables;
 }
 
 /**
- * Hook variant that subscribes to specific state containers
- * More efficient than useResolveVariables when template is known
- *
- * @param template - The template string to watch for state references
+ * Hook that resolves a specific template and subscribes to state changes
  */
-export function useResolveVariablesWithSubscription(template: string) {
+export function useResolvedTemplate(template: string) {
   const rowContext = useRowData();
   const dataContext = useDataLayoutContext();
   const searchParams = useSearchParams();
@@ -178,22 +163,12 @@ export function useResolveVariablesWithSubscription(template: string) {
   // Force re-render counter for state subscriptions
   const [, forceUpdate] = useReducer(x => x + 1, 0);
 
-  // Extract and subscribe to state containers
+  // Subscribe to state changes if template has state references
   useEffect(() => {
-    if (!stateContext || !template) return;
+    if (!stateContext || !template || !hasStateReferences(template)) return;
 
-    const containers = extractStateContainers(template);
-    if (containers.size === 0) return;
-
-    const unsubscribers: Array<() => void> = [];
-    containers.forEach(container => {
-      const unsub = stateContext.subscribe(container, forceUpdate);
-      unsubscribers.push(unsub);
-    });
-
-    return () => {
-      unsubscribers.forEach(unsub => unsub());
-    };
+    const unsub = stateContext.subscribe(forceUpdate);
+    return unsub;
   }, [stateContext, template]);
 
   return resolveTemplate(
