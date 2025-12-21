@@ -1,46 +1,45 @@
-## CRITICAL: Output Submission Required
+## Output Submission Required
 
-**IMPORTANT: Call only ONE tool at a time. Wait for the observation before calling another tool.**
+**Call only ONE tool at a time. Wait for the observation before calling another.**
 
-This task requires you to save outputs to the database.
+⚠️ **EXTRACTION RULES:**
+- ONLY use data explicitly stated in the input
+- Use `null` if data is not found (never make up values)
+- Never use placeholders like "N/A" or "unknown"
 
-### Step 1: Call `submit_result` with your outputs
-When you have completed your analysis, call `submit_result` with all required outputs:
-
+### Call `submit_result`:
 ```
 submit_result(
 {% for output in outputs %}
-    {{ output.name }}=<value>{{ "," if not loop.last else "" }}
+    {{ output.name }}=<value or null>{{ "," if not loop.last else "" }}
 {% endfor %}
 )
 ```
 
-### Outputs to Submit:
+### Outputs:
 {% for output in outputs %}
 - **{{ output.name }}**{% if output.target.field_type %} ({{ output.target.field_type }}){% else %} ({{ output.type }}){% endif %}
 {%- if output.target.field_type == 'single-select' and output.target.options %}
-  → Must be one of: {{ output.target.options | join(', ') }}
+  → One of: {{ output.target.options | join(', ') }}, or null
 {%- elif output.target.field_type == 'multi-select' and output.target.options %}
-  → Provide an array from: {{ output.target.options | join(', ') }}{% if output.target.max_selections %} (max {{ output.target.max_selections }}){% endif %}
+  → Array from: {{ output.target.options | join(', ') }}{% if output.target.max_selections %} (max {{ output.target.max_selections }}){% endif %}, or null
 {%- elif output.target.field_type == 'number' or output.type == 'number' %}
-  → Provide a numeric value
+  → Number or null
 {%- elif output.target.field_type == 'boolean' or output.type == 'boolean' %}
-  → Provide true or false
+  → true/false or null
 {%- elif output.target.field_type == 'date' or output.type == 'date' %}
-  → Provide date in ISO format (YYYY-MM-DD)
+  → YYYY-MM-DD or null
 {%- elif output.target.field_type == 'email' or output.type == 'email' %}
-  → Provide a valid email address
+  → Email or null
 {%- elif output.target.field_type == 'phone' or output.type == 'phone' %}
-  → Provide phone in E.164 format (+[country code][number], e.g., +61291234567)
+  → E.164 (+61...) or null
 {%- elif output.target.field_type == 'json' or output.type == 'json' %}
-  → Provide a JSON object or array
+  → JSON or null
 {%- elif output.description %}
-  → {{ output.description }}
+  → {{ output.description }}, or null
+{%- else %}
+  → or null if not in input
 {%- endif %}
-
 {% endfor %}
 
-### Step 2: After `submit_result` succeeds, call `final_answer`
-Only after you see the observation confirming `submit_result` succeeded, call `final_answer` to complete the task.
-
-⚠️ **Do NOT call both tools in the same response. Call `submit_result` first, wait for the observation, then call `final_answer`.**
+After `submit_result` succeeds, call `final_answer`.

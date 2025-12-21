@@ -207,10 +207,29 @@ class SkillExecutorService:
         if capture_outputs:
             was_called = output_tool.was_called() if output_tool else False
             captured = output_tool.get_captured_values() if output_tool and was_called else None
+
+            # Check for extraction failure
+            if not was_called:
+                logger.error("❌ OutputTool was NOT called - skill execution failed")
+                return SkillExecutionResult(
+                    result="FAILED: Skill did not submit results. Data extraction may have failed.",
+                    captured_outputs=None
+                )
+
+            # Check if all values are null (complete extraction failure)
+            if captured and all(v is None for v in captured.values()):
+                logger.error("❌ No data was extracted - all fields were null")
+                return SkillExecutionResult(
+                    result="FAILED: No data could be extracted from the input.",
+                    captured_outputs=None
+                )
+
             if captured:
-                logger.info(f"📤 Captured outputs from submit_result: {list(captured.keys())}")
+                extracted = sum(1 for v in captured.values() if v is not None)
+                logger.info(f"📤 Captured {extracted}/{len(captured)} outputs from submit_result")
             else:
-                logger.warning(f"⚠️ OutputTool was {'NOT ' if not was_called else ''}called, captured={captured}")
+                logger.warning(f"⚠️ No captured outputs")
+
             return SkillExecutionResult(result=result_json, captured_outputs=captured)
         else:
             return result_json
