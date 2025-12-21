@@ -10,6 +10,9 @@ export interface PageVariable {
   required: boolean;
   description?: string;
 }
+
+// Re-export PageStateConfig for use in DB schema
+export type { PageStateConfig } from './types/state';
 import { ButtonProps } from "./blocks/Button";
 import { CardProps } from "./blocks/Card";
 import { ContainerProps } from "./blocks/Container";
@@ -42,7 +45,6 @@ import { LinkFieldProps } from "./blocks/LinkField/LinkField";
 import type { LoginBlockProps } from "./blocks/LoginBlock";
 import type { SignOutBlockProps } from "./blocks/SignOutBlock";
 import type { EditorBlockProps } from "./blocks/EditorBlock/types";
-import type { StateBlockProps } from "./blocks/StateBlock";
 import type { ConditionalBlockProps } from "./blocks/ConditionalBlock";
 import type { DialogBlockProps } from "./blocks/DialogBlock";
 
@@ -88,7 +90,6 @@ export type Components = {
   HeaderBlock: HeaderBlockProps;
   FooterBlock: FooterBlockProps;
   DataBlock: DataBlockProps;
-  StateBlock: StateBlockProps;
   ConditionalBlock: ConditionalBlockProps;
   DialogBlock: DialogBlockProps;
   TableBlock: TableBlockProps;

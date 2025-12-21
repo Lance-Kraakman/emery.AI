@@ -3,14 +3,14 @@
 /**
  * useInterpolatedText - Hook for text interpolation with reactive updates
  *
- * Provides reactive text interpolation that re-renders when referenced
- * state values change.
+ * AIDEV-NOTE: Provides reactive text interpolation that re-renders when
+ * referenced state values change. Uses flat namespace for state.
  *
  * @example
  * ```tsx
  * function MyComponent({ text }) {
- *   // Text like "Hello {state.user.name}!" becomes "Hello John!"
- *   // Re-renders when user.name changes
+ *   // Text like "Hello {state.userName}!" becomes "Hello John!"
+ *   // Re-renders when state changes
  *   const interpolated = useInterpolatedText(text);
  *   return <span>{interpolated}</span>;
  * }
@@ -24,8 +24,8 @@ import { useStateContext } from '@/components/puck/contexts/StateContext';
 import type { ValueResolutionContext } from '@/components/puck/types/value-source';
 import {
   interpolateText,
-  extractStateContainers,
   hasVariableReferences,
+  hasStateReferences,
 } from '@/components/puck/utils/text-interpolation';
 
 /**
@@ -33,7 +33,7 @@ import {
  *
  * Automatically subscribes to state changes for reactive updates.
  *
- * @param text - Text with optional variable references like {state.x.y}
+ * @param text - Text with optional variable references like {state.key}
  * @returns Interpolated text with all variables resolved
  */
 export function useInterpolatedText(text: string | undefined | null): string {
@@ -52,27 +52,19 @@ export function useInterpolatedText(text: string | undefined | null): string {
     formData: undefined,
   }), [pageContext.params, rowContext?.resolveRowDataVariable, stateContext?.getValue]);
 
-  // Extract state containers for subscription
-  const stateContainers = useMemo(() => {
-    if (!text) return new Set<string>();
-    return extractStateContainers(text);
+  // Check if text has state references
+  const needsStateSubscription = useMemo(() => {
+    if (!text) return false;
+    return hasStateReferences(text);
   }, [text]);
 
-  // Subscribe to state changes
+  // Subscribe to state changes (flat namespace - just one subscription)
   useEffect(() => {
-    if (!stateContext || stateContainers.size === 0) return;
+    if (!stateContext || !needsStateSubscription) return;
 
-    const unsubscribers: Array<() => void> = [];
-
-    stateContainers.forEach(container => {
-      const unsub = stateContext.subscribe(container, forceUpdate);
-      unsubscribers.push(unsub);
-    });
-
-    return () => {
-      unsubscribers.forEach(unsub => unsub());
-    };
-  }, [stateContext, stateContainers]);
+    const unsubscribe = stateContext.subscribe(forceUpdate);
+    return unsubscribe;
+  }, [stateContext, needsStateSubscription]);
 
   // Perform interpolation
   return useMemo(() => {

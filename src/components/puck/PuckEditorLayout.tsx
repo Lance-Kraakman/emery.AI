@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { PageSettingsPanel } from "@/app/(app)/apps/components/PageSettingsPanel";
 import { PageAccessSettings } from "@/app/(app)/apps/components/PageAccessSettings";
 import { PageVariablesPanel } from "@/app/(app)/apps/components/PageVariablesPanel";
+import { PageStatePanel } from "@/app/(app)/apps/components/PageStatePanel";
 import { ThemeSidebarPanel } from "@/app/(app)/apps/components/ThemeEditorSheet";
 import { usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 import { PuckSession } from "@/lib/puck/session-storage";
@@ -17,6 +18,7 @@ import { updatePageContent } from "@/app/actions/puck-pages";
 import { ComponentBreadcrumb } from "@/components/puck/ComponentBreadcrumb";
 import { EditorUIProvider, useEditorUI } from "@/components/puck/contexts/EditorUIContext";
 import type { PageVariable } from "@/components/puck/types";
+import type { PageStateConfig } from "@/components/puck/types/state";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import type { OrganizationDTO } from "@/app/mappers/organization-mapper";
@@ -33,6 +35,7 @@ export interface PuckEditorLayoutProps {
   onSavePageSettings: (data: { name: string; slug: string }) => Promise<void>;
   onSaveAccessSettings: (data: { requiresAuth: boolean; allowedRoles: string[] }) => Promise<void>;
   onSavePageVariables: (variables: PageVariable[]) => Promise<void>;
+  onSavePageState: (pageState: PageStateConfig | undefined) => Promise<void>;
   themeMode: "app" | "page";
 }
 
@@ -48,6 +51,7 @@ function PuckEditorLayoutInner({
   onSavePageSettings,
   onSaveAccessSettings,
   onSavePageVariables,
+  onSavePageState,
   themeMode,
 }: PuckEditorLayoutProps) {
   const router = useRouter();
@@ -277,6 +281,13 @@ function PuckEditorLayoutInner({
                       pageId={pageId}
                       initialVariables={page.pageVariables || []}
                       onSave={onSavePageVariables}
+                    />
+                  </div>
+                  <div className="border-b border-border">
+                    <PageStatePanel
+                      pageId={pageId}
+                      initialState={page.pageState}
+                      onSave={onSavePageState}
                     />
                   </div>
                   <div className="border-b border-border">
