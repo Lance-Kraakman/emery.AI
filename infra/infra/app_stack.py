@@ -167,7 +167,6 @@ class AppStack(Stack):
             image=app_image,
             command=["migrate"],
             environment={
-                "RUN_SEEDS": "true",  # Enable database seeding
                 "NODE_ENV": "production",
             },
             secrets={
