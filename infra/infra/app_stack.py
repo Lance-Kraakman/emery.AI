@@ -167,7 +167,6 @@ class AppStack(Stack):
             image=app_image,
             command=["migrate"],
             environment={
-                "RUN_SEEDS": "true",  # Enable database seeding
                 "NODE_ENV": "production",
             },
             secrets={
@@ -217,6 +216,12 @@ class AppStack(Stack):
             deployment_controller=ecs.DeploymentController(
                 type=ecs.DeploymentControllerType.CODE_DEPLOY
             ) if is_production else None,
+        )
+
+        # Increase ALB idle timeout from default 60s to 300s (5 minutes)
+        # Required for long-running chat/agent operations
+        frontend_service.load_balancer.set_attribute(
+            'idle_timeout.timeout_seconds', '300'
         )
 
         # Grant database access to frontend service

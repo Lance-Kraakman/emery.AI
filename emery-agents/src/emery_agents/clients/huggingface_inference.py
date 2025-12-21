@@ -83,12 +83,11 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
             # Dedicated endpoint - use full URL
             endpoint = metadata.endpoint.url
             logger.info(f"🔧 Using dedicated endpoint for {model_id}: {endpoint}")
+            client = InferenceClient(model=endpoint, token=self.token)
         else:
-            # Inference API - model ID routes automatically
-            endpoint = model_id
-            logger.info(f"🔧 Using HF Inference API for model: {model_id}")
-
-        client = InferenceClient(model=endpoint, token=self.token)
+            # Inference Providers API with auto-failover
+            logger.info(f"🔧 Using HF Inference Providers API for model: {model_id}")
+            client = InferenceClient(model=model_id, token=self.token, provider="auto")
         self._clients[model_id] = client
         return client
 
