@@ -54,15 +54,3 @@ export {
   createVariableTextField,
   type VariableTextFieldOptions,
 } from "./variable-text-field";
-
-// State Container Selection (for ConditionalBlock, DialogBlock)
-export {
-  createStateContainerField,
-  type StateContainerFieldConfig,
-} from "./state-container-field";
-
-// State Key Selection (for ConditionalBlock, DialogBlock)
-export {
-  createStateKeyField,
-  type StateKeyFieldConfig,
-} from "./state-key-field";

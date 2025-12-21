@@ -1,13 +1,12 @@
 /**
  * Action types for UI elements (Button, Link, Form, etc.)
  *
- * Actions enable UI elements to trigger operations like:
+ * AIDEV-NOTE: Actions enable UI elements to trigger operations like:
  * - Assigning tasks to agents
  * - Navigation
  * - Opening URLs
  * - Showing notifications
- *
- * AIDEV-NOTE: AssignTaskAction reuses TaskInstructions from Agent entity for standardization
+ * - State management (flat namespace - no containers)
  */
 
 import type { TaskInstructions } from '@/ddd/domain/agents/entities/agent';
@@ -62,49 +61,41 @@ export interface UpdateQueryParamsAction {
 }
 
 /**
- * Action to set a value in a state container
+ * Action to set a value in page state (flat namespace)
  */
 export interface SetStateAction {
   type: 'setState';
-  /** State container name */
-  container: string;
-  /** Variable key */
+  /** Variable key (flat namespace - no container) */
   key: string;
   /** Value to set (can use templates like {rowData.field}) */
   value: string | number | boolean;
 }
 
 /**
- * Action to toggle a UI state flag (boolean)
+ * Action to toggle a UI flag (boolean)
  */
-export interface ToggleUIStateAction {
-  type: 'toggleUIState';
-  /** State container name */
-  container: string;
-  /** UI flag key */
+export interface ToggleUIFlagAction {
+  type: 'toggleUIFlag';
+  /** UI flag key (flat namespace) */
   key: string;
 }
 
 /**
- * Action to set a UI state flag to a specific value
+ * Action to set a UI flag to a specific value
  */
-export interface SetUIStateAction {
-  type: 'setUIState';
-  /** State container name */
-  container: string;
-  /** UI flag key */
+export interface SetUIFlagAction {
+  type: 'setUIFlag';
+  /** UI flag key (flat namespace) */
   key: string;
   /** Value to set */
   value: boolean;
 }
 
 /**
- * Action to reset a state container to its initial values
+ * Action to reset all state to initial values
  */
 export interface ResetStateAction {
   type: 'resetState';
-  /** State container name */
-  container: string;
 }
 
 /**
@@ -117,8 +108,8 @@ export type Action =
   | NotificationAction
   | UpdateQueryParamsAction
   | SetStateAction
-  | ToggleUIStateAction
-  | SetUIStateAction
+  | ToggleUIFlagAction
+  | SetUIFlagAction
   | ResetStateAction;
 
 /**
@@ -140,14 +131,13 @@ export interface ActionLinkContext {
 }
 
 /**
- * State context interface for action execution
- * Provides access to state operations without importing the full context
+ * State context interface for action execution (flat namespace)
  */
 export interface ActionStateContext {
-  setValue: (container: string, key: string, value: unknown) => void;
-  toggleUIState: (container: string, key: string) => void;
-  setUIState: (container: string, key: string, value: boolean) => void;
-  resetContainer: (container: string) => void;
+  setValue: (key: string, value: unknown) => void;
+  toggleUIFlag: (key: string) => void;
+  setUIFlag: (key: string, value: boolean) => void;
+  resetState: () => void;
 }
 
 /**

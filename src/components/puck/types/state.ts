@@ -1,9 +1,12 @@
 /**
- * State Types - Type definitions for StateBlock and StateContext
+ * State Types - Type definitions for Page State
  *
- * StateBlock provides client-side state containers for Puck pages.
- * Each container holds variables and UI state flags that can be
- * referenced by other components via ValueSource.
+ * AIDEV-NOTE: Page State provides client-side state management for Puck pages.
+ * State is defined at the page level (not in blocks) and accessible
+ * page-wide via {state.key} syntax.
+ *
+ * The state system uses a flat namespace - no containers.
+ * Variables and UI flags are accessed directly by name.
  */
 
 /**
@@ -12,14 +15,14 @@
 export type StateVariableType = 'string' | 'number' | 'boolean' | 'object' | 'array';
 
 /**
- * A state variable definition (configured in StateBlock)
+ * A state variable definition (configured in PageStatePanel)
  */
 export interface StateVariable {
-  /** Variable name (used in references like {state.container.name}) */
+  /** Variable name (used in references like {state.variableName}) */
   name: string;
   /** Variable type for validation */
   type: StateVariableType;
-  /** Default value when container initializes */
+  /** Default value when page loads */
   defaultValue: unknown;
   /** Optional description for documentation */
   description?: string;
@@ -29,7 +32,7 @@ export interface StateVariable {
  * A UI state flag (boolean for dialogs, tabs, etc.)
  */
 export interface UIStateFlag {
-  /** Flag name (used in references like {state.container.flagName}) */
+  /** Flag name (used in references like {state.flagName}) */
   name: string;
   /** Default value (typically false) */
   defaultValue: boolean;
@@ -43,31 +46,150 @@ export interface UIStateFlag {
 export type StatePersistence = 'none' | 'session' | 'localStorage';
 
 /**
- * State container configuration (defined by StateBlock)
+ * Page State configuration (stored at page level in DB)
  */
-export interface StateContainerConfig {
-  /** Container name (unique identifier) */
-  name: string;
-  /** Variable definitions */
+export interface PageStateConfig {
+  /** State variables (typed values) */
   variables: StateVariable[];
-  /** UI state flag definitions */
-  uiState: UIStateFlag[];
-  /** Persistence strategy */
+  /** UI state flags (boolean toggles for dialogs, panels, etc.) */
+  uiFlags: UIStateFlag[];
+  /** Persistence strategy for all state */
   persistence: StatePersistence;
 }
 
 /**
- * Runtime state for a container
+ * Runtime state (flat namespace - single page-wide state)
  */
-export interface ContainerState {
+export interface PageRuntimeState {
+  /** The configuration this state was initialized from */
+  config: PageStateConfig | undefined;
   /** Current variable values (keyed by variable name) */
   values: Record<string, unknown>;
   /** Current UI state flags (keyed by flag name) */
   uiFlags: Record<string, boolean>;
 }
 
+// ============================================
+// New flat namespace actions
+// ============================================
+
 /**
- * State action types
+ * Page state action types (flat namespace)
+ */
+export type PageStateActionType =
+  | 'INIT_STATE'
+  | 'SET_VALUE'
+  | 'TOGGLE_UI_FLAG'
+  | 'SET_UI_FLAG'
+  | 'RESET_STATE';
+
+/**
+ * Initialize state from page config
+ */
+export interface InitStateAction {
+  type: 'INIT_STATE';
+  config: PageStateConfig | undefined;
+}
+
+/**
+ * Set a value (flat namespace - no container)
+ */
+export interface PageSetValueAction {
+  type: 'SET_VALUE';
+  key: string;
+  value: unknown;
+}
+
+/**
+ * Toggle a UI flag (flat namespace)
+ */
+export interface PageToggleUIFlagAction {
+  type: 'TOGGLE_UI_FLAG';
+  key: string;
+}
+
+/**
+ * Set a UI flag to specific value (flat namespace)
+ */
+export interface PageSetUIFlagAction {
+  type: 'SET_UI_FLAG';
+  key: string;
+  value: boolean;
+}
+
+/**
+ * Reset state to initial values
+ */
+export interface ResetStateAction {
+  type: 'RESET_STATE';
+}
+
+/**
+ * Union of all page state actions (flat namespace)
+ */
+export type PageStateAction =
+  | InitStateAction
+  | PageSetValueAction
+  | PageToggleUIFlagAction
+  | PageSetUIFlagAction
+  | ResetStateAction;
+
+/**
+ * Initial page runtime state
+ */
+export const initialPageRuntimeState: PageRuntimeState = {
+  config: undefined,
+  values: {},
+  uiFlags: {},
+};
+
+/**
+ * Create initial runtime state from page state config
+ */
+export function createInitialPageState(config: PageStateConfig | undefined): PageRuntimeState {
+  if (!config) {
+    return { ...initialPageRuntimeState };
+  }
+
+  const values: Record<string, unknown> = {};
+  const uiFlags: Record<string, boolean> = {};
+
+  for (const variable of config.variables) {
+    values[variable.name] = variable.defaultValue;
+  }
+
+  for (const flag of config.uiFlags) {
+    uiFlags[flag.name] = flag.defaultValue;
+  }
+
+  return { config, values, uiFlags };
+}
+
+// ============================================
+// @deprecated - Legacy container-based types
+// Will be removed when StateBlock is deleted
+// ============================================
+
+/**
+ * @deprecated Use PageStateConfig instead - StateBlock is being removed
+ */
+export interface StateContainerConfig {
+  name: string;
+  variables: StateVariable[];
+  uiState: UIStateFlag[];
+  persistence: StatePersistence;
+}
+
+/**
+ * @deprecated Use PageRuntimeState instead
+ */
+export interface ContainerState {
+  values: Record<string, unknown>;
+  uiFlags: Record<string, boolean>;
+}
+
+/**
+ * @deprecated Legacy action types
  */
 export type StateActionType =
   | 'SET_VALUE'
@@ -76,9 +198,7 @@ export type StateActionType =
   | 'RESET_CONTAINER'
   | 'REGISTER_CONTAINER';
 
-/**
- * State action payloads
- */
+/** @deprecated */
 export interface SetValueAction {
   type: 'SET_VALUE';
   container: string;
@@ -86,12 +206,14 @@ export interface SetValueAction {
   value: unknown;
 }
 
+/** @deprecated */
 export interface ToggleUIStateAction {
   type: 'TOGGLE_UI_STATE';
   container: string;
   key: string;
 }
 
+/** @deprecated */
 export interface SetUIStateAction {
   type: 'SET_UI_STATE';
   container: string;
@@ -99,19 +221,19 @@ export interface SetUIStateAction {
   value: boolean;
 }
 
+/** @deprecated */
 export interface ResetContainerAction {
   type: 'RESET_CONTAINER';
   container: string;
 }
 
+/** @deprecated */
 export interface RegisterContainerAction {
   type: 'REGISTER_CONTAINER';
   config: StateContainerConfig;
 }
 
-/**
- * Union of all state actions
- */
+/** @deprecated */
 export type StateAction =
   | SetValueAction
   | ToggleUIStateAction
@@ -119,27 +241,19 @@ export type StateAction =
   | ResetContainerAction
   | RegisterContainerAction;
 
-/**
- * Global state shape (all containers)
- */
+/** @deprecated */
 export interface GlobalState {
-  /** Container configurations (keyed by name) */
   containers: Record<string, StateContainerConfig>;
-  /** Container runtime states (keyed by name) */
   states: Record<string, ContainerState>;
 }
 
-/**
- * Initial global state
- */
+/** @deprecated */
 export const initialGlobalState: GlobalState = {
   containers: {},
   states: {},
 };
 
-/**
- * Create initial container state from config
- */
+/** @deprecated */
 export function createInitialContainerState(config: StateContainerConfig): ContainerState {
   const values: Record<string, unknown> = {};
   const uiFlags: Record<string, boolean> = {};
@@ -155,37 +269,27 @@ export function createInitialContainerState(config: StateContainerConfig): Conta
   return { values, uiFlags };
 }
 
-/**
- * Helper to create a setState action
- */
+/** @deprecated */
 export function setStateValue(container: string, key: string, value: unknown): SetValueAction {
   return { type: 'SET_VALUE', container, key, value };
 }
 
-/**
- * Helper to create a toggleUIState action
- */
+/** @deprecated */
 export function toggleUIState(container: string, key: string): ToggleUIStateAction {
   return { type: 'TOGGLE_UI_STATE', container, key };
 }
 
-/**
- * Helper to create a setUIState action
- */
+/** @deprecated */
 export function setUIState(container: string, key: string, value: boolean): SetUIStateAction {
   return { type: 'SET_UI_STATE', container, key, value };
 }
 
-/**
- * Helper to create a resetContainer action
- */
+/** @deprecated */
 export function resetContainer(container: string): ResetContainerAction {
   return { type: 'RESET_CONTAINER', container };
 }
 
-/**
- * Helper to create a registerContainer action
- */
+/** @deprecated */
 export function registerContainer(config: StateContainerConfig): RegisterContainerAction {
   return { type: 'REGISTER_CONTAINER', config };
 }

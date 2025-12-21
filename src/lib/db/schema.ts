@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
 import type { ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
 import type { PuckDataStructure } from '@/ddd/domain/puck/value-objects/puck-data';
-import type { PageVariable } from '@/components/puck/types';
+import type { PageVariable, PageStateConfig } from '@/components/puck/types';
 
 // AIDEV-NOTE: Template variants for component library functionality
 export interface TemplateVariant {
@@ -1761,6 +1761,7 @@ export const pages = pgTable("pages", {
   requiresAuth: boolean("requires_auth").default(false).notNull(),
   allowedRoles: text("allowed_roles").array(),
   pageVariables: jsonb("page_variables").$type<PageVariable[]>(), // Expected query parameters for this page
+  pageState: jsonb("page_state").$type<PageStateConfig>(), // Client-side state configuration
   ownerId: uuid("owner_id")
     .notNull()
     .references(() => users.id), // Page owner - used for 'owned' scope permissions
