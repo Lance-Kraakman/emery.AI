@@ -5,7 +5,7 @@
 
 import { db } from '../../lib/db/client';
 import { templates } from '../../lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
 // Template data - same structure as the old SYSTEM_TEMPLATES
 const SYSTEM_TEMPLATES = [
@@ -444,7 +444,7 @@ const SYSTEM_TEMPLATES = [
   },
 ];
 
-async function seedSystemTemplates() {
+export async function seedSystemTemplates() {
   console.log('🌱 Seeding system templates...');
 
   let created = 0;
@@ -452,19 +452,14 @@ async function seedSystemTemplates() {
 
   for (const template of SYSTEM_TEMPLATES) {
     try {
-      // Check if template already exists by name and isSystem
-      const existing = await db.query.templates.findFirst({
-        where: eq(templates.isSystem, true),
-      });
-
-      // Check by name specifically
-      const existingByName = await db
-        .select()
+      // Check if system template already exists by name
+      const existing = await db
+        .select({ id: templates.id })
         .from(templates)
-        .where(eq(templates.name, template.name))
+        .where(and(eq(templates.name, template.name), eq(templates.isSystem, true)))
         .limit(1);
 
-      if (existingByName.length > 0 && existingByName[0].isSystem) {
+      if (existing.length > 0) {
         console.log(`  ⏭️  Skipping "${template.name}" (already exists)`);
         skipped++;
         continue;

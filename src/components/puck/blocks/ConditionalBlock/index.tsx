@@ -5,13 +5,18 @@
  *
  * AIDEV-NOTE: Uses flat namespace for state - no containers.
  * State variables are accessed directly by key.
+ *
+ * In editor mode: Shows condition badge and always renders children
+ * At runtime: Conditionally renders children based on condition
  */
 
 import React, { useEffect, useReducer, useMemo, type ComponentType } from 'react';
 import { ComponentConfig } from '@measured/puck';
 import { useStateContext } from '../../contexts/StateContext';
 import { useRowData } from '../../contexts/RowDataContext';
-import { usePageContext } from '../../contexts/PageContext';
+import { useLinkContext, usePageContext } from '../../contexts/PageContext';
+import { createStateKeyField } from '../../custom-fields/state-key-field';
+import { GitBranch, Check, X } from 'lucide-react';
 
 /**
  * Comparison operators for conditions
@@ -93,6 +98,48 @@ function evaluateCondition(
 }
 
 /**
+ * Format condition for display in editor badge
+ */
+function getConditionLabel(
+  sourceType: ConditionSourceType,
+  stateKey?: string,
+  paramName?: string,
+  fieldName?: string,
+  operator?: ConditionOperator,
+  compareValue?: string,
+  invert?: boolean
+): string {
+  // Determine the source label
+  let source = '?';
+  if (sourceType === 'uiFlag' && stateKey) {
+    source = stateKey;
+  } else if (sourceType === 'state' && stateKey) {
+    source = `state.${stateKey}`;
+  } else if (sourceType === 'params' && paramName) {
+    source = `params.${paramName}`;
+  } else if (sourceType === 'rowData' && fieldName) {
+    source = fieldName;
+  }
+
+  // Determine the operator label
+  let opLabel = '';
+  switch (operator) {
+    case 'truthy': opLabel = 'is true'; break;
+    case 'falsy': opLabel = 'is false'; break;
+    case 'eq': opLabel = `= "${compareValue || ''}"`; break;
+    case 'ne': opLabel = `!= "${compareValue || ''}"`; break;
+    case 'gt': opLabel = `> ${compareValue || ''}`; break;
+    case 'gte': opLabel = `>= ${compareValue || ''}`; break;
+    case 'lt': opLabel = `< ${compareValue || ''}`; break;
+    case 'lte': opLabel = `<= ${compareValue || ''}`; break;
+    case 'contains': opLabel = `contains "${compareValue || ''}"`; break;
+    default: opLabel = '';
+  }
+
+  return `${invert ? 'NOT ' : ''}{${source}} ${opLabel}`;
+}
+
+/**
  * ConditionalBlock - Conditionally render children based on state, params, or row data
  */
 function ConditionalBlockComponent({
@@ -108,6 +155,9 @@ function ConditionalBlockComponent({
   const stateContext = useStateContext();
   const rowContext = useRowData();
   const pageContext = usePageContext();
+
+  // Get editing context from page context
+  const { isEditing } = useLinkContext();
 
   // Force re-render counter for state subscriptions
   const [, forceUpdate] = useReducer(x => x + 1, 0);
@@ -151,7 +201,47 @@ function ConditionalBlockComponent({
     return invert ? !result : result;
   }, [currentValue, operator, compareValue, invert]);
 
-  // Render children only if condition is met
+  // Get condition label for editor display
+  const conditionLabel = getConditionLabel(
+    sourceType,
+    stateKey,
+    paramName,
+    fieldName,
+    operator,
+    compareValue,
+    invert
+  );
+
+  // Editor mode: Show condition badge and always render children
+  if (isEditing) {
+    return (
+      <div className="relative border-2 border-dashed border-blue-300 rounded-lg p-3 min-h-[60px]">
+        {/* Condition badge at top */}
+        <div className="absolute -top-3 left-2 bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full flex items-center gap-1.5 font-mono">
+          <GitBranch className="h-3 w-3" />
+          <span className="max-w-[200px] truncate">{conditionLabel}</span>
+          {conditionMet ? (
+            <Check className="h-3 w-3 text-green-600" />
+          ) : (
+            <X className="h-3 w-3 text-red-500" />
+          )}
+        </div>
+
+        {/* Children always visible in editor */}
+        <div className="mt-2">
+          {Children ? (
+            <Children />
+          ) : (
+            <div className="text-muted-foreground text-sm py-6 text-center border-2 border-dashed rounded-md">
+              Drop content here
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Runtime: Conditional rendering
   if (!conditionMet) {
     return <></>;
   }
@@ -230,12 +320,21 @@ export const ConditionalBlock: ComponentConfig<ConditionalBlockProps> = {
 
     // Source-specific fields
     let sourceFields = {};
-    if (sourceType === 'state' || sourceType === 'uiFlag') {
+    if (sourceType === 'uiFlag') {
       sourceFields = {
-        stateKey: {
-          ...fields.stateKey,
-          label: sourceType === 'uiFlag' ? 'UI Flag' : 'State Variable',
-        },
+        stateKey: createStateKeyField({
+          label: 'UI Flag',
+          placeholder: 'Select a UI flag...',
+          keyType: 'uiFlag',
+        }),
+      };
+    } else if (sourceType === 'state') {
+      sourceFields = {
+        stateKey: createStateKeyField({
+          label: 'State Variable',
+          placeholder: 'Select a variable...',
+          keyType: 'variable',
+        }),
       };
     } else if (sourceType === 'params') {
       sourceFields = {
