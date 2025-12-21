@@ -738,38 +738,47 @@ class SkillTool(Tool):
 
     def _build_result_with_outputs(self, original_result: str, captured: Dict[str, Any]) -> str:
         """
-        Build a result string that includes captured outputs for parent agent visibility.
+        Build a result string showing both extracted AND not-found fields.
 
-        The parent agent needs to know what was extracted so it can summarize to the user.
-        Plain text format is more robust for LLM consumption than JSON.
+        This explicit format prevents the parent agent from hallucinating about
+        what was extracted - it receives a clear list of what WAS and WASN'T found.
 
         Args:
-            original_result: The skill's final answer (often generic like "Data submitted successfully")
+            original_result: The skill's final answer
             captured: Dict of captured output values from OutputTool
 
         Returns:
-            Formatted result string with extracted data visible
+            Formatted result showing extracted values and fields not found
         """
         if not captured:
             return original_result
 
-        # Build readable output list
-        output_lines = []
+        extracted_lines = []
+        not_found_lines = []
+
         for name, value in captured.items():
-            # Truncate long values to keep result readable
-            str_value = str(value)
-            if len(str_value) > 200:
-                str_value = str_value[:200] + "..."
-            output_lines.append(f"- {name}: {str_value}")
+            if value is None:
+                not_found_lines.append(f"- {name}: (not found in input)")
+            else:
+                str_value = str(value)
+                if len(str_value) > 200:
+                    str_value = str_value[:200] + "..."
+                extracted_lines.append(f"- {name}: {str_value}")
 
-        outputs_text = "\n".join(output_lines)
+        result_parts = ["Skill completed."]
 
-        return f"""Skill completed successfully.
+        if extracted_lines:
+            result_parts.append(f"\n**Extracted ({len(extracted_lines)} fields):**")
+            result_parts.append("\n".join(extracted_lines))
 
-Extracted data:
-{outputs_text}
+        if not_found_lines:
+            result_parts.append(f"\n**Not found in input ({len(not_found_lines)} fields):**")
+            result_parts.append("\n".join(not_found_lines))
 
-Data has been saved to the configured tables."""
+        if extracted_lines:
+            result_parts.append("\nExtracted data has been saved.")
+
+        return "\n".join(result_parts)
 
     async def _apply_agent_output_mappings(self, captured_values: Dict[str, Any]) -> None:
         """
@@ -814,13 +823,21 @@ Data has been saved to the configured tables."""
         # Use the first output's mapping config (contains all table mappings)
         first_output = outputs_with_mappings[0]
         logger.info(f"📊 Applying multi-table output mappings")
-        logger.info(f"📤 Captured skill outputs: {list(captured_values.keys())}")
 
-        # Convert captured values to typed skill outputs
-        skill_outputs: list[SkillOutputValue] = [
+        # Filter out null values - only save actual extracted data
+        valid_outputs: list[SkillOutputValue] = [
             SkillOutputValue(name=name, value=value)
             for name, value in captured_values.items()
+            if value is not None
         ]
+
+        if not valid_outputs:
+            logger.warning("⚠️ No valid outputs to map after filtering nulls")
+            return
+
+        extracted = len(valid_outputs)
+        total = len(captured_values)
+        logger.info(f"📤 Mapping {extracted}/{total} skill outputs (filtered {total - extracted} nulls)")
 
         try:
             config = OutputMappingConfig.from_proto(first_output.output_mapping)
@@ -829,7 +846,7 @@ Data has been saved to the configured tables."""
             results = await OutputMappingService.apply_multi_table_mapping(
                 ctx=ctx,
                 config=config,
-                skill_outputs=skill_outputs
+                skill_outputs=valid_outputs
             )
 
             logger.info(f"✅ Multi-table mapping complete: {len(results)} tables updated")
