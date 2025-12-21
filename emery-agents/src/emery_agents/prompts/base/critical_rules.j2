@@ -25,6 +25,11 @@
 - DELETE = tool confirmed removal
 - Only use final_answer when tool output confirms the goal is achieved
 
+### Avoid Duplicate Actions
+- Only execute the LATEST task in the conversation
+- If a task already has an observation/result, it is DONE - do not re-execute
+- Calling the same tool with the same inputs twice is FORBIDDEN
+
 ### Delegating to Team Members
 When calling a team member (document_builder, skill_builder), include ALL relevant context in the task:
 - Include any IDs mentioned (table_id, field_id, row_id, skill_id)

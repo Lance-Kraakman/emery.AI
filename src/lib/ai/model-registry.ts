@@ -85,6 +85,12 @@ export interface ModelMetadata {
     type: 'dedicated' | 'inference-api';
     url?: string;             // For dedicated endpoints
   };
+
+  // Recommended flag for dedicated endpoints with high reliability
+  recommended?: boolean;
+
+  // Description of what the model is recommended for
+  recommendedFor?: string;
 }
 
 /**
@@ -96,7 +102,75 @@ export interface ModelMetadata {
  * - Free tier: Limited quota, slower inference
  */
 export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
-  // Current production model (dedicated endpoint)
+  // Primary recommended model (dedicated endpoint) - Qwen2.5-Coder-32B
+  'Qwen/Qwen2.5-Coder-32B-Instruct': {
+    id: 'Qwen/Qwen2.5-Coder-32B-Instruct',
+    name: 'Qwen 2.5 Coder 32B',
+    provider: 'huggingface',
+    description: 'Primary model on dedicated endpoint. 128K context, excellent for complex reasoning, code generation, tool calling and workflow planning.',
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: false,
+      jsonMode: true,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.30,
+      outputPer1M: 0.80,
+      currency: 'USD',
+      inputCreditsPerK: 0.75,
+      outputCreditsPerK: 2.0,
+    },
+    tier: 'free',
+    category: 'advanced',
+    endpoint: {
+      type: 'dedicated',
+      url: 'https://ehrauj4szamxqrll.us-east-1.aws.endpoints.huggingface.cloud',
+    },
+    recommended: true,
+    recommendedFor: 'Complex reasoning & workflows',
+  },
+
+  // Dedicated endpoint - small & fast for simple tasks
+  'HuggingFaceTB/SmolLM3-3B': {
+    id: 'HuggingFaceTB/SmolLM3-3B',
+    name: 'SmolLM3 3B',
+    provider: 'huggingface',
+    description: 'Fast 3B model on dedicated endpoint. Optimized for simple logical reasoning and quick tasks.',
+    contextWindow: 128000,
+    maxOutputTokens: 2048,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: false,
+      jsonMode: true,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.05,
+      outputPer1M: 0.20,
+      currency: 'USD',
+      inputCreditsPerK: 0.125,
+      outputCreditsPerK: 0.5,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'dedicated',
+      url: 'https://becue6pro40rf66y.us-east-1.aws.endpoints.huggingface.cloud',
+    },
+    recommended: true,
+    recommendedFor: 'Simple & fast tasks',
+  },
+
+  // Dedicated endpoint - fast & cost-efficient
   'ibm-granite/granite-3.3-8b-instruct': {
     id: 'ibm-granite/granite-3.3-8b-instruct',
     name: 'IBM Granite 3.3 8B Instruct',
@@ -124,7 +198,109 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       type: 'dedicated',
       url: 'https://dxv8q9ubsizxcp4v.us-east-1.aws.endpoints.huggingface.cloud',
     },
+    recommended: true,
+    recommendedFor: 'Fast & cost-efficient',
   },
+
+  // ============================================================================
+  // GOOGLE GEMINI MODELS (via OpenAI-compatible API)
+  // ============================================================================
+
+  'google/gemini-2.0-flash': {
+    id: 'google/gemini-2.0-flash',
+    name: 'Gemini 2.0 Flash',
+    provider: 'huggingface', // Uses OpenAI-compatible API
+    description: 'Fast, efficient Gemini model. Great for most tasks with 1M context window.',
+    contextWindow: 1000000,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: true,
+      jsonMode: true,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0.10,
+      outputPer1M: 0.40,
+      currency: 'USD',
+      inputCreditsPerK: 0.25,
+      outputCreditsPerK: 1.0,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+    recommended: true,
+    recommendedFor: 'Fast & reliable fallback',
+  },
+
+  'google/gemini-1.5-pro': {
+    id: 'google/gemini-1.5-pro',
+    name: 'Gemini 1.5 Pro',
+    provider: 'huggingface',
+    description: 'Most capable Gemini model. Excellent reasoning and 2M context window.',
+    contextWindow: 2000000,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: true,
+      jsonMode: true,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 1.25,
+      outputPer1M: 5.00,
+      currency: 'USD',
+      inputCreditsPerK: 3.125,
+      outputCreditsPerK: 12.5,
+    },
+    tier: 'free',
+    category: 'advanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'google/gemini-2.0-flash-lite': {
+    id: 'google/gemini-2.0-flash-lite',
+    name: 'Gemini 2.0 Flash Lite',
+    provider: 'huggingface',
+    description: 'Lightweight Gemini model. Ultra-fast for simple tasks.',
+    contextWindow: 1000000,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: true,
+      jsonMode: true,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0.075,
+      outputPer1M: 0.30,
+      currency: 'USD',
+      inputCreditsPerK: 0.1875,
+      outputCreditsPerK: 0.75,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  // ============================================================================
+  // HUGGINGFACE INFERENCE API MODELS
+  // ============================================================================
 
   // HuggingFace Inference API models (pay-per-use)
   'Qwen/Qwen2.5-7B-Instruct': {
@@ -340,36 +516,6 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
     name: 'Qwen 2.5 32B Instruct',
     provider: 'huggingface',
     description: 'Excellent balance of capability and speed. 128K context, strong reasoning and tool calling.',
-    contextWindow: 128000,
-    maxOutputTokens: 8192,
-    taskType: 'chat-completion',
-    outputType: 'text',
-    capabilities: {
-      toolCalling: true,
-      streaming: true,
-      vision: false,
-      jsonMode: true,
-      multimodal: false,
-    },
-    pricing: {
-      inputPer1M: 0.30,
-      outputPer1M: 0.80,
-      currency: 'USD',
-      inputCreditsPerK: 0.75,
-      outputCreditsPerK: 2.0,
-    },
-    tier: 'free',
-    category: 'balanced',
-    endpoint: {
-      type: 'inference-api',
-    },
-  },
-
-  'Qwen/Qwen2.5-Coder-32B-Instruct': {
-    id: 'Qwen/Qwen2.5-Coder-32B-Instruct',
-    name: 'Qwen 2.5 Coder 32B',
-    provider: 'huggingface',
-    description: 'Top-tier coding model. 128K context, excellent for code generation and tool use workflows.',
     contextWindow: 128000,
     maxOutputTokens: 8192,
     taskType: 'chat-completion',
@@ -1182,11 +1328,18 @@ export function calculateCreditsUsed(
 }
 
 /**
+ * Get recommended models (dedicated endpoints with high reliability)
+ */
+export function getRecommendedModels(): ModelMetadata[] {
+  return getAllModels().filter(model => model.recommended);
+}
+
+/**
  * Get default model for organization tier
  */
 export function getDefaultModelForTier(tier: 'free' | 'pro' | 'max' | 'enterprise'): string {
-  // Default to production model
-  return 'ibm-granite/granite-3.3-8b-instruct';
+  // Default to primary recommended model (dedicated endpoint)
+  return 'Qwen/Qwen2.5-Coder-32B-Instruct';
 }
 
 /**

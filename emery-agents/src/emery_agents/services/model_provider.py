@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from PIL import Image
 from smolagents.models import Model, ChatMessage, MessageRole
+from smolagents import OpenAIModel
 from huggingface_hub import InferenceClient
 from huggingface_hub.errors import HfHubHTTPError
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, retry_if_not_exception_type
@@ -151,8 +152,12 @@ class CustomInferenceModel(Model):
             properties = {}
             required = []
             for name, spec in tool.inputs.items():
+                # Normalize smolagents types to valid JSON Schema types
+                # "any", "image", "audio" are not valid JSON Schema - convert to "string"
+                raw_type = spec.get("type", "string")
+                json_type = "string" if raw_type in ("any", "image", "audio") else raw_type
                 properties[name] = {
-                    "type": spec.get("type", "string"),
+                    "type": json_type,
                     "description": spec.get("description", "")
                 }
                 # smolagents uses 'nullable' or checks if required
@@ -327,7 +332,7 @@ class SmolagentsModelProvider:
         self,
         has_images: bool,
         model_id: Optional[str] = None,
-    ) -> CustomInferenceModel:
+    ) -> Model:
         """
         Get appropriate model for message based on content type.
 
@@ -358,13 +363,15 @@ class SmolagentsModelProvider:
         self,
         model_id: Optional[str] = None,
         model_type: str = 'default',
-    ) -> CustomInferenceModel:
+        api_key: Optional[str] = None,
+    ) -> Model:
         """
         Get model instance by ID or type.
 
         Args:
             model_id: Specific model ID to use (e.g., 'ibm-granite/granite-3.3-8b-instruct')
             model_type: Fallback type if no model_id provided ('chat', 'tool_calling', 'default')
+            api_key: Optional API key for providers that need it (e.g., Gemini)
 
         Returns:
             Configured model instance ready for generation
@@ -383,6 +390,23 @@ class SmolagentsModelProvider:
             metadata = get_model_metadata(model_id)
 
         logger.info(f"🔧 Creating model: {metadata.name} ({metadata.category.value})")
+
+        # Handle Google Gemini models via OpenAI-compatible API
+        if model_id.startswith("google/"):
+            gemini_model_id = model_id.replace("google/", "")  # e.g., "gemini-2.0-flash"
+            gemini_api_key = api_key or os.environ.get("GEMINI_API_KEY")
+            if not gemini_api_key:
+                raise EnvironmentError(
+                    "GEMINI_API_KEY is required for Google Gemini models. "
+                    "Get your API key from https://aistudio.google.com/apikey"
+                )
+            logger.info(f"🔧 Using Google Gemini via OpenAI-compatible API: {gemini_model_id}")
+            return OpenAIModel(
+                model_id=gemini_model_id,
+                api_base="https://generativelanguage.googleapis.com/v1beta/openai/",
+                api_key=gemini_api_key,
+                client_kwargs={"max_retries": 2},  # Don't retry quota errors aggressively
+            )
 
         # Create model based on endpoint type
         if metadata.endpoint.type == "dedicated" and metadata.endpoint.url:
@@ -404,7 +428,7 @@ class SmolagentsModelProvider:
 
         return model
 
-    def get_model_by_type(self, model_type: str) -> CustomInferenceModel:
+    def get_model_by_type(self, model_type: str) -> Model:
         """
         Get model by type (legacy method for compatibility).
 
@@ -424,7 +448,7 @@ class SmolagentsModelProvider:
         model_id = type_mapping.get(model_type, type_mapping['default'])
         return self.get_model(model_id=model_id)
 
-    def get_default_model_for_capability(self, skill_name: Optional[str] = None) -> CustomInferenceModel:
+    def get_default_model_for_capability(self, skill_name: Optional[str] = None) -> Model:
         """
         Get default model for skill execution (legacy method for compatibility).
 
