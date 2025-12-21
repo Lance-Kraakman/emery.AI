@@ -55,44 +55,37 @@ async function runMigration() {
 
     console.log('✅ Migration completed successfully!');
 
-    // Run seed scripts if RUN_SEEDS environment variable is set
-    const runSeeds = process.env.RUN_SEEDS?.toLowerCase() === 'true';
+    // Always run seeds - they are idempotent (dedupe + existence checks)
+    console.log('\n🌱 Running database seed scripts...');
 
-    if (runSeeds) {
-      console.log('\n🌱 Running database seed scripts...');
+    try {
+      console.log('  📋 Seeding RBAC (permissions and roles)...');
+      await seedPermissions();
+      await seedSystemRoles();
 
-      try {
-      
-        console.log('  📋 Seeding RBAC (permissions and roles)...');
-        await seedPermissions();
-        await seedSystemRoles();
+      console.log('  👤 Seeding system users...');
+      await seedSystemUsers();
 
-        console.log('  👤 Seeding system users...');
-        await seedSystemUsers();
+      console.log('  🔐 Seeding system role assignments...');
+      await seedSystemRoleAssignments();
 
-        console.log('  🔐 Seeding system role assignments...');
-        await seedSystemRoleAssignments();
+      console.log('  📦 Seeding app types...');
+      await seedAppTypes();
 
-        console.log('  📦 Seeding app types...');
-        await seedAppTypes();
+      console.log('  🛠️  Seeding tools...');
+      await seedTools();
 
-        console.log('  🛠️  Seeding tools...');
-        await seedTools();
+      console.log('  🤖 Seeding system skills...');
+      await seedSystemSkills();
 
-        console.log('  🤖 Seeding system skills...');
-        await seedSystemSkills();
+      console.log('  🎨 Seeding puck templates...');
+      await seedSystemTemplates();
 
-        console.log('  🎨 Seeding puck templates...');
-        await seedSystemTemplates();
-
-        console.log('✅ Database seeding completed successfully!');
-      } catch (seedError) {
-        console.error('❌ Seeding failed:', (seedError as Error).message);
-        console.error('Note: Migration succeeded, but seeding failed');
-        // Don't exit with error - migration succeeded
-      }
-    } else {
-      console.log('ℹ️  Skipping seeds (set RUN_SEEDS=true to enable)');
+      console.log('✅ Database seeding completed successfully!');
+    } catch (seedError) {
+      console.error('❌ Seeding failed:', (seedError as Error).message);
+      console.error('Note: Migration succeeded, but seeding failed');
+      // Don't exit with error - migration succeeded
     }
 
     // Explicitly exit to close database connections and terminate container
