@@ -16,7 +16,7 @@ Feature: Task Permissions RBAC Manual Testing
     When I create a task for "My Agent"
     Then the task should be created successfully
     And the task should be assigned to "My Agent"
-
+xq
   Scenario: Non-owner cannot assign tasks to agent by default
     Given I have two users:
       | email              | role   |

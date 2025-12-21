@@ -77,11 +77,75 @@ class ModelMetadata:
     # Endpoint
     endpoint: ModelEndpoint
 
+    # Recommended flag for dedicated endpoints with high reliability
+    recommended: bool = False
+
+    # Description of what the model is recommended for
+    recommended_for: Optional[str] = None
+
 
 # AIDEV-NOTE: HuggingFace Model Registry
 # Keep pricing updated from HuggingFace Inference API pricing page
 HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
-    # Current production model (dedicated endpoint)
+    # Primary recommended model (dedicated endpoint) - Qwen2.5-Coder-32B
+    "Qwen/Qwen2.5-Coder-32B-Instruct": ModelMetadata(
+        id="Qwen/Qwen2.5-Coder-32B-Instruct",
+        name="Qwen 2.5 Coder 32B",
+        provider="huggingface",
+        description="Primary model on dedicated endpoint. 128K context, excellent for complex reasoning, code generation, tool calling and workflow planning.",
+        context_window=128000,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=False,
+            json_mode=True,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(
+            input_per_1m=0.30,
+            output_per_1m=0.80,
+        ),
+        tier=ModelTier.FREE,
+        category=ModelCategory.ADVANCED,
+        endpoint=ModelEndpoint(
+            type="dedicated",
+            url="https://ehrauj4szamxqrll.us-east-1.aws.endpoints.huggingface.cloud",
+        ),
+        recommended=True,
+        recommended_for="Complex reasoning & workflows",
+    ),
+
+    # Dedicated endpoint - small & fast for simple tasks
+    "HuggingFaceTB/SmolLM3-3B": ModelMetadata(
+        id="HuggingFaceTB/SmolLM3-3B",
+        name="SmolLM3 3B",
+        provider="huggingface",
+        description="Fast 3B model on dedicated endpoint. Optimized for simple logical reasoning and quick tasks.",
+        context_window=128000,
+        max_output_tokens=2048,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=False,
+            json_mode=True,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(
+            input_per_1m=0.05,
+            output_per_1m=0.20,
+        ),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(
+            type="dedicated",
+            url="https://becue6pro40rf66y.us-east-1.aws.endpoints.huggingface.cloud",
+        ),
+        recommended=True,
+        recommended_for="Simple & fast tasks",
+    ),
+
+    # Dedicated endpoint - fast & cost-efficient
     "ibm-granite/granite-3.3-8b-instruct": ModelMetadata(
         id="ibm-granite/granite-3.3-8b-instruct",
         name="IBM Granite 3.3 8B Instruct",
@@ -106,7 +170,79 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
             type="dedicated",
             url="https://dxv8q9ubsizxcp4v.us-east-1.aws.endpoints.huggingface.cloud",
         ),
+        recommended=True,
+        recommended_for="Fast & cost-efficient",
     ),
+
+    # ============================================================================
+    # GOOGLE GEMINI MODELS (via OpenAI-compatible API)
+    # ============================================================================
+
+    "google/gemini-2.0-flash": ModelMetadata(
+        id="google/gemini-2.0-flash",
+        name="Gemini 2.0 Flash",
+        provider="google",
+        description="Fast, efficient Gemini model. Great for most tasks with 1M context window.",
+        context_window=1000000,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=True,
+            json_mode=True,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0.10, output_per_1m=0.40),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+        recommended=True,
+        recommended_for="Fast & reliable fallback",
+    ),
+
+    "google/gemini-1.5-pro": ModelMetadata(
+        id="google/gemini-1.5-pro",
+        name="Gemini 1.5 Pro",
+        provider="google",
+        description="Most capable Gemini model. Excellent reasoning and 2M context window.",
+        context_window=2000000,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=True,
+            json_mode=True,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=1.25, output_per_1m=5.00),
+        tier=ModelTier.FREE,
+        category=ModelCategory.ADVANCED,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "google/gemini-2.0-flash-lite": ModelMetadata(
+        id="google/gemini-2.0-flash-lite",
+        name="Gemini 2.0 Flash Lite",
+        provider="google",
+        description="Lightweight Gemini model. Ultra-fast for simple tasks.",
+        context_window=1000000,
+        max_output_tokens=8192,
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=True,
+            json_mode=True,
+            multimodal=True,
+        ),
+        pricing=ModelPricing(input_per_1m=0.075, output_per_1m=0.30),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    # ============================================================================
+    # HUGGINGFACE INFERENCE API MODELS
+    # ============================================================================
 
     # HuggingFace Inference API models
     "Qwen/Qwen2.5-7B-Instruct": ModelMetadata(
@@ -260,26 +396,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         name="Qwen 2.5 32B Instruct",
         provider="huggingface",
         description="Excellent balance of capability and speed. 128K context, strong reasoning and tool calling.",
-        context_window=128000,
-        max_output_tokens=8192,
-        capabilities=ModelCapabilities(
-            tool_calling=True,
-            streaming=True,
-            vision=False,
-            json_mode=True,
-            multimodal=False,
-        ),
-        pricing=ModelPricing(input_per_1m=0.30, output_per_1m=0.80),
-        tier=ModelTier.FREE,
-        category=ModelCategory.BALANCED,
-        endpoint=ModelEndpoint(type="inference-api"),
-    ),
-
-    "Qwen/Qwen2.5-Coder-32B-Instruct": ModelMetadata(
-        id="Qwen/Qwen2.5-Coder-32B-Instruct",
-        name="Qwen 2.5 Coder 32B",
-        provider="huggingface",
-        description="Top-tier coding model. 128K context, excellent for code generation and tool use workflows.",
         context_window=128000,
         max_output_tokens=8192,
         capabilities=ModelCapabilities(
@@ -1150,10 +1266,15 @@ def calculate_token_cost(model_id: str, input_tokens: int, output_tokens: int) -
     return input_cost + output_cost
 
 
+def get_recommended_models() -> List[ModelMetadata]:
+    """Get recommended models (dedicated endpoints with high reliability)."""
+    return [model for model in get_all_models() if model.recommended]
+
+
 def get_default_model_for_tier(tier: ModelTier) -> str:
     """Get default model for organization tier."""
-    # Default to production model for all tiers
-    return "ibm-granite/granite-3.3-8b-instruct"
+    # Default to primary recommended model (dedicated endpoint)
+    return "Qwen/Qwen2.5-Coder-32B-Instruct"
 
 
 def can_access_model(

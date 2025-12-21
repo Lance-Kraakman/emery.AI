@@ -4,22 +4,51 @@ HuggingFace Inference Client
 AIDEV-NOTE: Client for HuggingFace task-specific API calls.
 Handles both dedicated endpoints and Inference API based on model registry.
 Used for direct skill execution (no LLM orchestration).
+Includes retry logic for cold start resilience on dedicated endpoints.
 """
 
 import os
 import io
 import base64
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
-from huggingface_hub import InferenceClient
+from huggingface_hub import InferenceClient, InferenceTimeoutError
+from huggingface_hub.utils import HfHubHTTPError
 from PIL import Image
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
 from .base import BaseInferenceClient, TaskResult, TaskResultType
 from ..services.model_registry import get_model_metadata
 from ..types import is_nested_list, is_dict_list
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar('T')
+
+
+def _is_retryable_error(exception: BaseException) -> bool:
+    """
+    Check if error is retryable (cold start, timeout, rate limit).
+
+    Retries on:
+    - 503 Service Unavailable (cold start)
+    - 429 Too Many Requests (rate limit)
+    - 502 Bad Gateway
+    - 504 Gateway Timeout
+    - InferenceTimeoutError
+    """
+    if isinstance(exception, InferenceTimeoutError):
+        logger.warning(f"🕐 Timeout error detected, will retry: {exception}")
+        return True
+    if isinstance(exception, HfHubHTTPError):
+        status = getattr(exception, 'response', None)
+        if status is not None:
+            status_code = getattr(status, 'status_code', None)
+            if status_code in (503, 429, 502, 504):
+                logger.warning(f"🔄 HTTP {status_code} detected (cold start/rate limit), will retry")
+                return True
+    return False
 
 
 # Supported task types for HuggingFace Inference API
@@ -67,7 +96,26 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
             )
         # Cache clients per model to reuse connections
         self._clients: Dict[str, InferenceClient] = {}
+        # Default timeout for API calls (seconds)
+        self._timeout = 120
         logger.info("✅ HuggingFaceInferenceClient initialized")
+
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=30, max=120),  # 30s, 60s, 120s, 120s, 120s
+        retry=retry_if_exception(_is_retryable_error),
+        before_sleep=lambda rs: logger.warning(
+            f"🔄 Retry {rs.attempt_number}/5 for cold start - waiting {rs.next_action.sleep:.0f}s"
+        )
+    )
+    def _call_with_retry(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        """
+        Execute HuggingFace API call with retry logic for cold starts.
+
+        Retries up to 5 times with exponential backoff (30s, 60s, 120s, 120s, 120s).
+        Total wait time: up to ~7 minutes, covering typical cold start window.
+        """
+        return func(*args, **kwargs)
 
     def _get_client(self, model_id: str) -> InferenceClient:
         """
@@ -80,14 +128,14 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
 
         metadata = get_model_metadata(model_id)
         if metadata and metadata.endpoint.type == "dedicated" and metadata.endpoint.url:
-            # Dedicated endpoint - use full URL
+            # Dedicated endpoint - use full URL with timeout
             endpoint = metadata.endpoint.url
             logger.info(f"🔧 Using dedicated endpoint for {model_id}: {endpoint}")
-            client = InferenceClient(model=endpoint, token=self.token)
+            client = InferenceClient(model=endpoint, token=self.token, timeout=self._timeout)
         else:
             # Inference Providers API with auto-failover
             logger.info(f"🔧 Using HF Inference Providers API for model: {model_id}")
-            client = InferenceClient(model=model_id, token=self.token, provider="auto")
+            client = InferenceClient(model=model_id, token=self.token, provider="auto", timeout=self._timeout)
         self._clients[model_id] = client
         return client
 
@@ -180,8 +228,9 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         logger.info(f"🎨 Generating image: '{prompt[:50]}...'")
         client = self._get_client(model_id)
 
-        # Call HF text_to_image
-        image: Image.Image = client.text_to_image(
+        # Call HF text_to_image with retry for cold starts
+        image: Image.Image = self._call_with_retry(
+            client.text_to_image,
             prompt=prompt,
             negative_prompt=inputs.get("negative_prompt") or params.get("negative_prompt"),
             num_inference_steps=int(params.get("num_inference_steps", 4)),
@@ -220,8 +269,9 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         logger.info(f"🎬 Generating video: '{prompt[:50]}...'")
         client = self._get_client(model_id)
 
-        # Call HF text_to_video (requires provider support)
-        video_bytes = client.text_to_video(
+        # Call HF text_to_video with retry for cold starts
+        video_bytes = self._call_with_retry(
+            client.text_to_video,
             prompt=prompt,
             num_frames=int(params.get("num_frames", 49)),
             num_inference_steps=int(params.get("num_inference_steps", 25)),
@@ -252,8 +302,9 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         logger.info(f"🖼️ Transforming image: '{prompt[:50]}...'")
         client = self._get_client(model_id)
 
-        # Call HF image_to_image
-        result_image: Image.Image = client.image_to_image(
+        # Call HF image_to_image with retry for cold starts
+        result_image: Image.Image = self._call_with_retry(
+            client.image_to_image,
             image=image,
             prompt=prompt,
             negative_prompt=inputs.get("negative_prompt") or params.get("negative_prompt"),
@@ -288,7 +339,8 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         logger.info(f"🎤 Transcribing audio: {len(audio)} bytes")
         client = self._get_client(model_id)
 
-        result = client.automatic_speech_recognition(audio=audio)
+        # Call HF ASR with retry for cold starts
+        result = self._call_with_retry(client.automatic_speech_recognition, audio=audio)
         text = result.text
         logger.info(f"✅ Transcribed: {len(text)} chars")
 
@@ -312,7 +364,7 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         logger.info(f"📝 Captioning image: {len(image)} bytes")
         client = self._get_client(model_id)
 
-        result = client.image_to_text(image=image)
+        result = self._call_with_retry(client.image_to_text, image=image)
         text = result.generated_text
 
         logger.info(f"✅ Generated caption: {len(text)} chars")
@@ -336,7 +388,7 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         logger.info(f"🔊 Generating speech: '{text[:50]}...'")
         client = self._get_client(model_id)
 
-        audio = client.text_to_speech(text=text)
+        audio = self._call_with_retry(client.text_to_speech, text=text)
 
         logger.info(f"✅ Generated audio: {len(audio)} bytes")
         return TaskResult(
@@ -359,7 +411,7 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         logger.info(f"🔍 Detecting objects: {len(image)} bytes")
         client = self._get_client(model_id)
 
-        results = client.object_detection(image=image)
+        results = self._call_with_retry(client.object_detection, image=image)
 
         # Filter by threshold if provided
         threshold = float(params.get("threshold", 0.5))
@@ -390,7 +442,7 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         logger.info(f"🏷️ Classifying image: {len(image)} bytes")
         client = self._get_client(model_id)
 
-        results = client.image_classification(image=image)
+        results = self._call_with_retry(client.image_classification, image=image)
 
         # Return top K results as dicts
         top_k = int(params.get("top_k", 5))
@@ -417,7 +469,7 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         logger.info(f"🎭 Segmenting image: {len(image)} bytes")
         client = self._get_client(model_id)
 
-        results = client.image_segmentation(image=image)
+        results = self._call_with_retry(client.image_segmentation, image=image)
 
         # Convert segmentation results to serializable format
         segments = []
@@ -460,7 +512,7 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
 
         # HuggingFace Inference API doesn't accept generation parameters
         # The model uses its default settings for length control
-        result = client.summarization(text=text)
+        result = self._call_with_retry(client.summarization, text=text)
 
         summary = result.summary_text
         logger.info(f"✅ Summary: {len(summary)} chars")
@@ -494,7 +546,7 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         client = self._get_client(model_id)
 
         # Note: src_lang/tgt_lang support depends on the model
-        result = client.translation(text=text, src_lang=src_lang, tgt_lang=tgt_lang)
+        result = self._call_with_retry(client.translation, text=text, src_lang=src_lang, tgt_lang=tgt_lang)
 
         translated = result.translation_text
         logger.info(f"✅ Translated: {len(translated)} chars")
@@ -523,7 +575,8 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         logger.info(f"🎯 Zero-shot classifying: '{text[:50]}...' into {candidate_labels}")
         client = self._get_client(model_id)
 
-        results = client.zero_shot_classification(
+        results = self._call_with_retry(
+            client.zero_shot_classification,
             text=text,
             candidate_labels=candidate_labels
         )
@@ -555,7 +608,7 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         logger.info(f"🔢 Generating embeddings: '{text[:50]}...'")
         client = self._get_client(model_id)
 
-        result = client.feature_extraction(text=text)
+        result = self._call_with_retry(client.feature_extraction, text=text)
 
         # Handle different response formats using type guards
         embedding: List[float]
@@ -595,7 +648,8 @@ class HuggingFaceInferenceClient(BaseInferenceClient):
         client = self._get_client(model_id)
 
         # Returns single object or list depending on model
-        result = client.question_answering(
+        result = self._call_with_retry(
+            client.question_answering,
             question=question,
             context=context
         )
