@@ -8,7 +8,7 @@ import type { PageOrder } from '../value-objects/page-order';
 import type { PuckData } from '../value-objects/puck-data';
 import { UserId } from '@/ddd/domain/shared/value-objects';
 import { ThemeConfig, type ThemeConfigProps } from '../value-objects/theme-config';
-import type { PageVariable } from '@/components/puck/types';
+import type { PageVariable, PageStateConfig } from '@/components/puck/types';
 
 export class PuckPage {
   private constructor(
@@ -24,6 +24,7 @@ export class PuckPage {
     private _requiresAuth: boolean,
     private _allowedRoles: string[] | undefined,
     private _pageVariables: PageVariable[] | undefined,
+    private _pageState: PageStateConfig | undefined,
     private readonly _ownerId: UserId,
     private readonly _createdAt: Date,
     private _updatedAt: Date
@@ -72,6 +73,10 @@ export class PuckPage {
 
   get pageVariables(): PageVariable[] | undefined {
     return this._pageVariables ? [...this._pageVariables] : undefined;
+  }
+
+  get pageState(): PageStateConfig | undefined {
+    return this._pageState ? { ...this._pageState } : undefined;
   }
 
   get ownerId(): UserId {
@@ -222,6 +227,14 @@ export class PuckPage {
   }
 
   /**
+   * Update page state configuration (client-side state)
+   */
+  setPageState(config: PageStateConfig | undefined): void {
+    this._pageState = config ? { ...config } : undefined;
+    this._updatedAt = new Date();
+  }
+
+  /**
    * Check if a user with specific roles can access this page
    */
   canBeAccessedByRoles(userRoles: string[]): boolean {
@@ -278,6 +291,7 @@ export class PuckPage {
     requiresAuth: boolean;
     allowedRoles?: string[];
     pageVariables?: PageVariable[];
+    pageState?: PageStateConfig;
     ownerId: string;
     createdAt: Date;
     updatedAt: Date;
@@ -320,6 +334,7 @@ export class PuckPage {
       data.requiresAuth,
       data.allowedRoles,
       data.pageVariables,
+      data.pageState,
       UserId.fromString(data.ownerId),
       data.createdAt,
       data.updatedAt
@@ -342,6 +357,7 @@ export class PuckPage {
     requiresAuth: boolean;
     allowedRoles: string[] | undefined;
     pageVariables: PageVariable[] | undefined;
+    pageState: PageStateConfig | undefined;
     ownerId: string;
     createdAt: Date;
     updatedAt: Date;
@@ -359,6 +375,7 @@ export class PuckPage {
       requiresAuth: this._requiresAuth,
       allowedRoles: this._allowedRoles,
       pageVariables: this._pageVariables,
+      pageState: this._pageState,
       ownerId: this._ownerId.value,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt

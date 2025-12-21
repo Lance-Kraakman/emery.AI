@@ -1,16 +1,16 @@
 'use client';
 
 /**
- * StateContext - Global State Registry for Puck Pages
+ * StateContext - Page State Management for Puck Pages
  *
- * Provides client-side state management for StateBlock containers.
- * Uses useReducer for predictable state updates and a subscription
- * pattern for targeted re-renders.
+ * AIDEV-NOTE: Provides client-side state management using a FLAT namespace.
+ * State is defined at the page level via PageStateConfig and accessible
+ * via {state.key} syntax in text interpolation.
  *
  * Features:
- * - Register state containers from StateBlock components
- * - Get/set values and UI state flags
- * - Subscribe to container changes for reactive updates
+ * - Initialize from PageStateConfig (from page DB)
+ * - Get/set values and UI flags (flat namespace - no containers)
+ * - Subscribe to changes for reactive updates
  * - Optional persistence (session/localStorage)
  */
 
@@ -20,122 +20,72 @@ import React, {
   useReducer,
   useCallback,
   useRef,
+  useEffect,
   type ReactNode,
 } from 'react';
 import {
-  type GlobalState,
-  type StateAction,
-  type StateContainerConfig,
-  type ContainerState,
-  initialGlobalState,
-  createInitialContainerState,
+  type PageRuntimeState,
+  type PageStateAction,
+  type PageStateConfig,
+  initialPageRuntimeState,
+  createInitialPageState,
 } from '@/components/puck/types/state';
 
 /**
- * State reducer - handles all state mutations
+ * Page state reducer - handles all state mutations (flat namespace)
  */
-function stateReducer(state: GlobalState, action: StateAction): GlobalState {
+function pageStateReducer(state: PageRuntimeState, action: PageStateAction): PageRuntimeState {
   switch (action.type) {
-    case 'REGISTER_CONTAINER': {
-      const { config } = action;
-      // Don't re-register if already exists with same config
-      if (state.containers[config.name]) {
-        return state;
-      }
-      return {
-        ...state,
-        containers: {
-          ...state.containers,
-          [config.name]: config,
-        },
-        states: {
-          ...state.states,
-          [config.name]: createInitialContainerState(config),
-        },
-      };
+    case 'INIT_STATE': {
+      return createInitialPageState(action.config);
     }
 
     case 'SET_VALUE': {
-      const { container, key, value } = action;
-      const containerState = state.states[container];
-      if (!containerState) {
-        console.warn(`[StateContext] Container "${container}" not registered`);
+      const { key, value } = action;
+      // Don't warn if state not initialized - just ignore
+      if (!state.config) {
         return state;
       }
       return {
         ...state,
-        states: {
-          ...state.states,
-          [container]: {
-            ...containerState,
-            values: {
-              ...containerState.values,
-              [key]: value,
-            },
-          },
+        values: {
+          ...state.values,
+          [key]: value,
         },
       };
     }
 
-    case 'TOGGLE_UI_STATE': {
-      const { container, key } = action;
-      const containerState = state.states[container];
-      if (!containerState) {
-        console.warn(`[StateContext] Container "${container}" not registered`);
+    case 'TOGGLE_UI_FLAG': {
+      const { key } = action;
+      if (!state.config) {
         return state;
       }
-      const currentValue = containerState.uiFlags[key] ?? false;
+      const currentValue = state.uiFlags[key] ?? false;
       return {
         ...state,
-        states: {
-          ...state.states,
-          [container]: {
-            ...containerState,
-            uiFlags: {
-              ...containerState.uiFlags,
-              [key]: !currentValue,
-            },
-          },
+        uiFlags: {
+          ...state.uiFlags,
+          [key]: !currentValue,
         },
       };
     }
 
-    case 'SET_UI_STATE': {
-      const { container, key, value } = action;
-      const containerState = state.states[container];
-      if (!containerState) {
-        console.warn(`[StateContext] Container "${container}" not registered`);
+    case 'SET_UI_FLAG': {
+      const { key, value } = action;
+      if (!state.config) {
         return state;
       }
       return {
         ...state,
-        states: {
-          ...state.states,
-          [container]: {
-            ...containerState,
-            uiFlags: {
-              ...containerState.uiFlags,
-              [key]: value,
-            },
-          },
+        uiFlags: {
+          ...state.uiFlags,
+          [key]: value,
         },
       };
     }
 
-    case 'RESET_CONTAINER': {
-      const { container } = action;
-      const config = state.containers[container];
-      if (!config) {
-        console.warn(`[StateContext] Container "${container}" not registered`);
-        return state;
-      }
-      return {
-        ...state,
-        states: {
-          ...state.states,
-          [container]: createInitialContainerState(config),
-        },
-      };
+    case 'RESET_STATE': {
+      return createInitialPageState(state.config);
     }
 
     default:
@@ -149,161 +99,264 @@ function stateReducer(state: GlobalState, action: StateAction): GlobalState {
 type SubscriptionCallback = () => void;
 
 /**
- * StateContext value interface
+ * StateContext value interface (flat namespace API)
  */
 export interface StateContextValue {
-  /** Get a value from a state container */
-  getValue: (container: string, key: string) => unknown;
+  /** Get a value by key */
+  getValue: (key: string) => unknown;
 
-  /** Get a UI state flag from a container */
-  getUIState: (container: string, key: string) => boolean;
+  /** Get a UI flag by key */
+  getUIFlag: (key: string) => boolean;
 
-  /** Set a value in a state container */
-  setValue: (container: string, key: string, value: unknown) => void;
+  /** Set a value by key */
+  setValue: (key: string, value: unknown) => void;
 
-  /** Toggle a UI state flag */
-  toggleUIState: (container: string, key: string) => void;
+  /** Toggle a UI flag */
+  toggleUIFlag: (key: string) => void;
 
-  /** Set a UI state flag to a specific value */
-  setUIState: (container: string, key: string, value: boolean) => void;
+  /** Set a UI flag to a specific value */
+  setUIFlag: (key: string, value: boolean) => void;
 
-  /** Reset a container to its initial state */
-  resetContainer: (container: string) => void;
+  /** Reset all state to initial values */
+  resetState: () => void;
 
-  /** Subscribe to changes in a container */
-  subscribe: (container: string, callback: SubscriptionCallback) => () => void;
+  /** Subscribe to any state change */
+  subscribe: (callback: SubscriptionCallback) => () => void;
 
-  /** Register a state container (called by StateBlock) */
-  registerContainer: (config: StateContainerConfig) => void;
+  /** Get all current values (for debugging or text interpolation) */
+  getAllValues: () => Record<string, unknown>;
 
-  /** Get the full container state (for debugging) */
-  getContainerState: (container: string) => ContainerState | undefined;
+  /** Get all UI flags */
+  getAllUIFlags: () => Record<string, boolean>;
 
-  /** Check if a container is registered */
-  hasContainer: (container: string) => boolean;
+  /** Get the page state config (for autocomplete) */
+  getConfig: () => PageStateConfig | undefined;
+
+  /** Check if a state key exists */
+  hasKey: (key: string) => boolean;
+
+  /** Check if a UI flag exists */
+  hasUIFlag: (key: string) => boolean;
 }
 
 const StateContext = createContext<StateContextValue | undefined>(undefined);
 
 export interface StateProviderProps {
   children: ReactNode;
+  /** Page state configuration from DB */
+  pageState?: PageStateConfig;
 }
 
 /**
- * StateProvider - Provides global state management for Puck pages
- *
- * Should be placed at the page level, wrapping all content that needs
- * access to state containers.
+ * Get storage key for persistence
+ */
+function getStorageKey(pageId: string): string {
+  return `emery_page_state_${pageId}`;
+}
+
+/**
+ * Load persisted state from storage
+ */
+function loadPersistedState(
+  config: PageStateConfig,
+  pageId: string
+): { values: Record<string, unknown>; uiFlags: Record<string, boolean> } | null {
+  if (config.persistence === 'none' || typeof window === 'undefined') {
+    return null;
+  }
+
+  const storage = config.persistence === 'session' ? sessionStorage : localStorage;
+  const key = getStorageKey(pageId);
+
+  try {
+    const stored = storage.getItem(key);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.warn('[StateContext] Failed to load persisted state:', e);
+  }
+
+  return null;
+}
+
+/**
+ * Save state to storage
+ */
+function savePersistedState(
+  config: PageStateConfig,
+  pageId: string,
+  values: Record<string, unknown>,
+  uiFlags: Record<string, boolean>
+): void {
+  if (config.persistence === 'none' || typeof window === 'undefined') {
+    return;
+  }
+
+  const storage = config.persistence === 'session' ? sessionStorage : localStorage;
+  const key = getStorageKey(pageId);
+
+  try {
+    storage.setItem(key, JSON.stringify({ values, uiFlags }));
+  } catch (e) {
+    console.warn('[StateContext] Failed to save persisted state:', e);
+  }
+}
+
+/**
+ * StateProvider - Provides page state management
  *
  * @example
  * ```tsx
- * <StateProvider>
+ * <StateProvider pageState={page.pageState}>
  *   <PuckRenderer data={pageData} />
  * </StateProvider>
  * ```
  */
-export function StateProvider({ children }: StateProviderProps) {
-  const [state, dispatch] = useReducer(stateReducer, initialGlobalState);
+export function StateProvider({ children, pageState }: StateProviderProps) {
+  const [state, dispatch] = useReducer(pageStateReducer, initialPageRuntimeState);
+
+  // Track page ID for persistence (use config hash or empty string)
+  const pageIdRef = useRef<string>('');
+
+  // Initialize state when pageState config changes
+  useEffect(() => {
+    // Create initial state
+    const initialState = createInitialPageState(pageState);
+
+    // Try to load persisted state
+    if (pageState && pageState.persistence !== 'none') {
+      // Use a simple hash of the config for page identification
+      pageIdRef.current = JSON.stringify(pageState.variables.map(v => v.name)).slice(0, 32);
+      const persisted = loadPersistedState(pageState, pageIdRef.current);
+      if (persisted) {
+        // Merge persisted values with initial state (only for known keys)
+        const mergedValues = { ...initialState.values };
+        const mergedFlags = { ...initialState.uiFlags };
+
+        for (const [key, value] of Object.entries(persisted.values)) {
+          if (key in mergedValues) {
+            mergedValues[key] = value;
+          }
+        }
+        for (const [key, value] of Object.entries(persisted.uiFlags)) {
+          if (key in mergedFlags) {
+            mergedFlags[key] = value;
+          }
+        }
+
+        dispatch({ type: 'INIT_STATE', config: pageState });
+        // Set persisted values
+        for (const [key, value] of Object.entries(mergedValues)) {
+          dispatch({ type: 'SET_VALUE', key, value });
+        }
+        for (const [key, value] of Object.entries(mergedFlags)) {
+          dispatch({ type: 'SET_UI_FLAG', key, value });
+        }
+        return;
+      }
+    }
+
+    dispatch({ type: 'INIT_STATE', config: pageState });
+  }, [pageState]);
+
+  // Persist state changes
+  useEffect(() => {
+    if (state.config && state.config.persistence !== 'none') {
+      savePersistedState(state.config, pageIdRef.current, state.values, state.uiFlags);
+    }
+  }, [state.values, state.uiFlags, state.config]);
 
   // Subscription management
-  const subscribersRef = useRef<Map<string, Set<SubscriptionCallback>>>(new Map());
+  const subscribersRef = useRef<Set<SubscriptionCallback>>(new Set());
 
-  // Notify subscribers when a container changes
-  const notifySubscribers = useCallback((container: string) => {
-    const callbacks = subscribersRef.current.get(container);
-    if (callbacks) {
-      callbacks.forEach(callback => callback());
-    }
+  // Notify all subscribers when state changes
+  const notifySubscribers = useCallback(() => {
+    subscribersRef.current.forEach(callback => callback());
   }, []);
 
-  // Get a value from a state container
-  const getValue = useCallback((container: string, key: string): unknown => {
-    const containerState = state.states[container];
-    if (!containerState) {
-      return undefined;
-    }
-    return containerState.values[key];
-  }, [state.states]);
+  // Get a value
+  const getValue = useCallback((key: string): unknown => {
+    return state.values[key];
+  }, [state.values]);
 
-  // Get a UI state flag
-  const getUIState = useCallback((container: string, key: string): boolean => {
-    const containerState = state.states[container];
-    if (!containerState) {
-      return false;
-    }
-    return containerState.uiFlags[key] ?? false;
-  }, [state.states]);
+  // Get a UI flag
+  const getUIFlag = useCallback((key: string): boolean => {
+    return state.uiFlags[key] ?? false;
+  }, [state.uiFlags]);
 
   // Set a value (with subscriber notification)
-  const setValue = useCallback((container: string, key: string, value: unknown) => {
-    dispatch({ type: 'SET_VALUE', container, key, value });
-    // Notify after dispatch (will be batched by React)
-    notifySubscribers(container);
+  const setValue = useCallback((key: string, value: unknown) => {
+    dispatch({ type: 'SET_VALUE', key, value });
+    notifySubscribers();
   }, [notifySubscribers]);
 
-  // Toggle a UI state flag
-  const toggleUIState = useCallback((container: string, key: string) => {
-    dispatch({ type: 'TOGGLE_UI_STATE', container, key });
-    notifySubscribers(container);
+  // Toggle a UI flag
+  const toggleUIFlag = useCallback((key: string) => {
+    dispatch({ type: 'TOGGLE_UI_FLAG', key });
+    notifySubscribers();
   }, [notifySubscribers]);
 
-  // Set a UI state flag to a specific value
-  const setUIState = useCallback((container: string, key: string, value: boolean) => {
-    dispatch({ type: 'SET_UI_STATE', container, key, value });
-    notifySubscribers(container);
+  // Set a UI flag to a specific value
+  const setUIFlag = useCallback((key: string, value: boolean) => {
+    dispatch({ type: 'SET_UI_FLAG', key, value });
+    notifySubscribers();
   }, [notifySubscribers]);
 
-  // Reset a container to initial state
-  const resetContainer = useCallback((container: string) => {
-    dispatch({ type: 'RESET_CONTAINER', container });
-    notifySubscribers(container);
+  // Reset state to initial values
+  const resetState = useCallback(() => {
+    dispatch({ type: 'RESET_STATE' });
+    notifySubscribers();
   }, [notifySubscribers]);
 
-  // Subscribe to container changes
-  const subscribe = useCallback((container: string, callback: SubscriptionCallback): () => void => {
-    if (!subscribersRef.current.has(container)) {
-      subscribersRef.current.set(container, new Set());
-    }
-    subscribersRef.current.get(container)!.add(callback);
+  // Subscribe to state changes
+  const subscribe = useCallback((callback: SubscriptionCallback): () => void => {
+    subscribersRef.current.add(callback);
 
     // Return unsubscribe function
     return () => {
-      const callbacks = subscribersRef.current.get(container);
-      if (callbacks) {
-        callbacks.delete(callback);
-        if (callbacks.size === 0) {
-          subscribersRef.current.delete(container);
-        }
-      }
+      subscribersRef.current.delete(callback);
     };
   }, []);
 
-  // Register a state container
-  const registerContainer = useCallback((config: StateContainerConfig) => {
-    dispatch({ type: 'REGISTER_CONTAINER', config });
-  }, []);
+  // Get all values (for text interpolation)
+  const getAllValues = useCallback((): Record<string, unknown> => {
+    return { ...state.values };
+  }, [state.values]);
 
-  // Get full container state (for debugging)
-  const getContainerState = useCallback((container: string): ContainerState | undefined => {
-    return state.states[container];
-  }, [state.states]);
+  // Get all UI flags
+  const getAllUIFlags = useCallback((): Record<string, boolean> => {
+    return { ...state.uiFlags };
+  }, [state.uiFlags]);
 
-  // Check if container exists
-  const hasContainer = useCallback((container: string): boolean => {
-    return container in state.containers;
-  }, [state.containers]);
+  // Get config (for autocomplete)
+  const getConfig = useCallback((): PageStateConfig | undefined => {
+    return state.config;
+  }, [state.config]);
+
+  // Check if key exists
+  const hasKey = useCallback((key: string): boolean => {
+    return key in state.values;
+  }, [state.values]);
+
+  // Check if UI flag exists
+  const hasUIFlag = useCallback((key: string): boolean => {
+    return key in state.uiFlags;
+  }, [state.uiFlags]);
 
   const contextValue: StateContextValue = {
     getValue,
-    getUIState,
+    getUIFlag,
     setValue,
-    toggleUIState,
-    setUIState,
-    resetContainer,
+    toggleUIFlag,
+    setUIFlag,
+    resetState,
     subscribe,
-    registerContainer,
-    getContainerState,
-    hasContainer,
+    getAllValues,
+    getAllUIFlags,
+    getConfig,
+    hasKey,
+    hasUIFlag,
   };
 
   return (
@@ -322,7 +375,7 @@ export function StateProvider({ children }: StateProviderProps) {
  * ```tsx
  * function MyComponent() {
  *   const stateCtx = useStateContext();
- *   const category = stateCtx?.getValue('filters', 'category');
+ *   const category = stateCtx?.getValue('category');
  *   // ...
  * }
  * ```
@@ -334,7 +387,7 @@ export function useStateContext(): StateContextValue | undefined {
 /**
  * useRequiredStateContext - Hook that throws if not in StateProvider
  *
- * Use this when state context is required (inside StateBlock children).
+ * Use this when state context is required.
  */
 export function useRequiredStateContext(): StateContextValue {
   const context = useContext(StateContext);
@@ -347,56 +400,75 @@ export function useRequiredStateContext(): StateContextValue {
 /**
  * useStateValue - Hook to get a specific state value with re-render on change
  *
- * @param container - State container name
  * @param key - Variable key
  * @returns The current value
  *
  * @example
  * ```tsx
  * function CategoryDisplay() {
- *   const category = useStateValue('filters', 'category');
+ *   const category = useStateValue('category');
  *   return <div>Category: {category}</div>;
  * }
  * ```
  */
-export function useStateValue(container: string, key: string): unknown {
+export function useStateValue(key: string): unknown {
   const context = useStateContext();
   const [, forceUpdate] = useReducer(x => x + 1, 0);
 
-  // Subscribe to container changes
-  React.useEffect(() => {
+  // Subscribe to state changes
+  useEffect(() => {
     if (!context) return;
-    return context.subscribe(container, forceUpdate);
-  }, [context, container]);
+    return context.subscribe(forceUpdate);
+  }, [context]);
 
-  return context?.getValue(container, key);
+  return context?.getValue(key);
 }
 
 /**
- * useUIState - Hook to get a UI state flag with re-render on change
+ * useUIFlag - Hook to get a UI flag with re-render on change
  *
- * @param container - State container name
  * @param key - UI flag key
  * @returns The current boolean value
  *
  * @example
  * ```tsx
  * function Modal() {
- *   const isOpen = useUIState('ui', 'showModal');
+ *   const isOpen = useUIFlag('showModal');
  *   if (!isOpen) return null;
  *   return <div className="modal">...</div>;
  * }
  * ```
  */
-export function useUIState(container: string, key: string): boolean {
+export function useUIFlag(key: string): boolean {
   const context = useStateContext();
   const [, forceUpdate] = useReducer(x => x + 1, 0);
 
-  // Subscribe to container changes
-  React.useEffect(() => {
+  // Subscribe to state changes
+  useEffect(() => {
     if (!context) return;
-    return context.subscribe(container, forceUpdate);
-  }, [context, container]);
+    return context.subscribe(forceUpdate);
+  }, [context]);
 
-  return context?.getUIState(container, key) ?? false;
+  return context?.getUIFlag(key) ?? false;
+}
+
+// ============================================
+// Backward compatibility exports
+// Will be removed when StateBlock is deleted
+// ============================================
+
+/**
+ * @deprecated Use useStateValue(key) instead
+ */
+export function useOldStateValue(container: string, key: string): unknown {
+  // Just ignore the container
+  return useStateValue(key);
+}
+
+/**
+ * @deprecated Use useUIFlag(key) instead
+ */
+export function useUIState(container: string, key: string): boolean {
+  // Just ignore the container
+  return useUIFlag(key);
 }

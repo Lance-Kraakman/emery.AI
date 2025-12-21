@@ -1,5 +1,12 @@
 'use client';
 
+/**
+ * DialogBlock - A modal dialog controlled by page state
+ *
+ * AIDEV-NOTE: Uses flat namespace for state - no containers.
+ * The dialog's open/close state is controlled by a UI flag.
+ */
+
 import React, { useEffect, useReducer, useMemo, type ComponentType } from 'react';
 import { ComponentConfig } from '@measured/puck';
 import {
@@ -11,6 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { useStateContext } from '../../contexts/StateContext';
 import { useInterpolatedText } from '../../hooks/useInterpolatedText';
+import { createVariableTextField } from '../../custom-fields';
 
 /**
  * Dialog size options
@@ -21,9 +29,7 @@ export type DialogSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
  * DialogBlock Props
  */
 export interface DialogBlockProps {
-  /** State container name that controls the dialog */
-  stateContainer: string;
-  /** UI state key that controls open/close */
+  /** UI flag key that controls open/close (flat namespace) */
   stateKey: string;
   /** Dialog title (supports variable interpolation) */
   title?: string;
@@ -64,30 +70,28 @@ function getDialogSizeClass(size: DialogSize): string {
 }
 
 /**
- * DialogBlock - A modal dialog controlled by StateBlock
+ * DialogBlock - A modal dialog controlled by page state
  *
- * The dialog's open/close state is controlled by a UI state flag in a StateBlock.
- * Use toggleUIState or setUIState actions to open/close the dialog.
+ * The dialog's open/close state is controlled by a UI flag.
+ * Use toggleUIFlag or setUIFlag actions to open/close the dialog.
  *
  * @example
  * ```tsx
- * <StateBlock name="ui" uiState={[{ name: "showModal", defaultValue: false }]}>
- *   <Button onClick={{ type: "toggleUIState", container: "ui", key: "showModal" }}>
- *     Open Dialog
- *   </Button>
- *   <DialogBlock
- *     stateContainer="ui"
- *     stateKey="showModal"
- *     title="My Dialog"
- *     description="This is a modal dialog"
- *   >
- *     {children}
- *   </DialogBlock>
- * </StateBlock>
+ * // Define showModal UI flag in Page State config
+ * // Then use it in DialogBlock:
+ * <Button onClick={{ type: "toggleUIFlag", key: "showModal" }}>
+ *   Open Dialog
+ * </Button>
+ * <DialogBlock
+ *   stateKey="showModal"
+ *   title="My Dialog"
+ *   description="This is a modal dialog"
+ * >
+ *   {children}
+ * </DialogBlock>
  * ```
  */
 function DialogBlockComponent({
-  stateContainer,
   stateKey,
   title,
   description,
@@ -103,21 +107,21 @@ function DialogBlockComponent({
 
   // Subscribe to state changes
   useEffect(() => {
-    if (!stateContext || !stateContainer) return;
-    const unsubscribe = stateContext.subscribe(stateContainer, forceUpdate);
+    if (!stateContext) return;
+    const unsubscribe = stateContext.subscribe(forceUpdate);
     return unsubscribe;
-  }, [stateContext, stateContainer]);
+  }, [stateContext]);
 
   // Get the current open state
   const isOpen = useMemo(() => {
-    if (!stateContext || !stateContainer || !stateKey) return false;
-    return stateContext.getUIState(stateContainer, stateKey);
-  }, [stateContext, stateContainer, stateKey]);
+    if (!stateContext || !stateKey) return false;
+    return stateContext.getUIFlag(stateKey);
+  }, [stateContext, stateKey]);
 
   // Handle open change (when dialog is closed via X button, outside click, or escape)
   const handleOpenChange = (open: boolean) => {
-    if (!stateContext || !stateContainer || !stateKey) return;
-    stateContext.setUIState(stateContainer, stateKey, open);
+    if (!stateContext || !stateKey) return;
+    stateContext.setUIFlag(stateKey, open);
   };
 
   // Interpolate title and description
@@ -172,22 +176,12 @@ function DialogBlockComponent({
 export const DialogBlock: ComponentConfig<DialogBlockProps> = {
   label: 'Dialog',
   fields: {
-    stateContainer: {
-      type: 'text',
-      label: 'State Container',
-    },
     stateKey: {
       type: 'text',
-      label: 'State Key (UI State)',
+      label: 'UI Flag',
     },
-    title: {
-      type: 'text',
-      label: 'Title',
-    },
-    description: {
-      type: 'textarea',
-      label: 'Description',
-    },
+    title: createVariableTextField({ label: 'Title' }),
+    description: createVariableTextField({ label: 'Description', multiline: true }),
     size: {
       type: 'select',
       label: 'Size',
@@ -221,7 +215,6 @@ export const DialogBlock: ComponentConfig<DialogBlockProps> = {
   },
 
   defaultProps: {
-    stateContainer: '',
     stateKey: '',
     title: '',
     description: '',

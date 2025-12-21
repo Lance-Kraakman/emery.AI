@@ -1,5 +1,12 @@
 'use client';
 
+/**
+ * ConditionalBlock - Conditionally render children based on state, params, or row data
+ *
+ * AIDEV-NOTE: Uses flat namespace for state - no containers.
+ * State variables are accessed directly by key.
+ */
+
 import React, { useEffect, useReducer, useMemo, type ComponentType } from 'react';
 import { ComponentConfig } from '@measured/puck';
 import { useStateContext } from '../../contexts/StateContext';
@@ -23,7 +30,7 @@ export type ConditionOperator =
 /**
  * Value source type for the condition
  */
-export type ConditionSourceType = 'state' | 'uiState' | 'params' | 'rowData';
+export type ConditionSourceType = 'state' | 'uiFlag' | 'params' | 'rowData';
 
 /**
  * ConditionalBlock Props
@@ -31,10 +38,8 @@ export type ConditionSourceType = 'state' | 'uiState' | 'params' | 'rowData';
 export interface ConditionalBlockProps {
   /** Source type for the condition value */
   sourceType: ConditionSourceType;
-  /** For state/uiState: container name */
-  container?: string;
-  /** For state/uiState: variable key */
-  key?: string;
+  /** For state: variable key (flat namespace) */
+  stateKey?: string;
   /** For params: query parameter name */
   paramName?: string;
   /** For rowData: field name */
@@ -89,23 +94,10 @@ function evaluateCondition(
 
 /**
  * ConditionalBlock - Conditionally render children based on state, params, or row data
- *
- * @example
- * ```tsx
- * <ConditionalBlock
- *   sourceType="uiState"
- *   container="ui"
- *   key="showAdvanced"
- *   operator="truthy"
- * >
- *   {children}
- * </ConditionalBlock>
- * ```
  */
 function ConditionalBlockComponent({
   sourceType,
-  container,
-  key,
+  stateKey,
   paramName,
   fieldName,
   operator,
@@ -120,25 +112,25 @@ function ConditionalBlockComponent({
   // Force re-render counter for state subscriptions
   const [, forceUpdate] = useReducer(x => x + 1, 0);
 
-  // Subscribe to state changes if using state/uiState source
+  // Subscribe to state changes if using state/uiFlag source
   useEffect(() => {
-    if (!stateContext || !container) return;
-    if (sourceType !== 'state' && sourceType !== 'uiState') return;
+    if (!stateContext) return;
+    if (sourceType !== 'state' && sourceType !== 'uiFlag') return;
 
-    const unsubscribe = stateContext.subscribe(container, forceUpdate);
+    const unsubscribe = stateContext.subscribe(forceUpdate);
     return unsubscribe;
-  }, [stateContext, sourceType, container]);
+  }, [stateContext, sourceType]);
 
   // Get the current value based on source type
   const currentValue = useMemo(() => {
     switch (sourceType) {
       case 'state':
-        if (!stateContext || !container || !key) return undefined;
-        return stateContext.getValue(container, key);
+        if (!stateContext || !stateKey) return undefined;
+        return stateContext.getValue(stateKey);
 
-      case 'uiState':
-        if (!stateContext || !container || !key) return undefined;
-        return stateContext.getUIState(container, key);
+      case 'uiFlag':
+        if (!stateContext || !stateKey) return undefined;
+        return stateContext.getUIFlag(stateKey);
 
       case 'params':
         if (!pageContext || !paramName) return undefined;
@@ -151,7 +143,7 @@ function ConditionalBlockComponent({
       default:
         return undefined;
     }
-  }, [sourceType, stateContext, container, key, pageContext, paramName, rowContext, fieldName]);
+  }, [sourceType, stateContext, stateKey, pageContext, paramName, rowContext, fieldName]);
 
   // Evaluate the condition
   const conditionMet = useMemo(() => {
@@ -177,19 +169,15 @@ export const ConditionalBlock: ComponentConfig<ConditionalBlockProps> = {
       type: 'select',
       label: 'Value Source',
       options: [
-        { value: 'uiState', label: 'UI State (boolean)' },
+        { value: 'uiFlag', label: 'UI Flag (boolean)' },
         { value: 'state', label: 'State Variable' },
         { value: 'params', label: 'URL Parameter' },
         { value: 'rowData', label: 'Row Data' },
       ],
     },
-    container: {
+    stateKey: {
       type: 'text',
-      label: 'State Container',
-    },
-    key: {
-      type: 'text',
-      label: 'Variable Key',
+      label: 'State Key',
     },
     paramName: {
       type: 'text',
@@ -242,10 +230,12 @@ export const ConditionalBlock: ComponentConfig<ConditionalBlockProps> = {
 
     // Source-specific fields
     let sourceFields = {};
-    if (sourceType === 'state' || sourceType === 'uiState') {
+    if (sourceType === 'state' || sourceType === 'uiFlag') {
       sourceFields = {
-        container: fields.container,
-        key: fields.key,
+        stateKey: {
+          ...fields.stateKey,
+          label: sourceType === 'uiFlag' ? 'UI Flag' : 'State Variable',
+        },
       };
     } else if (sourceType === 'params') {
       sourceFields = {
@@ -278,9 +268,8 @@ export const ConditionalBlock: ComponentConfig<ConditionalBlockProps> = {
   },
 
   defaultProps: {
-    sourceType: 'uiState',
-    container: '',
-    key: '',
+    sourceType: 'uiFlag',
+    stateKey: '',
     operator: 'truthy',
     invert: false,
   },

@@ -1,5 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
-import React, { ReactNode } from "react";
+import React from "react";
 import styles from "./styles.module.css";
 import { getClassNameFactory } from "@/components/puck/lib";
 import { Button } from "@/components/puck/components/Button";
@@ -10,6 +10,7 @@ import type { Action } from "../../types/actions";
 import type { FourSidedSpacing } from "../../types/spacing-types";
 import { useTheme } from "../../contexts/PageContext";
 import { computeFourSidedCSS } from "../../utils/spacing";
+import { useInterpolatedText } from "../../hooks/useInterpolatedText";
 
 const getClassName = getClassNameFactory("Hero", styles);
 
@@ -35,7 +36,7 @@ function convertLegacyAction(action: LinkActionConfig): Action[] {
 
 export type HeroProps = {
   quote?: { index: number; label: string };
-  title: string | ReactNode;
+  title: string;
   description: string;
   align?: string;
   padding?: FourSidedSpacing;
@@ -76,6 +77,9 @@ export const Hero: PuckComponent<HeroProps> = ({
 }) => {
   const theme = useTheme();
   const paddingStyles = padding ? computeFourSidedCSS(padding, theme, 'padding') : { paddingTop: '48px', paddingBottom: '48px' };
+  // Interpolate variables in title and description
+  const interpolatedTitle = useInterpolatedText(title);
+  const interpolatedDescription = useInterpolatedText(description);
 
   return (
     <Section
@@ -111,7 +115,7 @@ export const Hero: PuckComponent<HeroProps> = ({
               ...(titleFontWeight && { fontWeight: titleFontWeight }),
             }}
           >
-            {title}
+            {interpolatedTitle}
           </h1>
           <p
             className={getClassName("subtitle")}
@@ -121,7 +125,7 @@ export const Hero: PuckComponent<HeroProps> = ({
               ...(subtitleFontWeight && { fontWeight: subtitleFontWeight }),
             }}
           >
-            {description}
+            {interpolatedDescription}
           </p>
           <div className={getClassName("actions")}>
             {buttons.map((button, i) => (

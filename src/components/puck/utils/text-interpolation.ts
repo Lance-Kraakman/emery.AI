@@ -1,9 +1,9 @@
 /**
  * Text Interpolation Utility
  *
- * Provides string interpolation for displaying dynamic values in text.
+ * AIDEV-NOTE: Provides string interpolation for displaying dynamic values in text.
  * Supports patterns like:
- * - {state.container.key} - State values
+ * - {state.key} - State values (flat namespace)
  * - {params.name} - URL parameters
  * - {rowData.field} - Row data fields
  *
@@ -13,7 +13,7 @@
  *
  * @example
  * ```tsx
- * const text = interpolateText("Hello {state.user.name}!", context);
+ * const text = interpolateText("Hello {state.userName}!", context);
  * // Returns: "Hello John!"
  * ```
  */
@@ -22,7 +22,7 @@ import type { ValueResolutionContext } from '../types/value-source';
 
 /**
  * Pattern to match variable references in text
- * Matches: {state.container.key}, {params.name}, {rowData.field}
+ * Matches: {state.key}, {params.name}, {rowData.field}
  */
 const VARIABLE_PATTERN = /\{(state|params|rowData)\.([^}]+)\}/g;
 
@@ -30,6 +30,8 @@ const VARIABLE_PATTERN = /\{(state|params|rowData)\.([^}]+)\}/g;
  * Check if a string contains any variable references
  */
 export function hasVariableReferences(text: string): boolean {
+  // Reset lastIndex before testing
+  VARIABLE_PATTERN.lastIndex = 0;
   return VARIABLE_PATTERN.test(text);
 }
 
@@ -75,16 +77,13 @@ function resolveVariable(
 ): string {
   switch (type) {
     case 'state': {
-      // Path is "container.key"
-      const [container, ...keyParts] = path.split('.');
-      const key = keyParts.join('.'); // Handle nested keys like "user.address.city"
-
+      // Path is just the key (flat namespace)
       if (!context.getStateValue) {
         console.warn(`[interpolateText] No state context for: state.${path}`);
         return `{state.${path}}`;
       }
 
-      const value = context.getStateValue(container, key);
+      const value = context.getStateValue(path);
       return formatValue(value);
     }
 
@@ -149,14 +148,14 @@ function formatValue(value: unknown): string {
 /**
  * Interpolate variable references in a text string
  *
- * @param text - The text with variable references like {state.x.y}
+ * @param text - The text with variable references like {state.key}
  * @param context - The resolution context providing access to state, params, rowData
  * @returns The text with all variables replaced with their values
  *
  * @example
  * ```tsx
  * const result = interpolateText(
- *   "Welcome, {state.user.name}! You have {state.cart.count} items.",
+ *   "Welcome, {state.userName}! You have {state.cartCount} items.",
  *   context
  * );
  * // Returns: "Welcome, John! You have 3 items."
@@ -179,23 +178,12 @@ export function interpolateText(
 }
 
 /**
- * Extract state container names referenced in text
- * Useful for setting up subscriptions
+ * Check if text has state references (for subscription setup)
  *
  * @param text - The text to scan
- * @returns Set of container names referenced
+ * @returns true if text contains state references
  */
-export function extractStateContainers(text: string): Set<string> {
-  const containers = new Set<string>();
+export function hasStateReferences(text: string): boolean {
   const refs = extractVariableReferences(text);
-
-  for (const ref of refs) {
-    if (ref.type === 'state') {
-      // Path is "container.key" or "container.nested.key"
-      const container = ref.path.split('.')[0];
-      containers.add(container);
-    }
-  }
-
-  return containers;
+  return refs.some(ref => ref.type === 'state');
 }

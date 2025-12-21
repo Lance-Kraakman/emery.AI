@@ -21,8 +21,9 @@ import { PuckEditorThemeProvider, usePuckEditorTheme } from "@/components/puck/p
 import { PuckSession } from "@/lib/puck/session-storage";
 import { EditorDataLayoutProvider } from "@/components/puck/contexts/EditorDataLayoutProvider";
 import { PageVariablesProvider } from "@/components/puck/contexts/PageVariablesContext";
-import { updatePageVariables } from "@/app/actions/puck-pages";
+import { updatePageVariables, updatePageState } from "@/app/actions/puck-pages";
 import type { PageVariable } from "@/components/puck/types";
+import type { PageStateConfig } from "@/components/puck/types/state";
 import { PuckEditorLayout } from "@/components/puck/PuckEditorLayout";
 
 export default function PageEditPage() {
@@ -198,6 +199,23 @@ export default function PageEditPage() {
     }
   };
 
+  const handleSavePageState = async (pageState: PageStateConfig | undefined) => {
+    try {
+      const result = await updatePageState(pageId, pageState);
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update page state");
+        return;
+      }
+
+      // Update local state to reflect changes
+      setPage(prev => prev ? { ...prev, pageState } : null);
+    } catch (error) {
+      console.error('Error updating page state:', error);
+      toast.error("Failed to update page state");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -257,6 +275,7 @@ export default function PageEditPage() {
                 onSavePageSettings={handleSavePageSettings}
                 onSaveAccessSettings={handleSaveAccessSettings}
                 onSavePageVariables={handleSavePageVariables}
+                onSavePageState={handleSavePageState}
                 themeMode="page"
               />
             </EditorDataLayoutProvider>
