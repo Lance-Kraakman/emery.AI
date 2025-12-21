@@ -218,6 +218,12 @@ class AppStack(Stack):
             ) if is_production else None,
         )
 
+        # Increase ALB idle timeout from default 60s to 300s (5 minutes)
+        # Required for long-running chat/agent operations
+        frontend_service.load_balancer.set_attribute(
+            'idle_timeout.timeout_seconds', '300'
+        )
+
         # Grant database access to frontend service
         frontend_service.service.connections.allow_to(
             data_stack.db_instance,
