@@ -54,3 +54,9 @@ export {
   createVariableTextField,
   type VariableTextFieldOptions,
 } from "./variable-text-field";
+
+// State Key (for selecting UI flags/variables from PageStateConfig)
+export {
+  createStateKeyField,
+  type StateKeyFieldOptions,
+} from "./state-key-field";
