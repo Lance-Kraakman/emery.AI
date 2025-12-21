@@ -7,7 +7,7 @@ import { db } from '../../lib/db/client';
 import { permissions, roles, rolePermissions } from '../../lib/db/schema';
 import { Permission } from '../../ddd/domain/shared/value-objects/permission';
 import { SYSTEM_ROLES } from '../../ddd/domain/rbac/entities/role';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 
 async function seedPermissions() {
   console.log('🌱 Seeding permissions...');
@@ -36,7 +36,23 @@ async function seedPermissions() {
 
 async function seedSystemRoles() {
   console.log('🌱 Seeding system roles...');
-  
+
+  // First, dedupe any duplicate system roles (keeps the lowest ID for each name)
+  // This is a one-time cleanup that can be removed after the next deployment
+  console.log('  🧹 Cleaning up duplicate system roles...');
+  const dedupeResult = await db.execute(sql`
+    DELETE FROM roles r1
+    USING roles r2
+    WHERE r1.id > r2.id
+      AND r1.name = r2.name
+      AND r1.is_system = true
+      AND r2.is_system = true
+  `);
+  console.log(`  🧹 Removed ${dedupeResult.rowCount ?? 0} duplicate system roles`);
+
+  let created = 0;
+  let skipped = 0;
+
   // Define system role permissions
   const systemRolePermissions = {
     [SYSTEM_ROLES.ORGANIZATION_OWNER]: [
@@ -117,10 +133,21 @@ async function seedSystemRoles() {
     ]
   };
 
-  let created = 0;
-
   for (const [roleName, systemRolePerms] of Object.entries(systemRolePermissions)) {
     try {
+      // Check if system role already exists by name
+      const existing = await db
+        .select({ id: roles.id })
+        .from(roles)
+        .where(and(eq(roles.name, roleName), eq(roles.isSystem, true)))
+        .limit(1);
+
+      if (existing.length > 0) {
+        console.log(`  ⏭️  Skipping "${roleName}" (already exists with id=${existing[0].id})`);
+        skipped++;
+        continue;
+      }
+
       // Create the role
       const [role] = await db
         .insert(roles)
@@ -128,9 +155,9 @@ async function seedSystemRoles() {
           name: roleName,
           description: `System role: ${roleName}`,
           organizationId: null, // System roles are global
-          isSystem: true
+          isSystem: true,
+          type: 'system'
         })
-        .onConflictDoNothing()
         .returning();
 
       if (role) {
@@ -145,7 +172,7 @@ async function seedSystemRoles() {
                 eq(permissions.action, permission.action)
               ))
               .limit(1);
-            
+
             return result[0]?.id;
           })
         );
@@ -162,15 +189,15 @@ async function seedSystemRoles() {
             .onConflictDoNothing();
         }
 
-        console.log(`✅ Created system role: ${roleName} with ${validPermissionIds.length} permissions`);
+        console.log(`  ✅ Created system role: ${roleName} with ${validPermissionIds.length} permissions`);
         created++;
       }
     } catch (error) {
       console.warn(`Failed to create system role ${roleName}:`, error);
     }
   }
-  
-  console.log(`✅ Created ${created} system roles`);
+
+  console.log(`\n✅ System roles seeding complete: ${created} created, ${skipped} skipped`);
 }
 
 async function main() {

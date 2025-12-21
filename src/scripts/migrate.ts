@@ -11,6 +11,7 @@ import { seedSystemRoleAssignments } from '../drizzle/seeds/system-role-assignme
 import { seedAppTypes } from '../drizzle/seeds/app-types.js';
 import { seedTools } from '../drizzle/seeds/tools.js';
 import { seedSystemSkills } from '../drizzle/seeds/system-skills.js';
+import { seedSystemTemplates } from '@/drizzle/seeds/default-templates';
 
 async function runMigration() {
   console.log('Starting database migration...');
@@ -78,8 +79,11 @@ async function runMigration() {
         console.log('  🛠️  Seeding tools...');
         await seedTools();
 
-        console.log('  🤖 Seeding system skills...')
+        console.log('  🤖 Seeding system skills...');
         await seedSystemSkills();
+
+        console.log('  🎨 Seeding puck templates...');
+        await seedSystemTemplates();
 
         console.log('✅ Database seeding completed successfully!');
       } catch (seedError) {

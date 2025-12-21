@@ -93,6 +93,7 @@ If multiple matches exist, list them all with distinguishing details.
   }
 ];
 
+// This should likely be an update-or-insert operation in the future
 export async function seedSystemSkills() {
   console.log('🌱 Seeding system skills...');
 
