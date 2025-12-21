@@ -50,10 +50,19 @@ class TargetFieldMetadata:
 
 
 @dataclass
+class ExtractionStats:
+    """Statistics about field extraction."""
+    extracted: int = 0
+    not_found: int = 0
+    total: int = 0
+
+
+@dataclass
 class CapturedOutput:
     """Stores captured output values from agent execution."""
     values: Dict[str, Any] = field(default_factory=dict)
     called: bool = False
+    extraction_stats: ExtractionStats = field(default_factory=ExtractionStats)
 
 
 class OutputTool(Tool):
@@ -165,24 +174,47 @@ class OutputTool(Tool):
         """
         Capture output values when the agent calls this tool.
 
+        Validates extraction and rejects if nothing was extracted.
+
         Args:
             **kwargs: Output values keyed by output name
 
         Returns:
-            Confirmation message
+            Confirmation message with extraction stats
         """
         logger.info(f"📤 OutputTool.submit_result called with: {list(kwargs.keys())}")
 
-        # Store captured values
+        # Count extracted vs null values
+        extracted_count = 0
+        null_count = 0
+
+        for key, value in kwargs.items():
+            if value is None:
+                null_count += 1
+                logger.debug(f"  - {key}: null (not found)")
+            else:
+                extracted_count += 1
+                value_preview = str(value)[:100] + "..." if len(str(value)) > 100 else str(value)
+                logger.debug(f"  - {key}: {value_preview}")
+
+        total = len(kwargs)
+
+        # Reject if nothing was extracted
+        if extracted_count == 0:
+            logger.warning(f"❌ No data extracted - all {total} fields were null")
+            return "FAILED: No data could be extracted. All fields were null/not found."
+
+        # Store captured values (including nulls for transparency)
         self.captured.values = kwargs
         self.captured.called = True
+        self.captured.extraction_stats = ExtractionStats(
+            extracted=extracted_count,
+            not_found=null_count,
+            total=total
+        )
 
-        # Log each captured value
-        for key, value in kwargs.items():
-            value_preview = str(value)[:100] + "..." if len(str(value)) > 100 else str(value)
-            logger.debug(f"  - {key}: {value_preview}")
-
-        return "Results submitted successfully. Task complete."
+        logger.info(f"✅ Extracted {extracted_count}/{total} fields ({null_count} not found)")
+        return f"Results submitted. Extracted {extracted_count}/{total} fields."
 
     def get_captured_values(self) -> Dict[str, Any]:
         """Get the captured output values."""
