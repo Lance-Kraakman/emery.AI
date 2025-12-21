@@ -6,7 +6,7 @@
 
 import { db } from '../../lib/db/client';
 import { skills, organizations } from '../../lib/db/schema';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 
 // System skill definitions
 // These skills are always available and provide common operations for agent delegation
@@ -93,8 +93,25 @@ If multiple matches exist, list them all with distinguishing details.
   }
 ];
 
+// This should likely be an update-or-insert operation in the future
 export async function seedSystemSkills() {
   console.log('🌱 Seeding system skills...');
+
+  // First, dedupe any duplicate system skills (keeps the lowest ID for each org+name combo)
+  // This is a one-time cleanup that can be removed after the next deployment
+  console.log('  🧹 Cleaning up duplicate system skills...');
+  const dedupeResult = await db.execute(sql`
+    DELETE FROM skills s1
+    USING skills s2
+    WHERE s1.id > s2.id
+      AND s1.organization_id = s2.organization_id
+      AND s1.name = s2.name
+      AND s1.is_system = true
+      AND s2.is_system = true
+      AND s1.agent_id IS NULL
+      AND s2.agent_id IS NULL
+  `);
+  console.log(`  🧹 Removed ${dedupeResult.rowCount ?? 0} duplicate system skills`);
 
   // Get all organizations
   const allOrgs = await db.select({ id: organizations.id, name: organizations.name }).from(organizations);

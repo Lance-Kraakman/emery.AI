@@ -9,16 +9,15 @@
  * Supports:
  * - {fieldName} - Row data fields from DataBlock context
  * - {params.name} - Page variables (defined at page level) and URL query parameters
- * - {state.container.key} - State variables from StateBlocks on the page
+ * - {state.variableName} - State variables and UI flags from page-level state (flat namespace)
  *
  * Uses DataLayoutContext to get available fields and sample values.
  * Uses PageVariablesContext to get defined page variables.
- * Uses Puck's appState to scan for StateBlocks.
+ * Uses StateContext to get page-level state config.
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { createUsePuck } from '@measured/puck';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -29,59 +28,8 @@ import {
 import { cn } from '@/lib/utils';
 import { useDataLayoutContext } from '../contexts/DataLayoutContext';
 import { usePageVariables } from '../contexts/PageVariablesContext';
+import { useStateContext } from '../contexts/StateContext';
 import { Database, Variable, ChevronRight, Box } from 'lucide-react';
-import type { StateVariable, UIStateFlag } from '../types/state';
-
-const usePuck = createUsePuck();
-
-interface StateBlockData {
-  name: string;
-  variables: StateVariable[];
-  uiState: UIStateFlag[];
-}
-
-/**
- * Recursively find all StateBlocks in page content
- */
-function findStateBlocks(content: unknown[]): StateBlockData[] {
-  const stateBlocks: StateBlockData[] = [];
-  const seenNames = new Set<string>();
-
-  function traverse(items: unknown[]) {
-    for (const item of items) {
-      if (typeof item !== 'object' || item === null) continue;
-
-      const typedItem = item as Record<string, unknown>;
-
-      if (typedItem.type === 'StateBlock' && typedItem.props) {
-        const props = typedItem.props as Record<string, unknown>;
-        const name = props.name as string | undefined;
-
-        if (name && !seenNames.has(name)) {
-          seenNames.add(name);
-          stateBlocks.push({
-            name,
-            variables: (props.variables as StateVariable[]) || [],
-            uiState: (props.uiState as UIStateFlag[]) || [],
-          });
-        }
-      }
-
-      // Traverse props for nested components (slots)
-      if (typedItem.props) {
-        const props = typedItem.props as Record<string, unknown>;
-        for (const val of Object.values(props)) {
-          if (Array.isArray(val)) {
-            traverse(val);
-          }
-        }
-      }
-    }
-  }
-
-  traverse(content);
-  return stateBlocks;
-}
 
 interface VariableOption {
   variable: string;
@@ -124,19 +72,9 @@ export function VariableAutocompleteInput({
   const pageVariables = usePageVariables();
   const searchParams = useSearchParams();
 
-  // Get page data for StateBlocks (may be null if not in Puck editor)
-  let appStateData: { content?: unknown[] } | null = null;
-  try {
-    appStateData = usePuck((s) => s.appState.data);
-  } catch {
-    // Not in Puck editor context - that's fine
-  }
-
-  // Find StateBlocks on the page
-  const stateBlocks = useMemo(() => {
-    if (!appStateData?.content) return [];
-    return findStateBlocks(appStateData.content as unknown[]);
-  }, [appStateData?.content]);
+  // Get page state config from StateContext (flat namespace)
+  const stateContext = useStateContext();
+  const pageStateConfig = stateContext?.getConfig();
 
   // Build list of available variables
   const options = useMemo<VariableOption[]>(() => {
@@ -190,30 +128,30 @@ export function VariableAutocompleteInput({
       }
     });
 
-    // Add state variables from StateBlocks
-    for (const stateBlock of stateBlocks) {
-      // Add variables
-      for (const variable of stateBlock.variables) {
+    // Add state variables from PageStateConfig (flat namespace)
+    if (pageStateConfig) {
+      // Add variables with {state.variableName} syntax
+      for (const variable of pageStateConfig.variables) {
         result.push({
-          variable: `state.${stateBlock.name}.${variable.name}`,
-          label: `${stateBlock.name}.${variable.name}`,
+          variable: `state.${variable.name}`,
+          label: variable.name,
           description: variable.description || `${variable.type} variable`,
           group: 'state',
         });
       }
-      // Add UI state flags
-      for (const flag of stateBlock.uiState) {
+      // Add UI flags with {state.flagName} syntax
+      for (const flag of pageStateConfig.uiFlags) {
         result.push({
-          variable: `state.${stateBlock.name}.${flag.name}`,
-          label: `${stateBlock.name}.${flag.name}`,
-          description: flag.description || 'UI state flag',
+          variable: `state.${flag.name}`,
+          label: flag.name,
+          description: flag.description || 'UI flag (boolean)',
           group: 'state',
         });
       }
     }
 
     return result;
-  }, [dataContext?.fields, dataContext?.sampleRow, pageVariables, searchParams, stateBlocks]);
+  }, [dataContext?.fields, dataContext?.sampleRow, pageVariables, searchParams, pageStateConfig]);
 
   // Filter options based on search text
   const filteredOptions = useMemo(() => {
@@ -348,7 +286,7 @@ export function VariableAutocompleteInput({
     setSelectedIndex(0);
   }, [filteredOptions.length]);
 
-  const hasNoContext = !dataContext?.fields?.length && pageVariables.length === 0 && searchParams.size === 0 && stateBlocks.length === 0;
+  const hasNoContext = !dataContext?.fields?.length && pageVariables.length === 0 && searchParams.size === 0 && !pageStateConfig?.variables?.length && !pageStateConfig?.uiFlags?.length;
   const hasNoMatches = filteredOptions.length === 0 && !hasNoContext;
 
   // Common input props
