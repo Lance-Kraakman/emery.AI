@@ -59,32 +59,47 @@ async function getSignedUrl(s3Key: string): Promise<string | null> {
  * React component for rendering S3 images
  */
 function S3ImageNodeView({ node, selected }: NodeViewProps) {
-  const { src, s3Key, alt, title } = node.attrs;
-  const [imageUrl, setImageUrl] = useState<string | null>(src || null);
+  const { s3Key, alt, title } = node.attrs;
+
+  // Log all node attrs on mount
+  console.log('[S3Image] NodeView mounted with attrs:', JSON.stringify(node.attrs));
+
+  // Don't use src from attrs - it's an expired signed URL from when document was saved
+  // Always fetch fresh signed URL from s3Key
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(false);
   const fetchedRef = useRef(false);
 
   useEffect(() => {
-    // If we have an s3Key but no valid URL, fetch it
-    if (s3Key && !imageUrl && !fetchedRef.current) {
+    console.log('[S3Image] useEffect triggered, s3Key:', s3Key, 'fetchedRef:', fetchedRef.current);
+
+    // Always fetch signed URL when we have s3Key and haven't fetched yet
+    if (s3Key && !fetchedRef.current) {
       fetchedRef.current = true;
       setIsLoading(true);
       setError(false);
 
+      console.log('[S3Image] Fetching signed URL for s3Key:', s3Key);
+
       getSignedUrl(s3Key)
         .then((url) => {
           if (url) {
+            console.log('[S3Image] Got signed URL, length:', url.length);
             setImageUrl(url);
           } else {
+            console.error('[S3Image] Failed to get signed URL for:', s3Key);
             setError(true);
           }
         })
         .finally(() => {
           setIsLoading(false);
         });
+    } else if (!s3Key) {
+      console.error('[S3Image] No s3Key provided in node attrs!');
+      setError(true);
     }
-  }, [s3Key, imageUrl]);
+  }, [s3Key]);
 
   // Handle image load error - might be expired URL, try to refresh
   const handleError = async () => {
@@ -150,25 +165,45 @@ export const S3Image = Node.create({
 
   group: 'block',
 
-  atom: true,
+  // Note: removed atom: true - it was causing attrs to not serialize properly
+  inline: false,
 
   draggable: true,
+
+  selectable: true,
 
   addAttributes() {
     return {
       src: {
         default: null,
-        // Don't persist src - it's just for display
-        // The s3Key is what we persist
+        // Keep in JSON output even if null
+        renderHTML: attributes => {
+          if (!attributes.src) return {};
+          return { src: attributes.src };
+        },
       },
       s3Key: {
         default: null,
+        // Critical: ensure s3Key is always included in JSON output
+        parseHTML: element => element.getAttribute('data-s3-key'),
+        renderHTML: attributes => {
+          if (!attributes.s3Key) return {};
+          return { 'data-s3-key': attributes.s3Key };
+        },
       },
       alt: {
         default: null,
+        renderHTML: attributes => {
+          if (!attributes.alt) return {};
+          return { alt: attributes.alt };
+        },
       },
       title: {
         default: null,
+        renderHTML: attributes => {
+          if (!attributes.title) return {};
+          return { title: attributes.title };
+        },
       },
     };
   },
