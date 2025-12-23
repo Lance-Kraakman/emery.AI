@@ -181,7 +181,7 @@ class AgentConfig(_message.Message):
     def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., skills: _Optional[_Iterable[_Union[SkillConfig, _Mapping]]] = ..., default_model: _Optional[str] = ...) -> None: ...
 
 class SkillConfig(_message.Message):
-    __slots__ = ("id", "name", "description", "inputs", "outputs", "instructions", "tools", "model", "content", "agent_type", "execution_type", "task_model_config")
+    __slots__ = ("id", "name", "description", "inputs", "outputs", "instructions", "tools", "model", "content", "agent_type", "execution_type", "task_model_config", "tool_execution_config", "write_config")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -194,6 +194,8 @@ class SkillConfig(_message.Message):
     AGENT_TYPE_FIELD_NUMBER: _ClassVar[int]
     EXECUTION_TYPE_FIELD_NUMBER: _ClassVar[int]
     TASK_MODEL_CONFIG_FIELD_NUMBER: _ClassVar[int]
+    TOOL_EXECUTION_CONFIG_FIELD_NUMBER: _ClassVar[int]
+    WRITE_CONFIG_FIELD_NUMBER: _ClassVar[int]
     id: int
     name: str
     description: str
@@ -206,7 +208,9 @@ class SkillConfig(_message.Message):
     agent_type: str
     execution_type: str
     task_model_config: TaskModelConfig
-    def __init__(self, id: _Optional[int] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., inputs: _Optional[_Iterable[_Union[SkillInput, _Mapping]]] = ..., outputs: _Optional[_Iterable[_Union[SkillOutput, _Mapping]]] = ..., instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ..., content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., agent_type: _Optional[str] = ..., execution_type: _Optional[str] = ..., task_model_config: _Optional[_Union[TaskModelConfig, _Mapping]] = ...) -> None: ...
+    tool_execution_config: ToolExecutionConfig
+    write_config: WriteConfig
+    def __init__(self, id: _Optional[int] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., inputs: _Optional[_Iterable[_Union[SkillInput, _Mapping]]] = ..., outputs: _Optional[_Iterable[_Union[SkillOutput, _Mapping]]] = ..., instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ..., content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., agent_type: _Optional[str] = ..., execution_type: _Optional[str] = ..., task_model_config: _Optional[_Union[TaskModelConfig, _Mapping]] = ..., tool_execution_config: _Optional[_Union[ToolExecutionConfig, _Mapping]] = ..., write_config: _Optional[_Union[WriteConfig, _Mapping]] = ...) -> None: ...
 
 class TaskModelConfig(_message.Message):
     __slots__ = ("model_id", "task_type", "parameters")
@@ -224,6 +228,52 @@ class TaskModelConfig(_message.Message):
     task_type: str
     parameters: _containers.ScalarMap[str, str]
     def __init__(self, model_id: _Optional[str] = ..., task_type: _Optional[str] = ..., parameters: _Optional[_Mapping[str, str]] = ...) -> None: ...
+
+class ToolExecutionConfig(_message.Message):
+    __slots__ = ("tool_id", "input_mappings")
+    TOOL_ID_FIELD_NUMBER: _ClassVar[int]
+    INPUT_MAPPINGS_FIELD_NUMBER: _ClassVar[int]
+    tool_id: str
+    input_mappings: _containers.RepeatedCompositeFieldContainer[ToolInputMapping]
+    def __init__(self, tool_id: _Optional[str] = ..., input_mappings: _Optional[_Iterable[_Union[ToolInputMapping, _Mapping]]] = ...) -> None: ...
+
+class ToolInputMapping(_message.Message):
+    __slots__ = ("tool_param", "skill_input_name", "static_value")
+    TOOL_PARAM_FIELD_NUMBER: _ClassVar[int]
+    SKILL_INPUT_NAME_FIELD_NUMBER: _ClassVar[int]
+    STATIC_VALUE_FIELD_NUMBER: _ClassVar[int]
+    tool_param: str
+    skill_input_name: str
+    static_value: str
+    def __init__(self, tool_param: _Optional[str] = ..., skill_input_name: _Optional[str] = ..., static_value: _Optional[str] = ...) -> None: ...
+
+class WriteConfig(_message.Message):
+    __slots__ = ("target_table_id", "row_action", "field_mappings", "update_match")
+    TARGET_TABLE_ID_FIELD_NUMBER: _ClassVar[int]
+    ROW_ACTION_FIELD_NUMBER: _ClassVar[int]
+    FIELD_MAPPINGS_FIELD_NUMBER: _ClassVar[int]
+    UPDATE_MATCH_FIELD_NUMBER: _ClassVar[int]
+    target_table_id: int
+    row_action: str
+    field_mappings: _containers.RepeatedCompositeFieldContainer[WriteFieldMapping]
+    update_match: UpdateMatchConfig
+    def __init__(self, target_table_id: _Optional[int] = ..., row_action: _Optional[str] = ..., field_mappings: _Optional[_Iterable[_Union[WriteFieldMapping, _Mapping]]] = ..., update_match: _Optional[_Union[UpdateMatchConfig, _Mapping]] = ...) -> None: ...
+
+class WriteFieldMapping(_message.Message):
+    __slots__ = ("skill_input_name", "target_field_id")
+    SKILL_INPUT_NAME_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_ID_FIELD_NUMBER: _ClassVar[int]
+    skill_input_name: str
+    target_field_id: int
+    def __init__(self, skill_input_name: _Optional[str] = ..., target_field_id: _Optional[int] = ...) -> None: ...
+
+class UpdateMatchConfig(_message.Message):
+    __slots__ = ("skill_input_name", "target_field_id")
+    SKILL_INPUT_NAME_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_ID_FIELD_NUMBER: _ClassVar[int]
+    skill_input_name: str
+    target_field_id: int
+    def __init__(self, skill_input_name: _Optional[str] = ..., target_field_id: _Optional[int] = ...) -> None: ...
 
 class SkillInput(_message.Message):
     __slots__ = ("name", "required", "type", "file_config")
@@ -373,18 +423,27 @@ class ServerConfig(_message.Message):
     config: _containers.ScalarMap[str, str]
     def __init__(self, name: _Optional[str] = ..., endpoint: _Optional[str] = ..., config: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
+class SkillInputValue(_message.Message):
+    __slots__ = ("name", "type", "string_value", "number_value", "bool_value", "json_value")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    STRING_VALUE_FIELD_NUMBER: _ClassVar[int]
+    NUMBER_VALUE_FIELD_NUMBER: _ClassVar[int]
+    BOOL_VALUE_FIELD_NUMBER: _ClassVar[int]
+    JSON_VALUE_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    type: str
+    string_value: str
+    number_value: float
+    bool_value: bool
+    json_value: str
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., string_value: _Optional[str] = ..., number_value: _Optional[float] = ..., bool_value: bool = ..., json_value: _Optional[str] = ...) -> None: ...
+
 class TriggerData(_message.Message):
-    __slots__ = ("payload",)
-    class PayloadEntry(_message.Message):
-        __slots__ = ("key", "value")
-        KEY_FIELD_NUMBER: _ClassVar[int]
-        VALUE_FIELD_NUMBER: _ClassVar[int]
-        key: str
-        value: str
-        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
-    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
-    payload: _containers.ScalarMap[str, str]
-    def __init__(self, payload: _Optional[_Mapping[str, str]] = ...) -> None: ...
+    __slots__ = ("skill_inputs",)
+    SKILL_INPUTS_FIELD_NUMBER: _ClassVar[int]
+    skill_inputs: _containers.RepeatedCompositeFieldContainer[SkillInputValue]
+    def __init__(self, skill_inputs: _Optional[_Iterable[_Union[SkillInputValue, _Mapping]]] = ...) -> None: ...
 
 class InstructionConfig(_message.Message):
     __slots__ = ("task", "images", "attachments", "tools", "servers", "model")

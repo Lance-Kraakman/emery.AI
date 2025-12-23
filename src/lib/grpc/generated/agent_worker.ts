@@ -336,10 +336,18 @@ export interface SkillConfig {
   content: MessagePart[];
   /** Optional: "tool_calling" (default) or "code_agent" */
   agentType: string;
-  /** 'agent' (default) or 'operation' */
+  /** 'agent', 'operation', 'tool', or 'write' */
   executionType: string;
   /** Config for operation execution (when execution_type='operation') */
-  taskModelConfig: TaskModelConfig | undefined;
+  taskModelConfig:
+    | TaskModelConfig
+    | undefined;
+  /** Config for tool execution (when execution_type='tool') */
+  toolExecutionConfig:
+    | ToolExecutionConfig
+    | undefined;
+  /** Config for write execution (when execution_type='write') */
+  writeConfig: WriteConfig | undefined;
 }
 
 /** Configuration for operation execution (direct model invocation without LLM orchestration) */
@@ -355,6 +363,58 @@ export interface TaskModelConfig {
 export interface TaskModelConfig_ParametersEntry {
   key: string;
   value: string;
+}
+
+/**
+ * Configuration for direct tool execution (when execution_type='tool')
+ * Calls a Pipedream tool directly without LLM orchestration
+ */
+export interface ToolExecutionConfig {
+  /** Pipedream tool ID (e.g., 'gmail-send-email', 'slack-send-message') */
+  toolId: string;
+  /** Map skill inputs to tool parameters */
+  inputMappings: ToolInputMapping[];
+}
+
+/** Maps skill input to tool parameter */
+export interface ToolInputMapping {
+  /** Tool parameter name */
+  toolParam: string;
+  /** Skill input to use (if set) */
+  skillInputName: string;
+  /** Static value (used if skill_input_name not set) */
+  staticValue: string;
+}
+
+/**
+ * Configuration for direct table write (when execution_type='write')
+ * Writes data directly to a table without LLM orchestration
+ */
+export interface WriteConfig {
+  /** Table to write to */
+  targetTableId: number;
+  /** 'create' or 'update' */
+  rowAction: string;
+  /** Map skill inputs to table fields */
+  fieldMappings: WriteFieldMapping[];
+  /** For update: which field to match */
+  updateMatch: UpdateMatchConfig | undefined;
+}
+
+/** Maps skill input to table field */
+export interface WriteFieldMapping {
+  /** Skill input name */
+  skillInputName: string;
+  /** Table field ID */
+  targetFieldId: number;
+}
+
+/** Configuration for matching rows during update */
+export interface UpdateMatchConfig {
+  /** Skill input with match value */
+  skillInputName: string;
+  /** Field to match against */
+  targetFieldId: number;
 }
 
 /** Skill input parameter */
@@ -512,14 +572,35 @@ export interface ServerConfig_ConfigEntry {
   value: string;
 }
 
-/** Trigger data payload */
-export interface TriggerData {
-  payload: { [key: string]: string };
+/**
+ * Runtime skill input value with type information
+ * AIDEV-NOTE: This enables type-safe skill input passing from TypeScript to Python
+ */
+export interface SkillInputValue {
+  /** Input name (matches SkillInput.name from skill definition) */
+  name: string;
+  /** Type from SkillInput definition (text, number, boolean, etc.) */
+  type: string;
+  /** For text, email, phone, date (ISO string), single-select */
+  stringValue?:
+    | string
+    | undefined;
+  /** For number types */
+  numberValue?:
+    | number
+    | undefined;
+  /** For boolean types */
+  boolValue?:
+    | boolean
+    | undefined;
+  /** For json, multi-select (array), file refs, complex objects */
+  jsonValue?: string | undefined;
 }
 
-export interface TriggerData_PayloadEntry {
-  key: string;
-  value: string;
+/** Trigger data with typed skill inputs */
+export interface TriggerData {
+  /** Typed skill input values */
+  skillInputs: SkillInputValue[];
 }
 
 /**
@@ -1995,6 +2076,8 @@ function createBaseSkillConfig(): SkillConfig {
     agentType: "",
     executionType: "",
     taskModelConfig: undefined,
+    toolExecutionConfig: undefined,
+    writeConfig: undefined,
   };
 }
 
@@ -2035,6 +2118,12 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     }
     if (message.taskModelConfig !== undefined) {
       TaskModelConfig.encode(message.taskModelConfig, writer.uint32(98).fork()).join();
+    }
+    if (message.toolExecutionConfig !== undefined) {
+      ToolExecutionConfig.encode(message.toolExecutionConfig, writer.uint32(106).fork()).join();
+    }
+    if (message.writeConfig !== undefined) {
+      WriteConfig.encode(message.writeConfig, writer.uint32(114).fork()).join();
     }
     return writer;
   },
@@ -2142,6 +2231,22 @@ export const SkillConfig: MessageFns<SkillConfig> = {
           message.taskModelConfig = TaskModelConfig.decode(reader, reader.uint32());
           continue;
         }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          message.toolExecutionConfig = ToolExecutionConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.writeConfig = WriteConfig.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2165,6 +2270,10 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       agentType: isSet(object.agentType) ? globalThis.String(object.agentType) : "",
       executionType: isSet(object.executionType) ? globalThis.String(object.executionType) : "",
       taskModelConfig: isSet(object.taskModelConfig) ? TaskModelConfig.fromJSON(object.taskModelConfig) : undefined,
+      toolExecutionConfig: isSet(object.toolExecutionConfig)
+        ? ToolExecutionConfig.fromJSON(object.toolExecutionConfig)
+        : undefined,
+      writeConfig: isSet(object.writeConfig) ? WriteConfig.fromJSON(object.writeConfig) : undefined,
     };
   },
 
@@ -2206,6 +2315,12 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     if (message.taskModelConfig !== undefined) {
       obj.taskModelConfig = TaskModelConfig.toJSON(message.taskModelConfig);
     }
+    if (message.toolExecutionConfig !== undefined) {
+      obj.toolExecutionConfig = ToolExecutionConfig.toJSON(message.toolExecutionConfig);
+    }
+    if (message.writeConfig !== undefined) {
+      obj.writeConfig = WriteConfig.toJSON(message.writeConfig);
+    }
     return obj;
   },
 
@@ -2227,6 +2342,12 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     message.executionType = object.executionType ?? "";
     message.taskModelConfig = (object.taskModelConfig !== undefined && object.taskModelConfig !== null)
       ? TaskModelConfig.fromPartial(object.taskModelConfig)
+      : undefined;
+    message.toolExecutionConfig = (object.toolExecutionConfig !== undefined && object.toolExecutionConfig !== null)
+      ? ToolExecutionConfig.fromPartial(object.toolExecutionConfig)
+      : undefined;
+    message.writeConfig = (object.writeConfig !== undefined && object.writeConfig !== null)
+      ? WriteConfig.fromPartial(object.writeConfig)
       : undefined;
     return message;
   },
@@ -2420,6 +2541,440 @@ export const TaskModelConfig_ParametersEntry: MessageFns<TaskModelConfig_Paramet
     const message = createBaseTaskModelConfig_ParametersEntry();
     message.key = object.key ?? "";
     message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseToolExecutionConfig(): ToolExecutionConfig {
+  return { toolId: "", inputMappings: [] };
+}
+
+export const ToolExecutionConfig: MessageFns<ToolExecutionConfig> = {
+  encode(message: ToolExecutionConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.toolId !== "") {
+      writer.uint32(10).string(message.toolId);
+    }
+    for (const v of message.inputMappings) {
+      ToolInputMapping.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ToolExecutionConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseToolExecutionConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.toolId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.inputMappings.push(ToolInputMapping.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ToolExecutionConfig {
+    return {
+      toolId: isSet(object.toolId) ? globalThis.String(object.toolId) : "",
+      inputMappings: globalThis.Array.isArray(object?.inputMappings)
+        ? object.inputMappings.map((e: any) => ToolInputMapping.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ToolExecutionConfig): unknown {
+    const obj: any = {};
+    if (message.toolId !== "") {
+      obj.toolId = message.toolId;
+    }
+    if (message.inputMappings?.length) {
+      obj.inputMappings = message.inputMappings.map((e) => ToolInputMapping.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ToolExecutionConfig>, I>>(base?: I): ToolExecutionConfig {
+    return ToolExecutionConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ToolExecutionConfig>, I>>(object: I): ToolExecutionConfig {
+    const message = createBaseToolExecutionConfig();
+    message.toolId = object.toolId ?? "";
+    message.inputMappings = object.inputMappings?.map((e) => ToolInputMapping.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseToolInputMapping(): ToolInputMapping {
+  return { toolParam: "", skillInputName: "", staticValue: "" };
+}
+
+export const ToolInputMapping: MessageFns<ToolInputMapping> = {
+  encode(message: ToolInputMapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.toolParam !== "") {
+      writer.uint32(10).string(message.toolParam);
+    }
+    if (message.skillInputName !== "") {
+      writer.uint32(18).string(message.skillInputName);
+    }
+    if (message.staticValue !== "") {
+      writer.uint32(26).string(message.staticValue);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ToolInputMapping {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseToolInputMapping();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.toolParam = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.skillInputName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.staticValue = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ToolInputMapping {
+    return {
+      toolParam: isSet(object.toolParam) ? globalThis.String(object.toolParam) : "",
+      skillInputName: isSet(object.skillInputName) ? globalThis.String(object.skillInputName) : "",
+      staticValue: isSet(object.staticValue) ? globalThis.String(object.staticValue) : "",
+    };
+  },
+
+  toJSON(message: ToolInputMapping): unknown {
+    const obj: any = {};
+    if (message.toolParam !== "") {
+      obj.toolParam = message.toolParam;
+    }
+    if (message.skillInputName !== "") {
+      obj.skillInputName = message.skillInputName;
+    }
+    if (message.staticValue !== "") {
+      obj.staticValue = message.staticValue;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ToolInputMapping>, I>>(base?: I): ToolInputMapping {
+    return ToolInputMapping.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ToolInputMapping>, I>>(object: I): ToolInputMapping {
+    const message = createBaseToolInputMapping();
+    message.toolParam = object.toolParam ?? "";
+    message.skillInputName = object.skillInputName ?? "";
+    message.staticValue = object.staticValue ?? "";
+    return message;
+  },
+};
+
+function createBaseWriteConfig(): WriteConfig {
+  return { targetTableId: 0, rowAction: "", fieldMappings: [], updateMatch: undefined };
+}
+
+export const WriteConfig: MessageFns<WriteConfig> = {
+  encode(message: WriteConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.targetTableId !== 0) {
+      writer.uint32(8).int32(message.targetTableId);
+    }
+    if (message.rowAction !== "") {
+      writer.uint32(18).string(message.rowAction);
+    }
+    for (const v of message.fieldMappings) {
+      WriteFieldMapping.encode(v!, writer.uint32(26).fork()).join();
+    }
+    if (message.updateMatch !== undefined) {
+      UpdateMatchConfig.encode(message.updateMatch, writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WriteConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseWriteConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.targetTableId = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.rowAction = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.fieldMappings.push(WriteFieldMapping.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.updateMatch = UpdateMatchConfig.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): WriteConfig {
+    return {
+      targetTableId: isSet(object.targetTableId) ? globalThis.Number(object.targetTableId) : 0,
+      rowAction: isSet(object.rowAction) ? globalThis.String(object.rowAction) : "",
+      fieldMappings: globalThis.Array.isArray(object?.fieldMappings)
+        ? object.fieldMappings.map((e: any) => WriteFieldMapping.fromJSON(e))
+        : [],
+      updateMatch: isSet(object.updateMatch) ? UpdateMatchConfig.fromJSON(object.updateMatch) : undefined,
+    };
+  },
+
+  toJSON(message: WriteConfig): unknown {
+    const obj: any = {};
+    if (message.targetTableId !== 0) {
+      obj.targetTableId = Math.round(message.targetTableId);
+    }
+    if (message.rowAction !== "") {
+      obj.rowAction = message.rowAction;
+    }
+    if (message.fieldMappings?.length) {
+      obj.fieldMappings = message.fieldMappings.map((e) => WriteFieldMapping.toJSON(e));
+    }
+    if (message.updateMatch !== undefined) {
+      obj.updateMatch = UpdateMatchConfig.toJSON(message.updateMatch);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<WriteConfig>, I>>(base?: I): WriteConfig {
+    return WriteConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<WriteConfig>, I>>(object: I): WriteConfig {
+    const message = createBaseWriteConfig();
+    message.targetTableId = object.targetTableId ?? 0;
+    message.rowAction = object.rowAction ?? "";
+    message.fieldMappings = object.fieldMappings?.map((e) => WriteFieldMapping.fromPartial(e)) || [];
+    message.updateMatch = (object.updateMatch !== undefined && object.updateMatch !== null)
+      ? UpdateMatchConfig.fromPartial(object.updateMatch)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseWriteFieldMapping(): WriteFieldMapping {
+  return { skillInputName: "", targetFieldId: 0 };
+}
+
+export const WriteFieldMapping: MessageFns<WriteFieldMapping> = {
+  encode(message: WriteFieldMapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.skillInputName !== "") {
+      writer.uint32(10).string(message.skillInputName);
+    }
+    if (message.targetFieldId !== 0) {
+      writer.uint32(16).int32(message.targetFieldId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WriteFieldMapping {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseWriteFieldMapping();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.skillInputName = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.targetFieldId = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): WriteFieldMapping {
+    return {
+      skillInputName: isSet(object.skillInputName) ? globalThis.String(object.skillInputName) : "",
+      targetFieldId: isSet(object.targetFieldId) ? globalThis.Number(object.targetFieldId) : 0,
+    };
+  },
+
+  toJSON(message: WriteFieldMapping): unknown {
+    const obj: any = {};
+    if (message.skillInputName !== "") {
+      obj.skillInputName = message.skillInputName;
+    }
+    if (message.targetFieldId !== 0) {
+      obj.targetFieldId = Math.round(message.targetFieldId);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<WriteFieldMapping>, I>>(base?: I): WriteFieldMapping {
+    return WriteFieldMapping.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<WriteFieldMapping>, I>>(object: I): WriteFieldMapping {
+    const message = createBaseWriteFieldMapping();
+    message.skillInputName = object.skillInputName ?? "";
+    message.targetFieldId = object.targetFieldId ?? 0;
+    return message;
+  },
+};
+
+function createBaseUpdateMatchConfig(): UpdateMatchConfig {
+  return { skillInputName: "", targetFieldId: 0 };
+}
+
+export const UpdateMatchConfig: MessageFns<UpdateMatchConfig> = {
+  encode(message: UpdateMatchConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.skillInputName !== "") {
+      writer.uint32(10).string(message.skillInputName);
+    }
+    if (message.targetFieldId !== 0) {
+      writer.uint32(16).int32(message.targetFieldId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateMatchConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateMatchConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.skillInputName = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.targetFieldId = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateMatchConfig {
+    return {
+      skillInputName: isSet(object.skillInputName) ? globalThis.String(object.skillInputName) : "",
+      targetFieldId: isSet(object.targetFieldId) ? globalThis.Number(object.targetFieldId) : 0,
+    };
+  },
+
+  toJSON(message: UpdateMatchConfig): unknown {
+    const obj: any = {};
+    if (message.skillInputName !== "") {
+      obj.skillInputName = message.skillInputName;
+    }
+    if (message.targetFieldId !== 0) {
+      obj.targetFieldId = Math.round(message.targetFieldId);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateMatchConfig>, I>>(base?: I): UpdateMatchConfig {
+    return UpdateMatchConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateMatchConfig>, I>>(object: I): UpdateMatchConfig {
+    const message = createBaseUpdateMatchConfig();
+    message.skillInputName = object.skillInputName ?? "";
+    message.targetFieldId = object.targetFieldId ?? 0;
     return message;
   },
 };
@@ -3866,15 +4421,162 @@ export const ServerConfig_ConfigEntry: MessageFns<ServerConfig_ConfigEntry> = {
   },
 };
 
+function createBaseSkillInputValue(): SkillInputValue {
+  return {
+    name: "",
+    type: "",
+    stringValue: undefined,
+    numberValue: undefined,
+    boolValue: undefined,
+    jsonValue: undefined,
+  };
+}
+
+export const SkillInputValue: MessageFns<SkillInputValue> = {
+  encode(message: SkillInputValue, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.type !== "") {
+      writer.uint32(18).string(message.type);
+    }
+    if (message.stringValue !== undefined) {
+      writer.uint32(26).string(message.stringValue);
+    }
+    if (message.numberValue !== undefined) {
+      writer.uint32(33).double(message.numberValue);
+    }
+    if (message.boolValue !== undefined) {
+      writer.uint32(40).bool(message.boolValue);
+    }
+    if (message.jsonValue !== undefined) {
+      writer.uint32(50).string(message.jsonValue);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SkillInputValue {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSkillInputValue();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.stringValue = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.numberValue = reader.double();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.boolValue = reader.bool();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.jsonValue = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SkillInputValue {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+      stringValue: isSet(object.stringValue) ? globalThis.String(object.stringValue) : undefined,
+      numberValue: isSet(object.numberValue) ? globalThis.Number(object.numberValue) : undefined,
+      boolValue: isSet(object.boolValue) ? globalThis.Boolean(object.boolValue) : undefined,
+      jsonValue: isSet(object.jsonValue) ? globalThis.String(object.jsonValue) : undefined,
+    };
+  },
+
+  toJSON(message: SkillInputValue): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.type !== "") {
+      obj.type = message.type;
+    }
+    if (message.stringValue !== undefined) {
+      obj.stringValue = message.stringValue;
+    }
+    if (message.numberValue !== undefined) {
+      obj.numberValue = message.numberValue;
+    }
+    if (message.boolValue !== undefined) {
+      obj.boolValue = message.boolValue;
+    }
+    if (message.jsonValue !== undefined) {
+      obj.jsonValue = message.jsonValue;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SkillInputValue>, I>>(base?: I): SkillInputValue {
+    return SkillInputValue.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SkillInputValue>, I>>(object: I): SkillInputValue {
+    const message = createBaseSkillInputValue();
+    message.name = object.name ?? "";
+    message.type = object.type ?? "";
+    message.stringValue = object.stringValue ?? undefined;
+    message.numberValue = object.numberValue ?? undefined;
+    message.boolValue = object.boolValue ?? undefined;
+    message.jsonValue = object.jsonValue ?? undefined;
+    return message;
+  },
+};
+
 function createBaseTriggerData(): TriggerData {
-  return { payload: {} };
+  return { skillInputs: [] };
 }
 
 export const TriggerData: MessageFns<TriggerData> = {
   encode(message: TriggerData, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    Object.entries(message.payload).forEach(([key, value]) => {
-      TriggerData_PayloadEntry.encode({ key: key as any, value }, writer.uint32(10).fork()).join();
-    });
+    for (const v of message.skillInputs) {
+      SkillInputValue.encode(v!, writer.uint32(10).fork()).join();
+    }
     return writer;
   },
 
@@ -3890,10 +4592,7 @@ export const TriggerData: MessageFns<TriggerData> = {
             break;
           }
 
-          const entry1 = TriggerData_PayloadEntry.decode(reader, reader.uint32());
-          if (entry1.value !== undefined) {
-            message.payload[entry1.key] = entry1.value;
-          }
+          message.skillInputs.push(SkillInputValue.decode(reader, reader.uint32()));
           continue;
         }
       }
@@ -3907,25 +4606,16 @@ export const TriggerData: MessageFns<TriggerData> = {
 
   fromJSON(object: any): TriggerData {
     return {
-      payload: isObject(object.payload)
-        ? Object.entries(object.payload).reduce<{ [key: string]: string }>((acc, [key, value]) => {
-          acc[key] = String(value);
-          return acc;
-        }, {})
-        : {},
+      skillInputs: globalThis.Array.isArray(object?.skillInputs)
+        ? object.skillInputs.map((e: any) => SkillInputValue.fromJSON(e))
+        : [],
     };
   },
 
   toJSON(message: TriggerData): unknown {
     const obj: any = {};
-    if (message.payload) {
-      const entries = Object.entries(message.payload);
-      if (entries.length > 0) {
-        obj.payload = {};
-        entries.forEach(([k, v]) => {
-          obj.payload[k] = v;
-        });
-      }
+    if (message.skillInputs?.length) {
+      obj.skillInputs = message.skillInputs.map((e) => SkillInputValue.toJSON(e));
     }
     return obj;
   },
@@ -3935,88 +4625,7 @@ export const TriggerData: MessageFns<TriggerData> = {
   },
   fromPartial<I extends Exact<DeepPartial<TriggerData>, I>>(object: I): TriggerData {
     const message = createBaseTriggerData();
-    message.payload = Object.entries(object.payload ?? {}).reduce<{ [key: string]: string }>((acc, [key, value]) => {
-      if (value !== undefined) {
-        acc[key] = globalThis.String(value);
-      }
-      return acc;
-    }, {});
-    return message;
-  },
-};
-
-function createBaseTriggerData_PayloadEntry(): TriggerData_PayloadEntry {
-  return { key: "", value: "" };
-}
-
-export const TriggerData_PayloadEntry: MessageFns<TriggerData_PayloadEntry> = {
-  encode(message: TriggerData_PayloadEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.key !== "") {
-      writer.uint32(10).string(message.key);
-    }
-    if (message.value !== "") {
-      writer.uint32(18).string(message.value);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): TriggerData_PayloadEntry {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseTriggerData_PayloadEntry();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.key = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.value = reader.string();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): TriggerData_PayloadEntry {
-    return {
-      key: isSet(object.key) ? globalThis.String(object.key) : "",
-      value: isSet(object.value) ? globalThis.String(object.value) : "",
-    };
-  },
-
-  toJSON(message: TriggerData_PayloadEntry): unknown {
-    const obj: any = {};
-    if (message.key !== "") {
-      obj.key = message.key;
-    }
-    if (message.value !== "") {
-      obj.value = message.value;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<TriggerData_PayloadEntry>, I>>(base?: I): TriggerData_PayloadEntry {
-    return TriggerData_PayloadEntry.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<TriggerData_PayloadEntry>, I>>(object: I): TriggerData_PayloadEntry {
-    const message = createBaseTriggerData_PayloadEntry();
-    message.key = object.key ?? "";
-    message.value = object.value ?? "";
+    message.skillInputs = object.skillInputs?.map((e) => SkillInputValue.fromPartial(e)) || [];
     return message;
   },
 };
