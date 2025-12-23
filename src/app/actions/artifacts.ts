@@ -83,6 +83,11 @@ export async function fetchTiptapDocumentContent(
       error: result.error
     });
 
+    // Log the full content to see what's being loaded
+    if (result.success && result.data) {
+      console.log('[FETCH-TIPTAP-ACTION] Loaded content:', JSON.stringify(result.data.content, null, 2));
+    }
+
     return result;
   } catch (error) {
     console.error("Error fetching TipTap content:", error);
@@ -207,6 +212,9 @@ export async function updateTiptapDocumentContent(
   fieldId: number,
   content: object
 ): Promise<Result<DocumentFieldValue>> {
+  // Log the full content to see what's being saved
+  console.log('[UPDATE-TIPTAP-ACTION] Content to save:', JSON.stringify(content, null, 2));
+
   try {
     await requirePermission("table:manage");
 

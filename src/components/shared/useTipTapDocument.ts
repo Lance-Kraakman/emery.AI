@@ -195,12 +195,18 @@ export function useTipTapDocument({
   // Update editor content when loaded (only once per document)
   useEffect(() => {
     if (editor && content && contentLoaded && !hasInitializedEditor.current) {
+      console.log('[useTipTapDocument] Setting editor content:', JSON.stringify(content));
+
       if (typeof content === 'string') {
         editor.commands.setContent(content, { emitUpdate: false });
       } else if (content && typeof content === 'object' && content.type === 'doc') {
         editor.commands.setContent(content, { emitUpdate: false });
       }
       hasInitializedEditor.current = true;
+
+      // Log what nodes are in the editor after setting content
+      const json = editor.getJSON();
+      console.log('[useTipTapDocument] Editor JSON after setContent:', JSON.stringify(json));
     }
   }, [editor, content, contentLoaded]);
 
@@ -220,12 +226,16 @@ export function useTipTapDocument({
         try {
           onSaveStart?.();
           const currentContent = editor.getJSON();
+          console.log('[useTipTapDocument] Auto-save getJSON() result:', JSON.stringify(currentContent));
+          // CRITICAL: Use JSON.parse(JSON.stringify()) to create a plain object
+          // Next.js server actions can lose nested properties on TipTap objects
+          const plainContent = JSON.parse(JSON.stringify(currentContent));
           const result = await updateTiptapDocumentContent(
             documentId,
             organizationId,
             tableId,
             fieldId,
-            currentContent
+            plainContent
           );
 
           if (result.success) {
@@ -265,13 +275,16 @@ export function useTipTapDocument({
     try {
       onSaveStart?.();
       const tiptapContent = editor.getJSON();
+      // CRITICAL: Use JSON.parse(JSON.stringify()) to create a plain object
+      // Next.js server actions can lose nested properties on TipTap objects
+      const plainContent = JSON.parse(JSON.stringify(tiptapContent));
 
       const result = await updateTiptapDocumentContent(
         documentId,
         organizationId,
         tableId,
         fieldId,
-        tiptapContent
+        plainContent
       );
 
       if (result.success) {
