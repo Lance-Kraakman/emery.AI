@@ -17,8 +17,10 @@ import { withSystemContext } from "@/lib/db/system-context";
 import { TaskId } from "@/ddd/domain/tasks/value-objects/task-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import type { TaskEvent } from "@/ddd/domain/scheduling";
-import { DatabaseEventTriggerConfig, TriggerConfigFromJSON } from "@/ddd/domain/scheduling/value-objects/trigger-config";
-import { getAgentRepository } from "@/ddd/application/di/container";
+import { CalendarTriggerConfig, DatabaseEventTriggerConfig, TriggerConfigFromJSON } from "@/ddd/domain/scheduling/value-objects/trigger-config";
+import { getAgentRepository, getSkillRepository } from "@/ddd/application/di/container";
+import { InstructionTemplateService } from "@/ddd/domain/tasks/services/instruction-template-service";
+import type { TriggerContext } from "@/ddd/domain/tasks/entities/task";
 import postgres from "postgres";
 import * as cron from "node-cron";
 
@@ -142,31 +144,117 @@ class EventDrivenScheduler {
 
   private async processScheduledTasks(): Promise<void> {
     // Handle CALENDAR triggers
-    const dueTasks = await this.schedulerService.getTasksDueForExecution();
+    // AIDEV-NOTE: getAutomationsDueForExecution returns automation references, not tasks.
+    // We need to look up skills by skillId to get execution instructions.
+    const dueAutomations = await this.schedulerService.getAutomationsDueForExecution();
 
-    if (dueTasks.length > 0) {
-      log('⏰', `Processing ${dueTasks.length} scheduled tasks`);
+    if (dueAutomations.length > 0) {
+      log('⏰', `Processing ${dueAutomations.length} scheduled automations`);
 
-      for (const task of dueTasks) {
-        await withSystemContext(task.organizationId, async () => {
+      for (const automation of dueAutomations) {
+        const agentRepository = getAgentRepository();
+        const agent = await agentRepository.findById(automation.agentId);
+        if (!agent) {
+          log('⚠️', `Agent ${automation.agentId.value} not found, skipping automation`);
+          continue;
+        }
+
+        await withSystemContext(agent.organizationId, async () => {
           try {
+            // 1. Generate trigger context for CALENDAR triggers
+            const now = new Date();
+            let triggerContext: TriggerContext | undefined;
+
+            if (automation.trigger instanceof CalendarTriggerConfig) {
+              triggerContext = {
+                type: 'CALENDAR',
+                scheduleName: automation.automationName,
+                calendarData: {
+                  scheduledTime: now.toISOString(),
+                  timezone: automation.trigger.timezone || 'UTC'
+                }
+              };
+            }
+
+            // 2. Apply inputMappings to resolve skill inputs from trigger data
+            const skillInputs: Record<string, any> = {};
+            if (automation.inputMappings && automation.inputMappings.length > 0 && triggerContext) {
+              // Build variable map from trigger context
+              const triggerVariables = this.buildTriggerVariables(triggerContext);
+
+              for (const mapping of automation.inputMappings) {
+                // Resolve the trigger field value
+                const value = triggerVariables[mapping.triggerField];
+                if (value !== undefined) {
+                  skillInputs[mapping.skillInputName] = value;
+                  log('📥', `Mapped ${mapping.triggerField} → ${mapping.skillInputName}: ${JSON.stringify(value).substring(0, 50)}`);
+                }
+              }
+            }
+
+            // 3. Create task with skill reference and resolved inputs
             const createData = {
-              agentId: task.agentId.value,
-              organizationId: task.organizationId.value,
-              name: task.name,
-              instructions: task.instructions,
-              status: task.status.value,
-              createdBy: task.createdBy?.value,
-              createdAt: task.createdAt || new Date()
+              agentId: automation.agentId.value,
+              organizationId: agent.organizationId.value,
+              name: automation.automationName,
+              instructions: {
+                task: `Execute skill ID ${automation.skillId}`,
+                metadata: {
+                  skillId: automation.skillId,
+                  skillInputs: Object.keys(skillInputs).length > 0 ? skillInputs : undefined
+                }
+              },
+              skillId: automation.skillId,
+              triggerContext,
+              status: 'pending',
+              createdAt: new Date()
             };
-            await this.taskRepository.create(createData);
+            const task = await this.taskRepository.create(createData);
             await this.agentTaskService.executeTask({ taskId: task.id.value });
+            log('✅', `Executed automation ${automation.automationName} for agent ${automation.agentId.value}${Object.keys(skillInputs).length > 0 ? ` with ${Object.keys(skillInputs).length} inputs` : ''}`);
           } catch (error) {
-            logError('❌', `Failed to process scheduled task ${task.id.value}:`, error);
+            logError('❌', `Failed to process scheduled automation ${automation.automationName}:`, error);
           }
         });
       }
     }
+  }
+
+  /**
+   * Build variable map from trigger context for input mapping resolution
+   */
+  private buildTriggerVariables(context: TriggerContext): Record<string, any> {
+    const vars: Record<string, any> = {
+      '$trigger.type': context.type,
+      '$trigger.scheduleName': context.scheduleName || ''
+    };
+
+    // Calendar trigger variables
+    if (context.type === 'CALENDAR' && context.calendarData) {
+      vars['$trigger.scheduledTime'] = context.calendarData.scheduledTime;
+      vars['$trigger.timezone'] = context.calendarData.timezone;
+    }
+
+    // Database event trigger variables
+    if (context.type === 'DATABASE_EVENT' && context.tableChange) {
+      const tc = context.tableChange;
+      vars['$table.id'] = tc.tableId;
+      vars['$table.name'] = tc.tableName;
+      vars['$event.operation'] = tc.operation;
+      vars['$event.rowId'] = tc.rowId;
+      vars['$event.timestamp'] = tc.timestamp instanceof Date
+        ? tc.timestamp.toISOString()
+        : tc.timestamp;
+
+      // Row data fields
+      if (tc.rowData) {
+        Object.keys(tc.rowData).forEach(fieldKey => {
+          vars[`$row.${fieldKey}`] = tc.rowData[fieldKey];
+        });
+      }
+    }
+
+    return vars;
   }
 
   private async processQueuedTasks(): Promise<void> {

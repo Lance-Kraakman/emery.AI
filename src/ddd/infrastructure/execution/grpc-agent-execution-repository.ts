@@ -27,11 +27,14 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
    * Execute agent via gRPC worker
    */
   async executeAgent(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
-    const { agentId, instructions, tools, executionId, organizationId, timeoutSeconds, onProgress, agentModel, organizationModel, skill } = request;
+    const { agentId, instructions, tools, executionId, organizationId, timeoutSeconds, onProgress, agentModel, organizationModel, skill, skillInputs } = request;
 
     console.log(`[GRPC-EXECUTION-REPO] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
     console.log(`[GRPC-EXECUTION-REPO] Model selection: agentModel=${agentModel || 'none'}, orgModel=${organizationModel || 'none'}`);
     console.log(`[GRPC-EXECUTION-REPO] Skill execution: ${skill ? `${skill.name} (${skill.executionType})` : 'none'}`);
+    if (skillInputs && Object.keys(skillInputs).length > 0) {
+      console.log(`[GRPC-EXECUTION-REPO] Skill inputs: ${JSON.stringify(skillInputs)}`);
+    }
 
     try {
       // 1. Load agent configuration (delegated to agent repository)
@@ -69,7 +72,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
           }
         }),
         agent: enrichedAgent,
-        triggerData: {}, // Empty for proto compatibility
+        triggerData: skillInputs || {}, // Pass skill inputs through trigger data for worker
         organizationId: organizationIdStr,
         ownerId: agent.ownerId.value,
         timeoutSeconds: timeoutSeconds || 300,
