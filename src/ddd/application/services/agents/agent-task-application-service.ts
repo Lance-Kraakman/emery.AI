@@ -204,7 +204,13 @@ export class AgentTaskApplicationService {
         task.triggerContext
       );
 
-      // 7. Execute via execution repository
+      // 7. Extract skill inputs from task metadata (from automation inputMappings)
+      const skillInputs = task.instructions.metadata?.skillInputs as Record<string, any> | undefined;
+      if (skillInputs && Object.keys(skillInputs).length > 0) {
+        logger.summary(`Passing ${Object.keys(skillInputs).length} skill inputs: ${Object.keys(skillInputs).join(', ')}`);
+      }
+
+      // 8. Execute via execution repository
       const executionRequest: AgentExecutionRequest = {
         agentId: task.agentId.value,
         instructions: expandedInstructions,
@@ -216,6 +222,7 @@ export class AgentTaskApplicationService {
         organizationModel,
         timeoutSeconds,
         skill: enrichedSkill || undefined, // Pass enriched skill if present
+        skillInputs, // Pass resolved skill inputs (from automation inputMappings)
         onProgress: (logMessage: string) => {
           task.appendLog(logMessage);
         }

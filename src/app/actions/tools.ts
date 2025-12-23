@@ -10,6 +10,8 @@
  * Uses proper domain services and application services following DDD patterns.
  */
 
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { requireAuth } from "./permissions";
 import type { Result } from "./types";
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
@@ -245,6 +247,107 @@ export async function getToolCategories(): Promise<Result<string[]>> {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get categories'
+    };
+  }
+}
+
+// =============================================================================
+// Pipedream Tool Metadata Types and Functions
+// =============================================================================
+
+export interface PipedreamToolInput {
+  type: string;
+  description: string;
+  required: boolean;
+}
+
+export interface PipedreamToolMetadata {
+  id: string;
+  app: string;
+  name: string;
+  description: string;
+  type: 'action' | 'mcp';
+  inputs: Record<string, PipedreamToolInput>;
+}
+
+export interface PipedreamToolsGrouped {
+  [appName: string]: PipedreamToolMetadata[];
+}
+
+// Cache for pipedream metadata
+let pipedreamMetadataCache: Record<string, PipedreamToolMetadata> | null = null;
+
+/**
+ * Get all Pipedream tools grouped by app
+ */
+export async function getPipedreamTools(): Promise<Result<PipedreamToolsGrouped>> {
+  try {
+    await requireAuth();
+
+    // Load metadata from file (cached)
+    if (!pipedreamMetadataCache) {
+      const metadataPath = join(process.cwd(), 'emery-agents/src/emery_agents/tools/pipedream_metadata.json');
+      const rawData = readFileSync(metadataPath, 'utf-8');
+      pipedreamMetadataCache = JSON.parse(rawData);
+    }
+
+    // Group tools by app, excluding MCP generic tools
+    const grouped: PipedreamToolsGrouped = {};
+
+    for (const [_id, tool] of Object.entries(pipedreamMetadataCache!)) {
+      // Skip MCP generic tools (they're not useful for direct tool execution)
+      if (tool.type === 'mcp') continue;
+
+      const appName = tool.app;
+      if (!grouped[appName]) {
+        grouped[appName] = [];
+      }
+      grouped[appName].push(tool);
+    }
+
+    // Sort tools within each app by name
+    for (const appName of Object.keys(grouped)) {
+      grouped[appName].sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    return {
+      success: true,
+      data: grouped
+    };
+  } catch (error: unknown) {
+    console.error('[ToolActions] Error getting Pipedream tools:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get Pipedream tools'
+    };
+  }
+}
+
+/**
+ * Get a specific Pipedream tool by ID
+ */
+export async function getPipedreamToolById(toolId: string): Promise<Result<PipedreamToolMetadata | null>> {
+  try {
+    await requireAuth();
+
+    // Load metadata from file (cached)
+    if (!pipedreamMetadataCache) {
+      const metadataPath = join(process.cwd(), 'emery-agents/src/emery_agents/tools/pipedream_metadata.json');
+      const rawData = readFileSync(metadataPath, 'utf-8');
+      pipedreamMetadataCache = JSON.parse(rawData);
+    }
+
+    const tool = pipedreamMetadataCache![toolId] || null;
+
+    return {
+      success: true,
+      data: tool
+    };
+  } catch (error: unknown) {
+    console.error('[ToolActions] Error getting Pipedream tool:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get Pipedream tool'
     };
   }
 }

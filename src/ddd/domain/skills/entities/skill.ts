@@ -7,8 +7,10 @@ import { MessagePart } from '@/lib/grpc/generated/agent_worker';
  * Skill Execution Types
  * - 'agent' (default): LLM orchestration with tools via smolagents
  * - 'operation': Direct model invocation for single-task models (image gen, speech, etc.)
+ * - 'tool': Direct Pipedream tool call (no LLM, maps inputs to tool params)
+ * - 'write': Direct table write (no LLM, maps inputs to table fields)
  */
-export type SkillExecutionType = 'agent' | 'operation';
+export type SkillExecutionType = 'agent' | 'operation' | 'tool' | 'write';
 
 /**
  * Task Model Configuration
@@ -19,6 +21,59 @@ export interface TaskModelConfig {
   modelId: string;           // e.g., 'black-forest-labs/FLUX.1-schnell'
   taskType: string;          // e.g., 'text-to-image', 'speech-to-text' - validated at execution
   parameters?: Record<string, any>;  // Model-specific params (steps, guidance_scale, etc.)
+}
+
+// =============================================================================
+// Tool Execution Configuration (for executionType: 'tool')
+// =============================================================================
+
+/**
+ * Tool Input Mapping - maps skill input to tool parameter
+ */
+export interface ToolInputMapping {
+  toolParam: string;                 // Tool parameter name
+  skillInputName?: string;           // Skill input to use (if set)
+  staticValue?: any;                 // Static value (used if skillInputName not set)
+}
+
+/**
+ * Tool Execution Configuration
+ * Used when executionType is 'tool' for direct Pipedream tool calls
+ */
+export interface ToolExecutionConfig {
+  toolId: string;                    // e.g., 'gmail-send-email', 'slack-send-message'
+  inputMappings: ToolInputMapping[]; // Map skill inputs → tool params
+}
+
+// =============================================================================
+// Write Execution Configuration (for executionType: 'write')
+// =============================================================================
+
+/**
+ * Write Field Mapping - maps skill input to table field
+ */
+export interface WriteFieldMapping {
+  skillInputName: string;            // Skill input name
+  targetFieldId: number;             // Table field ID
+}
+
+/**
+ * Update Match Configuration - for update row action
+ */
+export interface UpdateMatchConfig {
+  skillInputName: string;            // Skill input with match value
+  targetFieldId: number;             // Field to match against
+}
+
+/**
+ * Write Execution Configuration
+ * Used when executionType is 'write' for direct table writes
+ */
+export interface WriteConfig {
+  targetTableId: number;
+  rowAction: 'create' | 'update';
+  fieldMappings: WriteFieldMapping[];
+  updateMatch?: UpdateMatchConfig;   // For update: which field to match
 }
 
 /**
@@ -166,8 +221,10 @@ export interface Skill {
   readonly content?: MessagePart[]; // Skill-level attachments (images, files, text)
   readonly model?: string | null; // Optional: Override model for this skill
   readonly agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
-  readonly executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
-  readonly taskModelConfig?: TaskModelConfig; // Config for operation execution
+  readonly executionType?: SkillExecutionType; // 'agent' (default), 'operation', 'tool', or 'write'
+  readonly taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
+  readonly toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
+  readonly writeConfig?: WriteConfig; // Config for 'write' execution
   readonly isSystem: boolean; // System skills cannot be deleted by users
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -188,8 +245,10 @@ export interface CreateSkillProps {
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
-  executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
-  taskModelConfig?: TaskModelConfig; // Config for operation execution
+  executionType?: SkillExecutionType; // 'agent' (default), 'operation', 'tool', or 'write'
+  taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
+  toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
+  writeConfig?: WriteConfig; // Config for 'write' execution
 }
 
 /**
@@ -205,8 +264,10 @@ export interface UpdateSkillProps {
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
-  executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
-  taskModelConfig?: TaskModelConfig | null; // Config for operation execution (null to clear)
+  executionType?: SkillExecutionType; // 'agent' (default), 'operation', 'tool', or 'write'
+  taskModelConfig?: TaskModelConfig | null; // Config for 'operation' execution (null to clear)
+  toolExecutionConfig?: ToolExecutionConfig | null; // Config for 'tool' execution (null to clear)
+  writeConfig?: WriteConfig | null; // Config for 'write' execution (null to clear)
 }
 
 /**
@@ -234,7 +295,7 @@ export class SkillEntity {
 
     const executionType = props.executionType || 'agent';
 
-    // Instructions are required for agent execution, optional for operation mode
+    // Instructions are required for agent execution, optional for other modes
     if (executionType === 'agent' && !props.instructions?.trim()) {
       throw new Error('Instructions are required and cannot be empty');
     }
@@ -242,6 +303,16 @@ export class SkillEntity {
     // Task model config is required for operation execution
     if (executionType === 'operation' && !props.taskModelConfig) {
       throw new Error('Task model configuration is required for operation execution');
+    }
+
+    // Tool execution config is required for tool execution
+    if (executionType === 'tool' && !props.toolExecutionConfig) {
+      throw new Error('Tool execution configuration is required for tool execution');
+    }
+
+    // Write config is required for write execution
+    if (executionType === 'write' && !props.writeConfig) {
+      throw new Error('Write configuration is required for write execution');
     }
 
     // Validate input names
@@ -272,6 +343,8 @@ export class SkillEntity {
       content: props.content,
       executionType: executionType,
       taskModelConfig: props.taskModelConfig,
+      toolExecutionConfig: props.toolExecutionConfig,
+      writeConfig: props.writeConfig,
       isSystem: false // User-created skills are never system skills
     };
   }
@@ -337,6 +410,12 @@ export class SkillEntity {
       taskModelConfig: updates.taskModelConfig !== undefined
         ? (updates.taskModelConfig === null ? undefined : updates.taskModelConfig)
         : skill.taskModelConfig,
+      toolExecutionConfig: updates.toolExecutionConfig !== undefined
+        ? (updates.toolExecutionConfig === null ? undefined : updates.toolExecutionConfig)
+        : skill.toolExecutionConfig,
+      writeConfig: updates.writeConfig !== undefined
+        ? (updates.writeConfig === null ? undefined : updates.writeConfig)
+        : skill.writeConfig,
       updatedAt: new Date()
     };
   }

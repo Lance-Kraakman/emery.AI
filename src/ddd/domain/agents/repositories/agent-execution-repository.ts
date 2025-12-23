@@ -8,6 +8,8 @@
  * infrastructure provides implementations (gRPC, local, HTTP, etc.)
  */
 
+import type { SkillExecutionType } from '@/ddd/domain/skills/entities/skill';
+
 /**
  * Enriched skill for execution (from SkillEnrichmentService)
  * Matches EnrichedSkill interface but defined here to avoid circular dependency
@@ -23,11 +25,23 @@ export interface ExecutionSkill {
   content: Array<any>; // MessagePart[] - flexible to avoid import
   model: string | null;
   agentType: string | null;
-  executionType: 'agent' | 'operation';
+  executionType: SkillExecutionType;
   taskModelConfig?: {
     modelId: string;
     taskType: string;
     parameters?: Record<string, any>;
+  };
+  // Optional config for 'tool' execution type
+  toolExecutionConfig?: {
+    toolId: string;
+    inputMappings: Array<{ toolParam: string; skillInputName?: string; staticValue?: any }>;
+  };
+  // Optional config for 'write' execution type
+  writeConfig?: {
+    targetTableId: number;
+    rowAction: 'create' | 'update';
+    fieldMappings: Array<{ skillInputName: string; targetFieldId: number }>;
+    updateMatch?: { skillInputName: string; targetFieldId: number };
   };
 }
 
@@ -43,6 +57,7 @@ export interface AgentExecutionRequest {
   organizationModel?: string; // Optional - organization's default model
   timeoutSeconds?: number;
   skill?: ExecutionSkill; // Optional - skill to execute (enables skill_name mode)
+  skillInputs?: Record<string, any>; // Optional - resolved skill inputs (from automation inputMappings)
   onProgress?: (logMessage: string) => void; // Callback for real-time log messages
 }
 
