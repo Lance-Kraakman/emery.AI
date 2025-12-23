@@ -48,7 +48,6 @@ export function useResolveValue(source: ValueSource | null | undefined): unknown
     if (!source) return undefined;
 
     const context: ValueResolutionContext = {
-      params: pageContext.params as Record<string, string | string[] | undefined>,
       resolveRowData: rowContext?.resolveRowDataVariable,
       getStateValue: stateContext?.getValue,
       // FormData is only available during action execution, not in hooks
@@ -56,7 +55,7 @@ export function useResolveValue(source: ValueSource | null | undefined): unknown
     };
 
     return resolveValueSource(source, context);
-  }, [source, pageContext.params, rowContext?.resolveRowDataVariable, stateContext?.getValue]);
+  }, [source, rowContext?.resolveRowDataVariable, stateContext?.getValue]);
 }
 
 /**
@@ -78,17 +77,15 @@ export function useResolveValue(source: ValueSource | null | undefined): unknown
  * ```
  */
 export function useValueResolutionContext(): ValueResolutionContext {
-  const pageContext = usePageContext();
   const rowContext = useRowData();
   const stateContext = useStateContext();
 
   return useMemo<ValueResolutionContext>(() => ({
-    params: pageContext.params as Record<string, string | string[] | undefined>,
     resolveRowData: rowContext?.resolveRowDataVariable,
     getStateValue: stateContext?.getValue,
     // FormData not available in hook context
     formData: undefined,
-  }), [pageContext.params, rowContext?.resolveRowDataVariable, stateContext?.getValue]);
+  }), [rowContext?.resolveRowDataVariable, stateContext?.getValue]);
 }
 
 /**

@@ -30,22 +30,21 @@ import {
 } from '@/components/ui/popover';
 import { Check, ChevronsUpDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { usePageVariablesContext } from '../contexts/PageVariablesContext';
-import type { PageVariable } from '@/components/puck/types';
+import { useStateContext } from '../contexts/StateContext';
 import type { DocumentIdSourceConfig } from '../blocks/EditorBlock/types';
 
-/** Regex to extract variable name from {params.varName} format */
-const PARAMS_VAR_REGEX = /\{params\.(\w+)\}/;
+/** Regex to extract variable name from {state.varName} format */
+const STATE_VAR_REGEX = /\{state\.(\w+)\}/;
 
-/** Parse variable name from {params.varName} format */
-function parseParamVariable(value: string): string {
-  const match = value.match(PARAMS_VAR_REGEX);
+/** Parse variable name from {state.varName} format */
+function parseStateVariable(value: string): string {
+  const match = value.match(STATE_VAR_REGEX);
   return match?.[1] || '';
 }
 
-/** Format variable name to {params.varName} format */
-function formatParamVariable(varName: string): string {
-  return `{params.${varName}}`;
+/** Format variable name to {state.varName} format */
+function formatStateVariable(varName: string): string {
+  return `{state.${varName}}`;
 }
 
 /** Default configuration */
@@ -68,7 +67,9 @@ export function DocumentIdSourceField({
   const [varComboOpen, setVarComboOpen] = useState(false);
   const [newVarInput, setNewVarInput] = useState('');
 
-  const { pageVariables, addPageVariable } = usePageVariablesContext();
+  const stateContext = useStateContext();
+  const pageStateConfig = stateContext?.getConfig();
+  const stateVariables = pageStateConfig?.variables || [];
 
   // Initialize with defaults
   const config: DocumentIdSourceConfig = value ?? DEFAULT_CONFIG;
@@ -79,25 +80,11 @@ export function DocumentIdSourceField({
   };
 
   // Handle variable selection
-  const handleSelectVariable = async (varName: string) => {
-    // Check if this is a new variable
-    const exists = pageVariables.some(v => v.name === varName);
-
-    if (!exists && addPageVariable) {
-      const newVar: PageVariable = {
-        name: varName,
-        type: 'string',
-        required: true,
-        description: 'Document ID for EditorBlock',
-      };
-
-      await addPageVariable(newVar);
-    }
-
+  const handleSelectVariable = (varName: string) => {
     onChange({
       ...config,
       valueType: 'variable',
-      value: formatParamVariable(varName),
+      value: formatStateVariable(varName),
     });
     setVarComboOpen(false);
     setNewVarInput('');
@@ -108,18 +95,9 @@ export function DocumentIdSourceField({
     onChange({ ...config, value: val });
   };
 
-  // Handle creating new variable from input
-  const handleCreateNewVariable = () => {
-    if (newVarInput.trim()) {
-      // Sanitize: only allow alphanumeric and underscore
-      const sanitized = newVarInput.trim().replace(/[^a-zA-Z0-9_]/g, '_');
-      handleSelectVariable(sanitized);
-    }
-  };
-
   // Extract variable name from value
   const currentVarName = config.valueType === 'variable'
-    ? parseParamVariable(config.value)
+    ? parseStateVariable(config.value)
     : '';
 
   return (
@@ -167,70 +145,47 @@ export function DocumentIdSourceField({
                 className="w-full justify-between h-8 text-xs font-normal"
                 disabled={readOnly}
               >
-                {currentVarName ? formatParamVariable(currentVarName) : 'Select or create variable...'}
+                {currentVarName ? formatStateVariable(currentVarName) : 'Select variable...'}
                 <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[250px] p-0" align="start">
               <Command>
                 <CommandInput
-                  placeholder="Search or type new..."
+                  placeholder="Search variables..."
                   className="h-8 text-xs"
                   value={newVarInput}
                   onValueChange={setNewVarInput}
                 />
                 <CommandList>
                   <CommandEmpty>
-                    {newVarInput.trim() ? (
-                      <button
-                        className="flex items-center gap-2 px-2 py-1.5 text-xs w-full hover:bg-accent rounded cursor-pointer"
-                        onClick={handleCreateNewVariable}
-                      >
-                        <Plus className="h-3 w-3" />
-                        Create "{newVarInput.trim()}"
-                      </button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        Type to create new variable
-                      </span>
-                    )}
+                    <span className="text-xs text-muted-foreground">
+                      No variables found. Add them in Page State panel.
+                    </span>
                   </CommandEmpty>
-                  <CommandGroup heading="Page Variables">
-                    {pageVariables.map(pv => (
+                  <CommandGroup heading="State Variables">
+                    {stateVariables.map(variable => (
                       <CommandItem
-                        key={pv.name}
-                        value={pv.name}
-                        onSelect={() => handleSelectVariable(pv.name)}
+                        key={variable.name}
+                        value={variable.name}
+                        onSelect={() => handleSelectVariable(variable.name)}
                         className="text-xs"
                       >
                         <Check
                           className={cn(
                             'mr-2 h-3 w-3',
-                            currentVarName === pv.name ? 'opacity-100' : 'opacity-0'
+                            currentVarName === variable.name ? 'opacity-100' : 'opacity-0'
                           )}
                         />
-                        {formatParamVariable(pv.name)}
-                        {pv.description && (
+                        {formatStateVariable(variable.name)}
+                        {variable.description && (
                           <span className="ml-2 text-muted-foreground truncate">
-                            {pv.description}
+                            {variable.description}
                           </span>
                         )}
                       </CommandItem>
                     ))}
                   </CommandGroup>
-                  {/* Option to create new if input doesn't match existing */}
-                  {newVarInput.trim() && !pageVariables.some(v => v.name === newVarInput.trim()) && (
-                    <CommandGroup heading="Create New">
-                      <CommandItem
-                        value={`create-${newVarInput}`}
-                        onSelect={handleCreateNewVariable}
-                        className="text-xs"
-                      >
-                        <Plus className="mr-2 h-3 w-3" />
-                        Create "{newVarInput.trim()}"
-                      </CommandItem>
-                    </CommandGroup>
-                  )}
                 </CommandList>
               </Command>
             </PopoverContent>
@@ -250,7 +205,7 @@ export function DocumentIdSourceField({
       {/* Help text */}
       <p className="text-[10px] text-muted-foreground">
         {config.valueType === 'variable'
-          ? 'Uses a URL parameter (e.g., ?documentId=abc123)'
+          ? 'Uses a state variable (auto-populated from URL params)'
           : 'Enter a fixed document ID to always display'}
       </p>
     </div>

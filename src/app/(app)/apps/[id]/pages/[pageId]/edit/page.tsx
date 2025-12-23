@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, type ReactNode } from "react";
+import React, { useEffect, useState, useMemo, type ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Puck, Data, resolveAllData } from "@measured/puck";
 import "@measured/puck/puck.css";
@@ -20,11 +20,15 @@ import { PageContextProvider } from "@/components/puck/contexts/PageContext";
 import { PuckEditorThemeProvider, usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 import { PuckSession } from "@/lib/puck/session-storage";
 import { EditorDataLayoutProvider } from "@/components/puck/contexts/EditorDataLayoutProvider";
-import { PageVariablesProvider } from "@/components/puck/contexts/PageVariablesContext";
-import { updatePageVariables, updatePageState } from "@/app/actions/puck-pages";
-import type { PageVariable } from "@/components/puck/types";
+import { updatePageState, updatePageDialogs } from "@/app/actions/puck-pages";
 import type { PageStateConfig } from "@/components/puck/types/state";
+import type { PageDialogsConfig } from "@/ddd/domain/puck/value-objects/page-dialogs";
 import { PuckEditorLayout } from "@/components/puck/PuckEditorLayout";
+import { StateProvider } from "@/components/puck/contexts/StateContext";
+import { createPuckUIOverrides } from "@/components/puck/overrides";
+
+// Type for tracking what we're editing - page or a specific dialog
+type EditingTarget = 'page' | { dialogId: string; dialogName: string };
 
 export default function PageEditPage() {
   const params = useParams();
@@ -37,10 +41,14 @@ export default function PageEditPage() {
   const [app, setApp] = useState<AppDTO | null>(null);
   const [organization, setOrganization] = useState<OrganizationDTO | null>(null);
   const [pages, setPages] = useState<PageDTO[]>([]);
-  const [initialData, setInitialData] = useState<Data>({ content: [], root: {}, zones: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loadedFromSessionStorage, setLoadedFromSessionStorage] = useState(false);
+  const [editingTarget, setEditingTarget] = useState<EditingTarget>('page');
+
+  // Separate state for page and dialog data to prevent cross-contamination
+  const [pageData, setPageData] = useState<Data>({ content: [], root: { props: {} }, zones: {} });
+  const [dialogData, setDialogData] = useState<Data>({ content: [], root: { props: {} }, zones: {} });
 
   // Convert URLSearchParams to Record for QueryParamContext
   const queryParamsObject: Record<string, string | string[]> = {};
@@ -86,7 +94,7 @@ export default function PageEditPage() {
         if (savedData) {
           try {
             const resolvedData = await resolveAllData(savedData, config, queryParamsObject);
-            setInitialData(resolvedData);
+            setPageData(resolvedData);
             setLoadedFromSessionStorage(true);
             setLoading(false);
             return;
@@ -99,7 +107,7 @@ export default function PageEditPage() {
         // Load from database
         const rawData = pageResult.data.templateData || { content: [], root: {}, zones: {} };
         const resolvedData = await resolveAllData(rawData, config, queryParamsObject);
-        setInitialData(resolvedData);
+        setPageData(resolvedData);
       } catch (err) {
         console.error('Error loading page:', err);
         setError(err instanceof Error ? err.message : 'Failed to load page');
@@ -112,6 +120,59 @@ export default function PageEditPage() {
       loadPage();
     }
   }, [pageId, appId, searchParams]);
+
+  // Compute current data based on editing target (page or dialog)
+  const currentData = useMemo(() => {
+    if (editingTarget === 'page') {
+      return pageData;
+    }
+    return dialogData;
+  }, [editingTarget, pageData, dialogData]);
+
+  // Handler to start editing a dialog's content
+  const handleEditDialogContent = (dialogId: string) => {
+    const dialog = page?.pageDialogs?.dialogs?.find(d => d.id === dialogId);
+    if (dialog) {
+      // Load dialog content into dialogData state before switching
+      // Use proper Puck data structure with root.props
+      const dialogContent = dialog?.content || {
+        content: [],
+        root: { props: {} },
+        zones: {}
+      };
+      setDialogData(dialogContent);
+      setEditingTarget({ dialogId, dialogName: dialog.name });
+    }
+  };
+
+  // Handler to return to page editing
+  const handleBackToPage = () => {
+    // Simply switch back - pageData is preserved separately
+    setEditingTarget('page');
+  };
+
+  // Callback when page data is saved - update local state so switching preserves content
+  const handlePageDataSaved = (data: Data) => {
+    setPageData(data);
+  };
+
+  // Callback when dialog data is saved - update local state
+  const handleDialogDataSaved = (dialogId: string, data: Data) => {
+    setDialogData(data);
+    // Also update page.pageDialogs so the dialog list stays in sync
+    setPage(prev => {
+      if (!prev || !prev.pageDialogs) return prev;
+      return {
+        ...prev,
+        pageDialogs: {
+          ...prev.pageDialogs,
+          dialogs: prev.pageDialogs.dialogs.map(d =>
+            d.id === dialogId ? { ...d, content: data } : d
+          )
+        }
+      };
+    });
+  };
 
   const handlePublish = async () => {
     if (!page) return;
@@ -182,23 +243,6 @@ export default function PageEditPage() {
     }
   };
 
-  const handleSavePageVariables = async (variables: PageVariable[]) => {
-    try {
-      const result = await updatePageVariables(pageId, variables);
-
-      if (!result.success) {
-        toast.error(result.error || "Failed to update page variables");
-        return;
-      }
-
-      // Update local state to reflect changes
-      setPage(prev => prev ? { ...prev, pageVariables: variables } : null);
-    } catch (error) {
-      console.error('Error updating page variables:', error);
-      toast.error("Failed to update page variables");
-    }
-  };
-
   const handleSavePageState = async (pageState: PageStateConfig | undefined) => {
     try {
       const result = await updatePageState(pageId, pageState);
@@ -213,6 +257,23 @@ export default function PageEditPage() {
     } catch (error) {
       console.error('Error updating page state:', error);
       toast.error("Failed to update page state");
+    }
+  };
+
+  const handleSavePageDialogs = async (pageDialogs: PageDialogsConfig | undefined) => {
+    try {
+      const result = await updatePageDialogs(pageId, pageDialogs);
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update page dialogs");
+        return;
+      }
+
+      // Update local state to reflect changes
+      setPage(prev => prev ? { ...prev, pageDialogs } : null);
+    } catch (error) {
+      console.error('Error updating page dialogs:', error);
+      toast.error("Failed to update page dialogs");
     }
   };
 
@@ -246,41 +307,41 @@ export default function PageEditPage() {
         pages={pages}
         params={queryParamsObject}
       >
-        <Puck
-          config={config}
-          data={initialData}
-          iframe={{
-            enabled: true,
-            waitForStyles: true,
-          }}
-        >
-          <PageVariablesProvider
-            pageVariables={page.pageVariables || []}
-            pageId={pageId}
-            onAddPageVariable={async (variable) => {
-              const updatedVariables = [...(page.pageVariables || []), variable];
-              await handleSavePageVariables(updatedVariables);
+        <StateProvider pageState={page.pageState}>
+          <Puck
+            key={editingTarget === 'page' ? 'page' : editingTarget.dialogId}
+            config={config}
+            data={currentData}
+            iframe={{
+              enabled: true,
+              waitForStyles: true,
             }}
+            overrides={createPuckUIOverrides()}
           >
             <EditorDataLayoutProvider>
               <PuckEditorLayout
-                pageId={pageId}
-                appId={appId}
-                page={page}
-                app={app}
-                organization={organization}
-                loadedFromSessionStorage={loadedFromSessionStorage}
-                setLoadedFromSessionStorage={setLoadedFromSessionStorage}
-                onPublish={handlePublish}
-                onSavePageSettings={handleSavePageSettings}
-                onSaveAccessSettings={handleSaveAccessSettings}
-                onSavePageVariables={handleSavePageVariables}
-                onSavePageState={handleSavePageState}
-                themeMode="page"
-              />
+              pageId={pageId}
+              appId={appId}
+              page={page}
+              app={app}
+              organization={organization}
+              loadedFromSessionStorage={loadedFromSessionStorage}
+              setLoadedFromSessionStorage={setLoadedFromSessionStorage}
+              onPublish={handlePublish}
+              onSavePageSettings={handleSavePageSettings}
+              onSaveAccessSettings={handleSaveAccessSettings}
+              onSavePageState={handleSavePageState}
+              onSavePageDialogs={handleSavePageDialogs}
+              themeMode="page"
+              editingTarget={editingTarget}
+              onEditDialogContent={handleEditDialogContent}
+              onBackToPage={handleBackToPage}
+              onPageDataSaved={handlePageDataSaved}
+              onDialogDataSaved={handleDialogDataSaved}
+            />
             </EditorDataLayoutProvider>
-          </PageVariablesProvider>
-        </Puck>
+          </Puck>
+        </StateProvider>
       </EditorPageContextWrapper>
     </PuckEditorThemeProvider>
   );

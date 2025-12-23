@@ -13,6 +13,8 @@ import type { PageDTO } from "@/app/mappers/puck-page-mapper"
 import type { AppDTO } from "@/app/mappers/puck-app-mapper"
 import { ThemeConfig } from "@/ddd/domain/puck/value-objects/theme-config"
 import { PageContextProvider } from "@/components/puck/contexts/PageContext"
+import { StateProvider } from "@/components/puck/contexts/StateContext"
+import { PageDialogsRenderer } from "@/components/puck/components/PageDialogsRenderer"
 import { Loading } from "@/components/ui/loading"
 
 interface PublicPageRendererProps {
@@ -106,12 +108,16 @@ export function PublicPageRenderer({ page, app, orgSlug, appSlug, pages }: Publi
         theme: effectiveTheme,
       }}
     >
-      <div className="min-h-screen w-full">
-        <Render
-          config={config}
-          data={resolvedData}
-        />
-      </div>
+      <StateProvider pageState={page.pageState}>
+        <PageDialogsRenderer pageDialogs={page.pageDialogs}>
+          <div className="min-h-screen w-full">
+            <Render
+              config={config}
+              data={resolvedData}
+            />
+          </div>
+        </PageDialogsRenderer>
+      </StateProvider>
     </PageContextProvider>
   )
 }

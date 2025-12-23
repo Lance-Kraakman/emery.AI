@@ -321,7 +321,7 @@ export async function executeAction(
       }
 
       case 'setState': {
-        // Set a value in page state (flat namespace)
+        // Set a value in page state (flat namespace) with optional URL sync
         if (!context.stateContext) {
           console.warn('[setState] No state context available');
           break;
@@ -333,7 +333,9 @@ export async function executeAction(
           resolvedValue = resolveDynamicValue(action.value, context);
         }
 
-        context.stateContext.setValue(action.key, resolvedValue);
+        // Default to updating URL (updateUrl defaults to true)
+        const updateUrl = action.updateUrl !== false;
+        context.stateContext.setValueWithUrlSync(action.key, resolvedValue, updateUrl);
         break;
       }
 

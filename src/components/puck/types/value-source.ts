@@ -2,10 +2,13 @@
  * ValueSource Type System
  *
  * AIDEV-NOTE: Provides type-safe value references for Puck component configuration.
- * Instead of string patterns like "{params.id}", we use typed objects
- * that can be resolved at runtime.
+ * Instead of string patterns, we use typed objects that can be resolved at runtime.
  *
- * State now uses a flat namespace - {state.key} instead of {state.container.key}
+ * Supported sources:
+ * - static: Hardcoded values
+ * - rowData: From parent DataBlock row
+ * - state: From page state (flat namespace, auto-populated from URL params)
+ * - formData: From form submission context
  */
 
 /**
@@ -14,15 +17,6 @@
 export interface StaticValueSource {
   type: 'static';
   value: unknown;
-}
-
-/**
- * URL params value - from query string (?id=123)
- */
-export interface ParamsValueSource {
-  type: 'params';
-  /** Query parameter key */
-  key: string;
 }
 
 /**
@@ -57,7 +51,6 @@ export interface FormDataValueSource {
  */
 export type ValueSource =
   | StaticValueSource
-  | ParamsValueSource
   | RowDataValueSource
   | StateValueSource
   | FormDataValueSource;
@@ -69,7 +62,7 @@ export function isValueSource(value: unknown): value is ValueSource {
   if (typeof value !== 'object' || value === null) return false;
   const obj = value as Record<string, unknown>;
   if (typeof obj.type !== 'string') return false;
-  return ['static', 'params', 'rowData', 'state', 'formData'].includes(obj.type);
+  return ['static', 'rowData', 'state', 'formData'].includes(obj.type);
 }
 
 /**
@@ -77,13 +70,6 @@ export function isValueSource(value: unknown): value is ValueSource {
  */
 export function staticValue(value: unknown): StaticValueSource {
   return { type: 'static', value };
-}
-
-/**
- * Helper to create a params value source
- */
-export function paramsValue(key: string): ParamsValueSource {
-  return { type: 'params', key };
 }
 
 /**
@@ -111,8 +97,6 @@ export function formDataValue(field: string): FormDataValueSource {
  * Resolution context for resolving ValueSources
  */
 export interface ValueResolutionContext {
-  /** URL query parameters */
-  params?: Record<string, string | string[] | undefined>;
   /** Parent row data resolver */
   resolveRowData?: (field: string) => unknown;
   /** State value getter (flat namespace) */
@@ -131,13 +115,6 @@ export function resolveValueSource(
   switch (source.type) {
     case 'static':
       return source.value;
-
-    case 'params':
-      if (!context.params) {
-        console.warn(`[ValueSource] No params context available for key: ${source.key}`);
-        return undefined;
-      }
-      return context.params[source.key];
 
     case 'rowData':
       if (!context.resolveRowData) {
@@ -170,19 +147,12 @@ export function resolveValueSource(
  * Convert a string pattern to ValueSource
  *
  * Handles patterns like:
- * - "{params.id}" -> ParamsValueSource
  * - "{rowData.field}" -> RowDataValueSource
  * - "{state.key}" -> StateValueSource (flat namespace)
  * - "{formData.field}" -> FormDataValueSource
  * - Plain strings -> StaticValueSource
  */
 export function stringPatternToValueSource(pattern: string): ValueSource {
-  // Match {params.key}
-  const paramsMatch = pattern.match(/^\{params\.(\w+)\}$/);
-  if (paramsMatch) {
-    return paramsValue(paramsMatch[1]);
-  }
-
   // Match {rowData.field}
   const rowDataMatch = pattern.match(/^\{rowData\.(\w+)\}$/);
   if (rowDataMatch) {

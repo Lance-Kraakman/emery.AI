@@ -4,7 +4,7 @@
  * DialogBlock - A modal dialog controlled by page state
  *
  * AIDEV-NOTE: Uses flat namespace for state - no containers.
- * The dialog's open/close state is controlled by a UI flag.
+ * The dialog's open/close state is controlled by a boolean state variable.
  *
  * Editor UX: DataBlock-style template editing
  * - Content hidden by default in editor
@@ -38,7 +38,7 @@ export type DialogSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
  * DialogBlock Props
  */
 export interface DialogBlockProps {
-  /** UI flag key that controls open/close (flat namespace) */
+  /** Boolean state variable key that controls open/close (flat namespace) */
   stateKey: string;
   /** Dialog title (supports variable interpolation) */
   title?: string;
@@ -81,17 +81,17 @@ function getDialogSizeClass(size: DialogSize): string {
 /**
  * DialogBlock - A modal dialog controlled by page state
  *
- * The dialog's open/close state is controlled by a UI flag.
- * Use toggleUIFlag or setUIFlag actions to open/close the dialog.
+ * The dialog's open/close state is controlled by a boolean state variable.
+ * Use toggleValue or setValue actions to open/close the dialog.
  *
  * In editor mode: Shows as collapsible template (like DataBlock)
  * At runtime: Renders as actual modal dialog
  *
  * @example
  * ```tsx
- * // Define showModal UI flag in Page State config
+ * // Define showModal boolean variable in Page State config
  * // Then use it in DialogBlock:
- * <Button onClick={{ type: "toggleUIFlag", key: "showModal" }}>
+ * <Button onClick={{ type: "toggleValue", key: "showModal" }}>
  *   Open Dialog
  * </Button>
  * <DialogBlock
@@ -153,13 +153,13 @@ function DialogBlockComponent({
   // Get the current open state
   const isOpen = useMemo(() => {
     if (!stateContext || !stateKey) return false;
-    return stateContext.getUIFlag(stateKey);
+    return Boolean(stateContext.getValue(stateKey));
   }, [stateContext, stateKey]);
 
   // Handle open change (when dialog is closed via X button, outside click, or escape)
   const handleOpenChange = (open: boolean) => {
     if (!stateContext || !stateKey) return;
-    stateContext.setUIFlag(stateKey, open);
+    stateContext.setValue(stateKey, open);
   };
 
   // Interpolate title and description
@@ -358,9 +358,8 @@ export const DialogBlock: ComponentConfig<DialogBlockProps> = {
   label: 'Dialog',
   fields: {
     stateKey: createStateKeyField({
-      label: 'UI Flag',
-      placeholder: 'Select a UI flag...',
-      keyType: 'uiFlag',
+      label: 'State Variable',
+      placeholder: 'Select a boolean variable...',
     }),
     title: createVariableTextField({ label: 'Title' }),
     description: createVariableTextField({ label: 'Description', multiline: true }),
