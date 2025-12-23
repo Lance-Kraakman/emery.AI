@@ -9,7 +9,8 @@
  *
  * Features:
  * - Initialize from PageStateConfig (from page DB)
- * - Get/set values and UI flags (flat namespace - no containers)
+ * - Auto-populate from URL params with matching names
+ * - Get/set values (flat namespace - no containers)
  * - Subscribe to changes for reactive updates
  * - Optional persistence (session/localStorage)
  */
@@ -55,31 +56,17 @@ function pageStateReducer(state: PageRuntimeState, action: PageStateAction): Pag
       };
     }
 
-    case 'TOGGLE_UI_FLAG': {
+    case 'TOGGLE_VALUE': {
       const { key } = action;
       if (!state.config) {
         return state;
       }
-      const currentValue = state.uiFlags[key] ?? false;
+      const currentValue = state.values[key];
       return {
         ...state,
-        uiFlags: {
-          ...state.uiFlags,
+        values: {
+          ...state.values,
           [key]: !currentValue,
-        },
-      };
-    }
-
-    case 'SET_UI_FLAG': {
-      const { key, value } = action;
-      if (!state.config) {
-        return state;
-      }
-      return {
-        ...state,
-        uiFlags: {
-          ...state.uiFlags,
-          [key]: value,
         },
       };
     }
@@ -105,17 +92,14 @@ export interface StateContextValue {
   /** Get a value by key */
   getValue: (key: string) => unknown;
 
-  /** Get a UI flag by key */
-  getUIFlag: (key: string) => boolean;
-
   /** Set a value by key */
   setValue: (key: string, value: unknown) => void;
 
-  /** Toggle a UI flag */
-  toggleUIFlag: (key: string) => void;
+  /** Set a value and optionally sync to URL param */
+  setValueWithUrlSync: (key: string, value: unknown, updateUrl?: boolean) => void;
 
-  /** Set a UI flag to a specific value */
-  setUIFlag: (key: string, value: boolean) => void;
+  /** Toggle a boolean value */
+  toggleValue: (key: string) => void;
 
   /** Reset all state to initial values */
   resetState: () => void;
@@ -126,17 +110,11 @@ export interface StateContextValue {
   /** Get all current values (for debugging or text interpolation) */
   getAllValues: () => Record<string, unknown>;
 
-  /** Get all UI flags */
-  getAllUIFlags: () => Record<string, boolean>;
-
   /** Get the page state config (for autocomplete) */
   getConfig: () => PageStateConfig | undefined;
 
   /** Check if a state key exists */
   hasKey: (key: string) => boolean;
-
-  /** Check if a UI flag exists */
-  hasUIFlag: (key: string) => boolean;
 }
 
 const StateContext = createContext<StateContextValue | undefined>(undefined);
@@ -160,7 +138,7 @@ function getStorageKey(pageId: string): string {
 function loadPersistedState(
   config: PageStateConfig,
   pageId: string
-): { values: Record<string, unknown>; uiFlags: Record<string, boolean> } | null {
+): { values: Record<string, unknown> } | null {
   if (config.persistence === 'none' || typeof window === 'undefined') {
     return null;
   }
@@ -186,8 +164,7 @@ function loadPersistedState(
 function savePersistedState(
   config: PageStateConfig,
   pageId: string,
-  values: Record<string, unknown>,
-  uiFlags: Record<string, boolean>
+  values: Record<string, unknown>
 ): void {
   if (config.persistence === 'none' || typeof window === 'undefined') {
     return;
@@ -197,9 +174,30 @@ function savePersistedState(
   const key = getStorageKey(pageId);
 
   try {
-    storage.setItem(key, JSON.stringify({ values, uiFlags }));
+    storage.setItem(key, JSON.stringify({ values }));
   } catch (e) {
     console.warn('[StateContext] Failed to save persisted state:', e);
+  }
+}
+
+/**
+ * Parse URL param value based on variable type
+ */
+function parseUrlParamValue(value: string, type: string): unknown {
+  switch (type) {
+    case 'number':
+      return Number(value);
+    case 'boolean':
+      return value === 'true';
+    case 'object':
+    case 'array':
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    default:
+      return value;
   }
 }
 
@@ -214,44 +212,61 @@ function savePersistedState(
  * ```
  */
 export function StateProvider({ children, pageState }: StateProviderProps) {
-  const [state, dispatch] = useReducer(pageStateReducer, initialPageRuntimeState);
+  // Initialize state synchronously using useReducer initializer to avoid first-render timing issues
+  const [state, dispatch] = useReducer(
+    pageStateReducer,
+    pageState,
+    (config) => createInitialPageState(config)
+  );
 
   // Track page ID for persistence (use config hash or empty string)
   const pageIdRef = useRef<string>('');
 
-  // Initialize state when pageState config changes
+  // Track if we've already initialized (to avoid redundant dispatch on first mount)
+  const hasInitializedRef = useRef(false);
+
+  // Handle persistence loading and pageState prop changes
   useEffect(() => {
-    // Create initial state
+    // On first mount, state is already initialized via useReducer initializer
+    // We only need to load persisted values if applicable
+    if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true;
+
+      // Try to load persisted state
+      if (pageState && pageState.persistence !== 'none') {
+        pageIdRef.current = JSON.stringify(pageState.variables.map(v => v.name)).slice(0, 32);
+        const persisted = loadPersistedState(pageState, pageIdRef.current);
+        if (persisted) {
+          // Set persisted values - check against config variable names (not stale state.values)
+          const variableNames = new Set(pageState.variables.map(v => v.name));
+          for (const [key, value] of Object.entries(persisted.values)) {
+            if (variableNames.has(key)) {
+              dispatch({ type: 'SET_VALUE', key, value });
+            }
+          }
+        }
+      }
+      return;
+    }
+
+    // On subsequent changes to pageState prop, re-initialize
     const initialState = createInitialPageState(pageState);
 
-    // Try to load persisted state
+    // Update page ID for persistence
     if (pageState && pageState.persistence !== 'none') {
-      // Use a simple hash of the config for page identification
       pageIdRef.current = JSON.stringify(pageState.variables.map(v => v.name)).slice(0, 32);
       const persisted = loadPersistedState(pageState, pageIdRef.current);
       if (persisted) {
-        // Merge persisted values with initial state (only for known keys)
         const mergedValues = { ...initialState.values };
-        const mergedFlags = { ...initialState.uiFlags };
-
         for (const [key, value] of Object.entries(persisted.values)) {
           if (key in mergedValues) {
             mergedValues[key] = value;
           }
         }
-        for (const [key, value] of Object.entries(persisted.uiFlags)) {
-          if (key in mergedFlags) {
-            mergedFlags[key] = value;
-          }
-        }
 
         dispatch({ type: 'INIT_STATE', config: pageState });
-        // Set persisted values
         for (const [key, value] of Object.entries(mergedValues)) {
           dispatch({ type: 'SET_VALUE', key, value });
-        }
-        for (const [key, value] of Object.entries(mergedFlags)) {
-          dispatch({ type: 'SET_UI_FLAG', key, value });
         }
         return;
       }
@@ -260,12 +275,27 @@ export function StateProvider({ children, pageState }: StateProviderProps) {
     dispatch({ type: 'INIT_STATE', config: pageState });
   }, [pageState]);
 
+  // Auto-populate from URL params after initialization
+  useEffect(() => {
+    if (!state.config || typeof window === 'undefined') return;
+
+    const searchParams = new URLSearchParams(window.location.search);
+
+    for (const variable of state.config.variables) {
+      const urlValue = searchParams.get(variable.name);
+      if (urlValue !== null) {
+        const typedValue = parseUrlParamValue(urlValue, variable.type);
+        dispatch({ type: 'SET_VALUE', key: variable.name, value: typedValue });
+      }
+    }
+  }, [state.config]);
+
   // Persist state changes
   useEffect(() => {
     if (state.config && state.config.persistence !== 'none') {
-      savePersistedState(state.config, pageIdRef.current, state.values, state.uiFlags);
+      savePersistedState(state.config, pageIdRef.current, state.values);
     }
-  }, [state.values, state.uiFlags, state.config]);
+  }, [state.values, state.config]);
 
   // Subscription management
   const subscribersRef = useRef<Set<SubscriptionCallback>>(new Set());
@@ -280,26 +310,31 @@ export function StateProvider({ children, pageState }: StateProviderProps) {
     return state.values[key];
   }, [state.values]);
 
-  // Get a UI flag
-  const getUIFlag = useCallback((key: string): boolean => {
-    return state.uiFlags[key] ?? false;
-  }, [state.uiFlags]);
-
   // Set a value (with subscriber notification)
   const setValue = useCallback((key: string, value: unknown) => {
     dispatch({ type: 'SET_VALUE', key, value });
     notifySubscribers();
   }, [notifySubscribers]);
 
-  // Toggle a UI flag
-  const toggleUIFlag = useCallback((key: string) => {
-    dispatch({ type: 'TOGGLE_UI_FLAG', key });
+  // Set a value with optional URL sync
+  const setValueWithUrlSync = useCallback((key: string, value: unknown, updateUrl = true) => {
+    dispatch({ type: 'SET_VALUE', key, value });
     notifySubscribers();
+
+    if (updateUrl && typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (value === null || value === undefined) {
+        url.searchParams.delete(key);
+      } else {
+        url.searchParams.set(key, String(value));
+      }
+      window.history.pushState({}, '', url);
+    }
   }, [notifySubscribers]);
 
-  // Set a UI flag to a specific value
-  const setUIFlag = useCallback((key: string, value: boolean) => {
-    dispatch({ type: 'SET_UI_FLAG', key, value });
+  // Toggle a boolean value
+  const toggleValue = useCallback((key: string) => {
+    dispatch({ type: 'TOGGLE_VALUE', key });
     notifySubscribers();
   }, [notifySubscribers]);
 
@@ -324,11 +359,6 @@ export function StateProvider({ children, pageState }: StateProviderProps) {
     return { ...state.values };
   }, [state.values]);
 
-  // Get all UI flags
-  const getAllUIFlags = useCallback((): Record<string, boolean> => {
-    return { ...state.uiFlags };
-  }, [state.uiFlags]);
-
   // Get config (for autocomplete)
   const getConfig = useCallback((): PageStateConfig | undefined => {
     return state.config;
@@ -339,24 +369,16 @@ export function StateProvider({ children, pageState }: StateProviderProps) {
     return key in state.values;
   }, [state.values]);
 
-  // Check if UI flag exists
-  const hasUIFlag = useCallback((key: string): boolean => {
-    return key in state.uiFlags;
-  }, [state.uiFlags]);
-
   const contextValue: StateContextValue = {
     getValue,
-    getUIFlag,
     setValue,
-    toggleUIFlag,
-    setUIFlag,
+    setValueWithUrlSync,
+    toggleValue,
     resetState,
     subscribe,
     getAllValues,
-    getAllUIFlags,
     getConfig,
     hasKey,
-    hasUIFlag,
   };
 
   return (
@@ -425,21 +447,21 @@ export function useStateValue(key: string): unknown {
 }
 
 /**
- * useUIFlag - Hook to get a UI flag with re-render on change
+ * useBooleanState - Hook to get a boolean state value with re-render on change
  *
- * @param key - UI flag key
- * @returns The current boolean value
+ * @param key - State key
+ * @returns The current boolean value (defaults to false if not set)
  *
  * @example
  * ```tsx
  * function Modal() {
- *   const isOpen = useUIFlag('showModal');
+ *   const isOpen = useBooleanState('showModal');
  *   if (!isOpen) return null;
  *   return <div className="modal">...</div>;
  * }
  * ```
  */
-export function useUIFlag(key: string): boolean {
+export function useBooleanState(key: string): boolean {
   const context = useStateContext();
   const [, forceUpdate] = useReducer(x => x + 1, 0);
 
@@ -449,26 +471,14 @@ export function useUIFlag(key: string): boolean {
     return context.subscribe(forceUpdate);
   }, [context]);
 
-  return context?.getUIFlag(key) ?? false;
-}
+  // Get the value from state
+  const value = context?.getValue(key);
+  if (value !== undefined) {
+    return Boolean(value);
+  }
 
-// ============================================
-// Backward compatibility exports
-// Will be removed when StateBlock is deleted
-// ============================================
-
-/**
- * @deprecated Use useStateValue(key) instead
- */
-export function useOldStateValue(container: string, key: string): unknown {
-  // Just ignore the container
-  return useStateValue(key);
-}
-
-/**
- * @deprecated Use useUIFlag(key) instead
- */
-export function useUIState(container: string, key: string): boolean {
-  // Just ignore the container
-  return useUIFlag(key);
+  // Fall back to default from config if value is undefined
+  const config = context?.getConfig();
+  const varConfig = config?.variables?.find(v => v.name === key);
+  return Boolean(varConfig?.defaultValue ?? false);
 }
