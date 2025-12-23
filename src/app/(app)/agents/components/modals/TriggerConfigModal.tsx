@@ -41,6 +41,9 @@ import { getSampleRow } from '@/app/actions/rows';
 import { VariablesPanel, type Variable } from '@/components/shared/VariablesPanel';
 import { SkillSelectorForAutomation } from '../SkillSelectorForAutomation';
 import type { AutomationInputMappingDTO } from '@/app/dtos/automation.dto';
+import { getUserOAuthConnections } from '@/app/actions/connections';
+import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface TriggerConfigModalProps {
   isOpen: boolean;
@@ -138,6 +141,12 @@ function generateVariableSamples(
     samples.push({ name: '$webhook.payload', sampleValue: '{"event": "user.created"}' });
     samples.push({ name: '$webhook.headers', sampleValue: '{"content-type": "application/json"}' });
     samples.push({ name: '$webhook.origin', sampleValue: 'https://example.com' });
+  } else if (triggerType === 'PIPEDREAM_EVENT') {
+    // External event-specific variables
+    samples.push({ name: '$event.app', sampleValue: 'gmail' });
+    samples.push({ name: '$event.type', sampleValue: 'new-email' });
+    samples.push({ name: '$event.timestamp', sampleValue: new Date().toISOString() });
+    samples.push({ name: '$event.payload', sampleValue: '{"from": "user@example.com", "subject": "Hello"}' });
   }
 
   return samples;
@@ -173,6 +182,15 @@ export function TriggerConfigModal({
     requiresSignature: false,
     allowedOrigins: [] as string[]
   });
+  const [pipedreamConfig, setPipedreamConfig] = useState({
+    connectionId: '' as string,
+    triggerType: '' as string,
+    props: {} as Record<string, any>
+  });
+
+  // Available connections for PIPEDREAM_EVENT
+  const [connections, setConnections] = useState<ConnectionDTO[]>([]);
+  const [loadingConnections, setLoadingConnections] = useState(false);
 
   // Task instructions state (NEW - defines WHAT task to execute)
   const [scheduleName, setScheduleName] = useState('');
@@ -200,6 +218,7 @@ export function TriggerConfigModal({
       setCalendarConfig({ rrule: '', timezone: 'UTC', startDate: undefined });
       setDatabaseConfig({ operations: ['INSERT', 'UPDATE'], tableId: undefined });
       setWebhookConfig({ webhookSecret: '', requiresSignature: false, allowedOrigins: [] });
+      setPipedreamConfig({ connectionId: '', triggerType: '', props: {} });
       setScheduleName('');
       setTaskInstructions('');
       setTaskTools([]);
@@ -284,6 +303,29 @@ export function TriggerConfigModal({
     fetchSampleData();
   }, [selectedType, databaseConfig.tableId]);
 
+  // Fetch user connections when PIPEDREAM_EVENT is selected
+  useEffect(() => {
+    const fetchConnections = async () => {
+      if (selectedType !== 'PIPEDREAM_EVENT') {
+        return;
+      }
+
+      setLoadingConnections(true);
+      try {
+        const result = await getUserOAuthConnections();
+        if (result.success && result.data) {
+          setConnections(result.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch connections:', error);
+      } finally {
+        setLoadingConnections(false);
+      }
+    };
+
+    fetchConnections();
+  }, [selectedType]);
+
   const handleTypeSelect = (type: TriggerType) => {
     setSelectedType(type);
     setCurrentStep('configure');
@@ -342,6 +384,10 @@ export function TriggerConfigModal({
         validationErrors.push('Database event trigger requires at least one operation');
       }
 
+      if (selectedType === 'PIPEDREAM_EVENT' && !pipedreamConfig.connectionId) {
+        validationErrors.push('External event trigger requires a connected app');
+      }
+
       if (validationErrors.length > 0) {
         const errorMsg = validationErrors.join(', ');
         console.error('[TriggerConfigModal] Validation failed:', validationErrors);
@@ -374,6 +420,16 @@ export function TriggerConfigModal({
             allowedOrigins: webhookConfig.allowedOrigins.length > 0 ? webhookConfig.allowedOrigins : undefined,
             enabled: true
           });
+          break;
+        case 'PIPEDREAM_EVENT':
+          triggerConfig = TriggerConfigs.pipedreamEvent(
+            pipedreamConfig.connectionId,
+            pipedreamConfig.triggerType || 'default',
+            {
+              props: Object.keys(pipedreamConfig.props).length > 0 ? pipedreamConfig.props : undefined,
+              enabled: true
+            }
+          );
           break;
         default:
           throw new Error(`Unsupported trigger type: ${selectedType}`);
@@ -515,6 +571,8 @@ export function TriggerConfigModal({
           return databaseConfig.operations.length > 0;
         case 'WEBHOOK':
           return true; // Webhook secret is optional
+        case 'PIPEDREAM_EVENT':
+          return !!pipedreamConfig.connectionId; // Connection is required
         default:
           return false;
       }
@@ -810,6 +868,81 @@ export function TriggerConfigModal({
               </div>
             </div>
           )}
+
+          {selectedType === 'PIPEDREAM_EVENT' && (
+            <div className="space-y-6">
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <h4 className="font-medium text-purple-900 mb-2">External Event Trigger</h4>
+                <p className="text-sm text-purple-700">
+                  Trigger this automation when events occur in connected apps like Gmail, Slack, or other services.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="connection-select">Connected App *</Label>
+                  {loadingConnections ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Loading connections...</span>
+                    </div>
+                  ) : connections.length === 0 ? (
+                    <div className="p-4 border border-dashed rounded-lg text-center">
+                      <p className="text-sm text-muted-foreground mb-2">
+                        No connected apps found. Connect an app first to use external events.
+                      </p>
+                      <Button variant="outline" size="sm" asChild>
+                        <a href="/connections" target="_blank" rel="noopener noreferrer">
+                          Connect an App
+                        </a>
+                      </Button>
+                    </div>
+                  ) : (
+                    <Select
+                      value={pipedreamConfig.connectionId}
+                      onValueChange={(value) => setPipedreamConfig(prev => ({
+                        ...prev,
+                        connectionId: value,
+                        triggerType: '' // Reset trigger type when connection changes
+                      }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a connected app..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {connections.map((conn) => (
+                          <SelectItem key={conn.id} value={conn.id}>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium capitalize">{conn.app}</span>
+                              <span className="text-muted-foreground">({conn.account_name})</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Select which connected account should trigger this automation
+                  </p>
+                </div>
+
+                {pipedreamConfig.connectionId && (
+                  <div className="space-y-2">
+                    <Label htmlFor="trigger-type">Event Type</Label>
+                    <Input
+                      id="trigger-type"
+                      value={pipedreamConfig.triggerType}
+                      onChange={(e) => setPipedreamConfig(prev => ({ ...prev, triggerType: e.target.value }))}
+                      placeholder="e.g., new-email, new-message"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Specify the event type (e.g., &quot;new-email&quot; for Gmail, &quot;new-message&quot; for Slack)
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -981,6 +1114,13 @@ export function TriggerConfigModal({
                     {webhookConfig.allowedOrigins.length > 0 && (
                       <div><strong>Allowed Origins:</strong> {webhookConfig.allowedOrigins.join(', ')}</div>
                     )}
+                  </>
+                )}
+
+                {selectedType === 'PIPEDREAM_EVENT' && (
+                  <>
+                    <div><strong>Connected App:</strong> {connections.find(c => c.id === pipedreamConfig.connectionId)?.app || pipedreamConfig.connectionId}</div>
+                    <div><strong>Event Type:</strong> {pipedreamConfig.triggerType || 'Not specified'}</div>
                   </>
                 )}
               </div>
