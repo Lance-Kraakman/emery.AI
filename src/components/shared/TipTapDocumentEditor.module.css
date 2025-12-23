@@ -209,6 +209,41 @@
   display: none;
 }
 
+/* Image Styling */
+.tiptapEditor :global(.ProseMirror img) {
+  @apply max-w-full h-auto rounded-lg my-4 border border-border;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.tiptapEditor :global(.ProseMirror img.ProseMirror-selectednode) {
+  @apply ring-2 ring-primary ring-offset-2;
+}
+
+/* File Attachment Node Styling */
+.tiptapEditor :global([data-file-attachment]) {
+  @apply my-3;
+}
+
+.tiptapEditor :global(.ProseMirror .node-fileAttachment) {
+  @apply my-3;
+}
+
+/* Drag and drop visual indicator */
+.tiptapEditor :global(.ProseMirror.ProseMirror-focused) {
+  /* Subtle indicator that the editor accepts drops */
+}
+
+.tiptapEditor :global(.ProseMirror-dragging) {
+  @apply opacity-50;
+}
+
+/* File upload loading state placeholder */
+.tiptapEditor :global(.file-upload-placeholder) {
+  @apply flex items-center gap-3 px-4 py-3 my-2 bg-muted/30 border border-dashed border-border rounded-lg animate-pulse;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .toolbarButtons {
@@ -218,5 +253,9 @@
   .tiptapEditor :global(.ProseMirror) {
     padding: 16px;
     font-size: 14px;
+  }
+
+  .tiptapEditor :global(.ProseMirror img) {
+    @apply my-3;
   }
 }
