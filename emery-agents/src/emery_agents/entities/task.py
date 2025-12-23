@@ -13,9 +13,17 @@ from ..types import AgentId, OrganizationId, TaskId, OwnerId, InstructionConfig
 
 
 @dataclass
+class SkillInputValue:
+    """A typed skill input value for task execution."""
+    name: str
+    type: str  # 'text', 'number', 'boolean', 'json', etc.
+    value: Any  # The actual value (type depends on the type field)
+
+
+@dataclass
 class TriggerData:
-    """Trigger data for task execution."""
-    payload: Dict[str, Any]
+    """Trigger data with typed skill inputs for task execution."""
+    skill_inputs: List[SkillInputValue]
 
 
 @dataclass
