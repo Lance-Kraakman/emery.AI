@@ -94,28 +94,28 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   };
 
   const getTriggerStatus = () => {
-    if (!agent.schedules || agent.schedules.length === 0) return 'partial';
-    const firstSchedule = agent.schedules[0];
-    if (!firstSchedule) return 'partial';
+    if (!agent.automations || agent.automations.length === 0) return 'partial';
+    const firstAutomation = agent.automations[0];
+    if (!firstAutomation) return 'partial';
     return 'configured';
   };
 
 
   // Generate summaries for each configuration area
   const getTriggerSummary = () => {
-    if (!agent.schedules || agent.schedules.length === 0) {
+    if (!agent.automations || agent.automations.length === 0) {
       return 'Manual execution only';
     }
 
-    const scheduleCount = agent.schedules.length;
-    const firstSchedule = agent.schedules[0];
+    const automationCount = agent.automations.length;
+    const firstAutomation = agent.automations[0];
 
-    if (!firstSchedule) {
+    if (!firstAutomation) {
       return 'Manual execution only';
     }
 
     let summary = '';
-    const trigger = firstSchedule.trigger;
+    const trigger = firstAutomation.trigger;
 
     if (trigger.type === 'CALENDAR') {
       const timezone = trigger.timezone || 'UTC';
@@ -130,8 +130,8 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
     }
     // MANUAL type is already handled above, no else needed
 
-    if (scheduleCount > 1) {
-      summary += ` (+${scheduleCount - 1} more)`;
+    if (automationCount > 1) {
+      summary += ` (+${automationCount - 1} more)`;
     }
 
     return summary;
@@ -161,18 +161,18 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
           actionText="Edit Details"
         />
 
-        {/* Schedule Configuration */}
+        {/* Automation Configuration */}
         <ConfigurationCard
-          title="Schedule Configuration"
+          title="Automation Configuration"
           description="Manage multiple execution triggers"
-          icon={agent.schedules?.[0]?.trigger.type === 'CALENDAR' ? Calendar :
-                agent.schedules?.[0]?.trigger.type === 'DATABASE_EVENT' ? Database :
-                agent.schedules?.[0]?.trigger.type === 'WEBHOOK' ? Globe : Zap}
+          icon={agent.automations?.[0]?.trigger.type === 'CALENDAR' ? Calendar :
+                agent.automations?.[0]?.trigger.type === 'DATABASE_EVENT' ? Database :
+                agent.automations?.[0]?.trigger.type === 'WEBHOOK' ? Globe : Zap}
           status={getTriggerStatus()}
           statusText={getTriggerStatus() === 'configured' ? 'Configured' : 'Default'}
           summary={getTriggerSummary()}
           onClick={() => setIsScheduleManagerOpen(true)}
-          actionText="Manage Schedules"
+          actionText="Manage Automations"
         />
 
         {/* Authorized Connections */}

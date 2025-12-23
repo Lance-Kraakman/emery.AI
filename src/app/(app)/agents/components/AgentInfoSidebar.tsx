@@ -100,7 +100,7 @@ export function AgentInfoSidebar({
 
         {/* Schedules Section */}
         <CompactSchedulesList
-          schedules={agent.schedules || []}
+          schedules={agent.automations || []}
           onManageSchedules={handleManageSchedules}
         />
 

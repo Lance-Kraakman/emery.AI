@@ -335,8 +335,27 @@ export function SkillEditor({
           )}
         </>
       ) : localValue.executionType === 'write' ? (
-        /* Write Mode Form - Table selector + field mappings */
+        /* Write Mode Form - Inputs first, then table selector + field mappings */
         <>
+          {/* Skill Inputs Section - FIRST */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm text-muted-foreground">Skill Inputs</Label>
+              <span className="text-xs text-muted-foreground">
+                {localValue.inputs.length} input{localValue.inputs.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <SkillInputsSection
+              inputs={localValue.inputs}
+              onInputsChange={(inputs) => handleChange({ inputs })}
+              isReadOnly={isReadOnly}
+            />
+            <p className="text-xs text-muted-foreground">
+              Define inputs that will be mapped to table fields.
+            </p>
+          </div>
+
+          {/* Table Write Configuration - AFTER inputs */}
           <WriteConfigForm
             value={localValue.writeConfig}
             onChange={(config) => handleChange({ writeConfig: config })}
@@ -344,26 +363,6 @@ export function SkillEditor({
             onSkillInputsChange={(inputs) => handleChange({ inputs })}
             disabled={isReadOnly}
           />
-
-          {/* Show skill inputs for reference/editing */}
-          {localValue.inputs.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm text-muted-foreground">Skill Inputs</Label>
-                <span className="text-xs text-muted-foreground">
-                  {localValue.inputs.length} input{localValue.inputs.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-              <SkillInputsSection
-                inputs={localValue.inputs}
-                onInputsChange={(inputs) => handleChange({ inputs })}
-                isReadOnly={isReadOnly}
-              />
-              <p className="text-xs text-muted-foreground">
-                These inputs were auto-generated from the table&apos;s fields.
-              </p>
-            </div>
-          )}
         </>
       ) : (
         /* Agent Form (default) */
