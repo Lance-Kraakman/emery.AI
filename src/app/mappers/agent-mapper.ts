@@ -1,8 +1,6 @@
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
-import { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import { ScheduleMapper } from './schedule-mapper';
-import type { ScheduleConfigurationDTO } from '@/app/dtos/schedule.dto';
+import { AutomationMapper } from './automation-mapper';
+import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
 import type { AvatarConfig } from '@/lib/avatars';
 
 // AIDEV-NOTE: Serializable DTO types following the ToolMapper pattern
@@ -20,7 +18,7 @@ export interface AgentDTO {
   role: string;
   description: string;
   persona: string;
-  schedules: ScheduleConfigurationDTO[];
+  automations: AutomationConfigurationDTO[];
   databaseId?: string | null;
   status: string;
   organizationId: number;
@@ -40,8 +38,8 @@ export class AgentMapper {
       role: agent.role,
       description: agent.description,
       persona: agent.persona,
-      // Use ScheduleMapper to convert ScheduleConfiguration to ScheduleConfigurationDTO
-      schedules: agent.schedules.map(schedule => ScheduleMapper.toDTO(schedule)),
+      // Use AutomationMapper to convert AutomationConfiguration to AutomationConfigurationDTO
+      automations: agent.automations.map(automation => AutomationMapper.toDTO(automation)),
       databaseId: agent.databaseId,
       status: agent.status.value,
       organizationId: agent.organizationId.value,

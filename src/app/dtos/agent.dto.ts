@@ -7,7 +7,7 @@
  */
 
 import type { ToolConfigDTO, AgentDTO as AgentDTOFromMapper } from '@/app/mappers/agent-mapper';
-import type { ScheduleConfigurationDTO } from './schedule.dto';
+import type { AutomationConfigurationDTO } from './automation.dto';
 import type { AvatarConfig } from '@/lib/avatars';
 
 // Re-export the canonical AgentDTO from mapper
@@ -17,7 +17,7 @@ export type { ToolConfigDTO };
 /**
  * DTO for creating a new agent
  * Used by both client and application layer
- * AIDEV-NOTE: Tools are defined per-task (skills/schedules/chat), not per-agent
+ * AIDEV-NOTE: Tools are defined per-task (skills/automations/chat), not per-agent
  * OAuth credentials resolved via agent.ownerId through proxy
  */
 export interface CreateAgentDTO {
@@ -27,7 +27,7 @@ export interface CreateAgentDTO {
   persona?: string;
   ownerId?: string; // User ID string - converted to UserId Value Object in application layer - used for OAuth resolution
   organizationId?: number; // Organization ID - converted to OrganizationId Value Object in application layer
-  schedules?: ScheduleConfigurationDTO[]; // Schedules with task instructions
+  automations?: AutomationConfigurationDTO[]; // Automations (trigger + skill reference)
   status?: 'active' | 'inactive' | 'archived';
   defaultModel?: string | null; // AI model override for this agent
   avatarConfig?: AvatarConfig | null; // Avatar configuration with icon + color (versioned JSON)
@@ -44,7 +44,7 @@ export interface UpdateAgentDTO {
   description?: string;
   persona?: string;
   ownerId?: string;
-  schedules?: ScheduleConfigurationDTO[]; // Schedules with task instructions
+  automations?: AutomationConfigurationDTO[]; // Automations (trigger + skill reference)
   status?: 'active' | 'inactive' | 'archived';
   defaultModel?: string | null; // AI model override for this agent
   avatarConfig?: AvatarConfig | null; // Avatar configuration with icon + color (versioned JSON)

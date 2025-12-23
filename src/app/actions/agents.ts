@@ -21,12 +21,17 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
       const session = await requirePermission("agents:manage");
       const agentApplicationService = getAgentApplicationService();
 
-      // Serialize schedules if they're ScheduleConfiguration instances
-      const scheduleDTOs = data.schedules?.map(schedule => {
-        if (schedule && typeof schedule === 'object' && 'toJSON' in schedule && typeof schedule.toJSON === 'function') {
-          return schedule.toJSON();
+      // Serialize automations if they're AutomationConfiguration instances
+      const automationDTOs = data.automations?.map(automation => {
+        if (automation && typeof automation === 'object' && 'trigger' in automation &&
+            automation.trigger && typeof automation.trigger === 'object' &&
+            'toJSON' in automation.trigger && typeof automation.trigger.toJSON === 'function') {
+          return {
+            ...automation,
+            trigger: automation.trigger.toJSON()
+          };
         }
-        return schedule;
+        return automation;
       });
 
       // Build DTO - Application Service handles Value Object conversion
@@ -37,7 +42,7 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
         persona: data.persona,
         ownerId: session.user.id,
         organizationId: session.user.currentOrganizationId,
-        schedules: scheduleDTOs as any,
+        automations: automationDTOs as any,
         status: (() => {
           const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
           return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
@@ -82,19 +87,24 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
 // Helper function for creating agents from client data (with plain types)
 export async function createAgentFromClient(data: CreateAgentClientData): Promise<Result> {
   // AIDEV-NOTE: Serialize TriggerConfig instances to JSON for database storage
-  const schedules = data.schedules
-    ?.filter(schedule => schedule != null)
-    ?.map(schedule => {
-      if (schedule && typeof schedule === 'object' && 'toJSON' in schedule && typeof schedule.toJSON === 'function') {
-        return schedule.toJSON();
+  const automations = data.automations
+    ?.filter(automation => automation != null)
+    ?.map(automation => {
+      if (automation && typeof automation === 'object' && 'trigger' in automation &&
+          automation.trigger && typeof automation.trigger === 'object' &&
+          'toJSON' in automation.trigger && typeof automation.trigger.toJSON === 'function') {
+        return {
+          ...automation,
+          trigger: automation.trigger.toJSON()
+        };
       }
-      return schedule;
+      return automation;
     });
 
   // Convert client data to domain data format
   const domainData: CreateAgentData = {
     ...data,
-    schedules: schedules || data.schedules,
+    automations: automations || data.automations,
     status: data.status ? AgentStatus.fromString(data.status) : AgentStatus.active(),
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
     ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
@@ -124,21 +134,26 @@ export async function updateAgentFromClient(agentId: number, data: Partial<Creat
   // AIDEV-NOTE: Serialize TriggerConfig instances to JSON for database storage
   // TriggerConfig.toJSON() must be called to convert class instances to plain objects
   // Otherwise Drizzle receives class instances and serializes them as empty objects
-  const schedules = data.schedules
-    ?.filter(schedule => schedule !== null && schedule !== undefined)
-    ?.map(schedule => {
-      // If it's a TriggerConfig instance with toJSON method, serialize it
-      if (schedule && typeof schedule === 'object' && 'toJSON' in schedule && typeof schedule.toJSON === 'function') {
-        return schedule.toJSON();
+  const automations = data.automations
+    ?.filter(automation => automation !== null && automation !== undefined)
+    ?.map(automation => {
+      // If it has a trigger with toJSON method, serialize the trigger
+      if (automation && typeof automation === 'object' && 'trigger' in automation &&
+          automation.trigger && typeof automation.trigger === 'object' &&
+          'toJSON' in automation.trigger && typeof automation.trigger.toJSON === 'function') {
+        return {
+          ...automation,
+          trigger: automation.trigger.toJSON()
+        };
       }
       // If it's already a plain object, keep it as-is
-      return schedule;
+      return automation;
     });
 
   // Convert client data to domain data format
   const domainData: Partial<CreateAgentData> = {
     ...data,
-    schedules: schedules !== undefined ? schedules : data.schedules,
+    automations: automations !== undefined ? automations : data.automations,
     status: data.status ? AgentStatus.fromString(data.status) : undefined,
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
     ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
@@ -242,24 +257,29 @@ export async function updateAgent(agentId: number, data: Partial<UpdateAgentData
       // LOGGING: Start of update operation
       console.log('[agents.ts/updateAgent] Starting agent update', {
         agentId,
-        hasSchedules: !!data.schedules,
-        scheduleCount: data.schedules?.length,
+        hasAutomations: !!data.automations,
+        automationCount: data.automations?.length,
         dataKeys: Object.keys(data)
       });
 
-      // Serialize schedules if they're ScheduleConfiguration instances
-      const scheduleDTOs = data.schedules?.map(schedule => {
-        if (schedule && typeof schedule === 'object' && 'toJSON' in schedule && typeof schedule.toJSON === 'function') {
-          return schedule.toJSON();
+      // Serialize automations if they're AutomationConfiguration instances
+      const automationDTOs = data.automations?.map(automation => {
+        if (automation && typeof automation === 'object' && 'trigger' in automation &&
+            automation.trigger && typeof automation.trigger === 'object' &&
+            'toJSON' in automation.trigger && typeof automation.trigger.toJSON === 'function') {
+          return {
+            ...automation,
+            trigger: automation.trigger.toJSON()
+          };
         }
-        return schedule;
+        return automation;
       });
 
-      // LOGGING: Schedules serialized
-      if (scheduleDTOs) {
-        console.log('[agents.ts/updateAgent] Schedules serialized', {
-          count: scheduleDTOs.length,
-          schedules: scheduleDTOs
+      // LOGGING: Automations serialized
+      if (automationDTOs) {
+        console.log('[agents.ts/updateAgent] Automations serialized', {
+          count: automationDTOs.length,
+          automations: automationDTOs
         });
       }
 
@@ -271,7 +291,7 @@ export async function updateAgent(agentId: number, data: Partial<UpdateAgentData
         description: data.description,
         persona: data.persona,
         ownerId: data.ownerId instanceof UserId ? data.ownerId.value : data.ownerId,
-        schedules: scheduleDTOs as any,
+        automations: automationDTOs as any,
         status: (() => {
           const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
           return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
@@ -285,8 +305,8 @@ export async function updateAgent(agentId: number, data: Partial<UpdateAgentData
       // LOGGING: DTO built, calling application service
       console.log('[agents.ts/updateAgent] DTO built, calling application service', {
         dto,
-        hasSchedules: !!dto.schedules,
-        scheduleCount: dto.schedules?.length
+        hasAutomations: !!dto.automations,
+        automationCount: dto.automations?.length
       });
 
       const result = await agentApplicationService.updateAgent(dto);
@@ -407,7 +427,7 @@ export async function duplicateAgent(agentId: number, revalidateUrl?: string): P
         persona: originalAgent.persona,
         ownerId: session.user.id,
         organizationId: currentOrg.id,
-        schedules: originalAgent.schedules as any,
+        automations: originalAgent.automations as any,
         status: originalAgent.status.value as 'active' | 'inactive' | 'archived'
       };
 

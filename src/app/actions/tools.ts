@@ -10,8 +10,6 @@
  * Uses proper domain services and application services following DDD patterns.
  */
 
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { requireAuth } from "./permissions";
 import type { Result } from "./types";
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
@@ -20,6 +18,9 @@ import { ReferenceToolMapper } from '@/app/mappers/reference-tool-mapper';
 import { getToolSearchApplicationService } from '@/ddd/application/di/container';
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
+import { db } from '@/lib/db/client';
+import { tools, appTypes, type OAuthToolDefinitionData } from '@/lib/db/schema';
+import { eq, sql } from 'drizzle-orm';
 
 /**
  * Search all tools (both reference and system tools)
@@ -274,35 +275,57 @@ export interface PipedreamToolsGrouped {
   [appName: string]: PipedreamToolMetadata[];
 }
 
-// Cache for pipedream metadata
-let pipedreamMetadataCache: Record<string, PipedreamToolMetadata> | null = null;
-
 /**
- * Get all Pipedream tools grouped by app
+ * Get all Pipedream (OAuth) tools grouped by app from the database
+ * AIDEV-NOTE: Queries tools table instead of reading from pipedream_metadata.json
  */
 export async function getPipedreamTools(): Promise<Result<PipedreamToolsGrouped>> {
   try {
     await requireAuth();
 
-    // Load metadata from file (cached)
-    if (!pipedreamMetadataCache) {
-      const metadataPath = join(process.cwd(), 'emery-agents/src/emery_agents/tools/pipedream_metadata.json');
-      const rawData = readFileSync(metadataPath, 'utf-8');
-      pipedreamMetadataCache = JSON.parse(rawData);
-    }
+    // Query tools with type='oauth' from DB (these are Pipedream tools)
+    const oauthTools = await db.select({
+      id: tools.id,
+      displayName: tools.displayName,
+      description: tools.description,
+      appId: tools.appId,
+      config: tools.config,
+      appName: appTypes.name,
+    })
+      .from(tools)
+      .innerJoin(appTypes, eq(tools.appId, appTypes.id))
+      .where(sql`${tools.config}->>'type' = 'oauth'`);
 
-    // Group tools by app, excluding MCP generic tools
+    // Group tools by app
     const grouped: PipedreamToolsGrouped = {};
 
-    for (const [_id, tool] of Object.entries(pipedreamMetadataCache!)) {
-      // Skip MCP generic tools (they're not useful for direct tool execution)
-      if (tool.type === 'mcp') continue;
+    for (const row of oauthTools) {
+      const config = row.config as OAuthToolDefinitionData;
+      const appName = row.appId; // Use appId as the grouping key (e.g., "slack", "gmail")
 
-      const appName = tool.app;
+      // Convert DB row to PipedreamToolMetadata
+      const toolMetadata: PipedreamToolMetadata = {
+        id: row.id,
+        app: appName,
+        name: row.displayName,
+        description: row.description || '',
+        type: 'action', // OAuth tools are actions (not MCP)
+        inputs: config.parameters ? Object.fromEntries(
+          Object.entries(config.parameters).map(([key, param]) => [
+            key,
+            {
+              type: param.type,
+              description: param.description || '',
+              required: param.required,
+            }
+          ])
+        ) : {},
+      };
+
       if (!grouped[appName]) {
         grouped[appName] = [];
       }
-      grouped[appName].push(tool);
+      grouped[appName].push(toolMetadata);
     }
 
     // Sort tools within each app by name
@@ -324,24 +347,56 @@ export async function getPipedreamTools(): Promise<Result<PipedreamToolsGrouped>
 }
 
 /**
- * Get a specific Pipedream tool by ID
+ * Get a specific Pipedream tool by ID from the database
  */
 export async function getPipedreamToolById(toolId: string): Promise<Result<PipedreamToolMetadata | null>> {
   try {
     await requireAuth();
 
-    // Load metadata from file (cached)
-    if (!pipedreamMetadataCache) {
-      const metadataPath = join(process.cwd(), 'emery-agents/src/emery_agents/tools/pipedream_metadata.json');
-      const rawData = readFileSync(metadataPath, 'utf-8');
-      pipedreamMetadataCache = JSON.parse(rawData);
+    // Query specific tool from DB
+    const rows = await db.select({
+      id: tools.id,
+      displayName: tools.displayName,
+      description: tools.description,
+      appId: tools.appId,
+      config: tools.config,
+    })
+      .from(tools)
+      .where(eq(tools.id, toolId))
+      .limit(1);
+
+    if (rows.length === 0) {
+      return {
+        success: true,
+        data: null
+      };
     }
 
-    const tool = pipedreamMetadataCache![toolId] || null;
+    const row = rows[0];
+    const config = row.config as OAuthToolDefinitionData;
+
+    // Convert DB row to PipedreamToolMetadata
+    const toolMetadata: PipedreamToolMetadata = {
+      id: row.id,
+      app: row.appId,
+      name: row.displayName,
+      description: row.description || '',
+      type: 'action',
+      inputs: config.parameters ? Object.fromEntries(
+        Object.entries(config.parameters).map(([key, param]) => [
+          key,
+          {
+            type: param.type,
+            description: param.description || '',
+            required: param.required,
+          }
+        ])
+      ) : {},
+    };
 
     return {
       success: true,
-      data: tool
+      data: toolMetadata
     };
   } catch (error: unknown) {
     console.error('[ToolActions] Error getting Pipedream tool:', error);
