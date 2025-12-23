@@ -1,62 +1,52 @@
 /**
- * Schedule Mapper
+ * Schedule Mapper (DEPRECATED - use AutomationMapper instead)
  *
- * Maps between ScheduleConfiguration domain objects and ScheduleConfigurationDTO for API transfer.
- * Handles the complete schedule structure: trigger config + task instructions + tools.
+ * This mapper is kept for backward compatibility during migration from schedules to automations.
+ * New code should use AutomationMapper from './automation-mapper'.
  *
- * AIDEV-NOTE: This mapper is central to the schedule system architecture.
- * - Domain: ScheduleConfiguration (has TriggerConfig Value Object + TaskInstructions)
- * - DTO: ScheduleConfigurationDTO (has TriggerConfigDTO plain object + TaskInstructionsDTO)
+ * AIDEV-NOTE: The schedule system has been refactored to automations.
+ * - Automations reference skills by ID instead of inline task instructions
+ * - This mapper provides legacy support for existing code that hasn't been migrated
  */
 
-import type { ScheduleConfiguration, TaskInstructions } from '@/ddd/domain/agents/entities/agent';
-import type { ScheduleConfigurationDTO, TaskInstructionsDTO } from '@/app/dtos/schedule.dto';
+import type { AutomationConfiguration } from '@/ddd/domain/agents/entities/agent';
+import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
 import { TriggerConfigMapper } from './trigger-config-mapper';
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
+/**
+ * @deprecated Use AutomationMapper instead
+ */
 export class ScheduleMapper {
   /**
-   * Convert ScheduleConfiguration domain object to DTO
+   * Convert AutomationConfiguration domain object to DTO
+   * @deprecated Use AutomationMapper.toDTO instead
    */
-  static toDTO(schedule: ScheduleConfiguration): ScheduleConfigurationDTO {
+  static toDTO(automation: AutomationConfiguration): AutomationConfigurationDTO {
     return {
-      // Convert TriggerConfig Value Object to DTO
-      trigger: TriggerConfigMapper.toDTO(schedule.trigger),
-
-      // Convert TaskInstructions with tools
-      taskInstructions: {
-        task: schedule.taskInstructions.task,
-        images: schedule.taskInstructions.images,
-        attachments: schedule.taskInstructions.attachments,
-        tools: (schedule.taskInstructions.tools || []).map(tool => tool.toPlain()),
-        metadata: schedule.taskInstructions.metadata
-      },
-
-      enabled: schedule.enabled,
-      name: schedule.name,
-      description: schedule.description
+      trigger: TriggerConfigMapper.toDTO(automation.trigger),
+      skillId: automation.skillId,
+      inputMappings: automation.inputMappings?.map(m => ({
+        triggerField: m.triggerField,
+        skillInputName: m.skillInputName
+      })),
+      enabled: automation.enabled,
+      name: automation.name,
+      description: automation.description
     };
   }
 
   /**
-   * Convert ScheduleConfigurationDTO to domain object
+   * Convert AutomationConfigurationDTO to domain object
+   * @deprecated Use AutomationMapper.fromDTO instead
    */
-  static fromDTO(dto: ScheduleConfigurationDTO): ScheduleConfiguration {
+  static fromDTO(dto: AutomationConfigurationDTO): AutomationConfiguration {
     return {
-      // Convert TriggerConfigDTO to TriggerConfig Value Object
       trigger: TriggerConfigMapper.fromDTO(dto.trigger),
-
-      // Convert TaskInstructionsDTO with tools
-      taskInstructions: {
-        task: dto.taskInstructions.task,
-        images: dto.taskInstructions.images,
-        attachments: dto.taskInstructions.attachments,
-        tools: (dto.taskInstructions.tools || []).map(toolDTO =>
-          ToolConfig.fromPlain(toolDTO)
-        ),
-        metadata: dto.taskInstructions.metadata
-      },
-
+      skillId: dto.skillId,
+      inputMappings: dto.inputMappings?.map(m => ({
+        triggerField: m.triggerField,
+        skillInputName: m.skillInputName
+      })),
       enabled: dto.enabled,
       name: dto.name,
       description: dto.description
@@ -64,16 +54,18 @@ export class ScheduleMapper {
   }
 
   /**
-   * Convert array of ScheduleConfiguration to array of DTOs
+   * Convert array of AutomationConfiguration to array of DTOs
+   * @deprecated Use AutomationMapper.toDTOs instead
    */
-  static toDTOs(schedules: ScheduleConfiguration[]): ScheduleConfigurationDTO[] {
-    return schedules.map(schedule => this.toDTO(schedule));
+  static toDTOs(automations: AutomationConfiguration[]): AutomationConfigurationDTO[] {
+    return automations.map(automation => this.toDTO(automation));
   }
 
   /**
-   * Convert array of DTOs to array of ScheduleConfiguration
+   * Convert array of DTOs to array of AutomationConfiguration
+   * @deprecated Use AutomationMapper.fromDTOs instead
    */
-  static fromDTOs(dtos: ScheduleConfigurationDTO[]): ScheduleConfiguration[] {
+  static fromDTOs(dtos: AutomationConfigurationDTO[]): AutomationConfiguration[] {
     return dtos.map(dto => this.fromDTO(dto));
   }
 }

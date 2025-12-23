@@ -197,6 +197,8 @@ export async function getPublicPage(
       isPublic: pageRecord.isPublic,
       requiresAuth: pageRecord.requiresAuth,
       allowedRoles: pageRecord.allowedRoles,
+      pageState: pageRecord.pageState,
+      pageDialogs: pageRecord.pageDialogs,
       ownerId: pageRecord.ownerId,
       createdAt: pageRecord.createdAt,
       updatedAt: pageRecord.updatedAt

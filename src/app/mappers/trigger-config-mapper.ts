@@ -11,7 +11,7 @@
 
 import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-import type { TriggerConfigDTO } from '@/app/dtos/schedule.dto';
+import type { TriggerConfigDTO } from '@/app/dtos/automation.dto';
 
 export class TriggerConfigMapper {
   /**
