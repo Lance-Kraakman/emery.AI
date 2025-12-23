@@ -19,9 +19,13 @@ import { getCurrentOrganization } from "@/app/actions/user-organizations";
 import { Loading } from "@/components/ui/loading";
 import { ThemeConfig } from "@/ddd/domain/puck/value-objects/theme-config";
 import { PageContextProvider } from "@/components/puck/contexts/PageContext";
+import { StateProvider } from "@/components/puck/contexts/StateContext";
+import { PageDialogsRenderer } from "@/components/puck/components/PageDialogsRenderer";
+import type { PageDialogsConfig } from "@/ddd/domain/puck/value-objects/page-dialogs";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
 import type { OrganizationDTO } from "@/app/mappers/organization-mapper";
+import type { PageStateConfig } from "@/components/puck/types/state";
 import { PuckSession } from "@/lib/puck/session-storage";
 
 export default function PreviewFramePage() {
@@ -35,6 +39,8 @@ export default function PreviewFramePage() {
   const [app, setApp] = useState<AppDTO | null>(null);
   const [organization, setOrganization] = useState<OrganizationDTO | null>(null);
   const [pages, setPages] = useState<PageDTO[]>([]);
+  const [pageState, setPageState] = useState<PageStateConfig | undefined>(undefined);
+  const [pageDialogs, setPageDialogs] = useState<PageDialogsConfig | undefined>(undefined);
   const [loading, setLoading] = useState(true);
 
   // Convert URLSearchParams to Record for QueryParamContext
@@ -103,6 +109,8 @@ export default function PreviewFramePage() {
           : appTheme;
 
         setEffectiveTheme(computedTheme);
+        setPageState(page.pageState);
+        setPageDialogs(page.pageDialogs);
 
         // Resolve all component data
         const resolved = await resolveAllData(rawData, config, {
@@ -151,12 +159,16 @@ export default function PreviewFramePage() {
         theme: effectiveTheme,
       }}
     >
-      <div
-        className="min-h-screen bg-white"
-        style={themeStyles as React.CSSProperties}
-      >
-        <Render config={config} data={resolvedData} />
-      </div>
+      <StateProvider pageState={pageState}>
+        <PageDialogsRenderer pageDialogs={pageDialogs}>
+          <div
+            className="min-h-screen bg-white"
+            style={themeStyles as React.CSSProperties}
+          >
+            <Render config={config} data={resolvedData} />
+          </div>
+        </PageDialogsRenderer>
+      </StateProvider>
     </PageContextProvider>
   );
 }

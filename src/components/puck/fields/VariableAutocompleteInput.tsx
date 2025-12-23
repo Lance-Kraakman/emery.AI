@@ -8,16 +8,13 @@
  *
  * Supports:
  * - {fieldName} - Row data fields from DataBlock context
- * - {params.name} - Page variables (defined at page level) and URL query parameters
- * - {state.variableName} - State variables and UI flags from page-level state (flat namespace)
+ * - {state.variableName} - State variables from page-level state (auto-populate from URL params)
  *
  * Uses DataLayoutContext to get available fields and sample values.
- * Uses PageVariablesContext to get defined page variables.
  * Uses StateContext to get page-level state config.
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -27,16 +24,15 @@ import {
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { useDataLayoutContext } from '../contexts/DataLayoutContext';
-import { usePageVariables } from '../contexts/PageVariablesContext';
 import { useStateContext } from '../contexts/StateContext';
-import { Database, Variable, ChevronRight, Box } from 'lucide-react';
+import { Database, ChevronRight, Box } from 'lucide-react';
 
 interface VariableOption {
   variable: string;
   label: string;
   sampleValue?: string;
   description?: string;
-  group: 'fields' | 'pageVars' | 'params' | 'state';
+  group: 'fields' | 'state';
 }
 
 interface VariableAutocompleteInputProps {
@@ -69,8 +65,6 @@ export function VariableAutocompleteInput({
 
   // Get data context for fields and sample values
   const dataContext = useDataLayoutContext();
-  const pageVariables = usePageVariables();
-  const searchParams = useSearchParams();
 
   // Get page state config from StateContext (flat namespace)
   const stateContext = useStateContext();
@@ -83,7 +77,7 @@ export function VariableAutocompleteInput({
     // Add id field first (system field not in fields list but always available in rows)
     if (dataContext?.sampleRow?.id !== undefined) {
       result.push({
-        variable: 'id',
+        variable: 'rowData.id',
         label: 'id',
         sampleValue: String(dataContext.sampleRow.id),
         group: 'fields',
@@ -96,7 +90,7 @@ export function VariableAutocompleteInput({
         if (field.name === 'id') continue; // Already added from sampleRow.id
         const sampleValue = dataContext.sampleRow?.[field.name];
         result.push({
-          variable: field.name,
+          variable: `rowData.${field.name}`,
           label: field.name,
           sampleValue: sampleValue !== undefined ? String(sampleValue) : undefined,
           group: 'fields',
@@ -104,33 +98,9 @@ export function VariableAutocompleteInput({
       }
     }
 
-    // Add page variables (defined at page level)
-    const addedPageVars = new Set<string>();
-    for (const pageVar of pageVariables) {
-      result.push({
-        variable: `params.${pageVar.name}`,
-        label: pageVar.name,
-        description: pageVar.description,
-        group: 'pageVars',
-      });
-      addedPageVars.add(pageVar.name);
-    }
-
-    // Add query param variables (only if not already added as page variable)
-    searchParams.forEach((paramValue, paramName) => {
-      if (!addedPageVars.has(paramName)) {
-        result.push({
-          variable: `params.${paramName}`,
-          label: paramName,
-          sampleValue: paramValue,
-          group: 'params',
-        });
-      }
-    });
-
     // Add state variables from PageStateConfig (flat namespace)
+    // State variables auto-populate from matching URL params
     if (pageStateConfig) {
-      // Add variables with {state.variableName} syntax
       for (const variable of pageStateConfig.variables) {
         result.push({
           variable: `state.${variable.name}`,
@@ -139,19 +109,10 @@ export function VariableAutocompleteInput({
           group: 'state',
         });
       }
-      // Add UI flags with {state.flagName} syntax
-      for (const flag of pageStateConfig.uiFlags) {
-        result.push({
-          variable: `state.${flag.name}`,
-          label: flag.name,
-          description: flag.description || 'UI flag (boolean)',
-          group: 'state',
-        });
-      }
     }
 
     return result;
-  }, [dataContext?.fields, dataContext?.sampleRow, pageVariables, searchParams, pageStateConfig]);
+  }, [dataContext?.fields, dataContext?.sampleRow, pageStateConfig]);
 
   // Filter options based on search text
   const filteredOptions = useMemo(() => {
@@ -167,10 +128,8 @@ export function VariableAutocompleteInput({
   // Group options for display
   const groupedOptions = useMemo(() => {
     const fields = filteredOptions.filter((o) => o.group === 'fields');
-    const pageVars = filteredOptions.filter((o) => o.group === 'pageVars');
-    const params = filteredOptions.filter((o) => o.group === 'params');
     const state = filteredOptions.filter((o) => o.group === 'state');
-    return { fields, pageVars, params, state };
+    return { fields, state };
   }, [filteredOptions]);
 
   // Find the start of the current variable being typed
@@ -286,7 +245,7 @@ export function VariableAutocompleteInput({
     setSelectedIndex(0);
   }, [filteredOptions.length]);
 
-  const hasNoContext = !dataContext?.fields?.length && pageVariables.length === 0 && searchParams.size === 0 && !pageStateConfig?.variables?.length && !pageStateConfig?.uiFlags?.length;
+  const hasNoContext = !dataContext?.fields?.length && !pageStateConfig?.variables?.length;
   const hasNoMatches = filteredOptions.length === 0 && !hasNoContext;
 
   // Common input props
@@ -376,93 +335,15 @@ export function VariableAutocompleteInput({
             </div>
           )}
 
-          {/* Page Variables (includes both defined page vars and URL params) */}
-          {(groupedOptions.pageVars.length > 0 || groupedOptions.params.length > 0) && (
-            <div className={cn("p-1", groupedOptions.fields.length > 0 && "border-t")}>
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                <Variable className="h-3 w-3" />
-                Page Variables
-              </div>
-              {/* Defined page variables first */}
-              {groupedOptions.pageVars.map((option, idx) => {
-                const globalIdx = groupedOptions.fields.length + idx;
-                const isSelected = selectedIndex === globalIdx;
-                return (
-                  <button
-                    key={option.variable}
-                    type="button"
-                    className={cn(
-                      'w-full flex items-center justify-between px-2 py-1.5 text-sm rounded-sm cursor-pointer',
-                      isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
-                    )}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleOptionClick(option);
-                    }}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onMouseEnter={() => setSelectedIndex(globalIdx)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                      <code className="text-xs bg-muted px-1 rounded">
-                        {`{${option.variable}}`}
-                      </code>
-                    </div>
-                    {option.description && (
-                      <span className="text-xs text-muted-foreground truncate max-w-[100px]">
-                        {option.description}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-              {/* Additional URL params not defined in page settings */}
-              {groupedOptions.params.map((option, idx) => {
-                const globalIdx = groupedOptions.fields.length + groupedOptions.pageVars.length + idx;
-                const isSelected = selectedIndex === globalIdx;
-                return (
-                  <button
-                    key={option.variable}
-                    type="button"
-                    className={cn(
-                      'w-full flex items-center justify-between px-2 py-1.5 text-sm rounded-sm cursor-pointer',
-                      isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
-                    )}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleOptionClick(option);
-                    }}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onMouseEnter={() => setSelectedIndex(globalIdx)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                      <code className="text-xs bg-muted px-1 rounded">
-                        {`{${option.variable}}`}
-                      </code>
-                    </div>
-                    {option.sampleValue !== undefined && (
-                      <span className="text-xs text-muted-foreground truncate max-w-[100px]">
-                        {option.sampleValue}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* State Variables */}
+          {/* State Variables (auto-populate from matching URL params) */}
           {groupedOptions.state.length > 0 && (
-            <div className={cn("p-1", (groupedOptions.fields.length > 0 || groupedOptions.pageVars.length > 0 || groupedOptions.params.length > 0) && "border-t")}>
+            <div className={cn("p-1", groupedOptions.fields.length > 0 && "border-t")}>
               <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                 <Box className="h-3 w-3" />
                 State Variables
               </div>
               {groupedOptions.state.map((option, idx) => {
-                const globalIdx = groupedOptions.fields.length + groupedOptions.pageVars.length + groupedOptions.params.length + idx;
+                const globalIdx = groupedOptions.fields.length + idx;
                 const isSelected = selectedIndex === globalIdx;
                 return (
                   <button

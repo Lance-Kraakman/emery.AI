@@ -41,10 +41,10 @@ import { Check, ChevronsUpDown, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getFields } from '@/app/actions/fields';
 import { getView } from '@/app/actions/views';
-import { usePageVariablesContext } from '../contexts/PageVariablesContext';
+import { useStateContext } from '../contexts/StateContext';
 import { useParentRowData } from '../contexts/RowDataContext';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
-import type { PageVariable } from '@/components/puck/types';
+import type { StateVariable } from '../types/state';
 import {
   type FilterOperator,
   type FieldType,
@@ -89,18 +89,18 @@ function createEmptyCondition(): FilterCondition {
   };
 }
 
-/** Regex to extract variable name from {params.varName} format */
-const PARAMS_VAR_REGEX = /\{params\.(\w+)\}/;
+/** Regex to extract variable name from {state.varName} format */
+const STATE_VAR_REGEX = /\{state\.(\w+)\}/;
 
-/** Parse variable name from {params.varName} format */
-function parseParamVariable(value: string): string {
-  const match = value.match(PARAMS_VAR_REGEX);
+/** Parse variable name from {state.varName} format */
+function parseStateVariable(value: string): string {
+  const match = value.match(STATE_VAR_REGEX);
   return match?.[1] || '';
 }
 
-/** Format variable name to {params.varName} format */
-function formatParamVariable(varName: string): string {
-  return `{params.${varName}}`;
+/** Format variable name to {state.varName} format */
+function formatStateVariable(varName: string): string {
+  return `{state.${varName}}`;
 }
 
 /** Regex to extract field name from {rowData.fieldName} format */
@@ -135,7 +135,9 @@ export function MultiFilterField({
   const [fields, setFields] = useState<FieldDTO[]>([]);
   const [loadingFields, setLoadingFields] = useState(false);
 
-  const { pageVariables, addPageVariable } = usePageVariablesContext();
+  const stateContext = useStateContext();
+  const pageStateConfig = stateContext?.getConfig();
+  const stateVariables = pageStateConfig?.variables || [];
 
   // Get parent row data context for {rowData.x} variables
   const parentContext = useParentRowData();
@@ -275,8 +277,7 @@ export function MultiFilterField({
               fields={fields}
               parentFields={parentFields}
               hasParentFields={hasParentFields}
-              pageVariables={pageVariables}
-              addPageVariable={addPageVariable}
+              stateVariables={stateVariables}
               onChange={(updates) => updateCondition(condition.id, updates)}
               onRemove={() => removeCondition(condition.id)}
             />
@@ -310,8 +311,7 @@ interface FilterConditionRowProps {
   fields: FieldDTO[];
   parentFields: FieldDTO[];
   hasParentFields: boolean;
-  pageVariables: PageVariable[];
-  addPageVariable?: (variable: PageVariable) => Promise<void>;
+  stateVariables: StateVariable[];
   onChange: (updates: Partial<FilterCondition>) => void;
   onRemove: () => void;
 }
@@ -321,13 +321,11 @@ function FilterConditionRow({
   fields,
   parentFields,
   hasParentFields,
-  pageVariables,
-  addPageVariable,
+  stateVariables,
   onChange,
   onRemove,
 }: FilterConditionRowProps) {
   const [varComboOpen, setVarComboOpen] = useState(false);
-  const [newVarInput, setNewVarInput] = useState('');
 
   // Get selected field info
   const selectedField = useMemo(() => {
@@ -356,28 +354,12 @@ function FilterConditionRow({
   };
 
   // Handle variable selection
-  const handleSelectVariable = async (varName: string) => {
-    const exists = pageVariables.some(v => v.name === varName);
-
-    if (!exists && addPageVariable) {
-      const varType = selectedField?.type === 'number' ? 'number' : 'string';
-
-      const newVar: PageVariable = {
-        name: varName,
-        type: varType as 'string' | 'number',
-        required: true,
-        description: `Used by DataBlock filter on ${selectedField?.name || 'unknown field'}`,
-      };
-
-      await addPageVariable(newVar);
-    }
-
+  const handleSelectVariable = (varName: string) => {
     onChange({
       valueType: 'variable',
-      value: formatParamVariable(varName),
+      value: formatStateVariable(varName),
     });
     setVarComboOpen(false);
-    setNewVarInput('');
   };
 
   // Handle parent field selection
@@ -393,17 +375,9 @@ function FilterConditionRow({
     onChange({ value: val });
   };
 
-  // Handle creating new variable from input
-  const handleCreateNewVariable = () => {
-    if (newVarInput.trim()) {
-      const sanitized = newVarInput.trim().replace(/[^a-zA-Z0-9_]/g, '_');
-      handleSelectVariable(sanitized);
-    }
-  };
-
   // Extract variable name from value
   const currentVarName = condition.valueType === 'variable'
-    ? parseParamVariable(condition.value)
+    ? parseStateVariable(condition.value)
     : '';
 
   const currentParentField = condition.valueType === 'parentRow'
@@ -501,7 +475,7 @@ function FilterConditionRow({
             </Label>
 
             {condition.valueType === 'variable' ? (
-              /* Combobox for Page Variables */
+              /* Combobox for State Variables */
               <Popover open={varComboOpen} onOpenChange={setVarComboOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -510,64 +484,45 @@ function FilterConditionRow({
                     aria-expanded={varComboOpen}
                     className="w-full justify-between h-7 text-xs font-normal"
                   >
-                    {currentVarName ? formatParamVariable(currentVarName) : 'Select or create...'}
+                    {currentVarName ? formatStateVariable(currentVarName) : 'Select variable...'}
                     <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[220px] p-0" align="start">
                   <Command>
                     <CommandInput
-                      placeholder="Search or type new..."
+                      placeholder="Search variables..."
                       className="h-7 text-xs"
-                      value={newVarInput}
-                      onValueChange={setNewVarInput}
                     />
                     <CommandList>
                       <CommandEmpty>
-                        {newVarInput.trim() ? (
-                          <button
-                            className="flex items-center gap-2 px-2 py-1.5 text-xs w-full hover:bg-accent rounded cursor-pointer"
-                            onClick={handleCreateNewVariable}
-                          >
-                            <Plus className="h-3 w-3" />
-                            Create "{newVarInput.trim()}"
-                          </button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            Type to create new variable
-                          </span>
-                        )}
+                        <span className="text-xs text-muted-foreground">
+                          No variables found. Add them in Page State panel.
+                        </span>
                       </CommandEmpty>
-                      <CommandGroup heading="Page Variables">
-                        {pageVariables.map(pv => (
+                      <CommandGroup heading="State Variables">
+                        {stateVariables.map(sv => (
                           <CommandItem
-                            key={pv.name}
-                            value={pv.name}
-                            onSelect={() => handleSelectVariable(pv.name)}
+                            key={sv.name}
+                            value={sv.name}
+                            onSelect={() => handleSelectVariable(sv.name)}
                             className="text-xs"
                           >
                             <Check
                               className={cn(
                                 'mr-2 h-3 w-3',
-                                currentVarName === pv.name ? 'opacity-100' : 'opacity-0'
+                                currentVarName === sv.name ? 'opacity-100' : 'opacity-0'
                               )}
                             />
-                            {formatParamVariable(pv.name)}
+                            {formatStateVariable(sv.name)}
+                            {sv.description && (
+                              <span className="ml-2 text-muted-foreground truncate">
+                                {sv.description}
+                              </span>
+                            )}
                           </CommandItem>
                         ))}
                       </CommandGroup>
-                      {newVarInput.trim() && !pageVariables.some(v => v.name === newVarInput.trim()) && (
-                        <CommandGroup heading="Create New">
-                          <CommandItem
-                            value={`create-${newVarInput}`}
-                            onSelect={handleCreateNewVariable}
-                            className="text-xs"
-                          >
-                            <Plus className="mr-2 h-3 w-3" />
-                            Create "{newVarInput.trim()}"
-                          </CommandItem>
-                        </CommandGroup>
-                      )}
                     </CommandList>
                   </Command>
                 </PopoverContent>

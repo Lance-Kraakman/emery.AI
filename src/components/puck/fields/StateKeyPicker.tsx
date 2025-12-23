@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * StateKeyPicker - Dropdown for selecting UI flags and state variables
+ * StateKeyPicker - Dropdown for selecting state variables
  *
  * Used by ConditionalBlock and DialogBlock for selecting state keys.
  * Gets available options from PageStateConfig via StateContext.
@@ -18,17 +18,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ToggleLeft, Box } from 'lucide-react';
-
-export type StateKeyType = 'uiFlag' | 'variable' | 'all';
+import { Box } from 'lucide-react';
 
 interface StateKeyPickerProps {
   value: string;
   onChange: (value: string) => void;
   label?: string;
   placeholder?: string;
-  /** Filter to show only UI flags, only variables, or all */
-  keyType?: StateKeyType;
+  /** Optional filter for variable type (e.g., 'boolean' for dialogs) */
+  filterType?: string;
   disabled?: boolean;
 }
 
@@ -36,25 +34,23 @@ export function StateKeyPicker({
   value,
   onChange,
   placeholder = 'Select...',
-  keyType = 'all',
+  filterType,
   disabled = false,
 }: StateKeyPickerProps) {
   const stateContext = useStateContext();
   const config = stateContext?.getConfig();
 
-  const uiFlags = config?.uiFlags || [];
-  const variables = config?.variables || [];
+  let variables = config?.variables || [];
 
-  const showFlags = keyType === 'all' || keyType === 'uiFlag';
-  const showVars = keyType === 'all' || keyType === 'variable';
+  // Optionally filter by type (e.g., 'boolean' for dialogs)
+  if (filterType) {
+    variables = variables.filter(v => v.type === filterType);
+  }
 
-  const hasOptions = (showFlags && uiFlags.length > 0) || (showVars && variables.length > 0);
-
-  if (!hasOptions) {
-    const typeLabel = keyType === 'uiFlag' ? 'UI flags' : keyType === 'variable' ? 'variables' : 'state keys';
+  if (variables.length === 0) {
     return (
       <div className="text-xs text-muted-foreground p-2 border rounded-md bg-muted/20">
-        No {typeLabel} defined.
+        No state variables defined.
         <br />
         <span className="text-[10px]">Add them in the Page State panel.</span>
       </div>
@@ -67,40 +63,20 @@ export function StateKeyPicker({
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
-        {showFlags && uiFlags.length > 0 && (
-          <SelectGroup>
-            <SelectLabel className="flex items-center gap-1.5 text-xs">
-              <ToggleLeft className="h-3 w-3" />
-              UI Flags
-            </SelectLabel>
-            {uiFlags.map((flag) => (
-              <SelectItem key={flag.name} value={flag.name}>
-                <div className="flex items-center gap-2">
-                  <code className="text-xs bg-muted px-1 rounded">{flag.name}</code>
-                  {flag.description && (
-                    <span className="text-xs text-muted-foreground">{flag.description}</span>
-                  )}
-                </div>
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        )}
-        {showVars && variables.length > 0 && (
-          <SelectGroup>
-            <SelectLabel className="flex items-center gap-1.5 text-xs">
-              <Box className="h-3 w-3" />
-              Variables
-            </SelectLabel>
-            {variables.map((variable) => (
-              <SelectItem key={variable.name} value={variable.name}>
-                <div className="flex items-center gap-2">
-                  <code className="text-xs bg-muted px-1 rounded">{variable.name}</code>
-                  <span className="text-xs text-muted-foreground">({variable.type})</span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        )}
+        <SelectGroup>
+          <SelectLabel className="flex items-center gap-1.5 text-xs">
+            <Box className="h-3 w-3" />
+            State Variables
+          </SelectLabel>
+          {variables.map((variable) => (
+            <SelectItem key={variable.name} value={variable.name}>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-muted px-1 rounded">{variable.name}</code>
+                <span className="text-xs text-muted-foreground">({variable.type})</span>
+              </div>
+            </SelectItem>
+          ))}
+        </SelectGroup>
       </SelectContent>
     </Select>
   );

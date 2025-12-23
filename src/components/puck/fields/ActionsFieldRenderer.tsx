@@ -12,7 +12,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { FieldLabel } from '@measured/puck';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Trash2, Bot, FileText, ExternalLink, GripVertical, Settings2 } from 'lucide-react';
+import { Plus, Trash2, Bot, FileText, ExternalLink, GripVertical, Settings2, Variable as VariableIcon } from 'lucide-react';
 import type { Action } from '../types/actions';
 import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 import type { PageDTO } from '@/app/mappers/puck-page-mapper';
@@ -35,20 +35,22 @@ import { TaskInstructionsDialog } from './TaskInstructionsDialog';
 import { VariableAutocompleteInput } from './VariableAutocompleteInput';
 import { VariablesPanel, type Variable } from '@/components/shared/VariablesPanel';
 import { useDataLayoutContext } from '../contexts/DataLayoutContext';
-import { usePageVariables } from '../contexts/PageVariablesContext';
+import { useStateContext } from '../contexts/StateContext';
 
-type ActionType = 'assignTask' | 'navigateToPage' | 'openUrl';
+type ActionType = 'assignTask' | 'navigateToPage' | 'openUrl' | 'setState';
 
 const ACTION_TYPE_LABELS: Record<ActionType, string> = {
   assignTask: 'Assign Task to Agent',
   navigateToPage: 'Navigate to Page',
   openUrl: 'Open URL',
+  setState: 'Set State Variable',
 };
 
 const ACTION_TYPE_ICONS: Record<ActionType, React.ReactNode> = {
   assignTask: <Bot className="h-4 w-4" />,
   navigateToPage: <FileText className="h-4 w-4" />,
   openUrl: <ExternalLink className="h-4 w-4" />,
+  setState: <VariableIcon className="h-4 w-4" />,
 };
 
 interface ActionsFieldProps {
@@ -74,8 +76,8 @@ function PageVariablesEditor({
 }) {
   const entries = Object.entries(value);
   const dataContext = useDataLayoutContext();
-  const pageVariables = usePageVariables();
-  const searchParams = useSearchParams();
+  const stateContext = useStateContext();
+  const pageStateConfig = stateContext?.getConfig();
 
   // Track which input was last focused for variable insertion (by index, not key name)
   const lastFocusedIndexRef = useRef<number | null>(null);
@@ -93,7 +95,7 @@ function PageVariablesEditor({
   // Add id field first if available
   if (dataContext?.sampleRow?.id !== undefined) {
     availableVariables.push({
-      name: 'id',
+      name: 'rowData.id',
       sampleValue: String(dataContext.sampleRow.id),
     });
   }
@@ -104,30 +106,21 @@ function PageVariablesEditor({
       if (field.name === 'id') continue; // Already added from sampleRow.id
       const sampleValue = dataContext.sampleRow?.[field.name];
       availableVariables.push({
-        name: field.name,
+        name: `rowData.${field.name}`,
         sampleValue: sampleValue !== undefined ? String(sampleValue) : undefined,
       });
     }
   }
 
-  // Add page variables
-  for (const pv of pageVariables) {
-    availableVariables.push({
-      name: `params.${pv.name}`,
-      description: pv.description,
-    });
-  }
-
-  // Add URL query params (not already defined as page variables)
-  const addedPageVars = new Set(pageVariables.map(pv => pv.name));
-  searchParams.forEach((paramValue, paramName) => {
-    if (!addedPageVars.has(paramName)) {
+  // Add state variables (which auto-populate from matching URL params)
+  if (pageStateConfig?.variables) {
+    for (const variable of pageStateConfig.variables) {
       availableVariables.push({
-        name: `params.${paramName}`,
-        sampleValue: paramValue,
+        name: `state.${variable.name}`,
+        description: variable.description || `${variable.type} variable`,
       });
     }
-  });
+  }
 
   // Add context variables (available when triggered from document/file fields)
   availableVariables.push({
@@ -333,6 +326,7 @@ function ActionItem({
   readOnly?: boolean;
 }) {
   const actionType = action.type as ActionType;
+  const stateContext = useStateContext();
 
   // Track if mousedown happened on the delete button to prevent accidental deletion
   // from Puck's focus management system which can focus+click buttons unexpectedly
@@ -361,6 +355,14 @@ function ActionItem({
           newTab: true,
         });
         break;
+      case 'setState':
+        onChange({
+          type: 'setState',
+          key: '',
+          value: '',
+          updateUrl: true,
+        });
+        break;
     }
   };
 
@@ -378,6 +380,8 @@ function ActionItem({
       }
       case 'openUrl':
         return action.url ? `Open: ${action.url}${action.newTab ? ' (new tab)' : ''}` : 'No URL specified';
+      case 'setState':
+        return action.key ? `Set ${action.key} = ${action.value}${action.updateUrl !== false ? ' (URL)' : ''}` : 'No variable selected';
       default:
         return 'Unknown action';
     }
@@ -543,14 +547,14 @@ function ActionItem({
                 const selectedPage = pages.find(p => p.id.toString() === val);
                 const queryParams: Record<string, string> = {};
 
-                // Auto-populate from page's required variables
+                // Auto-populate from page's state variables
                 // Try to match variable name to a field (case-insensitive), else leave empty
-                if (selectedPage?.pageVariables) {
-                  for (const pv of selectedPage.pageVariables) {
-                    const varNameLower = pv.name.toLowerCase();
-                    // Check if there's a matching field name (e.g., "id" -> "{id}")
+                if (selectedPage?.pageState?.variables) {
+                  for (const variable of selectedPage.pageState.variables) {
+                    const varNameLower = variable.name.toLowerCase();
+                    // Check if there's a matching field name (e.g., "id" -> "{rowData.id}")
                     // This handles common cases like id, client_id, etc.
-                    queryParams[pv.name] = `{${varNameLower}}`;
+                    queryParams[variable.name] = `{rowData.${varNameLower}}`;
                   }
                 }
 
@@ -626,6 +630,74 @@ function ActionItem({
               className="text-xs font-normal cursor-pointer"
             >
               Open in new tab
+            </Label>
+          </div>
+        </>
+      )}
+
+      {/* Set State Fields */}
+      {action.type === 'setState' && (
+        <>
+          <div className="space-y-2">
+            <Label className="text-xs font-medium">State Variable</Label>
+            <Select
+              value={action.key || ''}
+              onValueChange={(val) => onChange({ ...action, key: val })}
+              disabled={readOnly}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a state variable" />
+              </SelectTrigger>
+              <SelectContent>
+                {stateContext?.getConfig()?.variables?.map((variable) => (
+                  <SelectItem key={variable.name} value={variable.name}>
+                    <div className="flex items-center gap-2">
+                      <VariableIcon className="h-4 w-4 text-muted-foreground" />
+                      <span>{variable.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({variable.type})
+                      </span>
+                    </div>
+                  </SelectItem>
+                )) ?? (
+                  <SelectItem value="" disabled>
+                    No state variables defined
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Define state variables in Page State panel
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-medium">Value</Label>
+            <VariableAutocompleteInput
+              value={String(action.value ?? '')}
+              onChange={(val) => onChange({ ...action, value: val })}
+              placeholder="Enter value or {rowData.field}"
+              disabled={readOnly}
+            />
+            <p className="text-xs text-muted-foreground">
+              Type {"{"} to insert row data or other variables
+            </p>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id={`action-${index}-update-url`}
+              checked={action.updateUrl !== false}
+              onCheckedChange={(checked) =>
+                onChange({ ...action, updateUrl: checked as boolean })
+              }
+              disabled={readOnly}
+            />
+            <Label
+              htmlFor={`action-${index}-update-url`}
+              className="text-xs font-normal cursor-pointer"
+            >
+              Update URL parameter (persists state in URL)
             </Label>
           </div>
         </>

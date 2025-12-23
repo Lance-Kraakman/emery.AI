@@ -4,19 +4,21 @@
  * ConditionalBlock - Conditionally render children based on state, params, or row data
  *
  * AIDEV-NOTE: Uses flat namespace for state - no containers.
- * State variables are accessed directly by key.
+ * State variables are accessed directly by key via {state.key}.
+ * Boolean variables are just regular state with type 'boolean'.
  *
  * In editor mode: Shows condition badge and always renders children
  * At runtime: Conditionally renders children based on condition
  */
 
-import React, { useEffect, useReducer, useMemo, type ComponentType } from 'react';
+import React, { useEffect, useReducer, useMemo, useState, type ComponentType } from 'react';
 import { ComponentConfig } from '@measured/puck';
 import { useStateContext } from '../../contexts/StateContext';
 import { useRowData } from '../../contexts/RowDataContext';
 import { useLinkContext, usePageContext } from '../../contexts/PageContext';
 import { createStateKeyField } from '../../custom-fields/state-key-field';
-import { GitBranch, Check, X } from 'lucide-react';
+import { GitBranch, Check, X, Eye, Pencil } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 /**
  * Comparison operators for conditions
@@ -35,7 +37,7 @@ export type ConditionOperator =
 /**
  * Value source type for the condition
  */
-export type ConditionSourceType = 'state' | 'uiFlag' | 'params' | 'rowData';
+export type ConditionSourceType = 'state' | 'params' | 'rowData';
 
 /**
  * ConditionalBlock Props
@@ -57,6 +59,12 @@ export interface ConditionalBlockProps {
   invert: boolean;
   /** Child content to render when condition is true */
   children?: ComponentType<{
+    className?: string;
+    allow?: string[];
+    disallow?: string[];
+  }>;
+  /** Child content to render when condition is false */
+  elseContent?: ComponentType<{
     className?: string;
     allow?: string[];
     disallow?: string[];
@@ -111,14 +119,12 @@ function getConditionLabel(
 ): string {
   // Determine the source label
   let source = '?';
-  if (sourceType === 'uiFlag' && stateKey) {
-    source = stateKey;
-  } else if (sourceType === 'state' && stateKey) {
+  if (sourceType === 'state' && stateKey) {
     source = `state.${stateKey}`;
   } else if (sourceType === 'params' && paramName) {
     source = `params.${paramName}`;
   } else if (sourceType === 'rowData' && fieldName) {
-    source = fieldName;
+    source = `rowData.${fieldName}`;
   }
 
   // Determine the operator label
@@ -151,6 +157,7 @@ function ConditionalBlockComponent({
   compareValue,
   invert,
   children: Children,
+  elseContent: ElseContent,
 }: ConditionalBlockProps) {
   const stateContext = useStateContext();
   const rowContext = useRowData();
@@ -159,13 +166,17 @@ function ConditionalBlockComponent({
   // Get editing context from page context
   const { isEditing } = useLinkContext();
 
+  // Preview/Edit mode state
+  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
+  const [previewBranch, setPreviewBranch] = useState<'true' | 'else'>('true');
+
   // Force re-render counter for state subscriptions
   const [, forceUpdate] = useReducer(x => x + 1, 0);
 
-  // Subscribe to state changes if using state/uiFlag source
+  // Subscribe to state changes if using state source
   useEffect(() => {
     if (!stateContext) return;
-    if (sourceType !== 'state' && sourceType !== 'uiFlag') return;
+    if (sourceType !== 'state') return;
 
     const unsubscribe = stateContext.subscribe(forceUpdate);
     return unsubscribe;
@@ -177,10 +188,6 @@ function ConditionalBlockComponent({
       case 'state':
         if (!stateContext || !stateKey) return undefined;
         return stateContext.getValue(stateKey);
-
-      case 'uiFlag':
-        if (!stateContext || !stateKey) return undefined;
-        return stateContext.getUIFlag(stateKey);
 
       case 'params':
         if (!pageContext || !paramName) return undefined;
@@ -201,6 +208,11 @@ function ConditionalBlockComponent({
     return invert ? !result : result;
   }, [currentValue, operator, compareValue, invert]);
 
+  // Update preview branch when condition changes (default to actual state)
+  useEffect(() => {
+    setPreviewBranch(conditionMet ? 'true' : 'else');
+  }, [conditionMet]);
+
   // Get condition label for editor display
   const conditionLabel = getConditionLabel(
     sourceType,
@@ -212,41 +224,134 @@ function ConditionalBlockComponent({
     invert
   );
 
-  // Editor mode: Show condition badge and always render children
+  // Editor mode: Show condition badge with preview/edit toggle
   if (isEditing) {
     return (
       <div className="relative border-2 border-dashed border-blue-300 rounded-lg p-3 min-h-[60px]">
-        {/* Condition badge at top */}
+        {/* Condition badge at top with mode toggle */}
         <div className="absolute -top-3 left-2 bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full flex items-center gap-1.5 font-mono">
           <GitBranch className="h-3 w-3" />
-          <span className="max-w-[200px] truncate">{conditionLabel}</span>
+          <span className="max-w-[150px] truncate">{conditionLabel}</span>
           {conditionMet ? (
             <Check className="h-3 w-3 text-green-600" />
           ) : (
             <X className="h-3 w-3 text-red-500" />
           )}
-        </div>
 
-        {/* Children always visible in editor */}
-        <div className="mt-2">
-          {Children ? (
-            <Children />
-          ) : (
-            <div className="text-muted-foreground text-sm py-6 text-center border-2 border-dashed rounded-md">
-              Drop content here
-            </div>
+          {/* Divider */}
+          <div className="w-px h-3 bg-blue-300 mx-1" />
+
+          {/* Edit/Preview toggle */}
+          <div className="flex gap-0.5">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setViewMode('edit'); }}
+              className={cn(
+                "p-0.5 rounded transition-colors",
+                viewMode === 'edit' ? "bg-blue-200" : "hover:bg-blue-200/50"
+              )}
+              title="Edit mode - show both branches"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setViewMode('preview'); }}
+              className={cn(
+                "p-0.5 rounded transition-colors",
+                viewMode === 'preview' ? "bg-blue-200" : "hover:bg-blue-200/50"
+              )}
+              title="Preview mode - show selected branch"
+            >
+              <Eye className="h-3 w-3" />
+            </button>
+          </div>
+
+          {/* Branch toggle (only in preview mode) */}
+          {viewMode === 'preview' && (
+            <>
+              <div className="w-px h-3 bg-blue-300 mx-1" />
+              <div className="flex gap-0.5">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setPreviewBranch('true'); }}
+                  className={cn(
+                    "px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors",
+                    previewBranch === 'true' ? "bg-green-200 text-green-800" : "hover:bg-blue-200/50"
+                  )}
+                >
+                  True
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setPreviewBranch('else'); }}
+                  className={cn(
+                    "px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors",
+                    previewBranch === 'else' ? "bg-orange-200 text-orange-800" : "hover:bg-blue-200/50"
+                  )}
+                >
+                  Else
+                </button>
+              </div>
+            </>
           )}
         </div>
+
+        {viewMode === 'edit' ? (
+          // Edit mode: Show both branches
+          <>
+            {/* IF TRUE section */}
+            <div className="mt-2">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">If True</div>
+              {Children ? (
+                <Children />
+              ) : (
+                <div className="text-muted-foreground text-sm py-4 text-center border-2 border-dashed rounded-md">
+                  Drop content here
+                </div>
+              )}
+            </div>
+
+            {/* ELSE section */}
+            <div className="mt-3 pt-3 border-t border-dashed border-blue-300">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Else</div>
+              {ElseContent ? (
+                <ElseContent />
+              ) : (
+                <div className="text-muted-foreground text-sm py-4 text-center border-2 border-dashed rounded-md">
+                  Drop content here (optional)
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          // Preview mode: Show only selected branch
+          <div className="mt-2">
+            {previewBranch === 'true' ? (
+              Children ? <Children /> : (
+                <div className="text-muted-foreground text-sm py-4 text-center border-2 border-dashed rounded-md">
+                  No content in True branch
+                </div>
+              )
+            ) : (
+              ElseContent ? <ElseContent /> : (
+                <div className="text-muted-foreground text-sm py-4 text-center border-2 border-dashed rounded-md">
+                  No content in Else branch
+                </div>
+              )
+            )}
+          </div>
+        )}
       </div>
     );
   }
 
   // Runtime: Conditional rendering
-  if (!conditionMet) {
-    return <></>;
+  if (conditionMet) {
+    return Children ? <Children /> : <></>;
   }
 
-  return Children ? <Children /> : <></>;
+  return ElseContent ? <ElseContent /> : <></>;
 }
 
 /**
@@ -259,7 +364,6 @@ export const ConditionalBlock: ComponentConfig<ConditionalBlockProps> = {
       type: 'select',
       label: 'Value Source',
       options: [
-        { value: 'uiFlag', label: 'UI Flag (boolean)' },
         { value: 'state', label: 'State Variable' },
         { value: 'params', label: 'URL Parameter' },
         { value: 'rowData', label: 'Row Data' },
@@ -306,6 +410,11 @@ export const ConditionalBlock: ComponentConfig<ConditionalBlockProps> = {
     },
     children: {
       type: 'slot',
+      label: 'If True',
+    },
+    elseContent: {
+      type: 'slot',
+      label: 'Else',
     },
   },
 
@@ -320,20 +429,11 @@ export const ConditionalBlock: ComponentConfig<ConditionalBlockProps> = {
 
     // Source-specific fields
     let sourceFields = {};
-    if (sourceType === 'uiFlag') {
-      sourceFields = {
-        stateKey: createStateKeyField({
-          label: 'UI Flag',
-          placeholder: 'Select a UI flag...',
-          keyType: 'uiFlag',
-        }),
-      };
-    } else if (sourceType === 'state') {
+    if (sourceType === 'state') {
       sourceFields = {
         stateKey: createStateKeyField({
           label: 'State Variable',
           placeholder: 'Select a variable...',
-          keyType: 'variable',
         }),
       };
     } else if (sourceType === 'params') {
@@ -363,11 +463,12 @@ export const ConditionalBlock: ComponentConfig<ConditionalBlockProps> = {
       ...compareFields,
       invert: fields.invert,
       children: fields.children,
+      elseContent: fields.elseContent,
     };
   },
 
   defaultProps: {
-    sourceType: 'uiFlag',
+    sourceType: 'state',
     stateKey: '',
     operator: 'truthy',
     invert: false,

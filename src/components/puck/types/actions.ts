@@ -9,7 +9,7 @@
  * - State management (flat namespace - no containers)
  */
 
-import type { TaskInstructions } from '@/ddd/domain/agents/entities/agent';
+import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 
 /**
  * Action to assign a task to an agent
@@ -69,6 +69,8 @@ export interface SetStateAction {
   key: string;
   /** Value to set (can use templates like {rowData.field}) */
   value: string | number | boolean;
+  /** Whether to also update the URL param (default: true) */
+  updateUrl?: boolean;
 }
 
 /**
@@ -135,6 +137,7 @@ export interface ActionLinkContext {
  */
 export interface ActionStateContext {
   setValue: (key: string, value: unknown) => void;
+  setValueWithUrlSync: (key: string, value: unknown, updateUrl?: boolean) => void;
   toggleUIFlag: (key: string) => void;
   setUIFlag: (key: string, value: boolean) => void;
   resetState: () => void;

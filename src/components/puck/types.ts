@@ -1,16 +1,5 @@
 import { Config, Data, Slot } from "@measured/puck";
 
-/**
- * Page Variable - defines expected query parameters for a page
- * These are shown in the variable autocomplete and used for navigation actions
- */
-export interface PageVariable {
-  name: string;           // e.g., "user_id", "product_id"
-  type: 'string' | 'number';
-  required: boolean;
-  description?: string;
-}
-
 // Re-export PageStateConfig for use in DB schema
 export type { PageStateConfig } from './types/state';
 import { ButtonProps } from "./blocks/Button";

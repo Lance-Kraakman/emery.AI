@@ -8,7 +8,8 @@ import type { PageOrder } from '../value-objects/page-order';
 import type { PuckData } from '../value-objects/puck-data';
 import { UserId } from '@/ddd/domain/shared/value-objects';
 import { ThemeConfig, type ThemeConfigProps } from '../value-objects/theme-config';
-import type { PageVariable, PageStateConfig } from '@/components/puck/types';
+import type { PageStateConfig } from '@/components/puck/types/state';
+import type { PageDialogsConfig } from '../value-objects/page-dialogs';
 
 export class PuckPage {
   private constructor(
@@ -23,8 +24,8 @@ export class PuckPage {
     private _isPublic: boolean,
     private _requiresAuth: boolean,
     private _allowedRoles: string[] | undefined,
-    private _pageVariables: PageVariable[] | undefined,
     private _pageState: PageStateConfig | undefined,
+    private _pageDialogs: PageDialogsConfig | undefined,
     private readonly _ownerId: UserId,
     private readonly _createdAt: Date,
     private _updatedAt: Date
@@ -71,12 +72,12 @@ export class PuckPage {
     return this._allowedRoles ? [...this._allowedRoles] : undefined;
   }
 
-  get pageVariables(): PageVariable[] | undefined {
-    return this._pageVariables ? [...this._pageVariables] : undefined;
-  }
-
   get pageState(): PageStateConfig | undefined {
     return this._pageState ? { ...this._pageState } : undefined;
+  }
+
+  get pageDialogs(): PageDialogsConfig | undefined {
+    return this._pageDialogs ? { ...this._pageDialogs } : undefined;
   }
 
   get ownerId(): UserId {
@@ -219,18 +220,18 @@ export class PuckPage {
   }
 
   /**
-   * Update page variables (expected query parameters)
-   */
-  setPageVariables(variables: PageVariable[] | undefined): void {
-    this._pageVariables = variables && variables.length > 0 ? [...variables] : undefined;
-    this._updatedAt = new Date();
-  }
-
-  /**
    * Update page state configuration (client-side state)
    */
   setPageState(config: PageStateConfig | undefined): void {
     this._pageState = config ? { ...config } : undefined;
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Update page dialogs configuration
+   */
+  setPageDialogs(config: PageDialogsConfig | undefined): void {
+    this._pageDialogs = config ? { ...config } : undefined;
     this._updatedAt = new Date();
   }
 
@@ -290,8 +291,8 @@ export class PuckPage {
     isPublic: boolean;
     requiresAuth: boolean;
     allowedRoles?: string[];
-    pageVariables?: PageVariable[];
     pageState?: PageStateConfig;
+    pageDialogs?: PageDialogsConfig;
     ownerId: string;
     createdAt: Date;
     updatedAt: Date;
@@ -333,8 +334,8 @@ export class PuckPage {
       data.isPublic,
       data.requiresAuth,
       data.allowedRoles,
-      data.pageVariables,
       data.pageState,
+      data.pageDialogs,
       UserId.fromString(data.ownerId),
       data.createdAt,
       data.updatedAt
@@ -356,8 +357,8 @@ export class PuckPage {
     isPublic: boolean;
     requiresAuth: boolean;
     allowedRoles: string[] | undefined;
-    pageVariables: PageVariable[] | undefined;
     pageState: PageStateConfig | undefined;
+    pageDialogs: PageDialogsConfig | undefined;
     ownerId: string;
     createdAt: Date;
     updatedAt: Date;
@@ -374,8 +375,8 @@ export class PuckPage {
       isPublic: this._isPublic,
       requiresAuth: this._requiresAuth,
       allowedRoles: this._allowedRoles,
-      pageVariables: this._pageVariables,
       pageState: this._pageState,
+      pageDialogs: this._pageDialogs,
       ownerId: this._ownerId.value,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt

@@ -1,27 +1,30 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Puck, usePuck } from "@measured/puck";
+import { Puck, usePuck, type Data } from "@measured/puck";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { LayoutGrid, Settings, List, Globe, Eye, ExternalLink, Copy, Check, Undo2, Redo2 } from "lucide-react";
+import { LayoutGrid, Settings, List, Globe, Eye, ExternalLink, Copy, Check, Undo2, Redo2, ArrowLeft, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { PageSettingsPanel } from "@/app/(app)/apps/components/PageSettingsPanel";
 import { PageAccessSettings } from "@/app/(app)/apps/components/PageAccessSettings";
-import { PageVariablesPanel } from "@/app/(app)/apps/components/PageVariablesPanel";
 import { PageStatePanel } from "@/app/(app)/apps/components/PageStatePanel";
 import { ThemeSidebarPanel } from "@/app/(app)/apps/components/ThemeEditorSheet";
 import { usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 import { PuckSession } from "@/lib/puck/session-storage";
-import { updatePageContent } from "@/app/actions/puck-pages";
+import { updatePageContent, updatePageDialogs } from "@/app/actions/puck-pages";
 import { ComponentBreadcrumb } from "@/components/puck/ComponentBreadcrumb";
 import { EditorUIProvider, useEditorUI } from "@/components/puck/contexts/EditorUIContext";
-import type { PageVariable } from "@/components/puck/types";
 import type { PageStateConfig } from "@/components/puck/types/state";
+import type { PageDialogsConfig } from "@/ddd/domain/puck/value-objects/page-dialogs";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
+import { PageDialogsPanel } from "@/app/(app)/apps/components/PageDialogsPanel";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import type { OrganizationDTO } from "@/app/mappers/organization-mapper";
+
+// Type for tracking what we're editing - page or a specific dialog
+type EditingTarget = 'page' | { dialogId: string; dialogName: string };
 
 export interface PuckEditorLayoutProps {
   pageId: number;
@@ -34,9 +37,14 @@ export interface PuckEditorLayoutProps {
   onPublish: () => void;
   onSavePageSettings: (data: { name: string; slug: string }) => Promise<void>;
   onSaveAccessSettings: (data: { requiresAuth: boolean; allowedRoles: string[] }) => Promise<void>;
-  onSavePageVariables: (variables: PageVariable[]) => Promise<void>;
   onSavePageState: (pageState: PageStateConfig | undefined) => Promise<void>;
+  onSavePageDialogs: (pageDialogs: PageDialogsConfig | undefined) => Promise<void>;
   themeMode: "app" | "page";
+  editingTarget: EditingTarget;
+  onEditDialogContent: (dialogId: string) => void;
+  onBackToPage: () => void;
+  onPageDataSaved: (data: Data) => void;
+  onDialogDataSaved: (dialogId: string, data: Data) => void;
 }
 
 function PuckEditorLayoutInner({
@@ -50,9 +58,14 @@ function PuckEditorLayoutInner({
   onPublish,
   onSavePageSettings,
   onSaveAccessSettings,
-  onSavePageVariables,
   onSavePageState,
+  onSavePageDialogs,
   themeMode,
+  editingTarget,
+  onEditDialogContent,
+  onBackToPage,
+  onPageDataSaved,
+  onDialogDataSaved,
 }: PuckEditorLayoutProps) {
   const router = useRouter();
   const { appState, history } = usePuck();
@@ -91,36 +104,61 @@ function PuckEditorLayoutInner({
 
   const handleSave = async () => {
     try {
-      // Save theme first if needed
-      if (themeContext.hasUnsavedChanges) {
-        const themeData = PuckSession.getTheme(pageId);
-        if (themeData) {
-          await themeContext.saveTheme(themeData);
+      if (editingTarget === 'page') {
+        // Save theme first if needed
+        if (themeContext.hasUnsavedChanges) {
+          const themeData = PuckSession.getTheme(pageId);
+          if (themeData) {
+            await themeContext.saveTheme(themeData);
+          }
         }
+
+        // Save page content
+        const result = await updatePageContent({
+          id: pageId,
+          templateData: appState.data
+        });
+
+        if (!result.success) {
+          toast.error(result.error || "Failed to save page");
+          return;
+        }
+
+        toast.success("Page saved successfully!");
+        PuckSession.clearData(pageId);
+        setLoadedFromSessionStorage(false);
+        // Update local pageData state so switching to dialog and back preserves content
+        onPageDataSaved(appState.data);
+      } else {
+        // Save dialog content
+        const updatedDialogs = page.pageDialogs?.dialogs?.map(d =>
+          d.id === editingTarget.dialogId
+            ? { ...d, content: appState.data }
+            : d
+        ) || [];
+
+        const result = await updatePageDialogs(pageId, { dialogs: updatedDialogs });
+
+        if (!result.success) {
+          toast.error(result.error || "Failed to save dialog");
+          return;
+        }
+
+        toast.success("Dialog saved successfully!");
+        // Update local dialogData and page.pageDialogs state
+        onDialogDataSaved(editingTarget.dialogId, appState.data);
       }
-
-      // Save page content
-      const result = await updatePageContent({
-        id: pageId,
-        templateData: appState.data
-      });
-
-      if (!result.success) {
-        toast.error(result.error || "Failed to save page");
-        return;
-      }
-
-      toast.success("Page saved successfully!");
-      PuckSession.clearData(pageId);
-      setLoadedFromSessionStorage(false);
     } catch (err) {
-      console.error('Error saving page:', err);
-      toast.error("Failed to save page");
+      console.error('Error saving:', err);
+      toast.error(editingTarget === 'page' ? "Failed to save page" : "Failed to save dialog");
     }
   };
 
   const handlePreview = () => {
-    PuckSession.setData(pageId, appState.data);
+    // Only save to session storage when editing the page, not dialogs
+    if (editingTarget === 'page') {
+      PuckSession.setData(pageId, appState.data);
+    }
     router.push(`/apps/${appId}/pages/${pageId}/preview`);
   };
 
@@ -149,6 +187,22 @@ function PuckEditorLayoutInner({
 
   return (
     <div className="flex flex-col h-screen bg-background">
+      {/* Dialog editing banner */}
+      {editingTarget !== 'page' && (
+        <div className="bg-purple-100 dark:bg-purple-900/30 border-b border-purple-300 dark:border-purple-700 px-4 py-2 flex items-center gap-3 shrink-0">
+          <Button variant="ghost" size="sm" onClick={onBackToPage} className="gap-1">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Page
+          </Button>
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+            <span className="text-sm font-medium text-purple-800 dark:text-purple-200">
+              Editing Dialog: {editingTarget.dialogName}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 border-b border-border bg-transparent shrink-0">
         {/* Public URL display */}
@@ -246,6 +300,9 @@ function PuckEditorLayoutInner({
               </TabsTrigger>
             </TabsList>
 
+            {/* Component breadcrumb - always visible showing current selection or "Page" */}
+            <ComponentBreadcrumb />
+
             {/* Blocks Tab */}
             <TabsContent value="blocks" className="flex-1 overflow-auto m-0 p-2">
               <Puck.Components />
@@ -253,11 +310,9 @@ function PuckEditorLayoutInner({
 
             {/* Fields Tab */}
             <TabsContent value="fields" className="flex-1 overflow-auto m-0 p-0">
-              {/* Component breadcrumb (shown when component selected) */}
-              {!isRootLevel && <ComponentBreadcrumb />}
-              
-              {/* Page-level panels (shown when no component selected) */}
-              {isRootLevel && (
+
+              {/* Page-level panels (shown when editing page AND no component selected) */}
+              {isRootLevel && editingTarget === 'page' && (
                 <>
                   <div className="border-b border-border">
                     <PageSettingsPanel
@@ -277,17 +332,18 @@ function PuckEditorLayoutInner({
                     />
                   </div>
                   <div className="border-b border-border">
-                    <PageVariablesPanel
-                      pageId={pageId}
-                      initialVariables={page.pageVariables || []}
-                      onSave={onSavePageVariables}
-                    />
-                  </div>
-                  <div className="border-b border-border">
                     <PageStatePanel
                       pageId={pageId}
                       initialState={page.pageState}
                       onSave={onSavePageState}
+                    />
+                  </div>
+                  <div className="border-b border-border">
+                    <PageDialogsPanel
+                      pageDialogs={page.pageDialogs}
+                      pageState={page.pageState}
+                      onChange={onSavePageDialogs}
+                      onEditContent={onEditDialogContent}
                     />
                   </div>
                   <div className="border-b border-border">
