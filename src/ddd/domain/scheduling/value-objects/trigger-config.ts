@@ -9,7 +9,7 @@
 
 import { RRule } from 'rrule';
 
-export type TriggerType = 'CALENDAR' | 'DATABASE_EVENT' | 'WEBHOOK';
+export type TriggerType = 'CALENDAR' | 'DATABASE_EVENT' | 'WEBHOOK' | 'PIPEDREAM_EVENT';
 export type DatabaseOperation = 'INSERT' | 'UPDATE' | 'DELETE';
 
 // AIDEV-NOTE: Base class for all trigger configurations with common validation
@@ -272,10 +272,106 @@ export class WebhookTriggerConfig extends BaseTriggerConfig {
   }
 }
 
+// Pipedream event source trigger - responds to external events via Pipedream Connect
+export class PipedreamEventTriggerConfig extends BaseTriggerConfig {
+  constructor(
+    public readonly connectionId: string,           // User's OAuth connection ID (existing concept)
+    public readonly triggerType: string,            // 'new-email', 'new-message-in-channel', etc.
+    public readonly props?: Record<string, any>,    // Trigger-specific config (labels, channel, etc.)
+
+    // Set after Pipedream API creates resources:
+    public readonly pipedreamSourceId?: string,
+    public readonly pipedreamWebhookId?: string,
+    public readonly pipedreamSubscriptionId?: string,
+
+    enabled: boolean = true,
+    description?: string
+  ) {
+    super('PIPEDREAM_EVENT', enabled, description);
+    this.validate();
+  }
+
+  validate(): void {
+    if (!this.connectionId || this.connectionId.trim().length === 0) {
+      throw new Error('Connection ID is required for Pipedream event triggers');
+    }
+    if (!this.triggerType || this.triggerType.trim().length === 0) {
+      throw new Error('Trigger type is required for Pipedream event triggers');
+    }
+  }
+
+  equals(other: BaseTriggerConfig): boolean {
+    return other instanceof PipedreamEventTriggerConfig &&
+           this.enabled === other.enabled &&
+           this.connectionId === other.connectionId &&
+           this.triggerType === other.triggerType &&
+           JSON.stringify(this.props) === JSON.stringify(other.props) &&
+           this.pipedreamSourceId === other.pipedreamSourceId &&
+           this.pipedreamWebhookId === other.pipedreamWebhookId &&
+           this.pipedreamSubscriptionId === other.pipedreamSubscriptionId &&
+           this.description === other.description;
+  }
+
+  toJSON(): Record<string, any> {
+    return {
+      type: this.type,
+      enabled: this.enabled,
+      connectionId: this.connectionId,
+      triggerType: this.triggerType,
+      props: this.props,
+      pipedreamSourceId: this.pipedreamSourceId,
+      pipedreamWebhookId: this.pipedreamWebhookId,
+      pipedreamSubscriptionId: this.pipedreamSubscriptionId,
+      description: this.description
+    };
+  }
+
+  /**
+   * Check if the trigger has been deployed to Pipedream
+   */
+  public isDeployed(): boolean {
+    return !!(this.pipedreamSourceId && this.pipedreamWebhookId && this.pipedreamSubscriptionId);
+  }
+
+  /**
+   * Create a new config with Pipedream resource IDs after deployment
+   */
+  public withDeploymentIds(ids: {
+    sourceId: string;
+    webhookId: string;
+    subscriptionId: string;
+  }): PipedreamEventTriggerConfig {
+    return new PipedreamEventTriggerConfig(
+      this.connectionId,
+      this.triggerType,
+      this.props,
+      ids.sourceId,
+      ids.webhookId,
+      ids.subscriptionId,
+      this.enabled,
+      this.description
+    );
+  }
+
+  static fromJSON(data: any): PipedreamEventTriggerConfig {
+    return new PipedreamEventTriggerConfig(
+      data.connectionId,
+      data.triggerType,
+      data.props,
+      data.pipedreamSourceId,
+      data.pipedreamWebhookId,
+      data.pipedreamSubscriptionId,
+      data.enabled !== false, // Default to true
+      data.description
+    );
+  }
+}
+
 export type TriggerConfig =
   | CalendarTriggerConfig
   | DatabaseEventTriggerConfig
-  | WebhookTriggerConfig;
+  | WebhookTriggerConfig
+  | PipedreamEventTriggerConfig;
 
 // Factory functions for creating trigger configurations
 export const TriggerConfigs = {
@@ -325,6 +421,23 @@ export const TriggerConfigs = {
       options?.enabled !== false, // Default to true
       options?.description
     );
+  },
+
+  pipedreamEvent: (connectionId: string, triggerType: string, options?: {
+    props?: Record<string, any>;
+    enabled?: boolean;
+    description?: string;
+  }): PipedreamEventTriggerConfig => {
+    return new PipedreamEventTriggerConfig(
+      connectionId,
+      triggerType,
+      options?.props,
+      undefined, // pipedreamSourceId - set after deployment
+      undefined, // pipedreamWebhookId - set after deployment
+      undefined, // pipedreamSubscriptionId - set after deployment
+      options?.enabled !== false, // Default to true
+      options?.description
+    );
   }
 };
 
@@ -341,6 +454,8 @@ export function TriggerConfigFromJSON(data: any): TriggerConfig {
       return DatabaseEventTriggerConfig.fromJSON(data);
     case 'WEBHOOK':
       return WebhookTriggerConfig.fromJSON(data);
+    case 'PIPEDREAM_EVENT':
+      return PipedreamEventTriggerConfig.fromJSON(data);
     default:
       throw new Error(`Unknown trigger type: ${data.type}`);
   }

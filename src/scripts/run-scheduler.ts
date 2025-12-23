@@ -179,8 +179,8 @@ class EventDrivenScheduler {
             // 2. Apply inputMappings to resolve skill inputs from trigger data
             const skillInputs: Record<string, any> = {};
             if (automation.inputMappings && automation.inputMappings.length > 0 && triggerContext) {
-              // Build variable map from trigger context
-              const triggerVariables = this.buildTriggerVariables(triggerContext);
+              // Build variable map from trigger context (with $ prefix for mapping syntax)
+              const triggerVariables = InstructionTemplateService.buildVariableMapForMappings(triggerContext);
 
               for (const mapping of automation.inputMappings) {
                 // Resolve the trigger field value
@@ -218,43 +218,6 @@ class EventDrivenScheduler {
         });
       }
     }
-  }
-
-  /**
-   * Build variable map from trigger context for input mapping resolution
-   */
-  private buildTriggerVariables(context: TriggerContext): Record<string, any> {
-    const vars: Record<string, any> = {
-      '$trigger.type': context.type,
-      '$trigger.scheduleName': context.scheduleName || ''
-    };
-
-    // Calendar trigger variables
-    if (context.type === 'CALENDAR' && context.calendarData) {
-      vars['$trigger.scheduledTime'] = context.calendarData.scheduledTime;
-      vars['$trigger.timezone'] = context.calendarData.timezone;
-    }
-
-    // Database event trigger variables
-    if (context.type === 'DATABASE_EVENT' && context.tableChange) {
-      const tc = context.tableChange;
-      vars['$table.id'] = tc.tableId;
-      vars['$table.name'] = tc.tableName;
-      vars['$event.operation'] = tc.operation;
-      vars['$event.rowId'] = tc.rowId;
-      vars['$event.timestamp'] = tc.timestamp instanceof Date
-        ? tc.timestamp.toISOString()
-        : tc.timestamp;
-
-      // Row data fields
-      if (tc.rowData) {
-        Object.keys(tc.rowData).forEach(fieldKey => {
-          vars[`$row.${fieldKey}`] = tc.rowData[fieldKey];
-        });
-      }
-    }
-
-    return vars;
   }
 
   private async processQueuedTasks(): Promise<void> {

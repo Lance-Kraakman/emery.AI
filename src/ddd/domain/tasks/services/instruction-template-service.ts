@@ -37,9 +37,10 @@ export class InstructionTemplateService {
   }
 
   /**
-   * Build a flat variable map from trigger context
+   * Build a flat variable map from trigger context.
+   * Used internally for template expansion (no $ prefix).
    */
-  private static buildVariableMap(
+  static buildVariableMap(
     context: TriggerContext
   ): Record<string, any> {
     const vars: Record<string, any> = {
@@ -93,6 +94,29 @@ export class InstructionTemplateService {
   }
 
   /**
+   * Build variable map with $ prefix for automation input mappings.
+   *
+   * Automation inputMappings use $-prefixed variable names (e.g., $trigger.scheduledTime)
+   * to reference trigger context data. This method provides a map suitable for resolving
+   * those mapping references.
+   *
+   * @param context - TriggerContext with calendar, database event, or webhook data
+   * @returns Variable map with $ prefix on all keys (e.g., "$trigger.scheduledTime")
+   */
+  static buildVariableMapForMappings(
+    context: TriggerContext
+  ): Record<string, any> {
+    const vars = this.buildVariableMap(context);
+    const prefixedVars: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(vars)) {
+      prefixedVars[`$${key}`] = value;
+    }
+
+    return prefixedVars;
+  }
+
+  /**
    * Resolve a variable path to its value
    * Supports nested paths like "row.email" or "trigger.scheduleName"
    */
@@ -124,7 +148,7 @@ export class InstructionTemplateService {
    * Used by UI to show users what variables they can use
    */
   static getAvailableVariables(
-    triggerType: 'CALENDAR' | 'DATABASE_EVENT' | 'WEBHOOK' | 'MANUAL'
+    triggerType: 'CALENDAR' | 'DATABASE_EVENT' | 'WEBHOOK' | 'MANUAL' | 'PIPEDREAM_EVENT'
   ): Array<{ name: string; description: string }> {
     const commonVars = [
       { name: 'trigger.type', description: 'Trigger type (CALENDAR, DATABASE_EVENT, etc.)' },
@@ -157,6 +181,14 @@ export class InstructionTemplateService {
           { name: 'webhook.payload', description: 'Webhook request body' },
           { name: 'webhook.headers', description: 'Request headers' },
           { name: 'webhook.origin', description: 'Request origin' }
+        ];
+
+      case 'PIPEDREAM_EVENT':
+        return [
+          ...commonVars,
+          { name: 'event.data', description: 'Event payload from Pipedream' },
+          { name: 'event.timestamp', description: 'Event timestamp' },
+          { name: 'event.source', description: 'Source app (e.g., gmail, slack)' }
         ];
 
       case 'MANUAL':

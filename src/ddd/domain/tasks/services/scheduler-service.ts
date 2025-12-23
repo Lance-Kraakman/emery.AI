@@ -1,16 +1,16 @@
 /**
  * Scheduler Service
- * 
- * Domain service for managing agent task scheduling using agents.trigger configuration.
+ *
+ * Domain service for managing agent task scheduling using agents.automations configuration.
  * Replaces MemoryScheduledJobRepository with proper domain service pattern.
- * 
- * AIDEV-NOTE: This service uses the existing agents.trigger JSONB field for scheduling
- * instead of creating duplicate ScheduledJob entities.
+ *
+ * AIDEV-NOTE: This service uses the existing agents.automations JSONB field for scheduling.
+ * Automations reference skills by ID, so task creation requires skill lookup.
  */
 
 import { Task } from '../entities/task';
 import type { AgentId } from '@/ddd/domain/shared/value-objects';
-import type { TriggerConfig, TriggerType, ScheduledTask, ScheduleTaskRequest } from '@/ddd/domain/scheduling';
+import type { TriggerConfig, TriggerType, ScheduledTask, AutomationTaskRequest } from '@/ddd/domain/scheduling';
 import { CalendarTriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { IAgentRepository } from '../../agents/repositories/agent-repository';
 
@@ -19,14 +19,22 @@ import { IAgentRepository } from '../../agents/repositories/agent-repository';
  */
 export interface ISchedulerService {
   /**
-   * Schedule a recurring task for an agent
+   * Schedule a recurring task for an agent via automation
    */
-  scheduleTask(request: ScheduleTaskRequest): Promise<void>;
+  scheduleAutomation(request: AutomationTaskRequest): Promise<void>;
 
   /**
    * Get tasks due for execution
+   * AIDEV-NOTE: In the new model, this returns automations that need to run.
+   * The caller must look up the skill by ID to get execution instructions.
    */
-  getTasksDueForExecution(before?: Date): Promise<Task[]>;
+  getAutomationsDueForExecution(before?: Date): Promise<{
+    agentId: AgentId;
+    automationName: string;
+    skillId: number;
+    trigger: TriggerConfig;
+    inputMappings?: Array<{ triggerField: string; skillInputName: string }>;
+  }[]>;
 
   /**
    * Get active scheduled tasks for an agent
@@ -64,72 +72,61 @@ export class SchedulerService implements ISchedulerService {
     private agentRepository: IAgentRepository // Will be injected from container
   ) {}
 
-  async scheduleTask(request: ScheduleTaskRequest): Promise<void> {
-    // Add new schedule to agent's schedules array
+  async scheduleAutomation(request: AutomationTaskRequest): Promise<void> {
+    // Add new automation to agent's automations array
     const agent = await this.agentRepository.findById(request.agentId);
     if (agent) {
-      // Add the new schedule configuration to existing schedules
-      const updatedSchedules = [...agent.schedules, request.schedule];
+      // Add the new automation configuration to existing automations
+      const updatedAutomations = [...agent.automations, request.automation];
       await this.agentRepository.update(request.agentId, {
-        schedules: updatedSchedules
+        automations: updatedAutomations
       });
     }
   }
 
-  async getTasksDueForExecution(before: Date = new Date()): Promise<Task[]> {
-    const dueTasks: Task[] = [];
+  async getAutomationsDueForExecution(before: Date = new Date()): Promise<{
+    agentId: AgentId;
+    automationName: string;
+    skillId: number;
+    trigger: TriggerConfig;
+    inputMappings?: Array<{ triggerField: string; skillInputName: string }>;
+  }[]> {
+    const dueAutomations: {
+      agentId: AgentId;
+      automationName: string;
+      skillId: number;
+      trigger: TriggerConfig;
+      inputMappings?: Array<{ triggerField: string; skillInputName: string }>;
+    }[] = [];
 
     // Get all agents
     const agents = await this.agentRepository.findAll();
 
     for (const agent of agents) {
-      // Iterate through each agent's schedules
-      for (const schedule of agent.schedules) {
+      // Iterate through each agent's automations
+      for (const automation of agent.automations) {
         // Only process enabled calendar triggers
-        if (!schedule.enabled || schedule.trigger.type !== 'CALENDAR') {
+        if (!automation.enabled || automation.trigger.type !== 'CALENDAR') {
           continue;
         }
 
-        // Check if schedule is due for execution
-        const nextRun = this.calculateNextExecution(schedule.trigger);
+        // Check if automation is due for execution
+        const nextRun = this.calculateNextExecution(automation.trigger);
         if (!nextRun || nextRun > before) {
           continue;
         }
 
-        // Create a Task entity for this due schedule
-        // Cast trigger to CalendarTriggerConfig to access calendar-specific properties
-        const calendarTrigger = schedule.trigger as CalendarTriggerConfig;
-
-        const task = Task.create({
+        dueAutomations.push({
           agentId: agent.id,
-          organizationId: agent.organizationId,
-          name: schedule.name || `Scheduled: ${schedule.taskInstructions.task.substring(0, 50)}`,
-          instructions: {
-            ...schedule.taskInstructions,
-            metadata: {
-              ...schedule.taskInstructions.metadata,
-              scheduleType: schedule.trigger.type,
-              scheduledFor: nextRun.toISOString(),
-              'trigger.scheduledTime': nextRun.toISOString(),
-              'trigger.timezone': calendarTrigger.timezone,
-              'trigger.scheduleName': schedule.name
-            }
-          },
-          triggerContext: {
-            type: 'CALENDAR',
-            scheduleName: schedule.name,
-            calendarData: {
-              scheduledTime: nextRun.toISOString(),
-              timezone: calendarTrigger.timezone
-            }
-          }
+          automationName: automation.name || `Automation ${automation.skillId}`,
+          skillId: automation.skillId,
+          trigger: automation.trigger,
+          inputMappings: automation.inputMappings
         });
-
-        dueTasks.push(task);
       }
     }
 
-    return dueTasks;
+    return dueAutomations;
   }
 
   async getScheduledTasksForAgent(agentId: AgentId): Promise<ScheduledTask[]> {
@@ -169,29 +166,29 @@ export class SchedulerService implements ISchedulerService {
 
     // Use the proper RRule library through the Value Object
     const baseTime = lastExecution || new Date();
-    
+
     try {
       // Use the CalendarTriggerConfig's built-in RRule processing
       const nextOccurrence = trigger.getNextOccurrence(baseTime);
-      
+
       if (nextOccurrence) {
         // Ensure the next occurrence respects the trigger's start/end dates
         if (trigger.endDate && nextOccurrence > trigger.endDate) {
           return null; // Schedule has ended
         }
-        
+
         if (nextOccurrence < trigger.startDate) {
           // If next occurrence is before start date, get first occurrence after start date
           return trigger.getNextOccurrence(trigger.startDate);
         }
-        
+
         return nextOccurrence;
       }
-      
+
       return null;
     } catch (error) {
       console.warn('Failed to calculate next execution for trigger:', error);
-      
+
       // Fallback: execute in 1 hour if RRule parsing fails
       const nextTime = new Date(baseTime);
       nextTime.setHours(nextTime.getHours() + 1);

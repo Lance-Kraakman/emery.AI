@@ -1,45 +1,44 @@
 /**
  * Trigger Matching Service
  *
- * Domain service for finding agent schedules that match table change events.
+ * Domain service for finding agent automations that match table change events.
  * Used to determine which agents should be triggered when database tables are modified.
  *
  * AIDEV-NOTE: Pure domain service with no infrastructure dependencies.
  * Performance logging should be added in the application layer if needed.
  */
 
-import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import type { Agent, AutomationConfiguration } from '@/ddd/domain/agents/entities/agent';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
-import type { ScheduleConfiguration } from '@/ddd/domain/agents/entities/agent';
 import type { TableChangeEvent } from '../types/scheduling-types';
 import { DatabaseEventTriggerConfig } from '../value-objects/trigger-config';
 
 /**
- * Result of matching a table change event to an agent schedule
+ * Result of matching a table change event to an agent automation
  */
-export interface MatchedSchedule {
+export interface MatchedAutomation {
   agent: Agent;
-  schedule: ScheduleConfiguration;
+  automation: AutomationConfiguration;
   event: TableChangeEvent;
 }
 
 /**
- * Service for matching table change events to agent schedules
+ * Service for matching table change events to agent automations
  */
 export interface ITriggerMatchingService {
   /**
-   * Find all agent schedules that match a table change event
+   * Find all agent automations that match a table change event
    *
    * Algorithm:
    * 1. Query all agents in the event's organization
-   * 2. Filter agents that have enabled DATABASE_EVENT schedules
-   * 3. Match schedules by operation type and table ID
-   * 4. Return matched { agent, schedule, event } tuples
+   * 2. Filter agents that have enabled DATABASE_EVENT automations
+   * 3. Match automations by operation type and table ID
+   * 4. Return matched { agent, automation, event } tuples
    *
    * @param event - The table change event to match against
-   * @returns Array of matched schedules with their agents
+   * @returns Array of matched automations with their agents
    */
-  findMatchingSchedules(event: TableChangeEvent): Promise<MatchedSchedule[]>;
+  findMatchingAutomations(event: TableChangeEvent): Promise<MatchedAutomation[]>;
 }
 
 export class TriggerMatchingService implements ITriggerMatchingService {
@@ -47,36 +46,36 @@ export class TriggerMatchingService implements ITriggerMatchingService {
     private readonly agentRepository: IAgentRepository
   ) {}
 
-  async findMatchingSchedules(event: TableChangeEvent): Promise<MatchedSchedule[]> {
+  async findMatchingAutomations(event: TableChangeEvent): Promise<MatchedAutomation[]> {
     const startTime = performance.now();
 
     // Query all agents in the organization
     const agents = await this.agentRepository.findByOrganization(event.organizationId);
     const queryTime = performance.now() - startTime;
 
-    // Find matching schedules across all agents
-    const matches: MatchedSchedule[] = [];
+    // Find matching automations across all agents
+    const matches: MatchedAutomation[] = [];
 
     for (const agent of agents) {
-      // Skip agents with no schedules
-      if (!agent.schedules || agent.schedules.length === 0) {
+      // Skip agents with no automations
+      if (!agent.automations || agent.automations.length === 0) {
         continue;
       }
 
-      // Check each schedule for matches
-      for (const schedule of agent.schedules) {
+      // Check each automation for matches
+      for (const automation of agent.automations) {
         // Only process enabled DATABASE_EVENT triggers
-        if (!schedule.enabled || schedule.trigger.type !== 'DATABASE_EVENT') {
+        if (!automation.enabled || automation.trigger.type !== 'DATABASE_EVENT') {
           continue;
         }
 
-        const trigger = schedule.trigger as DatabaseEventTriggerConfig;
+        const trigger = automation.trigger as DatabaseEventTriggerConfig;
 
         // Check if trigger matches the event
-        if (this.scheduleMatchesEvent(trigger, event)) {
+        if (this.automationMatchesEvent(trigger, event)) {
           matches.push({
             agent,
-            schedule,
+            automation,
             event
           });
         }
@@ -104,7 +103,7 @@ export class TriggerMatchingService implements ITriggerMatchingService {
   /**
    * Check if a DATABASE_EVENT trigger matches a table change event
    */
-  private scheduleMatchesEvent(
+  private automationMatchesEvent(
     trigger: DatabaseEventTriggerConfig,
     event: TableChangeEvent
   ): boolean {
