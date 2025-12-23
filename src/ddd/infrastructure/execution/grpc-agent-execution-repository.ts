@@ -55,7 +55,22 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       // 4. Enrich agent with API key in tools (following chat pattern)
       const enrichedAgent = this.enrichAgentTools(agent);
 
-      // 5. Create proto task request
+      // 5. Build typed skill inputs from raw values + skill input definitions
+      // AIDEV-NOTE: Each SkillInputValue carries name, type, and the actual value in the appropriate oneof field
+      const typedSkillInputs: Array<{ name: string; type: string; value: unknown }> = [];
+      if (skillInputs && skill?.inputs) {
+        for (const [name, value] of Object.entries(skillInputs)) {
+          // Look up type from skill input definition
+          const inputDef = skill.inputs.find(i => i.name === name);
+          typedSkillInputs.push({
+            name,
+            type: inputDef?.type || 'text', // Default to 'text' if not found
+            value
+          });
+        }
+      }
+
+      // 6. Create proto task request
       // Use skill-based execution if skill is provided, otherwise instruction-based
       const taskRequest = createTaskRequest({
         taskId: executionId,
@@ -72,7 +87,9 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
           }
         }),
         agent: enrichedAgent,
-        triggerData: skillInputs || {}, // Pass skill inputs through trigger data for worker
+        // Typed skill inputs from automation inputMappings
+        // The worker extracts these in _create_skill_context() and passes to execute_skill(runtime_inputs=...)
+        skillInputs: typedSkillInputs,
         organizationId: organizationIdStr,
         ownerId: agent.ownerId.value,
         timeoutSeconds: timeoutSeconds || 300,

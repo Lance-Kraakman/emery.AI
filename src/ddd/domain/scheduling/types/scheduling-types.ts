@@ -7,7 +7,7 @@
 import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 import type { TriggerConfig, DatabaseOperation } from '../value-objects/trigger-config';
-import type { ScheduleConfiguration } from '@/ddd/domain/agents/entities/agent';
+import type { AutomationConfiguration } from '@/ddd/domain/agents/entities/agent';
 
 /**
  * Request to execute a task (immediately or scheduled)
@@ -24,16 +24,15 @@ export interface TaskExecutionRequest {
 }
 
 /**
- * Request to schedule a recurring task
- * AIDEV-NOTE: Updated to use full ScheduleConfiguration with task instructions
+ * Request to schedule a recurring task via automation
+ * AIDEV-NOTE: Updated to use AutomationConfiguration with skill reference
  */
-export interface ScheduleTaskRequest {
+export interface AutomationTaskRequest {
   agentId: AgentId;
   organizationId: OrganizationId;
   name: string;
-  skillName?: string;
-  instructions: TaskInstructions;
-  schedule: ScheduleConfiguration;
+  automation: AutomationConfiguration;
+  triggerPayload?: Record<string, any>;  // Data from trigger event for input mapping
 }
 
 /**

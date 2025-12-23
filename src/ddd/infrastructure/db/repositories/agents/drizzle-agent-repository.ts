@@ -80,11 +80,11 @@ export class DrizzleAgentRepository
     return result.length;
   }
 
-  async findActiveAgentsWithSchedules(organizationId?: OrganizationId): Promise<Agent[]> {
+  async findActiveAgentsWithAutomations(organizationId?: OrganizationId): Promise<Agent[]> {
     const conditions = [
       eq(agents.status, 'active'),
-      // Ensure schedules array is not empty
-      sql`jsonb_array_length(${agents.schedules}) > 0`
+      // Ensure automations array is not empty
+      sql`jsonb_array_length(${agents.automations}) > 0`
     ];
 
     if (organizationId) {
@@ -99,10 +99,10 @@ export class DrizzleAgentRepository
     return results.map(result => this.fromPersistence(result));
   }
 
-  async findAgentsWithSchedules(organizationId?: OrganizationId): Promise<Agent[]> {
+  async findAgentsWithAutomations(organizationId?: OrganizationId): Promise<Agent[]> {
     const conditions = [
-      // Ensure schedules array is not empty
-      sql`jsonb_array_length(${agents.schedules}) > 0`
+      // Ensure automations array is not empty
+      sql`jsonb_array_length(${agents.automations}) > 0`
     ];
 
     if (organizationId) {

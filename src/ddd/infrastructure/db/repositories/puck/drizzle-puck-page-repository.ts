@@ -90,7 +90,8 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
         isPublic: persistence.isPublic,
         requiresAuth: persistence.requiresAuth,
         allowedRoles: persistence.allowedRoles,
-        pageVariables: persistence.pageVariables,
+        pageState: persistence.pageState,
+        pageDialogs: persistence.pageDialogs,
         ownerId: persistence.ownerId,
         createdAt: persistence.createdAt,
         updatedAt: persistence.updatedAt
@@ -121,7 +122,8 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
           isPublic: persistence.isPublic,
           requiresAuth: persistence.requiresAuth,
           allowedRoles: persistence.allowedRoles,
-          pageVariables: persistence.pageVariables,
+          pageState: persistence.pageState,
+          pageDialogs: persistence.pageDialogs,
           updatedAt: new Date()
         })
         .where(eq(pages.id, persistence.id))
@@ -247,7 +249,8 @@ export class DrizzlePuckPageRepository implements IPuckPageRepository {
       isPublic: record.isPublic,
       requiresAuth: record.requiresAuth,
       allowedRoles: record.allowedRoles,
-      pageVariables: record.pageVariables,
+      pageState: record.pageState,
+      pageDialogs: record.pageDialogs,
       ownerId: record.ownerId,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
