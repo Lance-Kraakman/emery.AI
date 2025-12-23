@@ -1,9 +1,12 @@
 /**
  * PageStatePanel - Configure page-level client state
  *
- * AIDEV-NOTE: Allows defining state variables and UI flags for a page.
+ * AIDEV-NOTE: Allows defining state variables for a page.
  * These are accessible via {state.variableName} in text interpolation
  * and in ConditionalBlock/DialogBlock configuration.
+ *
+ * State auto-populates from URL params with matching names.
+ * Boolean variables can be used for dialogs, toggles, etc.
  */
 
 "use client";
@@ -22,9 +25,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Plus, X, Box, ToggleLeft } from "lucide-react";
+import { Plus, X, Box } from "lucide-react";
 import { toast } from "sonner";
-import type { PageStateConfig, StateVariable, UIStateFlag, StatePersistence, StateVariableType } from "@/components/puck/types/state";
+import type { PageStateConfig, StateVariable, StatePersistence, StateVariableType } from "@/components/puck/types/state";
 
 export interface PageStatePanelProps {
   pageId: number;
@@ -34,7 +37,6 @@ export interface PageStatePanelProps {
 
 const DEFAULT_STATE: PageStateConfig = {
   variables: [],
-  uiFlags: [],
   persistence: 'none',
 };
 
@@ -51,16 +53,10 @@ export function PageStatePanel({
 
   // Adding state
   const [isAddingVariable, setIsAddingVariable] = React.useState(false);
-  const [isAddingFlag, setIsAddingFlag] = React.useState(false);
   const [newVariable, setNewVariable] = React.useState<StateVariable>({
     name: "",
     type: "string",
     defaultValue: "",
-    description: "",
-  });
-  const [newFlag, setNewFlag] = React.useState<UIStateFlag>({
-    name: "",
-    defaultValue: false,
     description: "",
   });
 
@@ -80,7 +76,7 @@ export function PageStatePanel({
     try {
       setIsSaving(true);
       // If state is empty, save as undefined
-      const stateToSave = state.variables.length === 0 && state.uiFlags.length === 0
+      const stateToSave = state.variables.length === 0
         ? undefined
         : state;
       await onSave(stateToSave);
@@ -106,10 +102,7 @@ export function PageStatePanel({
   };
 
   const handleAddVariable = () => {
-    const allNames = [
-      ...state.variables.map(v => v.name),
-      ...state.uiFlags.map(f => f.name),
-    ];
+    const allNames = state.variables.map(v => v.name);
     const error = validateName(newVariable.name, allNames);
     if (error) {
       toast.error(error);
@@ -124,36 +117,10 @@ export function PageStatePanel({
     setIsAddingVariable(false);
   };
 
-  const handleAddFlag = () => {
-    const allNames = [
-      ...state.variables.map(v => v.name),
-      ...state.uiFlags.map(f => f.name),
-    ];
-    const error = validateName(newFlag.name, allNames);
-    if (error) {
-      toast.error(error);
-      return;
-    }
-
-    setState({
-      ...state,
-      uiFlags: [...state.uiFlags, { ...newFlag, name: newFlag.name.trim() }],
-    });
-    setNewFlag({ name: "", defaultValue: false, description: "" });
-    setIsAddingFlag(false);
-  };
-
   const handleRemoveVariable = (name: string) => {
     setState({
       ...state,
       variables: state.variables.filter((v) => v.name !== name),
-    });
-  };
-
-  const handleRemoveFlag = (name: string) => {
-    setState({
-      ...state,
-      uiFlags: state.uiFlags.filter((f) => f.name !== name),
     });
   };
 
@@ -168,7 +135,7 @@ export function PageStatePanel({
     }
   };
 
-  const isEmpty = state.variables.length === 0 && state.uiFlags.length === 0;
+  const isEmpty = state.variables.length === 0;
 
   return (
     <div className="w-full space-y-3 px-3 py-2">
@@ -181,7 +148,7 @@ export function PageStatePanel({
       {/* Variables Section */}
       <div className="space-y-1.5">
         <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-          Variables
+          State Variables
         </div>
 
         {state.variables.length > 0 && (
@@ -342,133 +309,6 @@ export function PageStatePanel({
         )}
       </div>
 
-      {/* UI Flags Section */}
-      <div className="space-y-1.5">
-        <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-          <ToggleLeft className="h-3 w-3" />
-          UI Flags
-        </div>
-
-        {state.uiFlags.length > 0 && (
-          <div className="space-y-1.5">
-            {state.uiFlags.map((flag) => (
-              <div
-                key={flag.name}
-                className="flex items-center gap-2 p-2 border rounded-md bg-muted/30"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <code className="text-xs font-mono bg-muted px-1 rounded">
-                      {flag.name}
-                    </code>
-                    <Badge variant={flag.defaultValue ? "default" : "secondary"} className="text-[10px] px-1 py-0">
-                      {flag.defaultValue ? "on" : "off"}
-                    </Badge>
-                  </div>
-                  {flag.description && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                      {flag.description}
-                    </p>
-                  )}
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 flex-shrink-0"
-                  onClick={() => handleRemoveFlag(flag.name)}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Add Flag Form */}
-        {isAddingFlag && (
-          <div className="space-y-2 p-2 border rounded-md bg-muted/20">
-            <div className="space-y-1">
-              <Label className="text-[10px]">Name</Label>
-              <Input
-                placeholder="e.g., showModal"
-                value={newFlag.name}
-                onChange={(e) =>
-                  setNewFlag({ ...newFlag, name: e.target.value })
-                }
-                className="h-7 text-xs"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="text-[10px]">Default</Label>
-                <div className="flex items-center h-7">
-                  <Switch
-                    checked={newFlag.defaultValue}
-                    onCheckedChange={(checked) =>
-                      setNewFlag({ ...newFlag, defaultValue: checked })
-                    }
-                  />
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {newFlag.defaultValue ? "On" : "Off"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-[10px]">Description (optional)</Label>
-              <Input
-                placeholder="e.g., Controls modal visibility"
-                value={newFlag.description || ""}
-                onChange={(e) =>
-                  setNewFlag({ ...newFlag, description: e.target.value })
-                }
-                className="h-7 text-xs"
-              />
-            </div>
-
-            <div className="flex gap-1.5">
-              <Button
-                type="button"
-                size="sm"
-                className="flex-1 h-6 text-xs"
-                onClick={handleAddFlag}
-                disabled={!newFlag.name.trim()}
-              >
-                Add
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-6 text-xs"
-                onClick={() => {
-                  setIsAddingFlag(false);
-                  setNewFlag({ name: "", defaultValue: false, description: "" });
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {!isAddingFlag && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-full h-6 text-[10px]"
-            onClick={() => setIsAddingFlag(true)}
-          >
-            <Plus className="h-3 w-3 mr-1" />
-            Add UI Flag
-          </Button>
-        )}
-      </div>
-
       {/* Persistence Section */}
       {!isEmpty && (
         <div className="space-y-1.5 pt-2 border-t">
@@ -497,10 +337,12 @@ export function PageStatePanel({
       )}
 
       {/* Empty State */}
-      {isEmpty && !isAddingVariable && !isAddingFlag && (
+      {isEmpty && !isAddingVariable && (
         <div className="py-2 text-center">
           <p className="text-[10px] text-muted-foreground">
-            Add variables or UI flags to manage client state
+            Add variables to manage client state.
+            <br />
+            Use boolean type for dialogs/toggles.
           </p>
         </div>
       )}
@@ -521,6 +363,8 @@ export function PageStatePanel({
       <p className="text-[10px] text-muted-foreground pt-1">
         Access state with{" "}
         <code className="bg-muted px-0.5 rounded">{"{state.name}"}</code>
+        <br />
+        State auto-populates from matching URL params.
       </p>
     </div>
   );
