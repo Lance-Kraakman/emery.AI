@@ -3,7 +3,7 @@
  *
  * Custom image node that stores s3Key instead of signed URLs.
  * Regenerates signed URLs on render for proper persistence.
- * Supports drag-to-resize with corner handles.
+ * Supports drag-to-resize with corner handles and alignment controls.
  *
  * Why this exists:
  * - S3 signed URLs are 400+ chars and expire after 1 hour
@@ -14,7 +14,7 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, NodeViewProps } from '@tiptap/react';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
 
 // Cache for signed URLs to avoid repeated API calls
 const urlCache = new Map<string, { url: string; expiresAt: number }>();
@@ -86,11 +86,60 @@ function ResizeHandle({
   );
 }
 
+type ImageAlign = 'left' | 'center' | 'right';
+
 /**
- * React component for rendering S3 images with resize support
+ * Alignment controls - appears above image when selected
+ */
+function AlignmentControls({
+  currentAlign,
+  onAlignChange
+}: {
+  currentAlign: ImageAlign;
+  onAlignChange: (align: ImageAlign) => void;
+}) {
+  const buttons: { align: ImageAlign; Icon: typeof AlignLeft }[] = [
+    { align: 'left', Icon: AlignLeft },
+    { align: 'center', Icon: AlignCenter },
+    { align: 'right', Icon: AlignRight },
+  ];
+
+  return (
+    <div
+      className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white border border-border rounded-md shadow-sm p-1 z-20"
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {buttons.map(({ align, Icon }) => (
+        <button
+          key={align}
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onAlignChange(align);
+          }}
+          className={`
+            p-1.5 rounded transition-colors
+            ${currentAlign === align
+              ? 'bg-primary text-primary-foreground'
+              : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+            }
+          `}
+          title={`Align ${align}`}
+        >
+          <Icon className="w-4 h-4" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * React component for rendering S3 images with resize and alignment support
  */
 function S3ImageNodeView({ node, selected, updateAttributes, editor }: NodeViewProps) {
-  const { s3Key, alt, title, width } = node.attrs;
+  const { s3Key, alt, title, width, align } = node.attrs;
+  const currentAlign: ImageAlign = align || 'left';
 
   // Don't use src from attrs - it's an expired signed URL from when document was saved
   // Always fetch fresh signed URL from s3Key
@@ -209,6 +258,18 @@ function S3ImageNodeView({ node, selected, updateAttributes, editor }: NodeViewP
   const isEditable = editor.isEditable;
   const showHandles = selected && isEditable && imageUrl && !error;
 
+  // Handle alignment change
+  const handleAlignChange = useCallback((newAlign: ImageAlign) => {
+    updateAttributes({ align: newAlign });
+  }, [updateAttributes]);
+
+  // Alignment styles using margin
+  const alignmentStyles: Record<ImageAlign, React.CSSProperties> = {
+    left: { marginRight: 'auto' },
+    center: { marginLeft: 'auto', marginRight: 'auto' },
+    right: { marginLeft: 'auto' },
+  };
+
   return (
     <NodeViewWrapper>
       <div
@@ -218,7 +279,11 @@ function S3ImageNodeView({ node, selected, updateAttributes, editor }: NodeViewP
           ${selected ? 'ring-2 ring-primary ring-offset-2 rounded-lg' : ''}
           ${isResizing ? 'select-none' : ''}
         `}
-        style={{ width: currentWidth ? `${currentWidth}px` : 'auto' }}
+        style={{
+          width: currentWidth ? `${currentWidth}px` : 'auto',
+          display: 'block',
+          ...alignmentStyles[currentAlign],
+        }}
       >
         {isLoading && (
           <div className="flex items-center justify-center w-64 h-48 bg-muted rounded-lg">
@@ -252,9 +317,13 @@ function S3ImageNodeView({ node, selected, updateAttributes, editor }: NodeViewP
               }}
             />
 
-            {/* Resize handles - only show when selected and editable */}
+            {/* Alignment and resize controls - only show when selected and editable */}
             {showHandles && (
               <>
+                <AlignmentControls
+                  currentAlign={currentAlign}
+                  onAlignChange={handleAlignChange}
+                />
                 <ResizeHandle position="nw" onResizeStart={handleResizeStart} />
                 <ResizeHandle position="ne" onResizeStart={handleResizeStart} />
                 <ResizeHandle position="sw" onResizeStart={handleResizeStart} />
@@ -323,6 +392,14 @@ export const S3Image = Node.create({
         renderHTML: attributes => {
           if (!attributes.width) return {};
           return { width: attributes.width };
+        },
+      },
+      align: {
+        default: 'left',
+        parseHTML: element => element.getAttribute('data-align') || 'left',
+        renderHTML: attributes => {
+          if (!attributes.align || attributes.align === 'left') return {};
+          return { 'data-align': attributes.align };
         },
       },
     };
