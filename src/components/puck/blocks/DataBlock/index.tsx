@@ -21,7 +21,7 @@
  * - Filtering happens at database level for efficiency
  */
 
-import type { ComponentConfig } from "@measured/puck";
+import type { ComponentConfig, Data } from "@measured/puck";
 import DataBlock, { type DataBlockProps } from "./DataBlock";
 import { executeView, getView } from "@/app/actions/views";
 import { executePublicView } from "@/app/actions/public-pages";
@@ -30,6 +30,7 @@ import { isPuckResolveContext } from "../../types/puck-context";
 import { createViewManagementField } from "../../custom-fields";
 import { MultiFilterField, type RowFilterConfig } from "../../fields/MultiFilterField";
 import { MultiSortField, type RowSortConfig } from "../../fields/MultiSortField";
+import { DataBlockTemplateField } from "./DataBlockTemplateField";
 
 export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
   label: "Data",
@@ -147,9 +148,20 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       ],
     },
 
-    // Slot for item template content
-    children: {
-      type: "slot",
+    // Template content (Puck Data) - edited via dedicated editor like dialogs
+    // Note: This is a fallback definition; resolveFields creates a dynamic version with viewId/tableId
+    // The componentId is not available here - resolveFields version has it from data.props.id
+    templateContent: {
+      type: "custom",
+      label: "Row Template",
+      render: ({ value, onChange }: { value: Data | undefined; onChange: (v: Data) => void }) => (
+        <DataBlockTemplateField
+          value={value}
+          onChange={onChange}
+          componentId=""
+          name="DataBlock"
+        />
+      ),
     },
 
     // Hidden fields populated by resolveData
@@ -183,6 +195,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     showCarouselArrows: false,
     editEnabled: false,
     allowCreate: false,
+    templateContent: { content: [], root: { props: {} }, zones: {} },
   },
 
   /**
@@ -194,6 +207,8 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     const layout = data.props.layout;
     const viewId = data.props.viewId;
     const editEnabled = data.props.editEnabled;
+    // Get the component's actual ID - this is what we need for nested editing
+    const componentId = data.props.id as string | undefined;
 
     // Base fields always shown
     const baseFields = {
@@ -202,6 +217,11 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     };
 
     // Row filter field - shown for both single and list modes
+    // Get fields from resolved data (available after resolveData runs)
+    const _fields = data.props._fields || [];
+    const _tableId = data.props._tableId;
+    const _viewName = data.props._viewName;
+
     const rowFilterField = {
       rowFilter: {
         type: "custom" as const,
@@ -212,6 +232,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
             value={value}
             onChange={onChange}
             viewId={viewId}
+            parentFields={_fields}
           />
         ),
       },
@@ -233,6 +254,27 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       },
     };
 
+    // Template content field - only needs viewId and tableId
+    // TemplateEditorContext will fetch fields and sample row fresh
+    // NOTE: componentId comes from data.props.id captured above, NOT from render's `id` param
+    const templateContentField = {
+      templateContent: {
+        type: "custom" as const,
+        label: "Row Template",
+        render: ({ value, onChange }: { value: Data | undefined; onChange: (v: Data) => void }) => (
+          <DataBlockTemplateField
+            key={`${viewId}-${_tableId}`}
+            value={value}
+            onChange={onChange}
+            componentId={componentId || ''}
+            name={_viewName || "DataBlock"}
+            viewId={viewId}
+            tableId={_tableId}
+          />
+        ),
+      },
+    };
+
     // Edit mode fields (shown when viewId is selected)
     const editFields = viewId ? {
       editEnabled: fields.editEnabled,
@@ -240,12 +282,12 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     } : {};
 
     if (mode === 'single') {
-      // Single mode: just filter and children
+      // Single mode: just filter and template
       return {
         ...baseFields,
         ...rowFilterField,
         ...editFields,
-        children: fields.children,
+        ...templateContentField,
       };
     }
 
@@ -262,7 +304,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       maxHeight: fields.maxHeight,
       ...(layout === 'horizontal' && { showCarouselArrows: fields.showCarouselArrows }),
       ...editFields,
-      children: fields.children,
+      ...templateContentField,
     };
   },
 
@@ -508,7 +550,9 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     }
   },
 
-  render: DataBlock,
+  // Cast render to satisfy TypeScript - templateContent uses custom Data type
+  // that Puck's type inference doesn't understand
+  render: DataBlock as ComponentConfig<DataBlockProps>['render'],
 };
 
 export default DataBlockConfig;

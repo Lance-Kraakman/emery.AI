@@ -12,29 +12,30 @@
  * Uses RowDataContext to provide row data to children.
  * Uses EditableRowContext to provide edit mode capabilities.
  *
- * Template Editing UX (list mode):
- * - Default: Shows all rows as preview with corner edit button
- * - Edit mode: Shows single editable template row
- * - No template: Shows centered "Edit Template" button
+ * Template Editing:
+ * - Template content is stored as Puck Data in templateContent prop
+ * - Click "Edit Template" to open dedicated editor (like dialog editing)
+ * - Uses ConditionalBlock-style floating bar for edit/preview toggle
  *
  * Data Edit Mode:
  * - When editEnabled=true, field blocks can render as inputs
  * - Save is always manual (requires save button)
  */
 
-import { useState, useRef, useEffect, useCallback, type ComponentType } from 'react';
-import { registerOverlayPortal } from '@measured/puck';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Render, registerOverlayPortal, type Data } from '@measured/puck';
+import { config } from '@/components/puck/config';
 import { RowDataProvider } from '@/components/puck/contexts/RowDataContext';
 import { DataLayoutProvider } from '@/components/puck/contexts/DataLayoutContext';
 import { EditableRowProvider } from '@/components/puck/contexts/EditableRowContext';
 import { useLinkContext } from '@/components/puck/contexts/PageContext';
-import { useEditorUI } from '@/components/puck/contexts/EditorUIContext';
+import { useEditingStack } from '@/components/puck/contexts/EditingStackContext';
 import { usePagination } from './usePagination';
 import { useChildDataBlock } from './useChildDataBlock';
 import { updateRowData, createRow } from '@/app/actions/rows';
 import { Button } from '@/components/ui/button';
 import { Section } from '@/components/puck/components/Section';
-import { Pencil, Check, ChevronLeft, ChevronRight, Save, X, Plus } from 'lucide-react';
+import { Database, Pencil, Eye, ChevronLeft, ChevronRight, Save, X, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { RowFilterConfig } from '../../fields/MultiFilterField';
@@ -89,13 +90,11 @@ export interface DataBlockProps {
   _totalCount?: number;
   _error?: string;
 
-  // Slot for item template - Puck passes this as a renderable component
-  // Slot props: className, allow, disallow, minEmptyHeight, style, ref
-  children?: ComponentType<{
-    className?: string;
-    allow?: string[];
-    disallow?: string[];
-  }>;
+  // Template content stored as Puck Data (like dialog content)
+  templateContent?: Data;
+
+  // Puck component ID (for edit template dispatch)
+  id?: string;
 }
 
 export default function DataBlock({
@@ -119,17 +118,21 @@ export default function DataBlock({
   _resolvedRow,
   _totalCount = 0,
   _error,
-  children: Children,
+  templateContent,
+  id: componentId,
 }: DataBlockProps) {
-  // Template editing state (list mode only)
-  const [isEditingTemplate, setIsEditingTemplate] = useState(false);
-  const editButtonRef = useRef<HTMLButtonElement>(null);
-  const doneButtonRef = useRef<HTMLButtonElement>(null);
-  const previewContainerRef = useRef<HTMLDivElement>(null);
+  // Editor view mode (edit = single template, preview = all rows)
+  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('preview');
+  const barRef = useRef<HTMLDivElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
 
   // Get editing context (Puck editor vs preview/public)
   const { isEditing } = useLinkContext();
+  const { pushDataBlock } = useEditingStack();
+
+  // NOTE: We do NOT use usePuck() here because this component renders on public/preview pages
+  // where there's no <Puck> wrapper. The pushDataBlock from EditingStackContext is wrapped by
+  // PuckEditorLayout to inject appState.data when in editor mode.
 
   // ============================================
   // CLIENT-SIDE DATA FETCHING (for rowData variables)
@@ -295,19 +298,6 @@ export default function DataBlock({
     }
   }, [_tableId, _fields]);
 
-  // Get UI navigation context (only available in editor)
-  let navigateToTab: ((tab: 'blocks' | 'fields' | 'outline') => void) | null = null;
-  let expandCategory: ((category: string) => void) | null = null;
-  try {
-    const editorUI = useEditorUI();
-    navigateToTab = editorUI.navigateToTab;
-    expandCategory = editorUI.expandCategory;
-  } catch {
-    // Context not available - we're not in the editor (preview/public)
-    navigateToTab = null;
-    expandCategory = null;
-  }
-
   // Pagination hook (only used in list mode, but called unconditionally for hook rules)
   const pagination = usePagination({
     viewId: viewId ?? 0,
@@ -316,23 +306,14 @@ export default function DataBlock({
     pageSize: itemsPerPage,
   });
 
-  // Register overlay portals for interactive elements
+  // Register floating bar as overlay portal so buttons remain clickable
   useEffect(() => {
-    // Edit button (preview mode)
-    if (editButtonRef.current && !isEditingTemplate && isEditing) {
-      registerOverlayPortal(editButtonRef.current);
+    if (barRef.current && isEditing) {
+      registerOverlayPortal(barRef.current);
     }
-    // Done button (edit mode)
-    if (doneButtonRef.current && isEditingTemplate && isEditing) {
-      registerOverlayPortal(doneButtonRef.current);
-    }
-    // Preview container (disables Puck overlays on preview rows)
-    if (previewContainerRef.current && !isEditingTemplate && isEditing) {
-      registerOverlayPortal(previewContainerRef.current);
-    }
-  }, [isEditingTemplate, isEditing]);
+  }, [isEditing]);
 
-  const hasTemplate = Children !== undefined;
+  const hasTemplate = templateContent && templateContent.content && templateContent.content.length > 0;
 
   // Carousel scroll helper
   const scrollCarousel = (direction: 'left' | 'right') => {
@@ -342,14 +323,30 @@ export default function DataBlock({
     });
   };
 
-  // Handle edit template action - switch to edit mode, navigate to Blocks tab, and expand Fields category
+  // Handle edit template action - push onto editing stack via context
   const handleEditTemplate = () => {
-    setIsEditingTemplate(true);
-    if (navigateToTab && expandCategory) {
-      // Switch to blocks tab and expand the fields category
-      navigateToTab('blocks');
-      expandCategory('fields');
+    // Validate required IDs before pushing
+    if (!viewId || !_tableId) {
+      console.warn('[DataBlock] Cannot edit template: viewId or tableId missing');
+      return;
     }
+
+    const template = templateContent || { content: [], root: { props: {} }, zones: {} };
+    // TemplateEditorContext will fetch fields and sample row fresh
+    // pushDataBlock is wrapped by PuckEditorLayout to inject appState.data
+    pushDataBlock(componentId || '', _viewName || 'DataBlock', template, viewId, _tableId);
+  };
+
+  // Render template content using Puck Render
+  const renderTemplateContent = () => {
+    if (!templateContent || !templateContent.content || templateContent.content.length === 0) {
+      return (
+        <div className="text-muted-foreground text-sm py-4 text-center border-2 border-dashed rounded-md">
+          No template content
+        </div>
+      );
+    }
+    return <Render config={config} data={templateContent} />;
   };
 
   // No view selected - show placeholder
@@ -415,7 +412,7 @@ export default function DataBlock({
     }
 
     // No data loaded - could be editor mode where variable isn't available
-    if (!_resolvedRow) {
+    if (!_resolvedRow && !isEditing) {
       // Build a description of the filter for the message
       const filterDesc = rowFilter?.conditions
         ?.filter(c => c.field && c.value)
@@ -433,7 +430,7 @@ export default function DataBlock({
       );
     }
 
-    const rowId = String(_resolvedRow.id);
+    const rowId = _resolvedRow ? String(_resolvedRow.id) : '';
 
     // Form submit handler for single mode
     const handleSingleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -487,81 +484,139 @@ export default function DataBlock({
     // Use localRowData for optimistic updates (falls back to _resolvedRow)
     const displayRow = localRowData ?? _resolvedRow;
 
-    return (
-      <Section>
-        <div className={styles.dataBlock}>
-          {/* Content with row context - uses slot */}
-          {wrapWithDataLayout(
-            <RowDataProvider rowData={displayRow!} rowIndex={0} fields={_fields}>
-                {editEnabled && singleEditState.isEditMode ? (
-                  <EditableRowProvider
-                    isEditMode={singleEditState.isEditMode}
-                    isSaving={singleEditState.isSaving}
-                    tableId={_tableId ?? null}
-                    rowId={rowId}
-                    cancel={handleCancelSingle}
-                    setEditMode={handleSetEditModeSingle}
-                  >
-                    <form onSubmit={handleSingleFormSubmit}>
-                      <div className={styles.content}>
-                        {Children && <Children />}
-                      </div>
-                      {!isEditing && (
-                        <div className={styles.editControls}>
-                          <Button
-                            type="submit"
-                            size="sm"
-                            disabled={singleEditState.isSaving}
-                          >
-                            <Save className="h-4 w-4 mr-1" />
-                            {singleEditState.isSaving ? 'Saving...' : 'Save'}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={handleCancelSingle}
-                            disabled={singleEditState.isSaving}
-                          >
-                            <X className="h-4 w-4 mr-1" />
-                            Cancel
-                          </Button>
-                        </div>
-                      )}
-                    </form>
-                  </EditableRowProvider>
-                ) : editEnabled ? (
-                  <EditableRowProvider
-                    isEditMode={false}
-                    isSaving={false}
-                    tableId={_tableId ?? null}
-                    rowId={rowId}
-                    cancel={handleCancelSingle}
-                    setEditMode={handleSetEditModeSingle}
-                  >
-                    <div className={styles.content}>
-                      {Children && <Children />}
-                    </div>
-                    {!isEditing && (
-                      <div className={styles.editControls}>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleSetEditModeSingle(true)}
-                        >
-                          <Pencil className="h-4 w-4 mr-1" />
-                          Edit
-                        </Button>
-                      </div>
-                    )}
-                  </EditableRowProvider>
-                ) : (
+    // Helper to render single mode content
+    const renderSingleModeContent = () => {
+      // In editor with no data, show placeholder
+      if (!displayRow) {
+        return (
+          <div className="text-muted-foreground text-sm py-4 text-center border-2 border-dashed rounded-md">
+            No data available - filter will be applied at runtime
+          </div>
+        );
+      }
+
+      return wrapWithDataLayout(
+        <RowDataProvider rowData={displayRow} rowIndex={0} fields={_fields}>
+            {editEnabled && singleEditState.isEditMode ? (
+              <EditableRowProvider
+                isEditMode={singleEditState.isEditMode}
+                isSaving={singleEditState.isSaving}
+                tableId={_tableId ?? null}
+                rowId={rowId}
+                cancel={handleCancelSingle}
+                setEditMode={handleSetEditModeSingle}
+              >
+                <form onSubmit={handleSingleFormSubmit}>
                   <div className={styles.content}>
-                    {Children && <Children />}
+                    {renderTemplateContent()}
+                  </div>
+                  {!isEditing && (
+                    <div className={styles.editControls}>
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={singleEditState.isSaving}
+                      >
+                        <Save className="h-4 w-4 mr-1" />
+                        {singleEditState.isSaving ? 'Saving...' : 'Save'}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleCancelSingle}
+                        disabled={singleEditState.isSaving}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Cancel
+                      </Button>
+                    </div>
+                  )}
+                </form>
+              </EditableRowProvider>
+            ) : editEnabled ? (
+              <EditableRowProvider
+                isEditMode={false}
+                isSaving={false}
+                tableId={_tableId ?? null}
+                rowId={rowId}
+                cancel={handleCancelSingle}
+                setEditMode={handleSetEditModeSingle}
+              >
+                <div className={styles.content}>
+                  {renderTemplateContent()}
+                </div>
+                {!isEditing && (
+                  <div className={styles.editControls}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleSetEditModeSingle(true)}
+                    >
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
                   </div>
                 )}
-            </RowDataProvider>
-          )}
+              </EditableRowProvider>
+            ) : (
+              <div className={styles.content}>
+                {renderTemplateContent()}
+              </div>
+            )}
+        </RowDataProvider>
+      );
+    };
+
+    // Not in editor (preview/public) - show content directly
+    if (!isEditing) {
+      return (
+        <Section>
+          <div className={styles.dataBlock}>
+            {renderSingleModeContent()}
+          </div>
+        </Section>
+      );
+    }
+
+    // ============================================
+    // EDITOR MODE for SINGLE: Show floating bar
+    // ============================================
+    return (
+      <Section>
+        <div className="relative border-2 border-dashed border-purple-300 rounded-lg p-3 min-h-[60px]">
+          {/* ConditionalBlock-style floating bar at top */}
+          <div
+            ref={barRef}
+            className="absolute -top-3 left-2 bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded-full flex items-center gap-1.5 font-mono z-50"
+          >
+            <Database className="h-3 w-3" />
+            <span className="max-w-[120px] truncate">{_viewName || 'DataBlock'}</span>
+            <span className="text-purple-500">(single)</span>
+
+            {/* Divider */}
+            <div className="w-px h-3 bg-purple-300 mx-1" />
+
+            {/* Edit Template button */}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleEditTemplate(); }}
+              className="px-1.5 py-0.5 rounded hover:bg-purple-200 transition-colors"
+            >
+              Edit Template
+            </button>
+          </div>
+
+          {/* Content area */}
+          <div className="mt-2">
+            {!hasTemplate ? (
+              <div className="text-muted-foreground text-sm py-4 text-center border-2 border-dashed rounded-md">
+                No template content - click "Edit Template" to add components
+              </div>
+            ) : (
+              renderSingleModeContent()
+            )}
+          </div>
         </div>
       </Section>
     );
@@ -650,7 +705,6 @@ export default function DataBlock({
   const renderRow = (
     row: Record<string, unknown>,
     index: number,
-    disableDrops = false,
     withEditControls = false
   ) => {
     const rowId = String(row.id);
@@ -661,7 +715,7 @@ export default function DataBlock({
       return (
         <div key={(row.id as number) || index} className={styles.item}>
           <RowDataProvider rowData={row} rowIndex={index} fields={_fields}>
-            {Children && <Children allow={disableDrops ? [] : undefined} />}
+            {renderTemplateContent()}
           </RowDataProvider>
         </div>
       );
@@ -686,7 +740,7 @@ export default function DataBlock({
                 <form onSubmit={(e) => handleRowFormSubmit(e, rowId)}>
                   <div className={styles.rowWrapper}>
                     {/* Row content */}
-                    {Children && <Children allow={disableDrops ? [] : undefined} />}
+                    {renderTemplateContent()}
 
                     {/* Row edit controls */}
                     <div className={styles.rowEditControls}>
@@ -713,7 +767,7 @@ export default function DataBlock({
               ) : (
                 <div className={styles.rowWrapper}>
                   {/* Row content */}
-                  {Children && <Children allow={disableDrops ? [] : undefined} />}
+                  {renderTemplateContent()}
 
                   {/* Row edit controls */}
                   <div className={styles.rowEditControls}>
@@ -734,11 +788,10 @@ export default function DataBlock({
     );
   };
 
-  // Render rows content using Children slot
-  // Pass allow={[]} to disable dropping in preview rows
-  const renderRows = (rows: Record<string, unknown>[], disableDrops = false, withEditControls = false) => (
+  // Render rows content using template
+  const renderRows = (rows: Record<string, unknown>[], withEditControls = false) => (
     <div className={styles.repeatContainer} style={containerStyle}>
-      {rows.map((row, index) => renderRow(row, index, disableDrops, withEditControls))}
+      {rows.map((row, index) => renderRow(row, index, withEditControls))}
     </div>
   );
 
@@ -788,192 +841,188 @@ export default function DataBlock({
     return null;
   };
 
-  // Helper to render all rows (used in preview/public mode)
-  const renderAllRows = () => (
-    <Section>
-      <div className={styles.dataBlock}>
-        {mergedDisplayedRows.length === 0 ? (
-          <div className={styles.empty}>
-            <p className={styles.emptyText}>
-              No data to display
-              {_viewName && ` from "${_viewName}"`}
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Horizontal carousel layout */}
-            {layout === 'horizontal' && showCarouselArrows ? (
-              <div className={styles.carouselWrapper}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => scrollCarousel('left')}
-                  className={styles.carouselButton}
+  // Helper to render all rows (used in preview/public mode and editor preview)
+  const renderAllRows = (showEditControls = false) => (
+    <>
+      {mergedDisplayedRows.length === 0 ? (
+        <div className={styles.empty}>
+          <p className={styles.emptyText}>
+            No data to display
+            {_viewName && ` from "${_viewName}"`}
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Horizontal carousel layout */}
+          {layout === 'horizontal' && showCarouselArrows ? (
+            <div className={styles.carouselWrapper}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => scrollCarousel('left')}
+                className={styles.carouselButton}
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+              {wrapWithDataLayout(
+                <div
+                  ref={carouselRef}
+                  className={styles.carouselScroll}
+                  style={{ gap: `var(--spacing-${gap}, 16px)` }}
                 >
-                  <ChevronLeft className="h-5 w-5" />
-                </Button>
-                {wrapWithDataLayout(
-                  <div
-                    ref={carouselRef}
-                    className={styles.carouselScroll}
-                    style={{ gap: `var(--spacing-${gap}, 16px)` }}
-                  >
-                    {mergedDisplayedRows.map((row, index) => (
-                      <div key={(row.id as number) || index} className={styles.carouselItem}>
-                        {renderRow(row, index, false, editEnabled)}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => scrollCarousel('right')}
-                  className={styles.carouselButton}
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </Button>
-              </div>
-            ) : (
-              /* Standard layout with optional scroll container */
-              wrapWithDataLayout(
-                <div className={styles.scrollContainer} style={scrollContainerStyle}>
-                  {renderRows(mergedDisplayedRows, false, editEnabled)}
+                  {mergedDisplayedRows.map((row, index) => (
+                    <div key={(row.id as number) || index} className={styles.carouselItem}>
+                      {renderRow(row, index, showEditControls)}
+                    </div>
+                  ))}
                 </div>
-              )
-            )}
-
-            {/* Pagination controls */}
-            {renderPaginationControls()}
-
-            {/* Add new row button */}
-            {allowCreate && !isEditing && (
-              <div className={styles.addRowContainer}>
-                <Button
-                  variant="outline"
-                  onClick={handleCreateNewRow}
-                  disabled={isCreatingNew}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add New
-                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => scrollCarousel('right')}
+                className={styles.carouselButton}
+              >
+                <ChevronRight className="h-5 w-5" />
+              </Button>
+            </div>
+          ) : (
+            /* Standard layout with optional scroll container */
+            wrapWithDataLayout(
+              <div className={styles.scrollContainer} style={scrollContainerStyle}>
+                {renderRows(mergedDisplayedRows, showEditControls)}
               </div>
-            )}
-          </>
-        )}
+            )
+          )}
 
-        {/* Create row dialog */}
-        {allowCreate && (
-          <CreateRowDialog
-            open={isCreatingNew}
-            onClose={handleCancelCreate}
-            onSave={handleSaveNewRow}
-            fields={_fields}
-            isSaving={isCreatingSaving}
-            errors={newRowErrors}
-          />
-        )}
-      </div>
-    </Section>
+          {/* Pagination controls */}
+          {renderPaginationControls()}
+
+          {/* Add new row button */}
+          {allowCreate && !isEditing && (
+            <div className={styles.addRowContainer}>
+              <Button
+                variant="outline"
+                onClick={handleCreateNewRow}
+                disabled={isCreatingNew}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add New
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Create row dialog */}
+      {allowCreate && (
+        <CreateRowDialog
+          open={isCreatingNew}
+          onClose={handleCancelCreate}
+          onSave={handleSaveNewRow}
+          fields={_fields}
+          isSaving={isCreatingSaving}
+          errors={newRowErrors}
+        />
+      )}
+    </>
   );
 
-  // Not in editor (preview/public) - always show all rows
+  // Not in editor (preview/public) - show all rows with edit controls if enabled
   if (!isEditing) {
-    return renderAllRows();
-  }
-
-  // In editor, no template yet - show centered edit button
-  if (!hasTemplate) {
-    return (
-      <Section>
-        <div className="flex min-h-[200px] items-center justify-center border-2 border-dashed rounded-lg bg-muted/20">
-          <Button onClick={handleEditTemplate}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit Template
-          </Button>
-        </div>
-      </Section>
-    );
-  }
-
-  // In editor, editing template - show single editable row
-  if (isEditingTemplate) {
     return (
       <Section>
         <div className={styles.dataBlock}>
-          {wrapWithDataLayout(
-            <RowDataProvider rowData={_rows[0] || {}} rowIndex={0} fields={_fields}>
-              <Children />
-            </RowDataProvider>
-          )}
-          <div className="flex justify-center mt-4">
-            <Button
-              ref={doneButtonRef}
-              onClick={() => setIsEditingTemplate(false)}
-            >
-              <Check className="mr-2 h-4 w-4" />
-              Done
-            </Button>
-          </div>
+          {renderAllRows(editEnabled)}
         </div>
       </Section>
     );
   }
 
-  // In editor, preview mode - show all rows with corner edit button
+  // ============================================
+  // EDITOR MODE: ConditionalBlock-style floating bar
+  // ============================================
+
+  // Render a single template preview row for edit mode
+  const renderSingleTemplatePreview = () => {
+    const sampleRow = _rows[0] || {};
+    return wrapWithDataLayout(
+      <RowDataProvider rowData={sampleRow} rowIndex={0} fields={_fields}>
+        {renderTemplateContent()}
+      </RowDataProvider>
+    );
+  };
+
   return (
     <Section>
-      <div className={styles.dataBlock}>
-        <div className="relative">
-          {/* Corner edit button - uses overlay portal */}
-          <Button
-            ref={editButtonRef}
-            variant="secondary"
-            className="absolute top-2 right-2 z-10"
-            onClick={handleEditTemplate}
-          >
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit Template
-          </Button>
+      <div className="relative border-2 border-dashed border-purple-300 rounded-lg p-3 min-h-[60px]">
+        {/* ConditionalBlock-style floating bar at top */}
+        <div
+          ref={barRef}
+          className="absolute -top-3 left-2 bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded-full flex items-center gap-1.5 font-mono z-50"
+        >
+          <Database className="h-3 w-3" />
+          <span className="max-w-[120px] truncate">{_viewName || 'DataBlock'}</span>
+          <span className="text-purple-500">({mergedDisplayedRows.length} rows)</span>
 
-          {/* Preview rows - disable drops with allow={[]} */}
-          {mergedDisplayedRows.length === 0 ? (
-            <div className={styles.empty}>
-              <p className={styles.emptyText}>
-                No data to display
-                {_viewName && ` from "${_viewName}"`}
-              </p>
-            </div>
-          ) : (
-            <div ref={previewContainerRef} className={styles.previewContainer}>
-              {wrapWithDataLayout(
-                <div className={styles.scrollContainer} style={scrollContainerStyle}>
-                  <div
-                    className={cn(styles.repeatContainer, styles.previewRows)}
-                    style={containerStyle}
-                  >
-                    {mergedDisplayedRows.map((row, index) => (
-                      <div key={(row.id as number) || index} className={styles.item}>
-                        <RowDataProvider rowData={row} rowIndex={index} fields={_fields}>
-                          {Children && <Children allow={[]} />}
-                        </RowDataProvider>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+          {/* Divider */}
+          <div className="w-px h-3 bg-purple-300 mx-1" />
+
+          {/* Edit/Preview toggle */}
+          <div className="flex gap-0.5">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setViewMode('edit'); }}
+              className={cn(
+                "p-0.5 rounded transition-colors",
+                viewMode === 'edit' ? "bg-purple-200" : "hover:bg-purple-200/50"
               )}
+              title="Edit mode - show single row"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setViewMode('preview'); }}
+              className={cn(
+                "p-0.5 rounded transition-colors",
+                viewMode === 'preview' ? "bg-purple-200" : "hover:bg-purple-200/50"
+              )}
+              title="Preview mode - show all rows"
+            >
+              <Eye className="h-3 w-3" />
+            </button>
+          </div>
+
+          {/* Divider */}
+          <div className="w-px h-3 bg-purple-300 mx-1" />
+
+          {/* Edit Template button */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleEditTemplate(); }}
+            className="px-1.5 py-0.5 rounded hover:bg-purple-200 transition-colors"
+          >
+            Edit Template
+          </button>
+        </div>
+
+        {/* Content area */}
+        <div className="mt-2">
+          {!hasTemplate ? (
+            <div className="text-muted-foreground text-sm py-4 text-center border-2 border-dashed rounded-md">
+              No template content - click "Edit Template" to add components
+            </div>
+          ) : viewMode === 'edit' ? (
+            // Edit mode: show single row template
+            renderSingleTemplatePreview()
+          ) : (
+            // Preview mode: show all rows
+            <div className={styles.dataBlock}>
+              {renderAllRows(false)}
             </div>
           )}
         </div>
-
-        {/* Pagination controls (disabled in editor preview) */}
-        {paginationStyle !== 'none' && (
-          <div className={styles.paginationPreview}>
-            <span className={styles.paginationPreviewText}>
-              {paginationStyle === 'pages' ? 'Page navigation' : 'Load more'} (active in preview)
-            </span>
-          </div>
-        )}
       </div>
     </Section>
   );
