@@ -1,12 +1,13 @@
 /**
  * Store Actions - Centralized action creators and utilities for all stores
- * 
+ *
  * This file provides action creators that work across multiple stores and
  * utilities for common patterns like data fetching with loading states.
- * 
+ *
  * AIDEV-NOTE: Centralized actions for cross-store operations and consistency
  */
 
+import type { QueryClient } from '@tanstack/react-query'
 import { appStateActions, appStateStore } from './app-state.store'
 import { uiStateActions, uiStateStore } from './ui-state.store'
 import { agentsActions, agentsStore } from './agents.store'
@@ -25,6 +26,17 @@ import { getAgents } from '@/app/actions/agents'
 import { getTeams } from '@/app/actions/teams'
 import { getFields } from '@/app/actions/fields'
 import { getRowsDSG } from '@/app/actions/rows'
+
+// Query client reference for invalidating queries from store actions
+let queryClientRef: QueryClient | null = null
+
+/**
+ * Set the query client reference for store actions to use
+ * Must be called during app initialization (in EmeryProviders)
+ */
+export function setQueryClientRef(client: QueryClient) {
+  queryClientRef = client
+}
 
 /**
  * Cross-store action creators for complex operations
@@ -131,6 +143,29 @@ export const storeActions = {
 
   showError(message: string) {
     this.showNotification('error', message)
+  },
+
+  /**
+   * Called after creating a new database/table to refresh both store and query caches
+   * This ensures new tables show up immediately without page refresh
+   */
+  async onDataStructureCreated() {
+    // Get user's current organization from store state
+    const user = appStateStore.state.user
+    const orgId = user?.currentOrganizationId
+
+    // First refresh store data
+    if (orgId) {
+      await this.initializeApplication(orgId)
+    }
+
+    // Then invalidate TanStack Query caches so any open data views refresh
+    if (queryClientRef) {
+      // Invalidate table-related queries
+      queryClientRef.invalidateQueries({ queryKey: ['rows'] })
+      queryClientRef.invalidateQueries({ queryKey: ['fields'] })
+      queryClientRef.invalidateQueries({ queryKey: ['views'] })
+    }
   },
 }
 
