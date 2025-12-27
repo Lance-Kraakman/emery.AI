@@ -13,26 +13,6 @@
   gap: 1.5rem;
 }
 
-/* Form header */
-.formHeader {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.formTitle {
-  font-size: var(--theme-font-3xl, 1.875rem);
-  font-weight: 700;
-  color: var(--theme-text, #1e293b);
-  line-height: 1.2;
-}
-
-.formDescription {
-  color: var(--theme-text-muted, #64748b);
-  font-size: var(--theme-font-base, 1rem);
-  line-height: 1.5;
-}
-
 /* Progress section */
 .progressSection {
   display: flex;
