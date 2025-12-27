@@ -546,3 +546,11 @@ export class TableField {
     }
   }
 }
+
+/**
+ * Check if a field type stores array values (relation, file, document, multi-select)
+ * These fields store JSON arrays and may need special handling for extraction.
+ */
+export function isArrayFieldType(type: FieldType | string): boolean {
+  return ['relation', 'file', 'document', 'multi-select'].includes(type);
+}

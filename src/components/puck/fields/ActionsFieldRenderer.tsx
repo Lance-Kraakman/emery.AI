@@ -37,6 +37,7 @@ import { VariablesPanel, type Variable } from '@/components/shared/VariablesPane
 import { useDataLayoutContext } from '../contexts/DataLayoutContext';
 import { useStateContext } from '../contexts/StateContext';
 import type { StateVariableType, StateVariable } from '../types/state';
+import { isArrayFieldType } from '@/ddd/domain/tables/value-objects/table-field';
 
 type ActionType = 'assignTask' | 'navigateToPage' | 'openUrl' | 'setState';
 
@@ -399,10 +400,24 @@ function ActionItem({
 }) {
   const actionType = action.type as ActionType;
   const stateContext = useStateContext();
+  const dataContext = useDataLayoutContext();
 
   // Track if mousedown happened on the delete button to prevent accidental deletion
   // from Puck's focus management system which can focus+click buttons unexpectedly
   const mouseDownOnDeleteRef = useRef(false);
+
+  // Check if setState value references an array-type field (relation/file/document/multi-select)
+  // Must be at top level to comply with React hooks rules
+  const isArrayTypeField = React.useMemo(() => {
+    if (action.type !== 'setState' || !('value' in action)) return false;
+    const valueStr = String(action.value ?? '');
+    const match = valueStr.match(/\{rowData\.(\w+)\}/);
+    if (!match) return false;
+    const fieldName = match[1];
+    if (!dataContext?.fields) return false;
+    const field = dataContext.fields.find(f => f.name === fieldName);
+    return field ? isArrayFieldType(field.type) : false;
+  }, [action, dataContext?.fields]);
 
   const handleTypeChange = (newType: ActionType) => {
     // Reset to defaults for the new type
@@ -691,134 +706,113 @@ function ActionItem({
       )}
 
       {/* Set State Fields */}
-      {action.type === 'setState' && (() => {
-        // Get the selected variable's type for type-aware input
-        const selectedVariable = stateContext?.getConfig()?.variables?.find(
-          (v) => v.name === action.key
-        );
-        const variableType = selectedVariable?.type;
+      {action.type === 'setState' && (
+        <>
+          <div className="space-y-2">
+            <Label className="text-xs font-medium">State Variable</Label>
+            <Select
+              value={action.key || ''}
+              onValueChange={(val) => {
+                // Reset value when variable changes (type might differ)
+                const newVar = stateContext?.getConfig()?.variables?.find(v => v.name === val);
+                const newValue = newVar?.type === 'boolean' ? '' : action.value;
+                onChange({ ...action, key: val, value: newValue });
+              }}
+              disabled={readOnly}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a state variable" />
+              </SelectTrigger>
+              <SelectContent>
+                {stateContext?.getConfig()?.variables?.length === 0 && (
+                  <div className="py-2 px-2 text-xs text-muted-foreground">
+                    No state variables defined
+                  </div>
+                )}
+                {stateContext?.getConfig()?.variables?.map((variable) => (
+                  <SelectItem key={variable.name} value={variable.name}>
+                    <div className="flex items-center gap-2">
+                      <VariableIcon className="h-4 w-4 text-muted-foreground" />
+                      <span>{variable.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({variable.type})
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Define state variables in Page State panel
+            </p>
+          </div>
 
-        // Check if value references a relation/file/document field (array type)
-        const dataContext = useDataLayoutContext();
-        const isArrayTypeField = React.useMemo(() => {
-          const valueStr = String(action.value ?? '');
-          // Check for {rowData.fieldName} pattern
-          const match = valueStr.match(/\{rowData\.(\w+)\}/);
-          if (!match) return false;
-          const fieldName = match[1];
-          if (!dataContext?.fields) return false;
-          const field = dataContext.fields.find(f => f.name === fieldName);
-          return field?.type === 'relation' || field?.type === 'file' || field?.type === 'document';
-        }, [action.value, dataContext?.fields]);
+          <div className="space-y-2">
+            <Label className="text-xs font-medium">Value</Label>
+            <StateValueInput
+              value={action.value as string | null | undefined}
+              onChange={(val) => onChange({ ...action, value: val })}
+              variableType={stateContext?.getConfig()?.variables?.find(v => v.name === action.key)?.type}
+              disabled={readOnly}
+            />
+            {stateContext?.getConfig()?.variables?.find(v => v.name === action.key)?.type !== 'boolean' && (
+              <p className="text-xs text-muted-foreground">
+                Type {"{"} to insert row data or other variables
+              </p>
+            )}
+          </div>
 
-        return (
-          <>
+          {/* Extract Mode selector for array-type fields (relation/file/document/multi-select) */}
+          {isArrayTypeField && (
             <div className="space-y-2">
-              <Label className="text-xs font-medium">State Variable</Label>
+              <Label className="text-xs font-medium">Extract from array</Label>
               <Select
-                value={action.key || ''}
-                onValueChange={(val) => {
-                  // Reset value when variable changes (type might differ)
-                  const newVar = stateContext?.getConfig()?.variables?.find(v => v.name === val);
-                  const newValue = newVar?.type === 'boolean' ? '' : action.value;
-                  onChange({ ...action, key: val, value: newValue });
-                }}
+                value={action.extractMode || 'first'}
+                onValueChange={(val) => onChange({ ...action, extractMode: val as 'first' | 'all' })}
                 disabled={readOnly}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a state variable" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {stateContext?.getConfig()?.variables?.length === 0 && (
-                    <div className="py-2 px-2 text-xs text-muted-foreground">
-                      No state variables defined
+                  <SelectItem value="first">
+                    <div className="flex items-center gap-2">
+                      <span>First item only</span>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">ID</span>
                     </div>
-                  )}
-                  {stateContext?.getConfig()?.variables?.map((variable) => (
-                    <SelectItem key={variable.name} value={variable.name}>
-                      <div className="flex items-center gap-2">
-                        <VariableIcon className="h-4 w-4 text-muted-foreground" />
-                        <span>{variable.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          ({variable.type})
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
+                  </SelectItem>
+                  <SelectItem value="all">
+                    <div className="flex items-center gap-2">
+                      <span>All items</span>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">[array]</span>
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Define state variables in Page State panel
+                This field contains multiple items. Choose how to extract the value.
               </p>
             </div>
+          )}
 
-            <div className="space-y-2">
-              <Label className="text-xs font-medium">Value</Label>
-              <StateValueInput
-                value={action.value as string | null | undefined}
-                onChange={(val) => onChange({ ...action, value: val })}
-                variableType={variableType}
-                disabled={readOnly}
-              />
-              {variableType !== 'boolean' && (
-                <p className="text-xs text-muted-foreground">
-                  Type {"{"} to insert row data or other variables
-                </p>
-              )}
-            </div>
-
-            {/* Extract Mode selector for array-type fields (relation/file/document) */}
-            {isArrayTypeField && (
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Extract from array</Label>
-                <Select
-                  value={action.extractMode || 'first'}
-                  onValueChange={(val) => onChange({ ...action, extractMode: val as 'first' | 'all' })}
-                  disabled={readOnly}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="first">
-                      <div className="flex items-center gap-2">
-                        <span>First item only</span>
-                        <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">ID</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="all">
-                      <div className="flex items-center gap-2">
-                        <span>All items</span>
-                        <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">[array]</span>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  This field contains multiple items. Choose how to extract the value.
-                </p>
-              </div>
-            )}
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id={`action-${index}-update-url`}
-                checked={action.updateUrl !== false}
-                onCheckedChange={(checked) =>
-                  onChange({ ...action, updateUrl: checked as boolean })
-                }
-                disabled={readOnly}
-              />
-              <Label
-                htmlFor={`action-${index}-update-url`}
-                className="text-xs font-normal cursor-pointer"
-              >
-                Update URL parameter (persists state in URL)
-              </Label>
-            </div>
-          </>
-        );
-      })()}
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id={`action-${index}-update-url`}
+              checked={action.updateUrl !== false}
+              onCheckedChange={(checked) =>
+                onChange({ ...action, updateUrl: checked as boolean })
+              }
+              disabled={readOnly}
+            />
+            <Label
+              htmlFor={`action-${index}-update-url`}
+              className="text-xs font-normal cursor-pointer"
+            >
+              Update URL parameter (persists state in URL)
+            </Label>
+          </div>
+        </>
+      )}
 
       {/* Preview */}
       <div className="pt-2 border-t border-border">

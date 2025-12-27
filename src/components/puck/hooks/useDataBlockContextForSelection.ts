@@ -13,9 +13,12 @@
  */
 
 import { useMemo } from 'react';
-import { usePuck } from '@measured/puck';
+import { createUsePuck, useGetPuck } from '@measured/puck';
 import type { Data } from '@measured/puck';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
+
+// Create usePuck with selector support to avoid re-renders
+const usePuck = createUsePuck();
 
 interface DataBlockContext {
   tableId?: number;
@@ -125,17 +128,40 @@ function findZoneContaining(data: Data, componentId: string): string | undefined
  * If found, returns the innermost DataBlock's field context for use in sidebar components.
  */
 export function useDataBlockContextForSelection(): DataBlockContext | null {
-  const { appState, getItemById } = usePuck();
-  const itemSelector = appState.ui.itemSelector;
+  // ONLY subscribe to zone changes - this prevents re-renders when any prop changes
+  // We use zone because it only changes when selection changes, not on every state update
+  const zone = usePuck((s) => s.appState.ui.itemSelector?.zone);
+
+  // Non-reactive: get latest API and data on-demand
+  const getPuck = useGetPuck();
 
   return useMemo(() => {
-    const hierarchy = buildDataBlockHierarchy(
-      appState.data,
-      itemSelector?.zone,
-      getItemById
-    );
-
+    const { appState, getItemById } = getPuck();
+    const hierarchy = buildDataBlockHierarchy(appState.data, zone, getItemById);
     // Return innermost DataBlock context (last in array)
     return hierarchy.length > 0 ? hierarchy[hierarchy.length - 1] : null;
-  }, [appState.data, itemSelector?.zone, getItemById]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zone]); // Only depend on zone - getPuck is stable, data is read on-demand
+}
+
+/**
+ * Returns the PARENT DataBlock context (for nested DataBlocks).
+ * Used by MultiFilterField for "Parent Row" filtering.
+ */
+export function useParentDataBlockContext(): DataBlockContext | null {
+  // ONLY subscribe to zone changes - this prevents re-renders when any prop changes
+  // We use zone because it only changes when selection changes, not on every state update
+  const zone = usePuck((s) => s.appState.ui.itemSelector?.zone);
+
+  // Non-reactive: get latest API and data on-demand
+  const getPuck = useGetPuck();
+
+  return useMemo(() => {
+    const { appState, getItemById } = getPuck();
+    const hierarchy = buildDataBlockHierarchy(appState.data, zone, getItemById);
+    // hierarchy contains ANCESTOR DataBlocks only (not the selected DataBlock itself)
+    // Return the last ancestor (immediate parent DataBlock)
+    return hierarchy.length >= 1 ? hierarchy[hierarchy.length - 1] : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zone]); // Only depend on zone - getPuck is stable, data is read on-demand
 }

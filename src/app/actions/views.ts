@@ -88,7 +88,12 @@ export async function createView(
       'lte': 'less_than_or_equal',
       'is_null': 'is_empty',
       'is_not_null': 'is_not_empty',
+      'in': 'in',
+      'not_in': 'not_in',
     };
+
+    // Operators that don't take a value
+    const noValueOperators = ['is_empty', 'is_not_empty', 'is_true', 'is_false'];
 
     const filterVOs = filters?.map((filter) => {
       const fieldId = fieldNameToIdMap.get(filter.field);
@@ -97,11 +102,13 @@ export async function createView(
       }
 
       const domainOperator = uiToDomainOperatorMap[filter.operator] || filter.operator;
+      // Clear value for no-value operators
+      const filterValue = noValueOperators.includes(domainOperator) ? undefined : filter.value;
 
       return FilterConfig.create({
         fieldId,
         operator: domainOperator as any,
-        value: filter.value,
+        value: filterValue,
       });
     });
 
@@ -250,7 +257,12 @@ export async function updateView(
         'lte': 'less_than_or_equal',
         'is_null': 'is_empty',
         'is_not_null': 'is_not_empty',
+        'in': 'in',
+        'not_in': 'not_in',
       };
+
+      // Operators that don't take a value
+      const noValueOperators = ['is_empty', 'is_not_empty', 'is_true', 'is_false'];
 
       for (const filter of filters) {
         const fieldId = fieldNameToIdMap.get(filter.field);
@@ -260,12 +272,14 @@ export async function updateView(
         }
 
         const domainOperator = uiToDomainOperatorMap[filter.operator] || filter.operator;
+        // Clear value for no-value operators
+        const filterValue = noValueOperators.includes(domainOperator) ? undefined : filter.value;
 
         dataSource.addFilter(
           FilterConfig.create({
             fieldId,
             operator: domainOperator as any,
-            value: filter.value,
+            value: filterValue,
           })
         );
       }
@@ -614,15 +628,22 @@ export async function executeView(
         'lte': 'less_than_or_equal',
         'is_null': 'is_empty',
         'is_not_null': 'is_not_empty',
+        'in': 'in',
+        'not_in': 'not_in',
       };
+
+      // Operators that don't take a value
+      const noValueOperators = ['is_empty', 'is_not_empty', 'is_true', 'is_false'];
 
       runtimeFilters = [];
       for (const filter of additionalFilters) {
+        const domainOperator = uiToDomainOperatorMap[filter.operator] || filter.operator;
+
         // Substitute variables in the filter value first
         const substitutedValue = substituteFilterVariable(filter.value, context);
 
-        // Skip filters where variable wasn't found (empty string)
-        if (substitutedValue === '') {
+        // Skip filters where variable wasn't found (empty string) - but not for no-value operators
+        if (substitutedValue === '' && !noValueOperators.includes(domainOperator)) {
           console.warn(`Variable in filter for field "${filter.field}" not found in context, skipping`);
           continue;
         }
@@ -641,13 +662,14 @@ export async function executeView(
           continue;
         }
 
-        const domainOperator = uiToDomainOperatorMap[filter.operator] || filter.operator;
+        // Clear value for no-value operators
+        const filterValue = noValueOperators.includes(domainOperator) ? undefined : substitutedValue;
 
         runtimeFilters.push(
           FilterConfig.create({
             fieldId,
             operator: domainOperator as any,
-            value: substitutedValue,
+            value: filterValue,
           })
         );
       }
