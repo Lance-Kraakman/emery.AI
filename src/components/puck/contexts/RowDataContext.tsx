@@ -109,6 +109,11 @@ export function RowDataProvider({
       const parent = parentStack[0];
       if (!parent) return undefined;
 
+      // Special case: Row ID is stored as direct property, not as field value
+      if (fieldName === 'id') {
+        return parent.rowData.id;
+      }
+
       // Find field by name
       const field = parent.fields.find(f => f.name === fieldName);
       if (!field) {
@@ -127,7 +132,8 @@ export function RowDataProvider({
     return (): string[] => {
       const parent = parentStack[0];
       if (!parent) return [];
-      return parent.fields.map(f => f.name);
+      // Include 'id' as a special built-in field, plus all user-defined fields
+      return ['id', ...parent.fields.map(f => f.name)];
     };
   }, [parentStack]);
 
@@ -207,17 +213,22 @@ export interface ParentRowDataContextValue {
 export function useParentRowData(): ParentRowDataContextValue | undefined {
   const context = useContext(RowDataContext);
 
-  if (context === undefined || context.parentStack.length === 0) {
-    return undefined;
-  }
+  // Simple memoization on context object
+  // NOTE: useChildDataBlock uses parentRowId (primitive) as its memoization key,
+  // so this can be simple memoization without causing stale data issues
+  return useMemo(() => {
+    if (context === undefined || context.parentStack.length === 0) {
+      return undefined;
+    }
 
-  return {
-    parentStack: context.parentStack,
-    resolveRowDataVariable: context.resolveRowDataVariable,
-    getParentFieldNames: context.getParentFieldNames,
-    hasParentFields: context.hasParentFields,
-    getParentRowData: () => context.parentStack[0] || null,
-  };
+    return {
+      parentStack: context.parentStack,
+      resolveRowDataVariable: context.resolveRowDataVariable,
+      getParentFieldNames: context.getParentFieldNames,
+      hasParentFields: context.hasParentFields,
+      getParentRowData: () => context.parentStack[0] || null,
+    };
+  }, [context]);
 }
 
 /**

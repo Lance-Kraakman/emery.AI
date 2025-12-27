@@ -521,7 +521,7 @@ export class View {
     viewType: string;
     viewConfig: ViewConfigData;
     requiresAuth: boolean;
-    filters: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null }>;
+    filters: Array<{ fieldId: number; operator: string; value?: string | number | boolean | null | Array<string | number | null> }>;
     sorting: Array<{ fieldId: number; direction: 'asc' | 'desc'; priority: number }>;
     pagination: { pageSize: number; offset: number };
     fieldMappings?: Array<{ sourceFieldId: number; displayName: string; visible: boolean; order: number }>;

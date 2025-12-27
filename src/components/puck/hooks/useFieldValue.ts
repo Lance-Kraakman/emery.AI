@@ -27,6 +27,7 @@ import { useQueryParams } from '@/components/puck/contexts/PageContext';
  * Get field value from nearest context
  *
  * @param fieldId - Field ID to retrieve (numeric, used as key in row data)
+ *                  Special value 'id' returns the row ID directly
  * @returns Field value or null if not found
  */
 export function useFieldValue(fieldId: number | string): any {
@@ -34,6 +35,11 @@ export function useFieldValue(fieldId: number | string): any {
   const rowContext = useRowData();
 
   if (rowContext?.rowData) {
+    // Special case: Row ID is stored as direct property, not as field value
+    if (fieldId === 'id') {
+      return rowContext.rowData.id ?? null;
+    }
+
     const fieldKey = String(fieldId);
     const value = rowContext.rowData[fieldKey];
 

@@ -121,15 +121,17 @@ export function ComponentBreadcrumb({ editingStack, onNavigate }: ComponentBread
     }
 
     // Show: first > ... > current
+    // Store the second-to-last item's selector in ellipsis for navigation
+    const prevComponent = componentBreadcrumbs[componentBreadcrumbs.length - 2];
     return [
       componentBreadcrumbs[0],
-      { id: 'ellipsis', label: '...', selector: { index: -1 } },
+      { id: 'ellipsis', label: '...', selector: prevComponent.selector },
       componentBreadcrumbs[componentBreadcrumbs.length - 1],
     ];
   }, [componentBreadcrumbs]);
 
   const handleComponentClick = (item: BreadcrumbItem) => {
-    if (item.id === 'ellipsis') return;
+    // Ellipsis navigates to the previous level (selector stored when ellipsis was created)
     dispatch({ type: "setUi", ui: { itemSelector: item.selector } });
   };
 
@@ -172,7 +174,12 @@ export function ComponentBreadcrumb({ editingStack, onNavigate }: ComponentBread
           <React.Fragment key={`comp-${item.id}-${index}`}>
             <ChevronRight className="h-3 w-3 shrink-0" />
             {item.id === 'ellipsis' ? (
-              <span className="shrink-0">...</span>
+              <button
+                onClick={() => handleComponentClick(item)}
+                className="shrink-0 hover:text-foreground transition-colors"
+              >
+                ...
+              </button>
             ) : (
               <button
                 onClick={() => handleComponentClick(item)}

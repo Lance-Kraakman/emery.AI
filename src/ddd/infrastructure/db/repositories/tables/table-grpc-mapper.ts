@@ -64,6 +64,7 @@ export class TableGrpcMapper {
       'is_null': ProtoFilterOperator.FILTER_OP_IS_NULL,
       'is_not_null': ProtoFilterOperator.FILTER_OP_IS_NOT_NULL,
       'contains': ProtoFilterOperator.FILTER_OP_CONTAINS,
+      'not_contains': ProtoFilterOperator.FILTER_OP_NE, // TODO: Add FILTER_OP_NOT_CONTAINS to proto
       'contained_by': ProtoFilterOperator.FILTER_OP_CONTAINED_BY,
       'has_key': ProtoFilterOperator.FILTER_OP_HAS_KEY,
     };

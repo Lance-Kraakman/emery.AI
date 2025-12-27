@@ -216,6 +216,7 @@ class DataStack(Stack):
             "STRIPE_MAX_PRICE_ID_MONTHLY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "STRIPE_MAX_PRICE_ID_MONTHLY"),
             "STRIPE_MAX_PRICE_ID_YEARLY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "STRIPE_MAX_PRICE_ID_YEARLY"),
             "STRIPE_ENTERPRISE_PRODUCT_ID": ecs.Secret.from_secrets_manager(self.app_secrets_object, "STRIPE_ENTERPRISE_PRODUCT_ID"),
+            "STRIPE_WEBHOOK_SECRET": ecs.Secret.from_secrets_manager(self.app_secrets_object, "STRIPE_WEBHOOK_SECRET"),
         }
 
         # ========== CLOUD MAP ==========

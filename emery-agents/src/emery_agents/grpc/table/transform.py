@@ -92,8 +92,15 @@ def build_pyarrow_predicate(filters: List[table_service_pb2.RowFilter], schema: 
     predicates = []
 
     for filter_obj in filters:
-        # Skip LIKE/ILIKE operators - they don't work in dataset filter predicates
-        if filter_obj.operator in (table_service_pb2.FILTER_OP_LIKE, table_service_pb2.FILTER_OP_ILIKE):
+        # Skip operators that cannot be pushed down to PyArrow
+        # - LIKE/ILIKE: Pattern matching requires in-memory string operations
+        # - CONTAINS/CONTAINED_BY: JSONB array operations require in-memory JSON parsing
+        if filter_obj.operator in (
+            table_service_pb2.FILTER_OP_LIKE,
+            table_service_pb2.FILTER_OP_ILIKE,
+            table_service_pb2.FILTER_OP_CONTAINS,
+            table_service_pb2.FILTER_OP_CONTAINED_BY,
+        ):
             continue
 
         field_name = filter_obj.field

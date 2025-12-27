@@ -17,8 +17,12 @@ import { useStateContext } from '../../contexts/StateContext';
 import { useRowData } from '../../contexts/RowDataContext';
 import { useLinkContext, usePageContext } from '../../contexts/PageContext';
 import { createStateKeyField } from '../../custom-fields/state-key-field';
+import { RowDataFieldSelector } from '../../fields/RowDataFieldSelector';
+import { TypeAwareOperatorSelector } from '../../fields/TypeAwareOperatorSelector';
+import { TypeAwareValueInput } from '../../fields/TypeAwareValueInput';
 import { GitBranch, Check, X, Eye, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Label } from '@/components/ui/label';
 
 /**
  * Comparison operators for conditions
@@ -442,18 +446,65 @@ export const ConditionalBlock: ComponentConfig<ConditionalBlockProps> = {
       };
     } else if (sourceType === 'rowData') {
       sourceFields = {
-        fieldName: fields.fieldName,
+        fieldName: {
+          type: 'custom' as const,
+          label: 'Field',
+          render: ({ value, onChange }: { value: string | undefined; onChange: (v: string) => void }) => (
+            <div className="space-y-1">
+              <Label className="text-xs">Field</Label>
+              <RowDataFieldSelector
+                value={value}
+                onChange={onChange}
+                placeholder="Select a field..."
+              />
+            </div>
+          ),
+        },
       };
     }
 
-    // Operator field
-    const operatorFields = {
+    // Operator field - type-aware for rowData source
+    const operatorFields = sourceType === 'rowData' ? {
+      operator: {
+        type: 'custom' as const,
+        label: 'Operator',
+        render: ({ value, onChange }: { value: ConditionOperator | undefined; onChange: (v: ConditionOperator) => void }) => (
+          <div className="space-y-1">
+            <Label className="text-xs">Operator</Label>
+            <TypeAwareOperatorSelector
+              value={value}
+              onChange={onChange}
+              fieldName={data.props.fieldName}
+              sourceType="rowData"
+            />
+          </div>
+        ),
+      },
+    } : {
       operator: fields.operator,
     };
 
     // Compare value (only for non-truthy/falsy operators)
+    // Use type-aware input for rowData source
     const compareFields = operator !== 'truthy' && operator !== 'falsy'
-      ? { compareValue: fields.compareValue }
+      ? (sourceType === 'rowData' ? {
+          compareValue: {
+            type: 'custom' as const,
+            label: 'Compare Value',
+            render: ({ value, onChange }: { value: string | undefined; onChange: (v: string) => void }) => (
+              <div className="space-y-1">
+                <Label className="text-xs">Compare Value</Label>
+                <TypeAwareValueInput
+                  value={value}
+                  onChange={onChange}
+                  fieldName={data.props.fieldName}
+                  sourceType="rowData"
+                  placeholder="Enter value to compare..."
+                />
+              </div>
+            ),
+          },
+        } : { compareValue: fields.compareValue })
       : {};
 
     return {

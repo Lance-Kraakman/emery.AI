@@ -182,20 +182,28 @@ export default function DataBlock({
   const [localRows, setLocalRows] = useState(_rows);
 
   // Sync local state when server props change (e.g., navigation)
+  // IMPORTANT: Skip when client-side fetching is active - server can't resolve {rowData.x} variables
   useEffect(() => {
-    setLocalRowData(_resolvedRow);
-  }, [_resolvedRow]);
+    if (!childData.needsClientFetch) {
+      setLocalRowData(_resolvedRow);
+    }
+  }, [_resolvedRow, childData.needsClientFetch]);
 
   useEffect(() => {
-    setLocalRows(_rows);
-  }, [_rows]);
+    if (!childData.needsClientFetch) {
+      setLocalRows(_rows);
+    }
+  }, [_rows, childData.needsClientFetch]);
 
   // When using client-side fetching, sync from childData
+  // IMPORTANT: Must set state even when empty to clear stale unfiltered data
   useEffect(() => {
     if (childData.needsClientFetch && !childData.loading) {
-      if (mode === 'single' && childData.resolvedRow) {
+      if (mode === 'single') {
+        // Always set - undefined means no match (clears stale _resolvedRow)
         setLocalRowData(childData.resolvedRow);
-      } else if (mode === 'list' && childData.rows.length > 0) {
+      } else if (mode === 'list') {
+        // Always set - empty array means no matches (clears stale _rows)
         setLocalRows(childData.rows);
       }
     }
@@ -466,8 +474,9 @@ export default function DataBlock({
     };
 
     // Render single record with optional edit mode
-    // Use localRowData for optimistic updates (falls back to _resolvedRow)
-    const displayRow = localRowData ?? _resolvedRow;
+    // When client-side fetching is active, use ONLY localRowData (which may be undefined if no match)
+    // Otherwise fall back to server-resolved _resolvedRow
+    const displayRow = childData.needsClientFetch ? localRowData : (localRowData ?? _resolvedRow);
 
     // Helper to render single mode content
     const renderSingleModeContent = () => {

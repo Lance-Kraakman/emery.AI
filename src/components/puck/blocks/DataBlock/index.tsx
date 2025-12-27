@@ -36,6 +36,40 @@ import { createViewManagementField } from "../../custom-fields";
 import { MultiFilterField, type RowFilterConfig } from "../../fields/MultiFilterField";
 import { MultiSortField, type RowSortConfig } from "../../fields/MultiSortField";
 import { FIELD_BLOCK_TYPES } from "../../constants";
+import { Info } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+/**
+ * Helper component for label with info tooltip
+ */
+function LabelWithTooltip({
+  label,
+  tooltip,
+}: {
+  label: string;
+  tooltip: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 mb-1.5">
+      <span className="text-xs font-medium">{label}</span>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+          </TooltipTrigger>
+          <TooltipContent side="right" className="max-w-[280px]">
+            <p className="text-xs">{tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+  );
+}
 
 export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
   label: "Data",
@@ -223,21 +257,27 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     };
 
     // Row filter field - shown for both single and list modes
-    // Get fields from resolved data (available after resolveData runs)
-    const _fields = data.props._fields || [];
+    // Tooltip text based on mode
+    const filterTooltip = mode === 'single'
+      ? 'Filter to match exactly one row. Use a unique field like ID. Example: id equals {state.selectedId}'
+      : 'Filter which rows to display. Leave empty to show all rows. Example: status equals "active"';
+
+    const filterLabel = mode === 'single' ? 'Row Selection' : 'Row Filter';
 
     const rowFilterField = {
       rowFilter: {
         type: "custom" as const,
-        label: "Row Filter",
+        label: filterLabel,
         render: ({ value, onChange }: { value: RowFilterConfig | undefined; onChange: (v: RowFilterConfig) => void }) => (
-          <MultiFilterField
-            key={viewId}  // Force remount when viewId changes
-            value={value}
-            onChange={onChange}
-            viewId={viewId}
-            parentFields={_fields}
-          />
+          <div>
+            <LabelWithTooltip label={filterLabel} tooltip={filterTooltip} />
+            <MultiFilterField
+              key={viewId}  // Force remount when viewId changes
+              value={value}
+              onChange={onChange}
+              viewId={viewId}
+            />
+          </div>
         ),
       },
     };

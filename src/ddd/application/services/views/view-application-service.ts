@@ -1356,11 +1356,27 @@ export class ViewApplicationService {
       let dbOperator: RowFilter['operator'];
       let dbValue: any = filter.value;
 
+      // Complex field types that store JSONB arrays with 'id' as key
+      // - relation: [{id: string|number, value: string}]
+      // - file: [{id: string, name: string, size: number, ...}]
+      // - document: [{id: string, name: string, documentMetadata: {...}, ...}]
+      const isJsonbArrayField = field.type === 'relation' || field.type === 'file' || field.type === 'document';
+
       switch (filter.operator) {
         case 'equals':
-          dbOperator = 'eq';
+          // For JSONB array fields, use contains to check if array has matching ID
+          if (isJsonbArrayField) {
+            dbOperator = 'contains';
+            // Format value for JSONB contains: [{"id": value}]
+            // Always use string - Python normalizes to string for comparison
+            const id = String(filter.value ?? '');
+            dbValue = [{ id }];
+          } else {
+            dbOperator = 'eq';
+          }
           break;
         case 'not_equals':
+          // TODO: Add JSONB not_contains support for relation fields when proto is updated
           dbOperator = 'ne';
           break;
         case 'contains':
@@ -1409,6 +1425,22 @@ export class ViewApplicationService {
         case 'is_false':
           dbOperator = 'eq';
           dbValue = false;
+          break;
+        case 'in':
+          // For JSONB array fields, use contains to check if array has matching ID
+          if (isJsonbArrayField) {
+            dbOperator = 'contains';
+            // Format value for JSONB contains: [{"id": v1}, {"id": v2}, ...]
+            // Always use strings - Python normalizes to string for comparison
+            const idsRaw = Array.isArray(filter.value) ? filter.value : [filter.value];
+            dbValue = idsRaw.map(v => ({ id: String(v ?? '') }));
+          } else {
+            dbOperator = 'in';
+          }
+          break;
+        case 'not_in':
+          // TODO: Add JSONB not_contains support for relation fields when proto is updated
+          dbOperator = 'not_in';
           break;
         default:
           logger.error('Unknown filter operator, using equals', { operator: filter.operator });

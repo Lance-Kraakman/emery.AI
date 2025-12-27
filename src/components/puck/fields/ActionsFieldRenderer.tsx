@@ -36,8 +36,99 @@ import { VariableAutocompleteInput } from './VariableAutocompleteInput';
 import { VariablesPanel, type Variable } from '@/components/shared/VariablesPanel';
 import { useDataLayoutContext } from '../contexts/DataLayoutContext';
 import { useStateContext } from '../contexts/StateContext';
+import type { StateVariableType, StateVariable } from '../types/state';
+import { isArrayFieldType } from '@/ddd/domain/tables/value-objects/table-field';
 
 type ActionType = 'assignTask' | 'navigateToPage' | 'openUrl' | 'setState';
+
+/**
+ * StateValueInput - Type-aware value input for setState action
+ *
+ * Shows appropriate input based on the selected state variable type:
+ * - Boolean: True/False/Clear dropdown
+ * - Number: Number input with variable autocomplete
+ * - String/other: Text input with variable autocomplete
+ */
+function StateValueInput({
+  value,
+  onChange,
+  variableType,
+  disabled,
+}: {
+  value: string | null | undefined;
+  onChange: (value: string | null) => void;
+  variableType?: StateVariableType;
+  disabled?: boolean;
+}) {
+  // Boolean type - show True/False/Clear dropdown
+  if (variableType === 'boolean') {
+    return (
+      <Select
+        value={value ?? ''}
+        onValueChange={(val) => onChange(val === '__null__' ? null : val)}
+        disabled={disabled}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder="Select value...">
+            {value === 'true' ? 'True' : value === 'false' ? 'False' : value === '' || value === null ? 'Clear (null)' : value}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="true">
+            <span className="text-green-600 font-medium">True</span>
+          </SelectItem>
+          <SelectItem value="false">
+            <span className="text-red-600 font-medium">False</span>
+          </SelectItem>
+          <SelectItem value="__null__">
+            <span className="text-muted-foreground">Clear (null)</span>
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  // Number type - show number input or variable autocomplete
+  if (variableType === 'number') {
+    // Check if value looks like a variable reference
+    const isVariable = value?.includes('{');
+    if (isVariable) {
+      return (
+        <VariableAutocompleteInput
+          value={value ?? ''}
+          onChange={(val) => onChange(val)}
+          placeholder="Enter number or {rowData.field}"
+          disabled={disabled}
+        />
+      );
+    }
+
+    return (
+      <div className="space-y-1">
+        <Input
+          type="number"
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Enter a number"
+          disabled={disabled}
+        />
+        <p className="text-[10px] text-muted-foreground">
+          Type {"{"} for variable reference
+        </p>
+      </div>
+    );
+  }
+
+  // Default: text input with variable autocomplete
+  return (
+    <VariableAutocompleteInput
+      value={value ?? ''}
+      onChange={(val) => onChange(val)}
+      placeholder="Enter value or {rowData.field}"
+      disabled={disabled}
+    />
+  );
+}
 
 const ACTION_TYPE_LABELS: Record<ActionType, string> = {
   assignTask: 'Assign Task to Agent',
@@ -309,10 +400,24 @@ function ActionItem({
 }) {
   const actionType = action.type as ActionType;
   const stateContext = useStateContext();
+  const dataContext = useDataLayoutContext();
 
   // Track if mousedown happened on the delete button to prevent accidental deletion
   // from Puck's focus management system which can focus+click buttons unexpectedly
   const mouseDownOnDeleteRef = useRef(false);
+
+  // Check if setState value references an array-type field (relation/file/document/multi-select)
+  // Must be at top level to comply with React hooks rules
+  const isArrayTypeField = React.useMemo(() => {
+    if (action.type !== 'setState' || !('value' in action)) return false;
+    const valueStr = String(action.value ?? '');
+    const match = valueStr.match(/\{rowData\.(\w+)\}/);
+    if (!match) return false;
+    const fieldName = match[1];
+    if (!dataContext?.fields) return false;
+    const field = dataContext.fields.find(f => f.name === fieldName);
+    return field ? isArrayFieldType(field.type) : false;
+  }, [action, dataContext?.fields]);
 
   const handleTypeChange = (newType: ActionType) => {
     // Reset to defaults for the new type
@@ -607,7 +712,12 @@ function ActionItem({
             <Label className="text-xs font-medium">State Variable</Label>
             <Select
               value={action.key || ''}
-              onValueChange={(val) => onChange({ ...action, key: val })}
+              onValueChange={(val) => {
+                // Reset value when variable changes (type might differ)
+                const newVar = stateContext?.getConfig()?.variables?.find(v => v.name === val);
+                const newValue = newVar?.type === 'boolean' ? '' : action.value;
+                onChange({ ...action, key: val, value: newValue });
+              }}
               disabled={readOnly}
             >
               <SelectTrigger>
@@ -639,16 +749,51 @@ function ActionItem({
 
           <div className="space-y-2">
             <Label className="text-xs font-medium">Value</Label>
-            <VariableAutocompleteInput
-              value={String(action.value ?? '')}
+            <StateValueInput
+              value={action.value as string | null | undefined}
               onChange={(val) => onChange({ ...action, value: val })}
-              placeholder="Enter value or {rowData.field}"
+              variableType={stateContext?.getConfig()?.variables?.find(v => v.name === action.key)?.type}
               disabled={readOnly}
             />
-            <p className="text-xs text-muted-foreground">
-              Type {"{"} to insert row data or other variables
-            </p>
+            {stateContext?.getConfig()?.variables?.find(v => v.name === action.key)?.type !== 'boolean' && (
+              <p className="text-xs text-muted-foreground">
+                Type {"{"} to insert row data or other variables
+              </p>
+            )}
           </div>
+
+          {/* Extract Mode selector for array-type fields (relation/file/document/multi-select) */}
+          {isArrayTypeField && (
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Extract from array</Label>
+              <Select
+                value={action.extractMode || 'first'}
+                onValueChange={(val) => onChange({ ...action, extractMode: val as 'first' | 'all' })}
+                disabled={readOnly}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="first">
+                    <div className="flex items-center gap-2">
+                      <span>First item only</span>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">ID</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="all">
+                    <div className="flex items-center gap-2">
+                      <span>All items</span>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">[array]</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                This field contains multiple items. Choose how to extract the value.
+              </p>
+            </div>
+          )}
 
           <div className="flex items-center space-x-2">
             <Checkbox
