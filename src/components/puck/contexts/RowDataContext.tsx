@@ -109,6 +109,11 @@ export function RowDataProvider({
       const parent = parentStack[0];
       if (!parent) return undefined;
 
+      // Special case: Row ID is stored as direct property, not as field value
+      if (fieldName === 'id') {
+        return parent.rowData.id;
+      }
+
       // Find field by name
       const field = parent.fields.find(f => f.name === fieldName);
       if (!field) {
@@ -127,7 +132,8 @@ export function RowDataProvider({
     return (): string[] => {
       const parent = parentStack[0];
       if (!parent) return [];
-      return parent.fields.map(f => f.name);
+      // Include 'id' as a special built-in field, plus all user-defined fields
+      return ['id', ...parent.fields.map(f => f.name)];
     };
   }, [parentStack]);
 
