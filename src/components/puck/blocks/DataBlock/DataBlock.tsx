@@ -13,23 +13,21 @@
  * Uses EditableRowContext to provide edit mode capabilities.
  *
  * Template Editing:
- * - Template content is stored as Puck Data in templateContent prop
- * - Click "Edit Template" to open dedicated editor (like dialog editing)
- * - Uses ConditionalBlock-style floating bar for edit/preview toggle
+ * - Uses Puck's native slot system for inline editing
+ * - In editor: shows slot directly (editable DropZone)
+ * - At runtime: iterates slot content with RowDataProvider per row
  *
  * Data Edit Mode:
  * - When editEnabled=true, field blocks can render as inputs
  * - Save is always manual (requires save button)
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { Render, registerOverlayPortal, type Data } from '@measured/puck';
-import { config } from '@/components/puck/config';
+import { useState, useRef, useEffect, useCallback, type ComponentType } from 'react';
+import { registerOverlayPortal } from '@measured/puck';
 import { RowDataProvider } from '@/components/puck/contexts/RowDataContext';
 import { DataLayoutProvider } from '@/components/puck/contexts/DataLayoutContext';
 import { EditableRowProvider } from '@/components/puck/contexts/EditableRowContext';
 import { useLinkContext } from '@/components/puck/contexts/PageContext';
-import { useEditingStack } from '@/components/puck/contexts/EditingStackContext';
 import { usePagination } from './usePagination';
 import { useChildDataBlock } from './useChildDataBlock';
 import { updateRowData, createRow } from '@/app/actions/rows';
@@ -90,10 +88,14 @@ export interface DataBlockProps {
   _totalCount?: number;
   _error?: string;
 
-  // Template content stored as Puck Data (like dialog content)
-  templateContent?: Data;
+  // Slot for template content - rendered inline via Puck's slot system
+  children?: ComponentType<{
+    className?: string;
+    allow?: string[];
+    disallow?: string[];
+  }>;
 
-  // Puck component ID (for edit template dispatch)
+  // Puck component ID
   id?: string;
 }
 
@@ -118,21 +120,15 @@ export default function DataBlock({
   _resolvedRow,
   _totalCount = 0,
   _error,
-  templateContent,
-  id: componentId,
+  children: Children,
 }: DataBlockProps) {
-  // Editor view mode (edit = single template, preview = all rows)
+  // Editor view mode (preview = show all rows in list mode)
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('preview');
   const barRef = useRef<HTMLDivElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
 
   // Get editing context (Puck editor vs preview/public)
   const { isEditing } = useLinkContext();
-  const { pushDataBlock } = useEditingStack();
-
-  // NOTE: We do NOT use usePuck() here because this component renders on public/preview pages
-  // where there's no <Puck> wrapper. The pushDataBlock from EditingStackContext is wrapped by
-  // PuckEditorLayout to inject appState.data when in editor mode.
 
   // ============================================
   // CLIENT-SIDE DATA FETCHING (for rowData variables)
@@ -313,7 +309,8 @@ export default function DataBlock({
     }
   }, [isEditing]);
 
-  const hasTemplate = templateContent && templateContent.content && templateContent.content.length > 0;
+  // Check if slot has content
+  const hasSlotContent = Children !== undefined;
 
   // Carousel scroll helper
   const scrollCarousel = (direction: 'left' | 'right') => {
@@ -323,30 +320,16 @@ export default function DataBlock({
     });
   };
 
-  // Handle edit template action - push onto editing stack via context
-  const handleEditTemplate = () => {
-    // Validate required IDs before pushing
-    if (!viewId || !_tableId) {
-      console.warn('[DataBlock] Cannot edit template: viewId or tableId missing');
-      return;
-    }
-
-    const template = templateContent || { content: [], root: { props: {} }, zones: {} };
-    // TemplateEditorContext will fetch fields and sample row fresh
-    // pushDataBlock is wrapped by PuckEditorLayout to inject appState.data
-    pushDataBlock(componentId || '', _viewName || 'DataBlock', template, viewId, _tableId);
-  };
-
-  // Render template content using Puck Render
-  const renderTemplateContent = () => {
-    if (!templateContent || !templateContent.content || templateContent.content.length === 0) {
+  // Render slot content
+  const renderSlotContent = () => {
+    if (!Children) {
       return (
         <div className="text-muted-foreground text-sm py-4 text-center border-2 border-dashed rounded-md">
-          No template content
+          Drop field components here
         </div>
       );
     }
-    return <Render config={config} data={templateContent} />;
+    return <Children />;
   };
 
   // No view selected - show placeholder
@@ -508,7 +491,7 @@ export default function DataBlock({
               >
                 <form onSubmit={handleSingleFormSubmit}>
                   <div className={styles.content}>
-                    {renderTemplateContent()}
+                    {renderSlotContent()}
                   </div>
                   {!isEditing && (
                     <div className={styles.editControls}>
@@ -544,7 +527,7 @@ export default function DataBlock({
                 setEditMode={handleSetEditModeSingle}
               >
                 <div className={styles.content}>
-                  {renderTemplateContent()}
+                  {renderSlotContent()}
                 </div>
                 {!isEditing && (
                   <div className={styles.editControls}>
@@ -561,7 +544,7 @@ export default function DataBlock({
               </EditableRowProvider>
             ) : (
               <div className={styles.content}>
-                {renderTemplateContent()}
+                {renderSlotContent()}
               </div>
             )}
         </RowDataProvider>
@@ -580,12 +563,12 @@ export default function DataBlock({
     }
 
     // ============================================
-    // EDITOR MODE for SINGLE: Show floating bar
+    // EDITOR MODE for SINGLE: Show floating bar with inline slot
     // ============================================
     return (
       <Section>
         <div className="relative border-2 border-dashed border-purple-300 rounded-lg p-3 min-h-[60px]">
-          {/* ConditionalBlock-style floating bar at top */}
+          {/* Floating bar at top */}
           <div
             ref={barRef}
             className="absolute -top-3 left-2 bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded-full flex items-center gap-1.5 font-mono z-50"
@@ -593,29 +576,11 @@ export default function DataBlock({
             <Database className="h-3 w-3" />
             <span className="max-w-[120px] truncate">{_viewName || 'DataBlock'}</span>
             <span className="text-purple-500">(single)</span>
-
-            {/* Divider */}
-            <div className="w-px h-3 bg-purple-300 mx-1" />
-
-            {/* Edit Template button */}
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); handleEditTemplate(); }}
-              className="px-1.5 py-0.5 rounded hover:bg-purple-200 transition-colors"
-            >
-              Edit Template
-            </button>
           </div>
 
-          {/* Content area */}
+          {/* Content area - slot is inline editable */}
           <div className="mt-2">
-            {!hasTemplate ? (
-              <div className="text-muted-foreground text-sm py-4 text-center border-2 border-dashed rounded-md">
-                No template content - click "Edit Template" to add components
-              </div>
-            ) : (
-              renderSingleModeContent()
-            )}
+            {renderSingleModeContent()}
           </div>
         </div>
       </Section>
@@ -715,7 +680,7 @@ export default function DataBlock({
       return (
         <div key={(row.id as number) || index} className={styles.item}>
           <RowDataProvider rowData={row} rowIndex={index} fields={_fields}>
-            {renderTemplateContent()}
+            {renderSlotContent()}
           </RowDataProvider>
         </div>
       );
@@ -740,7 +705,7 @@ export default function DataBlock({
                 <form onSubmit={(e) => handleRowFormSubmit(e, rowId)}>
                   <div className={styles.rowWrapper}>
                     {/* Row content */}
-                    {renderTemplateContent()}
+                    {renderSlotContent()}
 
                     {/* Row edit controls */}
                     <div className={styles.rowEditControls}>
@@ -767,7 +732,7 @@ export default function DataBlock({
               ) : (
                 <div className={styles.rowWrapper}>
                   {/* Row content */}
-                  {renderTemplateContent()}
+                  {renderSlotContent()}
 
                   {/* Row edit controls */}
                   <div className={styles.rowEditControls}>
@@ -940,15 +905,15 @@ export default function DataBlock({
   }
 
   // ============================================
-  // EDITOR MODE: ConditionalBlock-style floating bar
+  // EDITOR MODE: Floating bar with inline slot
   // ============================================
 
-  // Render a single template preview row for edit mode
+  // Render a single template preview row for edit mode (with inline slot)
   const renderSingleTemplatePreview = () => {
     const sampleRow = _rows[0] || {};
     return wrapWithDataLayout(
       <RowDataProvider rowData={sampleRow} rowIndex={0} fields={_fields}>
-        {renderTemplateContent()}
+        {renderSlotContent()}
       </RowDataProvider>
     );
   };
@@ -956,7 +921,7 @@ export default function DataBlock({
   return (
     <Section>
       <div className="relative border-2 border-dashed border-purple-300 rounded-lg p-3 min-h-[60px]">
-        {/* ConditionalBlock-style floating bar at top */}
+        {/* Floating bar at top */}
         <div
           ref={barRef}
           className="absolute -top-3 left-2 bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded-full flex items-center gap-1.5 font-mono z-50"
@@ -993,28 +958,12 @@ export default function DataBlock({
               <Eye className="h-3 w-3" />
             </button>
           </div>
-
-          {/* Divider */}
-          <div className="w-px h-3 bg-purple-300 mx-1" />
-
-          {/* Edit Template button */}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); handleEditTemplate(); }}
-            className="px-1.5 py-0.5 rounded hover:bg-purple-200 transition-colors"
-          >
-            Edit Template
-          </button>
         </div>
 
-        {/* Content area */}
+        {/* Content area - slot is inline editable */}
         <div className="mt-2">
-          {!hasTemplate ? (
-            <div className="text-muted-foreground text-sm py-4 text-center border-2 border-dashed rounded-md">
-              No template content - click "Edit Template" to add components
-            </div>
-          ) : viewMode === 'edit' ? (
-            // Edit mode: show single row template
+          {viewMode === 'edit' ? (
+            // Edit mode: show single row template (inline editable)
             renderSingleTemplatePreview()
           ) : (
             // Preview mode: show all rows

@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import { usePuck } from "@measured/puck";
-import { ChevronRight, FileText, MessageSquare, Database } from "lucide-react";
+import { ChevronRight, FileText, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { EditingContextItem } from "@/components/puck/types/editing-context";
 
@@ -21,7 +21,7 @@ function getContextIcon(item: EditingContextItem) {
   switch (item.type) {
     case 'page': return <FileText className="h-3 w-3" />;
     case 'dialog': return <MessageSquare className="h-3 w-3" />;
-    case 'datablock': return <Database className="h-3 w-3" />;
+    default: return <FileText className="h-3 w-3" />;
   }
 }
 
@@ -29,7 +29,7 @@ function getContextLabel(item: EditingContextItem): string {
   switch (item.type) {
     case 'page': return 'Page';
     case 'dialog': return item.dialogName || 'Dialog';
-    case 'datablock': return item.name || 'DataBlock';
+    default: return 'Page';
   }
 }
 
