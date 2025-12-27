@@ -571,8 +571,8 @@
    ============================================
 
    When editing a DataBlock template, the preview canvas
-   should fit the content and be centered. Users can use
-   Container blocks for specific sizing needs.
+   should fit the content and be centered. Uses Puck's
+   overrides.preview API to wrap content with this class.
 */
 
 .puck-template-editor {
@@ -581,28 +581,19 @@
   position: relative; /* Required for ::before positioning */
 }
 
-/* Center the canvas and add padding to avoid header overlap */
-.puck-template-editor [class*="Canvas-root"] {
+/* Template preview wrapper - applied via Puck overrides.preview */
+.template-preview-wrapper {
   display: flex;
-  flex-direction: column;
-  justify-content: center; /* Center vertically */
-  align-items: center; /* Center horizontally */
-  min-height: 300px;
-  padding: 24px; /* Avoid overlap with header/toolbar */
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100%;
+  padding: 24px;
+  background: var(--puck-color-grey-10, #f5f5f5);
+  overflow: auto;
 }
 
-/* Make canvas fit content for template editing */
-.puck-template-editor [class*="Canvas-preview"],
-.puck-template-editor [class*="Frame-root"] {
-  height: auto !important;
-  min-height: 200px;
-  overflow: visible; /* Don't clip content */
-}
-
-/* Ensure iframe also fits content */
-.puck-template-editor iframe {
-  height: auto !important;
-  min-height: 200px;
+.template-preview-wrapper > * {
+  max-width: 100%;
 }
 
 /* Add a visual indicator for template editing mode */

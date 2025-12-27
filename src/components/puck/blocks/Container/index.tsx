@@ -168,13 +168,6 @@ export const ContainerInternal: ComponentConfig<ContainerProps> = {
     const marginStyles = margin ? computeFourSidedCSS(margin, theme, 'margin') : {};
     const radiusStyles = radius ? computeFourCornerRadiusCSS(radius, theme) : {};
 
-    // When horizontal margins are applied, calculate width to prevent overflow
-    // (Container has width: 100% in CSS, so margins would cause overflow without this)
-    const hasHorizontalMargin = margin && (margin.left > 0 || margin.right > 0);
-    const widthStyle = hasHorizontalMargin
-      ? { width: `calc(100% - ${marginStyles.marginLeft || '0px'} - ${marginStyles.marginRight || '0px'})` }
-      : {};
-
     // Determine effective shadow - card variant defaults to md if not specified
     const effectiveShadow = shadow ?? (variant === "card" ? "md" : "none");
 
@@ -190,7 +183,6 @@ export const ContainerInternal: ComponentConfig<ContainerProps> = {
           ...radiusStyles,
           ...paddingStyles,
           ...marginStyles,
-          ...widthStyle,
         }}
       >
         <Children />
