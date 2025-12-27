@@ -27,8 +27,6 @@ export interface FormViewConfig {
 }
 
 export interface MultiPageFormProps {
-  viewName: string;
-  viewDescription?: string;
   formConfig: FormViewConfig;
   tableFields: TableField[];
   onSubmit: (formData: Record<string, any>) => Promise<{ success: boolean; error?: string }>;
@@ -39,9 +37,6 @@ export interface MultiPageFormProps {
   customProgress?: React.ComponentType<any>;
   customStyles?: {
     container?: string;
-    header?: string;
-    title?: string;
-    description?: string;
     progressSection?: string;
     form?: string;
     error?: string;
@@ -57,8 +52,6 @@ export interface MultiPageFormProps {
 }
 
 export function MultiPageForm({
-  viewName,
-  viewDescription,
   formConfig,
   tableFields,
   onSubmit,
@@ -242,14 +235,6 @@ export function MultiPageForm({
 
   return (
     <div className={customStyles.container || cn("space-y-6", className)}>
-      {/* Form Header */}
-      <div className={customStyles.header || "space-y-2"}>
-        <h1 className={customStyles.title || "text-3xl font-bold"}>{viewName}</h1>
-        {viewDescription && (
-          <p className={customStyles.description || "text-muted-foreground"}>{viewDescription}</p>
-        )}
-      </div>
-
       {/* Progress Indicator (for multi-page forms) */}
       {sortedPages.length > 1 && (
         <ProgressComponent
