@@ -167,6 +167,8 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         "Text", "Heading", "Button", "LinkBlock",
         // Other useful components
         "ConditionalBlock",
+        // Allow nested DataBlocks (e.g., client with nested orders)
+        "DataBlock",
       ],
     },
 
@@ -270,6 +272,8 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
           "Text", "Heading", "Button", "LinkBlock",
           // Other useful components
           "ConditionalBlock",
+          // Allow nested DataBlocks (e.g., client with nested orders)
+          "DataBlock",
         ],
       },
     };
