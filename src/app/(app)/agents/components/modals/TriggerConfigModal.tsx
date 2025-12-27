@@ -22,8 +22,8 @@ import {
   Info
 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-import { updateAgentFromClient } from '@/app/actions/agents';
+import { TriggerConfigs, type TriggerConfig, type TriggerType, PipedreamEventTriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { updateAgentFromClient, deployPipedreamSource } from '@/app/actions/agents';
 import { TableSelector } from '../TableSelector';
 import ScheduleManager from '../ScheduleManager';
 import {
@@ -44,6 +44,7 @@ import type { AutomationInputMappingDTO } from '@/app/dtos/automation.dto';
 import { getUserOAuthConnections } from '@/app/actions/connections';
 import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getTriggersByApp, type TriggerToolDTO } from '@/app/actions/tools';
 
 interface TriggerConfigModalProps {
   isOpen: boolean;
@@ -96,12 +97,14 @@ const triggerTypes: TriggerTypeOption[] = [
 /**
  * Generate sample values for all variables based on trigger type
  * Combines trigger metadata samples with actual table data for DATABASE_EVENT
+ * For PIPEDREAM_EVENT, uses the selected trigger's parameters for dynamic variables
  * Returns Variable[] compatible with VariablesPanel component
  */
 function generateVariableSamples(
   triggerType: TriggerType,
   scheduleName: string,
-  sampleRowData: Record<string, any> | null
+  sampleRowData: Record<string, any> | null,
+  selectedTrigger?: TriggerToolDTO | null
 ): Variable[] {
   const samples: Variable[] = [];
 
@@ -142,11 +145,40 @@ function generateVariableSamples(
     samples.push({ name: '$webhook.headers', sampleValue: '{"content-type": "application/json"}' });
     samples.push({ name: '$webhook.origin', sampleValue: 'https://example.com' });
   } else if (triggerType === 'PIPEDREAM_EVENT') {
-    // External event-specific variables
-    samples.push({ name: '$event.app', sampleValue: 'gmail' });
-    samples.push({ name: '$event.type', sampleValue: 'new-email' });
-    samples.push({ name: '$event.timestamp', sampleValue: new Date().toISOString() });
-    samples.push({ name: '$event.payload', sampleValue: '{"from": "user@example.com", "subject": "Hello"}' });
+    // Dynamic variables from selected trigger
+    if (selectedTrigger) {
+      samples.push({ name: '$event.app', sampleValue: selectedTrigger.appId });
+      samples.push({ name: '$event.type', sampleValue: selectedTrigger.id });
+      samples.push({ name: '$event.timestamp', sampleValue: new Date().toISOString() });
+
+      // Add variables from trigger parameters (excluding internal ones)
+      const excludeParams = ['timer', 'triggerType', 'db', 'permissionAlert', 'latencyWarningAlert', 'serviceAccountKeyJsonInstructions'];
+      Object.entries(selectedTrigger.parameters)
+        .filter(([key]) => !excludeParams.includes(key) && !key.endsWith('Alert'))
+        .forEach(([key, param]) => {
+          // Generate sample value based on type
+          let sampleValue: string;
+          if (param.type === 'boolean') {
+            sampleValue = 'true';
+          } else if (param.type === 'string[]') {
+            sampleValue = '["value1", "value2"]';
+          } else if (param.type.includes('number') || param.type.includes('integer')) {
+            sampleValue = '123';
+          } else {
+            sampleValue = '"sample value"';
+          }
+          samples.push({ name: `$event.${key}`, sampleValue });
+        });
+
+      // Always include payload for the full event data
+      samples.push({ name: '$event.payload', sampleValue: '{ ... full event payload ... }' });
+    } else {
+      // Fallback when no trigger selected
+      samples.push({ name: '$event.app', sampleValue: 'gmail' });
+      samples.push({ name: '$event.type', sampleValue: 'new-email' });
+      samples.push({ name: '$event.timestamp', sampleValue: new Date().toISOString() });
+      samples.push({ name: '$event.payload', sampleValue: '{"from": "user@example.com", "subject": "Hello"}' });
+    }
   }
 
   return samples;
@@ -184,13 +216,19 @@ export function TriggerConfigModal({
   });
   const [pipedreamConfig, setPipedreamConfig] = useState({
     connectionId: '' as string,
-    triggerType: '' as string,
+    triggerId: '' as string,        // Tool ID from tools table
+    triggerType: '' as string,      // Legacy - kept for backward compat
     props: {} as Record<string, any>
   });
 
   // Available connections for PIPEDREAM_EVENT
   const [connections, setConnections] = useState<ConnectionDTO[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
+
+  // Available triggers for selected connection's app
+  const [availableTriggers, setAvailableTriggers] = useState<TriggerToolDTO[]>([]);
+  const [selectedTrigger, setSelectedTrigger] = useState<TriggerToolDTO | null>(null);
+  const [loadingTriggers, setLoadingTriggers] = useState(false);
 
   // Task instructions state (NEW - defines WHAT task to execute)
   const [scheduleName, setScheduleName] = useState('');
@@ -218,7 +256,9 @@ export function TriggerConfigModal({
       setCalendarConfig({ rrule: '', timezone: 'UTC', startDate: undefined });
       setDatabaseConfig({ operations: ['INSERT', 'UPDATE'], tableId: undefined });
       setWebhookConfig({ webhookSecret: '', requiresSignature: false, allowedOrigins: [] });
-      setPipedreamConfig({ connectionId: '', triggerType: '', props: {} });
+      setPipedreamConfig({ connectionId: '', triggerId: '', triggerType: '', props: {} });
+      setAvailableTriggers([]);
+      setSelectedTrigger(null);
       setScheduleName('');
       setTaskInstructions('');
       setTaskTools([]);
@@ -326,6 +366,37 @@ export function TriggerConfigModal({
     fetchConnections();
   }, [selectedType]);
 
+  // Fetch available triggers when connection is selected
+  useEffect(() => {
+    const fetchTriggers = async () => {
+      if (!pipedreamConfig.connectionId) {
+        setAvailableTriggers([]);
+        setSelectedTrigger(null);
+        return;
+      }
+
+      // Find the selected connection to get its app
+      const selectedConnection = connections.find(c => c.id === pipedreamConfig.connectionId);
+      if (!selectedConnection) {
+        return;
+      }
+
+      setLoadingTriggers(true);
+      try {
+        const result = await getTriggersByApp(selectedConnection.app);
+        if (result.success && result.data) {
+          setAvailableTriggers(result.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch triggers:', error);
+      } finally {
+        setLoadingTriggers(false);
+      }
+    };
+
+    fetchTriggers();
+  }, [pipedreamConfig.connectionId, connections]);
+
   const handleTypeSelect = (type: TriggerType) => {
     setSelectedType(type);
     setCurrentStep('configure');
@@ -422,14 +493,47 @@ export function TriggerConfigModal({
           });
           break;
         case 'PIPEDREAM_EVENT':
-          triggerConfig = TriggerConfigs.pipedreamEvent(
+          // Create base trigger config
+          let pipedreamTrigger = TriggerConfigs.pipedreamEvent(
             pipedreamConfig.connectionId,
-            pipedreamConfig.triggerType || 'default',
+            pipedreamConfig.triggerId || pipedreamConfig.triggerType || 'default',
             {
               props: Object.keys(pipedreamConfig.props).length > 0 ? pipedreamConfig.props : undefined,
               enabled: true
             }
           );
+
+          // Deploy source to Pipedream if we have a trigger ID
+          if (pipedreamConfig.triggerId) {
+            // Get the app slug from the selected connection
+            const selectedConnection = connections.find(c => c.id === pipedreamConfig.connectionId);
+            const appSlug = selectedConnection?.app || pipedreamConfig.triggerId.split('-')[0];
+
+            console.log('[TriggerConfigModal] Deploying Pipedream source...');
+            const deployResult = await deployPipedreamSource({
+              agentId: agent.id,
+              triggerId: pipedreamConfig.triggerId,
+              connectionId: pipedreamConfig.connectionId,
+              appSlug,
+              configuredProps: pipedreamConfig.props
+            });
+
+            if (deployResult.success && deployResult.data) {
+              console.log('[TriggerConfigModal] Source deployed:', deployResult.data);
+              // Add deployment IDs to trigger config
+              pipedreamTrigger = pipedreamTrigger.withDeploymentIds({
+                sourceId: deployResult.data.sourceId,
+                webhookId: deployResult.data.webhookId,
+                subscriptionId: deployResult.data.subscriptionId
+              });
+            } else {
+              console.error('[TriggerConfigModal] Source deployment failed:', deployResult.error);
+              // Continue without deployment IDs - source can be deployed later
+              // We still want to save the trigger config so user doesn't lose their work
+            }
+          }
+
+          triggerConfig = pipedreamTrigger;
           break;
         default:
           throw new Error(`Unsupported trigger type: ${selectedType}`);
@@ -572,7 +676,7 @@ export function TriggerConfigModal({
         case 'WEBHOOK':
           return true; // Webhook secret is optional
         case 'PIPEDREAM_EVENT':
-          return !!pipedreamConfig.connectionId; // Connection is required
+          return !!pipedreamConfig.connectionId && !!pipedreamConfig.triggerId; // Connection and trigger required
         default:
           return false;
       }
@@ -928,16 +1032,53 @@ export function TriggerConfigModal({
 
                 {pipedreamConfig.connectionId && (
                   <div className="space-y-2">
-                    <Label htmlFor="trigger-type">Event Type</Label>
-                    <Input
-                      id="trigger-type"
-                      value={pipedreamConfig.triggerType}
-                      onChange={(e) => setPipedreamConfig(prev => ({ ...prev, triggerType: e.target.value }))}
-                      placeholder="e.g., new-email, new-message"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Specify the event type (e.g., &quot;new-email&quot; for Gmail, &quot;new-message&quot; for Slack)
+                    <Label className="text-xs font-medium">Event Type *</Label>
+                    {loadingTriggers ? (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span className="text-[11px]">Loading event types...</span>
+                      </div>
+                    ) : availableTriggers.length === 0 ? (
+                      <div className="p-3 border border-dashed rounded-lg text-center">
+                        <p className="text-[11px] text-muted-foreground">
+                          No event triggers available for this app yet.
+                        </p>
+                      </div>
+                    ) : (
+                      <Select
+                        value={pipedreamConfig.triggerId}
+                        onValueChange={(id) => {
+                          const trigger = availableTriggers.find(t => t.id === id);
+                          setSelectedTrigger(trigger || null);
+                          setPipedreamConfig(prev => ({
+                            ...prev,
+                            triggerId: id,
+                            triggerType: trigger?.id || '', // Use ID as triggerType for backward compat
+                          }));
+                        }}
+                      >
+                        <SelectTrigger className="h-7 text-[11px]">
+                          <SelectValue placeholder="Select an event type..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableTriggers.map((trigger) => (
+                            <SelectItem key={trigger.id} value={trigger.id}>
+                              <div className="flex flex-col">
+                                <span className="text-[11px]">{trigger.displayName}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">
+                      Select the event that will trigger this automation
                     </p>
+                    {selectedTrigger && (
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        {selectedTrigger.description}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -1010,7 +1151,7 @@ export function TriggerConfigModal({
                     </div>
                   </div>
                   <VariablesPanel
-                    variables={generateVariableSamples(selectedType, scheduleName, sampleRowData)}
+                    variables={generateVariableSamples(selectedType, scheduleName, sampleRowData, selectedTrigger)}
                     onInsert={(formattedVar) => {
                       // Insert variable at cursor position in task instructions
                       const input = document.getElementById('automation-task-instructions') as HTMLTextAreaElement;
