@@ -10,12 +10,12 @@ export type EditorType = 'document'; // Extensible: | 'pdf' | 'image' | 'code' |
 
 /**
  * Document ID source configuration
- * Defines how to get the document ID - from page variable or static value
+ * Defines how to get the document ID - from page variable, parent row, or static value
  */
 export interface DocumentIdSourceConfig {
-  /** Whether to use a page variable or static value */
-  valueType: 'variable' | 'static';
-  /** The value - either "{params.varName}" format or a static document ID */
+  /** Whether to use a page variable, parent row field, or static value */
+  valueType: 'variable' | 'parentRow' | 'static';
+  /** The value - "{state.varName}", "{rowData.fieldName}", or a static document ID */
   value: string;
 }
 
