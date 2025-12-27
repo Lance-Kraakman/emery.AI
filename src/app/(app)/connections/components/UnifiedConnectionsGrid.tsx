@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -21,6 +21,10 @@ interface UnifiedConnectionsGridProps {
   onDisconnect: (connectionId: string) => void;
   onReconnect?: (appId: string) => void;
   onLoadMore: () => void;
+  /** Callback for server-side search - called with debounced search term */
+  onSearch?: (term: string) => void;
+  /** Whether a search is currently loading */
+  isSearching?: boolean;
 }
 
 type FilterType = 'all' | 'connected' | 'available' | 'error';
@@ -38,12 +42,25 @@ export function UnifiedConnectionsGrid({
   onConnect,
   onDisconnect,
   onReconnect,
-  onLoadMore
+  onLoadMore,
+  onSearch,
+  isSearching
 }: UnifiedConnectionsGridProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');
   const [sort, setSort] = useState<SortType>('status');
   const [viewType, setViewType] = useState<ViewType>('grid');
+
+  // Debounced server-side search - triggers onSearch callback after 300ms of no typing
+  useEffect(() => {
+    if (!onSearch) return;
+
+    const timer = setTimeout(() => {
+      onSearch(searchTerm);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, onSearch]);
 
   // Create unified app data with connection status
   const unifiedApps = useMemo(() => {
@@ -177,9 +194,13 @@ export function UnifiedConnectionsGrid({
         <div className="flex flex-col sm:flex-row gap-4">
           {/* Search */}
           <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+            {isSearching ? (
+              <RefreshCw className="w-4 h-4 absolute left-3 top-3 text-muted-foreground animate-spin" />
+            ) : (
+              <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+            )}
             <Input
-              placeholder="Search apps..."
+              placeholder="Search all apps..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
