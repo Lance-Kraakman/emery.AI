@@ -15,7 +15,6 @@ import { usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context"
 import { PuckSession } from "@/lib/puck/session-storage";
 import { updatePageContent, updatePageDialogs } from "@/app/actions/puck-pages";
 import { ComponentBreadcrumb } from "@/components/puck/ComponentBreadcrumb";
-import { EditingContextBreadcrumb } from "@/components/puck/EditingContextBreadcrumb";
 import { EditorUIProvider, useEditorUI } from "@/components/puck/contexts/EditorUIContext";
 import { EditingStackProvider, useEditingStack } from "@/components/puck/contexts/EditingStackContext";
 import type { PageStateConfig } from "@/components/puck/types/state";
@@ -256,12 +255,6 @@ function PuckEditorLayoutInner({
   return (
     <EditingStackProvider value={enhancedEditingStack}>
     <div className="flex flex-col h-screen bg-background">
-      {/* Editing context breadcrumb - shows stack for nested editing */}
-      <EditingContextBreadcrumb
-        stack={editingStack}
-        onNavigate={handleSaveAndNavigateToLevel}
-      />
-
       {/* Header */}
       <header className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 border-b border-border bg-transparent shrink-0">
         {/* Public URL display */}
@@ -359,8 +352,11 @@ function PuckEditorLayoutInner({
               </TabsTrigger>
             </TabsList>
 
-            {/* Component breadcrumb - always visible showing current selection or "Page" */}
-            <ComponentBreadcrumb />
+            {/* Component breadcrumb - shows editing context + current selection */}
+            <ComponentBreadcrumb
+              editingStack={editingStack}
+              onNavigate={handleSaveAndNavigateToLevel}
+            />
 
             {/* Blocks Tab */}
             <TabsContent value="blocks" className="flex-1 overflow-auto m-0 p-2">

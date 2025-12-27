@@ -145,6 +145,47 @@ export default function PageEditPage() {
     };
   }, []);
 
+  /**
+   * Find ancestor DataBlocks containing targetId in their templateContent.
+   * Returns array of ancestor contexts (root to immediate parent), or empty if target is at root.
+   */
+  const findAncestorDataBlocks = useCallback((targetId: string): EditingContextItem[] => {
+    const search = (data: Data, path: EditingContextItem[]): EditingContextItem[] | null => {
+      const components = [...data.content, ...Object.values(data.zones || {}).flat()];
+
+      for (const comp of components) {
+        if (comp.type !== 'DataBlock' || !comp.props?.templateContent) continue;
+
+        const template = comp.props.templateContent as Data;
+        const allChildren = [...(template.content || []), ...Object.values(template.zones || {}).flat()];
+
+        // Is target directly in this DataBlock's template?
+        if (allChildren.some(c => c.props?.id === targetId)) {
+          return [...path, {
+            type: 'datablock' as const,
+            componentId: comp.props.id as string,
+            name: comp.props._viewName as string || 'DataBlock',
+            viewId: comp.props.viewId as number,
+            tableId: comp.props._tableId as number,
+          }];
+        }
+
+        // Recurse into this DataBlock's template
+        const found = search(template, [...path, {
+          type: 'datablock' as const,
+          componentId: comp.props.id as string,
+          name: comp.props._viewName as string || 'DataBlock',
+          viewId: comp.props.viewId as number,
+          tableId: comp.props._tableId as number,
+        }]);
+        if (found) return found;
+      }
+      return null;
+    };
+
+    return search(pageData, []) || [];
+  }, [pageData]);
+
   // Convert to legacy EditingTarget format for backward compatibility with PuckEditorLayout
   const editingTarget: EditingTarget = currentContext.type === 'page'
     ? 'page'
@@ -293,9 +334,16 @@ export default function PageEditPage() {
     setPageData(updatedPageData);
     PuckSession.setData(pageId, updatedPageData);
 
-    // Push new level onto stack
-    setEditingStack(prev => [...prev, { type: 'datablock', componentId, name, viewId, tableId }]);
-  }, [pageId, updatePageDataWithCurrentState]);
+    // Find ancestor DataBlocks (if this DataBlock is nested inside another's template)
+    const ancestors = findAncestorDataBlocks(componentId);
+
+    // Push ancestors first (if any), then the target DataBlock
+    setEditingStack(prev => [
+      ...prev,
+      ...ancestors,
+      { type: 'datablock', componentId, name, viewId, tableId }
+    ]);
+  }, [pageId, updatePageDataWithCurrentState, findAncestorDataBlocks]);
 
   // Handler to navigate back one level - pop from stack
   const handleBackToPage = () => {
