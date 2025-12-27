@@ -10,35 +10,70 @@
  * Configuration flow:
  * 1. User selects a view (resolveData fetches tableId, organizationId)
  * 2. User selects a document field from the view
- * 3. User configures document ID source (page variable or static)
+ * 3. User configures document ID source (page variable, parent row, or static)
  */
 
 import React from 'react';
-import { useSearchParams } from 'next/navigation';
 import { FileText, AlertCircle, Settings } from 'lucide-react';
 import { TipTapDocumentEditor } from '@/components/shared/TipTapDocumentEditor';
-import type { EditorBlockProps } from './types';
+import { useStateContext, type StateContextValue } from '../../contexts/StateContext';
+import { useRowData, type RowDataContextValue } from '../../contexts/RowDataContext';
+import type { EditorBlockProps, DocumentIdSourceConfig } from './types';
 
-/** Regex to extract variable name from {params.varName} format */
-const PARAMS_VAR_REGEX = /\{params\.(\w+)\}/;
+/** Regex to extract variable name from {state.varName} format */
+const STATE_VAR_REGEX = /\{state\.(\w+)\}/;
 
-/** Extract variable name from {params.varName} format and get value from URL */
+/** Regex to extract field name from {rowData.fieldName} format */
+const ROW_DATA_VAR_REGEX = /\{rowData\.(\w+)\}/;
+
+/** Parse variable name from {state.varName} format */
+function parseStateVariable(value: string): string {
+  const match = value.match(STATE_VAR_REGEX);
+  return match?.[1] || '';
+}
+
+/** Parse field name from {rowData.fieldName} format */
+function parseRowDataVariable(value: string): string {
+  const match = value.match(ROW_DATA_VAR_REGEX);
+  return match?.[1] || '';
+}
+
+/**
+ * Resolve document ID from source configuration
+ * Supports: static value, state variable, or parent row field
+ */
 function resolveDocumentId(
-  documentIdSource: EditorBlockProps['documentIdSource'],
-  searchParams: URLSearchParams
+  documentIdSource: DocumentIdSourceConfig | undefined,
+  stateContext: StateContextValue | undefined,
+  rowDataContext: RowDataContextValue | null
 ): string | undefined {
   if (!documentIdSource?.value) {
     return undefined;
   }
 
+  // Static value - return directly
   if (documentIdSource.valueType === 'static') {
     return documentIdSource.value;
   }
 
-  // Extract variable name from {params.varName}
-  const match = documentIdSource.value.match(PARAMS_VAR_REGEX);
-  if (match?.[1]) {
-    return searchParams.get(match[1]) || undefined;
+  // State variable - resolve from state context
+  if (documentIdSource.valueType === 'variable') {
+    const varName = parseStateVariable(documentIdSource.value);
+    if (varName && stateContext) {
+      const value = stateContext.getValue(varName);
+      return value !== undefined && value !== null ? String(value) : undefined;
+    }
+    return undefined;
+  }
+
+  // Parent row field - resolve from row data context
+  if (documentIdSource.valueType === 'parentRow') {
+    const fieldName = parseRowDataVariable(documentIdSource.value);
+    if (fieldName && rowDataContext) {
+      const value = rowDataContext.resolveRowDataVariable(fieldName);
+      return value !== undefined && value !== null ? String(value) : undefined;
+    }
+    return undefined;
   }
 
   return undefined;
@@ -56,10 +91,14 @@ export function EditorBlock({
   autoSave = true,
   autoSaveInterval = 3000,
 }: EditorBlockProps) {
-  const searchParams = useSearchParams();
+  // Get state context for {state.varName} resolution
+  const stateContext = useStateContext();
+
+  // Get row data context for {rowData.fieldName} resolution
+  const rowDataContext = useRowData();
 
   // Resolve document ID from source configuration
-  const documentId = resolveDocumentId(documentIdSource, searchParams);
+  const documentId = resolveDocumentId(documentIdSource, stateContext, rowDataContext);
 
   // Configuration missing state - no view selected
   if (!viewId) {
@@ -103,17 +142,17 @@ export function EditorBlock({
         <FileText className="w-12 h-12 text-muted-foreground/40 mb-4" />
         <p className="text-sm font-medium text-muted-foreground">Configure document ID source</p>
         <p className="text-xs text-muted-foreground/60 mt-2 max-w-xs text-center">
-          Select how to get the document ID (page variable or static value).
+          Select how to get the document ID (page variable, parent row, or static value).
         </p>
       </div>
     );
   }
 
-  // No document selected (waiting for URL param)
+  // No document selected (waiting for value resolution)
   if (!documentId) {
-    // Extract the variable name for display
-    const match = documentIdSource.value.match(PARAMS_VAR_REGEX);
-    const varName = match?.[1] || 'documentId';
+    // Extract the variable/field name for display
+    const varName = parseStateVariable(documentIdSource.value) || 'documentId';
+    const fieldName = parseRowDataVariable(documentIdSource.value) || 'field';
 
     return (
       <div
@@ -125,7 +164,11 @@ export function EditorBlock({
         <p className="text-xs text-muted-foreground/60 mt-2 max-w-xs text-center">
           {documentIdSource.valueType === 'variable' ? (
             <>
-              Waiting for <code className="bg-muted px-1 rounded">{varName}</code> in URL parameters
+              Waiting for <code className="bg-muted px-1 rounded">{varName}</code> state variable
+            </>
+          ) : documentIdSource.valueType === 'parentRow' ? (
+            <>
+              Waiting for <code className="bg-muted px-1 rounded">{fieldName}</code> from parent row
             </>
           ) : (
             'Please configure a document ID in the block settings.'
