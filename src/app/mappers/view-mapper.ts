@@ -23,7 +23,7 @@ export interface ViewDTO {
   filters: Array<{
     fieldId: number;
     operator: string;
-    value?: string | number | boolean | null;
+    value?: string | number | boolean | null | Array<string | number | null>;
   }>;
   sorting: Array<{
     fieldId: number;

@@ -209,7 +209,7 @@ export interface CreateViewData {
   filters?: Array<{
     field: string;
     operator: string;
-    value: string | number | boolean | null;
+    value: string | number | boolean | null | Array<string | number | null>;
   }>;
   sorting?: Array<{
     fieldId: number;
@@ -234,7 +234,7 @@ export interface UpdateViewData {
   filters?: Array<{
     field: string;           // Field name (will be converted to fieldId in action)
     operator: string;
-    value: string | number | boolean | null;
+    value: string | number | boolean | null | Array<string | number | null>;
   }>;
   sorting?: Array<{
     fieldId: number;

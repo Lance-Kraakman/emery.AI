@@ -21,54 +21,66 @@ import { createDebugLogger } from '@/lib/utils/debug-logger';
 const logger = createDebugLogger('DataLake');
 
 /**
- * Convert field name to field ID for Delta Lake queries
+ * Resolve field identifier to field ID for Delta Lake queries
  * Delta Lake columns use numeric field IDs (79, 80), not field names ('test', 'name')
  *
  * AIDEV-NOTE: System columns (id, created_at, updated_at) are special - they exist on all rows
  * and use their literal names in Delta Lake, not numeric field IDs.
  *
- * @param fieldName - Human-readable field name
+ * Accepts both field names (e.g., 'Patient') and field IDs (e.g., '14'). This allows
+ * ViewService to pass field IDs directly while other callers can still use field names.
+ *
+ * @param fieldNameOrId - Field name or numeric field ID as string
  * @param fields - Table field definitions
  * @returns Numeric field ID as string for user fields, literal name for system columns, or null if not found
  */
-function convertFieldNameToId(
-  fieldName: string,
+function resolveToFieldId(
+  fieldNameOrId: string,
   fields: readonly TableField[]
 ): string | null {
   // AIDEV-NOTE: System columns don't need conversion - they use literal names in Delta Lake
   const systemColumns = ['id', 'created_at', 'updated_at'];
-  if (systemColumns.includes(fieldName)) {
-    logger.debug('System column - no conversion needed', { fieldName });
-    return fieldName; // Return as-is for system columns
+  if (systemColumns.includes(fieldNameOrId)) {
+    logger.debug('System column - no conversion needed', { fieldNameOrId });
+    return fieldNameOrId; // Return as-is for system columns
   }
 
-  const field = fields.find(f => f.name === fieldName);
+  // Check if input is already a valid field ID (numeric string matching a field's ID)
+  // This handles the case when ViewService passes field IDs directly
+  const fieldById = fields.find(f => f.id.value.toString() === fieldNameOrId);
+  if (fieldById) {
+    logger.debug('Input is already a field ID', { fieldId: fieldNameOrId });
+    return fieldNameOrId; // Already an ID, return as-is
+  }
 
-  if (field) {
+  // Try to find by field name
+  const fieldByName = fields.find(f => f.name === fieldNameOrId);
+  if (fieldByName) {
     logger.debug('Converted field name to ID', {
-      fieldName,
-      fieldId: field.id.value.toString()
+      fieldName: fieldNameOrId,
+      fieldId: fieldByName.id.value.toString()
     });
-    return field.id.value.toString();
+    return fieldByName.id.value.toString();
   }
 
   logger.error('Field not found in table schema', {
-    fieldName,
+    fieldNameOrId,
     availableFields: fields.map(f => f.name)
   });
   return null;
 }
 
 /**
- * Convert filter field names to field IDs for Delta Lake queries
+ * Resolve filter field identifiers to field IDs for Delta Lake queries
  *
  * AIDEV-NOTE: System columns (id, created_at, updated_at) are passed through unchanged.
+ * Uses resolveToFieldId which accepts both field names and field IDs.
  *
- * @param filters - Array of filters using field names
+ * @param filters - Array of filters using field names or IDs
  * @param fields - Table field definitions
  * @returns Filters with field names converted to field IDs
  */
-function convertFiltersToFieldIds(
+function resolveFiltersToFieldIds(
   filters: any[],
   fields: readonly TableField[]
 ): any[] {
@@ -80,7 +92,7 @@ function convertFiltersToFieldIds(
       return filter; // Keep system columns as-is
     }
 
-    const fieldId = convertFieldNameToId(filter.field, fields);
+    const fieldId = resolveToFieldId(filter.field, fields);
 
     if (!fieldId) {
       // Field not found - return original filter (will likely fail, but preserves error context)
@@ -361,11 +373,11 @@ export class DynamicTableDataLake {
       // Delta Lake columns use numeric field IDs (79, 80), not field names ('test', 'name')
 
       // Convert orderBy from field name to field ID
-      const orderByFieldId = orderBy ? convertFieldNameToId(orderBy, fields) || '' : '';
+      const orderByFieldId = orderBy ? resolveToFieldId(orderBy, fields) || '' : '';
 
-      // Convert filter field names to field IDs
+      // Resolve filter field identifiers to field IDs
       const convertedFilters = Array.isArray(filters) && filters.length > 0
-        ? convertFiltersToFieldIds(filters, fields)
+        ? resolveFiltersToFieldIds(filters, fields)
         : filters;
 
       // Create query request (with converted field IDs)

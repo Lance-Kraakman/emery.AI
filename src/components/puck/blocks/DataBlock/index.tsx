@@ -257,9 +257,6 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     };
 
     // Row filter field - shown for both single and list modes
-    // Get fields from resolved data (available after resolveData runs)
-    const _fields = data.props._fields || [];
-
     // Tooltip text based on mode
     const filterTooltip = mode === 'single'
       ? 'Filter to match exactly one row. Use a unique field like ID. Example: id equals {state.selectedId}'
@@ -279,7 +276,6 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
               value={value}
               onChange={onChange}
               viewId={viewId}
-              parentFields={_fields}
             />
           </div>
         ),

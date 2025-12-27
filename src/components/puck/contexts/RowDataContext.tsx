@@ -213,17 +213,22 @@ export interface ParentRowDataContextValue {
 export function useParentRowData(): ParentRowDataContextValue | undefined {
   const context = useContext(RowDataContext);
 
-  if (context === undefined || context.parentStack.length === 0) {
-    return undefined;
-  }
+  // Simple memoization on context object
+  // NOTE: useChildDataBlock uses parentRowId (primitive) as its memoization key,
+  // so this can be simple memoization without causing stale data issues
+  return useMemo(() => {
+    if (context === undefined || context.parentStack.length === 0) {
+      return undefined;
+    }
 
-  return {
-    parentStack: context.parentStack,
-    resolveRowDataVariable: context.resolveRowDataVariable,
-    getParentFieldNames: context.getParentFieldNames,
-    hasParentFields: context.hasParentFields,
-    getParentRowData: () => context.parentStack[0] || null,
-  };
+    return {
+      parentStack: context.parentStack,
+      resolveRowDataVariable: context.resolveRowDataVariable,
+      getParentFieldNames: context.getParentFieldNames,
+      hasParentFields: context.hasParentFields,
+      getParentRowData: () => context.parentStack[0] || null,
+    };
+  }, [context]);
 }
 
 /**

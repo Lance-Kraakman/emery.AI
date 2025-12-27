@@ -18,7 +18,7 @@
  * - Returns rows, loading state, and error info
  */
 
-import { useState, useEffect, useMemo, useReducer, useCallback } from 'react';
+import { useState, useEffect, useMemo, useReducer, useCallback, useRef } from 'react';
 import { useParentRowData } from '@/components/puck/contexts/RowDataContext';
 import { useStateContext } from '@/components/puck/contexts/StateContext';
 import { executeView } from '@/app/actions/views';
@@ -265,6 +265,15 @@ export function useChildDataBlock({
   const parentContext = useParentRowData();
   const stateContext = useStateContext();
 
+  // Store parentContext in ref to use without depending on object identity
+  // This prevents infinite loops while allowing access to latest context
+  const parentContextRef = useRef(parentContext);
+  parentContextRef.current = parentContext;
+
+  // Extract stable parent row ID for memoization
+  // This is a primitive value that changes when parent row changes
+  const parentRowId = parentContext?.parentStack?.[0]?.rowData?.id;
+
   // Force re-render counter for state subscriptions
   const [refetchTrigger, forceRefetch] = useReducer(x => x + 1, 0);
 
@@ -345,10 +354,18 @@ export function useChildDataBlock({
   });
 
   // Build resolved filters with parent row data and state variables substituted
+  // Uses parentContextRef.current to access context without depending on object identity
+  // Depends on parentRowId (primitive) to trigger recalculation when parent row changes
   const resolvedFilters = useMemo(() => {
+    // Use ref to get latest context without adding it to dependencies
+    const ctx = parentContextRef.current;
+
     if (!needsClientFetch || !filterConfig?.conditions?.length) {
       return null;
     }
+
+    // Debug log for troubleshooting
+    console.log('[useChildDataBlock] Building filters for parentRowId:', parentRowId);
 
     const filters: Array<{ field: string; operator: string; value: unknown }> = [];
 
@@ -363,7 +380,7 @@ export function useChildDataBlock({
 
         // Resolve {rowData.x} variables
         if (valueStr.includes('{rowData.')) {
-          if (!parentContext) {
+          if (!ctx) {
             // Need parent context but don't have it
             console.warn(`[useChildDataBlock] No parent context for: ${condition.value}`);
             couldNotResolve = true;
@@ -371,14 +388,14 @@ export function useChildDataBlock({
             // Get field type lookup function from parent context
             const getFieldType = (fieldName: string): FieldType | undefined => {
               if (fieldName === 'id') return 'number'; // Built-in ID field
-              const parent = parentContext.parentStack?.[0];
+              const parent = ctx.parentStack?.[0];
               const field = parent?.fields.find(f => f.name === fieldName);
               return field?.type;
             };
 
             const resolved = resolveRowDataVariables(
               valueStr,
-              parentContext.resolveRowDataVariable,
+              ctx.resolveRowDataVariable,
               getFieldType
             );
             // Check if variable was resolved
@@ -416,9 +433,11 @@ export function useChildDataBlock({
       });
     }
 
+    console.log('[useChildDataBlock] Resolved filters:', filters.length, 'for parentRowId:', parentRowId);
     return filters.length > 0 ? filters : null;
-    // Include refetchTrigger to re-compute when state changes trigger a refetch
-  }, [needsClientFetch, parentContext, filterConfig, stateContext, refetchTrigger]);
+    // Depend on parentRowId (primitive) instead of parentContext (object)
+    // This ensures different parent rows get different filters without causing infinite loops
+  }, [needsClientFetch, parentRowId, filterConfig, stateContext, refetchTrigger]);
 
   // Fetch data when filters are resolved
   useEffect(() => {
@@ -447,6 +466,7 @@ export function useChildDataBlock({
         if (cancelled) return;
 
         if (result) {
+          console.log('[useChildDataBlock] Fetch complete for parentRowId:', parentRowId, 'rows:', result.rows.length, 'first row id:', result.rows[0]?.id);
           setData({
             rows: result.rows,
             totalCount: result.totalCount,

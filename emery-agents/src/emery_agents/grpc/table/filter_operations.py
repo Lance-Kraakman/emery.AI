@@ -5,8 +5,10 @@ Module-level functions for building PyArrow filter predicates from protobuf
 filter specifications. Enables predicate pushdown to Delta Lake.
 """
 
+import json
 import logging
-from typing import List, Any, Optional
+from dataclasses import dataclass
+from typing import List, Any, Optional, FrozenSet
 import pyarrow as pa
 import pyarrow.types as pat
 import pyarrow.compute as pc
@@ -222,3 +224,108 @@ def combine_predicates(predicates: List[Any]) -> Optional[Any]:
         for pred in predicates[1:]:
             result = result & pred
         return result
+
+
+# ============================================
+# JSONB Contains Filter Functions
+# ============================================
+#
+# For complex field types (relation, file, document) that store JSONB arrays:
+# - relation: [{id: number|string, value: string}]
+# - file:     [{id: string, name: string, size: number, mimeType: string, s3Key: string, uploadedAt: string}]
+# - document: [{id: string, name: string, ..., documentMetadata: {...}}]
+#
+# All use 'id' as the matching key. These cannot be pushed down to PyArrow.
+
+
+@dataclass(frozen=True)
+class JsonbContainsFilter:
+    """Represents a JSONB contains filter for complex field types.
+
+    The filter matches if the JSONB array contains ANY element with matching 'id'.
+    """
+    field_name: str
+    target_ids: FrozenSet[str]  # Normalized to strings for comparison
+
+
+def extract_jsonb_target_ids(filter_value: table_service_pb2.RowDataValue) -> FrozenSet[str]:
+    """Extract target IDs from filter value protobuf for JSONB contains.
+
+    Filter value format from TypeScript: '[{"id": "uuid"}]' or '[{"id": 123}]'
+
+    Args:
+        filter_value: RowDataValue protobuf with oneof field
+
+    Returns:
+        Immutable set of ID strings (normalized for comparison)
+    """
+    target_ids: set[str] = set()
+
+    # Use existing extract_filter_value for raw value extraction
+    raw_value = extract_filter_value(filter_value)
+    if raw_value is None:
+        return frozenset()
+
+    # Handle non-string values (number from protobuf)
+    if isinstance(raw_value, (int, float)):
+        return frozenset([str(int(raw_value))])
+
+    if not isinstance(raw_value, str):
+        return frozenset([str(raw_value)])
+
+    # Parse JSON string
+    try:
+        data = json.loads(raw_value)
+    except json.JSONDecodeError:
+        # Not valid JSON - treat as scalar ID string
+        return frozenset([raw_value])
+
+    # Extract IDs from parsed structure
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict) and 'id' in item:
+                target_ids.add(str(item['id']))
+    elif isinstance(data, dict) and 'id' in data:
+        target_ids.add(str(data['id']))
+    else:
+        # Scalar value in JSON
+        target_ids.add(str(data))
+
+    return frozenset(target_ids)
+
+
+def json_array_contains_id(json_str: Optional[str], target_ids: FrozenSet[str]) -> bool:
+    """Check if JSONB array contains any element with matching 'id'.
+
+    This is the core matching logic for JSONB contains filtering.
+    All complex types (relation, file, document) use 'id' as the key.
+
+    Args:
+        json_str: JSON string from column (e.g., '[{"id": "uuid", "value": "Name"}]')
+        target_ids: Frozenset of ID strings to match (normalized)
+
+    Returns:
+        True if array contains at least one element with id in target_ids
+    """
+    if not json_str:
+        return False
+
+    try:
+        # Parse stored JSON
+        data = json.loads(json_str) if isinstance(json_str, str) else json_str
+
+        # Must be an array
+        if not isinstance(data, list):
+            return False
+
+        # Check each element for matching ID
+        for item in data:
+            if isinstance(item, dict) and 'id' in item:
+                # Normalize to string for comparison (int 42 == string "42")
+                if str(item['id']) in target_ids:
+                    return True
+
+        return False
+
+    except (json.JSONDecodeError, TypeError):
+        return False

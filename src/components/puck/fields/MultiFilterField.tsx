@@ -37,12 +37,12 @@ import {
 } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Check, ChevronsUpDown, Plus, X } from 'lucide-react';
+import { Check, ChevronsUpDown, Key, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getFields } from '@/app/actions/fields';
 import { getView } from '@/app/actions/views';
 import { useStateContext } from '../contexts/StateContext';
-import { useParentRowData } from '../contexts/RowDataContext';
+import { useParentDataBlockContext } from '../hooks/useDataBlockContextForSelection';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { StateVariable } from '../types/state';
 import {
@@ -122,15 +122,12 @@ interface MultiFilterFieldProps {
   onChange: (value: RowFilterConfig) => void;
   /** viewId passed from resolveFields closure */
   viewId?: number;
-  /** Parent fields for {rowData.x} variables (passed from ParentRowDataContext in future) */
-  parentFields?: FieldDTO[];
 }
 
 export function MultiFilterField({
   value,
   onChange,
   viewId,
-  parentFields: parentFieldsProp = [],
 }: MultiFilterFieldProps) {
   const [fields, setFields] = useState<FieldDTO[]>([]);
   const [loadingFields, setLoadingFields] = useState(false);
@@ -139,14 +136,10 @@ export function MultiFilterField({
   const pageStateConfig = stateContext?.getConfig();
   const stateVariables = pageStateConfig?.variables || [];
 
-  // Get parent row data context for {rowData.x} variables
-  const parentContext = useParentRowData();
-
-  // Check if we have parent field metadata available (works even without row data)
-  const hasParentFields = parentContext?.hasParentFields() || parentFieldsProp.length > 0;
-
-  // Use parent fields from context if available, otherwise use prop
-  const parentFields = parentContext?.getParentRowData()?.fields || parentFieldsProp;
+  // Get parent DataBlock context using optimized hook
+  const parentDataBlock = useParentDataBlockContext();
+  const parentFields = parentDataBlock?.fields || [];
+  const hasParentFields = parentFields.length > 0;
 
   // Initialize with defaults
   const filterConfig: RowFilterConfig = value ?? DEFAULT_FILTER_CONFIG;
@@ -534,6 +527,14 @@ function FilterConditionRow({
                   <SelectValue placeholder="Select parent field" />
                 </SelectTrigger>
                 <SelectContent>
+                  {/* Always include id (Row ID) as first option */}
+                  <SelectItem value="id" className="text-xs">
+                    <span className="flex items-center gap-2">
+                      <Key className="h-3 w-3" />
+                      <span>id</span>
+                      <span className="text-muted-foreground">(Row ID)</span>
+                    </span>
+                  </SelectItem>
                   {parentFields.map(field => (
                     <SelectItem key={field.id} value={field.name} className="text-xs">
                       {field.name}

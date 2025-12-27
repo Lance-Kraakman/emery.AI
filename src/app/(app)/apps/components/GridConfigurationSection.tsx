@@ -19,7 +19,7 @@ import { FilterChip } from '@/app/(app)/data/components/FilterChip';
 export interface GridFilterConfig {
   field: string;
   operator: FilterOperator;
-  value: string | number | boolean | null;
+  value: string | number | boolean | null | Array<string | number | null>;
 }
 
 /**
