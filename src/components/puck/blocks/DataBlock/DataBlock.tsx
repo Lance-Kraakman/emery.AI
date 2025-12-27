@@ -93,6 +93,7 @@ export interface DataBlockProps {
     className?: string;
     allow?: string[];
     disallow?: string[];
+    minEmptyHeight?: number;
   }>;
 
   // Puck component ID
@@ -320,7 +321,7 @@ export default function DataBlock({
     });
   };
 
-  // Render slot content
+  // Render slot content with minEmptyHeight for drop target space
   const renderSlotContent = () => {
     if (!Children) {
       return (
@@ -329,7 +330,8 @@ export default function DataBlock({
         </div>
       );
     }
-    return <Children />;
+    // minEmptyHeight provides drop target space when slot is empty
+    return <Children minEmptyHeight={64} />;
   };
 
   // No view selected - show placeholder
