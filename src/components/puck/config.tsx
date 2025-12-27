@@ -37,6 +37,7 @@ import { EditorBlock } from "./blocks/EditorBlock";
 
 import Root from "./root";
 import { UserConfig } from "./types";
+import { FIELD_BLOCK_TYPES } from "./constants";
 
 export const config: UserConfig = {
   root: Root,
@@ -68,9 +69,10 @@ export const config: UserConfig = {
       title: "Content",
       components: ["EditorBlock"],
     },
-    // NOTE: Field components (TextField, NumberField, etc.) are intentionally NOT
-    // in any category. This hides them from the root page picker, but they remain
-    // available in DataBlock's slot via the allow prop.
+    fields: {
+      title: "Fields",
+      components: [...FIELD_BLOCK_TYPES],
+    },
     other: {
       title: "Other",
       // Hero, Card, Logos, Stats removed - now available as system templates
