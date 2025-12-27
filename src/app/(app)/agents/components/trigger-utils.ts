@@ -40,11 +40,13 @@ export const getWebhookRequiresSignature = (trigger: TriggerConfig): boolean =>
 export const getTriggerTypeLabel = (triggerType: TriggerConfig['type']): string => {
   switch (triggerType) {
     case 'CALENDAR':
-      return 'Scheduled/Calendar';
+      return 'Recurring';
     case 'DATABASE_EVENT':
       return 'Database Changes';
     case 'WEBHOOK':
       return 'Webhook Trigger';
+    case 'PIPEDREAM_EVENT':
+      return 'External Event';
     default:
       return 'Unknown';
   }

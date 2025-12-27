@@ -45,8 +45,8 @@ export function CompactAgentHeader({
   const [isCompact, setIsCompact] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const activeSchedules = agent.schedules?.filter(s => s.enabled).length || 0;
-  const totalSchedules = agent.schedules?.length || 0;
+  const activeSchedules = agent.automations?.filter((s: { enabled: boolean }) => s.enabled).length || 0;
+  const totalSchedules = agent.automations?.length || 0;
 
   // Container-based responsive behavior
   useEffect(() => {
@@ -102,7 +102,7 @@ export function CompactAgentHeader({
   const handleDeleteSchedule = async (index: number, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent triggering parent click handlers
 
-    if (agent.schedules.length === 1) {
+    if (agent.automations.length === 1) {
       // Cannot delete the last schedule
       return;
     }
@@ -110,10 +110,10 @@ export function CompactAgentHeader({
     try {
       setDeletingIndex(index);
 
-      const newSchedules = agent.schedules.filter((_, i) => i !== index);
+      const newAutomations = agent.automations.filter((_: any, i: number) => i !== index);
 
       const result = await updateAgentFromClient(agent.id, {
-        schedules: newSchedules
+        automations: newAutomations
       });
 
       if (!result.success) {
@@ -259,13 +259,13 @@ export function CompactAgentHeader({
 
               {/* Schedules List */}
               <div className="max-h-[300px] overflow-y-auto">
-                {!agent.schedules || agent.schedules.length === 0 ? (
+                {!agent.automations || agent.automations.length === 0 ? (
                   <div className="px-4 py-8 text-center text-sm text-muted-foreground">
                     No schedules configured
                   </div>
                 ) : (
                   <div className="py-1">
-                    {agent.schedules.map((schedule, index) => (
+                    {agent.automations.map((schedule: any, index: number) => (
                       <div
                         key={index}
                         className="group flex items-center justify-between px-4 py-2 hover:bg-accent transition-colors"
@@ -297,15 +297,15 @@ export function CompactAgentHeader({
                           <button
                             onClick={() => handleScheduleClick(index)}
                             className="p-1.5 rounded hover:bg-accent-foreground/10 transition-colors"
-                            title="Edit schedule"
+                            title="Edit automation"
                           >
                             <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
                           </button>
                           <button
                             onClick={(e) => handleDeleteSchedule(index, e)}
-                            disabled={deletingIndex === index || agent.schedules.length === 1}
+                            disabled={deletingIndex === index || agent.automations.length === 1}
                             className="p-1.5 rounded hover:bg-destructive/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={agent.schedules.length === 1 ? "Cannot delete last schedule" : "Delete schedule"}
+                            title={agent.automations.length === 1 ? "Cannot delete last automation" : "Delete automation"}
                           >
                             <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
                           </button>

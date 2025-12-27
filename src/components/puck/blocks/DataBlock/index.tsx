@@ -19,6 +19,11 @@
  * - Variables like {params.varName} are substituted from URL query parameters
  * - Static values work too: "id equals 123"
  * - Filtering happens at database level for efficiency
+ *
+ * Template Editing:
+ * - Uses Puck's native slot system for inline editing
+ * - Field components (TextField, NumberField, etc.) are only visible in this slot
+ * - At runtime, slot content is iterated with Render for list mode
  */
 
 import type { ComponentConfig } from "@measured/puck";
@@ -30,6 +35,7 @@ import { isPuckResolveContext } from "../../types/puck-context";
 import { createViewManagementField } from "../../custom-fields";
 import { MultiFilterField, type RowFilterConfig } from "../../fields/MultiFilterField";
 import { MultiSortField, type RowSortConfig } from "../../fields/MultiSortField";
+import { FIELD_BLOCK_TYPES } from "../../constants";
 
 export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
   label: "Data",
@@ -147,9 +153,23 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       ],
     },
 
-    // Slot for item template content
+    // Template slot - uses Puck's native slot system for inline editing
+    // Field components (TextField, NumberField, etc.) are allowed here but hidden from root picker
     children: {
       type: "slot",
+      // Allow field components plus common layout/content components
+      allow: [
+        // Field components (hidden from root, visible only in this slot)
+        ...FIELD_BLOCK_TYPES,
+        // Common layout components
+        "Container", "Flex", "Grid", "Space", "Divider",
+        // Content components
+        "Text", "Heading", "Button", "LinkBlock",
+        // Other useful components
+        "ConditionalBlock",
+        // Allow nested DataBlocks (e.g., client with nested orders)
+        "DataBlock",
+      ],
     },
 
     // Hidden fields populated by resolveData
@@ -183,6 +203,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     showCarouselArrows: false,
     editEnabled: false,
     allowCreate: false,
+    // children slot defaults to empty array
   },
 
   /**
@@ -202,6 +223,9 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     };
 
     // Row filter field - shown for both single and list modes
+    // Get fields from resolved data (available after resolveData runs)
+    const _fields = data.props._fields || [];
+
     const rowFilterField = {
       rowFilter: {
         type: "custom" as const,
@@ -212,6 +236,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
             value={value}
             onChange={onChange}
             viewId={viewId}
+            parentFields={_fields}
           />
         ),
       },
@@ -233,6 +258,26 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       },
     };
 
+    // Template slot field - uses Puck's native slot for inline editing
+    // Allow field components that are hidden from root picker
+    const childrenField = {
+      children: {
+        type: "slot" as const,
+        allow: [
+          // Field components (hidden from root, visible only in this slot)
+          ...FIELD_BLOCK_TYPES,
+          // Common layout components
+          "Container", "Flex", "Grid", "Space", "Divider",
+          // Content components
+          "Text", "Heading", "Button", "LinkBlock",
+          // Other useful components
+          "ConditionalBlock",
+          // Allow nested DataBlocks (e.g., client with nested orders)
+          "DataBlock",
+        ],
+      },
+    };
+
     // Edit mode fields (shown when viewId is selected)
     const editFields = viewId ? {
       editEnabled: fields.editEnabled,
@@ -240,12 +285,12 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     } : {};
 
     if (mode === 'single') {
-      // Single mode: just filter and children
+      // Single mode: just filter and template slot
       return {
         ...baseFields,
         ...rowFilterField,
         ...editFields,
-        children: fields.children,
+        ...childrenField,
       };
     }
 
@@ -262,7 +307,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
       maxHeight: fields.maxHeight,
       ...(layout === 'horizontal' && { showCarouselArrows: fields.showCarouselArrows }),
       ...editFields,
-      children: fields.children,
+      ...childrenField,
     };
   },
 
@@ -508,7 +553,9 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     }
   },
 
-  render: DataBlock,
+  // Cast render to satisfy TypeScript - templateContent uses custom Data type
+  // that Puck's type inference doesn't understand
+  render: DataBlock as ComponentConfig<DataBlockProps>['render'],
 };
 
 export default DataBlockConfig;

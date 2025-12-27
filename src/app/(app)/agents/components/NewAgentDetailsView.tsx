@@ -34,7 +34,7 @@ export function NewAgentDetailsView({ agent, tasks, skills, connections, onUpdat
         <div className="flex-1 overflow-hidden">
           <AgentExecutionTimeline
             tasks={tasks}
-            schedules={agent.schedules}
+            schedules={agent.automations}
           />
         </div>
       </div>

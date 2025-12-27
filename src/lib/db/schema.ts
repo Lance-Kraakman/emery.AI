@@ -3,9 +3,10 @@ import { sql } from "drizzle-orm";
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
-import type { ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
+import type { AutomationConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
 import type { PuckDataStructure } from '@/ddd/domain/puck/value-objects/puck-data';
-import type { PageVariable, PageStateConfig } from '@/components/puck/types';
+import type { PageStateConfig } from '@/components/puck/types/state';
+import type { PageDialogsConfig } from '@/ddd/domain/puck/value-objects/page-dialogs';
 
 // AIDEV-NOTE: Template variants for component library functionality
 export interface TemplateVariant {
@@ -17,7 +18,7 @@ export interface TemplateVariant {
 }
 import type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
-import type { SkillParameterType, SkillInputFileConfig, SkillOutput } from '@/ddd/domain/skills/entities/skill';
+import type { SkillParameterType, SkillInputFileConfig, SkillOutput, ToolExecutionConfig, WriteConfig } from '@/ddd/domain/skills/entities/skill';
 
 // AIDEV-NOTE: Authenticated user role for RLS policies
 export const authenticatedRole = pgRole('authenticated', {
@@ -812,7 +813,7 @@ export const agents = pgTable("agents", {
   description: text("description"),
   persona: text("persona"),
   ownerId: uuid("owner_id").notNull().references(() => users.id), // Agent owner - used for OAuth credential resolution via proxy
-  schedules: jsonb("schedules").$type<ScheduleConfigurationJSON[]>().default(sql`'[]'::jsonb`).notNull(), // Array of schedule configurations with task instructions
+  automations: jsonb("automations").$type<AutomationConfigurationJSON[]>().default(sql`'[]'::jsonb`).notNull(), // Array of automation configurations (trigger + skill reference)
   databaseId: text("database_id"),
   status: text("status").default("active"),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
@@ -1025,6 +1026,14 @@ export const skills = pgTable("skills", {
     taskType: string;
     parameters?: Record<string, any>;
   }>(),
+
+  // Tool execution configuration (when executionType is 'tool')
+  // Direct Pipedream tool call with input mappings
+  toolExecutionConfig: jsonb("tool_execution_config").$type<ToolExecutionConfig>(),
+
+  // Write execution configuration (when executionType is 'write')
+  // Direct table write with field mappings
+  writeConfig: jsonb("write_config").$type<WriteConfig>(),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -1588,6 +1597,7 @@ export const tools = pgTable("tools", {
   appId: text("app_id").notNull().references(() => appTypes.id), // Always references an app - "emery" for system tools
   icon: text("icon"),                                    // Icon or emoji
   config: jsonb("config").$type<ToolDefinitionData>().notNull(), // Typed JSONB configuration
+  isTrigger: boolean("is_trigger").default(false),       // True for event sources (triggers), false for actions
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1760,8 +1770,9 @@ export const pages = pgTable("pages", {
   isPublic: boolean("is_public").default(false).notNull(),
   requiresAuth: boolean("requires_auth").default(false).notNull(),
   allowedRoles: text("allowed_roles").array(),
-  pageVariables: jsonb("page_variables").$type<PageVariable[]>(), // Expected query parameters for this page
+  pageVariables: jsonb("page_variables"), // Deprecated - use pageState instead
   pageState: jsonb("page_state").$type<PageStateConfig>(), // Client-side state configuration
+  pageDialogs: jsonb("page_dialogs").$type<PageDialogsConfig>(), // Dialog configurations
   ownerId: uuid("owner_id")
     .notNull()
     .references(() => users.id), // Page owner - used for 'owned' scope permissions

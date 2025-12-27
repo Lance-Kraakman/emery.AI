@@ -27,11 +27,14 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
    * Execute agent via gRPC worker
    */
   async executeAgent(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
-    const { agentId, instructions, tools, executionId, organizationId, timeoutSeconds, onProgress, agentModel, organizationModel, skill } = request;
+    const { agentId, instructions, tools, executionId, organizationId, timeoutSeconds, onProgress, agentModel, organizationModel, skill, skillInputs } = request;
 
     console.log(`[GRPC-EXECUTION-REPO] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
     console.log(`[GRPC-EXECUTION-REPO] Model selection: agentModel=${agentModel || 'none'}, orgModel=${organizationModel || 'none'}`);
     console.log(`[GRPC-EXECUTION-REPO] Skill execution: ${skill ? `${skill.name} (${skill.executionType})` : 'none'}`);
+    if (skillInputs && Object.keys(skillInputs).length > 0) {
+      console.log(`[GRPC-EXECUTION-REPO] Skill inputs: ${JSON.stringify(skillInputs)}`);
+    }
 
     try {
       // 1. Load agent configuration (delegated to agent repository)
@@ -52,7 +55,22 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       // 4. Enrich agent with API key in tools (following chat pattern)
       const enrichedAgent = this.enrichAgentTools(agent);
 
-      // 5. Create proto task request
+      // 5. Build typed skill inputs from raw values + skill input definitions
+      // AIDEV-NOTE: Each SkillInputValue carries name, type, and the actual value in the appropriate oneof field
+      const typedSkillInputs: Array<{ name: string; type: string; value: unknown }> = [];
+      if (skillInputs && skill?.inputs) {
+        for (const [name, value] of Object.entries(skillInputs)) {
+          // Look up type from skill input definition
+          const inputDef = skill.inputs.find(i => i.name === name);
+          typedSkillInputs.push({
+            name,
+            type: inputDef?.type || 'text', // Default to 'text' if not found
+            value
+          });
+        }
+      }
+
+      // 6. Create proto task request
       // Use skill-based execution if skill is provided, otherwise instruction-based
       const taskRequest = createTaskRequest({
         taskId: executionId,
@@ -69,7 +87,9 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
           }
         }),
         agent: enrichedAgent,
-        triggerData: {}, // Empty for proto compatibility
+        // Typed skill inputs from automation inputMappings
+        // The worker extracts these in _create_skill_context() and passes to execute_skill(runtime_inputs=...)
+        skillInputs: typedSkillInputs,
         organizationId: organizationIdStr,
         ownerId: agent.ownerId.value,
         timeoutSeconds: timeoutSeconds || 300,

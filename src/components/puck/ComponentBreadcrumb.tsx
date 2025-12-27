@@ -2,8 +2,9 @@
 
 import React, { useMemo } from "react";
 import { usePuck } from "@measured/puck";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, FileText, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { EditingContextItem } from "@/components/puck/types/editing-context";
 
 interface BreadcrumbItem {
   id: string;
@@ -11,40 +12,57 @@ interface BreadcrumbItem {
   selector: { zone?: string; index: number };
 }
 
-export function ComponentBreadcrumb() {
+interface ComponentBreadcrumbProps {
+  editingStack?: EditingContextItem[];
+  onNavigate?: (level: number) => void;
+}
+
+function getContextIcon(item: EditingContextItem) {
+  switch (item.type) {
+    case 'page': return <FileText className="h-3 w-3" />;
+    case 'dialog': return <MessageSquare className="h-3 w-3" />;
+    default: return <FileText className="h-3 w-3" />;
+  }
+}
+
+function getContextLabel(item: EditingContextItem): string {
+  switch (item.type) {
+    case 'page': return 'Page';
+    case 'dialog': return item.dialogName || 'Dialog';
+    default: return 'Page';
+  }
+}
+
+export function ComponentBreadcrumb({ editingStack, onNavigate }: ComponentBreadcrumbProps) {
   const { appState, selectedItem, getItemById, getSelectorForId, dispatch } = usePuck();
   const itemSelector = appState.ui.itemSelector;
 
-  const breadcrumbs = useMemo(() => {
-    // Always start with Page as the root
+  // Build Puck component hierarchy breadcrumbs
+  const componentBreadcrumbs = useMemo(() => {
     const path: BreadcrumbItem[] = [];
 
-    // If nothing is selected, just return Page
+    // If nothing is selected, no component breadcrumbs
     if (!selectedItem || !itemSelector) {
-      return [{ id: 'root', label: 'Page', selector: { index: -1 } }];
+      return [];
     }
 
-    // Early return with just Page if no content (prevents zone access errors during deletion)
+    // Early return if no content
     if (!appState.data?.content || appState.data.content.length === 0) {
-      return [{ id: 'root', label: 'Page', selector: { index: -1 } }];
+      return [];
     }
 
     const visited = new Set<string>();
 
-    // Build path from current component up to root
+    // Find the ID of the selected item
     let currentId: string | undefined;
     let currentSelector = itemSelector;
 
-    // First, we need to find the ID of the selected item
-    // We'll traverse the zones to find it
     if (currentSelector.zone) {
-      // Extract the parent ID from zone format "parentId:slotName"
       const colonIndex = currentSelector.zone.lastIndexOf(":");
       if (colonIndex !== -1) {
         const parentId = currentSelector.zone.substring(0, colonIndex);
         const parent = getItemById(parentId);
 
-        // Get the actual selected item from parent's zone
         if (parent && parent.props && typeof parent.props === 'object') {
           const slotName = currentSelector.zone.substring(colonIndex + 1);
           const slot = parent.props[slotName];
@@ -92,63 +110,75 @@ export function ComponentBreadcrumb() {
       }
     }
 
-    // Always add Page as the root
-    path.push({
-      id: 'root',
-      label: 'Page',
-      selector: { index: -1 },
-    });
-
     // Reverse to show root -> current
     return path.reverse();
   }, [selectedItem, itemSelector, getItemById, getSelectorForId, appState.data?.content]);
 
-  // Create display path with ellipsis if needed
-  const displayPath = useMemo(() => {
-    if (breadcrumbs.length <= 3) {
-      return breadcrumbs;
+  // Create display path with ellipsis if needed for component hierarchy
+  const displayComponentPath = useMemo(() => {
+    if (componentBreadcrumbs.length <= 2) {
+      return componentBreadcrumbs;
     }
-    
-    // Show: first > ... > parent > current
-    return [
-      breadcrumbs[0],
-      { id: 'ellipsis', label: '...', selector: { index: -1 } },
-      breadcrumbs[breadcrumbs.length - 2],
-      breadcrumbs[breadcrumbs.length - 1],
-    ];
-  }, [breadcrumbs]);
 
-  const handleClick = (item: BreadcrumbItem) => {
-    if (item.id === 'ellipsis' || item.id === 'root') {
-      // For root, clear selection
-      dispatch({ type: "setUi", ui: { itemSelector: null } });
-    } else {
-      // Select the component
-      dispatch({ type: "setUi", ui: { itemSelector: item.selector } });
-    }
+    // Show: first > ... > current
+    return [
+      componentBreadcrumbs[0],
+      { id: 'ellipsis', label: '...', selector: { index: -1 } },
+      componentBreadcrumbs[componentBreadcrumbs.length - 1],
+    ];
+  }, [componentBreadcrumbs]);
+
+  const handleComponentClick = (item: BreadcrumbItem) => {
+    if (item.id === 'ellipsis') return;
+    dispatch({ type: "setUi", ui: { itemSelector: item.selector } });
   };
 
-  const fullPath = breadcrumbs.map(b => b.label).join(' > ');
+  const handleContextClick = (index: number) => {
+    // Clear component selection when navigating editing context
+    dispatch({ type: "setUi", ui: { itemSelector: null } });
+    onNavigate?.(index);
+  };
+
+  // Determine if we're at the last level (current editing context)
+  const isLastContextLevel = (index: number) => {
+    return editingStack && index === editingStack.length - 1;
+  };
 
   return (
-    <div 
-      className="px-4 py-2 border-b border-border bg-muted/30"
-      title={fullPath}
-    >
+    <div className="px-4 py-2 border-b border-border bg-muted/30">
       <div className="flex items-center gap-1 text-xs text-muted-foreground overflow-hidden">
-        {displayPath.map((item, index) => (
-          <React.Fragment key={`${item.id}-${index}`}>
+        {/* Editing context breadcrumbs */}
+        {editingStack?.map((item, index) => (
+          <React.Fragment key={`ctx-${index}`}>
             {index > 0 && (
               <ChevronRight className="h-3 w-3 shrink-0" />
             )}
+            <button
+              onClick={() => handleContextClick(index)}
+              disabled={isLastContextLevel(index) && displayComponentPath.length === 0}
+              className={cn(
+                "flex items-center gap-1 hover:text-foreground transition-colors truncate max-w-[100px]",
+                isLastContextLevel(index) && displayComponentPath.length === 0 && "text-foreground font-medium cursor-default"
+              )}
+            >
+              {getContextIcon(item)}
+              <span>{getContextLabel(item)}</span>
+            </button>
+          </React.Fragment>
+        ))}
+
+        {/* Component hierarchy breadcrumbs */}
+        {displayComponentPath.map((item, index) => (
+          <React.Fragment key={`comp-${item.id}-${index}`}>
+            <ChevronRight className="h-3 w-3 shrink-0" />
             {item.id === 'ellipsis' ? (
               <span className="shrink-0">...</span>
             ) : (
               <button
-                onClick={() => handleClick(item)}
+                onClick={() => handleComponentClick(item)}
                 className={cn(
                   "hover:text-foreground transition-colors truncate max-w-[80px]",
-                  index === displayPath.length - 1 && "text-foreground font-medium"
+                  index === displayComponentPath.length - 1 && "text-foreground font-medium"
                 )}
               >
                 {item.label}

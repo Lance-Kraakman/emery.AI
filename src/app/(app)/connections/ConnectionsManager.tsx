@@ -217,6 +217,21 @@ export function ConnectionsManager() {
     }
   }, [appsHasMore, appsLoadingMore, appsOffset, appsSearch]);
 
+  // Handle server-side search for Browse Apps tab
+  const handleAppsSearch = useCallback((term: string) => {
+    setAppsSearch(term);
+    setAppsOffset(0); // Reset pagination when search changes
+    // Note: loadAvailableApps will be triggered by the useEffect below
+  }, []);
+
+  // Trigger app reload when search term changes
+  useEffect(() => {
+    if (activeTab === 'browse') {
+      loadAvailableApps(true); // Reset to get fresh search results
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appsSearch]); // Only trigger on search change, not activeTab or loadAvailableApps
+
   const handleDisconnectAccount = async (accountId: string) => {
     console.log('🗑️ Disconnect button clicked for account:', accountId);
     
@@ -361,6 +376,8 @@ export function ConnectionsManager() {
               onDisconnect={handleDisconnectAccount}
               onReconnect={(appId) => handleConnectApp(appId, false, true)}
               onLoadMore={loadMoreApps}
+              onSearch={handleAppsSearch}
+              isSearching={appsLoading}
             />
           )}
         </TabsContent>

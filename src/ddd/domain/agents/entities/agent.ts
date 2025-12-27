@@ -4,7 +4,6 @@
 
 import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import {
   AgentId,
   OrganizationId,
@@ -17,44 +16,44 @@ import type { AvatarConfig } from '@/lib/avatars';
 // Domain-specific configuration types for Agent
 
 /**
- * Task instructions that define WHAT a schedule should do when triggered
+ * Maps trigger payload fields to skill inputs
+ * Used to extract data from trigger events and pass to skill execution
+ */
+export interface AutomationInputMapping {
+  triggerField: string;              // Path in trigger payload: "data.from", "rowData.email"
+  skillInputName: string;            // Skill input name to map to
+}
+
+/**
+ * Automation Configuration
+ * Combines trigger (WHEN) with skill reference (WHAT)
  *
- * AIDEV-NOTE: Aligned with smolagents API format (2025-01)
- * - task: Main instruction text → agent.run(task=...)
- * - images: Image URLs for vision models
- * - attachments: File metadata (preprocessed to text)
+ * AIDEV-NOTE: Replaces old ScheduleConfiguration
+ * - Skills determine HOW to execute (agent, operation, tool, write)
+ * - Automations just wire up triggers to skills with input mappings
  */
-export interface TaskInstructions {
-  task: string;                     // Main instruction text (required)
-  images?: Array<{ url: string; s3Key?: string }>;       // Image attachments
-  attachments?: Array<{                                  // File attachments (preprocessed)
-    type: 'pdf' | 'audio' | 'document' | 'text';
-    url: string;
-    filename: string;
-    mimeType: string;
-    preprocessed: true;              // Flag indicating text already extracted
-  }>;
-  tools?: ToolConfig[];             // Tools to use for this specific task
-  metadata?: Record<string, any>;   // Additional task metadata
-}
-
-/**
- * Complete schedule configuration
- * Combines trigger (WHEN) with task instructions (WHAT)
- */
-export interface ScheduleConfiguration {
-  trigger: TriggerConfig;          // WHEN to execute
-  taskInstructions: TaskInstructions; // WHAT to execute
+export interface AutomationConfiguration {
+  trigger: TriggerConfig;              // WHEN to execute
+  skillId: number;                     // Reference to skill (WHAT to execute)
+  inputMappings?: AutomationInputMapping[]; // Map trigger payload → skill inputs
   enabled: boolean;
-  name?: string;                   // Descriptive name (e.g., "Daily Sales Report")
-  description?: string;            // Optional description
+  name?: string;                       // Descriptive name (e.g., "Sync Gmail to Table")
+  description?: string;                // Optional description
 }
 
 /**
- * JSON representation of ScheduleConfiguration for database persistence
+ * JSON representation of AutomationInputMapping for database persistence
+ */
+export interface AutomationInputMappingJSON {
+  triggerField: string;
+  skillInputName: string;
+}
+
+/**
+ * JSON representation of AutomationConfiguration for database persistence
  * Plain JSON structure with all Value Objects converted to primitives
  */
-export interface ScheduleConfigurationJSON {
+export interface AutomationConfigurationJSON {
   trigger: {
     type: string;
     enabled: boolean;
@@ -72,20 +71,16 @@ export interface ScheduleConfigurationJSON {
     webhookSecret?: string;
     allowedOrigins?: string[];
     requiresSignature?: boolean;
+    // Pipedream event trigger fields (NEW)
+    connectionId?: string;
+    triggerType?: string;
+    props?: Record<string, any>;
+    pipedreamSourceId?: string;
+    pipedreamWebhookId?: string;
+    pipedreamSubscriptionId?: string;
   };
-  taskInstructions: {
-    task: string;
-    images?: Array<{ url: string; s3Key?: string }>;
-    attachments?: Array<{
-      type: 'pdf' | 'audio' | 'document' | 'text';
-      url: string;
-      filename: string;
-      mimeType: string;
-      preprocessed: true;
-    }>;
-    tools?: Array<{ name: string; config: Record<string, any> }>;
-    metadata?: Record<string, any>;
-  };
+  skillId: number;
+  inputMappings?: AutomationInputMappingJSON[];
   enabled: boolean;
   name?: string;
   description?: string;
@@ -97,7 +92,7 @@ export interface Agent {
   role: string;                               // required with default 'assistant'
   description: string;                        // required with default ''
   persona: string;                            // required with default ''
-  schedules: ScheduleConfiguration[];         // array of schedule configurations with task instructions (0 to many)
+  automations: AutomationConfiguration[];     // array of automation configurations (0 to many)
   databaseId?: string | null;                 // optional - can be null
   status: AgentStatus;                        // required with default 'active'
   organizationId: OrganizationId;             // DDD Value Object for type safety
@@ -116,7 +111,7 @@ export interface AgentPersistenceRecord {
   role: string;
   description: string;
   persona: string;
-  schedules: ScheduleConfigurationJSON[];
+  automations: AutomationConfigurationJSON[];
   databaseId?: string | null;
   status: string;
   organizationId: number;
@@ -137,20 +132,16 @@ export class AgentFactory {
       role: record.role,
       description: record.description,
       persona: record.persona,
-      schedules: (record.schedules || []).map((s: any) => ({
-        trigger: TriggerConfigFromJSON(s.trigger),
-        taskInstructions: {
-          task: s.taskInstructions.task || s.taskInstructions.instructions || '', // Support both old and new format
-          images: s.taskInstructions.images || [],
-          attachments: s.taskInstructions.attachments || [],
-          tools: (s.taskInstructions.tools || []).map((t: any) =>
-            t instanceof ToolConfig ? t : ToolConfig.fromPlain(t)
-          ),
-          metadata: s.taskInstructions.metadata
-        },
-        enabled: s.enabled !== false,
-        name: s.name,
-        description: s.description
+      automations: (record.automations || []).map((a: AutomationConfigurationJSON) => ({
+        trigger: TriggerConfigFromJSON(a.trigger),
+        skillId: a.skillId,
+        inputMappings: a.inputMappings?.map((m: AutomationInputMappingJSON) => ({
+          triggerField: m.triggerField,
+          skillInputName: m.skillInputName
+        })),
+        enabled: a.enabled !== false,
+        name: a.name,
+        description: a.description
       })),
       databaseId: record.databaseId,
       status: AgentStatus.fromString(record.status),
@@ -171,18 +162,16 @@ export class AgentFactory {
       role: agent.role,
       description: agent.description,
       persona: agent.persona,
-      schedules: agent.schedules.map(schedule => ({
-        trigger: schedule.trigger.toJSON() as ScheduleConfigurationJSON['trigger'],
-        taskInstructions: {
-          task: schedule.taskInstructions.task,
-          images: schedule.taskInstructions.images,
-          attachments: schedule.taskInstructions.attachments,
-          tools: (schedule.taskInstructions.tools || []).map(t => t.toPlain()),
-          metadata: schedule.taskInstructions.metadata
-        },
-        enabled: schedule.enabled,
-        name: schedule.name,
-        description: schedule.description
+      automations: agent.automations.map(automation => ({
+        trigger: automation.trigger.toJSON() as AutomationConfigurationJSON['trigger'],
+        skillId: automation.skillId,
+        inputMappings: automation.inputMappings?.map(m => ({
+          triggerField: m.triggerField,
+          skillInputName: m.skillInputName
+        })),
+        enabled: automation.enabled,
+        name: automation.name,
+        description: automation.description
       })),
       databaseId: agent.databaseId,
       status: agent.status.value,
@@ -202,7 +191,7 @@ export interface CreateAgentData {
   role?: string;                              // defaults to 'assistant'
   description?: string;                       // defaults to ''
   persona?: string;                           // defaults to ''
-  schedules?: ScheduleConfiguration[];        // array of schedules with task instructions (defaults to [])
+  automations?: AutomationConfiguration[];    // array of automations (defaults to [])
   databaseId?: string;
   status?: AgentStatus;                       // defaults to 'active'
   organizationId?: OrganizationId;            // Set by application layer from session
@@ -216,7 +205,7 @@ export interface UpdateAgentData {
   description?: string;
   persona?: string;
   ownerId?: UserId;
-  schedules?: ScheduleConfiguration[];  // Schedules with task instructions
+  automations?: AutomationConfiguration[];    // Automations (trigger + skill reference)
   databaseId?: string;
   status?: AgentStatus;
   apiKey?: string;  // API key updates for regeneration
@@ -248,8 +237,8 @@ export const getAgentDisplayName = (agent: Agent): string => {
   return agent.role !== 'assistant' ? `${agent.name} (${agent.role})` : agent.name;
 };
 
-export const getSchedulesCount = (agent: Agent): number => {
-  return agent.schedules?.length || 0;
+export const getAutomationsCount = (agent: Agent): number => {
+  return agent.automations?.length || 0;
 };
 
 // Default values for agent creation - ensures all required fields have defaults
@@ -257,7 +246,7 @@ export const createAgentDefaults = (data: CreateAgentData): Omit<CreateAgentData
   role: string;
   description: string;
   persona: string;
-  schedules: ScheduleConfiguration[];
+  automations: AutomationConfiguration[];
   status: AgentStatus;
   organizationId?: OrganizationId;
   ownerId?: UserId;
@@ -271,7 +260,7 @@ export const createAgentDefaults = (data: CreateAgentData): Omit<CreateAgentData
     role,
     description,
     persona,
-    schedules: data.schedules || [],
+    automations: data.automations || [],
     status: data.status || AgentStatus.active(),
     organizationId: data.organizationId, // Should be provided by application layer
     ownerId: data.ownerId, // Should be provided by application layer - used for OAuth resolution

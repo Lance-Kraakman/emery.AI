@@ -10,8 +10,9 @@
  * - Proto messages (proto/agent_worker.proto) - Transport layer only
  */
 
-import { Agent, ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
+import { Agent, AutomationConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import type { ExecutionSkill } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 
 import {
   AgentConfig as AgentConfigProto,
@@ -20,6 +21,7 @@ import {
   TaskRequest,
   TaskProgress as TaskProgressProto,
   TriggerData,
+  SkillInputValue,
   InstructionConfig as InstructionConfigProto
 } from './generated/agent_worker';
 import { Task, TaskStatus } from '@/ddd/domain/tasks/entities/task';
@@ -33,7 +35,7 @@ export interface AgentData {
   description?: string;
   persona?: string;
   tools?: ToolConfig[];
-  schedules?: ScheduleConfigurationJSON[];
+  automations?: AutomationConfigurationJSON[];
   status?: any;
   organizationId: number;
   ownerId: string;
@@ -125,40 +127,41 @@ export function createTaskRequest(params: {
     metadata?: Record<string, any>;
   };
   // Optional skill to execute (for skill-based task execution)
-  skill?: {
-    id: number;
-    name: string;
-    description: string;
-    instructions: string;
-    inputs: Array<{ name: string; required: boolean; type?: string; fileConfig?: any; default?: any }>;
-    outputs: Array<{ name: string; type?: string; mapping?: any }>;
-    tools: Array<{ name: string; version?: string; config?: Record<string, any> }>;
-    content: Array<any>; // MessagePart[] - flexible to match ExecutionSkill
-    model: string | null;
-    agentType: string | null;
-    executionType: 'agent' | 'operation';
-    taskModelConfig?: {
-      modelId: string;
-      taskType: string;
-      parameters?: Record<string, any>;
-    };
-  };
+  // AIDEV-NOTE: ExecutionSkill type now supports 'agent', 'operation', 'tool', 'write'
+  skill?: ExecutionSkill;
   agent: Agent;
-  triggerData: Record<string, any>;
+  // Typed skill inputs (name → value with type info)
+  skillInputs?: Array<{ name: string; type: string; value: unknown }>;
   organizationId: string;
   ownerId: string;
   timeoutSeconds?: number;
   agentModel?: string; // Agent default model (overrides organization model)
   organizationModel?: string; // Organization default model (fallback for agent model)
 }): TaskRequest {
-  // Convert trigger data to string map format expected by proto
-  const triggerPayload: Record<string, string> = {};
-  for (const [key, value] of Object.entries(params.triggerData)) {
-    triggerPayload[key] = typeof value === 'string' ? value : JSON.stringify(value);
-  }
+  // Build typed skill inputs for TriggerData
+  const skillInputValues: SkillInputValue[] = (params.skillInputs || []).map(input => {
+    const skillInputValue: SkillInputValue = {
+      name: input.name,
+      type: input.type
+    };
+
+    // Set appropriate oneof field based on value type
+    if (typeof input.value === 'string') {
+      skillInputValue.stringValue = input.value;
+    } else if (typeof input.value === 'number') {
+      skillInputValue.numberValue = input.value;
+    } else if (typeof input.value === 'boolean') {
+      skillInputValue.boolValue = input.value;
+    } else if (input.value !== null && input.value !== undefined) {
+      // Complex types (objects, arrays) → JSON string
+      skillInputValue.jsonValue = JSON.stringify(input.value);
+    }
+
+    return skillInputValue;
+  });
 
   const triggerData: TriggerData = {
-    payload: triggerPayload
+    skillInputs: skillInputValues
   };
 
   // Build the agent config, adding skill if provided
@@ -279,21 +282,28 @@ export function mapTaskProgressFromProto(progress: TaskProgressProto): {
 }
 
 /**
- * Extract trigger data from proto TriggerData back to TypeScript object
+ * Extract typed skill inputs from proto TriggerData back to TypeScript object
  */
 export function mapTriggerDataFromProto(triggerData: TriggerData): Record<string, any> {
   const result: Record<string, any> = {};
-  
-  for (const [key, value] of Object.entries(triggerData.payload || {})) {
-    try {
-      // Try to parse as JSON first
-      result[key] = JSON.parse(value);
-    } catch {
-      // If parsing fails, use as string
-      result[key] = value;
+
+  for (const input of triggerData.skillInputs || []) {
+    // Extract value from appropriate oneof field
+    if (input.stringValue !== undefined) {
+      result[input.name] = input.stringValue;
+    } else if (input.numberValue !== undefined) {
+      result[input.name] = input.numberValue;
+    } else if (input.boolValue !== undefined) {
+      result[input.name] = input.boolValue;
+    } else if (input.jsonValue !== undefined) {
+      try {
+        result[input.name] = JSON.parse(input.jsonValue);
+      } catch {
+        result[input.name] = input.jsonValue;
+      }
     }
   }
-  
+
   return result;
 }
 
@@ -397,29 +407,9 @@ function mapRowIdSourceToProto(source: RowIdSourceDTO): any {
 /**
  * Map EnrichedSkill/ExecutionSkill to protobuf SkillConfig
  * Used by both chat processing and task execution paths
+ * AIDEV-NOTE: Updated to accept SkillExecutionType which includes 'tool' and 'write'
  */
-export function mapSkillToProto(skill: {
-  id: number;
-  name: string;
-  description: string;
-  instructions: string;
-  inputs: Array<{ name: string; required: boolean; type?: string; fileConfig?: any; default?: any }>;
-  outputs: Array<{
-    name: string;
-    type?: string;
-    outputMapping?: OutputMappingConfigDTO;
-  }>;
-  tools: Array<{ name: string; version?: string; config?: Record<string, any> }>;
-  content: Array<any>; // MessagePart[] - flexible to support various content formats
-  model: string | null;
-  agentType: string | null;
-  executionType: 'agent' | 'operation';
-  taskModelConfig?: {
-    modelId: string;
-    taskType: string;
-    parameters?: Record<string, any>;
-  };
-}): SkillConfigProto {
+export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
   return {
     id: skill.id,
     name: skill.name,
@@ -435,38 +425,42 @@ export function mapSkillToProto(skill: {
         multiple: input.fileConfig.multiple || false
       } : undefined
     })),
-    outputs: skill.outputs.map(output => ({
-      name: output.name,
-      type: output.type || 'text', // Default to 'text' for proto compatibility
-      outputMapping: output.outputMapping ? {
-        mode: output.outputMapping.mode || 'single_row',
-        tableMappings: output.outputMapping.tableMappings.map(tm => ({
-          order: tm.order,
-          targetTableId: tm.targetTableId,
-          rowAction: tm.rowAction || 'create',
-          rowIdSource: tm.rowIdSource ? mapRowIdSourceToProto(tm.rowIdSource) : undefined,
-          displayFieldId: tm.displayFieldId || 0,
-          mode: tm.mode || '',
-          mappings: tm.mappings
-            .map(m => {
-              const source = mapFieldSourceToProto(m.source);
-              if (!source) return null; // Skip mappings with invalid sources
-              return {
-                source,
-                targetFieldId: m.targetFieldId,
-                targetFieldMetadata: m.targetFieldMetadata ? {
-                  fieldType: m.targetFieldMetadata.fieldType || '',
-                  options: m.targetFieldMetadata.options || [],
-                  maxSelections: m.targetFieldMetadata.maxSelections,
-                  fieldName: m.targetFieldMetadata.fieldName || ''
-                } : undefined,
-                appendMode: m.appendMode || false
-              };
-            })
-            .filter((m): m is NonNullable<typeof m> => m !== null)
-        }))
-      } : undefined
-    })),
+    outputs: skill.outputs.map(output => {
+      // ExecutionSkill uses 'mapping' field, map it to proto's 'outputMapping'
+      const outputMapping = output.mapping as OutputMappingConfigDTO | undefined;
+      return {
+        name: output.name,
+        type: output.type || 'text', // Default to 'text' for proto compatibility
+        outputMapping: outputMapping ? {
+          mode: outputMapping.mode || 'single_row',
+          tableMappings: outputMapping.tableMappings.map((tm: TableMappingDTO) => ({
+            order: tm.order,
+            targetTableId: tm.targetTableId,
+            rowAction: tm.rowAction || 'create',
+            rowIdSource: tm.rowIdSource ? mapRowIdSourceToProto(tm.rowIdSource) : undefined,
+            displayFieldId: tm.displayFieldId || 0,
+            mode: tm.mode || '',
+            mappings: tm.mappings
+              .map((m: any) => {
+                const source = mapFieldSourceToProto(m.source);
+                if (!source) return null; // Skip mappings with invalid sources
+                return {
+                  source,
+                  targetFieldId: m.targetFieldId,
+                  targetFieldMetadata: m.targetFieldMetadata ? {
+                    fieldType: m.targetFieldMetadata.fieldType || '',
+                    options: m.targetFieldMetadata.options || [],
+                    maxSelections: m.targetFieldMetadata.maxSelections,
+                    fieldName: m.targetFieldMetadata.fieldName || ''
+                  } : undefined,
+                  appendMode: m.appendMode || false
+                };
+              })
+              .filter((m: any): m is NonNullable<typeof m> => m !== null)
+          }))
+        } : undefined
+      };
+    }),
     tools: skill.tools.map(tool => mapToolToProto(
       tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
     )),
@@ -498,6 +492,28 @@ export function mapSkillToProto(skill: {
       parameters: Object.fromEntries(
         Object.entries(skill.taskModelConfig.parameters || {}).map(([k, v]) => [k, String(v)])
       )
+    } : undefined,
+    // Map tool execution config for 'tool' execution type
+    toolExecutionConfig: skill.toolExecutionConfig ? {
+      toolId: skill.toolExecutionConfig.toolId,
+      inputMappings: skill.toolExecutionConfig.inputMappings.map(m => ({
+        toolParam: m.toolParam,
+        skillInputName: m.skillInputName || '',
+        staticValue: m.staticValue !== undefined ? String(m.staticValue) : ''
+      }))
+    } : undefined,
+    // Map write config for 'write' execution type
+    writeConfig: skill.writeConfig ? {
+      targetTableId: skill.writeConfig.targetTableId,
+      rowAction: skill.writeConfig.rowAction,
+      fieldMappings: skill.writeConfig.fieldMappings.map(m => ({
+        skillInputName: m.skillInputName,
+        targetFieldId: m.targetFieldId
+      })),
+      updateMatch: skill.writeConfig.updateMatch ? {
+        skillInputName: skill.writeConfig.updateMatch.skillInputName,
+        targetFieldId: skill.writeConfig.updateMatch.targetFieldId
+      } : undefined
     } : undefined
   };
 }

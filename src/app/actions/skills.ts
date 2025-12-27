@@ -13,6 +13,7 @@ import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import type { SkillExecutionType, ToolExecutionConfig, WriteConfig } from '@/ddd/domain/skills/entities/skill';
 
 /**
  * Server Actions for Skill Management
@@ -42,8 +43,10 @@ export async function createSkill(command: {
   tools: ToolConfigDTO[];
   model?: string | null;
   agentType?: string | null; // "tool_calling" (default) or "code_agent"
-  executionType?: 'agent' | 'operation';
+  executionType?: SkillExecutionType;
   taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
+  toolExecutionConfig?: ToolExecutionConfig;
+  writeConfig?: WriteConfig;
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -136,8 +139,10 @@ export async function createOrganizationSkill(command: {
   tools: ToolConfigDTO[];
   model?: string | null;
   agentType?: string | null; // "tool_calling" (default) or "code_agent"
-  executionType?: 'agent' | 'operation';
+  executionType?: SkillExecutionType;
   taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
+  toolExecutionConfig?: ToolExecutionConfig;
+  writeConfig?: WriteConfig;
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -236,8 +241,10 @@ export async function updateSkill(
     tools?: ToolConfigDTO[];
     model?: string | null;
     agentType?: string | null; // "tool_calling" (default) or "code_agent"
-    executionType?: 'agent' | 'operation';
+    executionType?: SkillExecutionType;
     taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> } | null;
+    toolExecutionConfig?: ToolExecutionConfig | null;
+    writeConfig?: WriteConfig | null;
     content?: MessagePart[]; // Skill-level attachments
   }
 ): Promise<Result<SkillDTO>> {

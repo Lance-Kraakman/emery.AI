@@ -3,8 +3,7 @@
  *
  * AIDEV-NOTE: Provides string interpolation for displaying dynamic values in text.
  * Supports patterns like:
- * - {state.key} - State values (flat namespace)
- * - {params.name} - URL parameters
+ * - {state.key} - State values (flat namespace, auto-populated from URL params)
  * - {rowData.field} - Row data fields
  *
  * This is different from ValueSource resolution:
@@ -22,9 +21,9 @@ import type { ValueResolutionContext } from '../types/value-source';
 
 /**
  * Pattern to match variable references in text
- * Matches: {state.key}, {params.name}, {rowData.field}
+ * Matches: {state.key}, {rowData.field}
  */
-const VARIABLE_PATTERN = /\{(state|params|rowData)\.([^}]+)\}/g;
+const VARIABLE_PATTERN = /\{(state|rowData)\.([^}]+)\}/g;
 
 /**
  * Check if a string contains any variable references
@@ -43,12 +42,12 @@ export function hasVariableReferences(text: string): boolean {
  */
 export function extractVariableReferences(text: string): Array<{
   match: string;
-  type: 'state' | 'params' | 'rowData';
+  type: 'state' | 'rowData';
   path: string;
 }> {
   const references: Array<{
     match: string;
-    type: 'state' | 'params' | 'rowData';
+    type: 'state' | 'rowData';
     path: string;
   }> = [];
 
@@ -59,7 +58,7 @@ export function extractVariableReferences(text: string): Array<{
   while ((match = VARIABLE_PATTERN.exec(text)) !== null) {
     references.push({
       match: match[0],
-      type: match[1] as 'state' | 'params' | 'rowData',
+      type: match[1] as 'state' | 'rowData',
       path: match[2],
     });
   }
@@ -71,7 +70,7 @@ export function extractVariableReferences(text: string): Array<{
  * Resolve a single variable reference to a string value
  */
 function resolveVariable(
-  type: 'state' | 'params' | 'rowData',
+  type: 'state' | 'rowData',
   path: string,
   context: ValueResolutionContext
 ): string {
@@ -84,16 +83,6 @@ function resolveVariable(
       }
 
       const value = context.getStateValue(path);
-      return formatValue(value);
-    }
-
-    case 'params': {
-      if (!context.params) {
-        console.warn(`[interpolateText] No params context for: params.${path}`);
-        return `{params.${path}}`;
-      }
-
-      const value = context.params[path];
       return formatValue(value);
     }
 
@@ -173,7 +162,7 @@ export function interpolateText(
   VARIABLE_PATTERN.lastIndex = 0;
 
   return text.replace(VARIABLE_PATTERN, (match, type, path) => {
-    return resolveVariable(type as 'state' | 'params' | 'rowData', path, context);
+    return resolveVariable(type as 'state' | 'rowData', path, context);
   });
 }
 

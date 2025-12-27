@@ -1,7 +1,7 @@
 /**
  * StateKeyField - Custom Puck field for selecting state keys
  *
- * A dropdown field for selecting UI flags or state variables from PageStateConfig.
+ * A dropdown field for selecting state variables from PageStateConfig.
  * Used by ConditionalBlock and DialogBlock.
  *
  * Usage:
@@ -11,24 +11,23 @@
  * export const DialogBlock: ComponentConfig = {
  *   fields: {
  *     stateKey: createStateKeyField({
- *       label: 'UI Flag',
- *       keyType: 'uiFlag',
- *       placeholder: 'Select a UI flag...'
+ *       label: 'State Variable',
+ *       placeholder: 'Select a variable...'
  *     })
  *   }
  * }
  * ```
  */
 
-import { StateKeyPicker, type StateKeyType } from '../fields/StateKeyPicker';
+import { StateKeyPicker } from '../fields/StateKeyPicker';
 
 export interface StateKeyFieldOptions {
   /** Label shown above the field */
   label?: string;
   /** Placeholder text when empty */
   placeholder?: string;
-  /** Filter: 'uiFlag' | 'variable' | 'all' */
-  keyType?: StateKeyType;
+  /** Optional filter for variable type (e.g., 'boolean' for dialogs) */
+  filterType?: string;
 }
 
 /**
@@ -52,7 +51,7 @@ export function createStateKeyField(options: StateKeyFieldOptions = {}) {
         value: props.value || '',
         onChange: props.onChange,
         placeholder: options.placeholder,
-        keyType: options.keyType,
+        filterType: options.filterType,
         disabled: props.readOnly,
       }),
   };

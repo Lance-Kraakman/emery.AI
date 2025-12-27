@@ -14,8 +14,11 @@ import { SkillOutputsSection } from './editor/SkillOutputsSection';
 import { ExecutionTypeToggle } from './editor/ExecutionTypeToggle';
 import { TaskModelForm } from './editor/TaskModelForm';
 import { OutputMappingSection } from './editor/OutputMappingSection';
+import { ToolExecutionConfigForm } from './editor/ToolExecutionConfigForm';
+import { WriteConfigForm } from './editor/WriteConfigForm';
 import type { ToolConfigDTO, SkillInput, SkillOutput } from '@/app/mappers/skill-mapper';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import type { SkillExecutionType } from '@/ddd/domain/skills/entities/skill';
 
 export interface SkillFormData {
   name: string;
@@ -28,13 +31,29 @@ export interface SkillFormData {
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   content?: MessagePart[]; // Existing uploaded attachments
   pendingAttachments?: File[]; // New attachments to upload on save
-  // Execution type: 'agent' (default) or 'operation' (direct model invocation)
-  executionType?: 'agent' | 'operation';
+  // Execution type determines how the skill runs:
+  // - 'agent': LLM orchestration with tools (default)
+  // - 'operation': Direct AI model inference (e.g., speech-to-text)
+  // - 'tool': Direct Pipedream tool call (no LLM)
+  // - 'write': Direct table write (no LLM)
+  executionType?: SkillExecutionType;
   // Configuration for operation execution (required when executionType is 'operation')
   taskModelConfig?: {
     modelId: string;
     taskType: string;
     parameters?: Record<string, any>;
+  };
+  // Configuration for tool execution (required when executionType is 'tool')
+  toolExecutionConfig?: {
+    toolId: string;
+    inputMappings: Array<{ toolParam: string; skillInputName?: string; staticValue?: any }>;
+  };
+  // Configuration for write execution (required when executionType is 'write')
+  writeConfig?: {
+    targetTableId: number;
+    rowAction: 'create' | 'update';
+    fieldMappings: Array<{ skillInputName: string; targetFieldId: number }>;
+    updateMatch?: { skillInputName: string; targetFieldId: number };
   };
 }
 
@@ -75,7 +94,7 @@ export function SkillEditor({
   const [localValue, setLocalValue] = useState(value);
   const [showDescription, setShowDescription] = useState(false);
 
-  // Separate state for Agent and Direct mode inputs/outputs
+  // Separate state for each execution mode's inputs/outputs
   // This preserves user's work when switching between modes
   const [savedAgentState, setSavedAgentState] = useState<{
     inputs: SkillInput[];
@@ -90,6 +109,16 @@ export function SkillEditor({
     instructions: string;
     taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
   }>({ inputs: [], outputs: [], instructions: '' });
+
+  const [savedToolState, setSavedToolState] = useState<{
+    inputs: SkillInput[];
+    toolExecutionConfig?: SkillFormData['toolExecutionConfig'];
+  }>({ inputs: [] });
+
+  const [savedWriteState, setSavedWriteState] = useState<{
+    inputs: SkillInput[];
+    writeConfig?: SkillFormData['writeConfig'];
+  }>({ inputs: [] });
 
   // Sync with external value changes
   useEffect(() => {
@@ -179,13 +208,26 @@ export function SkillEditor({
               const currentMode = localValue.executionType || 'agent';
               if (currentMode === newMode) return;
 
-              // Save current state, restore target mode's saved state
+              // Save current state based on current mode
               if (currentMode === 'agent') {
                 setSavedAgentState({ inputs: localValue.inputs, outputs: localValue.outputs, instructions: localValue.instructions, tools: localValue.tools });
-                handleChange({ executionType: newMode, ...savedDirectState, tools: [] });
-              } else {
+              } else if (currentMode === 'operation') {
                 setSavedDirectState({ inputs: localValue.inputs, outputs: localValue.outputs, instructions: localValue.instructions, taskModelConfig: localValue.taskModelConfig });
-                handleChange({ executionType: newMode, ...savedAgentState, taskModelConfig: undefined });
+              } else if (currentMode === 'tool') {
+                setSavedToolState({ inputs: localValue.inputs, toolExecutionConfig: localValue.toolExecutionConfig });
+              } else if (currentMode === 'write') {
+                setSavedWriteState({ inputs: localValue.inputs, writeConfig: localValue.writeConfig });
+              }
+
+              // Restore target mode's saved state
+              if (newMode === 'agent') {
+                handleChange({ executionType: newMode, ...savedAgentState, taskModelConfig: undefined, toolExecutionConfig: undefined, writeConfig: undefined });
+              } else if (newMode === 'operation') {
+                handleChange({ executionType: newMode, ...savedDirectState, tools: [], toolExecutionConfig: undefined, writeConfig: undefined });
+              } else if (newMode === 'tool') {
+                handleChange({ executionType: newMode, inputs: savedToolState.inputs, outputs: [], instructions: '', tools: [], toolExecutionConfig: savedToolState.toolExecutionConfig, taskModelConfig: undefined, writeConfig: undefined });
+              } else if (newMode === 'write') {
+                handleChange({ executionType: newMode, inputs: savedWriteState.inputs, outputs: [], instructions: '', tools: [], writeConfig: savedWriteState.writeConfig, taskModelConfig: undefined, toolExecutionConfig: undefined });
               }
             }}
             disabled={isReadOnly}
@@ -261,138 +303,199 @@ export function SkillEditor({
             />
           )}
         </>
+      ) : localValue.executionType === 'tool' ? (
+        /* Tool Mode Form - Pipedream tool selector + input mappings */
+        <>
+          <ToolExecutionConfigForm
+            value={localValue.toolExecutionConfig}
+            onChange={(config) => handleChange({ toolExecutionConfig: config })}
+            skillInputs={localValue.inputs}
+            onSkillInputsChange={(inputs) => handleChange({ inputs })}
+            disabled={isReadOnly}
+          />
+
+          {/* Show skill inputs for reference/editing */}
+          {localValue.inputs.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm text-muted-foreground">Skill Inputs</Label>
+                <span className="text-xs text-muted-foreground">
+                  {localValue.inputs.length} input{localValue.inputs.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <SkillInputsSection
+                inputs={localValue.inputs}
+                onInputsChange={(inputs) => handleChange({ inputs })}
+                isReadOnly={isReadOnly}
+              />
+              <p className="text-xs text-muted-foreground">
+                These inputs were auto-generated from the tool&apos;s parameters.
+              </p>
+            </div>
+          )}
+        </>
+      ) : localValue.executionType === 'write' ? (
+        /* Write Mode Form - Inputs first, then table selector + field mappings */
+        <>
+          {/* Skill Inputs Section - FIRST */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm text-muted-foreground">Skill Inputs</Label>
+              <span className="text-xs text-muted-foreground">
+                {localValue.inputs.length} input{localValue.inputs.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <SkillInputsSection
+              inputs={localValue.inputs}
+              onInputsChange={(inputs) => handleChange({ inputs })}
+              isReadOnly={isReadOnly}
+            />
+            <p className="text-xs text-muted-foreground">
+              Define inputs that will be mapped to table fields.
+            </p>
+          </div>
+
+          {/* Table Write Configuration - AFTER inputs */}
+          <WriteConfigForm
+            value={localValue.writeConfig}
+            onChange={(config) => handleChange({ writeConfig: config })}
+            skillInputs={localValue.inputs}
+            onSkillInputsChange={(inputs) => handleChange({ inputs })}
+            disabled={isReadOnly}
+          />
+        </>
       ) : (
-        /* Agent Form (existing) */
+        /* Agent Form (default) */
         <>
           {/* Inputs Section */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-sm text-muted-foreground">Inputs</Label>
-          <span className="text-xs text-muted-foreground">
-            {localValue.inputs.length} input{localValue.inputs.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-        <SkillInputsSection
-          inputs={localValue.inputs}
-          onInputsChange={(inputs) => handleChange({ inputs })}
-          isReadOnly={isReadOnly}
-        />
-        <p className="text-xs text-muted-foreground">
-          Reference inputs in instructions using {'{input_name}'} syntax
-        </p>
-      </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm text-muted-foreground">Inputs</Label>
+              <span className="text-xs text-muted-foreground">
+                {localValue.inputs.length} input{localValue.inputs.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <SkillInputsSection
+              inputs={localValue.inputs}
+              onInputsChange={(inputs) => handleChange({ inputs })}
+              isReadOnly={isReadOnly}
+            />
+            <p className="text-xs text-muted-foreground">
+              Reference inputs in instructions using {'{input_name}'} syntax
+            </p>
+          </div>
 
-      {/* Instructions Section */}
-      <div className="space-y-3">
-        <Label className="text-base font-semibold">Instructions</Label>
+          {/* Instructions Section */}
+          <div className="space-y-3">
+            <Label className="text-base font-semibold">Instructions</Label>
 
-        {/* Selected Tools Display - ABOVE instructions (like chat UI) */}
-        {localValue.tools.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            {localValue.tools.map((tool, index) => (
-              <div key={index} className="relative flex items-center group">
-                <div
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs
-                    transition-colors duration-150 flex-shrink-0 max-w-xs
-                    border-border bg-background hover:bg-muted/50"
-                  title={tool.config?.displayName || tool.name}
-                >
-                  <span className="truncate font-medium">
-                    {tool.config?.displayName || tool.name}
-                  </span>
-                </div>
+            {/* Selected Tools Display - ABOVE instructions (like chat UI) */}
+            {localValue.tools.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {localValue.tools.map((tool, index) => (
+                  <div key={index} className="relative flex items-center group">
+                    <div
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs
+                        transition-colors duration-150 flex-shrink-0 max-w-xs
+                        border-border bg-background hover:bg-muted/50"
+                      title={tool.config?.displayName || tool.name}
+                    >
+                      <span className="truncate font-medium">
+                        {tool.config?.displayName || tool.name}
+                      </span>
+                    </div>
 
-                {/* Remove button (hide when read-only) */}
-                {!isReadOnly && (
-                  <button
-                    onClick={() => {
-                      const newTools = localValue.tools.filter((_, i) => i !== index);
-                      handleChange({ tools: newTools });
-                    }}
-                    className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Remove tool"
-                  >
-                    <X className="w-2 h-2" />
-                  </button>
-                )}
+                    {/* Remove button (hide when read-only) */}
+                    {!isReadOnly && (
+                      <button
+                        onClick={() => {
+                          const newTools = localValue.tools.filter((_, i) => i !== index);
+                          handleChange({ tools: newTools });
+                        }}
+                        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Remove tool"
+                      >
+                        <X className="w-2 h-2" />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+
+            <InstructionsInput
+              value={localValue.instructions}
+              onChange={(text) => handleChange({ instructions: text })}
+              onToolsChange={(tools) => handleChange({ tools })}
+              tools={localValue.tools}
+              stepIndex={0}
+              pendingAttachments={localValue.pendingAttachments}
+              onAttachmentAdd={handleAttachmentAdd}
+              onAttachmentRemove={handleAttachmentRemove}
+              existingAttachments={existingAttachments}
+              onExistingAttachmentRemove={handleExistingAttachmentRemove}
+              isReadOnly={isReadOnly}
+            />
+
+            <p className="text-xs text-muted-foreground">
+              Type @ to reference tools, documents, or other skills. Selected tools will appear above.
+            </p>
           </div>
-        )}
 
-        <InstructionsInput
-          value={localValue.instructions}
-          onChange={(text) => handleChange({ instructions: text })}
-          onToolsChange={(tools) => handleChange({ tools })}
-          tools={localValue.tools}
-          stepIndex={0}
-          pendingAttachments={localValue.pendingAttachments}
-          onAttachmentAdd={handleAttachmentAdd}
-          onAttachmentRemove={handleAttachmentRemove}
-          existingAttachments={existingAttachments}
-          onExistingAttachmentRemove={handleExistingAttachmentRemove}
-          isReadOnly={isReadOnly}
-        />
-
-        <p className="text-xs text-muted-foreground">
-          Type @ to reference tools, documents, or other skills. Selected tools will appear above.
-        </p>
-      </div>
-
-      {/* Outputs Section */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-sm text-muted-foreground">Outputs</Label>
-          <span className="text-xs text-muted-foreground">
-            {localValue.outputs.length} output{localValue.outputs.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-        <SkillOutputsSection
-          outputs={localValue.outputs}
-          onOutputsChange={(outputs) => handleChange({ outputs })}
-          isReadOnly={isReadOnly}
-        />
-        <p className="text-xs text-muted-foreground">
-          Define what data this skill returns
-        </p>
-      </div>
-
-      {/* Output Mapping Section - for Agent mode */}
-      <OutputMappingSection
-        outputs={localValue.outputs}
-        onOutputsChange={(outputs) => handleChange({ outputs })}
-        executionType="agent"
-        skillOutputs={localValue.outputs}
-        skillInputs={localValue.inputs}
-        isReadOnly={isReadOnly}
-      />
-
-      {/* Agent Type - Only show if non-default value needed */}
-      <div className="flex items-center gap-2">
-        <Label className="text-xs text-muted-foreground">Agent Type:</Label>
-        <Select
-          value={localValue.agentType || 'tool_calling'}
-          onValueChange={(agentType) => handleChange({ agentType: agentType === 'tool_calling' ? null : agentType })}
-          disabled={isReadOnly}
-        >
-          <SelectTrigger className="h-7 w-[140px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="tool_calling">Tool Calling</SelectItem>
-            <SelectItem value="code_agent">Code Agent</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="group relative">
-          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-          <div className="invisible group-hover:visible absolute left-0 top-5 z-50 w-72 rounded-md bg-popover p-3 text-xs text-popover-foreground shadow-md border">
-            <p className="font-medium mb-1">Tool Calling (Default)</p>
-            <p className="text-muted-foreground mb-2">Calls tools using structured function calls. More reliable and predictable.</p>
-            <p className="font-medium mb-1">Code Agent</p>
-            <p className="text-muted-foreground">Writes Python code to execute tools. Better for complex multi-step reasoning.</p>
+          {/* Outputs Section */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm text-muted-foreground">Outputs</Label>
+              <span className="text-xs text-muted-foreground">
+                {localValue.outputs.length} output{localValue.outputs.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <SkillOutputsSection
+              outputs={localValue.outputs}
+              onOutputsChange={(outputs) => handleChange({ outputs })}
+              isReadOnly={isReadOnly}
+            />
+            <p className="text-xs text-muted-foreground">
+              Define what data this skill returns
+            </p>
           </div>
-        </div>
-      </div>
+
+          {/* Output Mapping Section - for Agent mode */}
+          <OutputMappingSection
+            outputs={localValue.outputs}
+            onOutputsChange={(outputs) => handleChange({ outputs })}
+            executionType="agent"
+            skillOutputs={localValue.outputs}
+            skillInputs={localValue.inputs}
+            isReadOnly={isReadOnly}
+          />
+
+          {/* Agent Type - Only show if non-default value needed */}
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground">Agent Type:</Label>
+            <Select
+              value={localValue.agentType || 'tool_calling'}
+              onValueChange={(agentType) => handleChange({ agentType: agentType === 'tool_calling' ? null : agentType })}
+              disabled={isReadOnly}
+            >
+              <SelectTrigger className="h-7 w-[140px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tool_calling">Tool Calling</SelectItem>
+                <SelectItem value="code_agent">Code Agent</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="group relative">
+              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+              <div className="invisible group-hover:visible absolute left-0 top-5 z-50 w-72 rounded-md bg-popover p-3 text-xs text-popover-foreground shadow-md border">
+                <p className="font-medium mb-1">Tool Calling (Default)</p>
+                <p className="text-muted-foreground mb-2">Calls tools using structured function calls. More reliable and predictable.</p>
+                <p className="font-medium mb-1">Code Agent</p>
+                <p className="text-muted-foreground">Writes Python code to execute tools. Better for complex multi-step reasoning.</p>
+              </div>
+            </div>
+          </div>
         </>
       )}
     </div>

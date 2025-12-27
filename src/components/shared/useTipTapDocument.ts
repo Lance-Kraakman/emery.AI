@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { useEditor, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import Image from '@tiptap/extension-image';
 import { Table } from '@tiptap/extension-table';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
@@ -16,6 +15,9 @@ import Color from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
 import { fetchTiptapDocumentContent, updateTiptapDocumentContent } from '@/app/actions/artifacts';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
+import { FileAttachment } from './tiptap-extensions/FileAttachmentNode';
+import { FileUploadHandler } from './tiptap-extensions/FileUploadHandler';
+import { S3Image } from './tiptap-extensions/S3Image';
 
 const logger = createDebugLogger('useTipTapDocument');
 
@@ -147,7 +149,7 @@ export function useTipTapDocument({
         emptyEditorClass: 'is-editor-empty',
         emptyNodeClass: 'is-empty',
       }),
-      Image,
+      S3Image,  // Custom image node that stores s3Key for persistence
       Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
@@ -157,6 +159,26 @@ export function useTipTapDocument({
       Color,
       Highlight.configure({ multicolor: true }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      // File attachment support
+      FileAttachment,
+      FileUploadHandler.configure({
+        organizationId,
+        tableId,
+        fieldId,
+        onUploadStart: () => {
+          logger.debug('File upload started');
+        },
+        onUploadComplete: () => {
+          logger.debug('File upload completed');
+          setHasChanges(true);
+          setContentRecentlyChanged(true);
+          onContentChange?.(true);
+        },
+        onUploadError: (errorMsg: string) => {
+          logger.error('File upload error:', errorMsg);
+          onError?.(new Error(errorMsg));
+        },
+      }),
     ],
     content: '<p>Loading document content...</p>',
     editable: allowEdit,
@@ -168,17 +190,23 @@ export function useTipTapDocument({
       setContentRecentlyChanged(true);
       onContentChange?.(true);
     },
-  }, [allowEdit]);
+  }, [allowEdit, organizationId, tableId, fieldId]);
 
   // Update editor content when loaded (only once per document)
   useEffect(() => {
     if (editor && content && contentLoaded && !hasInitializedEditor.current) {
+      console.log('[useTipTapDocument] Setting editor content:', JSON.stringify(content));
+
       if (typeof content === 'string') {
         editor.commands.setContent(content, { emitUpdate: false });
       } else if (content && typeof content === 'object' && content.type === 'doc') {
         editor.commands.setContent(content, { emitUpdate: false });
       }
       hasInitializedEditor.current = true;
+
+      // Log what nodes are in the editor after setting content
+      const json = editor.getJSON();
+      console.log('[useTipTapDocument] Editor JSON after setContent:', JSON.stringify(json));
     }
   }, [editor, content, contentLoaded]);
 
@@ -198,12 +226,16 @@ export function useTipTapDocument({
         try {
           onSaveStart?.();
           const currentContent = editor.getJSON();
+          console.log('[useTipTapDocument] Auto-save getJSON() result:', JSON.stringify(currentContent));
+          // CRITICAL: Use JSON.parse(JSON.stringify()) to create a plain object
+          // Next.js server actions can lose nested properties on TipTap objects
+          const plainContent = JSON.parse(JSON.stringify(currentContent));
           const result = await updateTiptapDocumentContent(
             documentId,
             organizationId,
             tableId,
             fieldId,
-            currentContent
+            plainContent
           );
 
           if (result.success) {
@@ -243,13 +275,16 @@ export function useTipTapDocument({
     try {
       onSaveStart?.();
       const tiptapContent = editor.getJSON();
+      // CRITICAL: Use JSON.parse(JSON.stringify()) to create a plain object
+      // Next.js server actions can lose nested properties on TipTap objects
+      const plainContent = JSON.parse(JSON.stringify(tiptapContent));
 
       const result = await updateTiptapDocumentContent(
         documentId,
         organizationId,
         tableId,
         fieldId,
-        tiptapContent
+        plainContent
       );
 
       if (result.success) {

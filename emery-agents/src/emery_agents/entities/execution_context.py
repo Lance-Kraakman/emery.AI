@@ -66,6 +66,10 @@ class ExecutionContext:
     # Environment data
     environment: Dict[str, Any] = field(default_factory=dict)
 
+    # Runtime skill inputs from automation inputMappings
+    # These are resolved from trigger_data.payload and passed to execute_skill(runtime_inputs=...)
+    skill_inputs: Dict[str, Any] = field(default_factory=dict)
+
     @property
     def is_skill_mode(self) -> bool:
         """Check if execution is skill-based."""
@@ -95,5 +99,6 @@ class ExecutionContext:
             agent_model=self.agent_model,
             org_model=self.org_model,
             api_key=self.api_key,
-            environment=self.environment.copy()
+            environment=self.environment.copy(),
+            skill_inputs=self.skill_inputs.copy()
         )

@@ -51,8 +51,6 @@ export interface PuckEditorThemeProviderProps {
 
 export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEditorThemeProviderProps) {
   const [currentTheme, setCurrentTheme] = useState<ThemeConfig>(() => {
-    console.log('[PuckEditorTheme] useState initializer - Initializing theme');
-
     // Priority: sessionStorage > page theme > app theme
     // This prevents updateLiveTheme from being called with wrong theme on mount
 
@@ -64,21 +62,18 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
     try {
       const savedTheme = PuckSession.getTheme(pageId);
       if (savedTheme) {
-        console.log('[PuckEditorTheme] useState initializer - Found sessionStorage theme');
         return ThemeConfig.merge(appTheme, ThemeConfig.create(savedTheme));
       }
     } catch (err) {
-      console.error('[PuckEditorTheme] useState initializer - Error loading sessionStorage:', err);
+      // Silently ignore sessionStorage errors
     }
 
     // Then check page theme
     if (page.themeConfig) {
-      console.log('[PuckEditorTheme] useState initializer - Using page theme');
       return ThemeConfig.merge(appTheme, ThemeConfig.create(page.themeConfig));
     }
 
     // Finally fall back to app theme
-    console.log('[PuckEditorTheme] useState initializer - Using app theme');
     return appTheme;
   });
 
@@ -97,13 +92,8 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
 
   // Initialize theme on mount
   useEffect(() => {
-    console.log('[PuckEditorTheme] useEffect - Initializing theme');
-    console.log('[PuckEditorTheme] useEffect - page.themeConfig:', page.themeConfig);
-    console.log('[PuckEditorTheme] useEffect - app.themeConfig:', app.themeConfig);
-
     // Check sessionStorage first for unsaved changes
     const savedTheme = PuckSession.getTheme(pageId);
-    console.log('[PuckEditorTheme] useEffect - sessionStorage theme:', savedTheme);
 
     if (savedTheme) {
       try {
@@ -112,12 +102,10 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
           : ThemeConfig.default();
 
         const effectiveTheme = ThemeConfig.merge(appTheme, ThemeConfig.create(savedTheme));
-        console.log('[PuckEditorTheme] useEffect - Using sessionStorage theme:', effectiveTheme.toJSON());
         setCurrentTheme(effectiveTheme);
         setHasUnsavedChanges(true);
         return;
-      } catch (err) {
-        console.error('[PuckEditorTheme] Error parsing sessionStorage theme:', err);
+      } catch {
         PuckSession.clearTheme(pageId);
       }
     }
@@ -131,15 +119,12 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
       ? ThemeConfig.merge(appTheme, ThemeConfig.create(page.themeConfig))
       : appTheme;
 
-    console.log('[PuckEditorTheme] useEffect - Final effectiveTheme:', effectiveTheme.toJSON());
     setCurrentTheme(effectiveTheme);
     setHasUnsavedChanges(false);
   }, [pageId, page, app]);
 
   // Update live preview (doesn't save to DB)
   const updateLiveTheme = useCallback((newTheme: ThemeConfigProps) => {
-    console.log('[PuckEditorTheme] updateLiveTheme called, isSaving:', isSavingRef.current);
-
     const appTheme = app.themeConfig
       ? ThemeConfig.create(app.themeConfig)
       : ThemeConfig.default();
@@ -150,21 +135,14 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
 
     // Only save to sessionStorage if we're NOT in a save operation
     if (!isSavingRef.current) {
-      console.log('[PuckEditorTheme] Saving to sessionStorage');
       PuckSession.setTheme(pageId, newTheme);
-    } else {
-      console.log('[PuckEditorTheme] Skipping sessionStorage save (currently saving to DB)');
     }
   }, [app, pageId]);
 
   // Save theme to database (silent background save - no re-renders)
   const saveTheme = useCallback(async (theme: ThemeConfigProps | undefined) => {
     try {
-      console.log('[PuckEditorTheme] saveTheme called with:', theme);
-
       const result = await updatePageTheme(pageId, theme);
-
-      console.log('[PuckEditorTheme] updatePageTheme result:', result);
 
       if (!result.success) {
         toast.error(result.error || "Failed to save theme");
@@ -181,15 +159,11 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
         ? ThemeConfig.merge(appTheme, ThemeConfig.create(theme))
         : appTheme;
 
-      console.log('[PuckEditorTheme] Setting currentTheme to:', effectiveTheme.toJSON());
-
       // Set flag to prevent updateLiveTheme from re-setting sessionStorage
       isSavingRef.current = true;
-      console.log('[PuckEditorTheme] Set isSaving to true');
 
       // Clear sessionStorage FIRST (before state updates that might trigger re-renders)
       PuckSession.clearTheme(pageId);
-      console.log('[PuckEditorTheme] Cleared sessionStorage for pageId:', pageId);
 
       setCurrentTheme(effectiveTheme);
       toast.success("Theme saved successfully");
@@ -198,10 +172,8 @@ export function PuckEditorThemeProvider({ children, pageId, page, app }: PuckEdi
       // Reset flag after a short delay to allow any triggered re-renders to complete
       setTimeout(() => {
         isSavingRef.current = false;
-        console.log('[PuckEditorTheme] Reset isSaving to false');
       }, 100);
-    } catch (error) {
-      console.error('[PuckEditorTheme] Error saving theme:', error);
+    } catch {
       toast.error("Failed to save theme");
       // Reset flag on error as well
       isSavingRef.current = false;

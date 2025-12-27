@@ -302,6 +302,10 @@ export class DocumentApplicationService {
       }
 
       // 3. Create updated content with incremented version
+      // IMPORTANT: command.content is the FULL TipTap JSON from editor.getJSON()
+      // It should contain: { type: "doc", content: [...nodes with attrs...] }
+      console.log('[DOCUMENT-APP-SERVICE] updateTiptapDocument - command.content:', JSON.stringify(command.content));
+
       const updatedJson = {
         ...command.content,
         metadata: {
@@ -312,7 +316,10 @@ export class DocumentApplicationService {
         }
       };
 
+      console.log('[DOCUMENT-APP-SERVICE] updateTiptapDocument - updatedJson to save:', JSON.stringify(updatedJson));
+
       const fileBuffer = Buffer.from(JSON.stringify(updatedJson, null, 2), 'utf-8');
+      console.log('[DOCUMENT-APP-SERVICE] updateTiptapDocument - fileBuffer size:', fileBuffer.length);
 
       // 4. Update existing file using updateFile to preserve the same S3 key/ID
       const updateResult = await this.fileUseCases.updateFile({
@@ -428,6 +435,9 @@ export class DocumentApplicationService {
         hasMetadata: !!tiptapJson.metadata,
         keys: Object.keys(tiptapJson)
       });
+
+      // Log the FULL content to debug attrs being stripped
+      console.log('[DOCUMENT-APP-SERVICE] Full loaded content:', JSON.stringify(tiptapJson));
 
       // 3. Validate it's a TipTap document
       if (!tiptapJson.type || tiptapJson.type !== 'doc') {

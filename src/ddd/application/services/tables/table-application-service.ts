@@ -1258,35 +1258,38 @@ export class TableApplicationService {
     }
 
     try {
-      // Find all agent schedules that match this table change event
-      const matches = await this.triggerMatchingService.findMatchingSchedules(event);
+      // Find all agent automations that match this table change event
+      const matches = await this.triggerMatchingService.findMatchingAutomations(event);
 
       if (matches.length === 0) {
-        logger.debug('No matching schedules found for table change', {
+        logger.debug('No matching automations found for table change', {
           tableId: event.tableId,
           operation: event.operation
         });
         return;
       }
 
-      logger.debug(`Found ${matches.length} matching schedule(s) for table trigger`, {
+      logger.debug(`Found ${matches.length} matching automation(s) for table trigger`, {
         tableId: event.tableId,
         operation: event.operation,
         agentCount: matches.length
       });
 
-      // Create a task for each matching schedule
+      // Create a task for each matching automation
+      // AIDEV-TODO: Look up skill by match.automation.skillId to get instructions
       for (const match of matches) {
         try {
           const triggerContext: TriggerContext = {
             type: 'DATABASE_EVENT',
-            scheduleName: match.schedule.name,
+            scheduleName: match.automation.name,
             tableChange: event
           };
 
           // Build enhanced task instruction text with event context
           const eventDataPreview = JSON.stringify(event.rowData, null, 2);
-          const baseInstruction = match.schedule.taskInstructions.task || '';
+          // AIDEV-NOTE: In new automation model, instructions come from the referenced skill.
+          // For now, we create a placeholder task. Full implementation needs skill lookup.
+          const baseInstruction = `Execute skill ID ${match.automation.skillId}`;
 
           const enhancedTask = `
 DATABASE EVENT TRIGGER
@@ -1310,17 +1313,16 @@ ${baseInstruction}
           const taskData: CreateTaskData = {
             agentId: match.agent.id.value,
             organizationId: event.organizationId.value,
-            name: match.schedule.name || `Table ${event.operation} trigger`,
+            name: match.automation.name || `Table ${event.operation} trigger`,
             instructions: {
-              ...match.schedule.taskInstructions,
               task: enhancedTask,
               metadata: {
-                ...match.schedule.taskInstructions.metadata,
                 triggeredBy: 'DATABASE_EVENT',
                 tableName: event.tableName,
                 tableId: event.tableId,
                 operation: event.operation,
-                rowId: event.rowId
+                rowId: event.rowId,
+                skillId: match.automation.skillId
               }
             },
             triggerContext
@@ -1331,7 +1333,7 @@ ${baseInstruction}
           logger.summary('Created task from table trigger', {
             taskId: task.id.value,
             agentId: match.agent.id.value,
-            scheduleName: match.schedule.name,
+            automationName: match.automation.name,
             tableId: event.tableId,
             operation: event.operation
           });
@@ -1339,7 +1341,7 @@ ${baseInstruction}
           logger.error('Failed to create task for table trigger', {
             error: taskError,
             agentId: match.agent.id.value,
-            scheduleName: match.schedule.name
+            automationName: match.automation.name
           });
           // Continue creating tasks for other matches even if one fails
         }

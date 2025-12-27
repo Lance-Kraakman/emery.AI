@@ -53,7 +53,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       persona,
       ownerId: userId,
       organizationId: parseInt(organizationId),
-      schedules: trigger ? [trigger] : [{ type: 'MANUAL', enabled: true }]
+      automations: trigger ? [trigger] : [{ trigger: { type: 'MANUAL', enabled: true }, skillId: 0, enabled: true }]
     };
 
     const result = await agentApplicationService.createAgent(dto);

@@ -103,14 +103,27 @@ class AgentExecutor:
         Extract runtime inputs from execution context for direct skill execution.
 
         Maps skill inputs from context to a dictionary for inference client.
+        Includes:
+        - skill_inputs: Runtime values from automation inputMappings (trigger_data.payload)
+        - prompt/text: From task instructions
+        - images: Image attachments
+        - audio: Audio attachments
         """
         inputs = {}
 
-        # For now, extract from the task text (skill instructions with injected inputs)
-        # TODO: Parse structured inputs from context once frontend sends them
+        # Include skill inputs from automation inputMappings (resolved from trigger_data.payload)
+        # These are the primary source of runtime values for skill execution
+        if context.skill_inputs:
+            inputs.update(context.skill_inputs)
+            logger.debug(f"Runtime inputs from skill_inputs: {list(context.skill_inputs.keys())}")
+
+        # Extract from the task text (skill instructions with injected inputs)
+        # Only set prompt/text if not already provided via skill_inputs
         if context.task:
-            inputs['prompt'] = context.task
-            inputs['text'] = context.task
+            if 'prompt' not in inputs:
+                inputs['prompt'] = context.task
+            if 'text' not in inputs:
+                inputs['text'] = context.task
 
         # Extract image inputs from context
         if context.images:
@@ -208,6 +221,16 @@ class AgentExecutor:
         all_skills = list(request.agent_config.skills) if request.agent_config.skills else []
         available_skills = [s for s in all_skills if s.name != request.skill_name]
 
+        # Extract skill inputs from trigger_data.skill_inputs (automation inputMappings)
+        # These are typed runtime values resolved from variables like $trigger.scheduledTime
+        # AIDEV-NOTE: SkillInputValue carries name, type, and the actual typed value
+        skill_inputs = {}
+        if request.trigger_data and request.trigger_data.skill_inputs:
+            for input_val in request.trigger_data.skill_inputs:
+                skill_inputs[input_val.name] = input_val.value
+            if skill_inputs:
+                logger.info(f"📥 Skill inputs from trigger_data: {list(skill_inputs.keys())}")
+
         return ExecutionContext(
             mode=ExecutionMode.SKILL,
             task=skill.instructions,  # Changed from 'instructions'
@@ -223,7 +246,8 @@ class AgentExecutor:
             images=images,
             attachments=attachments,
             api_key=api_key,  # For output mappings
-            environment={}
+            environment={},
+            skill_inputs=skill_inputs  # Runtime values for skill inputs
         )
 
     def _create_instruction_context(self, request: TaskRequest) -> ExecutionContext:

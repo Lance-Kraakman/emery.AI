@@ -43,6 +43,14 @@ class SkillExecutorService:
         """Check if skill uses direct operation execution."""
         return skill_config.execution_type == 'operation'
 
+    def _is_tool_skill(self, skill_config: 'agent_worker_pb2.SkillConfig') -> bool:
+        """Check if skill uses direct tool execution (no LLM)."""
+        return skill_config.execution_type == 'tool'
+
+    def _is_write_skill(self, skill_config: 'agent_worker_pb2.SkillConfig') -> bool:
+        """Check if skill uses direct table write (no LLM)."""
+        return skill_config.execution_type == 'write'
+
     def _has_output_mappings(self, skill_config: 'agent_worker_pb2.SkillConfig') -> bool:
         """Check if skill has output mappings configured."""
         if not skill_config.outputs:
@@ -83,7 +91,17 @@ class SkillExecutorService:
         logger.info(f"🎯 Executing skill: {skill_config.name} (capture_outputs={capture_outputs})")
 
         try:
-            if self._is_operation_skill(skill_config):
+            if self._is_tool_skill(skill_config):
+                return self._execute_tool(
+                    skill_config, runtime_inputs,
+                    api_key=api_key, organization_id=organization_id
+                )
+            elif self._is_write_skill(skill_config):
+                return self._execute_write(
+                    skill_config, runtime_inputs,
+                    api_key=api_key, organization_id=organization_id
+                )
+            elif self._is_operation_skill(skill_config):
                 return self._execute_operation(
                     skill_config, runtime_inputs,
                     api_key=api_key, organization_id=organization_id
@@ -286,6 +304,185 @@ class SkillExecutorService:
             return json.dumps(result.data)
         else:
             return f"Binary result: {len(result.data)} bytes"
+
+    def _execute_tool(
+        self,
+        skill_config: 'agent_worker_pb2.SkillConfig',
+        runtime_inputs: Dict[str, Any],
+        api_key: Optional[str] = None,
+        organization_id: Optional[int] = None
+    ) -> str:
+        """Execute skill via direct Pipedream tool call (no LLM orchestration).
+
+        Args:
+            skill_config: Skill configuration with tool_execution_config
+            runtime_inputs: Runtime inputs from caller
+            api_key: API key for Pipedream tools
+            organization_id: Organization ID for context
+
+        Returns:
+            Tool execution result as string
+        """
+        tool_config = skill_config.tool_execution_config
+        if not tool_config or not tool_config.tool_id:
+            raise ValueError(f"Tool skill '{skill_config.name}' missing tool_execution_config.tool_id")
+
+        tool_id = tool_config.tool_id
+        logger.info(f"🔧 Direct tool execution: {skill_config.name} -> {tool_id}")
+
+        # Build tool inputs from mappings
+        tool_inputs = {}
+        for mapping in tool_config.input_mappings:
+            if mapping.skill_input_name:
+                # Map from skill input
+                value = runtime_inputs.get(mapping.skill_input_name)
+                if value is not None:
+                    tool_inputs[mapping.tool_param] = value
+            elif mapping.static_value:
+                # Use static value
+                tool_inputs[mapping.tool_param] = mapping.static_value
+
+        logger.info(f"   Tool inputs: {list(tool_inputs.keys())}")
+
+        # Load the specific Pipedream tool
+        from ..grpc.generated.agent_worker_pb2 import ToolConfig as ProtoToolConfig
+        proto_tool_config = ProtoToolConfig(
+            name=tool_id,
+            tool_type="pipedream",
+            config={}
+        )
+
+        tools = self.tool_loader.load_tools_from_configs(
+            tool_configs=[proto_tool_config],
+            api_key=api_key,
+            api_key_mode="user"
+        )
+
+        if not tools:
+            raise ValueError(f"Failed to load Pipedream tool: {tool_id}")
+
+        tool = tools[0]
+        logger.info(f"   Loaded tool: {tool.name}")
+
+        # Execute the tool directly
+        try:
+            result = tool.forward(**tool_inputs)
+            logger.info(f"✅ Tool execution complete: {skill_config.name}")
+
+            # Convert result to string
+            if isinstance(result, dict):
+                return json.dumps(result)
+            elif isinstance(result, str):
+                return result
+            else:
+                return str(result)
+        except Exception as e:
+            logger.error(f"❌ Tool execution failed: {e}")
+            raise
+
+    def _execute_write(
+        self,
+        skill_config: 'agent_worker_pb2.SkillConfig',
+        runtime_inputs: Dict[str, Any],
+        api_key: Optional[str] = None,
+        organization_id: Optional[int] = None
+    ) -> str:
+        """Execute skill via direct table write (no LLM orchestration).
+
+        Args:
+            skill_config: Skill configuration with write_config
+            runtime_inputs: Runtime inputs from caller
+            api_key: API key for authentication
+            organization_id: Organization ID for RLS context
+
+        Returns:
+            Write operation result as string
+        """
+        import os
+        import httpx
+
+        write_config = skill_config.write_config
+        if not write_config or not write_config.target_table_id:
+            raise ValueError(f"Write skill '{skill_config.name}' missing write_config.target_table_id")
+
+        table_id = write_config.target_table_id
+        row_action = write_config.row_action or 'create'
+
+        logger.info(f"📝 Direct table write: {skill_config.name} -> table {table_id} ({row_action})")
+
+        # Build field values from mappings
+        # Field mappings map skill inputs to table field IDs (as strings for the API)
+        field_values = {}
+        for mapping in write_config.field_mappings:
+            skill_input = mapping.skill_input_name
+            field_id = str(mapping.target_field_id)
+
+            if skill_input in runtime_inputs:
+                field_values[field_id] = runtime_inputs[skill_input]
+
+        logger.info(f"   Field mappings: {len(field_values)} fields")
+
+        # Build API request
+        nextjs_base = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
+        base_url = f"{nextjs_base}/api"
+
+        headers = {
+            "Content-Type": "application/json"
+        }
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        if organization_id:
+            headers["X-Organization-ID"] = str(organization_id)
+
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                if row_action == 'create':
+                    # Create new row
+                    response = client.post(
+                        f"{base_url}/rows",
+                        headers=headers,
+                        json={"tableId": table_id, "data": field_values}
+                    )
+                elif row_action == 'update':
+                    # Update existing row - need to find it first using update_match
+                    if not write_config.update_match:
+                        raise ValueError("Write skill update mode requires update_match configuration")
+
+                    match_input = write_config.update_match.skill_input_name
+                    match_field_id = str(write_config.update_match.target_field_id)
+
+                    if match_input not in runtime_inputs:
+                        raise ValueError(f"Update match input '{match_input}' not in runtime inputs")
+
+                    match_value = runtime_inputs[match_input]
+
+                    # For now, we pass the match info and let the API handle the lookup
+                    # The API route will need to support this pattern
+                    response = client.put(
+                        f"{base_url}/rows",
+                        headers=headers,
+                        json={
+                            "tableId": table_id,
+                            "matchField": match_field_id,
+                            "matchValue": match_value,
+                            "data": field_values
+                        }
+                    )
+                else:
+                    raise ValueError(f"Unknown row_action: {row_action}")
+
+                if response.status_code >= 400:
+                    error_detail = response.text[:500]
+                    logger.error(f"❌ Table write failed: {response.status_code} - {error_detail}")
+                    raise ValueError(f"Table write failed: {error_detail}")
+
+                result = response.json()
+                logger.info(f"✅ Table write complete: {skill_config.name}")
+                return json.dumps(result)
+
+        except httpx.RequestError as e:
+            logger.error(f"❌ Table write request failed: {e}")
+            raise ValueError(f"Table write request failed: {e}")
 
     def _process_skill_attachments(
         self,

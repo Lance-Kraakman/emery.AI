@@ -132,8 +132,10 @@ message SkillConfig {
   string model = 8;                    // Optional: model override for this skill
   repeated MessagePart content = 9;    // Skill-level attachments (images, files, text)
   string agent_type = 10;              // Optional: "tool_calling" (default) or "code_agent"
-  string execution_type = 11;          // 'agent' (default) or 'operation'
+  string execution_type = 11;          // 'agent', 'operation', 'tool', or 'write'
   TaskModelConfig task_model_config = 12; // Config for operation execution (when execution_type='operation')
+  ToolExecutionConfig tool_execution_config = 13; // Config for tool execution (when execution_type='tool')
+  WriteConfig write_config = 14;       // Config for write execution (when execution_type='write')
 }
 
 // Configuration for operation execution (direct model invocation without LLM orchestration)
@@ -141,6 +143,41 @@ message TaskModelConfig {
   string model_id = 1;                 // HuggingFace model ID (e.g., 'black-forest-labs/FLUX.1-schnell')
   string task_type = 2;                // Task type: text-to-image, speech-to-text, etc.
   map<string, string> parameters = 3;  // Model-specific parameters (steps, guidance_scale, etc.)
+}
+
+// Configuration for direct tool execution (when execution_type='tool')
+// Calls a Pipedream tool directly without LLM orchestration
+message ToolExecutionConfig {
+  string tool_id = 1;                  // Pipedream tool ID (e.g., 'gmail-send-email', 'slack-send-message')
+  repeated ToolInputMapping input_mappings = 2; // Map skill inputs to tool parameters
+}
+
+// Maps skill input to tool parameter
+message ToolInputMapping {
+  string tool_param = 1;               // Tool parameter name
+  string skill_input_name = 2;         // Skill input to use (if set)
+  string static_value = 3;             // Static value (used if skill_input_name not set)
+}
+
+// Configuration for direct table write (when execution_type='write')
+// Writes data directly to a table without LLM orchestration
+message WriteConfig {
+  int32 target_table_id = 1;           // Table to write to
+  string row_action = 2;               // 'create' or 'update'
+  repeated WriteFieldMapping field_mappings = 3; // Map skill inputs to table fields
+  UpdateMatchConfig update_match = 4;  // For update: which field to match
+}
+
+// Maps skill input to table field
+message WriteFieldMapping {
+  string skill_input_name = 1;         // Skill input name
+  int32 target_field_id = 2;           // Table field ID
+}
+
+// Configuration for matching rows during update
+message UpdateMatchConfig {
+  string skill_input_name = 1;         // Skill input with match value
+  int32 target_field_id = 2;           // Field to match against
 }
 
 // Skill input parameter
@@ -242,9 +279,22 @@ message ServerConfig {
   map<string, string> config = 3;
 }
 
-// Trigger data payload
+// Runtime skill input value with type information
+// AIDEV-NOTE: This enables type-safe skill input passing from TypeScript to Python
+message SkillInputValue {
+  string name = 1;           // Input name (matches SkillInput.name from skill definition)
+  string type = 2;           // Type from SkillInput definition (text, number, boolean, etc.)
+  oneof value {
+    string string_value = 3;   // For text, email, phone, date (ISO string), single-select
+    double number_value = 4;   // For number types
+    bool bool_value = 5;       // For boolean types
+    string json_value = 6;     // For json, multi-select (array), file refs, complex objects
+  }
+}
+
+// Trigger data with typed skill inputs
 message TriggerData {
-  map<string, string> payload = 1;
+  repeated SkillInputValue skill_inputs = 1;    // Typed skill input values
 }
 
 // AIDEV-NOTE: Task instruction format aligned with smolagents API

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, type ReactNode } from "react";
+import React, { useEffect, useState, useMemo, useCallback, type ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Puck, Data, resolveAllData } from "@measured/puck";
 import "@measured/puck/puck.css";
@@ -19,12 +19,14 @@ import { toast } from "sonner";
 import { PageContextProvider } from "@/components/puck/contexts/PageContext";
 import { PuckEditorThemeProvider, usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 import { PuckSession } from "@/lib/puck/session-storage";
-import { EditorDataLayoutProvider } from "@/components/puck/contexts/EditorDataLayoutProvider";
-import { PageVariablesProvider } from "@/components/puck/contexts/PageVariablesContext";
-import { updatePageVariables, updatePageState } from "@/app/actions/puck-pages";
-import type { PageVariable } from "@/components/puck/types";
+import { updatePageState, updatePageDialogs } from "@/app/actions/puck-pages";
 import type { PageStateConfig } from "@/components/puck/types/state";
+import type { PageDialogsConfig } from "@/ddd/domain/puck/value-objects/page-dialogs";
 import { PuckEditorLayout } from "@/components/puck/PuckEditorLayout";
+import { StateProvider } from "@/components/puck/contexts/StateContext";
+import { EditingStackProvider } from "@/components/puck/contexts/EditingStackContext";
+import { createPuckUIOverrides } from "@/components/puck/overrides";
+import type { EditingContextItem, EditingTarget } from "@/components/puck/types/editing-context";
 
 export default function PageEditPage() {
   const params = useParams();
@@ -37,10 +39,29 @@ export default function PageEditPage() {
   const [app, setApp] = useState<AppDTO | null>(null);
   const [organization, setOrganization] = useState<OrganizationDTO | null>(null);
   const [pages, setPages] = useState<PageDTO[]>([]);
-  const [initialData, setInitialData] = useState<Data>({ content: [], root: {}, zones: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loadedFromSessionStorage, setLoadedFromSessionStorage] = useState(false);
+
+  // True editing stack - tracks full path for nested editing (Page > DataBlock A > DataBlock B)
+  const [editingStack, setEditingStack] = useState<EditingContextItem[]>([{ type: 'page' }]);
+
+  // Page data is the source of truth
+  const [pageData, setPageData] = useState<Data>({ content: [], root: { props: {} }, zones: {} });
+
+  // Empty data constant
+  const emptyData: Data = useMemo(() => ({ content: [], root: { props: {} }, zones: {} }), []);
+
+  // Current editing context is the last item in the stack
+  const currentContext = editingStack[editingStack.length - 1];
+
+
+  // Convert to legacy EditingTarget format for backward compatibility with PuckEditorLayout
+  const editingTarget: EditingTarget = currentContext.type === 'page'
+    ? 'page'
+    : currentContext.type === 'dialog'
+      ? { dialogId: currentContext.dialogId, dialogName: currentContext.dialogName }
+      : 'page'; // DataBlock uses its own handling
 
   // Convert URLSearchParams to Record for QueryParamContext
   const queryParamsObject: Record<string, string | string[]> = {};
@@ -86,7 +107,7 @@ export default function PageEditPage() {
         if (savedData) {
           try {
             const resolvedData = await resolveAllData(savedData, config, queryParamsObject);
-            setInitialData(resolvedData);
+            setPageData(resolvedData);
             setLoadedFromSessionStorage(true);
             setLoading(false);
             return;
@@ -99,7 +120,7 @@ export default function PageEditPage() {
         // Load from database
         const rawData = pageResult.data.templateData || { content: [], root: {}, zones: {} };
         const resolvedData = await resolveAllData(rawData, config, queryParamsObject);
-        setInitialData(resolvedData);
+        setPageData(resolvedData);
       } catch (err) {
         console.error('Error loading page:', err);
         setError(err instanceof Error ? err.message : 'Failed to load page');
@@ -112,6 +133,108 @@ export default function PageEditPage() {
       loadPage();
     }
   }, [pageId, appId, searchParams]);
+
+  // Derive currentData based on editing context (page or dialog only)
+  // DataBlock templates are now edited inline via slots, no separate editing level needed
+  const currentData = useMemo(() => {
+    if (editingStack.length === 1 && editingStack[0].type === 'page') {
+      return pageData;
+    }
+
+    // Check for dialog editing
+    const currentLevel = editingStack[editingStack.length - 1];
+    if (currentLevel.type === 'dialog') {
+      const dialog = page?.pageDialogs?.dialogs?.find(d => d.id === currentLevel.dialogId);
+      if (!dialog?.content) {
+        console.warn(`[currentData] Dialog ${currentLevel.dialogId} not found in page dialogs`);
+        return emptyData;
+      }
+      return dialog.content;
+    }
+
+    return pageData;
+  }, [editingStack, pageData, page?.pageDialogs, emptyData]);
+
+  // Handler to start editing a dialog's content - push onto stack
+  const handleEditDialogContent = (dialogId: string) => {
+    const dialog = page?.pageDialogs?.dialogs?.find(d => d.id === dialogId);
+    if (dialog) {
+      // Save page to session before entering nested content
+      PuckSession.setData(pageId, pageData);
+      setEditingStack(prev => [...prev, { type: 'dialog', dialogId, dialogName: dialog.name }]);
+    }
+  };
+
+  // Handler to navigate back one level - pop from stack
+  const handleBackToPage = () => {
+    setEditingStack(prev => {
+      if (prev.length <= 1) return prev; // Can't go back from page level
+      return prev.slice(0, -1);
+    });
+  };
+
+  // Handler to navigate to a specific level in the stack
+  // Accepts currentAppState to save current content before navigating
+  const handleNavigateToLevel = useCallback((level: number, currentAppState?: Data) => {
+    // If currentAppState is provided, save it to pageData first
+    if (currentAppState) {
+      const currentLevel = editingStack[editingStack.length - 1];
+      if (currentLevel.type === 'page') {
+        // If at page level, the appState IS the pageData
+        setPageData(currentAppState);
+        PuckSession.setData(pageId, currentAppState);
+      }
+      // Dialog content is stored separately, no need to update pageData
+    }
+
+    // Update editing stack
+    setEditingStack(prev => {
+      if (level < 0 || level >= prev.length) return prev;
+      return prev.slice(0, level + 1);
+    });
+  }, [editingStack, pageId]);
+
+  // Handler to update pageData with current Puck appState
+  const handleUpdatePageData = useCallback((currentAppState: Data): Data => {
+    setPageData(currentAppState);
+    PuckSession.setData(pageId, currentAppState);
+    return currentAppState;
+  }, [pageId]);
+
+  // Callback when page data is saved
+  const handlePageDataSaved = (data: Data) => {
+    setPageData(data);
+  };
+
+  // Callback when dialog data is saved - update page.pageDialogs
+  const handleDialogDataSaved = (dialogId: string, data: Data) => {
+    // Update page.pageDialogs directly
+    setPage(prev => {
+      if (!prev || !prev.pageDialogs) return prev;
+      return {
+        ...prev,
+        pageDialogs: {
+          ...prev.pageDialogs,
+          dialogs: prev.pageDialogs.dialogs.map(d =>
+            d.id === dialogId ? { ...d, content: data } : d
+          )
+        }
+      };
+    });
+  };
+
+  // Editing stack actions for the context provider
+  // Note: DataBlock templates are now edited inline via slots, no pushDataBlock needed
+  const editingStackActions = useMemo(() => ({
+    pushDialog: (dialogId: string, dialogName: string) => {
+      const dialog = page?.pageDialogs?.dialogs?.find(d => d.id === dialogId);
+      if (dialog) {
+        handleEditDialogContent(dialogId);
+      }
+    },
+    pop: handleBackToPage,
+    navigateToLevel: (level: number, currentAppState?: Data) => handleNavigateToLevel(level, currentAppState),
+  }), [page?.pageDialogs?.dialogs, handleNavigateToLevel]);
 
   const handlePublish = async () => {
     if (!page) return;
@@ -182,23 +305,6 @@ export default function PageEditPage() {
     }
   };
 
-  const handleSavePageVariables = async (variables: PageVariable[]) => {
-    try {
-      const result = await updatePageVariables(pageId, variables);
-
-      if (!result.success) {
-        toast.error(result.error || "Failed to update page variables");
-        return;
-      }
-
-      // Update local state to reflect changes
-      setPage(prev => prev ? { ...prev, pageVariables: variables } : null);
-    } catch (error) {
-      console.error('Error updating page variables:', error);
-      toast.error("Failed to update page variables");
-    }
-  };
-
   const handleSavePageState = async (pageState: PageStateConfig | undefined) => {
     try {
       const result = await updatePageState(pageId, pageState);
@@ -213,6 +319,23 @@ export default function PageEditPage() {
     } catch (error) {
       console.error('Error updating page state:', error);
       toast.error("Failed to update page state");
+    }
+  };
+
+  const handleSavePageDialogs = async (pageDialogs: PageDialogsConfig | undefined) => {
+    try {
+      const result = await updatePageDialogs(pageId, pageDialogs);
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update page dialogs");
+        return;
+      }
+
+      // Update local state to reflect changes
+      setPage(prev => prev ? { ...prev, pageDialogs } : null);
+    } catch (error) {
+      console.error('Error updating page dialogs:', error);
+      toast.error("Failed to update page dialogs");
     }
   };
 
@@ -246,41 +369,35 @@ export default function PageEditPage() {
         pages={pages}
         params={queryParamsObject}
       >
-        <Puck
-          config={config}
-          data={initialData}
-          iframe={{
-            enabled: true,
-            waitForStyles: true,
-          }}
-        >
-          <PageVariablesProvider
-            pageVariables={page.pageVariables || []}
-            pageId={pageId}
-            onAddPageVariable={async (variable) => {
-              const updatedVariables = [...(page.pageVariables || []), variable];
-              await handleSavePageVariables(updatedVariables);
-            }}
-          >
-            <EditorDataLayoutProvider>
-              <PuckEditorLayout
-                pageId={pageId}
-                appId={appId}
-                page={page}
-                app={app}
-                organization={organization}
-                loadedFromSessionStorage={loadedFromSessionStorage}
-                setLoadedFromSessionStorage={setLoadedFromSessionStorage}
-                onPublish={handlePublish}
-                onSavePageSettings={handleSavePageSettings}
-                onSaveAccessSettings={handleSaveAccessSettings}
-                onSavePageVariables={handleSavePageVariables}
-                onSavePageState={handleSavePageState}
-                themeMode="page"
-              />
-            </EditorDataLayoutProvider>
-          </PageVariablesProvider>
-        </Puck>
+        <StateProvider pageState={page.pageState}>
+          <EditingStackProvider value={editingStackActions}>
+            <PuckEditorWrapper
+              currentContext={currentContext}
+              editingStack={editingStack}
+              currentData={currentData}
+              pageData={pageData}
+              pageId={pageId}
+              appId={appId}
+              page={page}
+              app={app}
+              organization={organization}
+              loadedFromSessionStorage={loadedFromSessionStorage}
+              setLoadedFromSessionStorage={setLoadedFromSessionStorage}
+              onPublish={handlePublish}
+              onSavePageSettings={handleSavePageSettings}
+              onSaveAccessSettings={handleSaveAccessSettings}
+              onSavePageState={handleSavePageState}
+              onSavePageDialogs={handleSavePageDialogs}
+              editingTarget={editingTarget}
+              onEditDialogContent={handleEditDialogContent}
+              onBackToPage={handleBackToPage}
+              onNavigateToLevel={handleNavigateToLevel}
+              onUpdatePageData={handleUpdatePageData}
+              onPageDataSaved={handlePageDataSaved}
+              onDialogDataSaved={handleDialogDataSaved}
+            />
+          </EditingStackProvider>
+        </StateProvider>
       </EditorPageContextWrapper>
     </PuckEditorThemeProvider>
   );
@@ -320,5 +437,102 @@ function EditorPageContextWrapper({
     >
       {children}
     </PageContextProvider>
+  );
+}
+
+/**
+ * PuckEditorWrapper - Wraps Puck for page/dialog editing
+ *
+ * DataBlock templates are now edited inline via slots, no separate editing level needed.
+ */
+interface PuckEditorWrapperProps {
+  currentContext: EditingContextItem;
+  editingStack: EditingContextItem[];
+  currentData: Data;
+  pageData: Data;
+  pageId: number;
+  appId: number;
+  page: PageDTO;
+  app: AppDTO;
+  organization: OrganizationDTO | null;
+  loadedFromSessionStorage: boolean;
+  setLoadedFromSessionStorage: (value: boolean) => void;
+  onPublish: () => Promise<void>;
+  onSavePageSettings: (data: { name: string; slug: string }) => Promise<void>;
+  onSaveAccessSettings: (data: { requiresAuth: boolean; allowedRoles: string[] }) => Promise<void>;
+  onSavePageState: (pageState: PageStateConfig | undefined) => Promise<void>;
+  onSavePageDialogs: (pageDialogs: PageDialogsConfig | undefined) => Promise<void>;
+  editingTarget: EditingTarget;
+  onEditDialogContent: (dialogId: string) => void;
+  onBackToPage: () => void;
+  onNavigateToLevel: (level: number, currentAppState?: Data) => void;
+  onUpdatePageData: (currentAppState: Data) => Data;
+  onPageDataSaved: (data: Data) => void;
+  onDialogDataSaved: (dialogId: string, data: Data) => void;
+}
+
+function PuckEditorWrapper({
+  editingStack,
+  currentData,
+  pageData,
+  pageId,
+  appId,
+  page,
+  app,
+  organization,
+  loadedFromSessionStorage,
+  setLoadedFromSessionStorage,
+  onPublish,
+  onSavePageSettings,
+  onSaveAccessSettings,
+  onSavePageState,
+  onSavePageDialogs,
+  editingTarget,
+  onEditDialogContent,
+  onBackToPage,
+  onNavigateToLevel,
+  onUpdatePageData,
+  onPageDataSaved,
+  onDialogDataSaved,
+}: PuckEditorWrapperProps) {
+  // Stable Puck key to preserve undo/redo history across navigation
+  const puckKey = `page-${pageId}`;
+
+  return (
+    <Puck
+      key={puckKey}
+      config={config}
+      data={currentData}
+      iframe={{
+        enabled: true,
+        waitForStyles: true,
+      }}
+      overrides={createPuckUIOverrides()}
+    >
+      <PuckEditorLayout
+        pageId={pageId}
+        appId={appId}
+        page={page}
+        app={app}
+        organization={organization}
+        pageData={pageData}
+        loadedFromSessionStorage={loadedFromSessionStorage}
+        setLoadedFromSessionStorage={setLoadedFromSessionStorage}
+        onPublish={onPublish}
+        onSavePageSettings={onSavePageSettings}
+        onSaveAccessSettings={onSaveAccessSettings}
+        onSavePageState={onSavePageState}
+        onSavePageDialogs={onSavePageDialogs}
+        themeMode="page"
+        editingTarget={editingTarget}
+        editingStack={editingStack}
+        onEditDialogContent={onEditDialogContent}
+        onBackToPage={onBackToPage}
+        onNavigateToLevel={onNavigateToLevel}
+        onUpdatePageData={onUpdatePageData}
+        onPageDataSaved={onPageDataSaved}
+        onDialogDataSaved={onDialogDataSaved}
+      />
+    </Puck>
   );
 }

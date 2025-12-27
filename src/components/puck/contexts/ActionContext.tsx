@@ -14,7 +14,8 @@
 import React, { createContext, useContext, type ReactNode } from 'react';
 import { useRowData } from './RowDataContext';
 import { useLinkContext } from './PageContext';
-import type { ActionContext as ActionContextType } from '../types/actions';
+import { useStateContext } from './StateContext';
+import type { ActionContext as ActionContextType, ActionStateContext } from '../types/actions';
 
 const ActionContext = createContext<Partial<ActionContextType>>({});
 
@@ -80,6 +81,16 @@ export function useActionContext() {
   const actionContext = useContext(ActionContext);
   const rowContext = useRowData();
   const linkContext = useLinkContext();
+  const stateCtx = useStateContext();
+
+  // Build ActionStateContext from StateContext
+  const stateContext: ActionStateContext | undefined = stateCtx ? {
+    setValue: stateCtx.setValue,
+    setValueWithUrlSync: stateCtx.setValueWithUrlSync,
+    toggleUIFlag: stateCtx.toggleValue,
+    setUIFlag: (key: string, value: boolean) => stateCtx.setValue(key, value),
+    resetState: stateCtx.resetState,
+  } : undefined;
 
   return (runtimeContext?: Partial<ActionContextType>): ActionContextType => {
     return {
@@ -93,6 +104,7 @@ export function useActionContext() {
         isEditing: linkContext.isEditing,
         isPreview: linkContext.isPreview,
       },
+      stateContext,
       ...runtimeContext,
     };
   };

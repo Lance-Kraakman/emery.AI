@@ -201,6 +201,7 @@ class DataStack(Stack):
             "PIPEDREAM_API_KEY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "PIPEDREAM_API_KEY"),
             "OPENAI_API_KEY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "OPENAI_API_KEY"),
             "HF_TOKEN": ecs.Secret.from_secrets_manager(self.app_secrets_object, "HF_TOKEN"),
+            "GEMINI_API_KEY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "GEMINI_API_KEY"),
             "RESEND_API_KEY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "RESEND_API_KEY"),
             # AWS S3 credentials for cloud deployment
             "AWS_ACCESS_KEY_ID": ecs.Secret.from_secrets_manager(self.app_secrets_object, "AWS_ACCESS_KEY_ID"),
