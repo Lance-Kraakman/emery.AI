@@ -8,7 +8,7 @@ import logging
 import threading
 import time
 import uuid
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from smolagents import Tool
 from ..grpc.generated.agent_worker_pb2 import ToolConfig
 
@@ -458,44 +458,119 @@ def load_document_crud(config: ToolConfig, api_key: Optional[str] = None, organi
         """CRUD operations for Emery documents."""
 
         name = "document_crud"
-        description = "Create, read, update, and list documents. Use 'create' to make new documents, 'list' to find documents, 'read' to get content, 'update' to modify content."
+        description = "Create, read, and modify documents. Use high-level methods (append_text, update_text, etc.) that handle formatting automatically."
         # AIDEV-NOTE: tableId and fieldId accept both string and integer (like skill_crud)
         inputs = {
-            "method": {"type": "string", "description": "Operation: create, read, update, list"},
-            "document_id": {"type": "string", "description": "Document ID (required for read/update)", "nullable": True},
-            "table_id": {"type": ["string", "integer"], "description": "Table ID containing the document field (required for create/read/update)", "nullable": True},
-            "field_id": {"type": ["string", "integer"], "description": "Field ID of document column (required for create/read/update)", "nullable": True},
-            "row_id": {"type": "string", "description": "Row ID to add document to (optional for create). If omitted, creates a new row.", "nullable": True},
+            "method": {"type": "string", "description": "Operation: create, read, list, append_text, append_heading, append_list, update_text, update_heading"},
+            "document_id": {"type": "string", "description": "Document ID (required for read/update/append/modify)", "nullable": True},
+            "table_id": {"type": ["string", "integer"], "description": "Table ID containing the document field", "nullable": True},
+            "field_id": {"type": ["string", "integer"], "description": "Field ID of document column", "nullable": True},
+            "row_id": {"type": "string", "description": "Row ID (optional for create)", "nullable": True},
             "title": {"type": "string", "description": "Document title (required for create)", "nullable": True},
-            "data": {
-                "type": "object",
-                "description": """Document content for update. JSON structure:
-{
-  "type": "doc",
-  "content": [
-    {"type": "paragraph", "content": [{"type": "text", "text": "Plain text here"}]},
-    {"type": "heading", "attrs": {"level": 2}, "content": [{"type": "text", "text": "Section Title"}]},
-    {"type": "bulletList", "content": [
-      {"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Item 1"}]}]}
-    ]}
-  ]
-}
-Node types: paragraph, heading (level 1-6), bulletList, orderedList, listItem, blockquote, codeBlock, image, table, tableRow, tableCell, horizontalRule, hardBreak
-Marks (inline formatting): {"type": "text", "text": "bold", "marks": [{"type": "bold"}]}
-Available marks: bold, italic, underline, strike, code, link (with href attr), highlight""",
-                "nullable": True
-            }
+            "text": {"type": "string", "description": "Text content for append_text, append_heading, update_text, update_heading", "nullable": True},
+            "level": {"type": "integer", "description": "Heading level 1-6 for append_heading, update_heading", "nullable": True},
+            "items": {"type": "array", "description": "List items for append_list", "nullable": True},
+            "position": {"type": "integer", "description": "Block index (0-based) for update_text, update_heading", "nullable": True},
+            "bold": {"type": "boolean", "description": "Make text bold", "nullable": True},
+            "italic": {"type": "boolean", "description": "Make text italic", "nullable": True},
+            "ordered": {"type": "boolean", "description": "Use ordered list instead of bullets", "nullable": True},
+            "data": {"type": "object", "description": "Full TipTap JSON for 'update' method (low-level)", "nullable": True}
         }
         output_type = "object"
 
         def __init__(self):
             super().__init__("document", "crud")
 
+        def _build_paragraph(self, text: str, bold: bool = False, italic: bool = False) -> Dict:
+            """Build a paragraph node with optional formatting."""
+            marks = []
+            if bold:
+                marks.append({"type": "bold"})
+            if italic:
+                marks.append({"type": "italic"})
+
+            text_node: Dict[str, Any] = {"type": "text", "text": text}
+            if marks:
+                text_node["marks"] = marks
+
+            return {"type": "paragraph", "content": [text_node]}
+
+        def _build_heading(self, text: str, level: int) -> Dict:
+            """Build a heading node."""
+            return {
+                "type": "heading",
+                "attrs": {"level": level},
+                "content": [{"type": "text", "text": text}]
+            }
+
+        def _build_list(self, items: List[str], ordered: bool = False) -> Dict:
+            """Build a bullet or ordered list node."""
+            list_items = [
+                {
+                    "type": "listItem",
+                    "content": [
+                        {"type": "paragraph", "content": [{"type": "text", "text": item}]}
+                    ]
+                }
+                for item in items
+            ]
+            return {
+                "type": "orderedList" if ordered else "bulletList",
+                "content": list_items
+            }
+
+        def _modify_content(self, doc_id: str, table_id: str, field_id: str,
+                           node: Dict, position: Optional[int] = None) -> Dict[str, Any]:
+            """Read document, append or replace at position, save."""
+            # 1. Read current document
+            read_result = self._make_api_request_with_deadline(
+                endpoint=f"documents/{doc_id}?tableId={table_id}&fieldId={field_id}",
+                method="GET",
+                auth_token=_auth_token,
+                organization_id=_org_id
+            )
+
+            if isinstance(read_result, str) or not read_result.get("success"):
+                return read_result if isinstance(read_result, dict) else {"success": False, "error": read_result}
+
+            # 2. Get current content (API response is double-nested: data.data.tiptapContent)
+            inner_data = read_result.get("data", {}).get("data", {})
+            current = inner_data.get("tiptapContent", {})
+            content = current.get("content", [])
+
+            # 3. Modify content
+            if position is not None:
+                # Update: replace at position
+                if 0 <= position < len(content):
+                    content[position] = node
+                else:
+                    return {"success": False, "error": f"Position {position} out of range (0-{len(content)-1})"}
+            else:
+                # Append
+                content.append(node)
+
+            # 4. Save updated document
+            updated = {"type": "doc", "content": content}
+            return self._make_api_request_with_deadline(
+                endpoint=f"documents/{doc_id}?tableId={table_id}&fieldId={field_id}",
+                method="PUT",
+                data={"tiptapContent": updated},
+                auth_token=_auth_token,
+                organization_id=_org_id
+            )
+
         def forward(self, method: str, document_id: Optional[str] = None,
                    table_id: Optional[Union[str, int]] = None,
                    field_id: Optional[Union[str, int]] = None,
                    row_id: Optional[str] = None,
                    title: Optional[str] = None,
+                   text: Optional[str] = None,
+                   level: Optional[int] = None,
+                   items: Optional[List[str]] = None,
+                   position: Optional[int] = None,
+                   bold: Optional[bool] = None,
+                   italic: Optional[bool] = None,
+                   ordered: Optional[bool] = None,
                    data: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute document CRUD operation."""
 
@@ -540,25 +615,6 @@ Available marks: bold, italic, underline, strike, code, link (with href attr), h
                     organization_id=_org_id
                 )
 
-            elif method == "update":
-                if not document_id:
-                    return {"success": False, "error": "document_id is required for update operation"}
-                if not table_id_str or not field_id_str:
-                    return {"success": False, "error": "table_id and field_id are required for update operation. First call document_crud(method='list') to find documents and their location."}
-                if not data:
-                    return {"success": False, "error": "data (TipTap content) is required for update operation"}
-
-                # Wrap content in tiptapContent for the API
-                update_data = {"tiptapContent": data}
-
-                return self._make_api_request_with_deadline(
-                    endpoint=f"documents/{document_id}?tableId={table_id_str}&fieldId={field_id_str}",
-                    method="PUT",
-                    data=update_data,
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
             elif method == "list":
                 return self._make_api_request_with_deadline(
                     endpoint="documents",
@@ -567,8 +623,66 @@ Available marks: bold, italic, underline, strike, code, link (with href attr), h
                     organization_id=_org_id
                 )
 
+            # High-level append methods
+            elif method == "append_text":
+                if not document_id:
+                    return {"success": False, "error": "document_id is required"}
+                if not table_id_str or not field_id_str:
+                    return {"success": False, "error": "table_id and field_id are required"}
+                if not text:
+                    return {"success": False, "error": "text is required for append_text"}
+                node = self._build_paragraph(text, bold=bool(bold), italic=bool(italic))
+                return self._modify_content(document_id, table_id_str, field_id_str, node)
+
+            elif method == "append_heading":
+                if not document_id:
+                    return {"success": False, "error": "document_id is required"}
+                if not table_id_str or not field_id_str:
+                    return {"success": False, "error": "table_id and field_id are required"}
+                if not text:
+                    return {"success": False, "error": "text is required for append_heading"}
+                heading_level = level if level and 1 <= level <= 6 else 2
+                node = self._build_heading(text, heading_level)
+                return self._modify_content(document_id, table_id_str, field_id_str, node)
+
+            elif method == "append_list":
+                if not document_id:
+                    return {"success": False, "error": "document_id is required"}
+                if not table_id_str or not field_id_str:
+                    return {"success": False, "error": "table_id and field_id are required"}
+                if not items or not isinstance(items, list):
+                    return {"success": False, "error": "items (array of strings) is required for append_list"}
+                node = self._build_list(items, ordered=bool(ordered))
+                return self._modify_content(document_id, table_id_str, field_id_str, node)
+
+            # High-level update methods
+            elif method == "update_text":
+                if not document_id:
+                    return {"success": False, "error": "document_id is required"}
+                if not table_id_str or not field_id_str:
+                    return {"success": False, "error": "table_id and field_id are required"}
+                if position is None:
+                    return {"success": False, "error": "position is required for update_text"}
+                if not text:
+                    return {"success": False, "error": "text is required for update_text"}
+                node = self._build_paragraph(text, bold=bool(bold), italic=bool(italic))
+                return self._modify_content(document_id, table_id_str, field_id_str, node, position)
+
+            elif method == "update_heading":
+                if not document_id:
+                    return {"success": False, "error": "document_id is required"}
+                if not table_id_str or not field_id_str:
+                    return {"success": False, "error": "table_id and field_id are required"}
+                if position is None:
+                    return {"success": False, "error": "position is required for update_heading"}
+                if not text:
+                    return {"success": False, "error": "text is required for update_heading"}
+                heading_level = level if level and 1 <= level <= 6 else 2
+                node = self._build_heading(text, heading_level)
+                return self._modify_content(document_id, table_id_str, field_id_str, node, position)
+
             else:
-                return {"success": False, "error": f"Unknown method: {method}. Supported: create, list, read, update"}
+                return {"success": False, "error": f"Unknown method: {method}. Supported: create, list, read, append_text, append_heading, append_list, update_text, update_heading"}
 
     return DocumentCrudTool()
 
