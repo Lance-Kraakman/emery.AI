@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Puck, usePuck, type Data } from "@measured/puck";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { LayoutGrid, Settings, List, Globe, Eye, ExternalLink, Copy, Check, Undo2, Redo2, ArrowLeft, MessageSquare } from "lucide-react";
+import { LayoutGrid, Settings, List, Globe, Eye, ExternalLink, Copy, Check, Undo2, Redo2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageSettingsPanel } from "@/app/(app)/apps/components/PageSettingsPanel";
 import { PageAccessSettings } from "@/app/(app)/apps/components/PageAccessSettings";
@@ -15,16 +15,16 @@ import { usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context"
 import { PuckSession } from "@/lib/puck/session-storage";
 import { updatePageContent, updatePageDialogs } from "@/app/actions/puck-pages";
 import { ComponentBreadcrumb } from "@/components/puck/ComponentBreadcrumb";
+import { EditingContextBreadcrumb } from "@/components/puck/EditingContextBreadcrumb";
 import { EditorUIProvider, useEditorUI } from "@/components/puck/contexts/EditorUIContext";
+import { EditingStackProvider, useEditingStack } from "@/components/puck/contexts/EditingStackContext";
 import type { PageStateConfig } from "@/components/puck/types/state";
 import type { PageDialogsConfig } from "@/ddd/domain/puck/value-objects/page-dialogs";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
 import { PageDialogsPanel } from "@/app/(app)/apps/components/PageDialogsPanel";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import type { OrganizationDTO } from "@/app/mappers/organization-mapper";
-
-// Type for tracking what we're editing - page or a specific dialog
-type EditingTarget = 'page' | { dialogId: string; dialogName: string };
+import type { EditingContextItem, EditingTarget } from "@/components/puck/types/editing-context";
 
 export interface PuckEditorLayoutProps {
   pageId: number;
@@ -32,6 +32,7 @@ export interface PuckEditorLayoutProps {
   page: PageDTO;
   app: AppDTO;
   organization: OrganizationDTO | null;
+  pageData: Data; // Full page data for saving nested content
   loadedFromSessionStorage: boolean;
   setLoadedFromSessionStorage: (value: boolean) => void;
   onPublish: () => void;
@@ -41,10 +42,15 @@ export interface PuckEditorLayoutProps {
   onSavePageDialogs: (pageDialogs: PageDialogsConfig | undefined) => Promise<void>;
   themeMode: "app" | "page";
   editingTarget: EditingTarget;
+  editingStack: EditingContextItem[];
   onEditDialogContent: (dialogId: string) => void;
+  onEditDataBlockTemplate: (componentId: string, name: string, templateContent: Data, viewId: number, tableId: number, currentAppState: Data) => void;
   onBackToPage: () => void;
+  onNavigateToLevel: (level: number) => void;
+  onUpdatePageData: (currentAppState: Data) => Data; // Updates pageData with current Puck state
   onPageDataSaved: (data: Data) => void;
   onDialogDataSaved: (dialogId: string, data: Data) => void;
+  onDataBlockSaved: (componentId: string, data: Data) => Data; // Returns updated pageData
 }
 
 function PuckEditorLayoutInner({
@@ -53,6 +59,7 @@ function PuckEditorLayoutInner({
   page,
   app,
   organization,
+  pageData,
   loadedFromSessionStorage,
   setLoadedFromSessionStorage,
   onPublish,
@@ -62,16 +69,43 @@ function PuckEditorLayoutInner({
   onSavePageDialogs,
   themeMode,
   editingTarget,
+  editingStack,
   onEditDialogContent,
+  onEditDataBlockTemplate,
   onBackToPage,
+  onNavigateToLevel,
+  onUpdatePageData,
   onPageDataSaved,
   onDialogDataSaved,
+  onDataBlockSaved,
 }: PuckEditorLayoutProps) {
   const router = useRouter();
   const { appState, history } = usePuck();
   const themeContext = usePuckEditorTheme();
   const { activeTab, navigateToTab } = useEditorUI();
   const [copiedUrl, setCopiedUrl] = useState(false);
+
+  // Get the outer editing stack actions (from page.tsx)
+  const outerEditingStack = useEditingStack();
+
+  // Create enhanced pushDataBlock that injects appState.data
+  // This allows DataBlockTemplateField to call pushDataBlock without needing usePuck()
+  const handlePushDataBlock = useCallback((
+    componentId: string,
+    name: string,
+    templateContent: Data,
+    viewId: number,
+    tableId: number
+  ) => {
+    // Call the page.tsx handler with appState.data injected
+    onEditDataBlockTemplate(componentId, name, templateContent, viewId, tableId, appState.data);
+  }, [onEditDataBlockTemplate, appState.data]);
+
+  // Enhanced editing stack actions that inject Puck state where needed
+  const enhancedEditingStack = useMemo(() => ({
+    ...outerEditingStack,
+    pushDataBlock: handlePushDataBlock,
+  }), [outerEditingStack, handlePushDataBlock]);
 
   // Wrapper for tabs onValueChange to ensure type safety
   const handleTabChange = (value: string) => {
@@ -104,7 +138,10 @@ function PuckEditorLayoutInner({
 
   const handleSave = async () => {
     try {
-      if (editingTarget === 'page') {
+      // Get current editing context from stack
+      const currentContext = editingStack[editingStack.length - 1];
+
+      if (currentContext.type === 'page') {
         // Save theme first if needed
         if (themeContext.hasUnsavedChanges) {
           const themeData = PuckSession.getTheme(pageId);
@@ -129,10 +166,10 @@ function PuckEditorLayoutInner({
         setLoadedFromSessionStorage(false);
         // Update local pageData state so switching to dialog and back preserves content
         onPageDataSaved(appState.data);
-      } else {
+      } else if (currentContext.type === 'dialog') {
         // Save dialog content
         const updatedDialogs = page.pageDialogs?.dialogs?.map(d =>
-          d.id === editingTarget.dialogId
+          d.id === currentContext.dialogId
             ? { ...d, content: appState.data }
             : d
         ) || [];
@@ -146,17 +183,41 @@ function PuckEditorLayoutInner({
 
         toast.success("Dialog saved successfully!");
         // Update local dialogData and page.pageDialogs state
-        onDialogDataSaved(editingTarget.dialogId, appState.data);
+        onDialogDataSaved(currentContext.dialogId, appState.data);
+      } else if (currentContext.type === 'datablock') {
+        // Update template in pageData (bubbles through stack) and save entire page to DB
+        const updatedPageData = onDataBlockSaved(currentContext.componentId, appState.data);
+
+        const result = await updatePageContent({
+          id: pageId,
+          templateData: updatedPageData
+        });
+
+        if (!result.success) {
+          toast.error(result.error || "Failed to save template");
+          return;
+        }
+
+        toast.success("Template saved!");
+        PuckSession.clearData(pageId);
+        setLoadedFromSessionStorage(false);
       }
     } catch (err) {
       console.error('Error saving:', err);
-      toast.error(editingTarget === 'page' ? "Failed to save page" : "Failed to save dialog");
+      const currentContext = editingStack[editingStack.length - 1];
+      const entityName = currentContext.type === 'page' ? 'page'
+        : currentContext.type === 'dialog' ? 'dialog'
+        : 'template';
+      toast.error(`Failed to save ${entityName}`);
     }
   };
 
   const handlePreview = () => {
-    // Only save to session storage when editing the page, not dialogs
-    if (editingTarget === 'page') {
+    // Only save to session when editing the PAGE itself
+    // When editing dialog/datablock, the page data is already in session
+    // (saved by page.tsx when entering nested content)
+    const currentContext = editingStack[editingStack.length - 1];
+    if (currentContext.type === 'page') {
       PuckSession.setData(pageId, appState.data);
     }
     router.push(`/apps/${appId}/pages/${pageId}/preview`);
@@ -185,23 +246,21 @@ function PuckEditorLayoutInner({
     history.forward();
   };
 
+  // Wrapper that saves current Puck state to pageData BEFORE navigating
+  // This ensures nested DataBlock changes are preserved when using breadcrumb
+  const handleSaveAndNavigateToLevel = (level: number) => {
+    onUpdatePageData(appState.data);
+    onNavigateToLevel(level);
+  };
+
   return (
+    <EditingStackProvider value={enhancedEditingStack}>
     <div className="flex flex-col h-screen bg-background">
-      {/* Dialog editing banner */}
-      {editingTarget !== 'page' && (
-        <div className="bg-purple-100 dark:bg-purple-900/30 border-b border-purple-300 dark:border-purple-700 px-4 py-2 flex items-center gap-3 shrink-0">
-          <Button variant="ghost" size="sm" onClick={onBackToPage} className="gap-1">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Page
-          </Button>
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-            <span className="text-sm font-medium text-purple-800 dark:text-purple-200">
-              Editing Dialog: {editingTarget.dialogName}
-            </span>
-          </div>
-        </div>
-      )}
+      {/* Editing context breadcrumb - shows stack for nested editing */}
+      <EditingContextBreadcrumb
+        stack={editingStack}
+        onNavigate={handleSaveAndNavigateToLevel}
+      />
 
       {/* Header */}
       <header className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 border-b border-border bg-transparent shrink-0">
@@ -367,6 +426,7 @@ function PuckEditorLayoutInner({
         </main>
       </div>
     </div>
+    </EditingStackProvider>
   );
 }
 
