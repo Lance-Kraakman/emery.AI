@@ -5,10 +5,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { EmeryStoreProvider } from '@/contexts/EmeryStoreProvider'
 import { CreateDatabaseDialog } from '@/app/(app)/data/components/CreateDatabaseDialog'
 import { CreateTableDialog } from '@/app/(app)/data/components/CreateTableDialog'
-import { useEmeryStore } from '@/contexts/EmeryStoreProvider'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
-import { storeActions } from '@/stores/actions'
+import { storeActions, setQueryClientRef } from '@/stores/actions'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { LayoutProvider } from '@/components/layout/LayoutProvider'
 import { EmeryLayout } from '@/components/layout/EmeryLayout'
@@ -24,15 +23,18 @@ const queryClient = new QueryClient({
   },
 })
 
+// Set query client reference for store actions to use for cache invalidation
+setQueryClientRef(queryClient)
+
 function DataDialogs() {
   // Use TanStack Store selectors for UI state
   const isCreateDatabaseOpen = useStore(uiStateStore, uiStateSelectors.isCreateDatabaseOpen)
-  const isCreateTableOpen = useStore(uiStateStore, uiStateSelectors.isCreateTableOpen) 
+  const isCreateTableOpen = useStore(uiStateStore, uiStateSelectors.isCreateTableOpen)
   const selectedDatabaseForTable = useStore(uiStateStore, uiStateSelectors.selectedDatabaseForTable)
-  const { refetch } = useEmeryStore()
-  
-  const handleDataStructureCreated = () => {
-    refetch()
+
+  // Use the new onDataStructureCreated which refreshes store AND invalidates query caches
+  const handleDataStructureCreated = async () => {
+    await storeActions.onDataStructureCreated()
   }
 
   return (

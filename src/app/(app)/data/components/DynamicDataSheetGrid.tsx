@@ -604,6 +604,12 @@ export function DynamicDataSheetGrid({
     JSONCell,
   })
 
+  // Create a stable fingerprint of field structure - only changes when fields are added/removed
+  // This is more stable than columns.length which caused jitter during edits
+  const fieldsFingerprint = useMemo(() => {
+    return fields.map(f => f.id).sort().join(',')
+  }, [fields])
+
   /**
    * Event-driven onChange - uses operations parameter for precise change detection
    * No debouncing - mutations fire immediately, TanStack Query handles optimistic updates
@@ -772,7 +778,7 @@ export function DynamicDataSheetGrid({
               </div>
             ) : (
               <DataSheetGrid
-                key={`grid-${tableId}-${columns.length}-${currentView?.id || 'no-view'}`}  // CRITICAL: Remount on visible column count change or view change, but stable during data updates to preserve scroll position
+                key={`grid-${tableId}-${currentView?.id || 'default'}-${fieldsFingerprint}`}  // Include field IDs to remount on field add/remove (but not on cell edits)
                 value={state.data}
                 onChange={handleChange}
                 columns={columns}
