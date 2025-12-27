@@ -24,6 +24,12 @@ import { useStateContext } from '@/components/puck/contexts/StateContext';
 import { executeView } from '@/app/actions/views';
 import type { RowFilterConfig, FilterCondition } from '../../fields/MultiFilterField';
 import type { RowSortConfig, SortCondition } from '../../fields/MultiSortField';
+import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import type {
+  RelationArrayFieldValue,
+  FileArrayFieldValue,
+  DocumentArrayFieldValue,
+} from '@/ddd/domain/tables/value-objects/field-values';
 
 /** Regex to match {rowData.fieldName} pattern */
 const ROW_DATA_VAR_REGEX = /\{rowData\.(\w+)\}/g;
@@ -55,15 +61,94 @@ function filterHasStateVariables(filterConfig?: RowFilterConfig): boolean {
 
 
 /**
+ * Extract filter-friendly value based on field type
+ * Uses field metadata to determine how to extract the value
+ */
+function extractFilterValue(
+  value: unknown,
+  fieldType: FieldType
+): string {
+  if (value === undefined || value === null) {
+    return '';
+  }
+
+  // Handle array-based field types using known types
+  switch (fieldType) {
+    case 'relation': {
+      const relations = value as RelationArrayFieldValue;
+      if (Array.isArray(relations) && relations.length > 0) {
+        // Extract first ID for equality filter
+        return String(relations[0].id);
+      }
+      return '';
+    }
+
+    case 'file': {
+      const files = value as FileArrayFieldValue;
+      if (Array.isArray(files) && files.length > 0) {
+        return String(files[0].id);
+      }
+      return '';
+    }
+
+    case 'document': {
+      const docs = value as DocumentArrayFieldValue;
+      if (Array.isArray(docs) && docs.length > 0) {
+        return String(docs[0].id);
+      }
+      return '';
+    }
+
+    case 'multi-select': {
+      // Multi-select stores array of option values
+      if (Array.isArray(value)) {
+        return value.map(String).join(',');
+      }
+      return String(value);
+    }
+
+    // Primitive types - direct conversion
+    case 'text':
+    case 'email':
+    case 'phone':
+    case 'single-select':
+    case 'number':
+    case 'autonumber':
+    case 'boolean':
+    case 'date':
+    case 'last-updated':
+    case 'created-at':
+    case 'json':
+    case 'embedding':
+    default:
+      return String(value);
+  }
+}
+
+/**
  * Resolve all {rowData.fieldName} variables in a string value
+ * Uses field metadata to properly extract values based on field type
  */
 function resolveRowDataVariables(
   value: string,
-  resolveVariable: (fieldName: string) => unknown
+  resolveVariable: (fieldName: string) => unknown,
+  getFieldType: (fieldName: string) => FieldType | undefined
 ): string {
   return value.replace(ROW_DATA_VAR_REGEX, (_, fieldName) => {
     const resolved = resolveVariable(fieldName);
-    return resolved !== undefined && resolved !== null ? String(resolved) : '';
+
+    // Special case: 'id' is always a number/string primitive
+    if (fieldName === 'id') {
+      return resolved !== undefined && resolved !== null ? String(resolved) : '';
+    }
+
+    const fieldType = getFieldType(fieldName);
+    if (!fieldType) {
+      console.warn(`[resolveRowDataVariables] Unknown field type for: ${fieldName}`);
+      return resolved !== undefined && resolved !== null ? String(resolved) : '';
+    }
+
+    return extractFilterValue(resolved, fieldType);
   });
 }
 
@@ -283,9 +368,18 @@ export function useChildDataBlock({
             console.warn(`[useChildDataBlock] No parent context for: ${condition.value}`);
             couldNotResolve = true;
           } else {
+            // Get field type lookup function from parent context
+            const getFieldType = (fieldName: string): FieldType | undefined => {
+              if (fieldName === 'id') return 'number'; // Built-in ID field
+              const parent = parentContext.parentStack?.[0];
+              const field = parent?.fields.find(f => f.name === fieldName);
+              return field?.type;
+            };
+
             const resolved = resolveRowDataVariables(
               valueStr,
-              parentContext.resolveRowDataVariable
+              parentContext.resolveRowDataVariable,
+              getFieldType
             );
             // Check if variable was resolved
             if (resolved === '' || resolved === valueStr) {

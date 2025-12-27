@@ -14,13 +14,32 @@ import {
   isDocumentArray,
   isFileArray,
 } from '@/ddd/domain/tables/value-objects/field-values';
+import type { RelationArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
+
+/**
+ * Check if value is a relation array field value
+ */
+function isRelationArray(value: unknown): value is RelationArrayFieldValue {
+  return Array.isArray(value) &&
+    value.length > 0 &&
+    typeof value[0] === 'object' &&
+    value[0] !== null &&
+    'id' in value[0] &&
+    'value' in value[0] &&
+    !('s3Key' in value[0]); // Distinguish from file/document arrays
+}
 
 /**
  * Extract string value from complex field values
- * Uses domain type guards for document/file arrays
+ * Uses domain type guards for document/file/relation arrays
  */
 function extractStringValue(value: unknown): string {
   if (value == null) return '';
+
+  // Relation arrays → first ID for filters (check before generic array)
+  if (isRelationArray(value)) {
+    return String(value[0].id);
+  }
 
   // Document arrays → comma-separated IDs
   if (isDocumentArray(value)) {
@@ -331,6 +350,26 @@ export async function executeAction(
         let resolvedValue: unknown = action.value;
         if (typeof action.value === 'string') {
           resolvedValue = resolveDynamicValue(action.value, context);
+        }
+
+        // Handle extraction mode for array field values (relation/file/document)
+        if (action.extractMode && Array.isArray(resolvedValue) && resolvedValue.length > 0) {
+          const firstItem = resolvedValue[0];
+
+          if (action.extractMode === 'first') {
+            // Extract first item's ID for relation/file/document arrays
+            if (firstItem && typeof firstItem === 'object' && 'id' in firstItem) {
+              resolvedValue = (firstItem as { id: string | number }).id;
+            } else {
+              resolvedValue = firstItem ?? null;
+            }
+          } else if (action.extractMode === 'all') {
+            // Extract all IDs as array
+            if (firstItem && typeof firstItem === 'object' && 'id' in firstItem) {
+              resolvedValue = resolvedValue.map((item: { id: string | number }) => item.id);
+            }
+            // else keep array as-is
+          }
         }
 
         // Default to updating URL (updateUrl defaults to true)

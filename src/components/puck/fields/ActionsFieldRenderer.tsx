@@ -36,8 +36,98 @@ import { VariableAutocompleteInput } from './VariableAutocompleteInput';
 import { VariablesPanel, type Variable } from '@/components/shared/VariablesPanel';
 import { useDataLayoutContext } from '../contexts/DataLayoutContext';
 import { useStateContext } from '../contexts/StateContext';
+import type { StateVariableType, StateVariable } from '../types/state';
 
 type ActionType = 'assignTask' | 'navigateToPage' | 'openUrl' | 'setState';
+
+/**
+ * StateValueInput - Type-aware value input for setState action
+ *
+ * Shows appropriate input based on the selected state variable type:
+ * - Boolean: True/False/Clear dropdown
+ * - Number: Number input with variable autocomplete
+ * - String/other: Text input with variable autocomplete
+ */
+function StateValueInput({
+  value,
+  onChange,
+  variableType,
+  disabled,
+}: {
+  value: string | null | undefined;
+  onChange: (value: string | null) => void;
+  variableType?: StateVariableType;
+  disabled?: boolean;
+}) {
+  // Boolean type - show True/False/Clear dropdown
+  if (variableType === 'boolean') {
+    return (
+      <Select
+        value={value ?? ''}
+        onValueChange={(val) => onChange(val === '__null__' ? null : val)}
+        disabled={disabled}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder="Select value...">
+            {value === 'true' ? 'True' : value === 'false' ? 'False' : value === '' || value === null ? 'Clear (null)' : value}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="true">
+            <span className="text-green-600 font-medium">True</span>
+          </SelectItem>
+          <SelectItem value="false">
+            <span className="text-red-600 font-medium">False</span>
+          </SelectItem>
+          <SelectItem value="__null__">
+            <span className="text-muted-foreground">Clear (null)</span>
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  // Number type - show number input or variable autocomplete
+  if (variableType === 'number') {
+    // Check if value looks like a variable reference
+    const isVariable = value?.includes('{');
+    if (isVariable) {
+      return (
+        <VariableAutocompleteInput
+          value={value ?? ''}
+          onChange={(val) => onChange(val)}
+          placeholder="Enter number or {rowData.field}"
+          disabled={disabled}
+        />
+      );
+    }
+
+    return (
+      <div className="space-y-1">
+        <Input
+          type="number"
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Enter a number"
+          disabled={disabled}
+        />
+        <p className="text-[10px] text-muted-foreground">
+          Type {"{"} for variable reference
+        </p>
+      </div>
+    );
+  }
+
+  // Default: text input with variable autocomplete
+  return (
+    <VariableAutocompleteInput
+      value={value ?? ''}
+      onChange={(val) => onChange(val)}
+      placeholder="Enter value or {rowData.field}"
+      disabled={disabled}
+    />
+  );
+}
 
 const ACTION_TYPE_LABELS: Record<ActionType, string> = {
   assignTask: 'Assign Task to Agent',
@@ -601,73 +691,134 @@ function ActionItem({
       )}
 
       {/* Set State Fields */}
-      {action.type === 'setState' && (
-        <>
-          <div className="space-y-2">
-            <Label className="text-xs font-medium">State Variable</Label>
-            <Select
-              value={action.key || ''}
-              onValueChange={(val) => onChange({ ...action, key: val })}
-              disabled={readOnly}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a state variable" />
-              </SelectTrigger>
-              <SelectContent>
-                {stateContext?.getConfig()?.variables?.length === 0 && (
-                  <div className="py-2 px-2 text-xs text-muted-foreground">
-                    No state variables defined
-                  </div>
-                )}
-                {stateContext?.getConfig()?.variables?.map((variable) => (
-                  <SelectItem key={variable.name} value={variable.name}>
-                    <div className="flex items-center gap-2">
-                      <VariableIcon className="h-4 w-4 text-muted-foreground" />
-                      <span>{variable.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        ({variable.type})
-                      </span>
+      {action.type === 'setState' && (() => {
+        // Get the selected variable's type for type-aware input
+        const selectedVariable = stateContext?.getConfig()?.variables?.find(
+          (v) => v.name === action.key
+        );
+        const variableType = selectedVariable?.type;
+
+        // Check if value references a relation/file/document field (array type)
+        const dataContext = useDataLayoutContext();
+        const isArrayTypeField = React.useMemo(() => {
+          const valueStr = String(action.value ?? '');
+          // Check for {rowData.fieldName} pattern
+          const match = valueStr.match(/\{rowData\.(\w+)\}/);
+          if (!match) return false;
+          const fieldName = match[1];
+          if (!dataContext?.fields) return false;
+          const field = dataContext.fields.find(f => f.name === fieldName);
+          return field?.type === 'relation' || field?.type === 'file' || field?.type === 'document';
+        }, [action.value, dataContext?.fields]);
+
+        return (
+          <>
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">State Variable</Label>
+              <Select
+                value={action.key || ''}
+                onValueChange={(val) => {
+                  // Reset value when variable changes (type might differ)
+                  const newVar = stateContext?.getConfig()?.variables?.find(v => v.name === val);
+                  const newValue = newVar?.type === 'boolean' ? '' : action.value;
+                  onChange({ ...action, key: val, value: newValue });
+                }}
+                disabled={readOnly}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a state variable" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stateContext?.getConfig()?.variables?.length === 0 && (
+                    <div className="py-2 px-2 text-xs text-muted-foreground">
+                      No state variables defined
                     </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Define state variables in Page State panel
-            </p>
-          </div>
+                  )}
+                  {stateContext?.getConfig()?.variables?.map((variable) => (
+                    <SelectItem key={variable.name} value={variable.name}>
+                      <div className="flex items-center gap-2">
+                        <VariableIcon className="h-4 w-4 text-muted-foreground" />
+                        <span>{variable.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          ({variable.type})
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Define state variables in Page State panel
+              </p>
+            </div>
 
-          <div className="space-y-2">
-            <Label className="text-xs font-medium">Value</Label>
-            <VariableAutocompleteInput
-              value={String(action.value ?? '')}
-              onChange={(val) => onChange({ ...action, value: val })}
-              placeholder="Enter value or {rowData.field}"
-              disabled={readOnly}
-            />
-            <p className="text-xs text-muted-foreground">
-              Type {"{"} to insert row data or other variables
-            </p>
-          </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Value</Label>
+              <StateValueInput
+                value={action.value as string | null | undefined}
+                onChange={(val) => onChange({ ...action, value: val })}
+                variableType={variableType}
+                disabled={readOnly}
+              />
+              {variableType !== 'boolean' && (
+                <p className="text-xs text-muted-foreground">
+                  Type {"{"} to insert row data or other variables
+                </p>
+              )}
+            </div>
 
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id={`action-${index}-update-url`}
-              checked={action.updateUrl !== false}
-              onCheckedChange={(checked) =>
-                onChange({ ...action, updateUrl: checked as boolean })
-              }
-              disabled={readOnly}
-            />
-            <Label
-              htmlFor={`action-${index}-update-url`}
-              className="text-xs font-normal cursor-pointer"
-            >
-              Update URL parameter (persists state in URL)
-            </Label>
-          </div>
-        </>
-      )}
+            {/* Extract Mode selector for array-type fields (relation/file/document) */}
+            {isArrayTypeField && (
+              <div className="space-y-2">
+                <Label className="text-xs font-medium">Extract from array</Label>
+                <Select
+                  value={action.extractMode || 'first'}
+                  onValueChange={(val) => onChange({ ...action, extractMode: val as 'first' | 'all' })}
+                  disabled={readOnly}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="first">
+                      <div className="flex items-center gap-2">
+                        <span>First item only</span>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">ID</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="all">
+                      <div className="flex items-center gap-2">
+                        <span>All items</span>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">[array]</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  This field contains multiple items. Choose how to extract the value.
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id={`action-${index}-update-url`}
+                checked={action.updateUrl !== false}
+                onCheckedChange={(checked) =>
+                  onChange({ ...action, updateUrl: checked as boolean })
+                }
+                disabled={readOnly}
+              />
+              <Label
+                htmlFor={`action-${index}-update-url`}
+                className="text-xs font-normal cursor-pointer"
+              >
+                Update URL parameter (persists state in URL)
+              </Label>
+            </div>
+          </>
+        );
+      })()}
 
       {/* Preview */}
       <div className="pt-2 border-t border-border">
