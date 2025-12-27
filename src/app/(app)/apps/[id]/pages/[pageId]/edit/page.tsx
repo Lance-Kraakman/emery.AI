@@ -266,6 +266,7 @@ export default function PageEditPage() {
 
   // Derive currentData by traversing the editing stack path
   // For nested DataBlocks: Page > A > B means we need to find B's template inside A's template
+  // Includes validation to handle deleted/missing components gracefully
   const currentData = useMemo(() => {
     if (editingStack.length === 1 && editingStack[0].type === 'page') {
       return pageData;
@@ -279,11 +280,19 @@ export default function PageEditPage() {
 
       if (level.type === 'dialog') {
         const dialog = page?.pageDialogs?.dialogs?.find(d => d.id === level.dialogId);
-        data = dialog?.content || emptyData;
+        if (!dialog?.content) {
+          console.warn(`[currentData] Dialog ${level.dialogId} not found in page dialogs`);
+          return emptyData;
+        }
+        data = dialog.content;
       } else if (level.type === 'datablock') {
         // Find the component in the current data level (recursively, including templateContent)
         const component = findNestedComponent(data, level.componentId);
-        data = component?.props?.templateContent || emptyData;
+        if (!component) {
+          console.warn(`[currentData] DataBlock ${level.componentId} (${level.name}) not found in data`);
+          return emptyData;
+        }
+        data = component.props?.templateContent || emptyData;
       }
     }
 
@@ -689,12 +698,9 @@ function PuckEditorWrapper({
 }: PuckEditorWrapperProps) {
   const isEditingDataBlock = currentContext.type === 'datablock';
 
-  // Simpler Puck key based on editing context
-  const puckKey = currentContext.type === 'page'
-    ? `page-${pageId}`
-    : currentContext.type === 'dialog'
-      ? `dialog-${currentContext.dialogId}`
-      : `datablock-${currentContext.componentId}`;
+  // Stable Puck key to preserve undo/redo history across navigation
+  // Let Puck handle data changes via the `data` prop instead of remounting
+  const puckKey = `page-${pageId}`;
 
   const puckEditor = (
     <Puck

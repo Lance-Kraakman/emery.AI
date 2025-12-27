@@ -571,21 +571,32 @@
    ============================================
 
    When editing a DataBlock template, the preview canvas
-   should fit the content instead of taking full page height.
-   Users can use Container blocks for specific sizing needs.
+   should fit the content and be centered. Users can use
+   Container blocks for specific sizing needs.
 */
 
 .puck-template-editor {
   height: 100%;
   width: 100%;
+  position: relative; /* Required for ::before positioning */
+}
+
+/* Center the canvas and add padding to avoid header overlap */
+.puck-template-editor [class*="Canvas-root"] {
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* Center vertically */
+  align-items: center; /* Center horizontally */
+  min-height: 300px;
+  padding: 24px; /* Avoid overlap with header/toolbar */
 }
 
 /* Make canvas fit content for template editing */
-.puck-template-editor [class*="Canvas-root"],
 .puck-template-editor [class*="Canvas-preview"],
 .puck-template-editor [class*="Frame-root"] {
   height: auto !important;
   min-height: 200px;
+  overflow: visible; /* Don't clip content */
 }
 
 /* Ensure iframe also fits content */

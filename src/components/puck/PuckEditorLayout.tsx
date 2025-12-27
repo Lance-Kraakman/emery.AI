@@ -247,9 +247,13 @@ function PuckEditorLayoutInner({
 
   // Wrapper that saves current Puck state to pageData BEFORE navigating
   // This ensures nested DataBlock changes are preserved when using breadcrumb
+  // Uses requestAnimationFrame to ensure pageData state update completes before
+  // we change the editing stack (fixes race condition with currentData derivation)
   const handleSaveAndNavigateToLevel = (level: number) => {
     onUpdatePageData(appState.data);
-    onNavigateToLevel(level);
+    requestAnimationFrame(() => {
+      onNavigateToLevel(level);
+    });
   };
 
   return (
