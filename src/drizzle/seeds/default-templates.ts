@@ -488,9 +488,11 @@ export async function seedSystemTemplates() {
 }
 
 // Run if called directly
-seedSystemTemplates()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error('Seeding failed:', error);
-    process.exit(1);
-  });
+if (require.main === module) {
+  seedSystemTemplates()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error('Seeding failed:', error);
+      process.exit(1);
+    });
+}
