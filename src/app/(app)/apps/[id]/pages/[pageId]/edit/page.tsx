@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useCallback, type ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Puck, Data, resolveAllData, type ComponentData } from "@measured/puck";
+import { Puck, Data, resolveAllData } from "@measured/puck";
 import "@measured/puck/puck.css";
 import "@/styles/puck-theme.css";
 import { config } from "@/components/puck/config";
@@ -19,8 +19,6 @@ import { toast } from "sonner";
 import { PageContextProvider } from "@/components/puck/contexts/PageContext";
 import { PuckEditorThemeProvider, usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
 import { PuckSession } from "@/lib/puck/session-storage";
-import { TemplateEditorProvider } from "@/components/puck/contexts/TemplateEditorContext";
-import { DataLayoutProvider } from "@/components/puck/contexts/DataLayoutContext";
 import { updatePageState, updatePageDialogs } from "@/app/actions/puck-pages";
 import type { PageStateConfig } from "@/components/puck/types/state";
 import type { PageDialogsConfig } from "@/ddd/domain/puck/value-objects/page-dialogs";
@@ -57,134 +55,6 @@ export default function PageEditPage() {
   // Current editing context is the last item in the stack
   const currentContext = editingStack[editingStack.length - 1];
 
-  /**
-   * Recursively find a component by ID, including inside templateContent.
-   * Puck's walkTree only traverses slots/zones, not custom fields like templateContent.
-   */
-  const findNestedComponent = useCallback((data: Data, componentId: string): ComponentData | null => {
-    // Search in content array
-    for (const comp of data.content) {
-      if (comp.props?.id === componentId) {
-        return comp as ComponentData;
-      }
-      // Recurse into templateContent if exists
-      if (comp.props?.templateContent) {
-        const found = findNestedComponent(comp.props.templateContent as Data, componentId);
-        if (found) return found;
-      }
-    }
-
-    // Search in zones
-    for (const zoneContent of Object.values(data.zones || {})) {
-      for (const comp of zoneContent) {
-        if (comp.props?.id === componentId) {
-          return comp as ComponentData;
-        }
-        if (comp.props?.templateContent) {
-          const found = findNestedComponent(comp.props.templateContent as Data, componentId);
-          if (found) return found;
-        }
-      }
-    }
-
-    return null;
-  }, []);
-
-  /**
-   * Recursively find and update a component's templateContent anywhere in pageData.
-   * Descends into templateContent props that Puck's walkTree doesn't traverse
-   * (because templateContent is a custom field, not a slot).
-   */
-  const updateNestedTemplate = useCallback((data: Data, componentId: string, newTemplate: Data): Data => {
-    let contentChanged = false;
-    const updatedContent = data.content.map(comp => {
-      // Found target - update its templateContent
-      if (comp.props?.id === componentId) {
-        contentChanged = true;
-        return { ...comp, props: { ...comp.props, templateContent: newTemplate } };
-      }
-
-      // Recurse into templateContent if exists
-      if (comp.props?.templateContent) {
-        const updatedInner = updateNestedTemplate(comp.props.templateContent as Data, componentId, newTemplate);
-        if (updatedInner !== comp.props.templateContent) {
-          contentChanged = true;
-          return { ...comp, props: { ...comp.props, templateContent: updatedInner } };
-        }
-      }
-      return comp;
-    });
-
-    // Also check zones
-    let zonesChanged = false;
-    const updatedZones: Record<string, typeof data.content> = {};
-    for (const [zoneName, zoneContent] of Object.entries(data.zones || {})) {
-      const updatedZone = zoneContent.map(comp => {
-        if (comp.props?.id === componentId) {
-          zonesChanged = true;
-          return { ...comp, props: { ...comp.props, templateContent: newTemplate } };
-        }
-        if (comp.props?.templateContent) {
-          const updatedInner = updateNestedTemplate(comp.props.templateContent as Data, componentId, newTemplate);
-          if (updatedInner !== comp.props.templateContent) {
-            zonesChanged = true;
-            return { ...comp, props: { ...comp.props, templateContent: updatedInner } };
-          }
-        }
-        return comp;
-      });
-      updatedZones[zoneName] = updatedZone;
-    }
-
-    if (!contentChanged && !zonesChanged) return data;
-
-    return {
-      ...data,
-      content: contentChanged ? updatedContent : data.content,
-      zones: zonesChanged ? updatedZones : data.zones
-    };
-  }, []);
-
-  /**
-   * Find ancestor DataBlocks containing targetId in their templateContent.
-   * Returns array of ancestor contexts (root to immediate parent), or empty if target is at root.
-   */
-  const findAncestorDataBlocks = useCallback((targetId: string): EditingContextItem[] => {
-    const search = (data: Data, path: EditingContextItem[]): EditingContextItem[] | null => {
-      const components = [...data.content, ...Object.values(data.zones || {}).flat()];
-
-      for (const comp of components) {
-        if (comp.type !== 'DataBlock' || !comp.props?.templateContent) continue;
-
-        const template = comp.props.templateContent as Data;
-        const allChildren = [...(template.content || []), ...Object.values(template.zones || {}).flat()];
-
-        // Is target directly in this DataBlock's template?
-        if (allChildren.some(c => c.props?.id === targetId)) {
-          return [...path, {
-            type: 'datablock' as const,
-            componentId: comp.props.id as string,
-            name: comp.props._viewName as string || 'DataBlock',
-            viewId: comp.props.viewId as number,
-            tableId: comp.props._tableId as number,
-          }];
-        }
-
-        // Recurse into this DataBlock's template
-        const found = search(template, [...path, {
-          type: 'datablock' as const,
-          componentId: comp.props.id as string,
-          name: comp.props._viewName as string || 'DataBlock',
-          viewId: comp.props.viewId as number,
-          tableId: comp.props._tableId as number,
-        }]);
-        if (found) return found;
-      }
-      return null;
-    };
-
-    return search(pageData, []) || [];
-  }, [pageData]);
 
   // Convert to legacy EditingTarget format for backward compatibility with PuckEditorLayout
   const editingTarget: EditingTarget = currentContext.type === 'page'
@@ -264,40 +134,26 @@ export default function PageEditPage() {
     }
   }, [pageId, appId, searchParams]);
 
-  // Derive currentData by traversing the editing stack path
-  // For nested DataBlocks: Page > A > B means we need to find B's template inside A's template
-  // Includes validation to handle deleted/missing components gracefully
+  // Derive currentData based on editing context (page or dialog only)
+  // DataBlock templates are now edited inline via slots, no separate editing level needed
   const currentData = useMemo(() => {
     if (editingStack.length === 1 && editingStack[0].type === 'page') {
       return pageData;
     }
 
-    // Start from pageData and traverse down the stack
-    let data: Data = pageData;
-
-    for (let i = 1; i < editingStack.length; i++) {
-      const level = editingStack[i];
-
-      if (level.type === 'dialog') {
-        const dialog = page?.pageDialogs?.dialogs?.find(d => d.id === level.dialogId);
-        if (!dialog?.content) {
-          console.warn(`[currentData] Dialog ${level.dialogId} not found in page dialogs`);
-          return emptyData;
-        }
-        data = dialog.content;
-      } else if (level.type === 'datablock') {
-        // Find the component in the current data level (recursively, including templateContent)
-        const component = findNestedComponent(data, level.componentId);
-        if (!component) {
-          console.warn(`[currentData] DataBlock ${level.componentId} (${level.name}) not found in data`);
-          return emptyData;
-        }
-        data = component.props?.templateContent || emptyData;
+    // Check for dialog editing
+    const currentLevel = editingStack[editingStack.length - 1];
+    if (currentLevel.type === 'dialog') {
+      const dialog = page?.pageDialogs?.dialogs?.find(d => d.id === currentLevel.dialogId);
+      if (!dialog?.content) {
+        console.warn(`[currentData] Dialog ${currentLevel.dialogId} not found in page dialogs`);
+        return emptyData;
       }
+      return dialog.content;
     }
 
-    return data;
-  }, [editingStack, pageData, page?.pageDialogs, emptyData, findNestedComponent]);
+    return pageData;
+  }, [editingStack, pageData, page?.pageDialogs, emptyData]);
 
   // Handler to start editing a dialog's content - push onto stack
   const handleEditDialogContent = (dialogId: string) => {
@@ -309,51 +165,6 @@ export default function PageEditPage() {
     }
   };
 
-  // Helper to update pageData with current appState at the correct nested position
-  // Uses updateNestedTemplate to find and update the component anywhere in pageData
-  const updatePageDataWithCurrentState = useCallback((currentAppState: Data): Data => {
-    const currentLevel = editingStack[editingStack.length - 1];
-
-    // At page level - appState IS pageData
-    if (currentLevel.type === 'page') {
-      return currentAppState;
-    }
-
-    // Editing a datablock template - find and update it anywhere in pageData
-    if (currentLevel.type === 'datablock') {
-      return updateNestedTemplate(pageData, currentLevel.componentId, currentAppState);
-    }
-
-    // Dialog (unchanged - dialogs are stored separately)
-    return pageData;
-  }, [editingStack, pageData, updateNestedTemplate]);
-
-  // Handler to start editing a DataBlock's template - push onto stack
-  const handleEditDataBlockTemplate = useCallback((
-    componentId: string,
-    name: string,
-    _templateContent: Data, // Template we're entering (fallback if pageData not updated)
-    viewId: number,
-    tableId: number,
-    currentAppState: Data  // Current appState.data from Puck
-  ) => {
-    // Update pageData with current appState BEFORE navigating
-    // This ensures nested DataBlocks are properly embedded in pageData
-    const updatedPageData = updatePageDataWithCurrentState(currentAppState);
-    setPageData(updatedPageData);
-    PuckSession.setData(pageId, updatedPageData);
-
-    // Find ancestor DataBlocks (if this DataBlock is nested inside another's template)
-    const ancestors = findAncestorDataBlocks(componentId);
-
-    // Push ancestors first (if any), then the target DataBlock
-    setEditingStack(prev => [
-      ...prev,
-      ...ancestors,
-      { type: 'datablock', componentId, name, viewId, tableId }
-    ]);
-  }, [pageId, updatePageDataWithCurrentState, findAncestorDataBlocks]);
-
   // Handler to navigate back one level - pop from stack
   const handleBackToPage = () => {
     setEditingStack(prev => {
@@ -363,21 +174,32 @@ export default function PageEditPage() {
   };
 
   // Handler to navigate to a specific level in the stack
-  const handleNavigateToLevel = (level: number) => {
+  // Accepts currentAppState to save current content before navigating
+  const handleNavigateToLevel = useCallback((level: number, currentAppState?: Data) => {
+    // If currentAppState is provided, save it to pageData first
+    if (currentAppState) {
+      const currentLevel = editingStack[editingStack.length - 1];
+      if (currentLevel.type === 'page') {
+        // If at page level, the appState IS the pageData
+        setPageData(currentAppState);
+        PuckSession.setData(pageId, currentAppState);
+      }
+      // Dialog content is stored separately, no need to update pageData
+    }
+
+    // Update editing stack
     setEditingStack(prev => {
       if (level < 0 || level >= prev.length) return prev;
       return prev.slice(0, level + 1);
     });
-  };
+  }, [editingStack, pageId]);
 
-  // Handler to update pageData with current Puck appState (called from PuckEditorLayout)
-  // Updates both state and session storage
+  // Handler to update pageData with current Puck appState
   const handleUpdatePageData = useCallback((currentAppState: Data): Data => {
-    const updatedPageData = updatePageDataWithCurrentState(currentAppState);
-    setPageData(updatedPageData);
-    PuckSession.setData(pageId, updatedPageData);
-    return updatedPageData;
-  }, [updatePageDataWithCurrentState, pageId]);
+    setPageData(currentAppState);
+    PuckSession.setData(pageId, currentAppState);
+    return currentAppState;
+  }, [pageId]);
 
   // Callback when page data is saved
   const handlePageDataSaved = (data: Data) => {
@@ -401,20 +223,9 @@ export default function PageEditPage() {
     });
   };
 
-  // Callback when DataBlock template is saved - update pageData using recursive function
-  // Returns the updated pageData for saving to DB
-  const handleDataBlockSaved = useCallback((componentId: string, templateData: Data): Data => {
-    // Use updateNestedTemplate to find and update the component anywhere in pageData
-    const updatedPageData = updateNestedTemplate(pageData, componentId, templateData);
-    setPageData(updatedPageData);
-    return updatedPageData;
-  }, [pageData, updateNestedTemplate]);
-
   // Editing stack actions for the context provider
-  // NOTE: pushDataBlock is a no-op here because PuckEditorLayout overrides it
-  // to inject appState.data (which is only available inside <Puck>).
+  // Note: DataBlock templates are now edited inline via slots, no pushDataBlock needed
   const editingStackActions = useMemo(() => ({
-    pushDataBlock: () => {},  // Overridden by PuckEditorLayout
     pushDialog: (dialogId: string, dialogName: string) => {
       const dialog = page?.pageDialogs?.dialogs?.find(d => d.id === dialogId);
       if (dialog) {
@@ -422,8 +233,8 @@ export default function PageEditPage() {
       }
     },
     pop: handleBackToPage,
-    navigateToLevel: handleNavigateToLevel,
-  }), [page?.pageDialogs?.dialogs]);
+    navigateToLevel: (level: number, currentAppState?: Data) => handleNavigateToLevel(level, currentAppState),
+  }), [page?.pageDialogs?.dialogs, handleNavigateToLevel]);
 
   const handlePublish = async () => {
     if (!page) return;
@@ -579,13 +390,11 @@ export default function PageEditPage() {
               onSavePageDialogs={handleSavePageDialogs}
               editingTarget={editingTarget}
               onEditDialogContent={handleEditDialogContent}
-              onEditDataBlockTemplate={handleEditDataBlockTemplate}
               onBackToPage={handleBackToPage}
               onNavigateToLevel={handleNavigateToLevel}
               onUpdatePageData={handleUpdatePageData}
               onPageDataSaved={handlePageDataSaved}
               onDialogDataSaved={handleDialogDataSaved}
-              onDataBlockSaved={handleDataBlockSaved}
             />
           </EditingStackProvider>
         </StateProvider>
@@ -632,20 +441,15 @@ function EditorPageContextWrapper({
 }
 
 /**
- * PuckEditorWrapper - Wraps Puck with appropriate context providers
+ * PuckEditorWrapper - Wraps Puck for page/dialog editing
  *
- * When editing a DataBlock template:
- * - Wraps with TemplateEditorProvider to fetch fields fresh
- * - Adds puck-template-editor class for sizing constraints
- *
- * When editing page/dialog:
- * - Renders Puck directly without extra wrappers
+ * DataBlock templates are now edited inline via slots, no separate editing level needed.
  */
 interface PuckEditorWrapperProps {
   currentContext: EditingContextItem;
   editingStack: EditingContextItem[];
   currentData: Data;
-  pageData: Data; // Full page data for saving nested content
+  pageData: Data;
   pageId: number;
   appId: number;
   page: PageDTO;
@@ -660,17 +464,14 @@ interface PuckEditorWrapperProps {
   onSavePageDialogs: (pageDialogs: PageDialogsConfig | undefined) => Promise<void>;
   editingTarget: EditingTarget;
   onEditDialogContent: (dialogId: string) => void;
-  onEditDataBlockTemplate: (componentId: string, name: string, templateContent: Data, viewId: number, tableId: number, currentAppState: Data) => void;
   onBackToPage: () => void;
-  onNavigateToLevel: (level: number) => void;
-  onUpdatePageData: (currentAppState: Data) => Data; // Updates pageData with current Puck state
+  onNavigateToLevel: (level: number, currentAppState?: Data) => void;
+  onUpdatePageData: (currentAppState: Data) => Data;
   onPageDataSaved: (data: Data) => void;
   onDialogDataSaved: (dialogId: string, data: Data) => void;
-  onDataBlockSaved: (componentId: string, data: Data) => Data; // Returns updated pageData
 }
 
 function PuckEditorWrapper({
-  currentContext,
   editingStack,
   currentData,
   pageData,
@@ -688,21 +489,16 @@ function PuckEditorWrapper({
   onSavePageDialogs,
   editingTarget,
   onEditDialogContent,
-  onEditDataBlockTemplate,
   onBackToPage,
   onNavigateToLevel,
   onUpdatePageData,
   onPageDataSaved,
   onDialogDataSaved,
-  onDataBlockSaved,
 }: PuckEditorWrapperProps) {
-  const isEditingDataBlock = currentContext.type === 'datablock';
-
   // Stable Puck key to preserve undo/redo history across navigation
-  // Let Puck handle data changes via the `data` prop instead of remounting
   const puckKey = `page-${pageId}`;
 
-  const puckEditor = (
+  return (
     <Puck
       key={puckKey}
       config={config}
@@ -731,31 +527,12 @@ function PuckEditorWrapper({
         editingTarget={editingTarget}
         editingStack={editingStack}
         onEditDialogContent={onEditDialogContent}
-        onEditDataBlockTemplate={onEditDataBlockTemplate}
         onBackToPage={onBackToPage}
         onNavigateToLevel={onNavigateToLevel}
         onUpdatePageData={onUpdatePageData}
         onPageDataSaved={onPageDataSaved}
         onDialogDataSaved={onDialogDataSaved}
-        onDataBlockSaved={onDataBlockSaved}
       />
     </Puck>
   );
-
-  // When editing a DataBlock template, wrap with TemplateEditorProvider
-  if (isEditingDataBlock) {
-    return (
-      <TemplateEditorProvider
-        viewId={currentContext.viewId}
-        tableId={currentContext.tableId}
-      >
-        <div className="puck-template-editor">
-          {puckEditor}
-        </div>
-      </TemplateEditorProvider>
-    );
-  }
-
-  // For page/dialog editing, render Puck directly
-  return puckEditor;
 }

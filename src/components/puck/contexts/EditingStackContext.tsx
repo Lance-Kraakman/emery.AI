@@ -7,10 +7,11 @@
  * Replaces the window.dispatchEvent pattern with idiomatic React context.
  *
  * Usage in components:
- *   const { pushDataBlock } = useEditingStack();
- *   pushDataBlock(componentId, name, templateContent, viewId, tableId);
+ *   const { pushDialog } = useEditingStack();
+ *   pushDialog(dialogId, dialogName);
  *
  * Note: When outside editor context (public/preview pages), returns no-op functions.
+ * Note: DataBlock templates are now edited inline via slots, no pushDataBlock needed.
  */
 
 import { createContext, useContext } from 'react';
@@ -27,7 +28,6 @@ export function useEditingStack(): EditingStackActions {
   if (!ctx) {
     // Return no-op functions when not in editor context
     return {
-      pushDataBlock: () => {},
       pushDialog: () => {},
       pop: () => {},
       navigateToLevel: () => {},
