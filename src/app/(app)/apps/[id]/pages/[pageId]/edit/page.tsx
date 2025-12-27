@@ -495,8 +495,12 @@ function PuckEditorWrapper({
   onPageDataSaved,
   onDialogDataSaved,
 }: PuckEditorWrapperProps) {
-  // Stable Puck key to preserve undo/redo history across navigation
-  const puckKey = `page-${pageId}`;
+  // Puck key includes editing context so it remounts when switching page/dialog
+  const currentLevel = editingStack[editingStack.length - 1];
+  const contextKey = currentLevel.type === 'page'
+    ? 'page'
+    : `dialog-${currentLevel.dialogId}`;
+  const puckKey = `${pageId}-${contextKey}`;
 
   return (
     <Puck
