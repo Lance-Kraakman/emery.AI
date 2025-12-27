@@ -460,3 +460,82 @@ export async function duplicateAgent(agentId: number, revalidateUrl?: string): P
     }
   });
 }
+
+// =============================================================================
+// Pipedream Source Deployment
+// =============================================================================
+
+export interface DeployPipedreamSourceInput {
+  agentId: number;
+  triggerId: string;      // Tool ID from tools table (e.g., "gmail-new-email-received")
+  connectionId: string;   // User's OAuth connection ID (e.g., "apn_QPhBxVA")
+  appSlug: string;        // App slug (e.g., "gmail", "slack")
+  configuredProps?: Record<string, any>;
+}
+
+export interface DeployPipedreamSourceResult {
+  sourceId: string;
+  webhookId: string;
+  subscriptionId: string;
+}
+
+/**
+ * Deploy a Pipedream event source for an agent's automation trigger
+ *
+ * AIDEV-NOTE: This wraps the Pipedream sources service to make it available
+ * as a server action. Needed because deploySource uses PIPEDREAM_API_KEY.
+ */
+export async function deployPipedreamSource(
+  input: DeployPipedreamSourceInput
+): Promise<Result<DeployPipedreamSourceResult>> {
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("agents:manage");
+      const { agentId, triggerId, connectionId, appSlug, configuredProps } = input;
+
+      console.log('[AgentActions] Deploying Pipedream source:', {
+        agentId,
+        triggerId,
+        connectionId,
+        appSlug,
+        userId: session.user.id
+      });
+
+      // Import dynamically to avoid issues with server-only code
+      const { deploySource } = await import('@/lib/pipedream/sources');
+
+      // Build webhook URL for this agent
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      const webhookUrl = `${baseUrl}/api/webhooks/pipedream/${agentId}`;
+
+      console.log('[AgentActions] Webhook URL:', webhookUrl);
+
+      // Deploy the source
+      const result = await deploySource({
+        userId: session.user.id,
+        triggerId,
+        webhookUrl,
+        connectionId,
+        appSlug,
+        configuredProps
+      });
+
+      console.log('[AgentActions] Source deployed:', result);
+
+      return {
+        success: true,
+        data: {
+          sourceId: result.sourceId,
+          webhookId: result.webhookId,
+          subscriptionId: result.subscriptionId
+        }
+      };
+    } catch (error) {
+      console.error('[AgentActions] Failed to deploy Pipedream source:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to deploy Pipedream source'
+      };
+    }
+  });
+}

@@ -20,7 +20,7 @@ import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-typ
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 import { db } from '@/lib/db/client';
 import { tools, appTypes, type OAuthToolDefinitionData } from '@/lib/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 
 /**
  * Search all tools (both reference and system tools)
@@ -403,6 +403,89 @@ export async function getPipedreamToolById(toolId: string): Promise<Result<Piped
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get Pipedream tool'
+    };
+  }
+}
+
+// =============================================================================
+// Trigger Tools (Event Sources) - For External Event Automations
+// =============================================================================
+
+export interface TriggerToolParameter {
+  type: string;
+  description: string;
+  required: boolean;
+}
+
+export interface TriggerToolDTO {
+  id: string;
+  displayName: string;
+  description: string;
+  appId: string;
+  parameters: Record<string, TriggerToolParameter>;
+}
+
+/**
+ * Get available triggers (event sources) for a specific app
+ * Used in TriggerConfigModal for External Event automation type
+ * AIDEV-NOTE: Filters tools where is_trigger = true AND appId matches
+ */
+export async function getTriggersByApp(appId: string): Promise<Result<TriggerToolDTO[]>> {
+  try {
+    await requireAuth();
+
+    console.log(`[ToolActions] Getting triggers for app: ${appId}`);
+
+    // Query tools that are triggers for this app
+    const triggerTools = await db.select({
+      id: tools.id,
+      displayName: tools.displayName,
+      description: tools.description,
+      appId: tools.appId,
+      config: tools.config,
+    })
+      .from(tools)
+      .where(and(
+        eq(tools.appId, appId),
+        eq(tools.isTrigger, true)
+      ));
+
+    console.log(`[ToolActions] Found ${triggerTools.length} triggers for ${appId}`);
+
+    // Convert to DTOs
+    const triggerDTOs: TriggerToolDTO[] = triggerTools.map((row: typeof triggerTools[number]) => {
+      const config = row.config as OAuthToolDefinitionData;
+
+      return {
+        id: row.id,
+        displayName: row.displayName,
+        description: row.description || '',
+        appId: row.appId,
+        parameters: config.parameters ? Object.fromEntries(
+          Object.entries(config.parameters).map(([key, param]) => [
+            key,
+            {
+              type: param.type,
+              description: param.description || '',
+              required: param.required,
+            }
+          ])
+        ) : {},
+      };
+    });
+
+    // Sort by display name
+    triggerDTOs.sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+    return {
+      success: true,
+      data: triggerDTOs
+    };
+  } catch (error: unknown) {
+    console.error('[ToolActions] Error getting triggers:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get triggers'
     };
   }
 }

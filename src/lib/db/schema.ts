@@ -1597,6 +1597,7 @@ export const tools = pgTable("tools", {
   appId: text("app_id").notNull().references(() => appTypes.id), // Always references an app - "emery" for system tools
   icon: text("icon"),                                    // Icon or emoji
   config: jsonb("config").$type<ToolDefinitionData>().notNull(), // Typed JSONB configuration
+  isTrigger: boolean("is_trigger").default(false),       // True for event sources (triggers), false for actions
   createdAt: timestamp("created_at").defaultNow(),
 });
 
