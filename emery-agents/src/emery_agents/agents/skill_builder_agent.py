@@ -28,6 +28,7 @@ from typing import List, Any, Callable
 
 from smolagents import Tool, CodeAgent
 from smolagents.memory import PlanningStep
+from smolagents.monitoring import LogLevel
 
 from .stateful_managed_agent import StatefulManagedAgent
 from ..prompts import build_agent_instructions
@@ -109,7 +110,8 @@ def create_skill_builder_agent(
         max_steps=max_steps,
         instructions=instructions,  # Custom instructions from Jinja2 template
         planning_interval=2,  # Plan after 2 steps (more informed - gathers context first)
-        step_callbacks={PlanningStep: planning_callback}
+        step_callbacks={PlanningStep: planning_callback},
+        verbosity_level=LogLevel.OFF,
     )
 
     # Set attributes for ManagedAgent identification
