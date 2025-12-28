@@ -1,48 +1,8 @@
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
-import { getTeam } from "@/app/actions/teams";
-import { getAgents } from "@/app/actions/agents";
-import TeamDetailsView from "../components/TeamDetailsView";
-import { Suspense } from "react";
-import { Loading } from "@/components/ui/loading";
-import { CenteredCanvasLayout } from "@/components/layouts/CenteredCanvasLayout";
+import { redirect } from 'next/navigation';
 
-// AIDEV-NOTE: Team detail page - renders individual team view
-// Uses CenteredCanvasLayout for centered content with collapse functionality
+// AIDEV-NOTE: Teams feature coming soon
+// Redirecting to dashboard until teams is implemented
 
-interface TeamPageProps {
-  params: Promise<{ teamId: string }>;
-}
-
-export default async function TeamPage({ params }: TeamPageProps) {
-  const session = await auth();
-
-  if (!session?.user) {
-    redirect("/auth/signin");
-  }
-
-  const { teamId } = await params;
-  const parsedTeamId = parseInt(teamId, 10);
-
-  if (isNaN(parsedTeamId)) {
-    redirect("/teams");
-  }
-
-  // Fetch team and all agents in parallel
-  const [team, agents] = await Promise.all([
-    getTeam(parsedTeamId),
-    getAgents()
-  ]);
-
-  if (!team) {
-    redirect("/teams");
-  }
-
-  return (
-    <CenteredCanvasLayout>
-      <Suspense fallback={<Loading text="Loading team..." />}>
-        <TeamDetailsView team={team} agents={agents || []} />
-      </Suspense>
-    </CenteredCanvasLayout>
-  );
+export default async function TeamPage() {
+  redirect("/dashboard");
 }
