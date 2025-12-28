@@ -4,7 +4,7 @@ import AnimatedBackground from '@/app/components/AnimatedBackground'
 import { EmeryProviders } from '@/components/EmeryProviders'
 import { auth } from '@/lib/auth'
 import { getAgents } from '@/app/actions/agents'
-import { getTeams } from '@/app/actions/teams'
+// import { getTeams } from '@/app/actions/teams' // Teams coming soon
 import { getSkillsByOrganization } from '@/app/actions/skills'
 import { getDatabases } from '@/app/actions/databases'
 import { getTables } from '@/app/actions/tables'
@@ -68,10 +68,10 @@ export default async function AppLayout({
       const orgId = OrganizationId.fromNumber(session.user.currentOrganizationId)
 
       // Fetch all sidebar data in parallel (no N+1 - apps+pages use optimized 2-query approach)
-      const [appsWithPages, agentsResult, teamsResult, skillsResult, databasesResult, tablesResult] = await Promise.all([
+      // Teams fetch skipped - feature coming soon
+      const [appsWithPages, agentsResult, skillsResult, databasesResult, tablesResult] = await Promise.all([
         getAppApplicationService().getAppsWithPagesForOrganization(orgId),
         getAgents(),
-        getTeams(),
         getSkillsByOrganization(session.user.currentOrganizationId),
         getDatabases(),
         getTables()
@@ -104,10 +104,7 @@ export default async function AppLayout({
           id: agent.id,
           name: agent.name
         })),
-        teams: (teamsResult || []).map(team => ({
-          id: team.id,
-          name: team.name
-        })),
+        teams: [], // Teams coming soon
         skills: (skillsResult?.success && skillsResult?.data ? skillsResult.data : []).map(skill => {
           // Find agent name if this is an agent-specific skill
           const agent = skill.agentId ? (agentsResult || []).find(a => a.id === skill.agentId) : null

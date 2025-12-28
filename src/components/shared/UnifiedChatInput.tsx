@@ -145,10 +145,10 @@ export function UnifiedChatInput<T = ToolDTO>({
 
     setInputValue(value);
 
-    // Find @ or $ symbol before cursor
+    // Find @ or { symbol before cursor
     const beforeCursor = value.slice(0, cursorPos);
     const atMatch = beforeCursor.match(/@([^@]*)$/);
-    const dollarMatch = beforeCursor.match(/\$([^\s$]*)$/);
+    const braceMatch = beforeCursor.match(/\{([^{}\s]*)$/);
 
     // Don't show dropdown if we're in a completed tool reference
     const isCompletedTool = atMatch && (
@@ -161,9 +161,9 @@ export function UnifiedChatInput<T = ToolDTO>({
       atMatch[0].startsWith('@skill:')
     );
 
-    // Check for $ variable trigger (only if variables are provided)
-    if (dollarMatch && variables && variables.length > 0) {
-      const query = dollarMatch[1] || '';
+    // Check for { variable trigger (only if variables are provided)
+    if (braceMatch && variables && variables.length > 0) {
+      const query = braceMatch[1] || '';
       setDropdownQuery(query);
       setDropdownType('variables');
       setShowDropdown(true);
@@ -270,22 +270,22 @@ export function UnifiedChatInput<T = ToolDTO>({
     setShowDropdown(false);
   };
 
-  // Handle variable selection - insert ${variableName} at cursor
+  // Handle variable selection - insert {{variableName}} at cursor
   const handleVariableSelect = (variable: { name: string; description: string }) => {
     const cursorPos = inputRef.current?.selectionStart || 0;
     const beforeCursor = inputValue.slice(0, cursorPos);
     const afterCursor = inputValue.slice(cursorPos);
 
-    // Find and replace the $ query with the full variable reference
-    const dollarMatch = beforeCursor.match(/\$[^\s$]*$/);
-    if (dollarMatch) {
-      const beforeDollar = beforeCursor.slice(0, dollarMatch.index);
-      const variableText = `\${${variable.name}}`;
-      const newValue = beforeDollar + variableText + ' ' + afterCursor;
+    // Find and replace the { query with the full variable reference
+    const braceMatch = beforeCursor.match(/\{[^{}\s]*$/);
+    if (braceMatch) {
+      const beforeBrace = beforeCursor.slice(0, braceMatch.index);
+      const variableText = `{{${variable.name}}}`;
+      const newValue = beforeBrace + variableText + ' ' + afterCursor;
       setInputValue(newValue);
 
       // Position cursor after inserted text
-      const newCursorPos = beforeDollar.length + variableText.length + 1;
+      const newCursorPos = beforeBrace.length + variableText.length + 1;
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
@@ -666,7 +666,7 @@ export function UnifiedChatInput<T = ToolDTO>({
                       }`}
                       onClick={() => handleVariableSelect(variable)}
                     >
-                      <div className="font-mono text-sm">${variable.name}</div>
+                      <div className="font-mono text-sm">{`{{${variable.name}}}`}</div>
                       <div className="text-xs text-muted-foreground">{variable.description}</div>
                     </button>
                   ))}
