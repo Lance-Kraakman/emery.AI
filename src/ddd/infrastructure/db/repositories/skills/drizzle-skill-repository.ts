@@ -96,8 +96,11 @@ export class DrizzleSkillRepository implements ISkillRepository {
         content: props.content || null,
         model: props.model ?? null,
         agentType: props.agentType ?? null,
-        executionType: props.executionType || 'agent',
+        executionType: props.executionType || 'agentic',
         taskModelConfig: props.taskModelConfig || null,
+        toolExecutionConfig: props.toolExecutionConfig || null,
+        writeConfig: props.writeConfig || null,
+        steps: props.steps || null,
         createdAt: now,
         updatedAt: now
       })
@@ -107,6 +110,12 @@ export class DrizzleSkillRepository implements ISkillRepository {
   }
 
   async update(id: SkillId, updates: UpdateSkillProps): Promise<Skill> {
+    console.log('[DrizzleSkillRepository] update called with:', {
+      skillId: id.value,
+      stepsProvided: updates.steps !== undefined,
+      steps: updates.steps,
+      stepsLength: updates.steps?.length
+    });
     const updateData: any = { updatedAt: new Date() };
 
     if (updates.name !== undefined) {
@@ -142,6 +151,18 @@ export class DrizzleSkillRepository implements ISkillRepository {
     if (updates.taskModelConfig !== undefined) {
       updateData.taskModelConfig = updates.taskModelConfig;
     }
+    if (updates.toolExecutionConfig !== undefined) {
+      updateData.toolExecutionConfig = updates.toolExecutionConfig;
+    }
+    if (updates.writeConfig !== undefined) {
+      updateData.writeConfig = updates.writeConfig;
+    }
+    if (updates.steps !== undefined) {
+      updateData.steps = updates.steps;
+      console.log('[DrizzleSkillRepository] Setting updateData.steps:', updateData.steps);
+    }
+
+    console.log('[DrizzleSkillRepository] Final updateData keys:', Object.keys(updateData));
 
     const result = await this.db
       .update(skills)
@@ -222,8 +243,11 @@ export class DrizzleSkillRepository implements ISkillRepository {
       content: record.content || undefined,
       model: record.model ?? null,
       agentType: record.agentType ?? null,
-      executionType: record.executionType || 'agent',
+      executionType: record.executionType || 'agentic',
       taskModelConfig: record.taskModelConfig || undefined,
+      toolExecutionConfig: record.toolExecutionConfig || undefined,
+      writeConfig: record.writeConfig || undefined,
+      steps: record.steps || undefined,
       isSystem: record.isSystem ?? false,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt

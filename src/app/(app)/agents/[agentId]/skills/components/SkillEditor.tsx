@@ -14,18 +14,19 @@ import { SkillOutputsSection } from './editor/SkillOutputsSection';
 import { ExecutionTypeToggle } from './editor/ExecutionTypeToggle';
 import { TaskModelForm } from './editor/TaskModelForm';
 import { OutputMappingSection } from './editor/OutputMappingSection';
+import { InputMappingSection } from './editor/InputMappingSection';
 import { ToolExecutionConfigForm } from './editor/ToolExecutionConfigForm';
 import { WriteConfigForm } from './editor/WriteConfigForm';
 import { StepBuilderSection } from './editor/StepBuilderSection';
-import type { ToolConfigDTO, SkillInput, SkillOutput } from '@/app/mappers/skill-mapper';
+import type { ToolConfigDTO, InputDefinition, OutputDefinition } from '@/app/mappers/skill-mapper';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 import type { SkillExecutionType } from '@/ddd/domain/skills/entities/skill';
 
 export interface SkillFormData {
   name: string;
   description: string;
-  inputs: SkillInput[];
-  outputs: SkillOutput[];
+  inputs: InputDefinition[];
+  outputs: OutputDefinition[];
   instructions: string;
   tools: ToolConfigDTO[];
   model?: string | null; // Optional model override for this skill
@@ -80,6 +81,7 @@ interface SkillEditorProps {
   agentDefaultModel?: string | null; // Agent's default model for inheritance display
   organizationTier?: 'free' | 'pro' | 'max' | 'enterprise'; // For filtering available models
   availableModels?: string[]; // Organization's whitelist of allowed models
+  availableSkills?: { id: number; name: string }[]; // Skills available for step references
   isReadOnly?: boolean; // When true, disables all inputs (for system skills)
 }
 
@@ -102,6 +104,7 @@ export function SkillEditor({
   agentDefaultModel,
   organizationTier = 'free',
   availableModels,
+  availableSkills = [],
   isReadOnly = false,
 }: SkillEditorProps) {
   const [localValue, setLocalValue] = useState(value);
@@ -110,32 +113,32 @@ export function SkillEditor({
   // Separate state for each execution mode's inputs/outputs
   // This preserves user's work when switching between modes
   const [savedAgenticState, setSavedAgenticState] = useState<{
-    inputs: SkillInput[];
-    outputs: SkillOutput[];
+    inputs: InputDefinition[];
+    outputs: OutputDefinition[];
     instructions: string;
     tools: ToolConfigDTO[];
   }>({ inputs: [], outputs: [], instructions: '', tools: [] });
 
   const [savedAgentState, setSavedAgentState] = useState<{
-    inputs: SkillInput[];
-    outputs: SkillOutput[];
+    inputs: InputDefinition[];
+    outputs: OutputDefinition[];
     steps: SkillFormData['steps'];
   }>({ inputs: [], outputs: [], steps: [] });
 
   const [savedDirectState, setSavedDirectState] = useState<{
-    inputs: SkillInput[];
-    outputs: SkillOutput[];
+    inputs: InputDefinition[];
+    outputs: OutputDefinition[];
     instructions: string;
     taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
   }>({ inputs: [], outputs: [], instructions: '' });
 
   const [savedToolState, setSavedToolState] = useState<{
-    inputs: SkillInput[];
+    inputs: InputDefinition[];
     toolExecutionConfig?: SkillFormData['toolExecutionConfig'];
   }>({ inputs: [] });
 
   const [savedWriteState, setSavedWriteState] = useState<{
-    inputs: SkillInput[];
+    inputs: InputDefinition[];
     writeConfig?: SkillFormData['writeConfig'];
   }>({ inputs: [] });
 
@@ -333,7 +336,7 @@ export function SkillEditor({
             value={localValue.toolExecutionConfig}
             onChange={(config) => handleChange({ toolExecutionConfig: config })}
             skillInputs={localValue.inputs}
-            onSkillInputsChange={(inputs) => handleChange({ inputs })}
+            onInputDefinitionsChange={(inputs) => handleChange({ inputs })}
             disabled={isReadOnly}
           />
 
@@ -383,7 +386,7 @@ export function SkillEditor({
             value={localValue.writeConfig}
             onChange={(config) => handleChange({ writeConfig: config })}
             skillInputs={localValue.inputs}
-            onSkillInputsChange={(inputs) => handleChange({ inputs })}
+            onInputDefinitionsChange={(inputs) => handleChange({ inputs })}
             disabled={isReadOnly}
           />
         </>
@@ -405,12 +408,19 @@ export function SkillEditor({
             />
           </div>
 
+          {/* Input Mapping Section - for Agent mode */}
+          <InputMappingSection
+            inputs={localValue.inputs}
+            onInputsChange={(inputs) => handleChange({ inputs })}
+            isReadOnly={isReadOnly}
+          />
+
           {/* Steps Section */}
           <StepBuilderSection
             steps={localValue.steps || []}
             onChange={(steps) => handleChange({ steps })}
             skillInputs={localValue.inputs}
-            availableSkills={[]} // TODO: Fetch from org/agent skills
+            availableSkills={availableSkills}
             disabled={isReadOnly}
           />
 
@@ -428,6 +438,16 @@ export function SkillEditor({
               isReadOnly={isReadOnly}
             />
           </div>
+
+          {/* Output Mapping Section - for Agent mode (maps skill outputs to tables) */}
+          <OutputMappingSection
+            outputs={localValue.outputs}
+            onOutputsChange={(outputs) => handleChange({ outputs })}
+            executionType="agent"
+            skillOutputs={localValue.outputs}
+            skillInputs={localValue.inputs}
+            isReadOnly={isReadOnly}
+          />
         </>
       ) : (
         /* Agentic Form (default) - Flat instructions with LLM orchestration */
@@ -449,6 +469,13 @@ export function SkillEditor({
               Reference inputs in instructions using {'{input_name}'} syntax
             </p>
           </div>
+
+          {/* Input Mapping Section - for Agentic mode */}
+          <InputMappingSection
+            inputs={localValue.inputs}
+            onInputsChange={(inputs) => handleChange({ inputs })}
+            isReadOnly={isReadOnly}
+          />
 
           {/* Instructions Section */}
           <div className="space-y-3">

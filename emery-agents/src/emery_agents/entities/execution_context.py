@@ -70,6 +70,9 @@ class ExecutionContext:
     # These are resolved from trigger_data.payload and passed to execute_skill(runtime_inputs=...)
     skill_inputs: Dict[str, Any] = field(default_factory=dict)
 
+    # Row ID that triggered this execution (for table automations with input_mapping)
+    source_row_id: Optional[int] = None
+
     @property
     def is_skill_mode(self) -> bool:
         """Check if execution is skill-based."""
@@ -100,5 +103,6 @@ class ExecutionContext:
             org_model=self.org_model,
             api_key=self.api_key,
             environment=self.environment.copy(),
-            skill_inputs=self.skill_inputs.copy()
+            skill_inputs=self.skill_inputs.copy(),
+            source_row_id=self.source_row_id
         )

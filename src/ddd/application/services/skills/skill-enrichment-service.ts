@@ -12,8 +12,8 @@ import type { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-re
 import { SkillId } from '@/ddd/domain/skills/value-objects/skill-id';
 import type {
   Skill,
-  SkillInput,
-  SkillOutput,
+  InputDefinition,
+  OutputDefinition,
   ToolConfig,
   SkillExecutionType,
   TaskModelConfig
@@ -28,8 +28,8 @@ export interface EnrichedSkill {
   name: string;
   description: string;
   instructions: string;
-  inputs: SkillInput[];
-  outputs: SkillOutput[];
+  inputs: InputDefinition[];
+  outputs: OutputDefinition[];
   tools: ToolConfig[];
   content: MessagePart[];
   model: string | null;

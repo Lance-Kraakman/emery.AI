@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, Trash2, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { ShareButton } from '@/components/permissions/ShareButton';
 import { ShareDialog } from '@/components/permissions/ShareDialog';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
-import { updateSkill, deleteSkill, uploadSkillAttachment } from '@/app/actions/skills';
+import { updateSkill, deleteSkill, uploadSkillAttachment, getSkillsByAgent } from '@/app/actions/skills';
 import { toast } from 'sonner';
 import { SkillEditor, type SkillFormData } from './SkillEditor';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
@@ -26,6 +26,7 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [availableSkills, setAvailableSkills] = useState<{ id: number; name: string }[]>([]);
   const [formData, setFormData] = useState<SkillFormData>({
     name: skill.name,
     description: skill.description,
@@ -36,8 +37,27 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
     content: skill.content, // Load existing attachments
     pendingAttachments: [], // Start with no pending attachments
     executionType: skill.executionType,
-    taskModelConfig: skill.taskModelConfig
+    taskModelConfig: skill.taskModelConfig,
+    toolExecutionConfig: skill.toolExecutionConfig,
+    writeConfig: skill.writeConfig,
+    steps: skill.steps
   });
+
+  // Fetch available skills for step builder (excluding current skill)
+  useEffect(() => {
+    async function fetchSkills() {
+      const result = await getSkillsByAgent(agent.id);
+      if (result.success && result.data) {
+        // Filter out current skill and map to simple format
+        setAvailableSkills(
+          result.data
+            .filter(s => s.id !== skill.id)
+            .map(s => ({ id: s.id, name: s.name }))
+        );
+      }
+    }
+    fetchSkills();
+  }, [agent.id, skill.id]);
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
@@ -48,6 +68,13 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
     setIsSaving(true);
 
     try {
+      // Debug: log what we're about to save
+      console.log('[EditSkillView] Saving skill with formData:', {
+        executionType: formData.executionType,
+        steps: formData.steps,
+        stepsLength: formData.steps?.length
+      });
+
       // Step 1: Upload pending attachments if any and collect metadata
       let updatedContent = [...(formData.content || [])];
 
@@ -92,7 +119,10 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
         tools: formData.tools,
         content: updatedContent, // Include attachment metadata
         executionType: formData.executionType,
-        taskModelConfig: formData.taskModelConfig
+        taskModelConfig: formData.taskModelConfig,
+        toolExecutionConfig: formData.toolExecutionConfig,
+        writeConfig: formData.writeConfig,
+        steps: formData.steps
       });
 
       if (!result.success) {
@@ -188,6 +218,7 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
           agentId={agent.id}
           skillId={skill.id}
           organizationTier={organizationTier}
+          availableSkills={availableSkills}
         />
       </Card>
 

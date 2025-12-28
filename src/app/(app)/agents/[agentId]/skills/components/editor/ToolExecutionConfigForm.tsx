@@ -9,13 +9,13 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { getPipedreamTools, getPipedreamToolById, type PipedreamToolMetadata, type PipedreamToolsGrouped } from '@/app/actions/tools';
-import type { ToolExecutionConfig, ToolInputMapping, SkillInput } from '@/ddd/domain/skills/entities/skill';
+import type { ToolExecutionConfig, ToolInputMapping, InputDefinition } from '@/ddd/domain/skills/entities/skill';
 
 interface ToolExecutionConfigFormProps {
   value: ToolExecutionConfig | undefined;
   onChange: (config: ToolExecutionConfig | undefined) => void;
-  skillInputs: SkillInput[];
-  onSkillInputsChange: (inputs: SkillInput[]) => void;
+  skillInputs: InputDefinition[];
+  onInputDefinitionsChange: (inputs: InputDefinition[]) => void;
   disabled?: boolean;
 }
 
@@ -27,7 +27,7 @@ export function ToolExecutionConfigForm({
   value,
   onChange,
   skillInputs,
-  onSkillInputsChange,
+  onInputDefinitionsChange,
   disabled
 }: ToolExecutionConfigFormProps) {
   const [toolsGrouped, setToolsGrouped] = useState<PipedreamToolsGrouped>({});
@@ -102,14 +102,14 @@ export function ToolExecutionConfigForm({
     setSelectedTool(tool);
 
     // Auto-create skill inputs from tool parameters
-    const newInputs: SkillInput[] = Object.entries(tool.inputs).map(([paramName, param]) => ({
+    const newInputs: InputDefinition[] = Object.entries(tool.inputs).map(([paramName, param]) => ({
       name: paramName,
       type: mapToolTypeToSkillType(param.type),
       required: param.required
     }));
 
     // Update skill inputs
-    onSkillInputsChange(newInputs);
+    onInputDefinitionsChange(newInputs);
 
     // Create input mappings (skill input name = tool param name)
     const mappings: ToolInputMapping[] = Object.keys(tool.inputs).map(paramName => ({
@@ -125,7 +125,7 @@ export function ToolExecutionConfigForm({
   };
 
   // Map tool parameter type to skill input type
-  const mapToolTypeToSkillType = (toolType: string): SkillInput['type'] => {
+  const mapToolTypeToSkillType = (toolType: string): InputDefinition['type'] => {
     switch (toolType.toLowerCase()) {
       case 'string':
         return 'text';
@@ -180,7 +180,7 @@ export function ToolExecutionConfigForm({
   const handleClearTool = () => {
     setSelectedTool(null);
     onChange(undefined);
-    onSkillInputsChange([]);
+    onInputDefinitionsChange([]);
   };
 
   if (isLoading) {

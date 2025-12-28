@@ -22,10 +22,13 @@ export interface SkillStep {
   instruction?: string;                   // Inline instruction (if not skillId)
   skillId?: number;                       // Reference to another skill by ID
   tools?: string[];                       // Tools available for this step
-  inputs?: Record<string, string>;        // Input mappings: param_name -> "{{source}}" or literal
-  outputs?: Record<string, string>;       // Output mappings: output_name -> target_var
+  inputs?: Record<string, string>;        // Context mappings: param_name -> "{{source}}" or literal
+  outputs?: Record<string, string>;       // Context mappings: output_name -> target_var
   parallel?: boolean;                     // Can run in parallel with previous (future)
   condition?: string;                     // Optional condition expression (future)
+  // Step-level definitions (unified types)
+  inputDefs?: InputDefinition[];          // What this step accepts (schema)
+  outputDefs?: OutputDefinition[];        // What this step produces (schema)
 }
 
 /**
@@ -107,24 +110,39 @@ export type SkillParameterType =
   | 'single-select' | 'multi-select'
   | 'image' | 'file' | 'audio' | 'video' | 'document';
 
+// =============================================================================
+// Input Mapping Types (read from tables into skill inputs)
+// =============================================================================
+
 /**
- * File Configuration for file-type inputs
+ * Source for reading a value from a table field
  */
-export interface SkillInputFileConfig {
-  allowedMimeTypes?: string[];
-  maxSizeBytes?: number;
-  multiple?: boolean;
+export interface InputFieldSource {
+  tableId: number;
+  fieldId: number;
+  rowSource: RowIdSource;  // Reuses existing RowIdSource type
 }
 
 /**
- * Skill Input Definition
+ * Input mapping configuration - maps table field to skill input
  */
-export interface SkillInput {
+export interface InputMappingConfig {
+  source: InputFieldSource;
+}
+
+// =============================================================================
+// Unified Definition Types (used for skill-level AND step-level)
+// =============================================================================
+
+/**
+ * Unified Input Definition
+ * Used for both skill-level inputs and step-level input definitions
+ */
+export interface InputDefinition {
   name: string;
   required: boolean;
   type?: SkillParameterType;
-  fileConfig?: SkillInputFileConfig;
-  default?: any; // Default value for @-mention insertion
+  inputMapping?: InputMappingConfig;  // Optional: read from table field
 }
 
 // =============================================================================
@@ -160,11 +178,22 @@ export type RowIdSource =
   | { type: 'source_row' };
 
 /**
+ * Target Field Metadata - info about the destination field
+ */
+export interface TargetFieldMetadata {
+  fieldType: string;         // Database field type: "single-select", "multi-select", "number", etc.
+  fieldName?: string;        // Target field name (for display)
+  options?: string[];        // For select fields: valid option values
+  maxSelections?: number;    // For multi-select: maximum allowed selections
+}
+
+/**
  * Field Mapping - maps a typed source to a target table field
  */
 export interface FieldMapping {
   source: FieldSource;                  // Where to get the value (typed)
   targetFieldId: number;                // Destination field/column
+  targetFieldMetadata?: TargetFieldMetadata;  // Optional: target field info for LLM guidance
   appendMode?: boolean;                 // When true, append to existing relation values instead of replacing
 }
 
@@ -191,13 +220,14 @@ export interface OutputMappingConfig {
 }
 
 /**
- * Skill Output Definition
+ * Unified Output Definition
+ * Used for both skill-level outputs and step-level output definitions
  */
-export interface SkillOutput {
+export interface OutputDefinition {
   name: string;
   type?: SkillParameterType;
   description?: string;  // Description of what this output contains (shown in LLM instructions)
-  outputMapping?: OutputMappingConfig;  // Optional: path-based field mapping
+  outputMapping?: OutputMappingConfig;  // Optional: write to table fields
 }
 
 /**
@@ -230,8 +260,8 @@ export interface Skill {
   readonly agentId: AgentId | null; // null for organization skills
   readonly name: string;
   readonly description: string;
-  readonly inputs: SkillInput[];
-  readonly outputs: SkillOutput[];
+  readonly inputs: InputDefinition[];
+  readonly outputs: OutputDefinition[];
   readonly instructions: string;
   readonly tools: ToolConfig[];
   readonly content?: MessagePart[]; // Skill-level attachments (images, files, text)
@@ -255,8 +285,8 @@ export interface CreateSkillProps {
   agentId?: AgentId | null; // Optional: null or undefined for organization skills
   name: string;
   description?: string;
-  inputs?: SkillInput[];
-  outputs?: SkillOutput[];
+  inputs?: InputDefinition[];
+  outputs?: OutputDefinition[];
   instructions: string;
   tools?: ToolConfig[];
   content?: MessagePart[];
@@ -275,8 +305,8 @@ export interface CreateSkillProps {
 export interface UpdateSkillProps {
   name?: string;
   description?: string;
-  inputs?: SkillInput[];
-  outputs?: SkillOutput[];
+  inputs?: InputDefinition[];
+  outputs?: OutputDefinition[];
   instructions?: string;
   tools?: ToolConfig[];
   content?: MessagePart[];

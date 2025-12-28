@@ -2,7 +2,7 @@ import { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-reposit
 import { SkillId } from '@/ddd/domain/skills/value-objects/skill-id';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
-import { SkillEntity, type Skill, type SkillInput, type SkillOutput, type ToolConfig, type SkillExecutionType, type TaskModelConfig } from '@/ddd/domain/skills/entities/skill';
+import { SkillEntity, type Skill, type InputDefinition, type OutputDefinition, type ToolConfig, type SkillExecutionType, type TaskModelConfig, type SkillStep, type ToolExecutionConfig, type WriteConfig } from '@/ddd/domain/skills/entities/skill';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
@@ -19,14 +19,17 @@ export interface CreateSkillCommand {
   organizationId: number; // Required for all skills
   name: string;
   description?: string;
-  inputs: SkillInput[];
-  outputs: SkillOutput[];
+  inputs: InputDefinition[];
+  outputs: OutputDefinition[];
   instructions: string;
   tools: ToolConfig[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
-  executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
-  taskModelConfig?: TaskModelConfig; // Config for operation execution
+  executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
+  taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
+  toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
+  writeConfig?: WriteConfig; // Config for 'write' execution
+  steps?: SkillStep[]; // Steps for 'agent' (step-based) execution
 }
 
 /**
@@ -35,15 +38,18 @@ export interface CreateSkillCommand {
 export interface UpdateSkillCommand {
   name?: string;
   description?: string;
-  inputs?: SkillInput[];
-  outputs?: SkillOutput[];
+  inputs?: InputDefinition[];
+  outputs?: OutputDefinition[];
   instructions?: string;
   tools?: ToolConfig[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   content?: MessagePart[]; // Skill-level attachments
-  executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
-  taskModelConfig?: TaskModelConfig | null; // Config for operation execution
+  executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
+  taskModelConfig?: TaskModelConfig | null; // Config for 'operation' execution
+  toolExecutionConfig?: ToolExecutionConfig | null; // Config for 'tool' execution
+  writeConfig?: WriteConfig | null; // Config for 'write' execution
+  steps?: SkillStep[] | null; // Steps for 'agent' (step-based) execution
 }
 
 /**
@@ -91,7 +97,10 @@ export class SkillApplicationService {
         model: command.model,
         agentType: command.agentType,
         executionType: command.executionType,
-        taskModelConfig: command.taskModelConfig
+        taskModelConfig: command.taskModelConfig,
+        toolExecutionConfig: command.toolExecutionConfig,
+        writeConfig: command.writeConfig,
+        steps: command.steps
       });
 
       logger.debug('[SkillApplicationService] skill created', {
