@@ -6,11 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { SkillInput } from '@/app/mappers/skill-mapper';
+import type { InputDefinition } from '@/app/mappers/skill-mapper';
 
 interface SkillInputsSectionProps {
-  inputs: SkillInput[];
-  onInputsChange: (inputs: SkillInput[]) => void;
+  inputs: InputDefinition[];
+  onInputsChange: (inputs: InputDefinition[]) => void;
   isReadOnly?: boolean;
 }
 
@@ -21,7 +21,7 @@ export function SkillInputsSection({
 }: SkillInputsSectionProps) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [formData, setFormData] = useState<SkillInput>({ name: '', required: true, type: 'text' });
+  const [formData, setFormData] = useState<InputDefinition>({ name: '', required: true, type: 'text' });
   const formRef = useRef<HTMLDivElement>(null);
 
   const handleAdd = () => {

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { getSkillsByAgent } from '@/app/actions/skills';
-import type { SkillDTO, SkillInput } from '@/app/mappers/skill-mapper';
+import type { SkillDTO, InputDefinition } from '@/app/mappers/skill-mapper';
 import type { TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { AutomationInputMappingDTO } from '@/app/dtos/automation.dto';
 import { InstructionTemplateService } from '@/ddd/domain/tasks/services/instruction-template-service';

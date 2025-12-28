@@ -23,7 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectGroup, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import type { SkillOutput, SkillInput, OutputMappingConfig, FieldMapping, TableMapping, FieldSource, RowIdSource } from '@/app/mappers/skill-mapper';
+import type { OutputDefinition, InputDefinition, OutputMappingConfig, FieldMapping, TableMapping, FieldSource, RowIdSource } from '@/app/mappers/skill-mapper';
 import type { TableDTO } from '@/app/mappers/table-mapper';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import { getTables } from '@/app/actions/tables';
@@ -167,7 +167,7 @@ interface FieldSourceSelectorProps {
   value: FieldSource | null;
   onChange: (source: FieldSource) => void;
   skillOutputs: OutputFieldDef[];
-  skillInputs?: SkillInput[];
+  skillInputs?: InputDefinition[];
   previousTableMappings: TableMapping[];
   tableFieldsMap: Map<number, FieldDTO[]>;
   disabled?: boolean;
@@ -248,7 +248,7 @@ function FieldSourceSelector({
 interface FieldMappingRowProps {
   mapping: FieldMapping;
   skillOutputs: OutputFieldDef[];
-  skillInputs?: SkillInput[];
+  skillInputs?: InputDefinition[];
   previousTableMappings: TableMapping[];
   targetFields: FieldDTO[];
   tableFieldsMap: Map<number, FieldDTO[]>;
@@ -359,7 +359,7 @@ interface TableMappingCardProps {
   tables: TableDTO[];
   tableFieldsMap: Map<number, FieldDTO[]>;
   skillOutputs: OutputFieldDef[];
-  skillInputs?: SkillInput[];
+  skillInputs?: InputDefinition[];
   previousTableMappings: TableMapping[];
   onUpdate: (tm: TableMapping) => void;
   onRemove: () => void;
@@ -660,11 +660,11 @@ function SortableTableMappingCard({ id, ...props }: SortableTableMappingCardProp
 }
 
 interface OutputMappingSectionProps {
-  outputs: SkillOutput[];
-  onOutputsChange: (outputs: SkillOutput[]) => void;
+  outputs: OutputDefinition[];
+  onOutputsChange: (outputs: OutputDefinition[]) => void;
   taskType?: string;
-  skillOutputs?: SkillOutput[];
-  skillInputs?: SkillInput[];
+  skillOutputs?: OutputDefinition[];
+  skillInputs?: InputDefinition[];
   executionType?: 'agent' | 'operation';
   isReadOnly?: boolean;
 }

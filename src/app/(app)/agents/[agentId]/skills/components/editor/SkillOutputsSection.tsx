@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import type { SkillOutput } from '@/app/mappers/skill-mapper';
+import type { OutputDefinition } from '@/app/mappers/skill-mapper';
 import type { TableDTO } from '@/app/mappers/table-mapper';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
@@ -17,7 +17,7 @@ import { getFields } from '@/app/actions/fields';
 
 // Map table field types to skill output types
 // Returns null for read-only/system fields that shouldn't be mapped
-const fieldTypeToOutputType: Record<FieldType, SkillOutput['type'] | null> = {
+const fieldTypeToOutputType: Record<FieldType, OutputDefinition['type'] | null> = {
   'text': 'text',
   'number': 'number',
   'boolean': 'boolean',
@@ -38,8 +38,8 @@ const fieldTypeToOutputType: Record<FieldType, SkillOutput['type'] | null> = {
 };
 
 interface SkillOutputsSectionProps {
-  outputs: SkillOutput[];
-  onOutputsChange: (outputs: SkillOutput[]) => void;
+  outputs: OutputDefinition[];
+  onOutputsChange: (outputs: OutputDefinition[]) => void;
   isReadOnly?: boolean;
 }
 
@@ -50,7 +50,7 @@ export function SkillOutputsSection({
 }: SkillOutputsSectionProps) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [formData, setFormData] = useState<SkillOutput>({ name: '', type: 'text' });
+  const [formData, setFormData] = useState<OutputDefinition>({ name: '', type: 'text' });
   const formRef = useRef<HTMLDivElement>(null);
 
   // Table picker state
@@ -98,7 +98,7 @@ export function SkillOutputsSection({
     if (selectedFieldIds.size === 0) return;
 
     const existingNames = new Set(outputs.map((o) => o.name));
-    const newOutputs: SkillOutput[] = [];
+    const newOutputs: OutputDefinition[] = [];
 
     fields
       .filter((f) => selectedFieldIds.has(f.id))
