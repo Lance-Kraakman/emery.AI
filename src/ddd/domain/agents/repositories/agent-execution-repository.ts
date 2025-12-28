@@ -43,6 +43,17 @@ export interface ExecutionSkill {
     fieldMappings: Array<{ skillInputName: string; targetFieldId: number }>;
     updateMatch?: { skillInputName: string; targetFieldId: number };
   };
+  // Optional steps for 'agent' (step-based) execution type
+  steps?: Array<{
+    name: string;
+    instruction?: string;
+    skillId?: number;
+    tools?: string[];
+    inputs?: Record<string, string>;
+    outputs?: Record<string, string>;
+    parallel?: boolean;
+    condition?: string;
+  }>;
 }
 
 export interface AgentExecutionRequest {

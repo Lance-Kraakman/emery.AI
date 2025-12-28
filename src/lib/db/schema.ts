@@ -1014,10 +1014,13 @@ export const skills = pgTable("skills", {
   // code_agent: Python code execution, better for complex multi-step reasoning
   agentType: text("agent_type"),
 
-  // Execution type: "agent" (default) or "operation"
-  // agent: LLM orchestration with tools (existing flow)
-  // operation: Direct task model execution (bypasses LLM)
-  executionType: text("execution_type").default('agent'),
+  // Execution type determines how the skill is executed:
+  // - 'agentic': LLM orchestration with flat instructions (default, current behavior)
+  // - 'agent': Step-based DAG execution with structured steps[]
+  // - 'operation': Direct task model execution (bypasses LLM)
+  // - 'tool': Direct Pipedream tool execution
+  // - 'write': Direct table write execution
+  executionType: text("execution_type").default('agentic'),
 
   // Task model configuration (when executionType is 'operation')
   // Contains modelId, taskType, and model-specific parameters
@@ -1034,6 +1037,19 @@ export const skills = pgTable("skills", {
   // Write execution configuration (when executionType is 'write')
   // Direct table write with field mappings
   writeConfig: jsonb("write_config").$type<WriteConfig>(),
+
+  // Steps configuration (when executionType is 'agent')
+  // Each step can be an inline instruction or a reference to another skill
+  steps: jsonb("steps").$type<Array<{
+    name: string;                           // Step identifier/name
+    instruction?: string;                   // Inline instruction (if not skill_id)
+    skillId?: number;                       // Reference to another skill by ID
+    tools?: string[];                       // Tools available for this step
+    inputs?: Record<string, string>;        // Input mappings: param_name -> "{{source}}" or literal
+    outputs?: Record<string, string>;       // Output mappings: output_name -> target_var
+    parallel?: boolean;                     // Can run in parallel (future)
+    condition?: string;                     // Optional condition (future)
+  }>>(),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

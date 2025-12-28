@@ -26,6 +26,7 @@ from ..tools.skill_tool import SkillTool
 from ..tools.output_tool import OutputTool, build_target_field_metadata_from_mappings
 from ..clients import HuggingFaceInferenceClient, TaskResult
 from .skill_executor import SkillExecutorService
+from .step_executor import StepExecutorService
 from ..entities.output_mapping import (
     OutputMappingConfig, FieldMapping, OutputMappingMode, RowAction,
     extract_field_value, get_extension_for_mime
@@ -97,6 +98,24 @@ class AgentExecutor:
         """
         # SkillConfig is a protobuf - execution_type field is always present (empty string if not set)
         return skill.execution_type == 'operation'
+
+    def _is_agent_skill(self, skill: SkillConfig) -> bool:
+        """
+        Check if skill uses step-based agent execution (DAG workflow).
+
+        Agent skills have a steps[] configuration that defines a workflow
+        of sub-agents and skill delegations.
+        """
+        return skill.execution_type == 'agent' and len(skill.steps) > 0
+
+    def _is_agentic_skill(self, skill: SkillConfig) -> bool:
+        """
+        Check if skill uses agentic execution (flat instructions, LLM orchestration).
+
+        This is the default execution type for skills without explicit configuration.
+        """
+        # 'agentic' is explicit, but also treat empty/missing as agentic for backwards compat
+        return skill.execution_type in ('agentic', '', None) or not skill.execution_type
 
     def _extract_runtime_inputs(self, context: ExecutionContext) -> Dict[str, Any]:
         """
@@ -394,7 +413,14 @@ class AgentExecutor:
                         yield progress
                     return
 
-                # Standard agent execution (LLM orchestration via smolagents)
+                # Route: step-based agent execution (DAG workflow)
+                if self._is_agent_skill(skill):
+                    logger.info(f"🔗 Agent skill '{skill.name}' - using step-based execution")
+                    async for progress in self._execute_step_skill(context, start_time):
+                        yield progress
+                    return
+
+                # Standard agentic execution (LLM orchestration via smolagents)
                 tool_count = len(skill.tools) if skill.tools else 0
                 logger.info(f"Using skill '{skill.name}' with {tool_count} tools")
 
@@ -606,6 +632,127 @@ class AgentExecutor:
                 output.update(result.metadata)
 
         return output
+
+    async def _execute_step_skill(
+        self,
+        context: ExecutionContext,
+        start_time: float
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Execute skill via step-based DAG workflow.
+
+        Each step can either:
+        - Execute an inline instruction with a sub-agent
+        - Delegate to another skill by skill_id
+
+        Args:
+            context: ExecutionContext with skill configuration
+            start_time: Task start time for duration calculation
+
+        Yields:
+            Dict with status, output, progress updates
+        """
+        skill = context.skill
+
+        logger.info(f"🔗 Step-based execution: {skill.name} ({len(skill.steps)} steps)")
+
+        yield {
+            "status": "in_progress",
+            "output": json.dumps({
+                "skill": skill.name,
+                "execution_type": "agent",
+                "steps": len(skill.steps),
+                "message": "Starting step-based execution"
+            }),
+            "error_message": "",
+            "timestamp_ms": int(time.time() * 1000),
+            "progress_percent": 10.0
+        }
+
+        # Build available skills map for delegation (skill_id -> config)
+        available_skills: Dict[int, SkillConfig] = {}
+        if context.available_skills:
+            for s in context.available_skills:
+                available_skills[s.id] = s
+
+        # Create step executor with callback for skill delegation
+        step_executor = StepExecutorService(
+            tool_loader=self.tool_loader,
+            agent_factory=self.agent_factory,
+            skill_executor_callback=self.skill_executor_service.create_executor_callback(
+                org_model=context.org_model,
+                return_message_parts=False,
+                api_key=context.api_key,
+                organization_id=context.organization_id
+            )
+        )
+
+        # Execute steps and yield progress
+        step_results = []
+        async for step_progress in step_executor.execute_steps(
+            steps=list(skill.steps),
+            available_skills=available_skills,
+            initial_inputs=context.skill_inputs or {},
+            org_model=context.org_model,
+            api_key=context.api_key,
+            organization_id=context.organization_id
+        ):
+            # Calculate overall progress (10% base + 80% for steps + 10% for completion)
+            step_percent = (step_progress.step / step_progress.total) * 80
+            overall_percent = 10 + step_percent
+
+            yield {
+                "status": "in_progress",
+                "output": json.dumps({
+                    "skill": skill.name,
+                    "step": step_progress.step,
+                    "total_steps": step_progress.total,
+                    "step_name": step_progress.name,
+                    "step_status": step_progress.status,
+                    "message": f"Step {step_progress.step}/{step_progress.total}: {step_progress.name}"
+                }),
+                "error_message": step_progress.error or "",
+                "timestamp_ms": int(time.time() * 1000),
+                "progress_percent": overall_percent
+            }
+
+            if step_progress.status == "completed":
+                step_results.append({
+                    "name": step_progress.name,
+                    "result": step_progress.result
+                })
+            elif step_progress.status == "failed":
+                # Step failed - report error and stop
+                yield {
+                    "status": "failed",
+                    "output": json.dumps({
+                        "skill": skill.name,
+                        "step": step_progress.step,
+                        "step_name": step_progress.name,
+                        "error": step_progress.error
+                    }),
+                    "error_message": step_progress.error or "Step execution failed",
+                    "timestamp_ms": int(time.time() * 1000),
+                    "progress_percent": 0.0
+                }
+                return
+
+        # All steps completed
+        duration_ms = int((time.time() - start_time) * 1000)
+        yield {
+            "status": "completed",
+            "output": json.dumps({
+                "skill": skill.name,
+                "execution_type": "agent",
+                "steps_completed": len(step_results),
+                "results": step_results,
+                "message": "Step-based execution completed successfully",
+                "duration_ms": duration_ms
+            }),
+            "error_message": "",
+            "timestamp_ms": int(time.time() * 1000),
+            "progress_percent": 100.0
+        }
 
     async def _create_direct_execution_agent(
         self,

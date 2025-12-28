@@ -36,7 +36,8 @@ If the requested data is not found, report what you searched and suggest alterna
     ],
     outputs: [
       { name: "data", type: "text" as const }
-    ]
+    ],
+    executionType: 'agentic' as const
   },
   {
     name: "Document Operations",
@@ -63,7 +64,8 @@ Format document content appropriately for TipTap editor.
     ],
     outputs: [
       { name: "result", type: "text" as const }
-    ]
+    ],
+    executionType: 'agentic' as const
   },
   {
     name: "Data Lookup",
@@ -89,7 +91,8 @@ If multiple matches exist, list them all with distinguishing details.
     ],
     outputs: [
       { name: "found", type: "text" as const }
-    ]
+    ],
+    executionType: 'agentic' as const
   }
 ];
 
@@ -112,6 +115,16 @@ export async function seedSystemSkills() {
       AND s2.agent_id IS NULL
   `);
   console.log(`  🧹 Removed ${dedupeResult.rowCount ?? 0} duplicate system skills`);
+
+  // Data migration: rename execution_type 'agent' → 'agentic'
+  // This is idempotent - safe to run multiple times
+  console.log('  🔄 Migrating execution_type: agent → agentic...');
+  const migrateResult = await db.execute(sql`
+    UPDATE skills
+    SET execution_type = 'agentic'
+    WHERE execution_type = 'agent'
+  `);
+  console.log(`  ✅ Migrated ${migrateResult.rowCount ?? 0} skills`);
 
   // Get all organizations
   const allOrgs = await db.select({ id: organizations.id, name: organizations.name }).from(organizations);
@@ -158,6 +171,7 @@ export async function seedSystemSkills() {
           tools: skillDef.tools,
           inputs: skillDef.inputs,
           outputs: skillDef.outputs,
+          executionType: skillDef.executionType,
           isSystem: true,
         });
 
