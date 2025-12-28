@@ -1,9 +1,11 @@
 """Step-based skill execution for DAG workflows."""
 
+import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, List, Literal, Optional
+from typing import Any, AsyncIterator, Callable, Dict, List, Literal, Optional, Set
 
 from ..grpc.generated import agent_worker_pb2
 from ..types import SkillExecutionResult
@@ -11,6 +13,13 @@ from .agent_factory import AgentFactory, AgentConfig
 from .tool_loader import UnifiedToolLoader
 
 logger = logging.getLogger(__name__)
+
+
+# Simple condition pattern: "value operator value"
+# Supports: >, <, >=, <=, ==, !=
+_CONDITION_PATTERN = re.compile(
+    r'^(.+?)\s*(>=|<=|==|!=|>|<)\s*(.+)$'
+)
 
 
 @dataclass
@@ -40,7 +49,7 @@ class StepExecutorService:
         self,
         tool_loader: UnifiedToolLoader,
         agent_factory: AgentFactory,
-        skill_executor_callback: Optional[callable] = None
+        skill_executor_callback: Optional[Callable] = None
     ):
         """Initialize step executor.
 
@@ -60,7 +69,8 @@ class StepExecutorService:
         initial_inputs: Dict[str, Any],
         org_model: Optional[str] = None,
         api_key: Optional[str] = None,
-        organization_id: Optional[int] = None
+        organization_id: Optional[int] = None,
+        _execution_stack: Optional[Set[int]] = None
     ) -> AsyncIterator[StepProgress]:
         """Execute steps sequentially, passing data between them.
 
@@ -71,12 +81,15 @@ class StepExecutorService:
             org_model: Organization default model
             api_key: API key for authenticated calls
             organization_id: Organization ID for RLS context
+            _execution_stack: Internal - tracks skills in current call chain
 
         Yields:
             StepProgress updates as each step executes
         """
         # Initialize step context with initial inputs
         step_context: Dict[str, Any] = dict(initial_inputs)
+        # Create execution stack for this call chain if not provided
+        execution_stack = _execution_stack if _execution_stack is not None else set()
 
         total_steps = len(steps)
         logger.info(f"🚀 Starting step-based execution with {total_steps} steps")
@@ -120,7 +133,8 @@ class StepExecutorService:
                         available_skills=available_skills,
                         org_model=org_model,
                         api_key=api_key,
-                        organization_id=organization_id
+                        organization_id=organization_id,
+                        execution_stack=execution_stack
                     )
                 else:
                     # Execute inline instruction with sub-agent
@@ -169,7 +183,8 @@ class StepExecutorService:
         available_skills: Dict[int, 'agent_worker_pb2.SkillConfig'],
         org_model: Optional[str],
         api_key: Optional[str],
-        organization_id: Optional[int]
+        organization_id: Optional[int],
+        execution_stack: Set[int]
     ) -> Any:
         """Execute a step that references another skill."""
         skill_id = step.skill_id
@@ -178,26 +193,43 @@ class StepExecutorService:
         if not skill_config:
             raise ValueError(f"Skill {skill_id} not found in available skills")
 
+        # Circular dependency detection - only check skills currently executing in this chain
+        if skill_id in execution_stack:
+            raise ValueError(
+                f"Circular dependency detected: skill {skill_id} ({skill_config.name}) "
+                f"is already executing in current chain"
+            )
+
         logger.info(f"🔗 Delegating to skill: {skill_config.name} (id={skill_id})")
 
         if not self.skill_executor_callback:
             raise ValueError("No skill executor callback configured for skill delegation")
 
-        # Execute via callback (handles operation/tool/write/agent routing)
-        result = self.skill_executor_callback(
-            skill_config=skill_config,
-            runtime_inputs=step_inputs,
-            capture_outputs=True  # We need outputs for chaining
-        )
+        # Add to execution stack for this call chain
+        execution_stack.add(skill_id)
+        try:
+            # Execute via callback (handles operation/tool/write/agent routing)
+            result = self.skill_executor_callback(
+                skill_config=skill_config,
+                runtime_inputs=step_inputs,
+                capture_outputs=True  # We need outputs for chaining
+            )
 
-        # Handle SkillExecutionResult
-        if isinstance(result, SkillExecutionResult):
-            # Return captured outputs if available, otherwise the result string
-            if result.captured_outputs:
-                return result.captured_outputs
-            return result.result
+            # Await if the callback returns a coroutine
+            if asyncio.iscoroutine(result):
+                result = await result
 
-        return result
+            # Handle SkillExecutionResult
+            if isinstance(result, SkillExecutionResult):
+                # Return captured outputs if available, otherwise the result string
+                if result.captured_outputs:
+                    return result.captured_outputs
+                return result.result
+
+            return result
+        finally:
+            # Remove from stack when this skill completes
+            execution_stack.discard(skill_id)
 
     async def _execute_inline_step(
         self,
@@ -332,19 +364,74 @@ class StepExecutorService:
         return result
 
     def _evaluate_condition(self, condition: str, context: Dict[str, Any]) -> bool:
-        """Evaluate condition like '{{count}} > 0'.
+        """Safely evaluate simple conditions like '{{count}} > 0'.
 
-        Note: For safety, we only support simple comparisons for now.
+        Supports: >, <, >=, <=, ==, !=
+        For complex conditions, returns True (execute the step).
         """
         # Inject context first
         expr = self._inject_context(condition, context)
 
+        # Match simple comparison: "left op right"
+        match = _CONDITION_PATTERN.match(expr.strip())
+        if not match:
+            # If no comparison found, treat as truthy check
+            logger.debug(f"Condition '{expr}' - treating as truthy check")
+            return bool(expr.strip())
+
+        left_str, op, right_str = match.groups()
+        left = self._parse_value(left_str.strip())
+        right = self._parse_value(right_str.strip())
+
         try:
-            # Simple evaluation - in production would want a safer approach
-            return bool(eval(expr, {"__builtins__": {}}, {}))
+            if op == '>':
+                return left > right
+            elif op == '<':
+                return left < right
+            elif op == '>=':
+                return left >= right
+            elif op == '<=':
+                return left <= right
+            elif op == '==':
+                return left == right
+            elif op == '!=':
+                return left != right
         except Exception as e:
-            logger.warning(f"Failed to evaluate condition '{condition}': {e}")
+            logger.warning(f"Condition comparison failed '{condition}': {e}")
             return False
+
+        return False
+
+    def _parse_value(self, value_str: str) -> Any:
+        """Parse a string value into appropriate Python type."""
+        # Try as int
+        try:
+            return int(value_str)
+        except ValueError:
+            pass
+
+        # Try as float
+        try:
+            return float(value_str)
+        except ValueError:
+            pass
+
+        # Handle boolean/null strings
+        lower = value_str.lower()
+        if lower == 'true':
+            return True
+        if lower == 'false':
+            return False
+        if lower in ('none', 'null'):
+            return None
+
+        # Handle quoted strings
+        if (value_str.startswith('"') and value_str.endswith('"')) or \
+           (value_str.startswith("'") and value_str.endswith("'")):
+            return value_str[1:-1]
+
+        # Return as string
+        return value_str
 
 
 def execute_steps_sync(

@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useMemo } from 'react';
-import { Plus, X, GripVertical } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Plus, X, GripVertical, ArrowLeft, ArrowRight } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -20,12 +20,12 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
 import { cn } from '@/lib/utils';
-import type { SkillStep, SkillInput } from '@/ddd/domain/skills/entities/skill';
+import type { SkillStep, InputDefinition } from '@/ddd/domain/skills/entities/skill';
 
 interface AvailableSkill {
   id: number;
@@ -35,15 +35,20 @@ interface AvailableSkill {
 interface StepBuilderSectionProps {
   steps: SkillStep[];
   onChange: (steps: SkillStep[]) => void;
-  skillInputs: SkillInput[];
+  skillInputs: InputDefinition[];
   availableSkills?: AvailableSkill[];
   disabled?: boolean;
+}
+
+interface VariableInfo {
+  name: string;
+  description: string;
 }
 
 interface SortableStepCardProps {
   step: SkillStep;
   index: number;
-  availableVariables: string[];
+  availableVariables: VariableInfo[];
   availableSkills: AvailableSkill[];
   onChange: (updates: Partial<SkillStep>) => void;
   onDelete: () => void;
@@ -55,14 +60,17 @@ interface SortableStepCardProps {
  */
 function getAvailableVariables(
   stepIndex: number,
-  skillInputs: SkillInput[],
+  skillInputs: InputDefinition[],
   steps: SkillStep[]
-): string[] {
-  const vars: string[] = [];
+): VariableInfo[] {
+  const vars: VariableInfo[] = [];
 
   // Skill inputs always available
   for (const input of skillInputs) {
-    vars.push(`{{${input.name}}}`);
+    vars.push({
+      name: input.name,
+      description: `Skill input: ${input.type || 'text'}`,
+    });
   }
 
   // Previous step outputs (from outputs record keys)
@@ -70,16 +78,195 @@ function getAvailableVariables(
     const step = steps[i];
     if (step.outputs) {
       for (const outputKey of Object.keys(step.outputs)) {
-        vars.push(`{{${outputKey}}}`);
+        vars.push({
+          name: outputKey,
+          description: `Output from step "${step.name}"`,
+        });
       }
     }
     // Also add step name as implicit output
     if (step.name) {
-      vars.push(`{{${step.name}_result}}`);
+      vars.push({
+        name: `${step.name}_result`,
+        description: `Result from step "${step.name}"`,
+      });
     }
   }
 
   return vars;
+}
+
+/**
+ * Step Input Mappings - Maps external values to step parameters
+ */
+interface StepInputMappingsProps {
+  inputs: Record<string, string>;
+  onChange: (inputs: Record<string, string>) => void;
+  availableVariables: VariableInfo[];
+  disabled?: boolean;
+}
+
+function StepInputMappings({ inputs, onChange, availableVariables, disabled }: StepInputMappingsProps) {
+  const entries = Object.entries(inputs);
+
+  const addInput = () => {
+    const newKey = `param_${Object.keys(inputs).length + 1}`;
+    onChange({ ...inputs, [newKey]: '' });
+  };
+
+  const updateInput = (oldKey: string, newKey: string, value: string) => {
+    const newInputs: Record<string, string> = {};
+    for (const [k, v] of Object.entries(inputs)) {
+      if (k === oldKey) {
+        newInputs[newKey] = value;
+      } else {
+        newInputs[k] = v;
+      }
+    }
+    onChange(newInputs);
+  };
+
+  const removeInput = (key: string) => {
+    const { [key]: _, ...rest } = inputs;
+    onChange(rest);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Input Mappings</Label>
+        {!disabled && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-5 w-5 p-0"
+            onClick={addInput}
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+      {entries.length === 0 ? (
+        <p className="text-[10px] text-muted-foreground italic">No input mappings</p>
+      ) : (
+        entries.map(([param, source]) => (
+          <div key={param} className="flex items-center gap-1.5">
+            <Input
+              value={param}
+              onChange={(e) => updateInput(param, e.target.value, source)}
+              className="h-6 text-xs w-24 font-mono"
+              placeholder="param"
+              disabled={disabled}
+            />
+            <ArrowLeft className="h-3 w-3 text-muted-foreground shrink-0" />
+            <Input
+              value={source}
+              onChange={(e) => updateInput(param, param, e.target.value)}
+              className="h-6 text-xs flex-1 font-mono"
+              placeholder="{{source}}"
+              disabled={disabled}
+            />
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => removeInput(param)}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+/**
+ * Step Output Mappings - Captures step results to named variables
+ */
+interface StepOutputMappingsProps {
+  outputs: Record<string, string>;
+  onChange: (outputs: Record<string, string>) => void;
+  disabled?: boolean;
+}
+
+function StepOutputMappings({ outputs, onChange, disabled }: StepOutputMappingsProps) {
+  const entries = Object.entries(outputs);
+
+  const addOutput = () => {
+    const newKey = `output_${Object.keys(outputs).length + 1}`;
+    onChange({ ...outputs, [newKey]: '' });
+  };
+
+  const updateOutput = (oldKey: string, newKey: string, value: string) => {
+    const newOutputs: Record<string, string> = {};
+    for (const [k, v] of Object.entries(outputs)) {
+      if (k === oldKey) {
+        newOutputs[newKey] = value;
+      } else {
+        newOutputs[k] = v;
+      }
+    }
+    onChange(newOutputs);
+  };
+
+  const removeOutput = (key: string) => {
+    const { [key]: _, ...rest } = outputs;
+    onChange(rest);
+  };
+
+  return (
+    <div className="space-y-1.5 border-t pt-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Output Mappings</Label>
+        {!disabled && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-5 w-5 p-0"
+            onClick={addOutput}
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+      {entries.length === 0 ? (
+        <p className="text-[10px] text-muted-foreground italic">No output mappings</p>
+      ) : (
+        entries.map(([outputName, targetVar]) => (
+          <div key={outputName} className="flex items-center gap-1.5">
+            <Input
+              value={outputName}
+              onChange={(e) => updateOutput(outputName, e.target.value, targetVar)}
+              className="h-6 text-xs w-24 font-mono"
+              placeholder="result_field"
+              disabled={disabled}
+            />
+            <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+            <Input
+              value={targetVar}
+              onChange={(e) => updateOutput(outputName, outputName, e.target.value)}
+              className="h-6 text-xs flex-1 font-mono"
+              placeholder="target_var"
+              disabled={disabled}
+            />
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => removeOutput(outputName)}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
 }
 
 /**
@@ -168,6 +355,14 @@ function SortableStepCard({
 
         {/* Step Content */}
         <div className="p-3 space-y-3">
+          {/* Input Mappings - maps context values to step parameters */}
+          <StepInputMappings
+            inputs={step.inputs || {}}
+            onChange={(inputs) => onChange({ inputs })}
+            availableVariables={availableVariables}
+            disabled={disabled}
+          />
+
           {/* Mode Toggle */}
           <div className="flex gap-4">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -223,16 +418,26 @@ function SortableStepCard({
           ) : (
             <div className="space-y-2">
               <Label className="text-xs">Instruction</Label>
-              <Textarea
+              <UnifiedChatInput
                 value={step.instruction || ''}
-                onChange={(e) => onChange({ instruction: e.target.value })}
-                placeholder="Describe what this step should do..."
-                rows={3}
-                className="text-sm resize-none"
+                onChange={(text) => onChange({ instruction: text })}
+                placeholder="Describe what this step should do... Use { for variables"
+                variables={availableVariables}
+                mode="form"
+                minHeight="80px"
                 disabled={disabled}
+                enableAttachments={false}
+                enableSendButton={false}
               />
             </div>
           )}
+
+          {/* Output Mappings - captures step results to named variables */}
+          <StepOutputMappings
+            outputs={step.outputs || {}}
+            onChange={(outputs) => onChange({ outputs })}
+            disabled={disabled}
+          />
 
           {/* Available Variables */}
           {availableVariables.length > 0 && (
@@ -243,8 +448,9 @@ function SortableStepCard({
                   <code
                     key={i}
                     className="px-1.5 py-0.5 text-xs bg-muted rounded font-mono"
+                    title={v.description}
                   >
-                    {v}
+                    {`{{${v.name}}}`}
                   </code>
                 ))}
               </div>
@@ -315,6 +521,16 @@ export function StepBuilderSection({
     onChange([...steps, newStep]);
   };
 
+  const handleInsertStep = (atIndex: number) => {
+    const newStep: SkillStep = {
+      name: `step_${steps.length + 1}`,
+      instruction: '',
+    };
+    const newSteps = [...steps];
+    newSteps.splice(atIndex, 0, newStep);
+    onChange(newSteps);
+  };
+
   // Empty state
   if (steps.length === 0) {
     return (
@@ -351,16 +567,32 @@ export function StepBuilderSection({
         <SortableContext items={stepIds} strategy={verticalListSortingStrategy}>
           <div className="space-y-0">
             {steps.map((step, index) => (
-              <SortableStepCard
-                key={step.name || `step-${index}`}
-                step={step}
-                index={index}
-                availableVariables={getAvailableVariables(index, skillInputs, steps)}
-                availableSkills={availableSkills}
-                onChange={(updates) => handleStepChange(index, updates)}
-                onDelete={() => handleDeleteStep(index)}
-                disabled={disabled}
-              />
+              <React.Fragment key={step.name || `step-${index}`}>
+                {/* Insert button before step (not for first step) */}
+                {index > 0 && !disabled && (
+                  <div className="flex justify-center py-1">
+                    <button
+                      type="button"
+                      onClick={() => handleInsertStep(index)}
+                      className="h-5 w-5 rounded-full border border-dashed border-muted-foreground/40
+                        text-muted-foreground/60 hover:border-primary hover:text-primary
+                        hover:bg-primary/5 flex items-center justify-center transition-colors"
+                      title="Insert step here"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+                <SortableStepCard
+                  step={step}
+                  index={index}
+                  availableVariables={getAvailableVariables(index, skillInputs, steps)}
+                  availableSkills={availableSkills}
+                  onChange={(updates) => handleStepChange(index, updates)}
+                  onDelete={() => handleDeleteStep(index)}
+                  disabled={disabled}
+                />
+              </React.Fragment>
             ))}
           </div>
         </SortableContext>

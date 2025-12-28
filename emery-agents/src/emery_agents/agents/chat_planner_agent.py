@@ -24,6 +24,7 @@ import logging
 from typing import List, Any, Optional
 
 from smolagents import Tool
+from smolagents.monitoring import LogLevel
 
 from .interrupt_aware_agent import InterruptAwareToolCallingAgent
 from ..prompts import build_agent_instructions
@@ -86,6 +87,7 @@ def create_chat_planner_agent(
         max_steps=max_steps,
         managed_agents=managed_agents or [],
         instructions=instructions,  # ADDS to default prompt, doesn't replace
+        verbosity_level=LogLevel.OFF,
     )
 
     # Set attributes for identification

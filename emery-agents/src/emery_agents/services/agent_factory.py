@@ -16,6 +16,7 @@ from typing import List, Any, Optional, Dict
 from dataclasses import dataclass
 
 from smolagents import ToolCallingAgent, CodeAgent
+from smolagents.monitoring import LogLevel
 from .model_provider import SmolagentsModelProvider
 from ..agents.interrupt_aware_agent import InterruptAwareToolCallingAgent
 from ..prompts import build_agent_instructions
@@ -110,6 +111,7 @@ class AgentFactory:
                 model=model,
                 max_steps=config.max_steps,
                 additional_authorized_imports=["json", "re", "datetime", "math"],
+                verbosity_level=LogLevel.OFF,
             )
         else:
             # ToolCallingAgent uses structured function calls (default)
@@ -119,7 +121,8 @@ class AgentFactory:
                 model=model,
                 max_steps=config.max_steps,
                 managed_agents=config.managed_agents or [],
-                instructions=instructions
+                instructions=instructions,
+                verbosity_level=LogLevel.OFF,
             )
 
         agent.name = config.agent_name
