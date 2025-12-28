@@ -16,6 +16,7 @@ import { TaskModelForm } from './editor/TaskModelForm';
 import { OutputMappingSection } from './editor/OutputMappingSection';
 import { ToolExecutionConfigForm } from './editor/ToolExecutionConfigForm';
 import { WriteConfigForm } from './editor/WriteConfigForm';
+import { StepBuilderSection } from './editor/StepBuilderSection';
 import type { ToolConfigDTO, SkillInput, SkillOutput } from '@/app/mappers/skill-mapper';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 import type { SkillExecutionType } from '@/ddd/domain/skills/entities/skill';
@@ -404,19 +405,14 @@ export function SkillEditor({
             />
           </div>
 
-          {/* Steps Section - Placeholder for now */}
-          <div className="space-y-3">
-            <Label className="text-base font-semibold">Steps</Label>
-            <div className="border-2 border-dashed border-muted rounded-lg p-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                Step-based workflow configuration coming soon.
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Define steps with inline instructions or skill references.
-                Each step can have its own tools and passes data to the next.
-              </p>
-            </div>
-          </div>
+          {/* Steps Section */}
+          <StepBuilderSection
+            steps={localValue.steps || []}
+            onChange={(steps) => handleChange({ steps })}
+            skillInputs={localValue.inputs}
+            availableSkills={[]} // TODO: Fetch from org/agent skills
+            disabled={isReadOnly}
+          />
 
           {/* Outputs Section */}
           <div className="space-y-2">
