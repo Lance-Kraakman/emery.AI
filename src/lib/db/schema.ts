@@ -18,7 +18,7 @@ export interface TemplateVariant {
 }
 import type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
-import type { SkillParameterType, SkillInputFileConfig, SkillOutput, ToolExecutionConfig, WriteConfig } from '@/ddd/domain/skills/entities/skill';
+import type { SkillParameterType, OutputDefinition, ToolExecutionConfig, WriteConfig, InputMappingConfig } from '@/ddd/domain/skills/entities/skill';
 
 // AIDEV-NOTE: Authenticated user role for RLS policies
 export const authenticatedRole = pgRole('authenticated', {
@@ -989,10 +989,9 @@ export const skills = pgTable("skills", {
     name: string;
     required: boolean;
     type?: SkillParameterType;
-    fileConfig?: SkillInputFileConfig;
-    default?: any;
+    inputMapping?: InputMappingConfig;
   }>>().default([]),
-  outputs: jsonb("outputs").$type<SkillOutput[]>().default([]),
+  outputs: jsonb("outputs").$type<OutputDefinition[]>().default([]),
   instructions: text("instructions").notNull().default(''),
   tools: jsonb("tools").default('[]').notNull(),
   content: jsonb("content").$type<MessagePart[]>(), // Skill-level attachments (images, files, text)
