@@ -67,11 +67,11 @@ function extractStringValue(value: unknown): string {
 /**
  * Resolve dynamic values from action context
  * Supports templates like:
- * - {fieldName} - Shorthand for row data (equivalent to {rowData.fieldName})
- * - {rowData.fieldName} - Explicit row data access
- * - {formData.fieldName} - Form data access
- * - {params.name} - Query parameter access
- * - {userId} - Direct context property
+ * - {{fieldName}} - Shorthand for row data (equivalent to {{rowData.fieldName}})
+ * - {{rowData.fieldName}} - Explicit row data access
+ * - {{formData.fieldName}} - Form data access
+ * - {{params.name}} - Query parameter access
+ * - {{userId}} - Direct context property
  *
  * @param value - The value to resolve (can contain templates)
  * @param context - Action context with available data
@@ -90,11 +90,11 @@ function resolveDynamicValue(
   console.log('🔍 context.rowData:', context.rowData);
   console.log('🔍 context.rowData keys:', context.rowData ? Object.keys(context.rowData) : 'N/A');
 
-  // Replace template variables: {rowData.id}, {formData.email}, {fieldName}, etc.
-  return value.replace(/\{([^}]+)\}/g, (match, path) => {
+  // Replace template variables: {{rowData.id}}, {{formData.email}}, {{fieldName}}, etc.
+  return value.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
     console.log('🔍 Resolving variable:', path);
     // Check for shorthand notation (no dots = assume rowData)
-    // e.g., {name} -> {rowData.name}
+    // e.g., {{name}} -> {{rowData.name}}
     const effectivePath = path.includes('.') ? path : `rowData.${path}`;
     console.log('🔍 Effective path:', effectivePath);
 

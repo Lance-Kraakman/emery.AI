@@ -210,14 +210,14 @@ export function VariableAutocompleteInput({
       // This ensures we use the position captured when the popover opened
       if (variableStartPos < 0) return;
 
-      // Replace from { to cursor with {variable}
+      // Replace from { to cursor with {{variable}}
       const before = value.substring(0, variableStartPos);
       const after = value.substring(cursorPosition);
-      const newValue = `${before}{${variable}}${after}`;
+      const newValue = `${before}{{${variable}}}${after}`;
       onChange(newValue);
 
       // Move cursor after the inserted variable
-      const newCursor = before.length + variable.length + 2; // +2 for {}
+      const newCursor = before.length + variable.length + 4; // +4 for {{}}
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.setSelectionRange(newCursor, newCursor);
@@ -321,7 +321,7 @@ export function VariableAutocompleteInput({
                     <div className="flex items-center gap-2">
                       <ChevronRight className="h-3 w-3 text-muted-foreground" />
                       <code className="text-xs bg-muted px-1 rounded">
-                        {`{${option.variable}}`}
+                        {`{{${option.variable}}}`}
                       </code>
                     </div>
                     {option.sampleValue !== undefined && (
@@ -364,7 +364,7 @@ export function VariableAutocompleteInput({
                     <div className="flex items-center gap-2">
                       <ChevronRight className="h-3 w-3 text-muted-foreground" />
                       <code className="text-xs bg-muted px-1 rounded">
-                        {`{${option.variable}}`}
+                        {`{{${option.variable}}}`}
                       </code>
                     </div>
                     {option.description && (
