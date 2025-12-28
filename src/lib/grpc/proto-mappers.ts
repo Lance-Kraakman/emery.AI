@@ -485,7 +485,7 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
       return { text: { text: '' } };
     }),
     agentType: skill.agentType || '',
-    executionType: skill.executionType || 'agent',
+    executionType: skill.executionType || 'agentic',
     taskModelConfig: skill.taskModelConfig ? {
       modelId: skill.taskModelConfig.modelId || '',
       taskType: skill.taskModelConfig.taskType || '',
@@ -514,7 +514,18 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
         skillInputName: skill.writeConfig.updateMatch.skillInputName,
         targetFieldId: skill.writeConfig.updateMatch.targetFieldId
       } : undefined
-    } : undefined
+    } : undefined,
+    // Map steps for 'agent' (step-based) execution type
+    steps: skill.steps?.map(step => ({
+      name: step.name,
+      instruction: step.instruction || '',
+      skillId: step.skillId || 0,
+      tools: step.tools || [],
+      inputs: step.inputs || {},
+      outputs: step.outputs || {},
+      parallel: step.parallel || false,
+      condition: step.condition || ''
+    })) || []
   };
 }
 

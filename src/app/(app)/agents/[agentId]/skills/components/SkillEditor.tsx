@@ -32,7 +32,8 @@ export interface SkillFormData {
   content?: MessagePart[]; // Existing uploaded attachments
   pendingAttachments?: File[]; // New attachments to upload on save
   // Execution type determines how the skill runs:
-  // - 'agent': LLM orchestration with tools (default)
+  // - 'agentic': LLM orchestration with flat instructions (default)
+  // - 'agent': Step-based DAG workflow with skill chaining
   // - 'operation': Direct AI model inference (e.g., speech-to-text)
   // - 'tool': Direct Pipedream tool call (no LLM)
   // - 'write': Direct table write (no LLM)
@@ -55,6 +56,17 @@ export interface SkillFormData {
     fieldMappings: Array<{ skillInputName: string; targetFieldId: number }>;
     updateMatch?: { skillInputName: string; targetFieldId: number };
   };
+  // Steps for agent (step-based) execution (required when executionType is 'agent')
+  steps?: Array<{
+    name: string;
+    instruction?: string;
+    skillId?: number;
+    tools?: string[];
+    inputs?: Record<string, string>;
+    outputs?: Record<string, string>;
+    parallel?: boolean;
+    condition?: string;
+  }>;
 }
 
 interface SkillEditorProps {
@@ -96,12 +108,18 @@ export function SkillEditor({
 
   // Separate state for each execution mode's inputs/outputs
   // This preserves user's work when switching between modes
-  const [savedAgentState, setSavedAgentState] = useState<{
+  const [savedAgenticState, setSavedAgenticState] = useState<{
     inputs: SkillInput[];
     outputs: SkillOutput[];
     instructions: string;
     tools: ToolConfigDTO[];
   }>({ inputs: [], outputs: [], instructions: '', tools: [] });
+
+  const [savedAgentState, setSavedAgentState] = useState<{
+    inputs: SkillInput[];
+    outputs: SkillOutput[];
+    steps: SkillFormData['steps'];
+  }>({ inputs: [], outputs: [], steps: [] });
 
   const [savedDirectState, setSavedDirectState] = useState<{
     inputs: SkillInput[];
@@ -203,14 +221,16 @@ export function SkillEditor({
         {/* Inline: Execution Toggle + Add Description */}
         <div className="flex items-center gap-3">
           <ExecutionTypeToggle
-            value={localValue.executionType || 'agent'}
+            value={localValue.executionType || 'agentic'}
             onChange={(newMode) => {
-              const currentMode = localValue.executionType || 'agent';
+              const currentMode = localValue.executionType || 'agentic';
               if (currentMode === newMode) return;
 
               // Save current state based on current mode
-              if (currentMode === 'agent') {
-                setSavedAgentState({ inputs: localValue.inputs, outputs: localValue.outputs, instructions: localValue.instructions, tools: localValue.tools });
+              if (currentMode === 'agentic') {
+                setSavedAgenticState({ inputs: localValue.inputs, outputs: localValue.outputs, instructions: localValue.instructions, tools: localValue.tools });
+              } else if (currentMode === 'agent') {
+                setSavedAgentState({ inputs: localValue.inputs, outputs: localValue.outputs, steps: localValue.steps });
               } else if (currentMode === 'operation') {
                 setSavedDirectState({ inputs: localValue.inputs, outputs: localValue.outputs, instructions: localValue.instructions, taskModelConfig: localValue.taskModelConfig });
               } else if (currentMode === 'tool') {
@@ -220,14 +240,16 @@ export function SkillEditor({
               }
 
               // Restore target mode's saved state
-              if (newMode === 'agent') {
-                handleChange({ executionType: newMode, ...savedAgentState, taskModelConfig: undefined, toolExecutionConfig: undefined, writeConfig: undefined });
+              if (newMode === 'agentic') {
+                handleChange({ executionType: newMode, ...savedAgenticState, taskModelConfig: undefined, toolExecutionConfig: undefined, writeConfig: undefined, steps: undefined });
+              } else if (newMode === 'agent') {
+                handleChange({ executionType: newMode, inputs: savedAgentState.inputs, outputs: savedAgentState.outputs, steps: savedAgentState.steps, instructions: '', tools: [], taskModelConfig: undefined, toolExecutionConfig: undefined, writeConfig: undefined });
               } else if (newMode === 'operation') {
-                handleChange({ executionType: newMode, ...savedDirectState, tools: [], toolExecutionConfig: undefined, writeConfig: undefined });
+                handleChange({ executionType: newMode, ...savedDirectState, tools: [], toolExecutionConfig: undefined, writeConfig: undefined, steps: undefined });
               } else if (newMode === 'tool') {
-                handleChange({ executionType: newMode, inputs: savedToolState.inputs, outputs: [], instructions: '', tools: [], toolExecutionConfig: savedToolState.toolExecutionConfig, taskModelConfig: undefined, writeConfig: undefined });
+                handleChange({ executionType: newMode, inputs: savedToolState.inputs, outputs: [], instructions: '', tools: [], toolExecutionConfig: savedToolState.toolExecutionConfig, taskModelConfig: undefined, writeConfig: undefined, steps: undefined });
               } else if (newMode === 'write') {
-                handleChange({ executionType: newMode, inputs: savedWriteState.inputs, outputs: [], instructions: '', tools: [], writeConfig: savedWriteState.writeConfig, taskModelConfig: undefined, toolExecutionConfig: undefined });
+                handleChange({ executionType: newMode, inputs: savedWriteState.inputs, outputs: [], instructions: '', tools: [], writeConfig: savedWriteState.writeConfig, taskModelConfig: undefined, toolExecutionConfig: undefined, steps: undefined });
               }
             }}
             disabled={isReadOnly}
@@ -364,8 +386,55 @@ export function SkillEditor({
             disabled={isReadOnly}
           />
         </>
+      ) : localValue.executionType === 'agent' ? (
+        /* Agent Form - Step-based DAG workflow */
+        <>
+          {/* Inputs Section */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm text-muted-foreground">Inputs</Label>
+              <span className="text-xs text-muted-foreground">
+                {localValue.inputs.length} input{localValue.inputs.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <SkillInputsSection
+              inputs={localValue.inputs}
+              onInputsChange={(inputs) => handleChange({ inputs })}
+              isReadOnly={isReadOnly}
+            />
+          </div>
+
+          {/* Steps Section - Placeholder for now */}
+          <div className="space-y-3">
+            <Label className="text-base font-semibold">Steps</Label>
+            <div className="border-2 border-dashed border-muted rounded-lg p-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                Step-based workflow configuration coming soon.
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Define steps with inline instructions or skill references.
+                Each step can have its own tools and passes data to the next.
+              </p>
+            </div>
+          </div>
+
+          {/* Outputs Section */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm text-muted-foreground">Outputs</Label>
+              <span className="text-xs text-muted-foreground">
+                {localValue.outputs.length} output{localValue.outputs.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <SkillOutputsSection
+              outputs={localValue.outputs}
+              onOutputsChange={(outputs) => handleChange({ outputs })}
+              isReadOnly={isReadOnly}
+            />
+          </div>
+        </>
       ) : (
-        /* Agent Form (default) */
+        /* Agentic Form (default) - Flat instructions with LLM orchestration */
         <>
           {/* Inputs Section */}
           <div className="space-y-2">

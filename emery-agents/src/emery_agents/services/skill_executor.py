@@ -15,6 +15,7 @@ from ..types import SkillExecutionResult
 from ..utils import run_async_in_thread
 from .agent_factory import AgentFactory, AgentConfig
 from .output_mapping_service import MappingContext, OutputMappingService
+from .step_executor import StepExecutorService, execute_steps_sync
 from .tool_loader import UnifiedToolLoader
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,15 @@ class SkillExecutorService:
     def _is_write_skill(self, skill_config: 'agent_worker_pb2.SkillConfig') -> bool:
         """Check if skill uses direct table write (no LLM)."""
         return skill_config.execution_type == 'write'
+
+    def _is_agentic_skill(self, skill_config: 'agent_worker_pb2.SkillConfig') -> bool:
+        """Check if skill uses agentic execution (flat instructions, LLM orchestration)."""
+        # 'agentic' is the explicit type, but also treat empty/missing as agentic for backwards compat
+        return skill_config.execution_type in ('agentic', '', None) or not skill_config.execution_type
+
+    def _is_agent_skill(self, skill_config: 'agent_worker_pb2.SkillConfig') -> bool:
+        """Check if skill uses step-based agent execution (DAG workflow)."""
+        return skill_config.execution_type == 'agent' and len(skill_config.steps) > 0
 
     def _has_output_mappings(self, skill_config: 'agent_worker_pb2.SkillConfig') -> bool:
         """Check if skill has output mappings configured."""
@@ -106,7 +116,14 @@ class SkillExecutorService:
                     skill_config, runtime_inputs,
                     api_key=api_key, organization_id=organization_id
                 )
+            elif self._is_agent_skill(skill_config):
+                # Step-based DAG execution
+                return self._execute_steps(
+                    skill_config, runtime_inputs, org_model,
+                    api_key=api_key, organization_id=organization_id
+                )
             else:
+                # Agentic execution (flat instructions, LLM orchestration)
                 return self._execute_agent(
                     skill_config, runtime_inputs, org_model,
                     capture_outputs, attachments, return_message_parts
@@ -483,6 +500,59 @@ class SkillExecutorService:
         except httpx.RequestError as e:
             logger.error(f"❌ Table write request failed: {e}")
             raise ValueError(f"Table write request failed: {e}")
+
+    def _execute_steps(
+        self,
+        skill_config: 'agent_worker_pb2.SkillConfig',
+        runtime_inputs: Dict[str, Any],
+        org_model: Optional[str] = None,
+        api_key: Optional[str] = None,
+        organization_id: Optional[int] = None
+    ) -> SkillExecutionResult:
+        """Execute skill via step-based DAG workflow.
+
+        Args:
+            skill_config: Skill configuration with steps[]
+            runtime_inputs: Runtime inputs from caller
+            org_model: Organization default model (fallback)
+            api_key: API key for authenticated calls
+            organization_id: Organization ID for RLS context
+
+        Returns:
+            SkillExecutionResult with results from all steps
+        """
+        logger.info(f"🚀 Step-based execution: {skill_config.name} ({len(skill_config.steps)} steps)")
+
+        # Create step executor with callback for skill delegation
+        step_executor = StepExecutorService(
+            tool_loader=self.tool_loader,
+            agent_factory=self.agent_factory,
+            skill_executor_callback=self.create_executor_callback(
+                org_model=org_model,
+                return_message_parts=False,
+                api_key=api_key,
+                organization_id=organization_id
+            )
+        )
+
+        # Build available skills map for delegation (skill_id -> config)
+        # For now, we don't have access to other skills in this context
+        # This would need to be passed in from the parent executor
+        available_skills: Dict[int, 'agent_worker_pb2.SkillConfig'] = {}
+
+        # Execute steps synchronously
+        result = execute_steps_sync(
+            step_executor=step_executor,
+            steps=list(skill_config.steps),
+            available_skills=available_skills,
+            initial_inputs=runtime_inputs,
+            org_model=org_model,
+            api_key=api_key,
+            organization_id=organization_id
+        )
+
+        logger.info(f"✅ Step-based execution complete: {skill_config.name}")
+        return result
 
     def _process_skill_attachments(
         self,

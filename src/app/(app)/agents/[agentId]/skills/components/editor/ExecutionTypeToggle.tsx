@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Bot, Cpu, Wrench, Database } from 'lucide-react';
+import { Bot, Cpu, Wrench, Database, GitBranch } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SkillExecutionType } from '@/ddd/domain/skills/entities/skill';
 
@@ -21,11 +21,18 @@ interface ExecutionTypeOption {
 
 const EXECUTION_TYPES: ExecutionTypeOption[] = [
   {
+    type: 'agentic',
+    label: 'Agentic',
+    shortLabel: 'Agentic',
+    description: 'LLM orchestrates tools with flat instructions',
+    icon: Bot,
+  },
+  {
     type: 'agent',
     label: 'Agent',
     shortLabel: 'Agent',
-    description: 'LLM orchestrates tools and reasoning',
-    icon: Bot,
+    description: 'Step-based workflow with isolated contexts',
+    icon: GitBranch,
   },
   {
     type: 'operation',
@@ -52,7 +59,8 @@ const EXECUTION_TYPES: ExecutionTypeOption[] = [
 
 /**
  * Execution type selector for skills.
- * - Agent: LLM orchestration with tools
+ * - Agentic: LLM orchestration with flat instructions (default)
+ * - Agent: Step-based DAG workflow with skill chaining
  * - Direct (operation): Single model call
  * - Tool: Direct Pipedream action
  * - Write: Direct table write
@@ -60,7 +68,7 @@ const EXECUTION_TYPES: ExecutionTypeOption[] = [
 export function ExecutionTypeToggle({ value, onChange, disabled }: ExecutionTypeToggleProps) {
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-5 gap-2">
         {EXECUTION_TYPES.map((option) => {
           const Icon = option.icon;
           const isSelected = value === option.type;

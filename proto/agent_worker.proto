@@ -132,10 +132,24 @@ message SkillConfig {
   string model = 8;                    // Optional: model override for this skill
   repeated MessagePart content = 9;    // Skill-level attachments (images, files, text)
   string agent_type = 10;              // Optional: "tool_calling" (default) or "code_agent"
-  string execution_type = 11;          // 'agent', 'operation', 'tool', or 'write'
+  string execution_type = 11;          // 'agentic' (flat LLM), 'agent' (step-based DAG), 'operation', 'tool', or 'write'
   TaskModelConfig task_model_config = 12; // Config for operation execution (when execution_type='operation')
   ToolExecutionConfig tool_execution_config = 13; // Config for tool execution (when execution_type='tool')
   WriteConfig write_config = 14;       // Config for write execution (when execution_type='write')
+  repeated SkillStep steps = 20;       // Steps for step-based execution (when execution_type='agent')
+}
+
+// Step definition for step-based skill execution (execution_type='agent')
+// Each step can either have inline instructions OR reference another skill
+message SkillStep {
+  string name = 1;                     // Step identifier/name
+  string instruction = 2;              // Inline instruction (if not referencing a skill)
+  int32 skill_id = 3;                  // OR reference to another skill by ID
+  repeated string tools = 4;           // Tools available for this step (for inline instruction)
+  map<string, string> inputs = 5;      // Input mappings: param_name -> "{{source_var}}" or literal
+  map<string, string> outputs = 6;     // Output mappings: output_name -> target_var_name
+  bool parallel = 7;                   // Can run in parallel with previous step (future)
+  string condition = 8;                // Optional condition: "{{var}} > 0" (future)
 }
 
 // Configuration for operation execution (direct model invocation without LLM orchestration)

@@ -336,7 +336,7 @@ export interface SkillConfig {
   content: MessagePart[];
   /** Optional: "tool_calling" (default) or "code_agent" */
   agentType: string;
-  /** 'agent', 'operation', 'tool', or 'write' */
+  /** 'agentic' (flat LLM), 'agent' (step-based DAG), 'operation', 'tool', or 'write' */
   executionType: string;
   /** Config for operation execution (when execution_type='operation') */
   taskModelConfig:
@@ -347,7 +347,44 @@ export interface SkillConfig {
     | ToolExecutionConfig
     | undefined;
   /** Config for write execution (when execution_type='write') */
-  writeConfig: WriteConfig | undefined;
+  writeConfig:
+    | WriteConfig
+    | undefined;
+  /** Steps for step-based execution (when execution_type='agent') */
+  steps: SkillStep[];
+}
+
+/**
+ * Step definition for step-based skill execution (execution_type='agent')
+ * Each step can either have inline instructions OR reference another skill
+ */
+export interface SkillStep {
+  /** Step identifier/name */
+  name: string;
+  /** Inline instruction (if not referencing a skill) */
+  instruction: string;
+  /** OR reference to another skill by ID */
+  skillId: number;
+  /** Tools available for this step (for inline instruction) */
+  tools: string[];
+  /** Input mappings: param_name -> "{{source_var}}" or literal */
+  inputs: { [key: string]: string };
+  /** Output mappings: output_name -> target_var_name */
+  outputs: { [key: string]: string };
+  /** Can run in parallel with previous step (future) */
+  parallel: boolean;
+  /** Optional condition: "{{var}} > 0" (future) */
+  condition: string;
+}
+
+export interface SkillStep_InputsEntry {
+  key: string;
+  value: string;
+}
+
+export interface SkillStep_OutputsEntry {
+  key: string;
+  value: string;
 }
 
 /** Configuration for operation execution (direct model invocation without LLM orchestration) */
@@ -2078,6 +2115,7 @@ function createBaseSkillConfig(): SkillConfig {
     taskModelConfig: undefined,
     toolExecutionConfig: undefined,
     writeConfig: undefined,
+    steps: [],
   };
 }
 
@@ -2124,6 +2162,9 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     }
     if (message.writeConfig !== undefined) {
       WriteConfig.encode(message.writeConfig, writer.uint32(114).fork()).join();
+    }
+    for (const v of message.steps) {
+      SkillStep.encode(v!, writer.uint32(162).fork()).join();
     }
     return writer;
   },
@@ -2247,6 +2288,14 @@ export const SkillConfig: MessageFns<SkillConfig> = {
           message.writeConfig = WriteConfig.decode(reader, reader.uint32());
           continue;
         }
+        case 20: {
+          if (tag !== 162) {
+            break;
+          }
+
+          message.steps.push(SkillStep.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2274,6 +2323,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
         ? ToolExecutionConfig.fromJSON(object.toolExecutionConfig)
         : undefined,
       writeConfig: isSet(object.writeConfig) ? WriteConfig.fromJSON(object.writeConfig) : undefined,
+      steps: globalThis.Array.isArray(object?.steps) ? object.steps.map((e: any) => SkillStep.fromJSON(e)) : [],
     };
   },
 
@@ -2321,6 +2371,9 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     if (message.writeConfig !== undefined) {
       obj.writeConfig = WriteConfig.toJSON(message.writeConfig);
     }
+    if (message.steps?.length) {
+      obj.steps = message.steps.map((e) => SkillStep.toJSON(e));
+    }
     return obj;
   },
 
@@ -2349,6 +2402,369 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     message.writeConfig = (object.writeConfig !== undefined && object.writeConfig !== null)
       ? WriteConfig.fromPartial(object.writeConfig)
       : undefined;
+    message.steps = object.steps?.map((e) => SkillStep.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseSkillStep(): SkillStep {
+  return { name: "", instruction: "", skillId: 0, tools: [], inputs: {}, outputs: {}, parallel: false, condition: "" };
+}
+
+export const SkillStep: MessageFns<SkillStep> = {
+  encode(message: SkillStep, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.instruction !== "") {
+      writer.uint32(18).string(message.instruction);
+    }
+    if (message.skillId !== 0) {
+      writer.uint32(24).int32(message.skillId);
+    }
+    for (const v of message.tools) {
+      writer.uint32(34).string(v!);
+    }
+    Object.entries(message.inputs).forEach(([key, value]) => {
+      SkillStep_InputsEntry.encode({ key: key as any, value }, writer.uint32(42).fork()).join();
+    });
+    Object.entries(message.outputs).forEach(([key, value]) => {
+      SkillStep_OutputsEntry.encode({ key: key as any, value }, writer.uint32(50).fork()).join();
+    });
+    if (message.parallel !== false) {
+      writer.uint32(56).bool(message.parallel);
+    }
+    if (message.condition !== "") {
+      writer.uint32(66).string(message.condition);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SkillStep {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSkillStep();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.instruction = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.skillId = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.tools.push(reader.string());
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          const entry5 = SkillStep_InputsEntry.decode(reader, reader.uint32());
+          if (entry5.value !== undefined) {
+            message.inputs[entry5.key] = entry5.value;
+          }
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          const entry6 = SkillStep_OutputsEntry.decode(reader, reader.uint32());
+          if (entry6.value !== undefined) {
+            message.outputs[entry6.key] = entry6.value;
+          }
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.parallel = reader.bool();
+          continue;
+        }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.condition = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SkillStep {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      instruction: isSet(object.instruction) ? globalThis.String(object.instruction) : "",
+      skillId: isSet(object.skillId) ? globalThis.Number(object.skillId) : 0,
+      tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => globalThis.String(e)) : [],
+      inputs: isObject(object.inputs)
+        ? Object.entries(object.inputs).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+          acc[key] = String(value);
+          return acc;
+        }, {})
+        : {},
+      outputs: isObject(object.outputs)
+        ? Object.entries(object.outputs).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+          acc[key] = String(value);
+          return acc;
+        }, {})
+        : {},
+      parallel: isSet(object.parallel) ? globalThis.Boolean(object.parallel) : false,
+      condition: isSet(object.condition) ? globalThis.String(object.condition) : "",
+    };
+  },
+
+  toJSON(message: SkillStep): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.instruction !== "") {
+      obj.instruction = message.instruction;
+    }
+    if (message.skillId !== 0) {
+      obj.skillId = Math.round(message.skillId);
+    }
+    if (message.tools?.length) {
+      obj.tools = message.tools;
+    }
+    if (message.inputs) {
+      const entries = Object.entries(message.inputs);
+      if (entries.length > 0) {
+        obj.inputs = {};
+        entries.forEach(([k, v]) => {
+          obj.inputs[k] = v;
+        });
+      }
+    }
+    if (message.outputs) {
+      const entries = Object.entries(message.outputs);
+      if (entries.length > 0) {
+        obj.outputs = {};
+        entries.forEach(([k, v]) => {
+          obj.outputs[k] = v;
+        });
+      }
+    }
+    if (message.parallel !== false) {
+      obj.parallel = message.parallel;
+    }
+    if (message.condition !== "") {
+      obj.condition = message.condition;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SkillStep>, I>>(base?: I): SkillStep {
+    return SkillStep.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SkillStep>, I>>(object: I): SkillStep {
+    const message = createBaseSkillStep();
+    message.name = object.name ?? "";
+    message.instruction = object.instruction ?? "";
+    message.skillId = object.skillId ?? 0;
+    message.tools = object.tools?.map((e) => e) || [];
+    message.inputs = Object.entries(object.inputs ?? {}).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+      if (value !== undefined) {
+        acc[key] = globalThis.String(value);
+      }
+      return acc;
+    }, {});
+    message.outputs = Object.entries(object.outputs ?? {}).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+      if (value !== undefined) {
+        acc[key] = globalThis.String(value);
+      }
+      return acc;
+    }, {});
+    message.parallel = object.parallel ?? false;
+    message.condition = object.condition ?? "";
+    return message;
+  },
+};
+
+function createBaseSkillStep_InputsEntry(): SkillStep_InputsEntry {
+  return { key: "", value: "" };
+}
+
+export const SkillStep_InputsEntry: MessageFns<SkillStep_InputsEntry> = {
+  encode(message: SkillStep_InputsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SkillStep_InputsEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSkillStep_InputsEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SkillStep_InputsEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: SkillStep_InputsEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SkillStep_InputsEntry>, I>>(base?: I): SkillStep_InputsEntry {
+    return SkillStep_InputsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SkillStep_InputsEntry>, I>>(object: I): SkillStep_InputsEntry {
+    const message = createBaseSkillStep_InputsEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseSkillStep_OutputsEntry(): SkillStep_OutputsEntry {
+  return { key: "", value: "" };
+}
+
+export const SkillStep_OutputsEntry: MessageFns<SkillStep_OutputsEntry> = {
+  encode(message: SkillStep_OutputsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SkillStep_OutputsEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSkillStep_OutputsEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SkillStep_OutputsEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: SkillStep_OutputsEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SkillStep_OutputsEntry>, I>>(base?: I): SkillStep_OutputsEntry {
+    return SkillStep_OutputsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SkillStep_OutputsEntry>, I>>(object: I): SkillStep_OutputsEntry {
+    const message = createBaseSkillStep_OutputsEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
     return message;
   },
 };

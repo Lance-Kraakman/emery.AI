@@ -5,12 +5,28 @@ import { MessagePart } from '@/lib/grpc/generated/agent_worker';
 
 /**
  * Skill Execution Types
- * - 'agent' (default): LLM orchestration with tools via smolagents
+ * - 'agentic' (default): LLM orchestration with flat instructions via smolagents
+ * - 'agent': Step-based DAG execution with structured steps[]
  * - 'operation': Direct model invocation for single-task models (image gen, speech, etc.)
  * - 'tool': Direct Pipedream tool call (no LLM, maps inputs to tool params)
  * - 'write': Direct table write (no LLM, maps inputs to table fields)
  */
-export type SkillExecutionType = 'agent' | 'operation' | 'tool' | 'write';
+export type SkillExecutionType = 'agentic' | 'agent' | 'operation' | 'tool' | 'write';
+
+/**
+ * Skill Step - defines a single step in a step-based skill workflow
+ * Each step can either execute an inline instruction or delegate to another skill
+ */
+export interface SkillStep {
+  name: string;                           // Step identifier/name
+  instruction?: string;                   // Inline instruction (if not skillId)
+  skillId?: number;                       // Reference to another skill by ID
+  tools?: string[];                       // Tools available for this step
+  inputs?: Record<string, string>;        // Input mappings: param_name -> "{{source}}" or literal
+  outputs?: Record<string, string>;       // Output mappings: output_name -> target_var
+  parallel?: boolean;                     // Can run in parallel with previous (future)
+  condition?: string;                     // Optional condition expression (future)
+}
 
 /**
  * Task Model Configuration
@@ -221,10 +237,11 @@ export interface Skill {
   readonly content?: MessagePart[]; // Skill-level attachments (images, files, text)
   readonly model?: string | null; // Optional: Override model for this skill
   readonly agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
-  readonly executionType?: SkillExecutionType; // 'agent' (default), 'operation', 'tool', or 'write'
+  readonly executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
   readonly taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
   readonly toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
   readonly writeConfig?: WriteConfig; // Config for 'write' execution
+  readonly steps?: SkillStep[]; // Steps for 'agent' execution (step-based DAG workflow)
   readonly isSystem: boolean; // System skills cannot be deleted by users
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -245,10 +262,11 @@ export interface CreateSkillProps {
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
-  executionType?: SkillExecutionType; // 'agent' (default), 'operation', 'tool', or 'write'
+  executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
   taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
   toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
   writeConfig?: WriteConfig; // Config for 'write' execution
+  steps?: SkillStep[]; // Steps for 'agent' execution (step-based DAG workflow)
 }
 
 /**
@@ -264,10 +282,11 @@ export interface UpdateSkillProps {
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
-  executionType?: SkillExecutionType; // 'agent' (default), 'operation', 'tool', or 'write'
+  executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
   taskModelConfig?: TaskModelConfig | null; // Config for 'operation' execution (null to clear)
   toolExecutionConfig?: ToolExecutionConfig | null; // Config for 'tool' execution (null to clear)
   writeConfig?: WriteConfig | null; // Config for 'write' execution (null to clear)
+  steps?: SkillStep[] | null; // Steps for 'agent' execution (null to clear)
 }
 
 /**
@@ -293,11 +312,16 @@ export class SkillEntity {
       throw new Error('Skill description must be 1000 characters or less');
     }
 
-    const executionType = props.executionType || 'agent';
+    const executionType = props.executionType || 'agentic';
 
-    // Instructions are required for agent execution, optional for other modes
-    if (executionType === 'agent' && !props.instructions?.trim()) {
-      throw new Error('Instructions are required and cannot be empty');
+    // Instructions are required for agentic execution, optional for other modes
+    if (executionType === 'agentic' && !props.instructions?.trim()) {
+      throw new Error('Instructions are required for agentic execution');
+    }
+
+    // Steps are required for agent (step-based) execution
+    if (executionType === 'agent' && (!props.steps || props.steps.length === 0)) {
+      throw new Error('Steps are required for agent (step-based) execution');
     }
 
     // Task model config is required for operation execution
@@ -345,6 +369,7 @@ export class SkillEntity {
       taskModelConfig: props.taskModelConfig,
       toolExecutionConfig: props.toolExecutionConfig,
       writeConfig: props.writeConfig,
+      steps: props.steps,
       isSystem: false // User-created skills are never system skills
     };
   }
@@ -372,11 +397,11 @@ export class SkillEntity {
     // Determine final execution type
     const finalExecutionType = updates.executionType !== undefined
       ? updates.executionType
-      : skill.executionType || 'agent';
+      : skill.executionType || 'agentic';
 
     // Instructions validation depends on execution type
-    if (updates.instructions !== undefined && finalExecutionType === 'agent' && !updates.instructions.trim()) {
-      throw new Error('Instructions cannot be empty for agent execution');
+    if (updates.instructions !== undefined && finalExecutionType === 'agentic' && !updates.instructions.trim()) {
+      throw new Error('Instructions cannot be empty for agentic execution');
     }
 
     // Validate input names if provided
@@ -416,6 +441,9 @@ export class SkillEntity {
       writeConfig: updates.writeConfig !== undefined
         ? (updates.writeConfig === null ? undefined : updates.writeConfig)
         : skill.writeConfig,
+      steps: updates.steps !== undefined
+        ? (updates.steps === null ? undefined : updates.steps)
+        : skill.steps,
       updatedAt: new Date()
     };
   }
@@ -442,10 +470,17 @@ export class SkillEntity {
   }
 
   /**
-   * Check if skill uses agent execution (LLM orchestration)
+   * Check if skill uses agentic execution (flat LLM orchestration)
+   */
+  static isAgenticExecution(skill: Skill): boolean {
+    return !skill.executionType || skill.executionType === 'agentic';
+  }
+
+  /**
+   * Check if skill uses agent execution (step-based DAG workflow)
    */
   static isAgentExecution(skill: Skill): boolean {
-    return !skill.executionType || skill.executionType === 'agent';
+    return skill.executionType === 'agent';
   }
 
   /**
