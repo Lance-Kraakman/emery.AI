@@ -125,8 +125,8 @@ message SkillConfig {
   int32 id = 1;                        // Skill ID for unique identification
   string name = 2;
   string description = 3;
-  repeated SkillInput inputs = 4;
-  repeated SkillOutput outputs = 5;
+  repeated InputDefinition inputs = 4;   // Unified input definitions (replaces SkillInput)
+  repeated OutputDefinition outputs = 5; // Unified output definitions (replaces SkillOutput)
   string instructions = 6;
   repeated ToolConfig tools = 7;
   string model = 8;                    // Optional: model override for this skill
@@ -137,6 +137,41 @@ message SkillConfig {
   ToolExecutionConfig tool_execution_config = 13; // Config for tool execution (when execution_type='tool')
   WriteConfig write_config = 14;       // Config for write execution (when execution_type='write')
   repeated SkillStep steps = 20;       // Steps for step-based execution (when execution_type='agent')
+}
+
+// =============================================================================
+// Input Mapping Types (read from tables into skill inputs)
+// =============================================================================
+
+// Source for reading a value from a table field
+message InputFieldSource {
+  int32 table_id = 1;           // Which table to read from
+  int32 field_id = 2;           // Which field to read
+  RowIdSource row_source = 3;   // Which row (reuses existing RowIdSource)
+}
+
+// Input mapping configuration - maps table field to skill input
+message InputMappingConfig {
+  InputFieldSource source = 1;
+}
+
+// =============================================================================
+// Unified Definition Types (used for skill-level AND step-level)
+// =============================================================================
+
+// Unified input definition
+message InputDefinition {
+  string name = 1;
+  bool required = 2;
+  string type = 3;  // text, number, boolean, json, image, file, audio, etc.
+  InputMappingConfig input_mapping = 4;  // Optional: read from table field
+}
+
+// Unified output definition
+message OutputDefinition {
+  string name = 1;
+  string type = 2;
+  OutputMappingConfig output_mapping = 3;  // Optional: write to table fields
 }
 
 // Step definition for step-based skill execution (execution_type='agent')
@@ -150,6 +185,9 @@ message SkillStep {
   map<string, string> outputs = 6;     // Output mappings: output_name -> target_var_name
   bool parallel = 7;                   // Can run in parallel with previous step (future)
   string condition = 8;                // Optional condition: "{{var}} > 0" (future)
+  // Step-level definitions (simpler types than skill-level)
+  repeated InputDefinition input_defs = 9;   // What this step accepts
+  repeated OutputDefinition output_defs = 10; // What this step produces
 }
 
 // Configuration for operation execution (direct model invocation without LLM orchestration)
@@ -194,27 +232,7 @@ message UpdateMatchConfig {
   int32 target_field_id = 2;           // Field to match against
 }
 
-// Skill input parameter
-message SkillInput {
-  string name = 1;
-  bool required = 2;
-  string type = 3;                     // text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document
-  SkillInputFileConfig file_config = 4; // File configuration (for file-type inputs)
-}
-
-// File configuration for skill inputs
-message SkillInputFileConfig {
-  repeated string allowed_mime_types = 1;  // Allowed MIME types (e.g., ["image/*", "application/pdf"])
-  int64 max_size_bytes = 2;                // Maximum file size in bytes
-  bool multiple = 3;                        // Allow multiple files
-}
-
-// Skill output value
-message SkillOutput {
-  string name = 1;
-  string type = 2;                     // text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document
-  OutputMappingConfig output_mapping = 3;  // Optional: path-based field mapping configuration
-}
+// NOTE: SkillInput, SkillOutput, SkillInputFileConfig removed - replaced by unified InputDefinition/OutputDefinition
 
 // Target field metadata - provides LLM guidance based on database field type
 message TargetFieldMetadata {

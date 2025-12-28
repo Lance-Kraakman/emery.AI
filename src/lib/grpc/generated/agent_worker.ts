@@ -326,8 +326,10 @@ export interface SkillConfig {
   id: number;
   name: string;
   description: string;
-  inputs: SkillInput[];
-  outputs: SkillOutput[];
+  /** Unified input definitions (replaces SkillInput) */
+  inputs: InputDefinition[];
+  /** Unified output definitions (replaces SkillOutput) */
+  outputs: OutputDefinition[];
   instructions: string;
   tools: ToolConfig[];
   /** Optional: model override for this skill */
@@ -354,6 +356,39 @@ export interface SkillConfig {
   steps: SkillStep[];
 }
 
+/** Source for reading a value from a table field */
+export interface InputFieldSource {
+  /** Which table to read from */
+  tableId: number;
+  /** Which field to read */
+  fieldId: number;
+  /** Which row (reuses existing RowIdSource) */
+  rowSource: RowIdSource | undefined;
+}
+
+/** Input mapping configuration - maps table field to skill input */
+export interface InputMappingConfig {
+  source: InputFieldSource | undefined;
+}
+
+/** Unified input definition */
+export interface InputDefinition {
+  name: string;
+  required: boolean;
+  /** text, number, boolean, json, image, file, audio, etc. */
+  type: string;
+  /** Optional: read from table field */
+  inputMapping: InputMappingConfig | undefined;
+}
+
+/** Unified output definition */
+export interface OutputDefinition {
+  name: string;
+  type: string;
+  /** Optional: write to table fields */
+  outputMapping: OutputMappingConfig | undefined;
+}
+
 /**
  * Step definition for step-based skill execution (execution_type='agent')
  * Each step can either have inline instructions OR reference another skill
@@ -375,6 +410,10 @@ export interface SkillStep {
   parallel: boolean;
   /** Optional condition: "{{var}} > 0" (future) */
   condition: string;
+  /** Step-level definitions (simpler types than skill-level) */
+  inputDefs: InputDefinition[];
+  /** What this step produces */
+  outputDefs: OutputDefinition[];
 }
 
 export interface SkillStep_InputsEntry {
@@ -452,35 +491,6 @@ export interface UpdateMatchConfig {
   skillInputName: string;
   /** Field to match against */
   targetFieldId: number;
-}
-
-/** Skill input parameter */
-export interface SkillInput {
-  name: string;
-  required: boolean;
-  /** text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document */
-  type: string;
-  /** File configuration (for file-type inputs) */
-  fileConfig: SkillInputFileConfig | undefined;
-}
-
-/** File configuration for skill inputs */
-export interface SkillInputFileConfig {
-  /** Allowed MIME types (e.g., ["image/*", "application/pdf"]) */
-  allowedMimeTypes: string[];
-  /** Maximum file size in bytes */
-  maxSizeBytes: number;
-  /** Allow multiple files */
-  multiple: boolean;
-}
-
-/** Skill output value */
-export interface SkillOutput {
-  name: string;
-  /** text, number, boolean, date, json, email, phone, single-select, multi-select, image, file, audio, video, document */
-  type: string;
-  /** Optional: path-based field mapping configuration */
-  outputMapping: OutputMappingConfig | undefined;
 }
 
 /** Target field metadata - provides LLM guidance based on database field type */
@@ -2131,10 +2141,10 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       writer.uint32(26).string(message.description);
     }
     for (const v of message.inputs) {
-      SkillInput.encode(v!, writer.uint32(34).fork()).join();
+      InputDefinition.encode(v!, writer.uint32(34).fork()).join();
     }
     for (const v of message.outputs) {
-      SkillOutput.encode(v!, writer.uint32(42).fork()).join();
+      OutputDefinition.encode(v!, writer.uint32(42).fork()).join();
     }
     if (message.instructions !== "") {
       writer.uint32(50).string(message.instructions);
@@ -2205,7 +2215,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.inputs.push(SkillInput.decode(reader, reader.uint32()));
+          message.inputs.push(InputDefinition.decode(reader, reader.uint32()));
           continue;
         }
         case 5: {
@@ -2213,7 +2223,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.outputs.push(SkillOutput.decode(reader, reader.uint32()));
+          message.outputs.push(OutputDefinition.decode(reader, reader.uint32()));
           continue;
         }
         case 6: {
@@ -2310,8 +2320,12 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       description: isSet(object.description) ? globalThis.String(object.description) : "",
-      inputs: globalThis.Array.isArray(object?.inputs) ? object.inputs.map((e: any) => SkillInput.fromJSON(e)) : [],
-      outputs: globalThis.Array.isArray(object?.outputs) ? object.outputs.map((e: any) => SkillOutput.fromJSON(e)) : [],
+      inputs: globalThis.Array.isArray(object?.inputs)
+        ? object.inputs.map((e: any) => InputDefinition.fromJSON(e))
+        : [],
+      outputs: globalThis.Array.isArray(object?.outputs)
+        ? object.outputs.map((e: any) => OutputDefinition.fromJSON(e))
+        : [],
       instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
       tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
       model: isSet(object.model) ? globalThis.String(object.model) : "",
@@ -2339,10 +2353,10 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       obj.description = message.description;
     }
     if (message.inputs?.length) {
-      obj.inputs = message.inputs.map((e) => SkillInput.toJSON(e));
+      obj.inputs = message.inputs.map((e) => InputDefinition.toJSON(e));
     }
     if (message.outputs?.length) {
-      obj.outputs = message.outputs.map((e) => SkillOutput.toJSON(e));
+      obj.outputs = message.outputs.map((e) => OutputDefinition.toJSON(e));
     }
     if (message.instructions !== "") {
       obj.instructions = message.instructions;
@@ -2385,8 +2399,8 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     message.id = object.id ?? 0;
     message.name = object.name ?? "";
     message.description = object.description ?? "";
-    message.inputs = object.inputs?.map((e) => SkillInput.fromPartial(e)) || [];
-    message.outputs = object.outputs?.map((e) => SkillOutput.fromPartial(e)) || [];
+    message.inputs = object.inputs?.map((e) => InputDefinition.fromPartial(e)) || [];
+    message.outputs = object.outputs?.map((e) => OutputDefinition.fromPartial(e)) || [];
     message.instructions = object.instructions ?? "";
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.model = object.model ?? "";
@@ -2407,8 +2421,377 @@ export const SkillConfig: MessageFns<SkillConfig> = {
   },
 };
 
+function createBaseInputFieldSource(): InputFieldSource {
+  return { tableId: 0, fieldId: 0, rowSource: undefined };
+}
+
+export const InputFieldSource: MessageFns<InputFieldSource> = {
+  encode(message: InputFieldSource, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.tableId !== 0) {
+      writer.uint32(8).int32(message.tableId);
+    }
+    if (message.fieldId !== 0) {
+      writer.uint32(16).int32(message.fieldId);
+    }
+    if (message.rowSource !== undefined) {
+      RowIdSource.encode(message.rowSource, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InputFieldSource {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseInputFieldSource();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.tableId = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.fieldId = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.rowSource = RowIdSource.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InputFieldSource {
+    return {
+      tableId: isSet(object.tableId) ? globalThis.Number(object.tableId) : 0,
+      fieldId: isSet(object.fieldId) ? globalThis.Number(object.fieldId) : 0,
+      rowSource: isSet(object.rowSource) ? RowIdSource.fromJSON(object.rowSource) : undefined,
+    };
+  },
+
+  toJSON(message: InputFieldSource): unknown {
+    const obj: any = {};
+    if (message.tableId !== 0) {
+      obj.tableId = Math.round(message.tableId);
+    }
+    if (message.fieldId !== 0) {
+      obj.fieldId = Math.round(message.fieldId);
+    }
+    if (message.rowSource !== undefined) {
+      obj.rowSource = RowIdSource.toJSON(message.rowSource);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InputFieldSource>, I>>(base?: I): InputFieldSource {
+    return InputFieldSource.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InputFieldSource>, I>>(object: I): InputFieldSource {
+    const message = createBaseInputFieldSource();
+    message.tableId = object.tableId ?? 0;
+    message.fieldId = object.fieldId ?? 0;
+    message.rowSource = (object.rowSource !== undefined && object.rowSource !== null)
+      ? RowIdSource.fromPartial(object.rowSource)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseInputMappingConfig(): InputMappingConfig {
+  return { source: undefined };
+}
+
+export const InputMappingConfig: MessageFns<InputMappingConfig> = {
+  encode(message: InputMappingConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      InputFieldSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InputMappingConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseInputMappingConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.source = InputFieldSource.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InputMappingConfig {
+    return { source: isSet(object.source) ? InputFieldSource.fromJSON(object.source) : undefined };
+  },
+
+  toJSON(message: InputMappingConfig): unknown {
+    const obj: any = {};
+    if (message.source !== undefined) {
+      obj.source = InputFieldSource.toJSON(message.source);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InputMappingConfig>, I>>(base?: I): InputMappingConfig {
+    return InputMappingConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InputMappingConfig>, I>>(object: I): InputMappingConfig {
+    const message = createBaseInputMappingConfig();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? InputFieldSource.fromPartial(object.source)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseInputDefinition(): InputDefinition {
+  return { name: "", required: false, type: "", inputMapping: undefined };
+}
+
+export const InputDefinition: MessageFns<InputDefinition> = {
+  encode(message: InputDefinition, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.required !== false) {
+      writer.uint32(16).bool(message.required);
+    }
+    if (message.type !== "") {
+      writer.uint32(26).string(message.type);
+    }
+    if (message.inputMapping !== undefined) {
+      InputMappingConfig.encode(message.inputMapping, writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InputDefinition {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseInputDefinition();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.required = reader.bool();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.inputMapping = InputMappingConfig.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InputDefinition {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      required: isSet(object.required) ? globalThis.Boolean(object.required) : false,
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+      inputMapping: isSet(object.inputMapping) ? InputMappingConfig.fromJSON(object.inputMapping) : undefined,
+    };
+  },
+
+  toJSON(message: InputDefinition): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.required !== false) {
+      obj.required = message.required;
+    }
+    if (message.type !== "") {
+      obj.type = message.type;
+    }
+    if (message.inputMapping !== undefined) {
+      obj.inputMapping = InputMappingConfig.toJSON(message.inputMapping);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InputDefinition>, I>>(base?: I): InputDefinition {
+    return InputDefinition.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InputDefinition>, I>>(object: I): InputDefinition {
+    const message = createBaseInputDefinition();
+    message.name = object.name ?? "";
+    message.required = object.required ?? false;
+    message.type = object.type ?? "";
+    message.inputMapping = (object.inputMapping !== undefined && object.inputMapping !== null)
+      ? InputMappingConfig.fromPartial(object.inputMapping)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseOutputDefinition(): OutputDefinition {
+  return { name: "", type: "", outputMapping: undefined };
+}
+
+export const OutputDefinition: MessageFns<OutputDefinition> = {
+  encode(message: OutputDefinition, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.type !== "") {
+      writer.uint32(18).string(message.type);
+    }
+    if (message.outputMapping !== undefined) {
+      OutputMappingConfig.encode(message.outputMapping, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OutputDefinition {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseOutputDefinition();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.outputMapping = OutputMappingConfig.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): OutputDefinition {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+      outputMapping: isSet(object.outputMapping) ? OutputMappingConfig.fromJSON(object.outputMapping) : undefined,
+    };
+  },
+
+  toJSON(message: OutputDefinition): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.type !== "") {
+      obj.type = message.type;
+    }
+    if (message.outputMapping !== undefined) {
+      obj.outputMapping = OutputMappingConfig.toJSON(message.outputMapping);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<OutputDefinition>, I>>(base?: I): OutputDefinition {
+    return OutputDefinition.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OutputDefinition>, I>>(object: I): OutputDefinition {
+    const message = createBaseOutputDefinition();
+    message.name = object.name ?? "";
+    message.type = object.type ?? "";
+    message.outputMapping = (object.outputMapping !== undefined && object.outputMapping !== null)
+      ? OutputMappingConfig.fromPartial(object.outputMapping)
+      : undefined;
+    return message;
+  },
+};
+
 function createBaseSkillStep(): SkillStep {
-  return { name: "", instruction: "", skillId: 0, tools: [], inputs: {}, outputs: {}, parallel: false, condition: "" };
+  return {
+    name: "",
+    instruction: "",
+    skillId: 0,
+    tools: [],
+    inputs: {},
+    outputs: {},
+    parallel: false,
+    condition: "",
+    inputDefs: [],
+    outputDefs: [],
+  };
 }
 
 export const SkillStep: MessageFns<SkillStep> = {
@@ -2436,6 +2819,12 @@ export const SkillStep: MessageFns<SkillStep> = {
     }
     if (message.condition !== "") {
       writer.uint32(66).string(message.condition);
+    }
+    for (const v of message.inputDefs) {
+      InputDefinition.encode(v!, writer.uint32(74).fork()).join();
+    }
+    for (const v of message.outputDefs) {
+      OutputDefinition.encode(v!, writer.uint32(82).fork()).join();
     }
     return writer;
   },
@@ -2517,6 +2906,22 @@ export const SkillStep: MessageFns<SkillStep> = {
           message.condition = reader.string();
           continue;
         }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.inputDefs.push(InputDefinition.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.outputDefs.push(OutputDefinition.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2546,6 +2951,12 @@ export const SkillStep: MessageFns<SkillStep> = {
         : {},
       parallel: isSet(object.parallel) ? globalThis.Boolean(object.parallel) : false,
       condition: isSet(object.condition) ? globalThis.String(object.condition) : "",
+      inputDefs: globalThis.Array.isArray(object?.inputDefs)
+        ? object.inputDefs.map((e: any) => InputDefinition.fromJSON(e))
+        : [],
+      outputDefs: globalThis.Array.isArray(object?.outputDefs)
+        ? object.outputDefs.map((e: any) => OutputDefinition.fromJSON(e))
+        : [],
     };
   },
 
@@ -2587,6 +2998,12 @@ export const SkillStep: MessageFns<SkillStep> = {
     if (message.condition !== "") {
       obj.condition = message.condition;
     }
+    if (message.inputDefs?.length) {
+      obj.inputDefs = message.inputDefs.map((e) => InputDefinition.toJSON(e));
+    }
+    if (message.outputDefs?.length) {
+      obj.outputDefs = message.outputDefs.map((e) => OutputDefinition.toJSON(e));
+    }
     return obj;
   },
 
@@ -2613,6 +3030,8 @@ export const SkillStep: MessageFns<SkillStep> = {
     }, {});
     message.parallel = object.parallel ?? false;
     message.condition = object.condition ?? "";
+    message.inputDefs = object.inputDefs?.map((e) => InputDefinition.fromPartial(e)) || [];
+    message.outputDefs = object.outputDefs?.map((e) => OutputDefinition.fromPartial(e)) || [];
     return message;
   },
 };
@@ -3391,304 +3810,6 @@ export const UpdateMatchConfig: MessageFns<UpdateMatchConfig> = {
     const message = createBaseUpdateMatchConfig();
     message.skillInputName = object.skillInputName ?? "";
     message.targetFieldId = object.targetFieldId ?? 0;
-    return message;
-  },
-};
-
-function createBaseSkillInput(): SkillInput {
-  return { name: "", required: false, type: "", fileConfig: undefined };
-}
-
-export const SkillInput: MessageFns<SkillInput> = {
-  encode(message: SkillInput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.name !== "") {
-      writer.uint32(10).string(message.name);
-    }
-    if (message.required !== false) {
-      writer.uint32(16).bool(message.required);
-    }
-    if (message.type !== "") {
-      writer.uint32(26).string(message.type);
-    }
-    if (message.fileConfig !== undefined) {
-      SkillInputFileConfig.encode(message.fileConfig, writer.uint32(34).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): SkillInput {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSkillInput();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.name = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 16) {
-            break;
-          }
-
-          message.required = reader.bool();
-          continue;
-        }
-        case 3: {
-          if (tag !== 26) {
-            break;
-          }
-
-          message.type = reader.string();
-          continue;
-        }
-        case 4: {
-          if (tag !== 34) {
-            break;
-          }
-
-          message.fileConfig = SkillInputFileConfig.decode(reader, reader.uint32());
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): SkillInput {
-    return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
-      required: isSet(object.required) ? globalThis.Boolean(object.required) : false,
-      type: isSet(object.type) ? globalThis.String(object.type) : "",
-      fileConfig: isSet(object.fileConfig) ? SkillInputFileConfig.fromJSON(object.fileConfig) : undefined,
-    };
-  },
-
-  toJSON(message: SkillInput): unknown {
-    const obj: any = {};
-    if (message.name !== "") {
-      obj.name = message.name;
-    }
-    if (message.required !== false) {
-      obj.required = message.required;
-    }
-    if (message.type !== "") {
-      obj.type = message.type;
-    }
-    if (message.fileConfig !== undefined) {
-      obj.fileConfig = SkillInputFileConfig.toJSON(message.fileConfig);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<SkillInput>, I>>(base?: I): SkillInput {
-    return SkillInput.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<SkillInput>, I>>(object: I): SkillInput {
-    const message = createBaseSkillInput();
-    message.name = object.name ?? "";
-    message.required = object.required ?? false;
-    message.type = object.type ?? "";
-    message.fileConfig = (object.fileConfig !== undefined && object.fileConfig !== null)
-      ? SkillInputFileConfig.fromPartial(object.fileConfig)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseSkillInputFileConfig(): SkillInputFileConfig {
-  return { allowedMimeTypes: [], maxSizeBytes: 0, multiple: false };
-}
-
-export const SkillInputFileConfig: MessageFns<SkillInputFileConfig> = {
-  encode(message: SkillInputFileConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.allowedMimeTypes) {
-      writer.uint32(10).string(v!);
-    }
-    if (message.maxSizeBytes !== 0) {
-      writer.uint32(16).int64(message.maxSizeBytes);
-    }
-    if (message.multiple !== false) {
-      writer.uint32(24).bool(message.multiple);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): SkillInputFileConfig {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSkillInputFileConfig();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.allowedMimeTypes.push(reader.string());
-          continue;
-        }
-        case 2: {
-          if (tag !== 16) {
-            break;
-          }
-
-          message.maxSizeBytes = longToNumber(reader.int64());
-          continue;
-        }
-        case 3: {
-          if (tag !== 24) {
-            break;
-          }
-
-          message.multiple = reader.bool();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): SkillInputFileConfig {
-    return {
-      allowedMimeTypes: globalThis.Array.isArray(object?.allowedMimeTypes)
-        ? object.allowedMimeTypes.map((e: any) => globalThis.String(e))
-        : [],
-      maxSizeBytes: isSet(object.maxSizeBytes) ? globalThis.Number(object.maxSizeBytes) : 0,
-      multiple: isSet(object.multiple) ? globalThis.Boolean(object.multiple) : false,
-    };
-  },
-
-  toJSON(message: SkillInputFileConfig): unknown {
-    const obj: any = {};
-    if (message.allowedMimeTypes?.length) {
-      obj.allowedMimeTypes = message.allowedMimeTypes;
-    }
-    if (message.maxSizeBytes !== 0) {
-      obj.maxSizeBytes = Math.round(message.maxSizeBytes);
-    }
-    if (message.multiple !== false) {
-      obj.multiple = message.multiple;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<SkillInputFileConfig>, I>>(base?: I): SkillInputFileConfig {
-    return SkillInputFileConfig.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<SkillInputFileConfig>, I>>(object: I): SkillInputFileConfig {
-    const message = createBaseSkillInputFileConfig();
-    message.allowedMimeTypes = object.allowedMimeTypes?.map((e) => e) || [];
-    message.maxSizeBytes = object.maxSizeBytes ?? 0;
-    message.multiple = object.multiple ?? false;
-    return message;
-  },
-};
-
-function createBaseSkillOutput(): SkillOutput {
-  return { name: "", type: "", outputMapping: undefined };
-}
-
-export const SkillOutput: MessageFns<SkillOutput> = {
-  encode(message: SkillOutput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.name !== "") {
-      writer.uint32(10).string(message.name);
-    }
-    if (message.type !== "") {
-      writer.uint32(18).string(message.type);
-    }
-    if (message.outputMapping !== undefined) {
-      OutputMappingConfig.encode(message.outputMapping, writer.uint32(26).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): SkillOutput {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSkillOutput();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.name = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.type = reader.string();
-          continue;
-        }
-        case 3: {
-          if (tag !== 26) {
-            break;
-          }
-
-          message.outputMapping = OutputMappingConfig.decode(reader, reader.uint32());
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): SkillOutput {
-    return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
-      type: isSet(object.type) ? globalThis.String(object.type) : "",
-      outputMapping: isSet(object.outputMapping) ? OutputMappingConfig.fromJSON(object.outputMapping) : undefined,
-    };
-  },
-
-  toJSON(message: SkillOutput): unknown {
-    const obj: any = {};
-    if (message.name !== "") {
-      obj.name = message.name;
-    }
-    if (message.type !== "") {
-      obj.type = message.type;
-    }
-    if (message.outputMapping !== undefined) {
-      obj.outputMapping = OutputMappingConfig.toJSON(message.outputMapping);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<SkillOutput>, I>>(base?: I): SkillOutput {
-    return SkillOutput.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<SkillOutput>, I>>(object: I): SkillOutput {
-    const message = createBaseSkillOutput();
-    message.name = object.name ?? "";
-    message.type = object.type ?? "";
-    message.outputMapping = (object.outputMapping !== undefined && object.outputMapping !== null)
-      ? OutputMappingConfig.fromPartial(object.outputMapping)
-      : undefined;
     return message;
   },
 };
