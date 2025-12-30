@@ -2,10 +2,10 @@
  * Instruction Template Service
  *
  * AIDEV-NOTE: Expands template variables in task instructions with actual trigger context data.
- * Supports ${variable} syntax for referencing trigger metadata, table data, etc.
+ * Supports {{variable}} syntax for referencing trigger metadata, table data, etc.
  *
  * Example:
- * - Input: "Process order ${event.rowId} for ${row.email}"
+ * - Input: "Process order {{event.rowId}} for {{row.email}}"
  * - Output: "Process order abc-123 for user@example.com"
  */
 
@@ -15,7 +15,7 @@ export class InstructionTemplateService {
   /**
    * Expand template variables in instruction text
    *
-   * @param template - Instruction text with ${variable} placeholders
+   * @param template - Instruction text with {{variable}} placeholders
    * @param triggerContext - Context data from the trigger (calendar, database event, etc.)
    * @returns Instruction text with variables replaced with actual values
    */
@@ -29,8 +29,8 @@ export class InstructionTemplateService {
 
     const variables = this.buildVariableMap(triggerContext);
 
-    // Replace ${variable} with actual values
-    return template.replace(/\$\{([^}]+)\}/g, (match, path) => {
+    // Replace {{variable}} with actual values
+    return template.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
       const value = this.resolveVariable(path.trim(), variables);
       return value !== undefined ? String(value) : match; // Keep original if not found
     });

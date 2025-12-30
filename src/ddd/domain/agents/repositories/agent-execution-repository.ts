@@ -19,8 +19,8 @@ export interface ExecutionSkill {
   name: string;
   description: string;
   instructions: string;
-  inputs: Array<{ name: string; required: boolean; type?: string; fileConfig?: any; default?: any }>;
-  outputs: Array<{ name: string; type?: string; mapping?: any }>;
+  inputs: Array<{ name: string; required: boolean; type?: string; inputMapping?: any }>;
+  outputs: Array<{ name: string; type?: string; description?: string; outputMapping?: any }>;
   tools: Array<{ name: string; version?: string; config?: Record<string, any> }>;
   content: Array<any>; // MessagePart[] - flexible to avoid import
   model: string | null;
@@ -43,6 +43,20 @@ export interface ExecutionSkill {
     fieldMappings: Array<{ skillInputName: string; targetFieldId: number }>;
     updateMatch?: { skillInputName: string; targetFieldId: number };
   };
+  // Optional steps for 'agent' (step-based) execution type
+  steps?: Array<{
+    name: string;
+    instruction?: string;
+    skillId?: number;
+    tools?: string[];
+    inputs?: Record<string, string>;
+    outputs?: Record<string, string>;
+    parallel?: boolean;
+    condition?: string;
+    // Step-level definitions (same types as skill-level)
+    inputDefs?: Array<{ name: string; required: boolean; type?: string; inputMapping?: any }>;
+    outputDefs?: Array<{ name: string; type?: string; description?: string; outputMapping?: any }>;
+  }>;
 }
 
 export interface AgentExecutionRequest {

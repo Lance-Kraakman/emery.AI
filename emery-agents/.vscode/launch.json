@@ -10,7 +10,7 @@
           "tests/test_grpc.py",
         ],
         "env": {
-          "HF_TOKEN": "***REMOVED***"
+          "HF_TOKEN": "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"
         },
         "console": "integratedTerminal",
         "justMyCode": false

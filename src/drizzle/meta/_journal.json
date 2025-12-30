@@ -365,6 +365,13 @@
       "when": 1766510948905,
       "tag": "0051_fantastic_the_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1766882507371,
+      "tag": "0052_aspiring_fallen_one",
+      "breakpoints": true
     }
   ]
 }

@@ -9,11 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { ShareButton } from '@/components/permissions/ShareButton';
 import { ShareDialog } from '@/components/permissions/ShareDialog';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
-import { updateSkill, deleteSkill, uploadSkillAttachment, duplicateSkill } from '@/app/actions/skills';
+import { duplicateSkill } from '@/app/actions/skills';
 import { toast } from 'sonner';
-import { SkillEditor, type SkillFormData } from '../../agents/[agentId]/skills/components/SkillEditor';
-import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
-import { useOrganizationPlan } from '@/stores/app-state.store';
+import { SkillEditor } from '../../agents/[agentId]/skills/components/SkillEditor';
+import { useSkillEditor } from '../../agents/[agentId]/skills/components/useSkillEditor';
 
 interface EditOrganizationSkillViewProps {
   skill: SkillDTO;
@@ -22,118 +21,24 @@ interface EditOrganizationSkillViewProps {
 
 export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrganizationSkillViewProps) {
   const router = useRouter();
-  const organizationTier = useOrganizationPlan();
-  const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
-  const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [formData, setFormData] = useState<SkillFormData>({
-    name: skill.name,
-    description: skill.description,
-    inputs: skill.inputs,
-    outputs: skill.outputs,
-    instructions: skill.instructions,
-    tools: skill.tools,
-    content: skill.content, // Load existing attachments
-    pendingAttachments: [], // Start with no pending attachments
-    executionType: skill.executionType,
-    taskModelConfig: skill.taskModelConfig
+
+  const {
+    formData,
+    setFormData,
+    isSaving,
+    isDeleting,
+    shareDialogOpen,
+    setShareDialogOpen,
+    availableSkills,
+    organizationTier,
+    handleSave,
+    handleDelete,
+  } = useSkillEditor({
+    skill,
+    agentId: null,
+    onDeleteRedirect: '/skills',
   });
-
-  const handleSave = async () => {
-    if (!formData.name.trim()) {
-      toast.error('Skill name is required');
-      return;
-    }
-
-    setIsSaving(true);
-
-    try {
-      // Step 1: Upload pending attachments if any and collect metadata
-      let updatedContent = [...(formData.content || [])];
-
-      if (formData.pendingAttachments && formData.pendingAttachments.length > 0) {
-        toast.info(`Uploading ${formData.pendingAttachments.length} attachment(s)...`);
-
-        for (const file of formData.pendingAttachments) {
-          const attachFormData = new FormData();
-          attachFormData.append('file', file);
-          attachFormData.append('type', file.type.startsWith('image/') ? 'image' : 'file');
-
-          const uploadResult = await uploadSkillAttachment(skill.id, attachFormData);
-
-          if (uploadResult.success && uploadResult.data) {
-            // Convert upload metadata to MessagePart and add to content
-            const metadata = uploadResult.data;
-            const messagePart: MessagePart = metadata.type === 'image'
-              ? { imageUrl: { url: metadata.url } }
-              : {
-                  file: {
-                    url: metadata.url,
-                    filename: metadata.filename,
-                    size: metadata.sizeBytes,
-                    mimeType: metadata.mimeType
-                  }
-                };
-            updatedContent.push(messagePart);
-          } else {
-            console.error('Failed to upload attachment:', file.name, uploadResult.error);
-            toast.error(`Failed to upload ${file.name}`);
-          }
-        }
-      }
-
-      // Step 2: Update the skill WITH the content
-      const result = await updateSkill(skill.id, {
-        name: formData.name,
-        description: formData.description,
-        inputs: formData.inputs,
-        outputs: formData.outputs,
-        instructions: formData.instructions,
-        tools: formData.tools,
-        content: updatedContent, // Include attachment metadata
-        executionType: formData.executionType,
-        taskModelConfig: formData.taskModelConfig
-      });
-
-      if (!result.success) {
-        toast.error(result.error || 'Failed to update skill');
-        return;
-      }
-
-      toast.success('Organization skill updated successfully');
-      router.refresh();
-    } catch (error) {
-      console.error('Error updating skill:', error);
-      toast.error('An unexpected error occurred');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this organization skill? This action cannot be undone.')) {
-      return;
-    }
-
-    setIsDeleting(true);
-
-    try {
-      const result = await deleteSkill(skill.id);
-
-      if (result.success) {
-        toast.success('Organization skill deleted successfully');
-        router.push('/skills');
-      } else {
-        toast.error(result.error || 'Failed to delete skill');
-      }
-    } catch (error) {
-      console.error('Error deleting skill:', error);
-      toast.error('An unexpected error occurred');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
 
   const handleDuplicate = async () => {
     setIsDuplicating(true);
@@ -234,10 +139,11 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
         <SkillEditor
           value={formData}
           onChange={setFormData}
-          agentId={null} // No agentId for organization skills
+          agentId={null}
           skillId={skill.id}
           isReadOnly={isSystem}
           organizationTier={organizationTier}
+          availableSkills={availableSkills}
         />
       </Card>
 

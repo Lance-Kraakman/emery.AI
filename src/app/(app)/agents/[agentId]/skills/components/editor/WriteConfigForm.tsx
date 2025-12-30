@@ -12,13 +12,13 @@ import { getTables } from '@/app/actions/tables';
 import { getFields } from '@/app/actions/fields';
 import type { TableDTO } from '@/app/mappers/table-mapper';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
-import type { WriteConfig, WriteFieldMapping, UpdateMatchConfig, SkillInput } from '@/ddd/domain/skills/entities/skill';
+import type { WriteConfig, WriteFieldMapping, UpdateMatchConfig, InputDefinition } from '@/ddd/domain/skills/entities/skill';
 
 interface WriteConfigFormProps {
   value: WriteConfig | undefined;
   onChange: (config: WriteConfig | undefined) => void;
-  skillInputs: SkillInput[];
-  onSkillInputsChange: (inputs: SkillInput[]) => void;
+  skillInputs: InputDefinition[];
+  onInputDefinitionsChange: (inputs: InputDefinition[]) => void;
   disabled?: boolean;
 }
 
@@ -30,7 +30,7 @@ export function WriteConfigForm({
   value,
   onChange,
   skillInputs,
-  onSkillInputsChange,
+  onInputDefinitionsChange,
   disabled
 }: WriteConfigFormProps) {
   const [tables, setTables] = useState<TableDTO[]>([]);
@@ -87,7 +87,7 @@ export function WriteConfigForm({
     const id = parseInt(tableId);
     if (isNaN(id)) {
       onChange(undefined);
-      onSkillInputsChange([]);
+      onInputDefinitionsChange([]);
       return;
     }
 
@@ -115,13 +115,13 @@ export function WriteConfigForm({
     if (!fields.length) return;
 
     // Create skill inputs from fields
-    const newInputs: SkillInput[] = fields.map(field => ({
+    const newInputs: InputDefinition[] = fields.map(field => ({
       name: field.name,
       type: mapFieldTypeToSkillType(field.type),
       required: field.required ?? false
     }));
 
-    onSkillInputsChange(newInputs);
+    onInputDefinitionsChange(newInputs);
 
     // Create field mappings
     const mappings: WriteFieldMapping[] = fields.map(field => ({
@@ -136,7 +136,7 @@ export function WriteConfigForm({
   };
 
   // Map field type to skill input type
-  const mapFieldTypeToSkillType = (fieldType: string): SkillInput['type'] => {
+  const mapFieldTypeToSkillType = (fieldType: string): InputDefinition['type'] => {
     switch (fieldType) {
       case 'text':
       case 'rich-text':
@@ -222,7 +222,7 @@ export function WriteConfigForm({
   // Clear configuration
   const handleClear = () => {
     onChange(undefined);
-    onSkillInputsChange([]);
+    onInputDefinitionsChange([]);
     setFields([]);
   };
 

@@ -8,12 +8,12 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { requirePermission, requireResourcePermission } from './permissions';
 import type { Result } from '@/ddd/domain/shared/result';
-import type { SkillInput, SkillOutput, ToolConfigDTO } from '@/app/mappers/skill-mapper';
+import type { InputDefinition, OutputDefinition, ToolConfigDTO } from '@/app/mappers/skill-mapper';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
-import type { SkillExecutionType, ToolExecutionConfig, WriteConfig } from '@/ddd/domain/skills/entities/skill';
+import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, SkillStep } from '@/ddd/domain/skills/entities/skill';
 
 /**
  * Server Actions for Skill Management
@@ -37,8 +37,8 @@ export async function createSkill(command: {
   agentId: number;
   name: string;
   description?: string;
-  inputs: SkillInput[];
-  outputs: SkillOutput[];
+  inputs: InputDefinition[];
+  outputs: OutputDefinition[];
   instructions: string;
   tools: ToolConfigDTO[];
   model?: string | null;
@@ -47,6 +47,7 @@ export async function createSkill(command: {
   taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
   toolExecutionConfig?: ToolExecutionConfig;
   writeConfig?: WriteConfig;
+  steps?: SkillStep[]; // Steps for 'agent' (step-based) execution
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -62,11 +63,16 @@ export async function createSkill(command: {
       return { success: false, error: 'Skill name is required' };
     }
 
-    const executionType = command.executionType || 'agent';
+    const executionType = command.executionType || 'agentic';
 
-    // Instructions required for agent execution, optional for operation mode
-    if (executionType !== 'operation' && !command.instructions?.trim()) {
-      return { success: false, error: 'Instructions are required for agent execution' };
+    // Instructions required for agentic execution
+    if (executionType === 'agentic' && !command.instructions?.trim()) {
+      return { success: false, error: 'Instructions are required for agentic execution' };
+    }
+
+    // Steps required for agent (step-based) execution
+    if (executionType === 'agent' && (!command.steps || command.steps.length === 0)) {
+      return { success: false, error: 'Steps are required for agent (step-based) execution' };
     }
 
     // Task model config required for operation mode
@@ -133,8 +139,8 @@ export async function createOrganizationSkill(command: {
   organizationId: number;
   name: string;
   description?: string;
-  inputs: SkillInput[];
-  outputs: SkillOutput[];
+  inputs: InputDefinition[];
+  outputs: OutputDefinition[];
   instructions: string;
   tools: ToolConfigDTO[];
   model?: string | null;
@@ -143,6 +149,7 @@ export async function createOrganizationSkill(command: {
   taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
   toolExecutionConfig?: ToolExecutionConfig;
   writeConfig?: WriteConfig;
+  steps?: SkillStep[]; // Steps for 'agent' (step-based) execution
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -158,11 +165,16 @@ export async function createOrganizationSkill(command: {
       return { success: false, error: 'Skill name is required' };
     }
 
-    const executionType = command.executionType || 'agent';
+    const executionType = command.executionType || 'agentic';
 
-    // Instructions required for agent execution, optional for operation mode
-    if (executionType !== 'operation' && !command.instructions?.trim()) {
-      return { success: false, error: 'Instructions are required for agent execution' };
+    // Instructions required for agentic execution
+    if (executionType === 'agentic' && !command.instructions?.trim()) {
+      return { success: false, error: 'Instructions are required for agentic execution' };
+    }
+
+    // Steps required for agent (step-based) execution
+    if (executionType === 'agent' && (!command.steps || command.steps.length === 0)) {
+      return { success: false, error: 'Steps are required for agent (step-based) execution' };
     }
 
     // Task model config required for operation mode
@@ -196,8 +208,11 @@ export async function createOrganizationSkill(command: {
       tools: command.tools,
       model: command.model,
       agentType: command.agentType,
-      executionType: command.executionType,  // Include execution type
-      taskModelConfig: command.taskModelConfig  // Include task model config
+      executionType: command.executionType,
+      taskModelConfig: command.taskModelConfig,
+      toolExecutionConfig: command.toolExecutionConfig,
+      writeConfig: command.writeConfig,
+      steps: command.steps
     });
 
     if (!result.success) {
@@ -235,8 +250,8 @@ export async function updateSkill(
   command: {
     name?: string;
     description?: string;
-    inputs?: SkillInput[];
-    outputs?: SkillOutput[];
+    inputs?: InputDefinition[];
+    outputs?: OutputDefinition[];
     instructions?: string;
     tools?: ToolConfigDTO[];
     model?: string | null;
@@ -245,6 +260,7 @@ export async function updateSkill(
     taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> } | null;
     toolExecutionConfig?: ToolExecutionConfig | null;
     writeConfig?: WriteConfig | null;
+    steps?: SkillStep[] | null; // Steps for 'agent' (step-based) execution
     content?: MessagePart[]; // Skill-level attachments
   }
 ): Promise<Result<SkillDTO>> {
@@ -277,6 +293,12 @@ export async function updateSkill(
       // Org-level skill: check skill management permission
       await requireResourcePermission("skills:manage", "skill", skillId);
     }
+
+    console.log('[updateSkill] action received:', {
+      stepsInCommand: 'steps' in command,
+      steps: command.steps,
+      stepsLength: command.steps?.length
+    });
 
     const result = await service.updateSkill(skillId, command);
 
@@ -407,7 +429,10 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
       model: originalSkill.model,
       agentType: originalSkill.agentType,
       executionType: originalSkill.executionType,
-      taskModelConfig: originalSkill.taskModelConfig
+      taskModelConfig: originalSkill.taskModelConfig,
+      toolExecutionConfig: originalSkill.toolExecutionConfig,
+      writeConfig: originalSkill.writeConfig,
+      steps: originalSkill.steps
     });
 
     if (!createResult.success || !createResult.data) {

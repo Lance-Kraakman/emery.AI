@@ -238,14 +238,19 @@ class SkillTool(Tool):
             if self._is_operation:
                 # Inject images/audio from parent context if available
                 enriched_kwargs = self._inject_context_inputs(kwargs)
+                # Resolve input mappings (read table field values)
+                enriched_kwargs = run_async_in_thread(self._resolve_input_mappings(enriched_kwargs))
                 result = self._execute_operation(enriched_kwargs)
             else:
                 # Agent mode execution via callback
+                # Resolve input mappings (read table field values)
+                enriched_kwargs = run_async_in_thread(self._resolve_input_mappings(kwargs))
+
                 # Check if we need to capture outputs for mapping
                 if self._has_output_mappings():
                     # Request output capture from skill executor
                     # Executor returns SkillExecutionResult when capture_outputs=True
-                    executor_result = self.skill_executor(self.skill_config, kwargs, capture_outputs=True)
+                    executor_result = self.skill_executor(self.skill_config, enriched_kwargs, capture_outputs=True)
 
                     # Type check using isinstance with dataclass
                     if isinstance(executor_result, SkillExecutionResult):
@@ -262,7 +267,7 @@ class SkillTool(Tool):
                         result = executor_result
                 else:
                     # Standard agent execution without output capture
-                    result = self.skill_executor(self.skill_config, kwargs)
+                    result = self.skill_executor(self.skill_config, enriched_kwargs)
 
             logger.info(f"✅ Skill {self.name} completed successfully")
             # Cache the result for memoization (prevents duplicate calls)
@@ -853,3 +858,118 @@ class SkillTool(Tool):
 
         except Exception as e:
             logger.error(f"❌ Failed to apply multi-table output mappings: {e}")
+
+    async def _resolve_input_mappings(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Resolve InputMappingConfig by reading table field values.
+
+        For each skill input with input_mapping configured, read the field value
+        from the specified table/row and inject into kwargs.
+        """
+        if not self.skill_config or not self.api_key or not self.organization_id:
+            return kwargs
+
+        resolved = dict(kwargs)
+
+        for input_def in self.skill_config.inputs:
+            # Skip if no input_mapping configured
+            if not input_def.HasField('input_mapping'):
+                continue
+
+            # Skip if already provided by LLM
+            if input_def.name in resolved and resolved[input_def.name] is not None:
+                continue
+
+            mapping = input_def.input_mapping
+            source = mapping.source
+
+            # Resolve row_id from row_source
+            row_id = self._resolve_row_id(source.row_source, resolved)
+            if row_id is None:
+                logger.debug(f"Could not resolve row_id for input '{input_def.name}'")
+                continue
+
+            # Read field value from table
+            value = await self._read_table_field(
+                table_id=source.table_id,
+                field_id=source.field_id,
+                row_id=row_id
+            )
+
+            if value is not None:
+                logger.info(f"📥 Resolved input '{input_def.name}' from table field")
+                resolved[input_def.name] = value
+
+        return resolved
+
+    def _resolve_row_id(self, row_source, context: Dict[str, Any]) -> Optional[str]:
+        """Resolve row ID from RowIdSource configuration."""
+        from ..services.agent_executor import AgentExecutor
+
+        # Check which field is set in the oneof
+        if row_source.use_source_row:
+            # Use triggering row from parent execution context
+            parent_ctx = AgentExecutor.get_current_context()
+            if parent_ctx and hasattr(parent_ctx, 'source_row_id') and parent_ctx.source_row_id:
+                return str(parent_ctx.source_row_id)
+            return None
+        elif row_source.static_id:
+            return row_source.static_id
+        elif row_source.skill_input:
+            # Get row ID from another skill input value
+            value = context.get(row_source.skill_input)
+            return str(value) if value is not None else None
+        elif row_source.skill_output:
+            # Get row ID from skill output (from previous step)
+            value = context.get(row_source.skill_output)
+            return str(value) if value is not None else None
+        elif row_source.HasField('table_ref'):
+            # TableReference - would need to resolve from previous table mapping
+            # For now, skip this case (complex cross-table reference)
+            logger.debug("table_ref row source not yet implemented for input mappings")
+            return None
+
+        return None
+
+    async def _read_table_field(
+        self,
+        table_id: int,
+        field_id: int,
+        row_id: str
+    ) -> Any:
+        """
+        Read a single field value from a table row.
+
+        Uses same HTTP pattern as OutputMappingService._fetch_row().
+        """
+        import httpx
+
+        ctx = MappingContext(
+            api_key=self.api_key,
+            organization_id=str(self.organization_id)
+        )
+
+        url = f"{ctx.api_base_url}/rows"
+        params = {"tableId": str(table_id), "rowId": row_id}
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url, headers=ctx.headers, params=params)
+
+                if response.status_code >= 400:
+                    logger.warning(f"Failed to fetch row {row_id}: {response.status_code}")
+                    return None
+
+                data = response.json()
+                rows = data.get('data', {}).get('rows', [])
+
+                if not rows:
+                    return None
+
+                row = rows[0]
+                # Row data is keyed by field_id (as string)
+                return row.get(str(field_id))
+
+        except Exception as e:
+            logger.error(f"Error reading table field: {e}")
+            return None

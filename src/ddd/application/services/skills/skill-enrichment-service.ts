@@ -12,11 +12,14 @@ import type { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-re
 import { SkillId } from '@/ddd/domain/skills/value-objects/skill-id';
 import type {
   Skill,
-  SkillInput,
-  SkillOutput,
+  InputDefinition,
+  OutputDefinition,
   ToolConfig,
   SkillExecutionType,
-  TaskModelConfig
+  TaskModelConfig,
+  ToolExecutionConfig,
+  WriteConfig,
+  SkillStep
 } from '@/ddd/domain/skills/entities/skill';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 
@@ -28,14 +31,17 @@ export interface EnrichedSkill {
   name: string;
   description: string;
   instructions: string;
-  inputs: SkillInput[];
-  outputs: SkillOutput[];
+  inputs: InputDefinition[];
+  outputs: OutputDefinition[];
   tools: ToolConfig[];
   content: MessagePart[];
   model: string | null;
   agentType: string | null;
   executionType: SkillExecutionType;
   taskModelConfig?: TaskModelConfig;
+  toolExecutionConfig?: ToolExecutionConfig;
+  writeConfig?: WriteConfig;
+  steps?: SkillStep[];
 }
 
 export class SkillEnrichmentService {
@@ -84,7 +90,10 @@ export class SkillEnrichmentService {
       model: skill.model || null,
       agentType: skill.agentType || null,
       executionType: skill.executionType || 'agent',
-      taskModelConfig: skill.taskModelConfig
+      taskModelConfig: skill.taskModelConfig,
+      toolExecutionConfig: skill.toolExecutionConfig,
+      writeConfig: skill.writeConfig,
+      steps: skill.steps || []
     };
   }
 }

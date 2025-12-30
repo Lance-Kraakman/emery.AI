@@ -1,6 +1,9 @@
-import type { Skill, SkillParameterType, SkillInputFileConfig, SkillExecutionType, TaskModelConfig } from '@/ddd/domain/skills/entities/skill';
+import type { Skill, SkillParameterType, SkillExecutionType, TaskModelConfig, SkillStep, ToolExecutionConfig, WriteConfig, InputMappingConfig, InputDefinition, OutputDefinition } from '@/ddd/domain/skills/entities/skill';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
+
+// Re-export unified types from domain
+export type { InputDefinition, OutputDefinition };
 
 /**
  * DTO for Tool Configuration
@@ -9,18 +12,6 @@ import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-ski
 export interface ToolConfigDTO {
   name: string;
   config?: Record<string, any>;
-}
-
-/**
- * DTO for Skill Input
- * Defines an input parameter for a skill
- */
-export interface SkillInput {
-  name: string;
-  required: boolean;
-  type?: SkillParameterType;
-  fileConfig?: SkillInputFileConfig;
-  default?: any;
 }
 
 /**
@@ -101,17 +92,6 @@ export interface OutputMappingConfig {
 }
 
 /**
- * DTO for Skill Output
- * Defines an output value from a skill
- */
-export interface SkillOutput {
-  name: string;
-  type?: SkillParameterType;
-  description?: string;  // Description of what this output contains (shown in LLM instructions)
-  outputMapping?: OutputMappingConfig;  // Optional: path-based field mapping
-}
-
-/**
  * DTO for Skill
  * Simplified single-instruction model with global skills support
  * AIDEV-NOTE: Removed steps array, replaced with single instructions field + inputs/outputs
@@ -133,15 +113,18 @@ export interface SkillDTO {
   agentId: number | null; // null for global skills
   name: string;
   description: string;
-  inputs: SkillInput[];
-  outputs: SkillOutput[];
+  inputs: InputDefinition[];
+  outputs: OutputDefinition[];
   instructions: string;
   tools: ToolConfigDTO[];
   content?: MessagePart[]; // Skill-level attachments with pre-signed URLs
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
-  executionType?: SkillExecutionType; // 'agent' (default) or 'operation'
-  taskModelConfig?: TaskModelConfigDTO; // Config for operation execution
+  executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
+  taskModelConfig?: TaskModelConfigDTO; // Config for 'operation' execution
+  toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
+  writeConfig?: WriteConfig; // Config for 'write' execution
+  steps?: SkillStep[]; // Steps for 'agent' (step-based) execution
   isSystem: boolean; // System skills cannot be deleted by users
   createdAt: string;
   updatedAt: string;
@@ -176,6 +159,9 @@ export class SkillMapper {
       agentType: skill.agentType ?? null,
       executionType: skill.executionType,
       taskModelConfig: skill.taskModelConfig,
+      toolExecutionConfig: skill.toolExecutionConfig,
+      writeConfig: skill.writeConfig,
+      steps: skill.steps,
       isSystem: skill.isSystem,
       createdAt: skill.createdAt.toISOString(),
       updatedAt: skill.updatedAt.toISOString()

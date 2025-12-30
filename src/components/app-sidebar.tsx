@@ -402,7 +402,7 @@ export function AppSidebar({
           onDelete={handleDeleteAgent}
         />
 
-        {/* Teams */}
+        {/* Teams - Coming Soon
         <SidebarSection
           icon={Users}
           label="Teams"
@@ -421,6 +421,7 @@ export function AppSidebar({
           onShare={handleShareTeam}
           onDelete={handleDeleteTeam}
         />
+        */}
 
         {/* Skills - Grouped by Organization and Agents, System skills at bottom */}
         <GroupedSidebarSection

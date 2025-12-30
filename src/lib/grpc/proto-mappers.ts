@@ -419,15 +419,17 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
       name: input.name,
       required: input.required,
       type: input.type || 'text', // Default to 'text' for proto compatibility
-      fileConfig: input.fileConfig ? {
-        allowedMimeTypes: input.fileConfig.allowedMimeTypes || [],
-        maxSizeBytes: input.fileConfig.maxSizeBytes || 0,
-        multiple: input.fileConfig.multiple || false
+      inputMapping: input.inputMapping ? {
+        source: {
+          tableId: input.inputMapping.source.tableId,
+          fieldId: input.inputMapping.source.fieldId,
+          rowSource: input.inputMapping.source.rowSource ? mapRowIdSourceToProto(input.inputMapping.source.rowSource) : undefined
+        }
       } : undefined
     })),
     outputs: skill.outputs.map(output => {
-      // ExecutionSkill uses 'mapping' field, map it to proto's 'outputMapping'
-      const outputMapping = output.mapping as OutputMappingConfigDTO | undefined;
+      // Map skill output to proto's outputMapping
+      const outputMapping = output.outputMapping as OutputMappingConfigDTO | undefined;
       return {
         name: output.name,
         type: output.type || 'text', // Default to 'text' for proto compatibility
@@ -485,7 +487,7 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
       return { text: { text: '' } };
     }),
     agentType: skill.agentType || '',
-    executionType: skill.executionType || 'agent',
+    executionType: skill.executionType || 'agentic',
     taskModelConfig: skill.taskModelConfig ? {
       modelId: skill.taskModelConfig.modelId || '',
       taskType: skill.taskModelConfig.taskType || '',
@@ -514,7 +516,36 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
         skillInputName: skill.writeConfig.updateMatch.skillInputName,
         targetFieldId: skill.writeConfig.updateMatch.targetFieldId
       } : undefined
-    } : undefined
+    } : undefined,
+    // Map steps for 'agent' (step-based) execution type
+    steps: skill.steps?.map(step => ({
+      name: step.name,
+      instruction: step.instruction || '',
+      skillId: step.skillId || 0,
+      tools: step.tools || [],
+      inputs: step.inputs || {},
+      outputs: step.outputs || {},
+      parallel: step.parallel || false,
+      condition: step.condition || '',
+      // Step-level definitions (same mapping as skill-level)
+      inputDefs: step.inputDefs?.map(input => ({
+        name: input.name,
+        required: input.required,
+        type: input.type || 'text',
+        inputMapping: input.inputMapping ? {
+          source: {
+            tableId: input.inputMapping.source.tableId,
+            fieldId: input.inputMapping.source.fieldId,
+            rowSource: input.inputMapping.source.rowSource ? mapRowIdSourceToProto(input.inputMapping.source.rowSource) : undefined
+          }
+        } : undefined
+      })) || [],
+      outputDefs: step.outputDefs?.map(output => ({
+        name: output.name,
+        type: output.type || 'text',
+        outputMapping: undefined  // Step-level outputs typically don't have table mappings
+      })) || []
+    })) || []
   };
 }
 

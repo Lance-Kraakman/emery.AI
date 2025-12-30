@@ -3,8 +3,8 @@
  *
  * AIDEV-NOTE: Provides string interpolation for displaying dynamic values in text.
  * Supports patterns like:
- * - {state.key} - State values (flat namespace, auto-populated from URL params)
- * - {rowData.field} - Row data fields
+ * - {{state.key}} - State values (flat namespace, auto-populated from URL params)
+ * - {{rowData.field}} - Row data fields
  *
  * This is different from ValueSource resolution:
  * - ValueSource: Used for data values (filters, actions) - returns typed values
@@ -12,7 +12,7 @@
  *
  * @example
  * ```tsx
- * const text = interpolateText("Hello {state.userName}!", context);
+ * const text = interpolateText("Hello {{state.userName}}!", context);
  * // Returns: "Hello John!"
  * ```
  */
@@ -21,9 +21,9 @@ import type { ValueResolutionContext } from '../types/value-source';
 
 /**
  * Pattern to match variable references in text
- * Matches: {state.key}, {rowData.field}
+ * Matches: {{state.key}}, {{rowData.field}}
  */
-const VARIABLE_PATTERN = /\{(state|rowData)\.([^}]+)\}/g;
+const VARIABLE_PATTERN = /\{\{(state|rowData)\.([^}]+)\}\}/g;
 
 /**
  * Check if a string contains any variable references
@@ -79,7 +79,7 @@ function resolveVariable(
       // Path is just the key (flat namespace)
       if (!context.getStateValue) {
         console.warn(`[interpolateText] No state context for: state.${path}`);
-        return `{state.${path}}`;
+        return `{{state.${path}}}`;
       }
 
       const value = context.getStateValue(path);
@@ -89,7 +89,7 @@ function resolveVariable(
     case 'rowData': {
       if (!context.resolveRowData) {
         console.warn(`[interpolateText] No rowData context for: rowData.${path}`);
-        return `{rowData.${path}}`;
+        return `{{rowData.${path}}}`;
       }
 
       const value = context.resolveRowData(path);
@@ -97,7 +97,7 @@ function resolveVariable(
     }
 
     default:
-      return `{${type}.${path}}`;
+      return `{{${type}.${path}}}`;
   }
 }
 
@@ -137,14 +137,14 @@ function formatValue(value: unknown): string {
 /**
  * Interpolate variable references in a text string
  *
- * @param text - The text with variable references like {state.key}
+ * @param text - The text with variable references like {{state.key}}
  * @param context - The resolution context providing access to state, params, rowData
  * @returns The text with all variables replaced with their values
  *
  * @example
  * ```tsx
  * const result = interpolateText(
- *   "Welcome, {state.userName}! You have {state.cartCount} items.",
+ *   "Welcome, {{state.userName}}! You have {{state.cartCount}} items.",
  *   context
  * );
  * // Returns: "Welcome, John! You have 3 items."

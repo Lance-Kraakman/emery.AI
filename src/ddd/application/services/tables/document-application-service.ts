@@ -301,6 +301,18 @@ export class DocumentApplicationService {
         return { success: false, error: 'Could not retrieve existing document' };
       }
 
+      // 2.5. Validate TipTap structure before saving
+      if (!command.content || typeof command.content !== 'object') {
+        return { success: false, error: 'Invalid content: must be an object' };
+      }
+      const content = command.content as { type?: string; content?: unknown };
+      if (content.type !== 'doc') {
+        return { success: false, error: `Invalid TipTap: root type must be "doc", got "${content.type}"` };
+      }
+      if (!Array.isArray(content.content)) {
+        return { success: false, error: `Invalid TipTap: 'content' must be an array of nodes, got ${typeof content.content}. Ensure you're sending {"type": "doc", "content": [...nodes...]}` };
+      }
+
       // 3. Create updated content with incremented version
       // IMPORTANT: command.content is the FULL TipTap JSON from editor.getJSON()
       // It should contain: { type: "doc", content: [...nodes with attrs...] }

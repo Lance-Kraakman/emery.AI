@@ -23,7 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModelSelector } from '@/components/ai/ModelSelector';
 import { getModelsByTaskType, type ModelTaskType } from '@/lib/ai/model-registry';
-import type { SkillInput, SkillOutput } from '@/app/mappers/skill-mapper';
+import type { InputDefinition, OutputDefinition } from '@/app/mappers/skill-mapper';
 
 // Task type options with icons and detailed descriptions for info tooltips
 const TASK_TYPE_OPTIONS = [
@@ -54,8 +54,8 @@ const TASK_TYPE_OPTIONS = [
 
 // Auto input/output mapping + default templates per task type
 const TASK_CONFIG: Record<string, {
-  inputs: SkillInput[],
-  outputs: SkillOutput[],
+  inputs: InputDefinition[],
+  outputs: OutputDefinition[],
   defaultTemplate?: string  // Default prompt template (Jinja2 syntax)
 }> = {
   // ============================================================================
@@ -171,8 +171,8 @@ interface TaskModelConfig {
 interface TaskModelFormProps {
   value: TaskModelConfig | undefined;
   onChange: (config: TaskModelConfig | undefined) => void;
-  onInputsChange: (inputs: SkillInput[]) => void;
-  onOutputsChange: (outputs: SkillOutput[]) => void;
+  onInputsChange: (inputs: InputDefinition[]) => void;
+  onOutputsChange: (outputs: OutputDefinition[]) => void;
   onInstructionsChange?: (instructions: string) => void;  // For default template
   organizationTier?: 'free' | 'pro' | 'max' | 'enterprise';
   isReadOnly?: boolean;
