@@ -72,8 +72,6 @@ export default function FormBlock({
     <Section>
       <div className={styles.formBlockContainer}>
         <MultiPageForm
-          viewName={_viewName}
-          viewDescription={_viewDescription}
           formConfig={_formConfig}
           tableFields={_tableFields}
           onSubmit={handleSubmit}
@@ -84,9 +82,6 @@ export default function FormBlock({
           customProgress={Progress}
           customStyles={{
             container: styles.formWrapper,
-            header: styles.formHeader,
-            title: styles.formTitle,
-            description: styles.formDescription,
             error: styles.errorMessage,
             errorText: styles.errorText,
             buttonGroup: styles.buttonGroup,
