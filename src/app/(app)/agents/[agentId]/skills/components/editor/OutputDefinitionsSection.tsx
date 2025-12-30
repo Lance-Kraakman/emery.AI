@@ -37,17 +37,17 @@ const fieldTypeToOutputType: Record<FieldType, OutputDefinition['type'] | null> 
   'created-at': null,
 };
 
-interface SkillOutputsSectionProps {
+interface OutputDefinitionsSectionProps {
   outputs: OutputDefinition[];
   onOutputsChange: (outputs: OutputDefinition[]) => void;
   isReadOnly?: boolean;
 }
 
-export function SkillOutputsSection({
+export function OutputDefinitionsSection({
   outputs,
   onOutputsChange,
   isReadOnly = false
-}: SkillOutputsSectionProps) {
+}: OutputDefinitionsSectionProps) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [formData, setFormData] = useState<OutputDefinition>({ name: '', type: 'text' });

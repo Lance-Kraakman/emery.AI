@@ -16,7 +16,10 @@ import type {
   OutputDefinition,
   ToolConfig,
   SkillExecutionType,
-  TaskModelConfig
+  TaskModelConfig,
+  ToolExecutionConfig,
+  WriteConfig,
+  SkillStep
 } from '@/ddd/domain/skills/entities/skill';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 
@@ -36,6 +39,9 @@ export interface EnrichedSkill {
   agentType: string | null;
   executionType: SkillExecutionType;
   taskModelConfig?: TaskModelConfig;
+  toolExecutionConfig?: ToolExecutionConfig;
+  writeConfig?: WriteConfig;
+  steps?: SkillStep[];
 }
 
 export class SkillEnrichmentService {
@@ -84,7 +90,10 @@ export class SkillEnrichmentService {
       model: skill.model || null,
       agentType: skill.agentType || null,
       executionType: skill.executionType || 'agent',
-      taskModelConfig: skill.taskModelConfig
+      taskModelConfig: skill.taskModelConfig,
+      toolExecutionConfig: skill.toolExecutionConfig,
+      writeConfig: skill.writeConfig,
+      steps: skill.steps || []
     };
   }
 }

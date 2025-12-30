@@ -122,7 +122,13 @@ class StepExecutorService:
                         continue
 
                 # Resolve inputs from step_context
-                step_inputs = self._resolve_inputs(dict(step.inputs), step_context)
+                # Use explicit input mappings if provided, otherwise auto-resolve from inputDefs
+                input_mappings = dict(step.inputs)
+                if not input_mappings and step.input_defs:
+                    # Auto-generate mappings: each inputDef.name looks for same-named context var
+                    input_mappings = {id.name: f"{{{{{id.name}}}}}" for id in step.input_defs}
+                    logger.debug(f"📥 Auto-generated input mappings from inputDefs: {list(input_mappings.keys())}")
+                step_inputs = self._resolve_inputs(input_mappings, step_context)
                 logger.info(f"📥 Step {step_name}: resolved {len(step_inputs)} inputs")
 
                 if step.skill_id:
@@ -146,7 +152,13 @@ class StepExecutorService:
                     )
 
                 # Capture outputs to step_context
-                self._capture_outputs(dict(step.outputs), result, step_context)
+                # Use explicit output mappings if provided, otherwise auto-generate from outputDefs
+                output_mappings = dict(step.outputs)
+                if not output_mappings and step.output_defs:
+                    # Auto-generate mappings: each outputDef.name maps to itself
+                    output_mappings = {od.name: od.name for od in step.output_defs}
+                    logger.debug(f"📤 Auto-generated output mappings from outputDefs: {list(output_mappings.keys())}")
+                self._capture_outputs(output_mappings, result, step_context)
 
                 result_str = str(result)[:500] if result else "No result"
                 logger.info(f"✅ Step {step_name}: completed")
