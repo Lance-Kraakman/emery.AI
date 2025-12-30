@@ -294,6 +294,12 @@ export async function updateSkill(
       await requireResourcePermission("skills:manage", "skill", skillId);
     }
 
+    console.log('[updateSkill] action received:', {
+      stepsInCommand: 'steps' in command,
+      steps: command.steps,
+      stepsLength: command.steps?.length
+    });
+
     const result = await service.updateSkill(skillId, command);
 
     if (!result.success) {

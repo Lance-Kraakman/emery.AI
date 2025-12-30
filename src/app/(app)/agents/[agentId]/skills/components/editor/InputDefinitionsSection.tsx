@@ -8,17 +8,17 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { InputDefinition } from '@/app/mappers/skill-mapper';
 
-interface SkillInputsSectionProps {
+interface InputDefinitionsSectionProps {
   inputs: InputDefinition[];
   onInputsChange: (inputs: InputDefinition[]) => void;
   isReadOnly?: boolean;
 }
 
-export function SkillInputsSection({
+export function InputDefinitionsSection({
   inputs,
   onInputsChange,
   isReadOnly = false
-}: SkillInputsSectionProps) {
+}: InputDefinitionsSectionProps) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [formData, setFormData] = useState<InputDefinition>({ name: '', required: true, type: 'text' });
