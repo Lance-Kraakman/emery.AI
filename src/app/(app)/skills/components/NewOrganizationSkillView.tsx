@@ -29,7 +29,9 @@ export function NewOrganizationSkillView({ organizationId, templateId }: NewOrga
     inputs: [],
     outputs: [],
     instructions: '',
-    tools: []
+    tools: [],
+    model: null,
+    agentType: null
   });
 
   // Load template if templateId is provided
@@ -52,6 +54,8 @@ export function NewOrganizationSkillView({ organizationId, templateId }: NewOrga
             outputs: result.data.outputs,
             instructions: result.data.instructions,
             tools: result.data.tools,
+            model: result.data.model,
+            agentType: result.data.agentType,
             executionType: result.data.executionType,
             taskModelConfig: result.data.taskModelConfig
           });
@@ -90,6 +94,8 @@ export function NewOrganizationSkillView({ organizationId, templateId }: NewOrga
         outputs: formData.outputs,
         instructions: formData.instructions,
         tools: formData.tools,
+        model: formData.model,
+        agentType: formData.agentType,
         executionType: formData.executionType,
         taskModelConfig: formData.taskModelConfig
       });
