@@ -3,83 +3,58 @@ import { AgentId } from '@/ddd/domain/shared/value-objects';
 import { getAgentRepository, getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import { withSystemContext } from '@/lib/db/system-context';
 import { PipedreamEventTriggerConfig, TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-import crypto from 'crypto';
 
 /**
  * Pipedream Event Source Webhook Receiver
  *
  * AIDEV-NOTE: This endpoint receives events from Pipedream sources (triggers).
- * SECURITY: Requires HMAC signature verification using PIPEDREAM_WEBHOOK_SECRET.
+ * SECURITY: Uses per-agent webhook token in URL for authentication.
  *
  * When a Pipedream source fires (e.g., new Gmail email), it POSTs here with
  * the event payload. We then:
- * 1. Verify the request signature
+ * 1. Validate the webhook token from URL
  * 2. Find the agent and matching PIPEDREAM_EVENT automation
  * 3. Extract variables from the payload for skill input mapping
  * 4. Create and execute a task with the skill
  */
 
-/**
- * Verify Pipedream webhook signature
- * SECURITY: Prevents unauthorized task execution
- */
-async function verifyPipedreamSignature(
-  signature: string | null,
-  body: string
-): Promise<boolean> {
-  const secret = process.env.PIPEDREAM_WEBHOOK_SECRET;
-  if (!secret) {
-    console.error('[PipedreamWebhook] PIPEDREAM_WEBHOOK_SECRET not configured');
-    return false;
-  }
-
-  if (!signature) {
-    console.error('[PipedreamWebhook] No signature provided');
-    return false;
-  }
-
-  const expectedSignature = crypto
-    .createHmac('sha256', secret)
-    .update(body)
-    .digest('hex');
-
-  // Constant-time comparison to prevent timing attacks
-  try {
-    return crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expectedSignature)
-    );
-  } catch {
-    return false;
-  }
-}
-
 interface RouteParams {
   params: Promise<{
     agentId: string;
+    token: string;
   }>;
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const { agentId: agentIdParam } = await params;
+    const { agentId: agentIdParam, token } = await params;
     const agentId = AgentId.fromNumber(parseInt(agentIdParam));
 
     console.log(`[PipedreamWebhook] Received event for agent ${agentIdParam}`);
 
-    // Parse the Pipedream event payload
-    const rawBody = await request.text();
+    // Get agent and validate webhook token
+    const agentRepository = getAgentRepository();
+    const agent = await agentRepository.findById(agentId);
 
-    // SECURITY: Verify webhook signature
-    const signature = request.headers.get('x-pipedream-signature');
-    const isValid = await verifyPipedreamSignature(signature, rawBody);
-    if (!isValid) {
-      console.error('[PipedreamWebhook] Invalid or missing signature');
+    if (!agent) {
+      console.error('[PipedreamWebhook] Agent not found:', agentIdParam);
       return NextResponse.json(
-        { error: 'Unauthorized: Invalid signature' },
+        { error: 'Agent not found' },
+        { status: 404 }
+      );
+    }
+
+    // SECURITY: Validate webhook token
+    if (!agent.webhookToken || agent.webhookToken !== token) {
+      console.error('[PipedreamWebhook] Invalid webhook token for agent:', agentIdParam);
+      return NextResponse.json(
+        { error: 'Unauthorized: Invalid webhook token' },
         { status: 401 }
       );
     }
+
+    // Parse the Pipedream event payload
+    const rawBody = await request.text();
     let payload: Record<string, any>;
 
     try {
@@ -93,18 +68,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     console.log('[PipedreamWebhook] Payload received:', JSON.stringify(payload).slice(0, 500));
-
-    // Get agent
-    const agentRepository = getAgentRepository();
-    const agent = await agentRepository.findById(agentId);
-
-    if (!agent) {
-      console.error('[PipedreamWebhook] Agent not found:', agentIdParam);
-      return NextResponse.json(
-        { error: 'Agent not found' },
-        { status: 404 }
-      );
-    }
 
     // Find matching PIPEDREAM_EVENT automation
     let matchingAutomation: typeof agent.automations[number] | null = null;
@@ -270,7 +233,7 @@ function flattenPayload(
 // GET endpoint for health check / debugging
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { agentId: agentIdParam } = await params;
+    const { agentId: agentIdParam, token } = await params;
     const agentId = AgentId.fromNumber(parseInt(agentIdParam));
     const agentRepository = getAgentRepository();
     const agent = await agentRepository.findById(agentId);
@@ -279,6 +242,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json(
         { error: 'Agent not found' },
         { status: 404 }
+      );
+    }
+
+    // SECURITY: Validate webhook token
+    if (!agent.webhookToken || agent.webhookToken !== token) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Invalid webhook token' },
+        { status: 401 }
       );
     }
 
@@ -296,7 +267,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       agentId: agent.id.value,
       agentName: agent.name,
       pipedreamAutomations,
-      webhookUrl: `${request.nextUrl.origin}/api/webhooks/pipedream/${agent.id.value}`,
+      webhookUrl: `${request.nextUrl.origin}/api/webhooks/pipedream/${agent.id.value}/${token}`,
       message: pipedreamAutomations.length > 0
         ? 'Pipedream event webhook is configured'
         : 'No Pipedream event automations found'

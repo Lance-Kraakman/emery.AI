@@ -176,6 +176,25 @@ export class DrizzleAgentRepository
     }
   }
 
+  async findByWebhookToken(token: string): Promise<Agent | null> {
+    try {
+      const [record] = await this.db
+        .select()
+        .from(agents)
+        .where(eq(agents.webhookToken, token))
+        .limit(1);
+
+      if (!record) {
+        return null;
+      }
+
+      return this.fromPersistence(record);
+    } catch (error) {
+      console.error('Error finding agent by webhook token:', error);
+      return null;
+    }
+  }
+
   async updateLastUsed(id: AgentId): Promise<void> {
     try {
       await this.db

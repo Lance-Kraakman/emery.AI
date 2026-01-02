@@ -74,6 +74,11 @@ export interface IAgentRepository {
   findByApiKey(apiKey: ApiKey): Promise<Agent | null>;
 
   /**
+   * Find agent by webhook token
+   */
+  findByWebhookToken(token: string): Promise<Agent | null>;
+
+  /**
    * Update agent's last used timestamp
    */
   updateLastUsed(id: AgentId): Promise<void>;

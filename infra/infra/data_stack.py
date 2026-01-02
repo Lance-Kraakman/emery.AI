@@ -220,8 +220,6 @@ class DataStack(Stack):
             # Modal for sandboxed CodeAgent execution
             "MODAL_TOKEN_ID": ecs.Secret.from_secrets_manager(self.app_secrets_object, "MODAL_TOKEN_ID"),
             "MODAL_TOKEN_SECRET": ecs.Secret.from_secrets_manager(self.app_secrets_object, "MODAL_TOKEN_SECRET"),
-            # Pipedream webhook signature verification
-            "PIPEDREAM_WEBHOOK_SECRET": ecs.Secret.from_secrets_manager(self.app_secrets_object, "PIPEDREAM_WEBHOOK_SECRET"),
         }
 
         # ========== CLOUD MAP ==========

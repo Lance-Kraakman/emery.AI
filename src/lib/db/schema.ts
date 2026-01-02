@@ -818,6 +818,7 @@ export const agents = pgTable("agents", {
   status: text("status").default("active"),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   apiKey: text("api_key").unique(), // For API authentication
+  webhookToken: text("webhook_token").unique(), // For webhook authentication (Pipedream, etc.)
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
 
   // Model configuration
