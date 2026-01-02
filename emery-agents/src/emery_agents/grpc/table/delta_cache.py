@@ -152,7 +152,9 @@ class DeltaTableCache:
 
 
 # Global singleton instance
-_delta_cache = DeltaTableCache(ttl_seconds=30, max_size=100)
+# TTL of 300 seconds (5 min) reduces S3 metadata reads by ~10x for read-heavy workloads
+# Writes always call invalidate_delta_cache() so subsequent reads get fresh data
+_delta_cache = DeltaTableCache(ttl_seconds=300, max_size=100)
 
 
 def get_delta_table_cached(s3_uri: str, storage_options: Dict[str, str]) -> DeltaTable:
