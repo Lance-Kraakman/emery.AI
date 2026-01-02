@@ -60,28 +60,11 @@ export async function POST(req: NextRequest) {
       currentOrganizationId: session?.user?.currentOrganizationId
     });
     
-    // AIDEV-NOTE: Development bypass for testing - remove in production
-    let userId = session?.user?.id;
-    let currentOrganizationId = session?.user?.currentOrganizationId;
-    
-    if (!session?.user && process.env.NODE_ENV === 'development') {
-      const testUserId = req.headers.get('x-test-user-id');
-      if (testUserId === '550e8400-e29b-41d4-a716-446655440000') {
-        userId = testUserId;
-        // For testing purposes, use a default organization ID
-        currentOrganizationId = 1; // Default test organization
-        console.log('[CHAT-GRPC-API] Using development bypass for test user');
-      } else {
-        console.error('[CHAT-GRPC-API] Authentication failed - no valid session or user ID');
-        return new Response(
-          JSON.stringify({ error: 'Authentication required. Please log in and try again.' }),
-          { 
-            status: 401,
-            headers: { 'Content-Type': 'application/json' }
-          }
-        );
-      }
-    } else if (!session?.user) {
+    // SECURITY: Require authenticated session - no bypass
+    const userId = session?.user?.id;
+    const currentOrganizationId = session?.user?.currentOrganizationId;
+
+    if (!session?.user) {
       console.error('[CHAT-GRPC-API] Authentication failed - no valid session or user ID');
       return new Response(
         JSON.stringify({ error: 'Authentication required. Please log in and try again.' }),

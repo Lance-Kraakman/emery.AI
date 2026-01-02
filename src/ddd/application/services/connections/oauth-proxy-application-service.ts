@@ -7,6 +7,7 @@
 
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { PipedreamClient } from '@pipedream/sdk';
+import { oauthAuditLogger } from '@/lib/audit/oauth-audit-logger';
 
 const logger = createDebugLogger('OAuthProxy');
 import { getExternalUserIdForAgent } from '@/lib/pipedream/client';
@@ -58,35 +59,48 @@ export class OAuthProxyApplicationService {
         return ResultHelpers.failure<OAuthProxyResult>('Missing required fields: service, action');
       }
 
-      // 3. SECURITY: Check credential delegation permission
-      if (this.delegationService) {
-        const serviceAppName = AppName.fromString(request.service);
-        const hasPermission = await this.delegationService.checkDelegation(
-          agent.id,
-          serviceAppName
-        );
-
-        if (!hasPermission) {
-          const error = new UnauthorizedCredentialUsageError(
-            agent.id.value,
-            agent.name,
-            request.service,
-            agent.ownerId.value
-          );
-          logger.error('Unauthorized credential usage attempt', {
-            agentId: agent.id.value,
-            agentName: agent.name,
-            service: request.service,
-            ownerId: agent.ownerId.value
-          });
-          return ResultHelpers.failure<OAuthProxyResult>(error.message);
-        }
-
-        logger.debug('Delegation check passed', {
-          agentId: agent.id.value,
-          service: request.service
-        });
+      // 3. SECURITY: Check credential delegation permission (MANDATORY)
+      if (!this.delegationService) {
+        logger.error('Delegation service not configured - denying OAuth call for security');
+        return ResultHelpers.failure<OAuthProxyResult>('OAuth proxy requires delegation service to be configured');
       }
+
+      const serviceAppName = AppName.fromString(request.service);
+      const hasPermission = await this.delegationService.checkDelegation(
+        agent.id,
+        serviceAppName
+      );
+
+      if (!hasPermission) {
+        const error = new UnauthorizedCredentialUsageError(
+          agent.id.value,
+          agent.name,
+          request.service,
+          agent.ownerId.value
+        );
+        logger.error('Unauthorized credential usage attempt', {
+          agentId: agent.id.value,
+          agentName: agent.name,
+          service: request.service,
+          ownerId: agent.ownerId.value
+        });
+
+        // AUDIT: Log unauthorized attempt
+        oauthAuditLogger.logUnauthorizedAttempt({
+          agentId: agent.id.value,
+          agentName: agent.name,
+          credentialOwnerId: agent.ownerId.value,
+          service: request.service,
+          reason: 'No delegation permission for this service'
+        });
+
+        return ResultHelpers.failure<OAuthProxyResult>(error.message);
+      }
+
+      logger.debug('Delegation check passed', {
+        agentId: agent.id.value,
+        service: request.service
+      });
 
       // 4. Update agent last used timestamp
       await this.agentRepository.updateLastUsed(agent.id);
@@ -101,6 +115,16 @@ export class OAuthProxyApplicationService {
         request.params || {}
       );
 
+      // AUDIT: Log successful OAuth call
+      oauthAuditLogger.logOAuthCall({
+        agentId: agent.id.value,
+        agentName: agent.name,
+        credentialOwnerId: agent.ownerId.value,
+        service: request.service,
+        action: request.action,
+        success: true
+      });
+
       return ResultHelpers.success<OAuthProxyResult>({
         success: true,
         data: result
@@ -108,6 +132,10 @@ export class OAuthProxyApplicationService {
 
     } catch (error) {
       console.error('OAuth proxy error:', error);
+
+      // AUDIT: Log failed OAuth call (if we have agent context)
+      // Note: Error may occur before agent is loaded, so we can't always log agent details
+
       return ResultHelpers.failure<OAuthProxyResult>(
         error instanceof Error ? error.message : 'Unknown error'
       );

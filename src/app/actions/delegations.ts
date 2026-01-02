@@ -71,27 +71,10 @@ export async function getAgentDelegation(agentId: number): Promise<{ success: bo
       const connections = connectionsResult.data || [];
 
       // Get agent's current delegation
-      let delegationResult = await delegationService.getDelegationForAgent(
+      // SECURITY: Delegations must be explicitly created by the owner - no auto-creation
+      const delegationResult = await delegationService.getDelegationForAgent(
         AgentId.fromNumber(agentId)
       );
-
-      // Auto-create delegation if none exists but owner has connections
-      if ((!delegationResult.success || !delegationResult.data) && connections.length > 0) {
-        console.log(`[Delegation] Auto-creating delegation for agent ${agentId} with ${connections.length} owner connections`);
-
-        const services = connections.map(conn => conn.appName);
-        const createResult = await delegationService.createDelegation({
-          ownerId: agent.ownerId,
-          agentId: agent.id,
-          services,
-          status: 'approved' as any
-        });
-
-        if (createResult.success && createResult.data) {
-          // Use the newly created delegation directly (no need to re-fetch)
-          delegationResult = createResult;
-        }
-      }
 
       // Format delegation data
       const delegationData = delegationResult.success && delegationResult.data ? {
@@ -129,6 +112,8 @@ export async function getAgentDelegation(agentId: number): Promise<{ success: bo
 /**
  * Update which OAuth services are delegated to an agent
  * Creates delegation if it doesn't exist
+ *
+ * SECURITY: Only the agent owner (whose credentials will be used) can create/update delegations
  */
 export async function updateAgentDelegationServices(
   agentId: number,
@@ -147,6 +132,26 @@ export async function updateAgentDelegationServices(
         };
       }
 
+      // Get the agent to verify ownership
+      const agentRepository = container.get('IAgentRepository');
+      const agent = await agentRepository?.findById(AgentId.fromNumber(agentId));
+
+      if (!agent) {
+        return {
+          success: false,
+          error: "Agent not found"
+        };
+      }
+
+      // SECURITY: Only the agent owner can delegate their OAuth credentials
+      if (agent.ownerId.value !== session.user.id) {
+        console.warn(`[Delegation] User ${session.user.id} attempted to update delegation for agent ${agentId} owned by ${agent.ownerId.value}`);
+        return {
+          success: false,
+          error: "Only the agent owner can update OAuth delegations"
+        };
+      }
+
       // Get current delegation
       let currentResult = await delegationService.getDelegationForAgent(
         AgentId.fromNumber(agentId)
@@ -157,16 +162,6 @@ export async function updateAgentDelegationServices(
       if (!currentResult.success || !currentResult.data) {
         // No delegation exists - create one
         console.log(`[Delegation] Creating new delegation for agent ${agentId} with ${services.length} services`);
-
-        const agentRepository = container.get('IAgentRepository');
-        const agent = await agentRepository?.findById(AgentId.fromNumber(agentId));
-
-        if (!agent) {
-          return {
-            success: false,
-            error: "Agent not found"
-          };
-        }
 
         // Create new delegation with specified services
         result = await delegationService.createDelegation({
@@ -211,6 +206,8 @@ export async function updateAgentDelegationServices(
 
 /**
  * Revoke all OAuth delegations for an agent
+ *
+ * SECURITY: Only the agent owner can revoke their OAuth delegations
  */
 export async function revokeAgentDelegation(agentId: number): Promise<{ success: boolean; error?: string }> {
   return withAuthContext(async () => {
@@ -223,6 +220,26 @@ export async function revokeAgentDelegation(agentId: number): Promise<{ success:
         return {
           success: false,
           error: "Delegation service not available"
+        };
+      }
+
+      // Get the agent to verify ownership
+      const agentRepository = container.get('IAgentRepository');
+      const agent = await agentRepository?.findById(AgentId.fromNumber(agentId));
+
+      if (!agent) {
+        return {
+          success: false,
+          error: "Agent not found"
+        };
+      }
+
+      // SECURITY: Only the agent owner can revoke their OAuth delegations
+      if (agent.ownerId.value !== session.user.id) {
+        console.warn(`[Delegation] User ${session.user.id} attempted to revoke delegation for agent ${agentId} owned by ${agent.ownerId.value}`);
+        return {
+          success: false,
+          error: "Only the agent owner can revoke OAuth delegations"
         };
       }
 
@@ -265,6 +282,94 @@ export async function revokeAgentDelegation(agentId: number): Promise<{ success:
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to revoke delegation"
+      };
+    }
+  });
+}
+
+/**
+ * Approve a pending delegation for an agent
+ *
+ * SECURITY: Only the agent owner (credential owner) can approve delegations
+ */
+export async function approveAgentDelegation(agentId: number): Promise<{ success: boolean; error?: string }> {
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("agents:manage");
+
+      const delegationService = container.get('CredentialDelegationApplicationService') as CredentialDelegationApplicationService;
+
+      if (!delegationService) {
+        return {
+          success: false,
+          error: "Delegation service not available"
+        };
+      }
+
+      // Get the agent to verify ownership
+      const agentRepository = container.get('IAgentRepository');
+      const agent = await agentRepository?.findById(AgentId.fromNumber(agentId));
+
+      if (!agent) {
+        return {
+          success: false,
+          error: "Agent not found"
+        };
+      }
+
+      // SECURITY: Only the agent owner can approve their OAuth delegations
+      if (agent.ownerId.value !== session.user.id) {
+        console.warn(`[Delegation] User ${session.user.id} attempted to approve delegation for agent ${agentId} owned by ${agent.ownerId.value}`);
+        return {
+          success: false,
+          error: "Only the agent owner can approve OAuth delegations"
+        };
+      }
+
+      // Get current delegation
+      const currentResult = await delegationService.getDelegationForAgent(
+        AgentId.fromNumber(agentId)
+      );
+
+      if (!currentResult.success || !currentResult.data) {
+        return {
+          success: false,
+          error: "No delegation found for this agent"
+        };
+      }
+
+      if (currentResult.data.status === 'approved') {
+        return {
+          success: true // Already approved
+        };
+      }
+
+      // Approve delegation
+      console.log(`[Delegation] Approving delegation for agent ${agentId}`);
+
+      const result = await delegationService.approveDelegation(
+        currentResult.data.id
+      );
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || "Failed to approve delegation"
+        };
+      }
+
+      // Revalidate agent page
+      revalidatePath(`/agents/${agentId}`);
+      revalidatePath('/agents');
+
+      return {
+        success: true
+      };
+    } catch (error) {
+      console.error("Error approving agent delegation:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to approve delegation"
       };
     }
   });

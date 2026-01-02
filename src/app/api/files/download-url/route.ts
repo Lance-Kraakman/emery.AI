@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute } from '@/lib/api/base';
+import { validateS3KeyWithOrgAccess } from '@/lib/security/s3-key-validator';
 
 /**
  * GET /api/files/download-url?s3Key=...
@@ -32,23 +33,14 @@ export async function GET(request: NextRequest): Promise<Response> {
       };
     }
 
-    // Validate that the s3Key belongs to the user's organization
-    // The s3Key format is: org_{orgId}/table_{tableId}/field_{fieldId}/{fileId}_{filename}
-    const keyParts = s3Key.split('/');
-    if (keyParts.length < 2) {
+    // SECURITY: Validate S3 key format and org access (prevents path traversal)
+    const validationError = validateS3KeyWithOrgAccess(s3Key, user.organizationId);
+    if (validationError) {
+      const isAccessDenied = validationError.includes('Access denied');
       return {
         success: false,
-        error: 'Invalid s3Key format',
-        status: 400
-      };
-    }
-
-    const orgPart = keyParts[0];
-    if (user.organizationId && !orgPart.includes(`org_${user.organizationId}`)) {
-      return {
-        success: false,
-        error: 'Access denied: file not in your organization',
-        status: 403
+        error: validationError,
+        status: isAccessDenied ? 403 : 400
       };
     }
 

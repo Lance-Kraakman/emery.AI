@@ -1,12 +1,20 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
+import {
+  checkRateLimit,
+  getRateLimitForPath,
+  getRateLimitIdentifier
+} from '@/lib/security/rate-limiter';
 
 /**
  * Middleware to protect platform routes from app-only users
+ * and apply rate limiting to API routes.
  *
  * App-only users can ONLY access /public/* routes
  * Organization users can access everything
+ *
+ * SECURITY: Rate limiting prevents DoS attacks
  */
 export async function middleware(request: NextRequest) {
   const token = await getToken({
@@ -16,6 +24,64 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // Track rate limit info for headers
+  let rateLimitHeaders: Record<string, string> | null = null;
+
+  // Rate limiting for API routes
+  if (pathname.startsWith('/api/')) {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || request.headers.get('x-real-ip')
+      || 'unknown';
+    const userId = token?.sub || null;
+
+    const identifier = getRateLimitIdentifier(ip, userId, pathname);
+    const config = getRateLimitForPath(pathname);
+    const result = checkRateLimit(identifier, config);
+
+    if (!result.allowed) {
+      console.warn('[RateLimit] Request blocked', {
+        ip,
+        userId,
+        pathname,
+        retryAfter: result.retryAfter
+      });
+
+      return new NextResponse(
+        JSON.stringify({
+          error: 'Too many requests',
+          retryAfter: result.retryAfter
+        }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'Retry-After': String(result.retryAfter || 60),
+            'X-RateLimit-Limit': String(config.limit),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': String(result.resetAt)
+          }
+        }
+      );
+    }
+
+    // Store rate limit headers to apply later
+    rateLimitHeaders = {
+      'X-RateLimit-Limit': String(config.limit),
+      'X-RateLimit-Remaining': String(result.remaining),
+      'X-RateLimit-Reset': String(result.resetAt)
+    };
+  }
+
+  // Helper to create response with rate limit headers
+  const createResponse = (response: NextResponse): NextResponse => {
+    if (rateLimitHeaders) {
+      Object.entries(rateLimitHeaders).forEach(([key, value]) => {
+        response.headers.set(key, value);
+      });
+    }
+    return response;
+  };
+
   // Allow public routes and auth routes
   if (
     pathname.startsWith('/public/') ||
@@ -24,7 +90,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon')
   ) {
-    return NextResponse.next();
+    return createResponse(NextResponse.next());
   }
 
   // Check if user is app-only user
@@ -46,7 +112,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Allow organization users to access everything
-  return NextResponse.next();
+  return createResponse(NextResponse.next());
 }
 
 export const config = {

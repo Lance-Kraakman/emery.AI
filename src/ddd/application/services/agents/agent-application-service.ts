@@ -98,47 +98,12 @@ export class AgentApplicationService {
 
       const savedAgent = await this.agentRepository.create(createData);
 
-      // SECURITY: Auto-create credential delegation for owner's OAuth services
-      if (this.delegationService && this.connectionService) {
-        try {
-          logger.debug('Creating automatic credential delegation', {
-            agentId: savedAgent.id.value,
-            ownerId: savedAgent.ownerId.value
-          });
-
-          // Get owner's connected OAuth services
-          const connectionsResult = await this.connectionService.getUserConnections(
-            savedAgent.ownerId
-          );
-
-          if (connectionsResult.success && connectionsResult.data) {
-            const services = connectionsResult.data.map(conn => conn.appName);
-
-            if (services.length > 0) {
-              // Create auto-approved delegation for all owner's services
-              await this.delegationService.createDelegation({
-                ownerId: savedAgent.ownerId,
-                agentId: savedAgent.id,
-                services,
-                status: 'approved' as any // Auto-approve for owner's own agent
-              });
-
-              logger.summary('Auto-created credential delegation', {
-                agentId: savedAgent.id.value,
-                serviceCount: services.length,
-                services: services.map(s => s.value)
-              });
-            } else {
-              logger.debug('No OAuth services to delegate', {
-                agentId: savedAgent.id.value
-              });
-            }
-          }
-        } catch (delegationError) {
-          // Log but don't fail agent creation if delegation fails
-          logger.error('Failed to create automatic delegation', delegationError);
-        }
-      }
+      // SECURITY: Delegations must be explicitly created by the owner
+      // No auto-delegation on agent creation - owner must configure which services to delegate
+      logger.debug('Agent created - owner must explicitly configure OAuth delegations', {
+        agentId: savedAgent.id.value,
+        ownerId: savedAgent.ownerId.value
+      });
 
       // Convert domain entity to DTO for serialization
       const agentDTO = AgentMapper.toDTO(savedAgent);

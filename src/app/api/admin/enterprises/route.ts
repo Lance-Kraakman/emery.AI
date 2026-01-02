@@ -17,12 +17,13 @@ import { eq } from 'drizzle-orm';
 
 /**
  * Check if user is a superuser/admin
+ * SECURITY: Case-insensitive email comparison
  */
 async function isAdmin(userEmail: string | null | undefined): Promise<boolean> {
   if (!userEmail) return false;
 
-  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(email => email.trim()) || [];
-  return adminEmails.includes(userEmail);
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(email => email.trim().toLowerCase()) || [];
+  return adminEmails.includes(userEmail.toLowerCase());
 }
 
 /**
