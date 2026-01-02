@@ -35,32 +35,11 @@ jobs:
             echo "env_name=dev" >> $GITHUB_OUTPUT
           fi
 
-  setup-repositories:
-    needs: get-environment
-    runs-on: ubuntu-latest
-    environment: ${{ needs.get-environment.outputs.env_name }}
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Create ECR repositories if they don't exist
-        run: |
-          aws ecr describe-repositories --repository-names ${{ env.FRONTEND_REPO }} || \
-          aws ecr create-repository --repository-name ${{ env.FRONTEND_REPO }} --image-scanning-configuration scanOnPush=true
-
-          aws ecr describe-repositories --repository-names ${{ env.AGENT_REPO }} || \
-          aws ecr create-repository --repository-name ${{ env.AGENT_REPO }} --image-scanning-configuration scanOnPush=true
+  # NOTE: ECR repositories are now managed by CDK (infra/infra/app_stack.py)
+  # with lifecycle policies for automatic cleanup
 
   build-frontend:
-    needs: [get-environment, setup-repositories]
+    needs: [get-environment]
     runs-on: ubuntu-latest
     environment: ${{ needs.get-environment.outputs.env_name }}
     permissions:
@@ -124,7 +103,7 @@ jobs:
             sh -c "echo '✅ Frontend container test passed'"
 
   build-agent:
-    needs: [get-environment, setup-repositories]
+    needs: [get-environment]
     runs-on: ubuntu-latest
     environment: ${{ needs.get-environment.outputs.env_name }}
     permissions:

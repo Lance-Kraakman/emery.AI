@@ -7,6 +7,7 @@ from aws_cdk import (
     aws_codedeploy as codedeploy,
     aws_logs as logs,
     aws_iam as iam,
+    aws_ecr as ecr,
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as origins,
     aws_servicediscovery as servicediscovery,
@@ -15,6 +16,7 @@ from aws_cdk import (
     Aws,
     Duration,
     CfnOutput,
+    RemovalPolicy,
 )
 from constructs import Construct
 from .data_stack import DataStack
@@ -84,6 +86,40 @@ class AppStack(Stack):
 
         # Default AWS region - can be overridden by CDK context
         aws_region = 'ap-southeast-2'
+
+        # ========== ECR REPOSITORIES WITH LIFECYCLE POLICIES ==========
+        # Shared lifecycle rules for all repositories
+        ecr_lifecycle_rules = [
+            ecr.LifecycleRule(
+                description="Delete untagged images after 1 day",
+                tag_status=ecr.TagStatus.UNTAGGED,
+                max_image_age=Duration.days(1),
+            ),
+            ecr.LifecycleRule(
+                description="Keep only last 10 tagged images",
+                tag_status=ecr.TagStatus.TAGGED,
+                tag_prefix_list=["develop-", "pr-", "tag-"],
+                max_image_count=10,
+            ),
+        ]
+
+        # Frontend container repository
+        self.frontend_repo = ecr.Repository(
+            self, "FrontendRepo",
+            repository_name="emery/frontend",
+            image_scan_on_push=True,
+            lifecycle_rules=ecr_lifecycle_rules,
+            removal_policy=RemovalPolicy.RETAIN,  # Don't delete repo on stack deletion
+        )
+
+        # Agent container repository
+        self.agent_repo = ecr.Repository(
+            self, "AgentRepo",
+            repository_name="emery/agent",
+            image_scan_on_push=True,
+            lifecycle_rules=ecr_lifecycle_rules,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
 
         # ========== CUSTOM DOMAIN CONFIGURATION ==========
         # Domain and certificate configuration per environment
@@ -556,11 +592,12 @@ class AppStack(Stack):
             "Allow agent chat service to access database"
         )
 
-        # Allow NLB health checks and traffic on gRPC port
-        # NLBs don't have security groups, so we must allow from VPC CIDR
-        agent_chat_service.service.connections.allow_from_any_ipv4(
+        # Allow NLB health checks and traffic on gRPC port - VPC CIDR only
+        # SECURITY: Restrict to VPC internal traffic only (fixes 0.0.0.0/0 exposure)
+        agent_chat_service.service.connections.allow_from(
+            ec2.Peer.ipv4(data_stack.vpc.vpc_cidr_block),
             ec2.Port.tcp(50051),
-            "Allow NLB health checks and gRPC traffic on port 50051"
+            "Allow internal gRPC traffic from VPC only"
         )
 
         # Set custom command for chat service container
@@ -656,11 +693,12 @@ class AppStack(Stack):
             "Allow agent table service to access database"
         )
 
-        # Allow NLB health checks and traffic on gRPC port
-        # NLBs don't have security groups, so we must allow from VPC CIDR
-        agent_table_service.service.connections.allow_from_any_ipv4(
+        # Allow NLB health checks and traffic on gRPC port - VPC CIDR only
+        # SECURITY: Restrict to VPC internal traffic only (fixes 0.0.0.0/0 exposure)
+        agent_table_service.service.connections.allow_from(
+            ec2.Peer.ipv4(data_stack.vpc.vpc_cidr_block),
             ec2.Port.tcp(50052),
-            "Allow NLB health checks and gRPC traffic on port 50052"
+            "Allow internal gRPC traffic from VPC only"
         )
 
         # Set custom command for table service container
