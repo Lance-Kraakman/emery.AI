@@ -546,7 +546,10 @@ class UnifiedToolLoader:
                 logger.info(f"✅ Successfully loaded tool: {tool_config.name}")
             except Exception as tool_error:
                 logger.error(f"❌ Failed to load tool {tool_config.name}: {tool_error}")
-                logger.error(f"❌ Tool config was: {tool_config.config if tool_config.config else 'empty'}")
+                # Redact sensitive fields before logging
+                safe_config = {k: '***REDACTED***' if k in ('api_key', 'secret', 'password', 'token', 'credential') else v
+                               for k, v in (tool_config.config or {}).items()}
+                logger.error(f"❌ Tool config was: {safe_config if safe_config else 'empty'}")
                 import traceback
                 logger.error(f"❌ Tool loading traceback: {traceback.format_exc()}")
                 # Continue with other tools instead of failing completely
