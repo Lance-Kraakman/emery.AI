@@ -3,21 +3,56 @@ import { AgentId } from '@/ddd/domain/shared/value-objects';
 import { getAgentRepository, getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import { withSystemContext } from '@/lib/db/system-context';
 import { PipedreamEventTriggerConfig, TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import crypto from 'crypto';
 
 /**
  * Pipedream Event Source Webhook Receiver
  *
  * AIDEV-NOTE: This endpoint receives events from Pipedream sources (triggers).
- * Unlike the general webhook endpoint, this doesn't require API key auth because:
- * 1. The URL is unique per agent (only we know it after source deployment)
- * 2. Pipedream signs requests with the source ID which we can verify
+ * SECURITY: Requires HMAC signature verification using PIPEDREAM_WEBHOOK_SECRET.
  *
  * When a Pipedream source fires (e.g., new Gmail email), it POSTs here with
  * the event payload. We then:
- * 1. Find the agent and matching PIPEDREAM_EVENT automation
- * 2. Extract variables from the payload for skill input mapping
- * 3. Create and execute a task with the skill
+ * 1. Verify the request signature
+ * 2. Find the agent and matching PIPEDREAM_EVENT automation
+ * 3. Extract variables from the payload for skill input mapping
+ * 4. Create and execute a task with the skill
  */
+
+/**
+ * Verify Pipedream webhook signature
+ * SECURITY: Prevents unauthorized task execution
+ */
+async function verifyPipedreamSignature(
+  signature: string | null,
+  body: string
+): Promise<boolean> {
+  const secret = process.env.PIPEDREAM_WEBHOOK_SECRET;
+  if (!secret) {
+    console.error('[PipedreamWebhook] PIPEDREAM_WEBHOOK_SECRET not configured');
+    return false;
+  }
+
+  if (!signature) {
+    console.error('[PipedreamWebhook] No signature provided');
+    return false;
+  }
+
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(body)
+    .digest('hex');
+
+  // Constant-time comparison to prevent timing attacks
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    );
+  } catch {
+    return false;
+  }
+}
 
 interface RouteParams {
   params: Promise<{
@@ -34,6 +69,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Parse the Pipedream event payload
     const rawBody = await request.text();
+
+    // SECURITY: Verify webhook signature
+    const signature = request.headers.get('x-pipedream-signature');
+    const isValid = await verifyPipedreamSignature(signature, rawBody);
+    if (!isValid) {
+      console.error('[PipedreamWebhook] Invalid or missing signature');
+      return NextResponse.json(
+        { error: 'Unauthorized: Invalid signature' },
+        { status: 401 }
+      );
+    }
     let payload: Record<string, any>;
 
     try {

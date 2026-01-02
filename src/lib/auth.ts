@@ -48,33 +48,11 @@ async function extractAppContextFromUrl(url: string | null): Promise<{ orgSlug: 
   }
 }
 
-// AIDEV-NOTE: Development bypass for testing - allows tests to authenticate as specific user
-export function getTestUserId(): string {
-  return "550e8400-e29b-41d4-a716-446655440000";
-}
-
-export function isDevelopmentBypass(): boolean {
-  return process.env.NODE_ENV === "development";
-}
-
-// AIDEV-NOTE: Reusable development bypass for API routes
-export async function getUserIdFromRequest(request: Request): Promise<string | null> {
+// AIDEV-NOTE: Get authenticated user ID from request session
+// SECURITY: Development bypass removed - use proper test authentication instead
+export async function getUserIdFromRequest(_request: Request): Promise<string | null> {
   const session = await auth();
-  
-  // Return authenticated user ID if available
-  if (session?.user?.id) {
-    return session.user.id;
-  }
-  
-  // Development bypass for testing
-  if (isDevelopmentBypass()) {
-    const testUserId = request.headers.get('x-test-user-id');
-    if (testUserId === getTestUserId()) {
-      return testUserId;
-    }
-  }
-  
-  return null;
+  return session?.user?.id ?? null;
 }
 
 export const authOptions = {
@@ -257,13 +235,14 @@ export const authOptions = {
     strategy: "database" as const,
   },
   cookies: {
+    // SECURITY: secure=true for all deployed environments, false only for localhost
     sessionToken: {
       name: `next-auth.session-token`,
       options: {
         httpOnly: true,
         sameSite: 'lax',
         path: '/',
-        secure: false, // Set to true if using HTTPS
+        secure: process.env.NEXTAUTH_URL?.startsWith('https://') ?? true,
       }
     },
     callbackUrl: {
@@ -271,7 +250,7 @@ export const authOptions = {
       options: {
         sameSite: 'lax',
         path: '/',
-        secure: false, // Set to true if using HTTPS
+        secure: process.env.NEXTAUTH_URL?.startsWith('https://') ?? true,
       }
     },
     csrfToken: {
@@ -280,7 +259,7 @@ export const authOptions = {
         httpOnly: true,
         sameSite: 'lax',
         path: '/',
-        secure: false, // Set to true if using HTTPS
+        secure: process.env.NEXTAUTH_URL?.startsWith('https://') ?? true,
       }
     }
   },

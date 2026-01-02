@@ -17,16 +17,22 @@ class DeltaLakeConfig:
     
     def __init__(self):
         # PostgreSQL configuration from environment variables
+        # SECURITY: Credentials must be provided via environment variables
         self.postgres_host = os.getenv("POSTGRES_HOST", "localhost")
         self.postgres_port = int(os.getenv("POSTGRES_PORT", "5433"))
         self.postgres_db = os.getenv("POSTGRES_DB", "emery")
         self.postgres_user = os.getenv("POSTGRES_USER", "postgres")
-        self.postgres_password = os.getenv("POSTGRES_PASSWORD", "dashlet")
-        
+        self.postgres_password = os.environ.get("POSTGRES_PASSWORD")
+        if not self.postgres_password:
+            raise ValueError("POSTGRES_PASSWORD environment variable is required")
+
         # S3 configuration from standard AWS environment variables
+        # SECURITY: AWS credentials must be provided, no defaults
         self.s3_endpoint = os.getenv("AWS_ENDPOINT_URL", "http://localhost:9000")
-        self.s3_access_key = os.getenv("AWS_ACCESS_KEY_ID", "minioadmin")
-        self.s3_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin")
+        self.s3_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+        self.s3_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+        if not self.s3_access_key or not self.s3_secret_key:
+            raise ValueError("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are required")
         self.s3_bucket = os.getenv("S3_BUCKET_NAME", "emery-files")
         self.s3_region = os.getenv("AWS_REGION", "us-east-1")
         

@@ -175,9 +175,13 @@ export async function POST(
 
 /**
  * Generate HMAC signature for webhook verification
+ * SECURITY: WEBHOOK_SECRET must be provided via environment variable
  */
 async function generateWebhookSignature(payload: any): Promise<string> {
-  const secret = process.env.WEBHOOK_SECRET || 'default-webhook-secret';
+  const secret = process.env.WEBHOOK_SECRET;
+  if (!secret) {
+    throw new Error("WEBHOOK_SECRET environment variable is required");
+  }
   const message = JSON.stringify(payload);
   
   const encoder = new TextEncoder();

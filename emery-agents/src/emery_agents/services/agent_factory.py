@@ -9,9 +9,13 @@ Provides standardized agent creation with model selection and caching support.
 
 AIDEV-NOTE: Uses Jinja2 templates from prompts/ directory for agent instructions.
 Templates are modular and composable via {% include %} directives.
+
+SECURITY: CodeAgent uses ModalExecutor for sandboxed code execution.
+This prevents LLM-generated code from accessing local resources.
 """
 
 import logging
+import os
 from typing import List, Any, Optional, Dict
 from dataclasses import dataclass
 
@@ -22,6 +26,23 @@ from ..agents.interrupt_aware_agent import InterruptAwareToolCallingAgent
 from ..prompts import build_agent_instructions
 
 logger = logging.getLogger(__name__)
+
+
+def _get_code_executor():
+    """Get Modal executor for sandboxed CodeAgent execution.
+
+    SECURITY: Always uses Modal for code execution isolation.
+    Requires MODAL_TOKEN_ID and MODAL_TOKEN_SECRET env vars.
+    """
+    import modal
+    from smolagents import ModalExecutor
+
+    image = modal.Image.debian_slim().pip_install([
+        "pandas", "numpy", "requests", "beautifulsoup4"
+    ])
+
+    logger.info("🔒 Using ModalExecutor for sandboxed CodeAgent execution")
+    return ModalExecutor(image=image)
 
 
 @dataclass
@@ -105,13 +126,16 @@ class AgentFactory:
         if config.skill_agent_type == "code_agent":
             # CodeAgent writes Python code to execute tools
             # Better for complex multi-step reasoning with conditionals and loops
+            # SECURITY: Uses ModalExecutor for sandboxed execution when configured
             logger.info("🐍 Creating CodeAgent for skill execution")
+            executor = _get_code_executor()
             agent = CodeAgent(
                 tools=config.tools,
                 model=model,
                 max_steps=config.max_steps,
                 additional_authorized_imports=["json", "re", "datetime", "math"],
                 verbosity_level=LogLevel.OFF,
+                executor=executor,  # None = local execution, ModalExecutor = sandboxed
             )
         else:
             # ToolCallingAgent uses structured function calls (default)

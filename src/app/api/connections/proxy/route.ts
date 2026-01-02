@@ -1,17 +1,19 @@
 import { NextRequest } from 'next/server';
 import { ApiKey, UserId } from '@/ddd/domain/shared/value-objects';
-import { getOAuthProxyApplicationService, getUserRepository } from '@/ddd/application/di/container';
+import { getOAuthProxyApplicationService, getUserRepository, getAgentRepository } from '@/ddd/application/di/container';
 
 /**
  * Unified OAuth Proxy - Supports both agent and user API keys
+ *
+ * SECURITY: API key mode is determined server-side based on which lookup succeeds.
+ * Client cannot specify mode to prevent privilege escalation.
  *
  * Usage: POST /api/connections/proxy
  * Headers: Authorization: Bearer {api_key}
  * Body: {
  *   "service": "gmail",
  *   "action": "send_email",
- *   "params": {...},
- *   "api_key_mode": "user" | "agent"  // defaults to "agent"
+ *   "params": {...}
  * }
  */
 export async function POST(request: NextRequest): Promise<Response> {
@@ -28,13 +30,12 @@ export async function POST(request: NextRequest): Promise<Response> {
       return Response.json({ error: 'Missing API key' }, { status: 401 });
     }
 
-    // Parse request body
-    const { service, action, params, api_key_mode = 'agent' } = await request.json();
+    // Parse request body - SECURITY: api_key_mode is validated against server-determined mode
+    const { service, action, params, api_key_mode } = await request.json();
 
     console.log('[PROXY] Request details:', {
       service,
       action,
-      api_key_mode,
       params_keys: params ? Object.keys(params) : []
     });
 
@@ -45,34 +46,37 @@ export async function POST(request: NextRequest): Promise<Response> {
       }, { status: 400 });
     }
 
-    // Get OAuth proxy service from DI container
+    // Get services from DI container
     const oauthProxyService = getOAuthProxyApplicationService();
+    const userRepository = getUserRepository();
+    const agentRepository = getAgentRepository();
 
+    const apiKey = ApiKey.fromString(apiKeyValue);
     let result;
 
-    if (api_key_mode === 'user') {
-      console.log('[PROXY] Using USER mode - looking up user by API key');
+    // SECURITY: Server determines API key type by attempting lookups
+    // Try user key first, then agent key
+    const user = await userRepository.findByApiKey(apiKey);
 
-      // User mode: Look up user by API key and use their credentials
-      const userRepository = getUserRepository();
-
-      const userApiKey = ApiKey.fromString(apiKeyValue);
-      const user = await userRepository.findByApiKey(userApiKey);
-
-      if (!user) {
-        console.log('[PROXY] ERROR: Invalid user API key');
-        return Response.json({ error: 'Invalid user API key' }, { status: 401 });
-      }
-
-      console.log('[PROXY] Found user:', {
+    if (user) {
+      console.log('[PROXY] Authenticated as USER:', {
         userId: user.id.value,
         email: user.email?.value || 'no-email'
       });
 
+      // SECURITY: Validate that client-claimed mode matches server-determined mode
+      if (api_key_mode && api_key_mode !== 'user') {
+        console.warn('[PROXY] Mode mismatch - client claimed:', api_key_mode,
+                     'but server determined: user. Possible misconfiguration or attack.');
+        return Response.json({
+          error: 'API key mode mismatch: key is a user key but client claimed agent mode'
+        }, { status: 403 });
+      }
+
       console.log('[PROXY] Calling executeUserOAuthCall...');
       result = await oauthProxyService.executeUserOAuthCall(
         user.id,
-        { service, action, params, api_key_mode }
+        { service, action, params, api_key_mode: 'user' }
       );
       console.log('[PROXY] User OAuth call result:', {
         success: result.success,
@@ -80,15 +84,29 @@ export async function POST(request: NextRequest): Promise<Response> {
         hasData: !!result.data
       });
     } else {
-      console.log('[PROXY] Using AGENT mode - looking up agent by API key');
+      // Try agent key lookup
+      const agent = await agentRepository.findByApiKey(apiKey);
 
-      // Agent mode: Look up agent by API key and use owner's credentials
-      const apiKey = ApiKey.fromString(apiKeyValue);
+      if (!agent) {
+        console.log('[PROXY] ERROR: Invalid API key - not found as user or agent key');
+        return Response.json({ error: 'Invalid API key' }, { status: 401 });
+      }
+
+      console.log('[PROXY] Authenticated as AGENT:', agent.id.value);
+
+      // SECURITY: Validate that client-claimed mode matches server-determined mode
+      if (api_key_mode && api_key_mode !== 'agent') {
+        console.warn('[PROXY] Mode mismatch - client claimed:', api_key_mode,
+                     'but server determined: agent. Possible misconfiguration or attack.');
+        return Response.json({
+          error: 'API key mode mismatch: key is an agent key but client claimed user mode'
+        }, { status: 403 });
+      }
 
       console.log('[PROXY] Calling executeAgentOAuthCall...');
       result = await oauthProxyService.executeAgentOAuthCall(
         apiKey,
-        { service, action, params, api_key_mode }
+        { service, action, params, api_key_mode: 'agent' }
       );
       console.log('[PROXY] Agent OAuth call result:', {
         success: result.success,

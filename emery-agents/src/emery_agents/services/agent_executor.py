@@ -1,11 +1,12 @@
 """Executes agent tasks with routing and tool loading."""
 
+import contextvars
 import logging
 import os
 import time
 import json
-import threading
 import uuid
+from contextlib import contextmanager
 from typing import Dict, Any, List, Optional, Union, AsyncIterator
 
 import httpx
@@ -39,19 +40,45 @@ logger = logging.getLogger(__name__)
 
 
 class AgentExecutor:
-    """Executes agent tasks. Uses thread-local context for SkillTool access."""
+    """Executes agent tasks with async-safe context management.
 
-    _context_local = threading.local()  # Shares context with SkillTool
+    SECURITY: Uses contextvars.ContextVar instead of threading.local()
+    to prevent context leakage between async requests.
+    """
+
+    # Async-safe context variable for ExecutionContext
+    _context_var: contextvars.ContextVar[Optional[ExecutionContext]] = \
+        contextvars.ContextVar('execution_context', default=None)
 
     @classmethod
     def set_current_context(cls, context: Optional[ExecutionContext]) -> None:
-        """Store execution context for skill access in current thread."""
-        cls._context_local.context = context
+        """Store execution context for skill access in current async context."""
+        cls._context_var.set(context)
 
     @classmethod
     def get_current_context(cls) -> Optional[ExecutionContext]:
-        """Get execution context for current thread (used by SkillTool)."""
-        return getattr(cls._context_local, 'context', None)
+        """Get execution context for current async context (used by SkillTool)."""
+        return cls._context_var.get()
+
+    @classmethod
+    @contextmanager
+    def execution_scope(cls, context: ExecutionContext):
+        """Context manager ensuring proper cleanup of execution context.
+
+        SECURITY: Always cleans up context even on exception,
+        preventing sensitive data from leaking between requests.
+
+        Usage:
+            with AgentExecutor.execution_scope(context):
+                # Execute agent task
+                pass
+            # Context is automatically cleaned up
+        """
+        token = cls._context_var.set(context)
+        try:
+            yield context
+        finally:
+            cls._context_var.reset(token)
 
     def __init__(
         self,
