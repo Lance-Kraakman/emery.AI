@@ -42,10 +42,14 @@ services:
       AWS_REGION: us-east-1
       S3_BUCKET_NAME: emery-files
       S3_FORCE_PATH_STYLE: true
+      # Redis for distributed rate limiting and caching
+      REDIS_URL: redis://redis-integration:6379
     depends_on:
       postgres-integration:
         condition: service_healthy
       minio-integration:
+        condition: service_healthy
+      redis-integration:
         condition: service_healthy
       agent-chat-integration:
         condition: service_healthy
@@ -56,6 +60,22 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    networks:
+      - integration-test-network
+
+  redis-integration:
+    image: redis:7-alpine
+    container_name: emery-integration-redis
+    ports:
+      - "127.0.0.1:6380:6379"  # Different from potential dev Redis (6379)
+    command: redis-server --appendonly yes
+    volumes:
+      - integration_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - integration-test-network
 
@@ -193,6 +213,7 @@ services:
 volumes:
   integration_postgres_data:  # Isolated volume for integration tests
   integration_minio_data:     # MinIO data for S3 storage testing
+  integration_redis_data:     # Redis data for caching
 
 networks:
   integration-test-network:
