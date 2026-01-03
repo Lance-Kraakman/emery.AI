@@ -149,7 +149,6 @@
     "geist": "^1.4.2",
     "google-protobuf": "^4.0.0",
     "input-otp": "^1.4.2",
-    "ioredis": "^5.8.2",
     "lexical": "^0.20.0",
     "llama-cloud-services": "^0.1.0",
     "llamaindex": "^0.11.26",

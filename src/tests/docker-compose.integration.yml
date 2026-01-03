@@ -42,17 +42,13 @@ services:
       AWS_REGION: us-east-1
       S3_BUCKET_NAME: emery-files
       S3_FORCE_PATH_STYLE: true
-      # Redis for server-side caching (ioredis)
-      REDIS_URL: redis://redis-integration:6379
-      # Upstash-compatible REST API for rate limiting (Edge Runtime)
+      # Upstash-compatible REST API via SRH (rate limiting + caching)
       UPSTASH_REDIS_REST_URL: http://srh-integration:80
       UPSTASH_REDIS_REST_TOKEN: local_development_token
     depends_on:
       postgres-integration:
         condition: service_healthy
       minio-integration:
-        condition: service_healthy
-      redis-integration:
         condition: service_healthy
       srh-integration:
         condition: service_healthy
