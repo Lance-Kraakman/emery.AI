@@ -1907,3 +1907,137 @@ export const pages = pgTable("pages", {
     `,
   }),
 ]);
+
+// ============================================================================
+// AUDIT TRAIL TABLES
+// ============================================================================
+
+/**
+ * Audit Events - Tracks all system actions for audit trail
+ * Used for: agent executions, skill changes, security events, etc.
+ */
+export const auditEvents = pgTable("audit_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+
+  // Event identification
+  eventType: text("event_type").notNull(), // 'database', 'agent', 'skill', 'app', 'security'
+  eventCategory: text("event_category").notNull(), // 'row_crud', 'task_execution', 'definition', etc.
+  eventAction: text("event_action").notNull(), // 'create', 'update', 'delete', 'execute', etc.
+
+  // Actor information
+  actorType: text("actor_type").notNull(), // 'user', 'agent', 'system', 'webhook', 'public_app'
+  actorId: text("actor_id"),
+  actorName: text("actor_name"),
+
+  // Target resource
+  resourceType: text("resource_type").notNull(), // 'row', 'table', 'agent', 'skill', 'task', etc.
+  resourceId: text("resource_id"),
+  resourceName: text("resource_name"),
+  parentResourceType: text("parent_resource_type"),
+  parentResourceId: text("parent_resource_id"),
+
+  // Event data (flexible JSONB)
+  eventData: jsonb("event_data").notNull().default({}),
+  previousData: jsonb("previous_data"),
+  metadata: jsonb("metadata").default({}),
+
+  // Status and timing
+  occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+  durationMs: integer("duration_ms"),
+  success: boolean("success").notNull().default(true),
+  error: text("error"),
+
+  // Retention management
+  expiresAt: timestamp("expires_at"),
+  archivedAt: timestamp("archived_at"),
+}, (table) => [
+  index("audit_events_org_occurred_idx").on(table.organizationId, table.occurredAt),
+  index("audit_events_resource_idx").on(table.resourceType, table.resourceId),
+  index("audit_events_actor_idx").on(table.actorType, table.actorId),
+  index("audit_events_expires_idx").on(table.expiresAt),
+
+  // RLS: Tenant isolation
+  pgPolicy("audit_events_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  }),
+]);
+
+/**
+ * Row History - Tracks changes to dynamic table rows (Baserow-style)
+ * Provides field-level diff for each row change
+ */
+export const rowHistory = pgTable("row_history", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  tableId: bigint("table_id", { mode: "number" }).notNull().references(() => tables.id, { onDelete: 'cascade' }),
+  rowId: text("row_id").notNull(),
+
+  // Change information
+  operation: text("operation").notNull(), // 'INSERT', 'UPDATE', 'DELETE'
+  version: integer("version").notNull().default(1),
+
+  // Change data
+  fieldChanges: jsonb("field_changes").$type<Record<string, { old: unknown; new: unknown }>>(),
+  rowSnapshot: jsonb("row_snapshot").$type<Record<string, unknown>>(),
+
+  // Actor
+  changedByType: text("changed_by_type").notNull(),
+  changedById: text("changed_by_id"),
+  changedByName: text("changed_by_name"),
+
+  // Timing
+  changedAt: timestamp("changed_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"),
+}, (table) => [
+  index("row_history_table_row_idx").on(table.tableId, table.rowId),
+  index("row_history_org_time_idx").on(table.organizationId, table.changedAt),
+  index("row_history_expires_idx").on(table.expiresAt),
+
+  // RLS: Tenant isolation
+  pgPolicy("row_history_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  }),
+]);
+
+/**
+ * Task Tool Calls - Detailed agent execution tracing
+ * Records each tool call made during task execution (for max plan)
+ */
+export const taskToolCalls = pgTable("task_tool_calls", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  taskId: uuid("task_id").notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+
+  // Tool execution details
+  toolName: text("tool_name").notNull(),
+  toolInput: jsonb("tool_input"),
+  toolOutput: jsonb("tool_output"),
+  toolError: text("tool_error"),
+
+  // Timing
+  startedAt: timestamp("started_at").notNull(),
+  completedAt: timestamp("completed_at"),
+  durationMs: integer("duration_ms"),
+
+  // Sequence and usage
+  callIndex: integer("call_index").notNull(),
+  tokensUsed: integer("tokens_used").default(0),
+}, (table) => [
+  index("task_tool_calls_task_idx").on(table.taskId, table.callIndex),
+  index("task_tool_calls_org_time_idx").on(table.organizationId, table.startedAt),
+
+  // RLS: Tenant isolation
+  pgPolicy("task_tool_calls_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  }),
+]);

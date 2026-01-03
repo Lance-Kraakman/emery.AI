@@ -57,6 +57,7 @@ import type { CreditUsageApplicationService } from '@/ddd/application/services/b
 import type { InvoiceApplicationService } from '@/ddd/application/services/billing/invoice-application-service';
 import type { StorageQuotaApplicationService } from '@/ddd/application/services/billing/storage-quota-application-service';
 import type { StorageRecalculationApplicationService } from '@/ddd/application/services/billing/storage-recalculation-application-service';
+import type { AuditApplicationService } from '@/ddd/application/services/audit/audit-application-service';
 
 import { DIContainer } from './container';
 
@@ -127,6 +128,9 @@ type ServiceMap = {
   InvoiceApplicationService: InvoiceApplicationService;
   StorageQuotaApplicationService: StorageQuotaApplicationService;
   StorageRecalculationApplicationService: StorageRecalculationApplicationService;
+
+  // Audit Services
+  AuditApplicationService: AuditApplicationService;
 };
 
 /**
@@ -269,3 +273,6 @@ export const getCreditUsageApplicationService = createGetter('CreditUsageApplica
 export const getInvoiceApplicationService = createGetter('InvoiceApplicationService');
 export const getStorageQuotaApplicationService = createGetter('StorageQuotaApplicationService');
 export const getStorageRecalculationApplicationService = createGetter('StorageRecalculationApplicationService');
+
+// Audit application service getters
+export const getAuditApplicationService = createGetter('AuditApplicationService');
