@@ -3,12 +3,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { getUserOAuthConnectionsPaginated, getAppConnectionUrl, disconnectOAuthAccount, getAvailableAppsPaginated } from '@/app/actions/connections';
+import { getOwnerDelegationsSummary, revokeServiceFromAgent, type DelegationSummaryItem } from '@/app/actions/delegations';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UnifiedConnectionsGrid } from './components/UnifiedConnectionsGrid';
+import { DelegationsGrid } from './components/DelegationsGrid';
 import { ConnectionDTO as Connection } from '@/app/mappers/connection-mapper';
+import { toast } from 'sonner';
 
-type TabValue = 'connections' | 'browse';
+type TabValue = 'connections' | 'browse' | 'delegations';
 
 export function ConnectionsManager() {
   const [activeTab, setActiveTab] = useState<TabValue>('connections');
@@ -35,6 +38,11 @@ export function ConnectionsManager() {
   const [appsHasMore, setAppsHasMore] = useState(false);
   const [appsSearch, setAppsSearch] = useState('');
 
+  // Agent Delegations tab state
+  const [delegations, setDelegations] = useState<DelegationSummaryItem[]>([]);
+  const [delegationsLoading, setDelegationsLoading] = useState(false);
+  const [revokingDelegation, setRevokingDelegation] = useState<string | null>(null);
+
   // Shared state
   const [error, setError] = useState<string | null>(null);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
@@ -49,6 +57,13 @@ export function ConnectionsManager() {
   useEffect(() => {
     if (activeTab === 'browse' && availableApps.length === 0 && !appsLoading) {
       loadAvailableApps();
+    }
+  }, [activeTab]);
+
+  // Load delegations when Delegations tab is accessed
+  useEffect(() => {
+    if (activeTab === 'delegations' && delegations.length === 0 && !delegationsLoading) {
+      loadDelegations();
     }
   }, [activeTab]);
 
@@ -224,6 +239,57 @@ export function ConnectionsManager() {
     // Note: loadAvailableApps will be triggered by the useEffect below
   }, []);
 
+  // Load delegations for the current user
+  const loadDelegations = useCallback(async () => {
+    try {
+      setDelegationsLoading(true);
+      setError(null);
+
+      const result = await getOwnerDelegationsSummary();
+
+      if (result.success && result.data) {
+        setDelegations(result.data);
+      } else {
+        setError(result.error || 'Failed to load delegations');
+      }
+    } catch (err) {
+      setError('Failed to load delegations');
+      console.error('Error loading delegations:', err);
+    } finally {
+      setDelegationsLoading(false);
+    }
+  }, []);
+
+  // Handle revoking a service from an agent
+  const handleRevokeDelegation = useCallback(async (agentId: number, service: string) => {
+    const confirmRevoke = confirm(
+      `Are you sure you want to revoke ${service} access from this agent?`
+    );
+    if (!confirmRevoke) return;
+
+    try {
+      setRevokingDelegation(`${agentId}-${service}`);
+      setError(null);
+
+      const result = await revokeServiceFromAgent(agentId, service);
+
+      if (result.success) {
+        toast.success('Service access revoked');
+        // Refresh delegations
+        await loadDelegations();
+      } else {
+        setError(result.error || 'Failed to revoke access');
+        toast.error(result.error || 'Failed to revoke access');
+      }
+    } catch (err) {
+      setError('Failed to revoke access');
+      console.error('Error revoking delegation:', err);
+      toast.error('Failed to revoke access');
+    } finally {
+      setRevokingDelegation(null);
+    }
+  }, [loadDelegations]);
+
   // Trigger app reload when search term changes
   useEffect(() => {
     if (activeTab === 'browse') {
@@ -317,7 +383,11 @@ export function ConnectionsManager() {
         <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
           <div className="text-destructive font-medium">{error}</div>
           <button
-            onClick={() => activeTab === 'connections' ? loadConnections() : loadAvailableApps(true)}
+            onClick={() => {
+              if (activeTab === 'connections') loadConnections();
+              else if (activeTab === 'browse') loadAvailableApps(true);
+              else if (activeTab === 'delegations') loadDelegations();
+            }}
             className="mt-2 text-destructive hover:text-destructive/80 text-sm underline transition-colors"
           >
             Try again
@@ -326,12 +396,15 @@ export function ConnectionsManager() {
       )}
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabValue)}>
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-lg grid-cols-3">
           <TabsTrigger value="connections">
             My Connections {connections.length > 0 && `(${connections.length})`}
           </TabsTrigger>
           <TabsTrigger value="browse">
             Browse Apps {appsTotal > 0 && `(${appsTotal})`}
+          </TabsTrigger>
+          <TabsTrigger value="delegations">
+            Agent Delegations
           </TabsTrigger>
         </TabsList>
 
@@ -380,6 +453,16 @@ export function ConnectionsManager() {
               isSearching={appsLoading}
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="delegations" className="mt-6">
+          <DelegationsGrid
+            delegations={delegations}
+            loading={delegationsLoading}
+            revoking={revokingDelegation}
+            onRevoke={handleRevokeDelegation}
+            onRefresh={loadDelegations}
+          />
         </TabsContent>
       </Tabs>
     </div>

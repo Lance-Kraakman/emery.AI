@@ -163,8 +163,8 @@ export function ShareDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Share {resourceName}</DialogTitle>
           <DialogDescription>
             Manage who can access this {resourceType}
@@ -172,8 +172,8 @@ export function ShareDialog({
         </DialogHeader>
 
         {/* Main Tabs: Current Access | Grant Access */}
-        <Tabs value={mainTab} onValueChange={setMainTab} className="flex-1 flex flex-col">
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs value={mainTab} onValueChange={setMainTab} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <TabsList className="grid w-full grid-cols-2 shrink-0">
             <TabsTrigger value="current" className="gap-2">
               <Users className="h-4 w-4" />
               Current Access
@@ -185,7 +185,7 @@ export function ShareDialog({
           </TabsList>
 
           {/* Current Access Tab */}
-          <TabsContent value="current" className="flex-1 overflow-y-auto mt-4">
+          <TabsContent value="current" className="flex-1 overflow-y-auto mt-4 min-h-0">
             {isLoadingAccess ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -245,17 +245,17 @@ export function ShareDialog({
           </TabsContent>
 
           {/* Grant Access Tab */}
-          <TabsContent value="grant" className="flex-1 overflow-y-auto mt-4">
-            <div className="grid grid-cols-2 gap-4">
+          <TabsContent value="grant" className="flex-1 flex flex-col mt-4 min-h-0 overflow-hidden">
+            <div className="grid grid-cols-2 gap-4 flex-1 min-h-0 overflow-hidden">
               {/* Left Side: Select Users/Teams */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium">Select People or Teams</h3>
-                <Tabs value={grantTab} onValueChange={setGrantTab} className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
+              <div className="flex flex-col min-h-0 overflow-hidden">
+                <h3 className="text-sm font-medium shrink-0 mb-4">Select People or Teams</h3>
+                <Tabs value={grantTab} onValueChange={setGrantTab} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                  <TabsList className="grid w-full grid-cols-2 shrink-0">
                     <TabsTrigger value="users">Users</TabsTrigger>
                     <TabsTrigger value="teams">Teams</TabsTrigger>
                   </TabsList>
-                  <TabsContent value="users" className="mt-4">
+                  <TabsContent value="users" className="mt-4 flex-1 overflow-y-auto min-h-0">
                     <ResourceSelector
                       resourceType="user"
                       selectedResourceIds={selectedUsers}
@@ -263,7 +263,7 @@ export function ShareDialog({
                       className="border-0 shadow-none"
                     />
                   </TabsContent>
-                  <TabsContent value="teams" className="mt-4">
+                  <TabsContent value="teams" className="mt-4 flex-1 overflow-y-auto min-h-0">
                     <ResourceSelector
                       resourceType="team"
                       selectedResourceIds={selectedTeams}

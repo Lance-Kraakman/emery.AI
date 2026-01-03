@@ -5,15 +5,17 @@ import { BaseModal } from './BaseModal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, ShieldCheck, ShieldX, Trash2, AlertCircle } from 'lucide-react';
+import { Loader2, ShieldCheck, ShieldX, Trash2, AlertCircle, Users, Info, Settings } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import {
   getAgentDelegation,
   updateAgentDelegationServices,
-  revokeAgentDelegation
+  revokeAgentDelegation,
+  getAgentAccessCount
 } from '@/app/actions/delegations';
 import { getConnectionIcon, formatConnectionName } from '../../lib/delegation-helpers';
+import { ShareDialog } from '@/components/permissions/ShareDialog';
 
 interface AuthorizedConnectionsModalProps {
   isOpen: boolean;
@@ -42,6 +44,8 @@ export function AuthorizedConnectionsModal({
   const [updating, setUpdating] = useState<string | null>(null);
   const [revoking, setRevoking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [accessCount, setAccessCount] = useState<number>(0);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   // Load delegation data when modal opens
   useEffect(() => {
@@ -60,7 +64,16 @@ export function AuthorizedConnectionsModal({
       setLoading(true);
       setError(null);
 
-      const result = await getAgentDelegation(agent.id);
+      // Fetch delegation data and access count in parallel
+      const [result, accessResult] = await Promise.all([
+        getAgentDelegation(agent.id),
+        getAgentAccessCount(agent.id)
+      ]);
+
+      // Set access count
+      if (accessResult.success) {
+        setAccessCount(accessResult.count);
+      }
 
       if (!result.success || !result.data) {
         setError(result.error || 'Failed to load delegation data');
@@ -186,6 +199,36 @@ export function AuthorizedConnectionsModal({
           </div>
         )}
 
+        {/* RBAC Access Banner */}
+        {!loading && !error && (
+          <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-md">
+            <Users className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-blue-900 dark:text-blue-100">
+                <span className="font-medium">
+                  {accessCount === 0
+                    ? 'No users or teams have'
+                    : `${accessCount} ${accessCount === 1 ? 'user or team has' : 'users or teams have'}`}
+                </span> access to this agent.
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                {accessCount > 0
+                  ? 'They can trigger actions using the services below.'
+                  : 'Only you can use this agent. Share it to let others trigger it.'}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900"
+              onClick={() => setShareDialogOpen(true)}
+            >
+              <Settings className="w-3 h-3 mr-1" />
+              Manage Access
+            </Button>
+          </div>
+        )}
+
         {/* No Connections State */}
         {!loading && !error && connections.length === 0 && (
           <div className="py-12 text-center text-muted-foreground">
@@ -300,6 +343,21 @@ export function AuthorizedConnectionsModal({
           </>
         )}
       </div>
+
+      {/* Share Dialog for managing RBAC access */}
+      <ShareDialog
+        open={shareDialogOpen}
+        onOpenChange={(open) => {
+          setShareDialogOpen(open);
+          if (!open) {
+            // Refresh access count when dialog closes
+            loadDelegationData();
+          }
+        }}
+        resourceType="agent"
+        resourceId={agent.id}
+        resourceName={agent.name}
+      />
     </BaseModal>
   );
 }
