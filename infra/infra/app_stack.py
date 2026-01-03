@@ -79,10 +79,19 @@ class AppStack(Stack):
             print("Building agent image from source")
             return ecs.ContainerImage.from_asset("../emery-agents")
 
-    def __init__(self, scope: Construct, construct_id: str, data_stack: DataStack, env_name: str, **kwargs) -> None:
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        data_stack: DataStack,
+        env_name: str,
+        waf_acl_arn: str = None,
+        **kwargs
+    ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         prefix = env_name.capitalize()
+        self.waf_acl_arn = waf_acl_arn
 
         # Default AWS region - can be overridden by CDK context
         aws_region = 'ap-southeast-2'
@@ -422,6 +431,8 @@ class AppStack(Stack):
             # Custom domain configuration
             domain_names=[custom_domain] if custom_domain else None,
             certificate=certificate,
+            # WAF protection - rate limiting and managed security rules
+            web_acl_id=self.waf_acl_arn,
             comment=f"CloudFront distribution for {prefix} Emery application",
             enabled=True,
             price_class=cloudfront.PriceClass.PRICE_CLASS_ALL  # All edge locations including APAC (Sydney)

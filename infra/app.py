@@ -5,6 +5,7 @@ import aws_cdk as cdk
 
 from infra.data_stack import DataStack
 from infra.app_stack import AppStack
+from infra.waf_stack import WAFStack
 
 
 app = cdk.App()
@@ -40,13 +41,29 @@ data_stack = DataStack(
     env=cdk_env
 )
 
+# Create WAF stack in us-east-1 (required for CloudFront)
+# WAF must be deployed before app stack since CloudFront references the Web ACL
+waf_stack_name = f"Emery-WAF-{env_name.capitalize()}"
+waf_env = cdk.Environment(account=aws_account, region="us-east-1")
+
+waf_stack = WAFStack(
+    app,
+    waf_stack_name,
+    env_name=env_name,
+    env=waf_env,
+    cross_region_references=True  # Enable cross-region references for ARN export
+)
+
 # Create the app stack with reference to data stack (ECS services, load balancers, CloudFront)
 app_stack = AppStack(
     app,
     app_stack_name,
     data_stack=data_stack,
     env_name=env_name,
-    env=cdk_env
+    waf_acl_arn=waf_stack.web_acl.attr_arn,
+    env=cdk_env,
+    cross_region_references=True  # Enable cross-region references for WAF ARN
 )
+app_stack.add_dependency(waf_stack)
 
 app.synth()
