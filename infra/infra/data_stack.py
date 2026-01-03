@@ -220,6 +220,9 @@ class DataStack(Stack):
             # Modal for sandboxed CodeAgent execution
             "MODAL_TOKEN_ID": ecs.Secret.from_secrets_manager(self.app_secrets_object, "MODAL_TOKEN_ID"),
             "MODAL_TOKEN_SECRET": ecs.Secret.from_secrets_manager(self.app_secrets_object, "MODAL_TOKEN_SECRET"),
+            # Upstash Redis for distributed rate limiting (Edge Runtime compatible)
+            "UPSTASH_REDIS_REST_URL": ecs.Secret.from_secrets_manager(self.app_secrets_object, "UPSTASH_REDIS_REST_URL"),
+            "UPSTASH_REDIS_REST_TOKEN": ecs.Secret.from_secrets_manager(self.app_secrets_object, "UPSTASH_REDIS_REST_TOKEN"),
         }
 
         # ========== CLOUD MAP ==========
