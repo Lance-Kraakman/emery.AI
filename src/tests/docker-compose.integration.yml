@@ -42,15 +42,14 @@ services:
       AWS_REGION: us-east-1
       S3_BUCKET_NAME: emery-files
       S3_FORCE_PATH_STYLE: true
-      # Upstash-compatible REST API via SRH (rate limiting + caching)
-      UPSTASH_REDIS_REST_URL: http://srh-integration:80
-      UPSTASH_REDIS_REST_TOKEN: local_development_token
+      # Redis for caching (ioredis)
+      REDIS_URL: redis://redis-integration:6379
     depends_on:
       postgres-integration:
         condition: service_healthy
       minio-integration:
         condition: service_healthy
-      srh-integration:
+      redis-integration:
         condition: service_healthy
       agent-chat-integration:
         condition: service_healthy
@@ -74,29 +73,6 @@ services:
       - integration_redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - integration-test-network
-
-  # Serverless Redis HTTP (SRH) - Upstash-compatible REST API for local development
-  # Allows @upstash/redis client to work locally without external Upstash service
-  # See: https://upstash.com/docs/redis/sdks/ts/developing
-  srh-integration:
-    image: hiett/serverless-redis-http:latest
-    container_name: emery-integration-srh
-    ports:
-      - "127.0.0.1:8079:80"  # Upstash-compatible REST API
-    environment:
-      SRH_MODE: env
-      SRH_TOKEN: local_development_token
-      SRH_CONNECTION_STRING: redis://redis-integration:6379
-    depends_on:
-      redis-integration:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
       interval: 5s
       timeout: 5s
       retries: 5

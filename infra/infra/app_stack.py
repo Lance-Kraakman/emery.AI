@@ -229,6 +229,9 @@ class AppStack(Stack):
             f"{prefix}FrontendContainer",
             image=app_image,
             port_mappings=[ecs.PortMapping(container_port=3000)],
+            environment={
+                "REDIS_URL": data_stack.redis_endpoint,  # ElastiCache for caching
+            },
             secrets={
                 "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
                 **data_stack.app_secrets_map
@@ -274,6 +277,13 @@ class AppStack(Stack):
             data_stack.db_instance,
             ec2.Port.tcp(5432),
             "Allow frontend service to access database"
+        )
+
+        # Grant Redis access to frontend service
+        data_stack.redis_sg.add_ingress_rule(
+            peer=frontend_service.service.connections.security_groups[0],
+            connection=ec2.Port.tcp(6379),
+            description="Allow frontend service to access ElastiCache Redis"
         )
 
         # Configure the health check for the frontend service (Blue target group)

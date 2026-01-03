@@ -6,7 +6,7 @@ export {
   type ICacheService,
   type CacheOptions,
   NoOpCacheService,
-  UpstashCacheService,
+  IoRedisCacheService,
   createCacheService,
   getCacheService,
 } from './cache-service';

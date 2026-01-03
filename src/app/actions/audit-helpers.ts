@@ -1,10 +1,11 @@
-'use server';
-
 /**
  * Row Audit Logging Helpers
  *
  * Encapsulates audit logging logic for row operations.
  * Uses non-blocking writes via AuditApplicationService.
+ *
+ * NOTE: This is NOT a Server Actions file - these are internal helpers
+ * called from server-side code only (rows.ts, etc.)
  */
 
 import { getAuditApplicationService } from '@/ddd/application/di/container';

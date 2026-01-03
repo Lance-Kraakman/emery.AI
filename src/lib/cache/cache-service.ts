@@ -1,18 +1,18 @@
 /**
  * Distributed Cache Service
  *
- * Upstash Redis-backed caching layer.
+ * Redis-backed caching layer using ioredis.
  *
  * Features:
  * - Get/Set/Delete operations with TTL
  * - Tag-based invalidation for cache groups
  * - Graceful degradation when Redis unavailable
  *
- * Local Development: Uses SRH (Serverless Redis HTTP) from docker-compose
- * Production: Uses Upstash Redis
+ * Local Development: Docker Redis
+ * Production: AWS ElastiCache
  */
 
-import { Redis as UpstashRedis } from '@upstash/redis';
+import Redis from 'ioredis';
 
 export interface CacheOptions {
   /** TTL in seconds */
@@ -56,20 +56,46 @@ export class NoOpCacheService implements ICacheService {
 }
 
 /**
- * Upstash Redis cache service.
- * Uses REST API, works from edge functions, serverless, and local dev (via SRH).
+ * ioredis cache service for ElastiCache (production) and Docker Redis (local).
  */
-export class UpstashCacheService implements ICacheService {
-  private readonly redis: UpstashRedis;
+export class IoRedisCacheService implements ICacheService {
+  private readonly redis: Redis;
   private readonly keyPrefix: string;
-  private connected: boolean = true;
+  private connected: boolean = false;
 
-  constructor(url: string, token: string, keyPrefix: string = 'emery:') {
-    this.redis = new UpstashRedis({
-      url,
-      token,
+  constructor(url: string, keyPrefix: string = 'emery:') {
+    this.redis = new Redis(url, {
+      retryStrategy: (times) => {
+        if (times > 3) {
+          console.warn('[Cache] Redis connection failed after 3 retries');
+          return null; // Stop retrying
+        }
+        return Math.min(times * 100, 3000);
+      },
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: true,
+      lazyConnect: true,
     });
     this.keyPrefix = keyPrefix;
+
+    this.redis.on('connect', () => {
+      this.connected = true;
+      console.log('[Cache] Connected to Redis');
+    });
+
+    this.redis.on('error', (error) => {
+      this.connected = false;
+      console.error('[Cache] Redis error:', error.message);
+    });
+
+    this.redis.on('close', () => {
+      this.connected = false;
+    });
+
+    // Attempt connection
+    this.redis.connect().catch(() => {
+      // Connection error handled by event listener
+    });
   }
 
   private prefixKey(key: string): string {
@@ -81,9 +107,12 @@ export class UpstashCacheService implements ICacheService {
   }
 
   async get<T>(key: string): Promise<T | null> {
+    if (!this.connected) return null;
+
     try {
-      const result = await this.redis.get<T>(this.prefixKey(key));
-      return result;
+      const result = await this.redis.get(this.prefixKey(key));
+      if (!result) return null;
+      return JSON.parse(result) as T;
     } catch (error) {
       console.error('[Cache] Get error:', error);
       return null;
@@ -91,13 +120,14 @@ export class UpstashCacheService implements ICacheService {
   }
 
   async set<T>(key: string, value: T, options: CacheOptions): Promise<void> {
+    if (!this.connected) return;
+
     try {
       const prefixedKey = this.prefixKey(key);
+      const serialized = JSON.stringify(value);
 
       // Set the value with TTL
-      await this.redis.set(prefixedKey, value, {
-        ex: options.ttlSeconds,
-      });
+      await this.redis.setex(prefixedKey, options.ttlSeconds, serialized);
 
       // Register key with tags for later invalidation
       if (options.tags && options.tags.length > 0) {
@@ -116,6 +146,8 @@ export class UpstashCacheService implements ICacheService {
   }
 
   async delete(key: string): Promise<void> {
+    if (!this.connected) return;
+
     try {
       await this.redis.del(this.prefixKey(key));
     } catch (error) {
@@ -124,6 +156,8 @@ export class UpstashCacheService implements ICacheService {
   }
 
   async invalidateByTag(tag: string): Promise<number> {
+    if (!this.connected) return 0;
+
     try {
       const tagKey = this.tagSetKey(tag);
       const keys = await this.redis.smembers(tagKey);
@@ -152,17 +186,20 @@ export class UpstashCacheService implements ICacheService {
   isConnected(): boolean {
     return this.connected;
   }
+
+  async disconnect(): Promise<void> {
+    await this.redis.quit();
+  }
 }
 
 /**
  * Create the cache service based on environment variables.
  *
- * Requires: UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
+ * Requires: REDIS_URL
  * Falls back to no-op cache if not configured.
  */
 export function createCacheService(): ICacheService {
-  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
-  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const redisUrl = process.env.REDIS_URL;
 
   // Check if caching is explicitly disabled
   if (process.env.CACHE_ENABLED === 'false') {
@@ -170,10 +207,10 @@ export function createCacheService(): ICacheService {
     return new NoOpCacheService();
   }
 
-  // Use Upstash (production or local via SRH)
-  if (upstashUrl && upstashToken) {
-    console.log('[Cache] Using Upstash Redis');
-    return new UpstashCacheService(upstashUrl, upstashToken);
+  // Use Redis (ElastiCache in production, Docker Redis locally)
+  if (redisUrl) {
+    console.log('[Cache] Using Redis:', redisUrl.replace(/\/\/.*@/, '//*****@'));
+    return new IoRedisCacheService(redisUrl);
   }
 
   // No Redis configured - use no-op

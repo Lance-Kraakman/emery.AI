@@ -5,6 +5,7 @@ from aws_cdk import (
     aws_ecs as ecs,
     aws_rds as rds,
     aws_s3 as s3,
+    aws_elasticache as elasticache,
     aws_secretsmanager as secretsmanager,
     aws_servicediscovery as servicediscovery,
     Duration,
@@ -98,6 +99,41 @@ class DataStack(Stack):
             backup_retention=Duration.days(7), # Enable backups for better data management
             removal_policy=RemovalPolicy.RETAIN,  # Protect database from accidental deletion
         )
+
+        # ========== ELASTICACHE (REDIS) ==========
+        # Security group for ElastiCache
+        self.redis_sg = ec2.SecurityGroup(
+            self, f"{prefix}RedisSg",
+            vpc=self.vpc,
+            description="Security group for ElastiCache Redis cluster"
+        )
+
+        # Create ElastiCache subnet group
+        redis_subnet_group = elasticache.CfnSubnetGroup(
+            self, f"{prefix}RedisSubnetGroup",
+            description="Subnet group for ElastiCache Redis",
+            subnet_ids=[subnet.subnet_id for subnet in self.vpc.private_subnets],
+            cache_subnet_group_name=f"{env_name}-redis-subnets"
+        )
+
+        # Create ElastiCache Redis cluster (single node for cost efficiency)
+        # Use cache.t4g.micro for ARM-based, cost-effective caching (~$9/month)
+        self.redis_cluster = elasticache.CfnCacheCluster(
+            self, f"{prefix}RedisCluster",
+            cache_node_type="cache.t4g.micro",
+            engine="redis",
+            num_cache_nodes=1,
+            cluster_name=f"{env_name}-emery-redis",
+            vpc_security_group_ids=[self.redis_sg.security_group_id],
+            cache_subnet_group_name=redis_subnet_group.cache_subnet_group_name,
+            engine_version="7.0",
+            port=6379,
+            auto_minor_version_upgrade=True,
+        )
+        self.redis_cluster.add_dependency(redis_subnet_group)
+
+        # Store Redis endpoint for use in app_stack
+        self.redis_endpoint = f"redis://{self.redis_cluster.attr_redis_endpoint_address}:{self.redis_cluster.attr_redis_endpoint_port}"
 
         # ========== SECURITY GROUPS ==========
         # Create a shared security group for DB clients
@@ -220,9 +256,6 @@ class DataStack(Stack):
             # Modal for sandboxed CodeAgent execution
             "MODAL_TOKEN_ID": ecs.Secret.from_secrets_manager(self.app_secrets_object, "MODAL_TOKEN_ID"),
             "MODAL_TOKEN_SECRET": ecs.Secret.from_secrets_manager(self.app_secrets_object, "MODAL_TOKEN_SECRET"),
-            # Upstash Redis for distributed rate limiting (Edge Runtime compatible)
-            "UPSTASH_REDIS_REST_URL": ecs.Secret.from_secrets_manager(self.app_secrets_object, "UPSTASH_REDIS_REST_URL"),
-            "UPSTASH_REDIS_REST_TOKEN": ecs.Secret.from_secrets_manager(self.app_secrets_object, "UPSTASH_REDIS_REST_TOKEN"),
         }
 
         # ========== CLOUD MAP ==========
@@ -251,3 +284,4 @@ class DataStack(Stack):
         CfnOutput(self, "DatabaseEndpoint", value=self.db_instance.db_instance_endpoint_address, description="Database endpoint")
         CfnOutput(self, "BucketName", value=self.storage_bucket.bucket_name, description="S3 bucket name")
         CfnOutput(self, "BastionPublicIp", value=bastion_host.instance_public_ip, description="Bastion host public IP")
+        CfnOutput(self, "RedisEndpoint", value=self.redis_endpoint, description="ElastiCache Redis endpoint")
