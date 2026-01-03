@@ -27,6 +27,7 @@ import { ViewType } from "@/ddd/domain/views/value-objects/view-type";
 import { ViewConfig } from "@/ddd/domain/views/value-objects/view-config";
 import { ViewMapper, type ViewDTO } from "@/app/mappers/view-mapper";
 import type { Result, CreateViewData, UpdateViewData } from "./types";
+import { getCacheService, CACHE_KEYS, CACHE_TAGS } from "@/lib/cache";
 
 /**
  * Create a new view
@@ -746,12 +747,13 @@ export async function executeView(
  * Aggregations are computed at the backend (Python/Polars via gRPC), never in Node.js/browser.
  * This follows Baserow's architecture pattern for backend aggregation computation.
  *
- * TODO-CACHING: Add caching layer with configurable TTL for aggregation results.
- * Cache key should include: viewId, filters, timestamp bucket (e.g., rounded to nearest 5 minutes).
- * Invalidate cache on data changes or manual refresh.
+ * CACHING: Results are cached for 5 minutes. Cache is invalidated on:
+ * - Row mutations (via table stats tag)
+ * - View configuration changes (via view tag)
  */
 export async function executeViewAggregations(
-  viewId: number
+  viewId: number,
+  options?: { skipCache?: boolean }
 ): Promise<{
   results: Array<{
     fieldId: number;
@@ -770,6 +772,33 @@ export async function executeViewAggregations(
     await requireCurrentOrganization();
 
     const viewService = getViewApplicationService();
+    const cacheService = getCacheService();
+
+    // Get view to determine tableId for cache tagging
+    const viewResult = await viewService.getView(ViewId.fromNumber(viewId));
+    const tableId = viewResult.success && viewResult.data
+      ? viewResult.data.tableId.value
+      : 0;
+
+    const cacheConfig = CACHE_KEYS.viewAggregations(viewId, tableId);
+
+    // Check cache first (unless skipCache is true)
+    if (!options?.skipCache && cacheService.isConnected()) {
+      const cached = await cacheService.get<{
+        results: Array<{
+          fieldId: number;
+          aggregationType: string;
+          value: any;
+          label?: string;
+          formatType?: string;
+        }>;
+      }>(cacheConfig.key);
+
+      if (cached) {
+        console.log(`[Cache] Hit for view aggregations: ${viewId}`);
+        return cached;
+      }
+    }
 
     // Execute aggregations via application service
     const result = await viewService.executeAggregations({
@@ -781,9 +810,20 @@ export async function executeViewAggregations(
       return null;
     }
 
-    return {
+    const response = {
       results: result.data,
     };
+
+    // Cache the result
+    if (cacheService.isConnected()) {
+      await cacheService.set(cacheConfig.key, response, {
+        ttlSeconds: cacheConfig.ttl,
+        tags: cacheConfig.tags,
+      });
+      console.log(`[Cache] Stored view aggregations: ${viewId}`);
+    }
+
+    return response;
   } catch (error) {
     console.error("Error executing view aggregations:", error);
     return null;
@@ -795,9 +835,14 @@ export async function executeViewAggregations(
  *
  * AIDEV-NOTE: Used by ChartBlock to fetch and render chart visualizations.
  * Handles both raw mode (plot table rows directly) and aggregated mode (GROUP BY with aggregations).
+ *
+ * CACHING: Results are cached for 5 minutes. Cache is invalidated on:
+ * - Row mutations (via table stats tag)
+ * - View configuration changes (via view tag)
  */
 export async function executeChartView(
-  viewId: number
+  viewId: number,
+  options?: { skipCache?: boolean }
 ): Promise<{
   dataPoints: Array<{
     x: any;
@@ -819,6 +864,38 @@ export async function executeChartView(
     await requireCurrentOrganization();
 
     const viewService = getViewApplicationService();
+    const cacheService = getCacheService();
+
+    // Get view to determine tableId for cache tagging
+    const viewResult = await viewService.getView(ViewId.fromNumber(viewId));
+    const tableId = viewResult.success && viewResult.data
+      ? viewResult.data.tableId.value
+      : 0;
+
+    const cacheConfig = CACHE_KEYS.chartViewData(viewId, tableId);
+
+    // Check cache first (unless skipCache is true)
+    if (!options?.skipCache && cacheService.isConnected()) {
+      type ChartViewResult = {
+        dataPoints: Array<{
+          x: any;
+          y: any;
+          series?: string;
+          [key: string]: any;
+        }>;
+        xAxisLabel?: string;
+        yAxisLabels?: string[];
+        chartType: 'bar' | 'line' | 'pie' | 'area' | 'scatter';
+        dataMode: 'raw' | 'aggregated';
+      };
+
+      const cached = await cacheService.get<ChartViewResult>(cacheConfig.key);
+
+      if (cached) {
+        console.log(`[Cache] Hit for chart view: ${viewId}`);
+        return cached;
+      }
+    }
 
     // Execute chart view via application service
     const result = await viewService.executeChartView({
@@ -828,6 +905,15 @@ export async function executeChartView(
     if (!result.success || !result.data) {
       console.error("Failed to execute chart view:", result.error);
       return null;
+    }
+
+    // Cache the result
+    if (cacheService.isConnected()) {
+      await cacheService.set(cacheConfig.key, result.data, {
+        ttlSeconds: cacheConfig.ttl,
+        tags: cacheConfig.tags,
+      });
+      console.log(`[Cache] Stored chart view: ${viewId}`);
     }
 
     return result.data;

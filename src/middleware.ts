@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import {
-  checkRateLimit,
+  checkDistributedRateLimit,
   getRateLimitForPath,
   getRateLimitIdentifier
-} from '@/lib/security/rate-limiter';
+} from '@/lib/security/distributed-rate-limiter';
 
 /**
  * Middleware to protect platform routes from app-only users
@@ -36,7 +36,7 @@ export async function middleware(request: NextRequest) {
 
     const identifier = getRateLimitIdentifier(ip, userId, pathname);
     const config = getRateLimitForPath(pathname);
-    const result = checkRateLimit(identifier, config);
+    const result = await checkDistributedRateLimit(identifier, config);
 
     if (!result.allowed) {
       console.warn('[RateLimit] Request blocked', {

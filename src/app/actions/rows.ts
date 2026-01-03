@@ -13,6 +13,7 @@ import { TableId, UserId } from "@/ddd/domain/shared/value-objects";
 import { RowMapper, type RowDTO } from "@/app/mappers/row-mapper";
 import type { DSGRow } from "@/app/mappers/dsg-mapper";
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field";
+import { getCacheService, CACHE_TAGS } from "@/lib/cache";
 
 /**
  * Convert row data to use field IDs as keys
@@ -114,14 +115,23 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
       };
     }
 
+    // Invalidate caches for this table (view aggregations, stats, etc.)
+    const cacheService = getCacheService();
+    if (cacheService.isConnected()) {
+      await Promise.all([
+        cacheService.invalidateByTag(CACHE_TAGS.tableStats(tableId)),
+        cacheService.invalidateByTag(CACHE_TAGS.table(tableId)),
+      ]);
+    }
+
     // Optional revalidation with custom URL
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
     }
-    
+
     // Convert Domain object to DTO for serialization
     const rowDTO = result.data ? RowMapper.toDTO(result.data) : null;
-    
+
     return {
       success: true,
       data: rowDTO,
@@ -451,6 +461,15 @@ export async function updateRowsData(
       };
     }
 
+    // Invalidate caches for this table (view aggregations, stats, etc.)
+    const cacheService = getCacheService();
+    if (cacheService.isConnected()) {
+      await Promise.all([
+        cacheService.invalidateByTag(CACHE_TAGS.tableStats(tableId)),
+        cacheService.invalidateByTag(CACHE_TAGS.table(tableId)),
+      ]);
+    }
+
     // Optional revalidation with custom URL
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
@@ -523,11 +542,20 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
       };
     }
 
+    // Invalidate caches for this table (view aggregations, stats, etc.)
+    const cacheService = getCacheService();
+    if (cacheService.isConnected()) {
+      await Promise.all([
+        cacheService.invalidateByTag(CACHE_TAGS.tableStats(tableId)),
+        cacheService.invalidateByTag(CACHE_TAGS.table(tableId)),
+      ]);
+    }
+
     // Optional revalidation with custom URL
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
     }
-    
+
     return {
       success: true,
       data: { message: "Row deleted successfully" },
