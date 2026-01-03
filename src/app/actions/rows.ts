@@ -14,6 +14,14 @@ import { RowMapper, type RowDTO } from "@/app/mappers/row-mapper";
 import type { DSGRow } from "@/app/mappers/dsg-mapper";
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field";
 import { getCacheService, CACHE_TAGS } from "@/lib/cache";
+import {
+  logRowCreate,
+  logRowUpdate,
+  logRowDelete,
+  computeFieldChanges,
+  type RowAuditContext,
+  type AuditActor,
+} from "./audit-helpers";
 
 /**
  * Convert row data to use field IDs as keys
@@ -113,6 +121,25 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
         success: false,
         error: result.error || "Failed to create row"
       };
+    }
+
+    // AUDIT: Log row creation
+    if (result.data) {
+      const rowSnapshot = result.data.toNamedObject(table.fields);
+      const createdRowId = result.data.id.value;
+
+      const auditContext: RowAuditContext = {
+        organizationId: table.organizationId.value,
+        tableId,
+        tableName: table.name,
+        actor: {
+          type: 'user',
+          id: session.user.id,
+          name: session.user.name || undefined,
+        },
+      };
+
+      logRowCreate(auditContext, { rowId: createdRowId, rowSnapshot });
     }
 
     // Invalidate caches for this table (view aggregations, stats, etc.)
@@ -355,14 +382,39 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       };
     }
 
+    // AUDIT: Log row update with field-level changes
+    if (result.data && existingRow) {
+      const existingData = existingRow.toNamedObject(table.fields);
+      const newData = result.data.toNamedObject(table.fields);
+      const fieldChanges = computeFieldChanges(existingData, newData);
+
+      const auditContext: RowAuditContext = {
+        organizationId: table.organizationId.value,
+        tableId,
+        tableName: table.name,
+        actor: {
+          type: 'user',
+          id: session.user.id,
+          name: session.user.name || undefined,
+        },
+      };
+
+      logRowUpdate(auditContext, {
+        rowId,
+        rowSnapshot: newData,
+        fieldChanges,
+        previousData: existingData,
+      });
+    }
+
     // Optional revalidation with custom URL
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
     }
-    
+
     // Convert Domain object to DTO for serialization
     const rowDTO = result.data ? RowMapper.toDTO(result.data) : null;
-    
+
     return {
       success: true,
       data: rowDTO,
@@ -461,6 +513,44 @@ export async function updateRowsData(
       };
     }
 
+    // AUDIT: Log bulk row updates with field-level changes
+    if (result.data && result.data.length > 0) {
+      // Create maps for efficient lookup
+      const updatedRowMap = new Map(
+        result.data.map(row => [row.id.value, row.toNamedObject(table.fields)])
+      );
+      const existingNamedMap = new Map(
+        existingRows.map(row => [row.id.value, row.toNamedObject(table.fields)])
+      );
+
+      const auditContext: RowAuditContext = {
+        organizationId: table.organizationId.value,
+        tableId,
+        tableName: table.name,
+        actor: {
+          type: 'user',
+          id: session.user.id,
+          name: session.user.name || undefined,
+        },
+      };
+
+      // Log each row update
+      for (const update of updates) {
+        const existingData = existingNamedMap.get(update.rowId);
+        const newData = updatedRowMap.get(update.rowId);
+
+        if (existingData && newData) {
+          const fieldChanges = computeFieldChanges(existingData, newData);
+          logRowUpdate(auditContext, {
+            rowId: update.rowId,
+            rowSnapshot: newData,
+            fieldChanges,
+            previousData: existingData,
+          });
+        }
+      }
+    }
+
     // Invalidate caches for this table (view aggregations, stats, etc.)
     const cacheService = getCacheService();
     if (cacheService.isConnected()) {
@@ -519,7 +609,7 @@ export async function updateRowAction(formData: FormData) {
 export async function deleteRowData(tableId: number, rowId: string, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("table:manage");
-    
+
     if (!tableId || !rowId) {
       return {
         success: false,
@@ -529,7 +619,23 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
 
     // Use table application service for row deletion
     const tableAppService = getTableApplicationService();
-    
+
+    // Get table for audit logging
+    const table = await tableAppService.getTable(TableId.fromNumber(tableId));
+    if (!table) {
+      return {
+        success: false,
+        error: "Table not found"
+      };
+    }
+
+    // AUDIT: Capture existing row data BEFORE deletion
+    const existingRow = await tableAppService.getRow(
+      TableId.fromNumber(tableId),
+      RowId.fromString(rowId)
+    );
+    const rowSnapshot = existingRow?.toNamedObject(table.fields);
+
     const result = await tableAppService.deleteRow(
       TableId.fromNumber(tableId),
       RowId.fromString(rowId)
@@ -540,6 +646,22 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
         success: false,
         error: result.error || "Failed to delete row"
       };
+    }
+
+    // AUDIT: Log row deletion
+    if (rowSnapshot) {
+      const auditContext: RowAuditContext = {
+        organizationId: table.organizationId.value,
+        tableId,
+        tableName: table.name,
+        actor: {
+          type: 'user',
+          id: session.user.id,
+          name: session.user.name || undefined,
+        },
+      };
+
+      logRowDelete(auditContext, { rowId, rowSnapshot });
     }
 
     // Invalidate caches for this table (view aggregations, stats, etc.)

@@ -14,6 +14,7 @@ import {
   SlidersHorizontal,
   FileText,
   CreditCard,
+  ScrollText,
 } from "lucide-react"
 
 import {
@@ -531,6 +532,18 @@ export function AppSidebar({
                       <Link href="/organization/settings/permissions">
                         <Users className="h-4 w-4" />
                         <span className="group-data-[collapsible=icon]:hidden">Permissions</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname === "/organization/settings/audit-log"}
+                      className="h-6"
+                    >
+                      <Link href="/organization/settings/audit-log">
+                        <ScrollText className="h-4 w-4" />
+                        <span className="group-data-[collapsible=icon]:hidden">Audit Log</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
