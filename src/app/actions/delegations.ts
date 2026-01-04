@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { requirePermission, requireAuth } from "./permissions";
-import { container } from "@/ddd/application/di/container";
+import { container, getAuditApplicationService } from "@/ddd/application/di/container";
 import type { CredentialDelegationApplicationService } from "@/ddd/application/services/delegations/credential-delegation-application-service";
 import type { ConnectionApplicationService } from "@/ddd/application/services/connections/connection-application-service";
-import { AgentId, UserId } from '@/ddd/domain/shared/value-objects';
+import { AgentId, UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { AppName } from '@/ddd/domain/connections/value-objects';
 import { DelegationId } from '@/ddd/domain/shared/value-objects';
 import { getResourceAccessList, type AccessEntry } from "./resource-permissions";
@@ -192,6 +192,31 @@ export async function updateAgentDelegationServices(
         };
       }
 
+      // Audit log the delegation update
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        agent.organizationId,
+        {
+          eventType: 'security',
+          eventCategory: 'delegation_crud',
+          eventAction: currentResult.success && currentResult.data ? 'update' : 'create',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'delegation',
+          resourceId: result.data ? String(result.data.id.value) : 'unknown',
+          resourceName: agent.name,
+          parentResourceType: 'agent',
+          parentResourceId: String(agentId),
+          eventData: {
+            services,
+            agentId,
+            agentName: agent.name,
+          },
+          success: true,
+        }
+      );
+
       // Revalidate agent page
       revalidatePath(`/agents/${agentId}`);
       revalidatePath('/agents');
@@ -261,6 +286,10 @@ export async function revokeAgentDelegation(agentId: number): Promise<{ success:
         };
       }
 
+      // Capture services before revocation for audit log
+      const revokedServices = currentResult.data.services.map(s => s.value);
+      const delegationId = currentResult.data.id.value;
+
       // Revoke delegation
       console.log(`[Delegation] Revoking delegation for agent ${agentId}`);
 
@@ -274,6 +303,32 @@ export async function revokeAgentDelegation(agentId: number): Promise<{ success:
           error: result.error || "Failed to revoke delegation"
         };
       }
+
+      // Audit log the revocation
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        agent.organizationId,
+        {
+          eventType: 'security',
+          eventCategory: 'delegation_crud',
+          eventAction: 'delete',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'delegation',
+          resourceId: String(delegationId),
+          resourceName: agent.name,
+          parentResourceType: 'agent',
+          parentResourceId: String(agentId),
+          eventData: {
+            action: 'revoked_all',
+            services: revokedServices,
+            agentId,
+            agentName: agent.name,
+          },
+          success: true,
+        }
+      );
 
       // Revalidate agent page
       revalidatePath(`/agents/${agentId}`);
@@ -362,6 +417,32 @@ export async function approveAgentDelegation(agentId: number): Promise<{ success
           error: result.error || "Failed to approve delegation"
         };
       }
+
+      // Audit log the approval
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        agent.organizationId,
+        {
+          eventType: 'security',
+          eventCategory: 'delegation_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'delegation',
+          resourceId: String(currentResult.data.id.value),
+          resourceName: agent.name,
+          parentResourceType: 'agent',
+          parentResourceId: String(agentId),
+          eventData: {
+            action: 'approved',
+            services: currentResult.data.services.map(s => s.value),
+            agentId,
+            agentName: agent.name,
+          },
+          success: true,
+        }
+      );
 
       // Revalidate agent page
       revalidatePath(`/agents/${agentId}`);
@@ -653,6 +734,33 @@ export async function revokeServiceFromAgent(
           };
         }
       }
+
+      // Audit log the service revocation
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        agent.organizationId,
+        {
+          eventType: 'security',
+          eventCategory: 'delegation_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'delegation',
+          resourceId: String(currentResult.data.id.value),
+          resourceName: agent.name,
+          parentResourceType: 'agent',
+          parentResourceId: String(agentId),
+          eventData: {
+            action: 'revoked_service',
+            service,
+            remainingServices: updatedServices.map(s => s.value),
+            agentId,
+            agentName: agent.name,
+          },
+          success: true,
+        }
+      );
 
       // Revalidate
       revalidatePath('/connections');

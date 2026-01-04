@@ -26,6 +26,8 @@ import type {
 import { withAuthContext } from '@/lib/auth/with-context';
 import { requirePermission } from './permissions';
 import { requireCurrentOrganization } from './user-organizations';
+import { getAuditApplicationService } from "@/ddd/application/di/container";
+import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 
 /**
  * Get all roles for the current organization (system + custom) with counts
@@ -345,8 +347,27 @@ export async function createCustomRole(formData: FormData): Promise<Result> {
         return newRole;
       });
 
+      // AUDIT: Log role creation
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'security',
+          eventCategory: 'role_crud',
+          eventAction: 'create',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'role',
+          resourceId: String(result.id),
+          resourceName: name,
+          eventData: { permissionCount: permissionAssignments.length },
+          success: true,
+        }
+      );
+
       revalidatePath("/organization/settings/permissions");
-      
+
       return {
         success: true,
         data: { id: result.id, message: `Role "${name}" created successfully` }
@@ -505,8 +526,27 @@ export async function updateCustomRole(formData: FormData): Promise<Result> {
         }
       });
 
+      // AUDIT: Log role update
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'security',
+          eventCategory: 'role_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'role',
+          resourceId: String(roleId),
+          resourceName: name,
+          eventData: { permissionCount: permissionAssignments.length },
+          success: true,
+        }
+      );
+
       revalidatePath("/organization/settings/permissions");
-      
+
       return {
         success: true,
         data: { message: `Role "${name}" updated successfully` }
@@ -597,8 +637,27 @@ export async function deleteCustomRole(roleId: number): Promise<Result> {
           .where(eq(roles.id, roleId));
       });
 
+      // AUDIT: Log role deletion
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'security',
+          eventCategory: 'role_crud',
+          eventAction: 'delete',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'role',
+          resourceId: String(roleId),
+          resourceName: existingRole[0].name,
+          eventData: {},
+          success: true,
+        }
+      );
+
       revalidatePath("/organization/settings/permissions");
-      
+
       return {
         success: true,
         data: { message: `Role "${existingRole[0].name}" deleted successfully` }

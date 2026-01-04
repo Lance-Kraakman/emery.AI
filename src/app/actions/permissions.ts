@@ -7,7 +7,7 @@ import { auth, hasPermission as authHasPermission, requirePermission as authRequ
 import { Permission } from "@/ddd/domain/shared/value-objects/permission";
 import { revalidatePath } from "next/cache";
 // REMOVED: import { requireCurrentOrganization } from "./user-organizations"; - causes circular dependency
-import { getRBACRepository, getUserRoleApplicationService } from "@/ddd/application/di/container";
+import { getRBACRepository, getUserRoleApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import type { Result } from "./types";
 import { SYSTEM_ROLES, type SystemRoleType } from "@/ddd/domain/rbac/entities/role";
 import { OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
@@ -65,6 +65,28 @@ export async function assignUserRoles(command: AssignUserRolesCommand): Promise<
         error: result.error || "Failed to assign user roles"
       };
     }
+
+    // Audit log the role assignment
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(organizationId),
+      {
+        eventType: 'security',
+        eventCategory: 'permission_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'user_roles',
+        resourceId: command.userId,
+        resourceName: command.userId,
+        eventData: {
+          targetUserId: command.userId,
+          roleIds: command.roleIds,
+        },
+        success: true,
+      }
+    );
 
     revalidatePath('/dashboard');
     revalidatePath('/organization/settings/users');

@@ -6,7 +6,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { getInvitationApplicationService, getUserRoleApplicationService } from "@/ddd/application/di/container";
+import { getInvitationApplicationService, getUserRoleApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import type { SendInvitationCommand, AcceptInvitationCommand } from "@/ddd/application/services/invitations/invitation-application-service";
@@ -52,6 +52,29 @@ export async function inviteUser(formData: FormData): Promise<Result> {
         error: result.error || "Failed to send invitation"
       };
     }
+
+    // Audit log the invitation
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'security',
+        eventCategory: 'invitation_crud',
+        eventAction: 'create',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'invitation',
+        resourceId: result.data ? String(result.data.id.value) : 'unknown',
+        resourceName: email,
+        eventData: {
+          email,
+          roleIds,
+          expiryDays: 7,
+        },
+        success: true,
+      }
+    );
 
     revalidatePath("/organization/settings/users");
     return {
@@ -134,6 +157,29 @@ export async function acceptInvitation(token: string): Promise<Result> {
       };
     }
 
+    // Audit log the invitation acceptance
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      invitation.organizationId,
+      {
+        eventType: 'security',
+        eventCategory: 'invitation_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session?.user?.id || acceptingUserEmail,
+        actorName: userName,
+        resourceType: 'invitation',
+        resourceId: String(invitation.id.value),
+        resourceName: acceptingUserEmail,
+        eventData: {
+          action: 'accepted',
+          email: acceptingUserEmail,
+          organizationId: invitation.organizationId.value,
+        },
+        success: true,
+      }
+    );
+
     revalidatePath("/organization/settings/users");
     revalidatePath("/dashboard"); // User may now have access to new organization
 
@@ -193,7 +239,8 @@ export async function getPendingInvitations(): Promise<InvitationDTO[]> {
 export async function revokeInvitation(invitationId: number): Promise<Result> {
   try {
     const session = await requirePermission("users:manage");
-    
+    const currentOrg = await requireCurrentOrganization();
+
     if (!invitationId) {
       return {
         success: false,
@@ -202,6 +249,7 @@ export async function revokeInvitation(invitationId: number): Promise<Result> {
     }
 
     const invitationApplicationService = getInvitationApplicationService();
+
     const result = await invitationApplicationService.revokeInvitation(invitationId, session.user.id);
 
     if (!result.success) {
@@ -210,6 +258,28 @@ export async function revokeInvitation(invitationId: number): Promise<Result> {
         error: result.error || "Failed to revoke invitation"
       };
     }
+
+    // Audit log the revocation
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'security',
+        eventCategory: 'invitation_crud',
+        eventAction: 'delete',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'invitation',
+        resourceId: String(invitationId),
+        resourceName: `invitation-${invitationId}`,
+        eventData: {
+          action: 'revoked',
+          invitationId,
+        },
+        success: true,
+      }
+    );
 
     revalidatePath("/organization/settings/users");
     return {
@@ -231,7 +301,8 @@ export async function revokeInvitation(invitationId: number): Promise<Result> {
 export async function resendInvitation(invitationId: number): Promise<Result> {
   try {
     const session = await requirePermission("users:manage");
-    
+    const currentOrg = await requireCurrentOrganization();
+
     if (!invitationId) {
       return {
         success: false,
@@ -248,6 +319,28 @@ export async function resendInvitation(invitationId: number): Promise<Result> {
         error: result.error || "Failed to resend invitation"
       };
     }
+
+    // Audit log the resend
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'security',
+        eventCategory: 'invitation_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'invitation',
+        resourceId: String(invitationId),
+        resourceName: result.data?.email?.value || 'unknown',
+        eventData: {
+          action: 'resent',
+          email: result.data?.email?.value,
+        },
+        success: true,
+      }
+    );
 
     revalidatePath("/organization/settings/users");
     return {

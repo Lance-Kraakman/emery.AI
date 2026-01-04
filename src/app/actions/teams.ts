@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
-import { getTeamApplicationService } from "@/ddd/application/di/container";
+import { getTeamApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import { AgentId } from "@/ddd/domain/shared/value-objects";
 import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/lib/schemas";
 import type { Result, CreateTeamData, CreateTeamClientData, TeamMembershipData } from "./types";
@@ -74,15 +74,34 @@ export async function createTeam(data: CreateTeamData): Promise<Result> {
       };
     }
 
+    // AUDIT: Log team creation
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'security',
+        eventCategory: 'team_crud',
+        eventAction: 'create',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'team',
+        resourceId: String(result.data.id),
+        resourceName: result.data.name,
+        eventData: { purpose: data.purpose, agentCount: agentIds?.length || 0 },
+        success: true,
+      }
+    );
+
     // Note: RAG reindexing is now handled automatically by database triggers
 
     // Revalidate paths
     revalidatePath('/dashboard');
     revalidatePath('/teams');
-    
+
     // Map domain entity to DTO for client serialization
     const teamDTO = result.data;
-    
+
     return {
       success: true,
       data: teamDTO,
@@ -172,7 +191,8 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("teams:manage");
-      
+      const currentOrg = await requireCurrentOrganization();
+
       if (!teamId) {
         return {
           success: false,
@@ -201,13 +221,32 @@ export async function updateTeam(teamId: number, data: Partial<CreateTeamData>):
         };
       }
 
+      // AUDIT: Log team update
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'security',
+          eventCategory: 'team_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'team',
+          resourceId: String(teamId),
+          resourceName: result.data.name,
+          eventData: { updatedFields: Object.keys(data) },
+          success: true,
+        }
+      );
+
       // Note: RAG reindexing is now handled automatically by database triggers
       revalidatePath('/dashboard');
       revalidatePath('/teams');
-      
+
       // Map domain entity to DTO for client serialization
       const teamDTO = result.data;
-      
+
       return {
         success: true,
         data: teamDTO,
@@ -227,6 +266,7 @@ export async function deleteTeam(teamId: number): Promise<Result> {
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("teams:manage");
+      const currentOrg = await requireCurrentOrganization();
 
       if (!teamId) {
         return {
@@ -236,6 +276,11 @@ export async function deleteTeam(teamId: number): Promise<Result> {
       }
 
       const teamApplicationService = getTeamApplicationService();
+
+      // AUDIT: Get team name BEFORE deletion
+      const teamToDelete = await teamApplicationService.getTeam(teamId);
+      const teamName = teamToDelete?.name;
+
       const result = await teamApplicationService.deleteTeam(teamId);
 
       if (!result.success) {
@@ -244,6 +289,25 @@ export async function deleteTeam(teamId: number): Promise<Result> {
           error: result.error || "Failed to delete team"
         };
       }
+
+      // AUDIT: Log team deletion
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'security',
+          eventCategory: 'team_crud',
+          eventAction: 'delete',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'team',
+          resourceId: String(teamId),
+          resourceName: teamName,
+          eventData: {},
+          success: true,
+        }
+      );
 
       // Note: RAG reindexing is now handled automatically by database triggers
       revalidatePath('/dashboard');
@@ -336,6 +400,7 @@ export async function addAgentToTeam(teamId: number, agentId: string): Promise<R
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("teams:manage");
+      const currentOrg = await requireCurrentOrganization();
 
       if (!teamId || !agentId) {
         return {
@@ -354,12 +419,31 @@ export async function addAgentToTeam(teamId: number, agentId: string): Promise<R
         };
       }
 
+      // AUDIT: Log agent added to team
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'security',
+          eventCategory: 'team_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'team',
+          resourceId: String(teamId),
+          resourceName: result.data.name,
+          eventData: { action: 'add_agent', agentId },
+          success: true,
+        }
+      );
+
       revalidatePath('/dashboard');
       revalidatePath('/teams');
-      
+
       // Map domain entity to DTO for client serialization
       const teamDTO = result.data;
-      
+
       return {
         success: true,
         data: teamDTO,
@@ -381,7 +465,8 @@ export async function removeAgentFromTeam(teamId: number, agentId: string): Prom
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("teams:manage");
-      
+      const currentOrg = await requireCurrentOrganization();
+
       if (!teamId || !agentId) {
         return {
           success: false,
@@ -390,6 +475,11 @@ export async function removeAgentFromTeam(teamId: number, agentId: string): Prom
       }
 
       const teamApplicationService = getTeamApplicationService();
+
+      // Get team name for audit log
+      const team = await teamApplicationService.getTeam(teamId);
+      const teamName = team?.name;
+
       const result = await teamApplicationService.removeAgentFromTeam(teamId, agentId);
 
       if (!result.success) {
@@ -399,9 +489,28 @@ export async function removeAgentFromTeam(teamId: number, agentId: string): Prom
         };
       }
 
+      // AUDIT: Log agent removed from team
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'security',
+          eventCategory: 'team_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'team',
+          resourceId: String(teamId),
+          resourceName: teamName,
+          eventData: { action: 'remove_agent', agentId },
+          success: true,
+        }
+      );
+
       revalidatePath('/dashboard');
       revalidatePath('/teams');
-      
+
       return {
         success: true,
         data: { message: "Agent removed from team successfully" },
