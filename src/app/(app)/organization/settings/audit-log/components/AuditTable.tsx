@@ -15,7 +15,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
-import { ChevronDown, ChevronRight, RefreshCw, Filter, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,7 +23,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getAuditEvents, getRowHistory } from '@/app/actions/audit';
 import type { AuditEvent, RowHistoryEntry } from '@/ddd/domain/audit/types';
-import styles from './audit-table.module.css';
+import { cn } from '@/lib/utils';
 
 export interface AuditTableProps {
   // Pre-set filters (optional - for embedding in table context)
@@ -40,20 +40,20 @@ export interface AuditTableProps {
 
 // Columns for audit_events
 const AUDIT_COLUMNS = [
-  { key: 'occurredAt', label: 'Time', width: '140px' },
-  { key: 'actor', label: 'Actor', width: '150px' },
-  { key: 'action', label: 'Action', width: '120px' },
-  { key: 'resource', label: 'Resource', width: '200px' },
-  { key: 'details', label: 'Details', width: 'auto' },
+  { key: 'occurredAt', label: 'Time', width: 'w-[120px]' },
+  { key: 'actor', label: 'Actor', width: 'w-[140px]' },
+  { key: 'action', label: 'Action', width: 'w-[100px]' },
+  { key: 'resource', label: 'Resource', width: 'w-[160px]' },
+  { key: 'details', label: 'Details', width: 'flex-1' },
 ];
 
 // Columns for row_history
 const HISTORY_COLUMNS = [
-  { key: 'changedAt', label: 'Time', width: '140px' },
-  { key: 'actor', label: 'Changed By', width: '150px' },
-  { key: 'operation', label: 'Operation', width: '100px' },
-  { key: 'version', label: 'Version', width: '80px' },
-  { key: 'changes', label: 'Changes', width: 'auto' },
+  { key: 'changedAt', label: 'Time', width: 'w-[120px]' },
+  { key: 'actor', label: 'Changed By', width: 'w-[140px]' },
+  { key: 'operation', label: 'Operation', width: 'w-[90px]' },
+  { key: 'version', label: 'Version', width: 'w-[70px]' },
+  { key: 'changes', label: 'Changes', width: 'flex-1' },
 ];
 
 export function AuditTable({
@@ -70,9 +70,9 @@ export function AuditTable({
 
   // Filters state
   const [filters, setFilters] = useState({
-    eventType: '',
-    actorType: '',
-    resourceType: '',
+    eventType: 'all',
+    actorType: 'all',
+    resourceType: 'all',
     after: '',
     before: '',
   });
@@ -98,9 +98,9 @@ export function AuditTable({
           limit: 100,
         };
 
-        if (filters.eventType) queryFilters.eventType = filters.eventType;
-        if (filters.actorType) queryFilters.actorType = filters.actorType;
-        if (filters.resourceType) queryFilters.resourceType = filters.resourceType;
+        if (filters.eventType && filters.eventType !== 'all') queryFilters.eventType = filters.eventType;
+        if (filters.actorType && filters.actorType !== 'all') queryFilters.actorType = filters.actorType;
+        if (filters.resourceType && filters.resourceType !== 'all') queryFilters.resourceType = filters.resourceType;
         if (filters.after) queryFilters.after = new Date(filters.after);
         if (filters.before) queryFilters.before = new Date(filters.before);
 
@@ -142,48 +142,35 @@ export function AuditTable({
 
   const clearFilters = () => {
     setFilters({
-      eventType: '',
-      actorType: '',
-      resourceType: '',
+      eventType: 'all',
+      actorType: 'all',
+      resourceType: 'all',
       after: '',
       before: '',
     });
   };
 
-  const hasActiveFilters = Object.values(filters).some(Boolean);
-
-  // Build class names
-  const tableClasses = [
-    styles.table,
-    styles.striped,
-    compact && styles.compact,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const hasActiveFilters = filters.eventType !== 'all' || filters.actorType !== 'all' ||
+    filters.resourceType !== 'all' || filters.after || filters.before;
 
   if (loading) {
     return (
-      <div className={styles.container}>
-        <div className={styles.tableWrapper}>
-          <div className="p-4 space-y-3">
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-8 w-full" />
-          </div>
-        </div>
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-full" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className={styles.emptyState}>
-        <div className={styles.emptyIcon}>⚠️</div>
-        <p className={styles.emptyText}>{error}</p>
-        <Button onClick={fetchData} variant="outline" size="sm" className="mt-2">
-          <RefreshCw className="h-4 w-4 mr-2" />
+      <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+        <span className="text-2xl mb-2">⚠️</span>
+        <p className="text-sm mb-2">{error}</p>
+        <Button onClick={fetchData} variant="outline" size="sm">
+          <RefreshCw className="h-3 w-3 mr-1" />
           Retry
         </Button>
       </div>
@@ -191,118 +178,122 @@ export function AuditTable({
   }
 
   return (
-    <div className={styles.container}>
+    <div className="space-y-3">
       {/* Filters */}
       {showFilters && mode === 'audit' && (
-        <div className={styles.filtersContainer}>
-          <div className={styles.filtersRow}>
-            <Select
-              value={filters.eventType}
-              onValueChange={(value) => setFilters((f) => ({ ...f, eventType: value }))}
-            >
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Event Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">All Types</SelectItem>
-                <SelectItem value="database">Database</SelectItem>
-                <SelectItem value="auth">Authentication</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="agent">Agent</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={filters.eventType}
+            onValueChange={(value) => setFilters((f) => ({ ...f, eventType: value }))}
+          >
+            <SelectTrigger className="h-8 w-[120px] text-xs">
+              <SelectValue placeholder="Event Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="database">Database</SelectItem>
+              <SelectItem value="auth">Auth</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value="agent">Agent</SelectItem>
+            </SelectContent>
+          </Select>
 
-            <Select
-              value={filters.actorType}
-              onValueChange={(value) => setFilters((f) => ({ ...f, actorType: value }))}
-            >
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Actor Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">All Actors</SelectItem>
-                <SelectItem value="user">User</SelectItem>
-                <SelectItem value="agent">Agent</SelectItem>
-                <SelectItem value="system">System</SelectItem>
-              </SelectContent>
-            </Select>
+          <Select
+            value={filters.actorType}
+            onValueChange={(value) => setFilters((f) => ({ ...f, actorType: value }))}
+          >
+            <SelectTrigger className="h-8 w-[120px] text-xs">
+              <SelectValue placeholder="Actor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Actors</SelectItem>
+              <SelectItem value="user">User</SelectItem>
+              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="system">System</SelectItem>
+            </SelectContent>
+          </Select>
 
-            <Select
-              value={filters.resourceType}
-              onValueChange={(value) => setFilters((f) => ({ ...f, resourceType: value }))}
-            >
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Resource Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">All Resources</SelectItem>
-                <SelectItem value="row">Row</SelectItem>
-                <SelectItem value="table">Table</SelectItem>
-                <SelectItem value="agent">Agent</SelectItem>
-                <SelectItem value="skill">Skill</SelectItem>
-              </SelectContent>
-            </Select>
+          <Select
+            value={filters.resourceType}
+            onValueChange={(value) => setFilters((f) => ({ ...f, resourceType: value }))}
+          >
+            <SelectTrigger className="h-8 w-[120px] text-xs">
+              <SelectValue placeholder="Resource" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Resources</SelectItem>
+              <SelectItem value="row">Row</SelectItem>
+              <SelectItem value="table">Table</SelectItem>
+              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="skill">Skill</SelectItem>
+            </SelectContent>
+          </Select>
 
-            <Input
-              type="date"
-              placeholder="After"
-              value={filters.after}
-              onChange={(e) => setFilters((f) => ({ ...f, after: e.target.value }))}
-              className="w-[150px]"
-            />
+          <Input
+            type="date"
+            placeholder="After"
+            value={filters.after}
+            onChange={(e) => setFilters((f) => ({ ...f, after: e.target.value }))}
+            className="h-8 w-[130px] text-xs"
+          />
 
-            <Input
-              type="date"
-              placeholder="Before"
-              value={filters.before}
-              onChange={(e) => setFilters((f) => ({ ...f, before: e.target.value }))}
-              className="w-[150px]"
-            />
+          <Input
+            type="date"
+            placeholder="Before"
+            value={filters.before}
+            onChange={(e) => setFilters((f) => ({ ...f, before: e.target.value }))}
+            className="h-8 w-[130px] text-xs"
+          />
 
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
-                <X className="h-4 w-4 mr-1" />
-                Clear
-              </Button>
-            )}
-
-            <Button variant="outline" size="sm" onClick={fetchData}>
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Refresh
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 px-2">
+              <X className="h-3 w-3 mr-1" />
+              Clear
             </Button>
-          </div>
+          )}
+
+          <Button variant="outline" size="sm" onClick={fetchData} className="h-8 px-2">
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Refresh
+          </Button>
         </div>
       )}
 
       {/* Table */}
-      <div className={styles.tableWrapper}>
+      <div className="overflow-x-auto rounded-md border border-border">
         {data.length === 0 ? (
-          <div className={styles.emptyState}>
-            <div className={styles.emptyIcon}>📭</div>
-            <p className={styles.emptyText}>
+          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+            <span className="text-2xl mb-2 opacity-40">📭</span>
+            <p className="text-sm">
               {mode === 'history'
                 ? 'No history available for this row'
                 : 'No audit events found'}
             </p>
             {hasActiveFilters && (
-              <Button variant="link" size="sm" onClick={clearFilters}>
+              <Button variant="link" size="sm" onClick={clearFilters} className="text-xs mt-1">
                 Clear filters to see all events
               </Button>
             )}
           </div>
         ) : (
-          <table className={tableClasses}>
-            <thead>
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 border-b border-border">
               <tr>
-                <th className={styles.th} style={{ width: '40px' }}></th>
+                <th className="w-8 px-2 py-2"></th>
                 {columns.map((col) => (
-                  <th key={col.key} className={styles.th} style={{ width: col.width }}>
+                  <th
+                    key={col.key}
+                    className={cn(
+                      "px-3 py-2 text-left text-xs font-medium text-muted-foreground",
+                      col.width
+                    )}
+                  >
                     {col.label}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-border">
               {mode === 'audit'
                 ? (data as AuditEvent[]).map((event) => (
                     <AuditEventRow
@@ -329,10 +320,8 @@ export function AuditTable({
 
       {/* Count */}
       {data.length > 0 && (
-        <div className={styles.footer}>
-          <span className={styles.count}>
-            {data.length} {data.length === 1 ? 'event' : 'events'}
-          </span>
+        <div className="text-xs text-muted-foreground text-right">
+          {data.length} {data.length === 1 ? 'event' : 'events'}
         </div>
       )}
     </div>
@@ -353,42 +342,47 @@ function AuditEventRow({
 }) {
   return (
     <>
-      <tr className={styles.tr}>
-        <td className={styles.td}>
-          <button onClick={onToggle} className={styles.expandButton}>
-            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+      <tr className="hover:bg-muted/30 transition-colors">
+        <td className="px-2 py-1.5">
+          <button
+            onClick={onToggle}
+            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           </button>
         </td>
-        <td className={styles.td}>
+        <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">
           {format(new Date(event.occurredAt), compact ? 'HH:mm:ss' : 'MMM d, HH:mm:ss')}
         </td>
-        <td className={styles.td}>
-          <div className={styles.actorCell}>
-            <Badge variant={event.actorType === 'user' ? 'default' : 'secondary'}>
+        <td className="px-3 py-1.5">
+          <div className="flex items-center gap-1.5">
+            <Badge variant={event.actorType === 'user' ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0">
               {event.actorType}
             </Badge>
-            {event.actorName && <span className={styles.actorName}>{event.actorName}</span>}
+            {event.actorName && (
+              <span className="text-xs text-muted-foreground truncate max-w-[80px]">{event.actorName}</span>
+            )}
           </div>
         </td>
-        <td className={styles.td}>
+        <td className="px-3 py-1.5">
           <ActionBadge action={event.eventAction} success={event.success ?? true} />
         </td>
-        <td className={styles.td}>
-          <span className={styles.resourceType}>{event.resourceType}</span>
+        <td className="px-3 py-1.5">
+          <span className="text-xs font-medium">{event.resourceType}</span>
           {event.resourceName && (
-            <span className={styles.resourceName}> - {event.resourceName}</span>
+            <span className="text-xs text-muted-foreground ml-1 truncate">- {event.resourceName}</span>
           )}
         </td>
-        <td className={styles.td}>
-          <span className={styles.eventCategory}>{event.eventCategory}</span>
+        <td className="px-3 py-1.5">
+          <span className="text-xs text-muted-foreground">{event.eventCategory}</span>
           {!event.success && event.error && (
-            <span className={styles.errorText}> - {event.error}</span>
+            <span className="text-xs text-destructive ml-1">- {event.error}</span>
           )}
         </td>
       </tr>
       {expanded && (
-        <tr className={styles.expandedRow}>
-          <td colSpan={6}>
+        <tr>
+          <td colSpan={6} className="p-0">
             <ExpandedDetails
               eventData={event.eventData}
               previousData={event.previousData}
@@ -417,40 +411,43 @@ function HistoryEntryRow({
 
   return (
     <>
-      <tr className={styles.tr}>
-        <td className={styles.td}>
-          <button onClick={onToggle} className={styles.expandButton}>
-            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+      <tr className="hover:bg-muted/30 transition-colors">
+        <td className="px-2 py-1.5">
+          <button
+            onClick={onToggle}
+            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           </button>
         </td>
-        <td className={styles.td}>
+        <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">
           {format(new Date(entry.changedAt), compact ? 'HH:mm:ss' : 'MMM d, HH:mm:ss')}
         </td>
-        <td className={styles.td}>
-          <div className={styles.actorCell}>
-            <Badge variant={entry.changedByType === 'user' ? 'default' : 'secondary'}>
+        <td className="px-3 py-1.5">
+          <div className="flex items-center gap-1.5">
+            <Badge variant={entry.changedByType === 'user' ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0">
               {entry.changedByType}
             </Badge>
-            {entry.changedByName && <span className={styles.actorName}>{entry.changedByName}</span>}
+            {entry.changedByName && (
+              <span className="text-xs text-muted-foreground truncate max-w-[80px]">{entry.changedByName}</span>
+            )}
           </div>
         </td>
-        <td className={styles.td}>
+        <td className="px-3 py-1.5">
           <OperationBadge operation={entry.operation} />
         </td>
-        <td className={styles.td}>v{entry.version}</td>
-        <td className={styles.td}>
+        <td className="px-3 py-1.5 text-xs text-muted-foreground">v{entry.version}</td>
+        <td className="px-3 py-1.5 text-xs text-muted-foreground">
           {entry.operation === 'UPDATE' && changeCount > 0 && (
-            <span className={styles.changeCount}>
-              {changeCount} field{changeCount !== 1 ? 's' : ''} changed
-            </span>
+            <span>{changeCount} field{changeCount !== 1 ? 's' : ''} changed</span>
           )}
-          {entry.operation === 'INSERT' && <span className={styles.changeCount}>Row created</span>}
-          {entry.operation === 'DELETE' && <span className={styles.changeCount}>Row deleted</span>}
+          {entry.operation === 'INSERT' && <span>Row created</span>}
+          {entry.operation === 'DELETE' && <span>Row deleted</span>}
         </td>
       </tr>
       {expanded && (
-        <tr className={styles.expandedRow}>
-          <td colSpan={6}>
+        <tr>
+          <td colSpan={6} className="p-0">
             <FieldChangesDetail
               operation={entry.operation}
               fieldChanges={entry.fieldChanges}
@@ -473,7 +470,7 @@ function ActionBadge({ action, success }: { action: string; success: boolean }) 
       : 'outline'
     : 'destructive';
 
-  return <Badge variant={variant}>{action}</Badge>;
+  return <Badge variant={variant} className="text-[10px] px-1.5 py-0">{action}</Badge>;
 }
 
 // Operation badge component for row history
@@ -485,7 +482,7 @@ function OperationBadge({ operation }: { operation: string }) {
       ? 'destructive'
       : 'outline';
 
-  return <Badge variant={variant}>{operation}</Badge>;
+  return <Badge variant={variant} className="text-[10px] px-1.5 py-0">{operation}</Badge>;
 }
 
 // Expanded details component
@@ -499,25 +496,33 @@ function ExpandedDetails({
   metadata?: Record<string, unknown>;
 }) {
   return (
-    <div className={styles.expandedContent}>
-      {eventData && Object.keys(eventData).length > 0 && (
-        <div className={styles.detailSection}>
-          <h4 className={styles.detailTitle}>Event Data</h4>
-          <pre className={styles.jsonBlock}>{JSON.stringify(eventData, null, 2)}</pre>
-        </div>
-      )}
-      {previousData && Object.keys(previousData).length > 0 && (
-        <div className={styles.detailSection}>
-          <h4 className={styles.detailTitle}>Previous Data</h4>
-          <pre className={styles.jsonBlock}>{JSON.stringify(previousData, null, 2)}</pre>
-        </div>
-      )}
-      {metadata && Object.keys(metadata).length > 0 && (
-        <div className={styles.detailSection}>
-          <h4 className={styles.detailTitle}>Metadata</h4>
-          <pre className={styles.jsonBlock}>{JSON.stringify(metadata, null, 2)}</pre>
-        </div>
-      )}
+    <div className="px-4 py-3 bg-muted/30 border-t border-dashed border-border">
+      <div className="grid gap-3">
+        {eventData && Object.keys(eventData).length > 0 && (
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-1">Event Data</div>
+            <pre className="text-[11px] font-mono bg-background border border-border rounded p-2 max-h-[100px] overflow-auto">
+              {JSON.stringify(eventData, null, 2)}
+            </pre>
+          </div>
+        )}
+        {previousData && Object.keys(previousData).length > 0 && (
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-1">Previous Data</div>
+            <pre className="text-[11px] font-mono bg-background border border-border rounded p-2 max-h-[100px] overflow-auto">
+              {JSON.stringify(previousData, null, 2)}
+            </pre>
+          </div>
+        )}
+        {metadata && Object.keys(metadata).length > 0 && (
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-1">Metadata</div>
+            <pre className="text-[11px] font-mono bg-background border border-border rounded p-2 max-h-[100px] overflow-auto">
+              {JSON.stringify(metadata, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -533,34 +538,38 @@ function FieldChangesDetail({
   rowSnapshot?: Record<string, unknown>;
 }) {
   return (
-    <div className={styles.expandedContent}>
-      {operation === 'UPDATE' && fieldChanges && (
-        <div className={styles.detailSection}>
-          <h4 className={styles.detailTitle}>Field Changes</h4>
-          <div className={styles.changesGrid}>
-            {Object.entries(fieldChanges).map(([field, change]) => (
-              <div key={field} className={styles.changeRow}>
-                <span className={styles.fieldName}>{field}</span>
-                <span className={styles.oldValue}>
-                  {formatValue(change.old)}
-                </span>
-                <span className={styles.arrow}>→</span>
-                <span className={styles.newValue}>
-                  {formatValue(change.new)}
-                </span>
-              </div>
-            ))}
+    <div className="px-4 py-3 bg-muted/30 border-t border-dashed border-border">
+      <div className="grid gap-3">
+        {operation === 'UPDATE' && fieldChanges && (
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-1">Field Changes</div>
+            <div className="space-y-1">
+              {Object.entries(fieldChanges).map(([field, change]) => (
+                <div key={field} className="flex items-center gap-2 text-xs bg-background border border-border rounded px-2 py-1">
+                  <span className="font-medium min-w-[80px]">{field}</span>
+                  <span className="text-destructive bg-destructive/10 px-1.5 py-0.5 rounded font-mono text-[10px] truncate max-w-[150px]">
+                    {formatValue(change.old)}
+                  </span>
+                  <span className="text-muted-foreground">→</span>
+                  <span className="text-green-600 dark:text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded font-mono text-[10px] truncate max-w-[150px]">
+                    {formatValue(change.new)}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
-      {rowSnapshot && (
-        <div className={styles.detailSection}>
-          <h4 className={styles.detailTitle}>
-            {operation === 'DELETE' ? 'Deleted Row' : 'Row Snapshot'}
-          </h4>
-          <pre className={styles.jsonBlock}>{JSON.stringify(rowSnapshot, null, 2)}</pre>
-        </div>
-      )}
+        )}
+        {rowSnapshot && (
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-1">
+              {operation === 'DELETE' ? 'Deleted Row' : 'Row Snapshot'}
+            </div>
+            <pre className="text-[11px] font-mono bg-background border border-border rounded p-2 max-h-[100px] overflow-auto">
+              {JSON.stringify(rowSnapshot, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
