@@ -5,7 +5,8 @@ import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result, CreateTaskData } from "./types";
-import { getAgentTaskApplicationService, getAgentApplicationService } from "@/ddd/application/di/container";
+import { getAgentTaskApplicationService, getAgentApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
+import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import type { CreateTaskDTO } from "@/app/dtos/task.dto";
 import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -49,6 +50,31 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
           error: result.error || "Failed to create task"
         };
       }
+
+      // Audit log task creation
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'agent',
+          eventCategory: 'task_crud',
+          eventAction: 'create',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'task',
+          resourceId: result.data?.id || 'unknown',
+          resourceName: name,
+          parentResourceType: 'agent',
+          parentResourceId: String(agentId),
+          eventData: {
+            agentId,
+            taskName: name,
+            hasInstructions: !!instructions?.task,
+          },
+          success: true,
+        }
+      );
 
       revalidatePath('/dashboard');
 
@@ -197,6 +223,42 @@ export async function updateTaskStatus(
       };
     }
 
+    // Audit log the status transition
+    const auditService = getAuditApplicationService();
+    const eventAction = status === 'in_progress' ? 'started' :
+                        status === 'completed' ? 'completed' :
+                        status === 'failed' ? 'failed' :
+                        status === 'timeout' ? 'timeout' :
+                        status === 'cancelled' ? 'cancelled' : status;
+
+    // Cancelled is user-initiated, others are typically system
+    const isUserAction = status === 'cancelled';
+    const session = isUserAction ? await requirePermission("tasks:manage") : null;
+
+    auditService.logEvent(
+      OrganizationId.fromNumber(updatedTask.organizationId),
+      {
+        eventType: 'agent',
+        eventCategory: 'task_lifecycle',
+        eventAction,
+        actorType: isUserAction ? 'user' : 'system',
+        actorId: isUserAction && session ? session.user.id : 'system',
+        actorName: isUserAction && session ? session.user.name || undefined : undefined,
+        resourceType: 'task',
+        resourceId: taskId,
+        resourceName: updatedTask.name,
+        parentResourceType: 'agent',
+        parentResourceId: String(updatedTask.agentId),
+        eventData: {
+          newStatus: status,
+          agentId: updatedTask.agentId,
+          ...(error && { error }),
+          ...(result && { hasResult: true }),
+        },
+        success: status !== 'failed' && status !== 'timeout',
+      }
+    );
+
     // Service already returns DTO, no conversion needed
     revalidatePath('/dashboard');
 
@@ -217,7 +279,7 @@ export async function updateTaskStatus(
 export async function deleteTask(taskId: string): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      await requirePermission("tasks:manage");
+      const session = await requirePermission("tasks:manage");
 
     if (!taskId) {
       return {
@@ -227,8 +289,8 @@ export async function deleteTask(taskId: string): Promise<Result> {
     }
 
     const taskApplicationService = getAgentTaskApplicationService();
-    
-    // Verify task exists
+
+    // Verify task exists and capture details for audit
     const task = await taskApplicationService.getTask(taskId);
     if (!task) {
       return {
@@ -237,12 +299,42 @@ export async function deleteTask(taskId: string): Promise<Result> {
       };
     }
 
+    // Capture task details before deletion for audit
+    const taskName = task.name;
+    const taskStatus = task.status;
+    const agentId = task.agentId;
+    const organizationId = task.organizationId;
+
     // Delete through the repository
     // Note: Ideally this would be a method on the application service
     await (taskApplicationService as any).taskRepository.delete(taskId);
 
+    // Audit log the deletion
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(organizationId),
+      {
+        eventType: 'agent',
+        eventCategory: 'task_crud',
+        eventAction: 'delete',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'task',
+        resourceId: taskId,
+        resourceName: taskName,
+        parentResourceType: 'agent',
+        parentResourceId: String(agentId),
+        eventData: {
+          agentId,
+          finalStatus: taskStatus,
+        },
+        success: true,
+      }
+    );
+
     revalidatePath('/dashboard');
-    
+
     return {
       success: true,
       data: { message: "Task deleted successfully" },
@@ -358,6 +450,33 @@ export async function uploadTaskAttachment(
     const url = await getSignedUrl(s3Client, getCommand, {
       expiresIn: 3600 // 1 hour
     });
+
+    // Audit log the attachment upload
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      agent.organizationId,
+      {
+        eventType: 'agent',
+        eventCategory: 'task_attachment',
+        eventAction: 'upload',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'attachment',
+        resourceId: s3Key,
+        resourceName: file.name,
+        parentResourceType: 'agent',
+        parentResourceId: String(agentId),
+        eventData: {
+          agentId,
+          filename: file.name,
+          mimeType: file.type,
+          attachmentType,
+          s3Key,
+        },
+        success: true,
+      }
+    );
 
     return {
       success: true,

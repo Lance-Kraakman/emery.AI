@@ -260,7 +260,7 @@ export function AuditTable({
       )}
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-md border border-border">
+      <div className="overflow-x-auto">
         {data.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
             <span className="text-2xl mb-2 opacity-40">📭</span>
