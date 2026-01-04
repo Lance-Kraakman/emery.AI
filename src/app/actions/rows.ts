@@ -235,6 +235,34 @@ export async function createRows(data: { tableId: number; rows: Record<string, a
       };
     }
 
+    // AUDIT: Log row creations
+    if (result.data && result.data.length > 0) {
+      const auditContext: RowAuditContext = {
+        organizationId: table.organizationId.value,
+        tableId,
+        tableName: table.name,
+        actor: {
+          type: 'user',
+          id: session.user.id,
+          name: session.user.name || undefined,
+        },
+      };
+
+      for (const createdRow of result.data) {
+        const rowSnapshot = createdRow.toNamedObject(table.fields);
+        logRowCreate(auditContext, { rowId: createdRow.id.value, rowSnapshot });
+      }
+    }
+
+    // Invalidate caches for this table (view aggregations, stats, etc.)
+    const cacheService = getCacheService();
+    if (cacheService.isConnected()) {
+      await Promise.all([
+        cacheService.invalidateByTag(CACHE_TAGS.tableStats(tableId)),
+        cacheService.invalidateByTag(CACHE_TAGS.table(tableId)),
+      ]);
+    }
+
     // Optional revalidation with custom URL
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
