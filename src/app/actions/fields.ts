@@ -5,8 +5,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission, requireResourcePermission, getSessionSafe } from "./permissions";
+import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
-import { getTableApplicationService, getViewApplicationService } from "@/ddd/application/di/container";
+import { getTableApplicationService, getViewApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
+import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import type { Result, CreateFieldData } from "./types";
 import type { FieldType, AutonumberFieldConfig } from "@/ddd/domain/tables/value-objects/table-field";
 import type { CreateFieldCommand } from "@/ddd/application/services/tables/table-application-service";
@@ -19,6 +21,7 @@ const logger = createDebugLogger('Fields');
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("database:create");
+    const currentOrg = await requireCurrentOrganization();
     const { tableId, name, type, required = false, relatedTableId, metadata } = data;
 
     if (!tableId || !name || !type) {
@@ -104,6 +107,29 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
     }
 
     // Note: RAG reindexing is now handled automatically by database triggers
+
+    // AUDIT: Log field creation
+    if (result.data) {
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'database',
+          eventCategory: 'field_crud',
+          eventAction: 'create',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'field',
+          resourceId: String(result.data.id),
+          resourceName: result.data.name,
+          parentResourceType: 'table',
+          parentResourceId: String(tableId),
+          eventData: { type, required, relatedTableId },
+          success: true,
+        }
+      );
+    }
 
     // Revalidate the appropriate path
     if (revalidateUrl) {
@@ -262,7 +288,8 @@ export async function updateField(data: {
     }
 
     // Fields inherit permissions from their parent table
-    await requireResourcePermission("database:manage", "table", tableId);
+    const session = await requireResourcePermission("database:manage", "table", tableId);
+    const currentOrg = await requireCurrentOrganization();
     logger.debug('[updateField] Permission check passed');
 
     const tableApplicationService = getTableApplicationService();
@@ -304,6 +331,29 @@ export async function updateField(data: {
       });
     }
 
+    // AUDIT: Log field update
+    if (result.data) {
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'database',
+          eventCategory: 'field_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'field',
+          resourceId: String(result.data.id),
+          resourceName: result.data.name,
+          parentResourceType: 'table',
+          parentResourceId: String(tableId),
+          eventData: { updates },
+          success: true,
+        }
+      );
+    }
+
     // Revalidate the appropriate path
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
@@ -339,7 +389,8 @@ export async function deleteField(tableId: number, fieldName: string, revalidate
     }
 
     // Fields inherit permissions from their parent table
-    await requireResourcePermission("database:manage", "table", tableId);
+    const session = await requireResourcePermission("database:manage", "table", tableId);
+    const currentOrg = await requireCurrentOrganization();
     logger.debug('[deleteField] Permission check passed');
 
     const tableApplicationService = getTableApplicationService();
@@ -356,6 +407,27 @@ export async function deleteField(tableId: number, fieldName: string, revalidate
     }
 
     logger.debug('[deleteField] tableApplicationService.deleteField succeeded');
+
+    // AUDIT: Log field deletion
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'field_crud',
+        eventAction: 'delete',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'field',
+        resourceId: fieldName, // Field ID not available after deletion
+        resourceName: fieldName,
+        parentResourceType: 'table',
+        parentResourceId: String(tableId),
+        eventData: {},
+        success: true,
+      }
+    );
 
     // Revalidate the appropriate path
     if (revalidateUrl) {
@@ -461,7 +533,8 @@ export async function reorderFields(data: {
     }
 
     // Fields inherit permissions from their parent table
-    await requireResourcePermission("database:manage", "table", tableId);
+    const session = await requireResourcePermission("database:manage", "table", tableId);
+    const currentOrg = await requireCurrentOrganization();
 
     // Filter out system 'id' field - it's a synthetic field not stored in DB
     const filteredFieldOrders = fieldOrders.filter(fo => fo.fieldName !== 'id');
@@ -484,6 +557,27 @@ export async function reorderFields(data: {
     }
 
     logger.summary('Fields reordered successfully', { tableId, fieldCount: fieldOrders.length });
+
+    // AUDIT: Log field reorder
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'field_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'field',
+        resourceId: String(tableId),
+        resourceName: 'field_order',
+        parentResourceType: 'table',
+        parentResourceId: String(tableId),
+        eventData: { action: 'reorder', fieldCount: fieldOrders.length },
+        success: true,
+      }
+    );
 
     // Revalidate the appropriate path
     if (revalidateUrl) {

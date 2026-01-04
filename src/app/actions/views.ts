@@ -15,7 +15,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission, requireResourcePermission, getSessionSafe } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { getViewApplicationService, getFileApplicationService } from "@/ddd/application/di/container";
+import { getViewApplicationService, getFileApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import { OrganizationId, TableId, UserId, FieldId } from "@/ddd/domain/shared/value-objects";
 import type { FileFieldValue } from "@/ddd/domain/tables/value-objects/field-values";
 import { ViewId } from "@/ddd/domain/views/value-objects/view-id";
@@ -163,6 +163,27 @@ export async function createView(
       };
     }
 
+    // AUDIT: Log view creation
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'view_crud',
+        eventAction: 'create',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'view',
+        resourceId: String(result.data.id.value),
+        resourceName: result.data.name,
+        parentResourceType: 'table',
+        parentResourceId: String(tableId),
+        eventData: { viewType: viewType?.toString(), requiresAuth },
+        success: true,
+      }
+    );
+
     // Only revalidate if explicitly requested (prevents unwanted page reloads)
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
@@ -200,8 +221,8 @@ export async function updateView(
       };
     }
 
-    await requireResourcePermission("view:manage", "view", id);
-    await requireCurrentOrganization();
+    const session = await requireResourcePermission("view:manage", "view", id);
+    const currentOrg = await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();
 
@@ -329,6 +350,27 @@ export async function updateView(
     const dataSourceRepository = (dataSourceService as any).dataSourceRepository;
     const savedView = await dataSourceRepository.save(dataSource);
 
+    // AUDIT: Log view update
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'view_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'view',
+        resourceId: String(id),
+        resourceName: savedView.name,
+        parentResourceType: 'table',
+        parentResourceId: String(savedView.tableId.value),
+        eventData: { updatedFields: Object.keys(data).filter(k => k !== 'id') },
+        success: true,
+      }
+    );
+
     // Only revalidate if explicitly requested (prevents unwanted page reloads)
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
@@ -362,10 +404,15 @@ export async function deleteView(
       };
     }
 
-    await requireResourcePermission("view:manage", "view", id);
-    await requireCurrentOrganization();
+    const session = await requireResourcePermission("view:manage", "view", id);
+    const currentOrg = await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();
+
+    // AUDIT: Get view info BEFORE deletion
+    const viewResult = await dataSourceService.getView(ViewId.fromNumber(id));
+    const viewName = viewResult.data?.name;
+    const tableId = viewResult.data?.tableId.value;
 
     const result = await dataSourceService.deleteView(
       ViewId.fromNumber(id)
@@ -377,6 +424,27 @@ export async function deleteView(
         error: result.error || "Failed to delete view",
       };
     }
+
+    // AUDIT: Log view deletion
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'view_crud',
+        eventAction: 'delete',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'view',
+        resourceId: String(id),
+        resourceName: viewName,
+        parentResourceType: 'table',
+        parentResourceId: tableId ? String(tableId) : undefined,
+        eventData: {},
+        success: true,
+      }
+    );
 
     // Only revalidate if explicitly requested (prevents unwanted page reloads)
     if (revalidateUrl) {
