@@ -6,7 +6,7 @@ import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
 import { type Result, type CreateAgentData, type CreateAgentClientData } from "./types";
-import { getAgentApplicationService } from "@/ddd/application/di/container";
+import { getAgentApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from "@/app/dtos/agent.dto";
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
 import type { UpdateAgentData } from '@/ddd/domain/agents/entities/agent';
@@ -19,6 +19,7 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("agents:manage");
+      const currentOrg = await requireCurrentOrganization();
       const agentApplicationService = getAgentApplicationService();
 
       // Serialize automations if they're AutomationConfiguration instances
@@ -59,6 +60,25 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
           error: result.error || "Failed to create agent"
         };
       }
+
+      // AUDIT: Log agent creation
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'agent',
+          eventCategory: 'agent_crud',
+          eventAction: 'create',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'agent',
+          resourceId: String(result.data.id),
+          resourceName: result.data.name,
+          eventData: { role: data.role, status: dto.status },
+          success: true,
+        }
+      );
 
       // Note: RAG reindexing is now handled automatically by database triggers
 
@@ -252,6 +272,7 @@ export async function updateAgent(agentId: number, data: Partial<UpdateAgentData
 
       // Check resource-specific permission for updating this specific agent
       const session = await requireResourcePermission("agents:manage", "agent", agentId);
+      const currentOrg = await requireCurrentOrganization();
       const agentApplicationService = getAgentApplicationService();
 
       // LOGGING: Start of update operation
@@ -325,6 +346,25 @@ export async function updateAgent(agentId: number, data: Partial<UpdateAgentData
         };
       }
 
+      // AUDIT: Log agent update
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'agent',
+          eventCategory: 'agent_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'agent',
+          resourceId: String(agentId),
+          resourceName: result.data.name,
+          eventData: { updatedFields: Object.keys(data) },
+          success: true,
+        }
+      );
+
       // Revalidate the appropriate path
       if (revalidateUrl) {
         revalidatePath(revalidateUrl);
@@ -359,30 +399,54 @@ export async function deleteAgent(agentId: number, revalidateUrl?: string): Prom
       }
 
       const session = await requirePermission("agents:manage");
-    const agentApplicationService = getAgentApplicationService();
+      const currentOrg = await requireCurrentOrganization();
+      const agentApplicationService = getAgentApplicationService();
 
-    const result = await agentApplicationService.deleteAgent(AgentId.fromNumber(agentId));
+      // AUDIT: Get agent name BEFORE deletion
+      const agentToDelete = await agentApplicationService.getAgent(AgentId.fromNumber(agentId));
+      const agentName = agentToDelete?.name;
 
-    if (!result.success) {
+      const result = await agentApplicationService.deleteAgent(AgentId.fromNumber(agentId));
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || "Failed to delete agent"
+        };
+      }
+
+      // AUDIT: Log agent deletion
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'agent',
+          eventCategory: 'agent_crud',
+          eventAction: 'delete',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'agent',
+          resourceId: String(agentId),
+          resourceName: agentName,
+          eventData: {},
+          success: true,
+        }
+      );
+
+      // Revalidate the appropriate path
+      if (revalidateUrl) {
+        revalidatePath(revalidateUrl);
+      } else {
+        revalidatePath('/manage'); // Default path for agent operations
+      }
+
       return {
-        success: false,
-        error: result.error || "Failed to delete agent"
+        success: true,
+        data: { message: "Agent deleted successfully" },
       };
-    }
-
-    // Revalidate the appropriate path
-    if (revalidateUrl) {
-      revalidatePath(revalidateUrl);
-    } else {
-      revalidatePath('/manage'); // Default path for agent operations
-    }
-
-    return {
-      success: true,
-      data: { message: "Agent deleted successfully" },
-    };
-  } catch (error) {
-    console.error("Error deleting agent:", error);
+    } catch (error) {
+      console.error("Error deleting agent:", error);
       return {
         success: false,
         error: "Failed to delete agent",
@@ -440,6 +504,25 @@ export async function duplicateAgent(agentId: number, revalidateUrl?: string): P
         };
       }
 
+      // AUDIT: Log agent duplication
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'agent',
+          eventCategory: 'agent_crud',
+          eventAction: 'create',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'agent',
+          resourceId: String(result.data.id),
+          resourceName: result.data.name,
+          eventData: { duplicatedFrom: agentId, originalName: originalAgent.name },
+          success: true,
+        }
+      );
+
       // Revalidate the appropriate path
       if (revalidateUrl) {
         revalidatePath(revalidateUrl);
@@ -491,6 +574,7 @@ export async function deployPipedreamSource(
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("agents:manage");
+      const currentOrg = await requireCurrentOrganization();
       const { agentId, triggerId, connectionId, appSlug, configuredProps } = input;
 
       console.log('[AgentActions] Deploying Pipedream source:', {
@@ -521,6 +605,24 @@ export async function deployPipedreamSource(
       });
 
       console.log('[AgentActions] Source deployed:', result);
+
+      // AUDIT: Log Pipedream source deployment
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'agent',
+          eventCategory: 'agent_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'agent',
+          resourceId: String(agentId),
+          eventData: { action: 'deploy_pipedream_source', appSlug, triggerId, sourceId: result.sourceId },
+          success: true,
+        }
+      );
 
       return {
         success: true,

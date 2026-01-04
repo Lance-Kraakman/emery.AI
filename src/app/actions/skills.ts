@@ -1,7 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getSkillApplicationService, getAgentApplicationService, getStorageQuotaApplicationService } from '@/ddd/application/di/container';
+import { getSkillApplicationService, getAgentApplicationService, getStorageQuotaApplicationService, getAuditApplicationService } from '@/ddd/application/di/container';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { SkillMapper } from '@/app/mappers/skill-mapper';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { getServerSession } from 'next-auth';
@@ -115,6 +116,27 @@ export async function createSkill(command: {
       return { success: false, error: 'Failed to fetch created skill' };
     }
 
+    // AUDIT: Log skill creation
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(agent.organizationId.value),
+      {
+        eventType: 'agent',
+        eventCategory: 'skill_crud',
+        eventAction: 'create',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'skill',
+        resourceId: String(result.data!.value),
+        resourceName: command.name,
+        parentResourceType: 'agent',
+        parentResourceId: String(command.agentId),
+        eventData: { executionType: command.executionType },
+        success: true,
+      }
+    );
+
     // Revalidate sidebar and skill pages
     revalidatePath(`/agents/${command.agentId}/skills`);
     revalidatePath('/');
@@ -225,6 +247,25 @@ export async function createOrganizationSkill(command: {
       return { success: false, error: 'Failed to fetch created skill' };
     }
 
+    // AUDIT: Log organization skill creation
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(command.organizationId),
+      {
+        eventType: 'agent',
+        eventCategory: 'skill_crud',
+        eventAction: 'create',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'skill',
+        resourceId: String(result.data!.value),
+        resourceName: command.name,
+        eventData: { executionType: command.executionType, isOrganizationSkill: true },
+        success: true,
+      }
+    );
+
     // Revalidate sidebar and skills pages
     revalidatePath('/skills');
     revalidatePath('/');
@@ -312,6 +353,27 @@ export async function updateSkill(
       return { success: false, error: 'Failed to fetch updated skill' };
     }
 
+    // AUDIT: Log skill update
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      skill.organizationId,
+      {
+        eventType: 'agent',
+        eventCategory: 'skill_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'skill',
+        resourceId: String(skillId),
+        resourceName: updatedSkillResult.data.name,
+        parentResourceType: skill.agentId ? 'agent' : undefined,
+        parentResourceId: skill.agentId ? String(skill.agentId.value) : undefined,
+        eventData: { updatedFields: Object.keys(command) },
+        success: true,
+      }
+    );
+
     // Revalidate sidebar and skill pages
     const updatedSkill = updatedSkillResult.data;
     if (updatedSkill.agentId) {
@@ -373,6 +435,27 @@ export async function deleteSkill(skillId: number): Promise<Result<void>> {
     const result = await service.deleteSkill(skillId);
 
     if (result.success) {
+      // AUDIT: Log skill deletion
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        skill.organizationId,
+        {
+          eventType: 'agent',
+          eventCategory: 'skill_crud',
+          eventAction: 'delete',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'skill',
+          resourceId: String(skillId),
+          resourceName: skill.name,
+          parentResourceType: skill.agentId ? 'agent' : undefined,
+          parentResourceId: skill.agentId ? String(skill.agentId.value) : undefined,
+          eventData: {},
+          success: true,
+        }
+      );
+
       // Revalidate sidebar and skill pages
       if (agentId) {
         revalidatePath(`/agents/${agentId}/skills`);
@@ -447,6 +530,27 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
     if (!newSkillResult.success || !newSkillResult.data) {
       return { success: false, error: 'Failed to fetch duplicated skill' };
     }
+
+    // AUDIT: Log skill duplication
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      originalSkill.organizationId,
+      {
+        eventType: 'agent',
+        eventCategory: 'skill_crud',
+        eventAction: 'create',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'skill',
+        resourceId: String(createResult.data.value),
+        resourceName: newName,
+        parentResourceType: originalSkill.agentId ? 'agent' : undefined,
+        parentResourceId: originalSkill.agentId ? String(originalSkill.agentId.value) : undefined,
+        eventData: { duplicatedFrom: skillId, originalName: originalSkill.name },
+        success: true,
+      }
+    );
 
     // Revalidate sidebar and skill pages
     if (originalSkill.agentId) {

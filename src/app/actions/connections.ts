@@ -4,7 +4,7 @@
 // Provides same interface for frontend components but uses new DDD architecture
 
 import { requireAuth } from "./permissions";
-import { getConnectionApplicationService } from "@/ddd/application/di/container";
+import { getConnectionApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
 import { AppName, ConnectionId, createDefaultPaginationOptions } from "@/ddd/domain/connections/value-objects";
 import { ConnectionMapper, type ConnectionDTO } from "@/app/mappers/connection-mapper";
@@ -215,18 +215,36 @@ export async function disconnectOAuthAccount(data: {
     }
     
     const result = await connectionService.disconnectConnection(connectionId);
-    
+
     if (result.success) {
       console.log(`[ConnectionActions] Successfully disconnected account ${data.accountId}`);
+
+      // AUDIT: Log connection disconnection
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(session.user.currentOrganizationId),
+        {
+          eventType: 'agent',
+          eventCategory: 'connection_crud',
+          eventAction: 'delete',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'connection',
+          resourceId: data.accountId,
+          eventData: { action: 'disconnect' },
+          success: true,
+        }
+      );
     } else {
       console.error(`[ConnectionActions] Failed to disconnect ${data.accountId}:`, result.error);
     }
-    
+
     return result;
   } catch (error) {
     console.error('[ConnectionActions] Error disconnecting OAuth account:', error);
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: 'Failed to disconnect account'
     };
   }
