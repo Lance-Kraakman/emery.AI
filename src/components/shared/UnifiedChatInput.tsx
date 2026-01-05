@@ -161,8 +161,8 @@ export function UnifiedChatInput<T = ToolDTO>({
       atMatch[0].startsWith('@skill:')
     );
 
-    // Check for { variable trigger (only if variables are provided)
-    if (braceMatch && variables && variables.length > 0) {
+    // Check for { variable trigger
+    if (braceMatch) {
       const query = braceMatch[1] || '';
       setDropdownQuery(query);
       setDropdownType('variables');
@@ -643,7 +643,7 @@ export function UnifiedChatInput<T = ToolDTO>({
           />
         ) : (
           /* Variable Dropdown */
-          showDropdown && variables && (
+          showDropdown && dropdownType === 'variables' && (
             <div
               className="fixed z-[100] bg-popover border rounded-lg shadow-lg w-[440px] overflow-auto"
               style={{
@@ -656,24 +656,33 @@ export function UnifiedChatInput<T = ToolDTO>({
                 <div className="text-xs font-medium text-muted-foreground px-2 py-1.5">
                   Variables
                 </div>
-                {variables
-                  .filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase()))
-                  .map((variable, index) => (
-                    <button
-                      key={variable.name}
-                      className={`w-full text-left px-3 py-2 rounded transition-colors flex flex-col gap-1 ${
-                        index === selectedIndex ? 'bg-accent' : 'hover:bg-accent'
-                      }`}
-                      onClick={() => handleVariableSelect(variable)}
-                    >
-                      <div className="font-mono text-sm">{`{{${variable.name}}}`}</div>
-                      <div className="text-xs text-muted-foreground">{variable.description}</div>
-                    </button>
-                  ))}
-                {variables.filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase())).length === 0 && (
-                  <div className="px-3 py-2 text-sm text-muted-foreground">
-                    No variables found
+                {(!variables || variables.length === 0) ? (
+                  <div className="px-3 py-3 text-sm text-muted-foreground">
+                    <p className="mb-1">No variables available.</p>
+                    <p className="text-xs">Define skill inputs in the Skill Config panel (click empty canvas) to use them as variables.</p>
                   </div>
+                ) : (
+                  <>
+                    {variables
+                      .filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase()))
+                      .map((variable, index) => (
+                        <button
+                          key={variable.name}
+                          className={`w-full text-left px-3 py-2 rounded transition-colors flex flex-col gap-1 ${
+                            index === selectedIndex ? 'bg-accent' : 'hover:bg-accent'
+                          }`}
+                          onClick={() => handleVariableSelect(variable)}
+                        >
+                          <div className="font-mono text-sm">{`{{${variable.name}}}`}</div>
+                          <div className="text-xs text-muted-foreground">{variable.description}</div>
+                        </button>
+                      ))}
+                    {variables.filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase())).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-muted-foreground">
+                        No matching variables found
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
