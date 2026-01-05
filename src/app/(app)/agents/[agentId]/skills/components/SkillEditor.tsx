@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { InputDefinition, OutputDefinition } from '@/app/mappers/skill-mapper';
 import type { SkillStep } from '@/ddd/domain/skills/entities/skill';
-import type { WorkflowNode, WorkflowNodeData, WorkflowEdge } from '@/components/workflow-canvas/types';
+import type { WorkflowNode, WorkflowNodeData, WorkflowEdge, LoopNodeData } from '@/components/workflow-canvas/types';
 import type { WorkflowVariable } from '@/components/workflow-canvas/WorkflowVariableInput';
 import { NodeConfigContent } from './NodeConfigContent';
 import { RootSkillConfig } from './RootSkillConfig';
@@ -107,7 +107,7 @@ export function SkillEditor({
       });
     }
 
-    // 2. Outputs from upstream connected nodes
+    // 2. Outputs from upstream connected nodes + loop context
     if (selectedNodeId && nodes.length > 0 && edges.length > 0) {
       // Find all edges that point TO the selected node
       const incomingEdges = edges.filter(e => e.target === selectedNodeId);
@@ -125,9 +125,41 @@ export function SkillEditor({
           }
         }
       }
-    }
 
-    // TODO: Add loop context variables (item, index) when inside a loop
+      // 3. Loop context variables (if node is inside a loop)
+      // Walk upstream to find any enclosing loop node
+      const visited = new Set<string>();
+      const queue = [selectedNodeId];
+
+      while (queue.length > 0) {
+        const nodeId = queue.shift()!;
+        if (visited.has(nodeId)) continue;
+        visited.add(nodeId);
+
+        const node = nodes.find(n => n.id === nodeId);
+        if (node?.type === 'loop') {
+          const loopData = node.data as LoopNodeData;
+          const itemVar = loopData.loopConfig?.currentItemVar || 'item';
+
+          vars.push({
+            name: itemVar,
+            label: `${node.data.name}: current item`,
+            description: 'Current item in loop iteration',
+            group: 'loop',
+          });
+          vars.push({
+            name: '__loop_index__',
+            label: `${node.data.name}: index`,
+            description: 'Current loop iteration index (0-based)',
+            group: 'loop',
+          });
+          break; // Found enclosing loop
+        }
+
+        // Add upstream nodes to queue
+        edges.filter(e => e.target === nodeId).forEach(e => queue.push(e.source));
+      }
+    }
 
     return vars;
   }, [value.inputs, selectedNodeId, nodes, edges]);

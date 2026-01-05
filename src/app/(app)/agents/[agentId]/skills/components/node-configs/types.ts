@@ -34,10 +34,17 @@ export interface ConfigWithVariables<T extends WorkflowNodeData> extends BaseCon
 }
 
 /**
- * Config props with skill inputs (for tool/write/read nodes)
+ * Config props with skill inputs (for tool/write nodes)
  */
 export interface ConfigWithSkillInputs<T extends WorkflowNodeData> extends BaseConfigProps<T> {
   skillInputs: InputDefinition[];
+}
+
+/**
+ * Config props with workflow variables (for write field mapping, read row ID)
+ */
+export interface ConfigWithWorkflowVariables<T extends WorkflowNodeData> extends BaseConfigProps<T> {
+  workflowVariables: WorkflowVariable[];
 }
 
 /**

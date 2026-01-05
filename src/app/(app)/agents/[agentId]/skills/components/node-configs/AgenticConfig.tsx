@@ -24,8 +24,8 @@ export function AgenticConfig({
   }));
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-1.5">
+    <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor="instructions" className="text-xs">
           Instructions
         </Label>
@@ -41,7 +41,7 @@ export function AgenticConfig({
         />
       </div>
 
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <Label className="text-xs">Agent Type</Label>
         <Select
           value={data.agentType || 'tool_calling'}
@@ -59,7 +59,7 @@ export function AgenticConfig({
       </div>
 
       {data.tools && data.tools.length > 0 && (
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <Label className="text-xs">Tools ({data.tools.length})</Label>
           <div className="flex flex-wrap gap-1">
             {data.tools.map((tool, idx) => (

@@ -1,22 +1,22 @@
 'use client';
 
 import { WriteConfigForm } from '../editor/WriteConfigForm';
-import type { ConfigWithSkillInputs, WriteNodeData } from './types';
+import type { ConfigWithWorkflowVariables, WriteNodeData } from './types';
 
 /**
- * Write node config - uses the full WriteConfigForm
+ * Write node config - uses the full WriteConfigForm with workflow variables
  */
 export function WriteConfig({
   data,
   onUpdate,
-  skillInputs,
+  workflowVariables = [],
   disabled,
-}: ConfigWithSkillInputs<WriteNodeData>) {
+}: ConfigWithWorkflowVariables<WriteNodeData>) {
   return (
     <WriteConfigForm
       value={data.writeConfig}
       onChange={(writeConfig) => onUpdate({ writeConfig })}
-      skillInputs={skillInputs}
+      workflowVariables={workflowVariables}
       onInputDefinitionsChange={(inputs) => onUpdate({ inputDefs: inputs })}
       disabled={disabled}
     />

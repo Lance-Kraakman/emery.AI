@@ -47,6 +47,8 @@ export function useWorkflowCanvas({
   const isSyncingFromParent = useRef(false);
   // Track last steps to detect external changes
   const lastStepsRef = useRef<SkillStep[]>(steps);
+  // Track if canvas has been initialized (had nodes at some point)
+  const hasInitialized = useRef(false);
 
   // ==========================================================================
   // Sync: Parent steps → Canvas nodes/edges (on mount or external changes)
@@ -84,7 +86,15 @@ export function useWorkflowCanvas({
   // Debounced sync on node/edge changes
   useEffect(() => {
     if (isSyncingFromParent.current) return;
-    if (nodes.length === 0) return;
+
+    // Track when we first get nodes
+    if (nodes.length > 0) {
+      hasInitialized.current = true;
+    }
+
+    // Skip sync if we've never had nodes (initial empty state)
+    // But allow sync when deleting down to zero (hasInitialized is true)
+    if (nodes.length === 0 && !hasInitialized.current) return;
 
     const timeoutId = setTimeout(() => {
       syncToParent();

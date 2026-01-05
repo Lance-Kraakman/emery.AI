@@ -30,8 +30,8 @@ export function LoopConfig({
   };
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-1.5">
+    <div className="space-y-2">
+      <div className="space-y-1">
         <Label className="text-xs">Loop Type</Label>
         <Select
           value={loopConfig.type}
@@ -51,7 +51,7 @@ export function LoopConfig({
 
       {loopConfig.type === 'for_each' ? (
         <>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <Label className="text-xs">Items Variable</Label>
             <WorkflowVariableInput
               value={loopConfig.itemsVar || ''}
@@ -62,7 +62,7 @@ export function LoopConfig({
               className="h-8"
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <Label className="text-xs">Current Item Variable</Label>
             <Input
               value={loopConfig.currentItemVar || 'item'}
@@ -76,7 +76,7 @@ export function LoopConfig({
           </div>
         </>
       ) : (
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <Label className="text-xs">Condition</Label>
           <WorkflowVariableInput
             value={loopConfig.condition || ''}
@@ -89,7 +89,7 @@ export function LoopConfig({
         </div>
       )}
 
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <Label className="text-xs">Max Iterations</Label>
         <Input
           type="number"

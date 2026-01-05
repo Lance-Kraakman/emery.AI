@@ -13,11 +13,12 @@ import { getFields } from '@/app/actions/fields';
 import type { TableDTO } from '@/app/mappers/table-mapper';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { WriteConfig, WriteFieldMapping, UpdateMatchConfig, InputDefinition } from '@/ddd/domain/skills/entities/skill';
+import type { WorkflowVariable } from '@/components/workflow-canvas/WorkflowVariableInput';
 
 interface WriteConfigFormProps {
   value: WriteConfig | undefined;
   onChange: (config: WriteConfig | undefined) => void;
-  skillInputs: InputDefinition[];
+  workflowVariables: WorkflowVariable[];
   onInputDefinitionsChange: (inputs: InputDefinition[]) => void;
   disabled?: boolean;
 }
@@ -29,7 +30,7 @@ interface WriteConfigFormProps {
 export function WriteConfigForm({
   value,
   onChange,
-  skillInputs,
+  workflowVariables,
   onInputDefinitionsChange,
   disabled
 }: WriteConfigFormProps) {
@@ -244,17 +245,17 @@ export function WriteConfigForm({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Table Selection */}
       {!value?.targetTableId ? (
-        <div className="border rounded-lg p-4">
-          <Label className="text-sm font-medium mb-2 block">Target Table</Label>
+        <div className="border rounded-lg p-3">
+          <Label className="text-xs font-medium mb-1.5 block">Target Table</Label>
           <Select
             value=""
             onValueChange={handleTableSelect}
             disabled={disabled}
           >
-            <SelectTrigger>
+            <SelectTrigger className="h-8 text-sm">
               <SelectValue placeholder="Select a table..." />
             </SelectTrigger>
             <SelectContent>
@@ -274,24 +275,24 @@ export function WriteConfigForm({
               )}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground mt-2">
+          <p className="text-[10px] text-muted-foreground mt-1.5">
             Select the table where data will be written.
           </p>
         </div>
       ) : (
         /* Selected Table Configuration */
-        <div className="border rounded-lg p-4 bg-primary/5">
-          <div className="flex items-start justify-between mb-4">
+        <div className="border rounded-lg p-3 bg-primary/5">
+          <div className="flex items-start justify-between mb-3">
             <div>
-              <div className="flex items-center gap-2">
-                <Database className="h-4 w-4" />
-                <span className="font-medium">{selectedTable?.name || 'Table'}</span>
-                <Badge variant="secondary" className="text-xs">
+              <div className="flex items-center gap-1.5">
+                <Database className="h-3.5 w-3.5" />
+                <span className="font-medium text-sm">{selectedTable?.name || 'Table'}</span>
+                <Badge variant="secondary" className="text-[10px]">
                   {fields.length} fields
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                Configure how skill inputs map to table fields.
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Map variables to table fields.
               </p>
             </div>
             <Button
@@ -305,46 +306,46 @@ export function WriteConfigForm({
           </div>
 
           {/* Row Action Toggle */}
-          <div className="mb-4">
-            <Label className="text-sm font-medium mb-2 block">Row Action</Label>
-            <div className="grid grid-cols-2 gap-2">
+          <div className="mb-3">
+            <Label className="text-xs font-medium mb-1.5 block">Row Action</Label>
+            <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
                 onClick={() => handleRowActionChange('create')}
                 disabled={disabled}
                 className={cn(
-                  'flex items-center justify-center gap-2 p-2 rounded-md border-2 transition-all',
+                  'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md border transition-all text-xs',
                   value?.rowAction === 'create'
                     ? 'border-primary bg-primary/5'
                     : 'border-border bg-background hover:bg-accent/50'
                 )}
               >
-                <Plus className="h-4 w-4" />
-                <span className="text-sm font-medium">Create Row</span>
+                <Plus className="h-3.5 w-3.5" />
+                <span className="font-medium">Create</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleRowActionChange('update')}
                 disabled={disabled}
                 className={cn(
-                  'flex items-center justify-center gap-2 p-2 rounded-md border-2 transition-all',
+                  'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md border transition-all text-xs',
                   value?.rowAction === 'update'
                     ? 'border-primary bg-primary/5'
                     : 'border-border bg-background hover:bg-accent/50'
                 )}
               >
-                <RefreshCw className="h-4 w-4" />
-                <span className="text-sm font-medium">Update Row</span>
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span className="font-medium">Update</span>
               </button>
             </div>
           </div>
 
           {/* Update Match Config (only for update action) */}
           {value?.rowAction === 'update' && (
-            <div className="mb-4 p-3 bg-background rounded-md border">
-              <Label className="text-sm font-medium mb-2 block">Match Row By</Label>
-              <p className="text-xs text-muted-foreground mb-2">
-                Select a skill input and field to identify which row to update.
+            <div className="mb-3 p-2 bg-background rounded-md border">
+              <Label className="text-xs font-medium mb-1 block">Match Row By</Label>
+              <p className="text-[10px] text-muted-foreground mb-1.5">
+                Select input and field to match row.
               </p>
               <div className="flex items-center gap-2">
                 <Select
@@ -353,12 +354,12 @@ export function WriteConfigForm({
                   disabled={disabled}
                 >
                   <SelectTrigger className="flex-1 h-8">
-                    <SelectValue placeholder="Skill input..." />
+                    <SelectValue placeholder="Variable..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {skillInputs.map(input => (
-                      <SelectItem key={input.name} value={input.name}>
-                        {input.name}
+                    {workflowVariables.map(v => (
+                      <SelectItem key={v.name} value={v.name}>
+                        {v.label || v.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -386,30 +387,30 @@ export function WriteConfigForm({
 
           {/* Field Mappings */}
           {isLoadingFields ? (
-            <div className="text-sm text-muted-foreground text-center py-4">
+            <div className="text-xs text-muted-foreground text-center py-2">
               Loading fields...
             </div>
           ) : fields.length === 0 ? (
-            <div className="text-sm text-muted-foreground text-center py-4">
+            <div className="text-xs text-muted-foreground text-center py-2">
               No fields found in this table.
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">Field Mappings</Label>
+                <Label className="text-xs font-medium">Field Mappings</Label>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleAutoCreateInputs}
                   disabled={disabled}
-                  className="text-xs"
+                  className="text-[10px] h-6 px-2"
                 >
-                  Auto-map from fields
+                  Auto-map
                 </Button>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {fields.map((field) => (
-                  <div key={field.id} className="flex items-center gap-2">
+                  <div key={field.id} className="flex items-center gap-1.5">
                     <div className="flex-1">
                       <Select
                         value={getMappingForField(field.id) || '__none__'}
@@ -421,30 +422,27 @@ export function WriteConfigForm({
                         }}
                         disabled={disabled}
                       >
-                        <SelectTrigger className="h-8">
-                          <SelectValue placeholder="Select input..." />
+                        <SelectTrigger className="h-7 text-xs">
+                          <SelectValue placeholder="Select..." />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">
-                            <span className="text-muted-foreground">Not mapped</span>
+                            <span className="text-muted-foreground">—</span>
                           </SelectItem>
-                          {skillInputs.map(input => (
-                            <SelectItem key={input.name} value={input.name}>
-                              {input.name}
+                          {workflowVariables.map(v => (
+                            <SelectItem key={v.name} value={v.name}>
+                              {v.label || v.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                    <span className="text-muted-foreground">→</span>
+                    <span className="text-muted-foreground text-xs">→</span>
                     <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">{field.name}</span>
-                        <Badge variant="outline" className="text-xs">
-                          {field.type}
-                        </Badge>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs truncate">{field.name}</span>
                         {field.required && (
-                          <Badge variant="secondary" className="text-xs">required</Badge>
+                          <span className="text-[9px] text-destructive">*</span>
                         )}
                       </div>
                     </div>

@@ -139,7 +139,7 @@ export function NodeConfigContent({
         <WriteConfig
           data={data as WriteNodeData}
           onUpdate={handleUpdate}
-          skillInputs={skillInputs}
+          workflowVariables={workflowVariables}
           disabled={disabled}
         />
       )}
@@ -148,7 +148,7 @@ export function NodeConfigContent({
         <ReadConfig
           data={data as ReadNodeData}
           onUpdate={handleUpdate}
-          skillInputs={skillInputs}
+          workflowVariables={workflowVariables}
           disabled={disabled}
         />
       )}
