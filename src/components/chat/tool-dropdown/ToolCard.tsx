@@ -56,14 +56,14 @@ export function ToolCard({ tool, index, isSelected, onSelect, onMouseEnter, avai
         onClick={() => onSelect({ ...tool, insertText: displayInfo.insertText })}
         onMouseEnter={onMouseEnter}
         className={cn(
-          'w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-50 last:border-b-0 transition-colors',
-          isSelected && 'bg-blue-50 border-blue-100'
+          'w-full px-4 py-3 text-left hover:bg-accent border-b border-border/50 last:border-b-0 transition-colors',
+          isSelected && 'bg-accent'
         )}
       >
         <div className="flex items-start gap-3">
           {/* Provider icon or default */}
           {app?.icon && !iconError ? (
-            <div className="p-1 rounded-md flex-shrink-0 bg-white border border-gray-200">
+            <div className="p-1 rounded-md flex-shrink-0 bg-background border border-border">
               <img
                 src={app.icon}
                 alt={app.name}
@@ -72,37 +72,37 @@ export function ToolCard({ tool, index, isSelected, onSelect, onMouseEnter, avai
               />
             </div>
           ) : (
-            <div className="p-1 rounded-md flex-shrink-0 text-gray-600 bg-gray-50">
+            <div className="p-1 rounded-md flex-shrink-0 text-muted-foreground bg-muted">
               <Icon className="w-3 h-3" />
             </div>
           )}
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 mb-0.5">
-              <div className="font-medium text-sm text-gray-900 truncate">
+              <div className="font-medium text-sm text-foreground truncate">
                 {displayInfo.displayName}
               </div>
 
               {/* Badges */}
               <div className="flex items-center gap-1 flex-shrink-0">
                 {isMCPTool && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 font-medium">
                     MCP
                   </span>
                 )}
                 {displayInfo.requiresConnection && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-medium">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-medium">
                     OAuth
                   </span>
                 )}
                 {app && !tool.type.includes('reference') && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">
                     {app.name}
                   </span>
                 )}
               </div>
             </div>
-            <div className="text-xs text-gray-500 line-clamp-2">
+            <div className="text-xs text-muted-foreground line-clamp-2">
               {displayInfo.description}
             </div>
 
@@ -116,8 +116,8 @@ export function ToolCard({ tool, index, isSelected, onSelect, onMouseEnter, avai
                     className={cn(
                       'text-[10px] px-1.5 py-0.5 rounded cursor-help transition-colors',
                       param.required
-                        ? 'text-red-700 bg-red-50 font-semibold hover:bg-red-100'
-                        : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                        ? 'text-red-400 bg-red-500/20 font-semibold hover:bg-red-500/30'
+                        : 'text-muted-foreground bg-muted hover:bg-accent'
                     )}
                   >
                     {name}{param.required ? '*' : ''}

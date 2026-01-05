@@ -140,14 +140,14 @@ export function ToolList({
       {isLoading ? (
         <div className="flex items-center justify-center p-4">
           <Loader2 className="w-4 h-4 animate-spin mr-2" />
-          <span className="text-sm text-gray-500">Searching tools...</span>
+          <span className="text-sm text-muted-foreground">Searching tools...</span>
         </div>
       ) : error ? (
-        <div className="p-4 text-center text-sm text-red-600">
+        <div className="p-4 text-center text-sm text-red-400">
           Failed to load tools. Please try again.
         </div>
       ) : tools.length === 0 ? (
-        <div className="p-4 text-center text-sm text-gray-500">
+        <div className="p-4 text-center text-sm text-muted-foreground">
           {query.trim() ? 'No tools found' : 'Type to search tools'}
         </div>
       ) : (
@@ -165,13 +165,13 @@ export function ToolList({
             }
 
             return (
-              <div key={group.provider} className="border-b border-gray-100 last:border-b-0">
+              <div key={group.provider} className="border-b border-border/50 last:border-b-0">
                 {/* Group Header */}
                 <button
                   onClick={() => toggleGroup(group.provider)}
-                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 transition-colors border-b border-gray-100"
+                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-accent transition-colors border-b border-border/50"
                 >
-                  <ChevronIcon className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                  <ChevronIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
 
                   {/* Provider icon with error handling */}
                   <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
@@ -185,11 +185,11 @@ export function ToolList({
                     ) : null}
                   </div>
 
-                  <span className="font-medium text-sm text-gray-700 flex-1 text-left truncate">
+                  <span className="font-medium text-sm text-foreground flex-1 text-left truncate">
                     {group.provider}
                   </span>
 
-                  <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">
+                  <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
                     {group.tools.length}
                   </span>
                 </button>
@@ -216,15 +216,15 @@ export function ToolList({
 
           {/* Loading more indicator */}
           {isLoadingMore && (
-            <div className="flex items-center justify-center p-4 border-t border-gray-100">
+            <div className="flex items-center justify-center p-4 border-t border-border/50">
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              <span className="text-sm text-gray-500">Loading more tools...</span>
+              <span className="text-sm text-muted-foreground">Loading more tools...</span>
             </div>
           )}
 
           {/* Scroll for more indicator */}
           {hasMore && !isLoadingMore && tools.length >= 20 && (
-            <div className="p-2 text-center text-xs text-gray-400 border-t border-gray-100">
+            <div className="p-2 text-center text-xs text-muted-foreground border-t border-border/50">
               {tools.length} tools • Scroll for more
             </div>
           )}
