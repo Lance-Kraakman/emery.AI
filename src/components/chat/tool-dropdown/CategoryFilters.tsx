@@ -40,7 +40,10 @@ export function CategoryFilters({
     return (
       <button
         key={category}
-        onClick={() => onToggleCategory(category)}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleCategory(category);
+        }}
         className={cn(
           'flex items-center justify-center rounded-md font-medium transition-all',
           compact ? 'p-1.5' : 'gap-1 px-2 py-1 text-xs whitespace-nowrap',

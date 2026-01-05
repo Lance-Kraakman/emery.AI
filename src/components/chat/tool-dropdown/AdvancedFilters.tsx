@@ -104,10 +104,15 @@ export function AdvancedFilters({
               type="text"
               value={appSearchQuery}
               onChange={(e) => {
+                e.stopPropagation();
                 onAppSearchChange(e.target.value);
                 onShowAppDropdown(true);
               }}
-              onFocus={() => onShowAppDropdown(true)}
+              onFocus={(e) => {
+                e.stopPropagation();
+                onShowAppDropdown(true);
+              }}
+              onClick={(e) => e.stopPropagation()}
               placeholder={isLoadingApps ? 'Loading...' : (selectedApps.length > 0 ? 'Add more...' : 'Search apps...')}
               className="text-xs border border-border rounded px-2 py-1 bg-background min-w-[100px] text-foreground placeholder:text-muted-foreground"
               disabled={isLoadingApps}
@@ -120,7 +125,10 @@ export function AdvancedFilters({
                   return (
                     <button
                       key={app.id}
-                      onClick={() => toggleApp(app.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleApp(app.id);
+                      }}
                       className={cn(
                         'w-full text-left px-3 py-2 text-xs hover:bg-accent whitespace-nowrap flex items-center justify-between text-foreground',
                         isSelected && 'bg-blue-500/20 font-medium'
@@ -139,33 +147,42 @@ export function AdvancedFilters({
         {/* Checkbox row */}
         <div className="flex items-center gap-3 flex-wrap">
           {/* Connected Only Checkbox */}
-          <label className="flex items-center gap-1 text-muted-foreground cursor-pointer whitespace-nowrap">
+          <label className="flex items-center gap-1 text-muted-foreground cursor-pointer whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
             <input
               type="checkbox"
               checked={connectedOnly}
-              onChange={(e) => onConnectedOnlyChange(e.target.checked)}
+              onChange={(e) => {
+                e.stopPropagation();
+                onConnectedOnlyChange(e.target.checked);
+              }}
               className="w-3 h-3"
             />
             Connected only
           </label>
 
           {/* Requires Connection Checkbox */}
-          <label className="flex items-center gap-1 text-muted-foreground cursor-pointer whitespace-nowrap">
+          <label className="flex items-center gap-1 text-muted-foreground cursor-pointer whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
             <input
               type="checkbox"
               checked={requiresConnection === true}
-              onChange={(e) => onRequiresConnectionChange(e.target.checked ? true : undefined)}
+              onChange={(e) => {
+                e.stopPropagation();
+                onRequiresConnectionChange(e.target.checked ? true : undefined);
+              }}
               className="w-3 h-3"
             />
             OAuth required
           </label>
 
           {/* Show Reference Tools Checkbox */}
-          <label className="flex items-center gap-1 text-muted-foreground cursor-pointer whitespace-nowrap">
+          <label className="flex items-center gap-1 text-muted-foreground cursor-pointer whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
             <input
               type="checkbox"
               checked={showReferenceTools}
-              onChange={(e) => onShowReferenceToolsChange(e.target.checked)}
+              onChange={(e) => {
+                e.stopPropagation();
+                onShowReferenceToolsChange(e.target.checked);
+              }}
               className="w-3 h-3"
             />
             Show reference tools
@@ -174,7 +191,10 @@ export function AdvancedFilters({
           {/* Clear All Filters Button */}
           {hasActiveFilters && (
             <button
-              onClick={onClearAll}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClearAll();
+              }}
               className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/20 px-2 py-1 rounded transition-colors ml-auto"
               title="Clear all filters"
             >

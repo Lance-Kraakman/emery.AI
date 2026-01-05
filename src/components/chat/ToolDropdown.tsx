@@ -183,7 +183,10 @@ export function ToolDropdown({
           compact={true}
         />
         <button
-          onClick={() => setFiltersExpanded(!filtersExpanded)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setFiltersExpanded(!filtersExpanded);
+          }}
           className="ml-auto p-1 rounded hover:bg-accent text-muted-foreground"
           title={filtersExpanded ? 'Hide filters' : 'Show more filters'}
         >
