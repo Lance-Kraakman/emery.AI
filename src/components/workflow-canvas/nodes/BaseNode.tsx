@@ -3,13 +3,12 @@
 /**
  * BaseNode Component
  *
- * Shared wrapper component for all workflow nodes.
- * Eliminates boilerplate duplication across node types.
+ * Compact n8n-style node - just icon + name.
+ * All configuration is done via the side panel.
  */
 
 import React, { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import {
   nodeTheme,
@@ -30,8 +29,8 @@ export function IconBadge({ theme }: IconBadgeProps) {
   const Icon = config.icon;
 
   return (
-    <div className={cn('flex h-6 w-6 items-center justify-center rounded', config.bg)}>
-      <Icon className={cn('h-3.5 w-3.5', config.text)} />
+    <div className={cn('flex h-5 w-5 items-center justify-center rounded', config.bg)}>
+      <Icon className={cn('h-3 w-3', config.text)} />
     </div>
   );
 }
@@ -46,8 +45,6 @@ interface BaseNodeProps {
   selected: boolean;
   /** Theme key for styling (determines icon and colors) */
   theme: NodeThemeKey;
-  /** Node content */
-  children: React.ReactNode;
   /**
    * Output handle configuration:
    * - 'standard': success/error handles (default)
@@ -58,26 +55,24 @@ interface BaseNodeProps {
 }
 
 /**
- * BaseNode - Shared node wrapper component
+ * BaseNode - Compact n8n-style node
  *
- * Provides consistent styling and structure for all workflow nodes:
- * - Input handle at top
- * - Icon badge with node name
- * - Content area
- * - Output handles at bottom
+ * Shows only icon + name. All details in side panel.
  */
 export const BaseNode = memo(function BaseNode({
   name,
   selected,
   theme,
-  children,
   outputHandles = 'standard',
 }: BaseNodeProps) {
+  const themeConfig = nodeTheme[theme];
+
   return (
-    <Card
+    <div
       className={cn(
-        'min-w-[200px] max-w-[280px] shadow-md transition-shadow',
-        selected && 'ring-2 ring-primary shadow-lg'
+        'w-[140px] rounded-lg border bg-card shadow-sm transition-all',
+        selected && 'ring-2 ring-primary shadow-md',
+        !selected && 'hover:shadow-md'
       )}
     >
       {/* Input handle - always present */}
@@ -87,14 +82,11 @@ export const BaseNode = memo(function BaseNode({
         className={standardHandles.input.className}
       />
 
-      <CardHeader className="p-3 pb-1">
-        <div className="flex items-center gap-2">
-          <IconBadge theme={theme} />
-          <span className="text-sm font-medium truncate">{name}</span>
-        </div>
-      </CardHeader>
-
-      <CardContent className="p-3 pt-1">{children}</CardContent>
+      {/* Compact content: icon + name */}
+      <div className="flex items-center gap-2 px-3 py-2">
+        <IconBadge theme={theme} />
+        <span className="text-xs font-medium truncate flex-1">{name}</span>
+      </div>
 
       {/* Standard output handles (success/error) */}
       {outputHandles === 'standard' && (
@@ -128,6 +120,6 @@ export const BaseNode = memo(function BaseNode({
             style={{ left: handle.offset }}
           />
         ))}
-    </Card>
+    </div>
   );
 });

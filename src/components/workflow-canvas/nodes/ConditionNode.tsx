@@ -11,7 +11,7 @@ interface ConditionNodeProps {
 }
 
 /**
- * ConditionNode - Branching based on conditions
+ * ConditionNode - Branching based on conditions (compact view)
  * Uses custom output handles for each condition + default
  */
 export const ConditionNode = memo(function ConditionNode({
@@ -47,18 +47,6 @@ export const ConditionNode = memo(function ConditionNode({
       selected={selected}
       theme="condition"
       outputHandles={outputHandles}
-    >
-      {conditions.length > 0 ? (
-        <div className="space-y-1">
-          {conditions.map((cond, i) => (
-            <p key={i} className="text-xs text-muted-foreground truncate">
-              {cond.label || cond.expression || `Condition ${i + 1}`}
-            </p>
-          ))}
-        </div>
-      ) : (
-        <p className="text-xs text-muted-foreground">No conditions set</p>
-      )}
-    </BaseNode>
+    />
   );
 });

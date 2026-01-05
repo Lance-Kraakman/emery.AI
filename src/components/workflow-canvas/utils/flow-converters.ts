@@ -134,10 +134,11 @@ function stepToNodeData(step: SkillStep): WorkflowNodeData {
 
 /**
  * Auto-layout nodes if no position is stored
+ * Tighter grid for compact n8n-style nodes
  */
 function getDefaultPosition(index: number): XYPosition {
-  const GRID_X = 250;
-  const GRID_Y = 150;
+  const GRID_X = 180; // Tighter horizontal spacing for 140px nodes
+  const GRID_Y = 80;  // Tighter vertical spacing for compact nodes
   const OFFSET_X = 100;
   const OFFSET_Y = 100;
 

@@ -10,22 +10,11 @@ interface SkillRefNodeProps {
 }
 
 /**
- * SkillRefNode - Reference to another skill
+ * SkillRefNode - Reference to another skill (compact view)
  */
 export const SkillRefNode = memo(function SkillRefNode({
   data,
   selected,
 }: SkillRefNodeProps) {
-  return (
-    <BaseNode name={data.name} selected={selected} theme="skill_ref">
-      <p className="text-xs text-muted-foreground">
-        {data.skillName || `Skill ID: ${data.skillId || 'Not set'}`}
-      </p>
-      {data.skillType && (
-        <span className="mt-1 inline-block text-[10px] px-1.5 py-0.5 rounded bg-muted">
-          {data.skillType}
-        </span>
-      )}
-    </BaseNode>
-  );
+  return <BaseNode name={data.name} selected={selected} theme="skill_ref" />;
 });

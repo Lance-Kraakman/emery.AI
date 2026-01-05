@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { InputDefinition, OutputDefinition } from '@/app/mappers/skill-mapper';
 import type { SkillStep } from '@/ddd/domain/skills/entities/skill';
-import type { WorkflowNode, WorkflowNodeData, WorkflowEdge, LoopNodeData } from '@/components/workflow-canvas/types';
+import type { WorkflowNode, WorkflowNodeData, WorkflowEdge } from '@/components/workflow-canvas/types';
 import type { WorkflowVariable } from '@/components/workflow-canvas/WorkflowVariableInput';
+import { inferVariablesForNode } from '@/components/workflow-canvas/utils/variable-inference';
 import { NodeConfigContent } from './NodeConfigContent';
 import { RootSkillConfig } from './RootSkillConfig';
 
@@ -95,75 +96,10 @@ export function SkillEditor({
   const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
 
   // Build workflow variables from skill inputs and upstream node outputs
+  // Uses auto-inference based on node types and connections
   const workflowVariables = useMemo((): WorkflowVariable[] => {
-    const vars: WorkflowVariable[] = [];
-
-    // 1. Skill inputs (always available)
-    for (const input of value.inputs) {
-      vars.push({
-        name: input.name,
-        label: input.name,
-        description: input.type ? `Type: ${input.type}` : undefined,
-        group: 'input',
-      });
-    }
-
-    // 2. Outputs from upstream connected nodes + loop context
-    if (selectedNodeId && nodes.length > 0 && edges.length > 0) {
-      // Find all edges that point TO the selected node
-      const incomingEdges = edges.filter(e => e.target === selectedNodeId);
-
-      for (const edge of incomingEdges) {
-        const sourceNode = nodes.find(n => n.id === edge.source);
-        if (sourceNode?.data.outputDefs) {
-          for (const output of sourceNode.data.outputDefs) {
-            vars.push({
-              name: output.name,
-              label: `${sourceNode.data.name}: ${output.name}`,
-              description: output.type ? `Type: ${output.type}` : undefined,
-              group: 'output',
-            });
-          }
-        }
-      }
-
-      // 3. Loop context variables (if node is inside a loop)
-      // Walk upstream to find any enclosing loop node
-      const visited = new Set<string>();
-      const queue = [selectedNodeId];
-
-      while (queue.length > 0) {
-        const nodeId = queue.shift()!;
-        if (visited.has(nodeId)) continue;
-        visited.add(nodeId);
-
-        const node = nodes.find(n => n.id === nodeId);
-        if (node?.type === 'loop') {
-          const loopData = node.data as LoopNodeData;
-          const itemVar = loopData.loopConfig?.currentItemVar || 'item';
-
-          vars.push({
-            name: itemVar,
-            label: `${node.data.name}: current item`,
-            description: 'Current item in loop iteration',
-            group: 'loop',
-          });
-          vars.push({
-            name: '__loop_index__',
-            label: `${node.data.name}: index`,
-            description: 'Current loop iteration index (0-based)',
-            group: 'loop',
-          });
-          break; // Found enclosing loop
-        }
-
-        // Add upstream nodes to queue
-        edges.filter(e => e.target === nodeId).forEach(e => queue.push(e.source));
-      }
-    }
-
-    return vars;
-  }, [value.inputs, selectedNodeId, nodes, edges]);
+    return inferVariablesForNode(selectedNodeId, nodes, edges, value.inputs);
+  }, [selectedNodeId, nodes, edges, value.inputs]);
 
   // Node type labels for panel header
   const nodeTypeLabels: Record<string, string> = {
@@ -197,7 +133,7 @@ export function SkillEditor({
       {/* Floating Config Panel */}
       <div
         className={cn(
-          'absolute top-2 right-2 w-80 max-h-[calc(100%-1rem)] bg-background/80 backdrop-blur-sm border rounded-lg shadow-lg overflow-hidden flex flex-col',
+          'absolute top-2 right-2 w-80 max-h-[calc(100%-1rem)] bg-background/50 backdrop-blur-sm border rounded-lg shadow-lg overflow-hidden flex flex-col',
           'transition-all duration-200'
         )}
       >

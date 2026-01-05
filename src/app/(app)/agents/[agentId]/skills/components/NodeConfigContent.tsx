@@ -4,8 +4,6 @@ import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { InputDefinitionsSection } from './editor/InputDefinitionsSection';
-import { OutputDefinitionsSection } from './editor/OutputDefinitionsSection';
 import type { WorkflowVariable } from '@/components/workflow-canvas/WorkflowVariableInput';
 import type {
   WorkflowNode,
@@ -156,35 +154,13 @@ export function NodeConfigContent({
         />
       )}
 
-      {/* Node Inputs Section - what this node needs */}
-      {(type === 'agentic' || type === 'tool' || type === 'write') && (
-        <div className="space-y-2 pt-2 border-t">
-          <Label className="text-xs font-medium">Inputs</Label>
-          <p className="text-[10px] text-muted-foreground">
-            Variables this node receives
-          </p>
-          <InputDefinitionsSection
-            inputs={data.inputDefs || []}
-            onInputsChange={(inputs) => handleUpdate({ inputDefs: inputs })}
-            isReadOnly={disabled}
-          />
-        </div>
-      )}
-
-      {/* Node Outputs Section - what this node produces */}
-      {(type === 'agentic' || type === 'operation' || type === 'tool' || type === 'read') && (
-        <div className="space-y-2 pt-2 border-t">
-          <Label className="text-xs font-medium">Outputs</Label>
-          <p className="text-[10px] text-muted-foreground">
-            Variables this node produces for subsequent steps
-          </p>
-          <OutputDefinitionsSection
-            outputs={data.outputDefs || []}
-            onOutputsChange={(outputs) => handleUpdate({ outputDefs: outputs })}
-            isReadOnly={disabled}
-          />
-        </div>
-      )}
+      {/*
+        Note: Input/Output definitions are now auto-inferred from connections.
+        See variable-inference.ts for the logic.
+        - Skill inputs are always available
+        - Node outputs are inferred by type (agentic → result, read → fieldMappings, etc.)
+        - Upstream node outputs flow to downstream nodes via edges
+      */}
 
       {/* Error handling - common to all */}
       <div className="space-y-2 pt-2 border-t">
