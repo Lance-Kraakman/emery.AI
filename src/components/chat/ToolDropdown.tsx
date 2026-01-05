@@ -28,6 +28,11 @@ interface ToolDropdownProps {
     left: number;
     maxHeight?: number;
   };
+  /**
+   * 'fixed' = legacy fixed positioning (default)
+   * 'content' = just render content, no wrapper (for use inside Popover)
+   */
+  renderMode?: 'fixed' | 'content';
 }
 
 export function ToolDropdown({
@@ -35,7 +40,8 @@ export function ToolDropdown({
   isOpen,
   onClose,
   onSelect,
-  position
+  position,
+  renderMode = 'fixed'
 }: ToolDropdownProps) {
   const [isClient, setIsClient] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -162,19 +168,9 @@ export function ToolDropdown({
 
   if (!isOpen || !isClient) return null;
 
-  return (
-    <div
-      className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-[440px] flex flex-col text-gray-900"
-      style={{
-        ...(position?.top !== undefined ? { top: position.top } : {}),
-        ...(position?.bottom !== undefined ? { bottom: position.bottom } : {}),
-        left: position?.left || 0,
-        height: position?.maxHeight ? `${position.maxHeight}px` : '600px',
-      }}
-      data-tool-dropdown
-      aria-label="Toolbox"
-      role="dialog"
-    >
+  // Content rendered inside either fixed wrapper or directly (for Popover use)
+  const content = (
+    <>
       {/* Category Filters */}
       <CategoryFilters
         selectedCategories={filters.selectedCategories}
@@ -216,6 +212,29 @@ export function ToolDropdown({
         query={query}
         availableApps={appFilter.availableApps || []}
       />
+    </>
+  );
+
+  // For Popover use - just return content without wrapper
+  if (renderMode === 'content') {
+    return content;
+  }
+
+  // Legacy fixed positioning mode
+  return (
+    <div
+      className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-[440px] flex flex-col text-gray-900"
+      style={{
+        ...(position?.top !== undefined ? { top: position.top } : {}),
+        ...(position?.bottom !== undefined ? { bottom: position.bottom } : {}),
+        left: position?.left || 0,
+        height: position?.maxHeight ? `${position.maxHeight}px` : '600px',
+      }}
+      data-tool-dropdown
+      aria-label="Toolbox"
+      role="dialog"
+    >
+      {content}
     </div>
   );
 }

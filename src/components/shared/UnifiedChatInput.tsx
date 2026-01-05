@@ -546,9 +546,9 @@ export function UnifiedChatInput<T = ToolDTO>({
           </Button>
         )}
 
-        {/* Textarea with Popover for variable dropdown */}
+        {/* Textarea with Popover for both variable and tool dropdowns */}
         <Popover
-          open={showDropdown && dropdownType === 'variables'}
+          open={showDropdown}
           onOpenChange={(open) => { if (!open) setShowDropdown(false); }}
         >
           <PopoverAnchor asChild>
@@ -573,7 +573,7 @@ export function UnifiedChatInput<T = ToolDTO>({
           </PopoverAnchor>
 
           <PopoverContent
-            className="w-[300px] p-2 z-[100]"
+            className={dropdownType === 'tools' ? "w-[440px] p-0 z-[100] max-h-[500px] flex flex-col" : "w-[300px] p-2 z-[100]"}
             align="start"
             side="bottom"
             sideOffset={4}
@@ -581,36 +581,48 @@ export function UnifiedChatInput<T = ToolDTO>({
             onPointerDownOutside={(e) => e.preventDefault()}
             onInteractOutside={(e) => e.preventDefault()}
           >
-            <div className="text-xs font-medium text-muted-foreground px-2 py-1.5">
-              Variables
-            </div>
-            {(!variables || variables.length === 0) ? (
-              <div className="px-3 py-3 text-sm text-muted-foreground">
-                <p className="mb-1">No variables available.</p>
-                <p className="text-xs">Define skill inputs in the Skill Config panel (click empty canvas) to use them as variables.</p>
-              </div>
-            ) : (
+            {dropdownType === 'variables' ? (
               <>
-                {variables
-                  .filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase()))
-                  .map((variable, index) => (
-                    <button
-                      key={variable.name}
-                      className={`w-full text-left px-3 py-2 rounded transition-colors flex flex-col gap-1 ${
-                        index === selectedIndex ? 'bg-accent' : 'hover:bg-accent'
-                      }`}
-                      onClick={() => handleVariableSelect(variable)}
-                    >
-                      <div className="font-mono text-sm">{`{{${variable.name}}}`}</div>
-                      <div className="text-xs text-muted-foreground">{variable.description}</div>
-                    </button>
-                  ))}
-                {variables.filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase())).length === 0 && (
-                  <div className="px-3 py-2 text-sm text-muted-foreground">
-                    No matching variables found
+                <div className="text-xs font-medium text-muted-foreground px-2 py-1.5">
+                  Variables
+                </div>
+                {(!variables || variables.length === 0) ? (
+                  <div className="px-3 py-3 text-sm text-muted-foreground">
+                    <p className="mb-1">No variables available.</p>
+                    <p className="text-xs">Define skill inputs in the Skill Config panel (click empty canvas) to use them as variables.</p>
                   </div>
+                ) : (
+                  <>
+                    {variables
+                      .filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase()))
+                      .map((variable, index) => (
+                        <button
+                          key={variable.name}
+                          className={`w-full text-left px-3 py-2 rounded transition-colors flex flex-col gap-1 ${
+                            index === selectedIndex ? 'bg-accent' : 'hover:bg-accent'
+                          }`}
+                          onClick={() => handleVariableSelect(variable)}
+                        >
+                          <div className="font-mono text-sm">{`{{${variable.name}}}`}</div>
+                          <div className="text-xs text-muted-foreground">{variable.description}</div>
+                        </button>
+                      ))}
+                    {variables.filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase())).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-muted-foreground">
+                        No matching variables found
+                      </div>
+                    )}
+                  </>
                 )}
               </>
+            ) : (
+              <ToolDropdown
+                query={dropdownQuery}
+                isOpen={showDropdown}
+                onClose={() => setShowDropdown(false)}
+                onSelect={handleToolSelect}
+                renderMode="content"
+              />
             )}
           </PopoverContent>
         </Popover>
@@ -686,16 +698,6 @@ export function UnifiedChatInput<T = ToolDTO>({
           />
         )}
 
-        {/* Tool Dropdown (uses its own positioning) */}
-        {dropdownType === 'tools' && (
-          <ToolDropdown
-            query={dropdownQuery}
-            isOpen={showDropdown}
-            onClose={() => setShowDropdown(false)}
-            onSelect={handleToolSelect}
-            position={dropdownPosition}
-          />
-        )}
       </div>
     </div>
     </div>
