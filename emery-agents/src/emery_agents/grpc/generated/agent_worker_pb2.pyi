@@ -252,8 +252,50 @@ class OutputDefinition(_message.Message):
     output_mapping: OutputMappingConfig
     def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., output_mapping: _Optional[_Union[OutputMappingConfig, _Mapping]] = ...) -> None: ...
 
+class ErrorConfig(_message.Message):
+    __slots__ = ("continue_on_error", "error_output_var")
+    CONTINUE_ON_ERROR_FIELD_NUMBER: _ClassVar[int]
+    ERROR_OUTPUT_VAR_FIELD_NUMBER: _ClassVar[int]
+    continue_on_error: bool
+    error_output_var: str
+    def __init__(self, continue_on_error: bool = ..., error_output_var: _Optional[str] = ...) -> None: ...
+
+class RetryConfig(_message.Message):
+    __slots__ = ("max_attempts", "backoff_ms", "backoff_type")
+    MAX_ATTEMPTS_FIELD_NUMBER: _ClassVar[int]
+    BACKOFF_MS_FIELD_NUMBER: _ClassVar[int]
+    BACKOFF_TYPE_FIELD_NUMBER: _ClassVar[int]
+    max_attempts: int
+    backoff_ms: int
+    backoff_type: str
+    def __init__(self, max_attempts: _Optional[int] = ..., backoff_ms: _Optional[int] = ..., backoff_type: _Optional[str] = ...) -> None: ...
+
+class StepOutput(_message.Message):
+    __slots__ = ("type", "condition", "next_steps")
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    CONDITION_FIELD_NUMBER: _ClassVar[int]
+    NEXT_STEPS_FIELD_NUMBER: _ClassVar[int]
+    type: str
+    condition: str
+    next_steps: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, type: _Optional[str] = ..., condition: _Optional[str] = ..., next_steps: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class LoopConfig(_message.Message):
+    __slots__ = ("type", "items_var", "current_item_var", "condition", "max_iterations")
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    ITEMS_VAR_FIELD_NUMBER: _ClassVar[int]
+    CURRENT_ITEM_VAR_FIELD_NUMBER: _ClassVar[int]
+    CONDITION_FIELD_NUMBER: _ClassVar[int]
+    MAX_ITERATIONS_FIELD_NUMBER: _ClassVar[int]
+    type: str
+    items_var: str
+    current_item_var: str
+    condition: str
+    max_iterations: int
+    def __init__(self, type: _Optional[str] = ..., items_var: _Optional[str] = ..., current_item_var: _Optional[str] = ..., condition: _Optional[str] = ..., max_iterations: _Optional[int] = ...) -> None: ...
+
 class SkillStep(_message.Message):
-    __slots__ = ("name", "instruction", "skill_id", "tools", "inputs", "outputs", "parallel", "condition", "input_defs", "output_defs")
+    __slots__ = ("name", "instruction", "skill_id", "tools", "inputs", "outputs", "parallel", "condition", "input_defs", "output_defs", "error_config", "retry_config", "step_outputs", "parallel_group", "loop_config")
     class InputsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -278,6 +320,11 @@ class SkillStep(_message.Message):
     CONDITION_FIELD_NUMBER: _ClassVar[int]
     INPUT_DEFS_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_DEFS_FIELD_NUMBER: _ClassVar[int]
+    ERROR_CONFIG_FIELD_NUMBER: _ClassVar[int]
+    RETRY_CONFIG_FIELD_NUMBER: _ClassVar[int]
+    STEP_OUTPUTS_FIELD_NUMBER: _ClassVar[int]
+    PARALLEL_GROUP_FIELD_NUMBER: _ClassVar[int]
+    LOOP_CONFIG_FIELD_NUMBER: _ClassVar[int]
     name: str
     instruction: str
     skill_id: int
@@ -288,7 +335,12 @@ class SkillStep(_message.Message):
     condition: str
     input_defs: _containers.RepeatedCompositeFieldContainer[InputDefinition]
     output_defs: _containers.RepeatedCompositeFieldContainer[OutputDefinition]
-    def __init__(self, name: _Optional[str] = ..., instruction: _Optional[str] = ..., skill_id: _Optional[int] = ..., tools: _Optional[_Iterable[str]] = ..., inputs: _Optional[_Mapping[str, str]] = ..., outputs: _Optional[_Mapping[str, str]] = ..., parallel: bool = ..., condition: _Optional[str] = ..., input_defs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., output_defs: _Optional[_Iterable[_Union[OutputDefinition, _Mapping]]] = ...) -> None: ...
+    error_config: ErrorConfig
+    retry_config: RetryConfig
+    step_outputs: _containers.RepeatedCompositeFieldContainer[StepOutput]
+    parallel_group: str
+    loop_config: LoopConfig
+    def __init__(self, name: _Optional[str] = ..., instruction: _Optional[str] = ..., skill_id: _Optional[int] = ..., tools: _Optional[_Iterable[str]] = ..., inputs: _Optional[_Mapping[str, str]] = ..., outputs: _Optional[_Mapping[str, str]] = ..., parallel: bool = ..., condition: _Optional[str] = ..., input_defs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., output_defs: _Optional[_Iterable[_Union[OutputDefinition, _Mapping]]] = ..., error_config: _Optional[_Union[ErrorConfig, _Mapping]] = ..., retry_config: _Optional[_Union[RetryConfig, _Mapping]] = ..., step_outputs: _Optional[_Iterable[_Union[StepOutput, _Mapping]]] = ..., parallel_group: _Optional[str] = ..., loop_config: _Optional[_Union[LoopConfig, _Mapping]] = ...) -> None: ...
 
 class TaskModelConfig(_message.Message):
     __slots__ = ("model_id", "task_type", "parameters")

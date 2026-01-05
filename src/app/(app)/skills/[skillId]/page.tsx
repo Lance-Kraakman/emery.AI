@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { getSkill } from '@/app/actions/skills';
 import { EditOrganizationSkillView } from '../components/EditOrganizationSkillView';
-import { CenteredCanvasLayout } from '@/components/layouts/CenteredCanvasLayout';
+import { CanvasBase } from '@/components/canvas/CanvasBase';
 
 interface PageProps {
   params: Promise<{
@@ -40,8 +40,8 @@ export default async function EditOrganizationSkillPage({ params }: PageProps) {
   }
 
   return (
-    <CenteredCanvasLayout>
+    <CanvasBase>
       <EditOrganizationSkillView skill={skill} isSystem={skill.isSystem} />
-    </CenteredCanvasLayout>
+    </CanvasBase>
   );
 }

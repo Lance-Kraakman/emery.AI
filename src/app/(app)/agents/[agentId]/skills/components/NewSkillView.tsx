@@ -4,13 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { ModelSelector } from '@/components/ai/ModelSelector';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import { createSkill, getSkillTemplate, uploadSkillAttachment, updateSkill } from '@/app/actions/skills';
+import { createSkill, getSkillTemplate } from '@/app/actions/skills';
 import { toast } from 'sonner';
 import { SkillEditor, type SkillFormData } from './SkillEditor';
-import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 import { useOrganizationPlan } from '@/stores/app-state.store';
 
 interface NewSkillViewProps {
@@ -18,6 +18,11 @@ interface NewSkillViewProps {
   templateId?: number;
 }
 
+/**
+ * Full-page new skill view with minimal header.
+ * Header contains: back, name, model, save.
+ * Canvas fills the remaining height.
+ */
 export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
   const router = useRouter();
   const organizationTier = useOrganizationPlan();
@@ -29,10 +34,8 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
     description: '',
     inputs: [],
     outputs: [],
-    instructions: '',
-    tools: [],
+    steps: [],
     model: null,
-    agentType: null
   });
 
   // Load template if templateId is provided
@@ -40,7 +43,7 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
     if (!templateId) return;
 
     async function loadTemplate() {
-      if (!templateId) return; // Type guard
+      if (!templateId) return;
 
       try {
         setIsLoadingTemplate(true);
@@ -53,12 +56,8 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
             description: result.data.description,
             inputs: result.data.inputs,
             outputs: result.data.outputs,
-            instructions: result.data.instructions,
-            tools: result.data.tools,
+            steps: result.data.steps || [],
             model: result.data.model,
-            agentType: result.data.agentType,
-            executionType: result.data.executionType,
-            taskModelConfig: result.data.taskModelConfig
           });
           toast.success('Template loaded successfully');
         } else {
@@ -84,72 +83,19 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
     setIsSaving(true);
 
     try {
-      // Step 1: Create the skill
       const result = await createSkill({
         agentId: agent.id,
         name: formData.name,
         description: formData.description,
         inputs: formData.inputs,
         outputs: formData.outputs,
-        instructions: formData.instructions,
-        tools: formData.tools,
+        steps: formData.steps,
         model: formData.model,
-        agentType: formData.agentType,
-        executionType: formData.executionType,
-        taskModelConfig: formData.taskModelConfig
       });
 
       if (!result.success || !result.data) {
         toast.error(result.error || 'Failed to create skill');
         return;
-      }
-
-      const skillId = result.data.id;
-
-      // Step 2: Upload pending attachments if any and collect metadata
-      let contentParts: MessagePart[] = [];
-
-      if (formData.pendingAttachments && formData.pendingAttachments.length > 0) {
-        toast.info(`Uploading ${formData.pendingAttachments.length} attachment(s)...`);
-
-        for (const file of formData.pendingAttachments) {
-          const attachFormData = new FormData();
-          attachFormData.append('file', file);
-          attachFormData.append('type', file.type.startsWith('image/') ? 'image' : 'file');
-
-          const uploadResult = await uploadSkillAttachment(skillId, attachFormData);
-
-          if (uploadResult.success && uploadResult.data) {
-            // Convert upload metadata to MessagePart and add to content
-            const metadata = uploadResult.data;
-            const messagePart: MessagePart = metadata.type === 'image'
-              ? { imageUrl: { url: metadata.url } }
-              : {
-                  file: {
-                    url: metadata.url,
-                    filename: metadata.filename,
-                    size: metadata.sizeBytes,
-                    mimeType: metadata.mimeType
-                  }
-                };
-            contentParts.push(messagePart);
-          } else {
-            console.error('Failed to upload attachment:', file.name, uploadResult.error);
-            toast.error(`Failed to upload ${file.name}`);
-          }
-        }
-
-        // Step 3: Update skill with content metadata
-        if (contentParts.length > 0) {
-          const updateResult = await updateSkill(skillId, {
-            content: contentParts
-          });
-
-          if (!updateResult.success) {
-            console.error('Failed to save attachment metadata:', updateResult.error);
-            toast.warning('Skill created but attachment metadata may not be saved');
-          }
-        }
       }
 
       toast.success('Skill created successfully');
@@ -162,46 +108,67 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
     }
   };
 
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-semibold">Skill Builder</h1>
-          {templateName && (
-            <Badge variant="secondary">
-              Based on: {templateName}
-            </Badge>
-          )}
+  if (isLoadingTemplate) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading template...</p>
         </div>
-        <p className="text-sm text-muted-foreground mt-1">
-          {templateName
-            ? `Creating skill from template for ${agent.name}`
-            : `Create a new skill for ${agent.name}`
-          }
-        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Minimal Header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b shrink-0">
+        <Input
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          placeholder="Skill name..."
+          className="h-8 w-64 text-sm"
+        />
+
+        {templateName && (
+          <Badge variant="secondary" className="text-xs">
+            Based on: {templateName}
+          </Badge>
+        )}
+
+        <ModelSelector
+          value={formData.model}
+          onChange={(model) => setFormData({ ...formData, model })}
+          organizationTier={organizationTier}
+          showInherit={true}
+          inheritLabel="Inherit"
+          inheritFromModel={agent.defaultModel || 'IBM Granite 3.3 8B'}
+          requiredCapabilities={['toolCalling']}
+          className="w-[180px] h-8"
+        />
+
+        <div className="flex-1" />
+
+        <Button
+          onClick={handleSave}
+          disabled={isSaving}
+          size="sm"
+          className="gap-1.5 h-8"
+        >
+          <Save className="h-3.5 w-3.5" />
+          {isSaving ? 'Creating...' : 'Create Skill'}
+        </Button>
       </div>
 
-      {/* Editor */}
-      <Card className="p-6">
-        {isLoadingTemplate ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-              <p className="text-muted-foreground">Loading template...</p>
-            </div>
-          </div>
-        ) : (
-          <SkillEditor
-            value={formData}
-            onChange={setFormData}
-            agentId={agent.id}
-            onSave={handleSave}
-            isSaving={isSaving}
-            organizationTier={organizationTier}
-          />
-        )}
-      </Card>
+      {/* Full-height Editor */}
+      <div className="flex-1 min-h-0">
+        <SkillEditor
+          value={formData}
+          onChange={setFormData}
+          agentId={agent.id}
+          organizationTier={organizationTier}
+        />
+      </div>
     </div>
   );
 }

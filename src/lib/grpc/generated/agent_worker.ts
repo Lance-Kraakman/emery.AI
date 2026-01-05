@@ -389,6 +389,54 @@ export interface OutputDefinition {
   outputMapping: OutputMappingConfig | undefined;
 }
 
+/** Error handling configuration for a step */
+export interface ErrorConfig {
+  /** Continue execution even if step fails */
+  continueOnError: boolean;
+  /** Variable name to store error details (e.g., "__error__") */
+  errorOutputVar: string;
+}
+
+/** Retry configuration for error recovery */
+export interface RetryConfig {
+  /** Max retry attempts (default: 3) */
+  maxAttempts: number;
+  /** Initial backoff in milliseconds (default: 1000) */
+  backoffMs: number;
+  /** "fixed", "exponential", "linear" (default: "exponential") */
+  backoffType: string;
+}
+
+/**
+ * Step output routing - determines which steps to execute based on outcome
+ * Enables n8n-style branching: success path, error path, conditional paths
+ */
+export interface StepOutput {
+  /** "success", "error", "condition", "default" */
+  type: string;
+  /** For type="condition": expression like "{{result}} > 100" */
+  condition: string;
+  /** Step names to execute for this output */
+  nextSteps: string[];
+}
+
+/**
+ * Loop configuration for iteration support
+ * Enables for-each over arrays and while/until conditional loops
+ */
+export interface LoopConfig {
+  /** "for_each", "while", "until" */
+  type: string;
+  /** For for_each: variable containing array to iterate */
+  itemsVar: string;
+  /** Variable name to store current item (default: "item") */
+  currentItemVar: string;
+  /** For while/until: condition expression "{{count}} < 10" */
+  condition: string;
+  /** Safety limit to prevent infinite loops (default: 100) */
+  maxIterations: number;
+}
+
 /**
  * Step definition for step-based skill execution (execution_type='agent')
  * Each step can either have inline instructions OR reference another skill
@@ -408,12 +456,26 @@ export interface SkillStep {
   outputs: { [key: string]: string };
   /** Can run in parallel with previous step (future) */
   parallel: boolean;
-  /** Optional condition: "{{var}} > 0" (future) */
+  /** Optional condition: "{{var}} > 0" (skip step if false) */
   condition: string;
   /** Step-level definitions (simpler types than skill-level) */
   inputDefs: InputDefinition[];
   /** What this step produces */
   outputDefs: OutputDefinition[];
+  /** DAG execution configuration */
+  errorConfig:
+    | ErrorConfig
+    | undefined;
+  /** Retry configuration for transient failures */
+  retryConfig:
+    | RetryConfig
+    | undefined;
+  /** Output routing for DAG branching (n8n-style) */
+  stepOutputs: StepOutput[];
+  /** Parallel execution */
+  parallelGroup: string;
+  /** Loop/iteration support */
+  loopConfig: LoopConfig | undefined;
 }
 
 export interface SkillStep_InputsEntry {
@@ -2779,6 +2841,392 @@ export const OutputDefinition: MessageFns<OutputDefinition> = {
   },
 };
 
+function createBaseErrorConfig(): ErrorConfig {
+  return { continueOnError: false, errorOutputVar: "" };
+}
+
+export const ErrorConfig: MessageFns<ErrorConfig> = {
+  encode(message: ErrorConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.continueOnError !== false) {
+      writer.uint32(8).bool(message.continueOnError);
+    }
+    if (message.errorOutputVar !== "") {
+      writer.uint32(18).string(message.errorOutputVar);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ErrorConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseErrorConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.continueOnError = reader.bool();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.errorOutputVar = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ErrorConfig {
+    return {
+      continueOnError: isSet(object.continueOnError) ? globalThis.Boolean(object.continueOnError) : false,
+      errorOutputVar: isSet(object.errorOutputVar) ? globalThis.String(object.errorOutputVar) : "",
+    };
+  },
+
+  toJSON(message: ErrorConfig): unknown {
+    const obj: any = {};
+    if (message.continueOnError !== false) {
+      obj.continueOnError = message.continueOnError;
+    }
+    if (message.errorOutputVar !== "") {
+      obj.errorOutputVar = message.errorOutputVar;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ErrorConfig>, I>>(base?: I): ErrorConfig {
+    return ErrorConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ErrorConfig>, I>>(object: I): ErrorConfig {
+    const message = createBaseErrorConfig();
+    message.continueOnError = object.continueOnError ?? false;
+    message.errorOutputVar = object.errorOutputVar ?? "";
+    return message;
+  },
+};
+
+function createBaseRetryConfig(): RetryConfig {
+  return { maxAttempts: 0, backoffMs: 0, backoffType: "" };
+}
+
+export const RetryConfig: MessageFns<RetryConfig> = {
+  encode(message: RetryConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.maxAttempts !== 0) {
+      writer.uint32(8).int32(message.maxAttempts);
+    }
+    if (message.backoffMs !== 0) {
+      writer.uint32(16).int32(message.backoffMs);
+    }
+    if (message.backoffType !== "") {
+      writer.uint32(26).string(message.backoffType);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RetryConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRetryConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.maxAttempts = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.backoffMs = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.backoffType = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RetryConfig {
+    return {
+      maxAttempts: isSet(object.maxAttempts) ? globalThis.Number(object.maxAttempts) : 0,
+      backoffMs: isSet(object.backoffMs) ? globalThis.Number(object.backoffMs) : 0,
+      backoffType: isSet(object.backoffType) ? globalThis.String(object.backoffType) : "",
+    };
+  },
+
+  toJSON(message: RetryConfig): unknown {
+    const obj: any = {};
+    if (message.maxAttempts !== 0) {
+      obj.maxAttempts = Math.round(message.maxAttempts);
+    }
+    if (message.backoffMs !== 0) {
+      obj.backoffMs = Math.round(message.backoffMs);
+    }
+    if (message.backoffType !== "") {
+      obj.backoffType = message.backoffType;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RetryConfig>, I>>(base?: I): RetryConfig {
+    return RetryConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RetryConfig>, I>>(object: I): RetryConfig {
+    const message = createBaseRetryConfig();
+    message.maxAttempts = object.maxAttempts ?? 0;
+    message.backoffMs = object.backoffMs ?? 0;
+    message.backoffType = object.backoffType ?? "";
+    return message;
+  },
+};
+
+function createBaseStepOutput(): StepOutput {
+  return { type: "", condition: "", nextSteps: [] };
+}
+
+export const StepOutput: MessageFns<StepOutput> = {
+  encode(message: StepOutput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.type !== "") {
+      writer.uint32(10).string(message.type);
+    }
+    if (message.condition !== "") {
+      writer.uint32(18).string(message.condition);
+    }
+    for (const v of message.nextSteps) {
+      writer.uint32(26).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StepOutput {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStepOutput();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.condition = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.nextSteps.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StepOutput {
+    return {
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+      condition: isSet(object.condition) ? globalThis.String(object.condition) : "",
+      nextSteps: globalThis.Array.isArray(object?.nextSteps)
+        ? object.nextSteps.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: StepOutput): unknown {
+    const obj: any = {};
+    if (message.type !== "") {
+      obj.type = message.type;
+    }
+    if (message.condition !== "") {
+      obj.condition = message.condition;
+    }
+    if (message.nextSteps?.length) {
+      obj.nextSteps = message.nextSteps;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StepOutput>, I>>(base?: I): StepOutput {
+    return StepOutput.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StepOutput>, I>>(object: I): StepOutput {
+    const message = createBaseStepOutput();
+    message.type = object.type ?? "";
+    message.condition = object.condition ?? "";
+    message.nextSteps = object.nextSteps?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseLoopConfig(): LoopConfig {
+  return { type: "", itemsVar: "", currentItemVar: "", condition: "", maxIterations: 0 };
+}
+
+export const LoopConfig: MessageFns<LoopConfig> = {
+  encode(message: LoopConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.type !== "") {
+      writer.uint32(10).string(message.type);
+    }
+    if (message.itemsVar !== "") {
+      writer.uint32(18).string(message.itemsVar);
+    }
+    if (message.currentItemVar !== "") {
+      writer.uint32(26).string(message.currentItemVar);
+    }
+    if (message.condition !== "") {
+      writer.uint32(34).string(message.condition);
+    }
+    if (message.maxIterations !== 0) {
+      writer.uint32(40).int32(message.maxIterations);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): LoopConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseLoopConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.itemsVar = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.currentItemVar = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.condition = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.maxIterations = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): LoopConfig {
+    return {
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+      itemsVar: isSet(object.itemsVar) ? globalThis.String(object.itemsVar) : "",
+      currentItemVar: isSet(object.currentItemVar) ? globalThis.String(object.currentItemVar) : "",
+      condition: isSet(object.condition) ? globalThis.String(object.condition) : "",
+      maxIterations: isSet(object.maxIterations) ? globalThis.Number(object.maxIterations) : 0,
+    };
+  },
+
+  toJSON(message: LoopConfig): unknown {
+    const obj: any = {};
+    if (message.type !== "") {
+      obj.type = message.type;
+    }
+    if (message.itemsVar !== "") {
+      obj.itemsVar = message.itemsVar;
+    }
+    if (message.currentItemVar !== "") {
+      obj.currentItemVar = message.currentItemVar;
+    }
+    if (message.condition !== "") {
+      obj.condition = message.condition;
+    }
+    if (message.maxIterations !== 0) {
+      obj.maxIterations = Math.round(message.maxIterations);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<LoopConfig>, I>>(base?: I): LoopConfig {
+    return LoopConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<LoopConfig>, I>>(object: I): LoopConfig {
+    const message = createBaseLoopConfig();
+    message.type = object.type ?? "";
+    message.itemsVar = object.itemsVar ?? "";
+    message.currentItemVar = object.currentItemVar ?? "";
+    message.condition = object.condition ?? "";
+    message.maxIterations = object.maxIterations ?? 0;
+    return message;
+  },
+};
+
 function createBaseSkillStep(): SkillStep {
   return {
     name: "",
@@ -2791,6 +3239,11 @@ function createBaseSkillStep(): SkillStep {
     condition: "",
     inputDefs: [],
     outputDefs: [],
+    errorConfig: undefined,
+    retryConfig: undefined,
+    stepOutputs: [],
+    parallelGroup: "",
+    loopConfig: undefined,
   };
 }
 
@@ -2825,6 +3278,21 @@ export const SkillStep: MessageFns<SkillStep> = {
     }
     for (const v of message.outputDefs) {
       OutputDefinition.encode(v!, writer.uint32(82).fork()).join();
+    }
+    if (message.errorConfig !== undefined) {
+      ErrorConfig.encode(message.errorConfig, writer.uint32(90).fork()).join();
+    }
+    if (message.retryConfig !== undefined) {
+      RetryConfig.encode(message.retryConfig, writer.uint32(98).fork()).join();
+    }
+    for (const v of message.stepOutputs) {
+      StepOutput.encode(v!, writer.uint32(106).fork()).join();
+    }
+    if (message.parallelGroup !== "") {
+      writer.uint32(114).string(message.parallelGroup);
+    }
+    if (message.loopConfig !== undefined) {
+      LoopConfig.encode(message.loopConfig, writer.uint32(122).fork()).join();
     }
     return writer;
   },
@@ -2922,6 +3390,46 @@ export const SkillStep: MessageFns<SkillStep> = {
           message.outputDefs.push(OutputDefinition.decode(reader, reader.uint32()));
           continue;
         }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.errorConfig = ErrorConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          message.retryConfig = RetryConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          message.stepOutputs.push(StepOutput.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.parallelGroup = reader.string();
+          continue;
+        }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.loopConfig = LoopConfig.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2957,6 +3465,13 @@ export const SkillStep: MessageFns<SkillStep> = {
       outputDefs: globalThis.Array.isArray(object?.outputDefs)
         ? object.outputDefs.map((e: any) => OutputDefinition.fromJSON(e))
         : [],
+      errorConfig: isSet(object.errorConfig) ? ErrorConfig.fromJSON(object.errorConfig) : undefined,
+      retryConfig: isSet(object.retryConfig) ? RetryConfig.fromJSON(object.retryConfig) : undefined,
+      stepOutputs: globalThis.Array.isArray(object?.stepOutputs)
+        ? object.stepOutputs.map((e: any) => StepOutput.fromJSON(e))
+        : [],
+      parallelGroup: isSet(object.parallelGroup) ? globalThis.String(object.parallelGroup) : "",
+      loopConfig: isSet(object.loopConfig) ? LoopConfig.fromJSON(object.loopConfig) : undefined,
     };
   },
 
@@ -3004,6 +3519,21 @@ export const SkillStep: MessageFns<SkillStep> = {
     if (message.outputDefs?.length) {
       obj.outputDefs = message.outputDefs.map((e) => OutputDefinition.toJSON(e));
     }
+    if (message.errorConfig !== undefined) {
+      obj.errorConfig = ErrorConfig.toJSON(message.errorConfig);
+    }
+    if (message.retryConfig !== undefined) {
+      obj.retryConfig = RetryConfig.toJSON(message.retryConfig);
+    }
+    if (message.stepOutputs?.length) {
+      obj.stepOutputs = message.stepOutputs.map((e) => StepOutput.toJSON(e));
+    }
+    if (message.parallelGroup !== "") {
+      obj.parallelGroup = message.parallelGroup;
+    }
+    if (message.loopConfig !== undefined) {
+      obj.loopConfig = LoopConfig.toJSON(message.loopConfig);
+    }
     return obj;
   },
 
@@ -3032,6 +3562,17 @@ export const SkillStep: MessageFns<SkillStep> = {
     message.condition = object.condition ?? "";
     message.inputDefs = object.inputDefs?.map((e) => InputDefinition.fromPartial(e)) || [];
     message.outputDefs = object.outputDefs?.map((e) => OutputDefinition.fromPartial(e)) || [];
+    message.errorConfig = (object.errorConfig !== undefined && object.errorConfig !== null)
+      ? ErrorConfig.fromPartial(object.errorConfig)
+      : undefined;
+    message.retryConfig = (object.retryConfig !== undefined && object.retryConfig !== null)
+      ? RetryConfig.fromPartial(object.retryConfig)
+      : undefined;
+    message.stepOutputs = object.stepOutputs?.map((e) => StepOutput.fromPartial(e)) || [];
+    message.parallelGroup = object.parallelGroup ?? "";
+    message.loopConfig = (object.loopConfig !== undefined && object.loopConfig !== null)
+      ? LoopConfig.fromPartial(object.loopConfig)
+      : undefined;
     return message;
   },
 };

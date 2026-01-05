@@ -56,6 +56,25 @@ export interface ExecutionSkill {
     // Step-level definitions (same types as skill-level)
     inputDefs?: Array<{ name: string; required: boolean; type?: string; inputMapping?: any }>;
     outputDefs?: Array<{ name: string; type?: string; description?: string; outputMapping?: any }>;
+    // DAG execution configuration
+    errorConfig?: { continueOnError: boolean; errorOutputVar?: string };
+    retryConfig?: { maxAttempts: number; backoffMs: number; backoffType: 'fixed' | 'exponential' | 'linear' };
+    // Output routing for DAG branching
+    stepOutputs?: Array<{
+      type: 'success' | 'error' | 'condition' | 'default';
+      condition?: string;
+      nextSteps: string[];
+    }>;
+    // Parallel execution
+    parallelGroup?: string;
+    // Loop/iteration support
+    loopConfig?: {
+      type: 'for_each' | 'while' | 'until';
+      itemsVar?: string;
+      currentItemVar?: string;
+      condition?: string;
+      maxIterations?: number;
+    };
   }>;
 }
 

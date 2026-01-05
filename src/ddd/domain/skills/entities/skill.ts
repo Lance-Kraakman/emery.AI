@@ -4,31 +4,139 @@ import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-i
 import { MessagePart } from '@/lib/grpc/generated/agent_worker';
 
 /**
- * Skill Execution Types
- * - 'agentic' (default): LLM orchestration with flat instructions via smolagents
- * - 'agent': Step-based DAG execution with structured steps[]
- * - 'operation': Direct model invocation for single-task models (image gen, speech, etc.)
- * - 'tool': Direct Pipedream tool call (no LLM, maps inputs to tool params)
- * - 'write': Direct table write (no LLM, maps inputs to table fields)
+ * Skill Execution Types (legacy - being replaced by unified canvas)
+ * @deprecated Use WorkflowNodeType for new code
  */
 export type SkillExecutionType = 'agentic' | 'agent' | 'operation' | 'tool' | 'write';
 
 /**
- * Skill Step - defines a single step in a step-based skill workflow
- * Each step can either execute an inline instruction or delegate to another skill
+ * Workflow Node Types
+ * Used in the unified workflow canvas - all skills are now workflows with typed steps.
+ *
+ * Execution nodes:
+ * - 'agentic': LLM with tools and instructions
+ * - 'operation': Direct model call (HuggingFace)
+ * - 'tool': Direct Pipedream tool execution
+ * - 'write': Direct database write
+ * - 'read': Direct database read
+ *
+ * Flow control nodes:
+ * - 'skillRef': Reference to another skill
+ * - 'condition': Conditional branching
+ * - 'loop': Iteration (for-each, while, until)
+ */
+export type WorkflowNodeType =
+  | 'skillRef'
+  | 'condition'
+  | 'loop'
+  | 'agentic'
+  | 'operation'
+  | 'tool'
+  | 'write'
+  | 'read';
+
+// =============================================================================
+// DAG Execution Configuration Types
+// =============================================================================
+
+/**
+ * Error handling configuration for a step
+ * Enables continue-on-error and error variable storage
+ */
+export interface ErrorConfig {
+  continueOnError: boolean;              // Continue execution even if step fails
+  errorOutputVar?: string;               // Variable name to store error details (e.g., "__error__")
+}
+
+/**
+ * Retry configuration for error recovery
+ * Uses tenacity-style exponential backoff
+ */
+export interface RetryConfig {
+  maxAttempts: number;                   // Max retry attempts (default: 3)
+  backoffMs: number;                     // Initial backoff in milliseconds (default: 1000)
+  backoffType: 'fixed' | 'exponential' | 'linear';  // Backoff strategy
+}
+
+/**
+ * Step output routing - determines which steps to execute based on outcome
+ * Enables n8n-style branching: success path, error path, conditional paths
+ */
+export interface StepOutput {
+  type: 'success' | 'error' | 'condition' | 'default';  // Output type
+  condition?: string;                    // For type="condition": expression like "{{result}} > 100"
+  nextSteps: string[];                   // Step names to execute for this output
+}
+
+/**
+ * Loop configuration for iteration support
+ * Enables for-each over arrays and while/until conditional loops
+ */
+export interface LoopConfig {
+  type: 'for_each' | 'while' | 'until';  // Loop type
+  itemsVar?: string;                     // For for_each: variable containing array to iterate
+  currentItemVar?: string;               // Variable name to store current item (default: "item")
+  condition?: string;                    // For while/until: condition expression "{{count}} < 10"
+  maxIterations?: number;                // Safety limit to prevent infinite loops (default: 100)
+}
+
+/**
+ * Agentic Step Configuration
+ * Used when nodeType is 'agentic' - LLM with tools (smolagents)
+ */
+export interface AgenticStepConfig {
+  instructions: string;
+  tools: ToolConfig[];
+  agentType?: 'tool_calling' | 'code_agent';
+  model?: string | null;
+}
+
+/**
+ * Condition Step Configuration
+ * Used when nodeType is 'condition' - branching based on expressions
+ */
+export interface ConditionStepConfig {
+  expression: string;
+  label?: string;
+}
+
+/**
+ * Skill Step - defines a single step in a workflow
+ * Each step has a nodeType determining its execution behavior.
  */
 export interface SkillStep {
-  name: string;                           // Step identifier/name
-  instruction?: string;                   // Inline instruction (if not skillId)
-  skillId?: number;                       // Reference to another skill by ID
-  tools?: string[];                       // Tools available for this step
-  inputs?: Record<string, string>;        // Context mappings: param_name -> "{{source}}" or literal
-  outputs?: Record<string, string>;       // Context mappings: output_name -> target_var
-  parallel?: boolean;                     // Can run in parallel with previous (future)
-  condition?: string;                     // Optional condition expression (future)
+  // Identity
+  name: string;
+  nodeType?: WorkflowNodeType;            // Node type (defaults to 'agentic' for backwards compat)
+
+  // Node-type specific data (only one populated per step based on nodeType)
+  instruction?: string;                   // Legacy instruction field (use agenticConfig.instructions)
+  skillId?: number;                       // For 'skillRef' nodes
+  agenticConfig?: AgenticStepConfig;      // For 'agentic' nodes
+  taskModelConfig?: TaskModelConfig;      // For 'operation' nodes
+  toolExecutionConfig?: ToolExecutionConfig;  // For 'tool' nodes
+  writeConfig?: WriteConfig;              // For 'write' nodes
+  readConfig?: ReadConfig;                // For 'read' nodes
+  conditions?: ConditionStepConfig[];     // For 'condition' nodes
+  loopConfig?: LoopConfig;                // For 'loop' nodes
+
+  // Legacy fields (for backwards compatibility)
+  tools?: string[];                       // @deprecated Use agenticConfig.tools
+  inputs?: Record<string, string>;        // @deprecated Context mappings
+  outputs?: Record<string, string>;       // @deprecated Context mappings
+
   // Step-level definitions (unified types)
   inputDefs?: InputDefinition[];          // What this step accepts (schema)
   outputDefs?: OutputDefinition[];        // What this step produces (schema)
+
+  // DAG execution configuration
+  errorConfig?: ErrorConfig;              // Error handling (continue_on_error, error variable)
+  retryConfig?: RetryConfig;              // Retry configuration for transient failures
+  stepOutputs?: StepOutput[];             // Output paths: success, error, conditional branches
+  parallelGroup?: string;                 // Steps with same group ID execute concurrently
+
+  // Canvas position (UI only, persisted for convenience)
+  _position?: { x: number; y: number };
 }
 
 /**
@@ -93,6 +201,46 @@ export interface WriteConfig {
   rowAction: 'create' | 'update';
   fieldMappings: WriteFieldMapping[];
   updateMatch?: UpdateMatchConfig;   // For update: which field to match
+}
+
+// =============================================================================
+// Read Execution Configuration Types
+// =============================================================================
+
+/**
+ * Read Execution Configuration
+ * Used for 'read' node type - reads data from tables into workflow variables
+ */
+export interface ReadConfig {
+  mode: 'single_row' | 'query';
+  sourceTableId: number;
+
+  // Single row mode - read one row by ID
+  rowIdSource?: RowIdSource;
+
+  // Query mode - read multiple rows with filters
+  queryFilters?: QueryFilter[];
+  queryLimit?: number;
+
+  // Both modes - map table fields to output variables
+  fieldMappings: ReadFieldMapping[];
+}
+
+/**
+ * Query filter for read node query mode
+ */
+export interface QueryFilter {
+  fieldId: number;
+  operator: 'equals' | 'not_equals' | 'contains' | 'gt' | 'lt' | 'gte' | 'lte' | 'is_empty' | 'is_not_empty';
+  valueSource: RowIdSource;  // Reuse RowIdSource for value source (skill_input, previous_step, static)
+}
+
+/**
+ * Field mapping for read node - maps table field to output variable
+ */
+export interface ReadFieldMapping {
+  sourceFieldId: number;
+  targetVariable: string;
 }
 
 /**
@@ -271,6 +419,7 @@ export interface Skill {
   readonly taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
   readonly toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
   readonly writeConfig?: WriteConfig; // Config for 'write' execution
+  readonly readConfig?: ReadConfig; // Config for 'read' execution
   readonly steps?: SkillStep[]; // Steps for 'agent' execution (step-based DAG workflow)
   readonly isSystem: boolean; // System skills cannot be deleted by users
   readonly createdAt: Date;
@@ -296,6 +445,7 @@ export interface CreateSkillProps {
   taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
   toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
   writeConfig?: WriteConfig; // Config for 'write' execution
+  readConfig?: ReadConfig; // Config for 'read' execution
   steps?: SkillStep[]; // Steps for 'agent' execution (step-based DAG workflow)
 }
 
@@ -316,6 +466,7 @@ export interface UpdateSkillProps {
   taskModelConfig?: TaskModelConfig | null; // Config for 'operation' execution (null to clear)
   toolExecutionConfig?: ToolExecutionConfig | null; // Config for 'tool' execution (null to clear)
   writeConfig?: WriteConfig | null; // Config for 'write' execution (null to clear)
+  readConfig?: ReadConfig | null; // Config for 'read' execution (null to clear)
   steps?: SkillStep[] | null; // Steps for 'agent' execution (null to clear)
 }
 

@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { getSkill } from '@/app/actions/skills';
 import { getAgent } from '@/app/actions/agents';
 import { EditSkillView } from '../components/EditSkillView';
-import { CenteredCanvasLayout } from '@/components/layouts/CenteredCanvasLayout';
+import { CanvasBase } from '@/components/canvas/CanvasBase';
 
 interface PageProps {
   params: Promise<{
@@ -45,8 +45,8 @@ export default async function EditSkillPage({ params }: PageProps) {
   const skill = skillResult.data;
 
   return (
-    <CenteredCanvasLayout>
+    <CanvasBase>
       <EditSkillView agent={agent} skill={skill} />
-    </CenteredCanvasLayout>
+    </CanvasBase>
   );
 }

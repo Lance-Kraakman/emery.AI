@@ -4,10 +4,11 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, Trash2, Globe, Lock, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ShareButton } from '@/components/permissions/ShareButton';
 import { ShareDialog } from '@/components/permissions/ShareDialog';
+import { ModelSelector } from '@/components/ai/ModelSelector';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { duplicateSkill } from '@/app/actions/skills';
 import { toast } from 'sonner';
@@ -19,6 +20,9 @@ interface EditOrganizationSkillViewProps {
   isSystem?: boolean;
 }
 
+/**
+ * Full-page organization skill editor view with minimal header.
+ */
 export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrganizationSkillViewProps) {
   const router = useRouter();
   const [isDuplicating, setIsDuplicating] = useState(false);
@@ -61,81 +65,94 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 pb-6 border-b">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-3xl font-bold tracking-tight">
-              {isSystem ? 'View Organization Skill' : 'Edit Organization Skill'}
-            </h1>
-            {isSystem && (
-              <Badge variant="secondary" className="gap-1">
-                <Lock className="h-3 w-3" />
-                System
-              </Badge>
-            )}
-            <Badge variant="secondary" className="gap-1">
-              <Globe className="h-3 w-3" />
-              Organization
-            </Badge>
-          </div>
-          <p className="text-base text-muted-foreground">
-            {isSystem
-              ? 'System skills are read-only. Duplicate to create an editable copy.'
-              : 'Available to all agents in your organization'
-            }
-          </p>
-        </div>
-        <div className="flex gap-2 pt-1">
-          {isSystem ? (
-            <>
-              <Button
-                variant="outline"
-                onClick={handleDuplicate}
-                disabled={isDuplicating}
-                className="gap-2"
-              >
-                <Copy className="h-4 w-4" />
-                {isDuplicating ? 'Duplicating...' : 'Duplicate to Edit'}
-              </Button>
-              <ShareButton
-                resourceType="skill"
-                resourceId={skill.id}
-                onShare={() => setShareDialogOpen(true)}
-                variant="outline"
-                size="default"
-              />
-            </>
-          ) : (
-            <>
-              <Button
-                variant="outline"
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="gap-2"
-              >
-                <Trash2 className="h-4 w-4" />
-                {isDeleting ? 'Deleting...' : 'Delete'}
-              </Button>
-              <ShareButton
-                resourceType="skill"
-                resourceId={skill.id}
-                onShare={() => setShareDialogOpen(true)}
-                variant="outline"
-                size="default"
-              />
-              <Button onClick={handleSave} disabled={isSaving} className="gap-2">
-                <Save className="h-4 w-4" />
-                {isSaving ? 'Saving...' : 'Save Changes'}
-              </Button>
-            </>
-          )}
-        </div>
+    <div className="h-full flex flex-col">
+      {/* Minimal Header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b shrink-0">
+        <Globe className="h-4 w-4 text-muted-foreground" />
+
+        <Input
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          placeholder="Skill name..."
+          className="h-8 w-64 text-sm"
+          disabled={isSystem}
+        />
+
+        {isSystem && (
+          <Badge variant="secondary" className="gap-1 text-xs">
+            <Lock className="h-3 w-3" />
+            System
+          </Badge>
+        )}
+
+        <ModelSelector
+          value={formData.model}
+          onChange={(model) => setFormData({ ...formData, model })}
+          organizationTier={organizationTier}
+          showInherit={true}
+          inheritLabel="Inherit"
+          inheritFromModel="IBM Granite 3.3 8B"
+          requiredCapabilities={['toolCalling']}
+          className="w-[180px] h-8"
+          disabled={isSystem}
+        />
+
+        <div className="flex-1" />
+
+        {isSystem ? (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDuplicate}
+              disabled={isDuplicating}
+              className="gap-1.5 h-8"
+            >
+              <Copy className="h-3.5 w-3.5" />
+              {isDuplicating ? 'Duplicating...' : 'Duplicate'}
+            </Button>
+            <ShareButton
+              resourceType="skill"
+              resourceId={skill.id}
+              onShare={() => setShareDialogOpen(true)}
+              variant="outline"
+              size="sm"
+            />
+          </>
+        ) : (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="gap-1.5 h-8"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </Button>
+            <ShareButton
+              resourceType="skill"
+              resourceId={skill.id}
+              onShare={() => setShareDialogOpen(true)}
+              variant="outline"
+              size="sm"
+            />
+            <Button
+              onClick={handleSave}
+              disabled={isSaving}
+              size="sm"
+              className="gap-1.5 h-8"
+            >
+              <Save className="h-3.5 w-3.5" />
+              {isSaving ? 'Saving...' : 'Save'}
+            </Button>
+          </>
+        )}
       </div>
 
-      {/* Editor */}
-      <Card className="p-6">
+      {/* Full-height Editor */}
+      <div className="flex-1 min-h-0">
         <SkillEditor
           value={formData}
           onChange={setFormData}
@@ -145,7 +162,7 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
           organizationTier={organizationTier}
           availableSkills={availableSkills}
         />
-      </Card>
+      </div>
 
       {/* Share Dialog */}
       <ShareDialog

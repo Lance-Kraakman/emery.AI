@@ -32,23 +32,24 @@ import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, SkillStep } 
  */
 
 /**
- * Create a new skill with inputs, outputs, and single instruction block
+ * Create a new skill
+ * All skills are now workflows - node configs live in steps[]
  */
 export async function createSkill(command: {
   agentId: number;
   name: string;
   description?: string;
-  inputs: InputDefinition[];
-  outputs: OutputDefinition[];
-  instructions: string;
-  tools: ToolConfigDTO[];
+  inputs?: InputDefinition[];
+  outputs?: OutputDefinition[];
+  instructions?: string;
+  tools?: ToolConfigDTO[];
   model?: string | null;
-  agentType?: string | null; // "tool_calling" (default) or "code_agent"
+  agentType?: string | null;
   executionType?: SkillExecutionType;
   taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
   toolExecutionConfig?: ToolExecutionConfig;
   writeConfig?: WriteConfig;
-  steps?: SkillStep[]; // Steps for 'agent' (step-based) execution
+  steps?: SkillStep[];
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -56,39 +57,24 @@ export async function createSkill(command: {
       return { success: false, error: 'Unauthorized' };
     }
 
-    // Check permission to manage the agent (agent-scoped skills require agent management permission)
+    // Check permission to manage the agent
     await requireResourcePermission("agents:manage", "agent", command.agentId);
 
-    // Validation
+    // Validation - only name is required
     if (!command.name?.trim()) {
       return { success: false, error: 'Skill name is required' };
     }
 
-    const executionType = command.executionType || 'agentic';
-
-    // Instructions required for agentic execution
-    if (executionType === 'agentic' && !command.instructions?.trim()) {
-      return { success: false, error: 'Instructions are required for agentic execution' };
-    }
-
-    // Steps required for agent (step-based) execution
-    if (executionType === 'agent' && (!command.steps || command.steps.length === 0)) {
-      return { success: false, error: 'Steps are required for agent (step-based) execution' };
-    }
-
-    // Task model config required for operation mode
-    if (executionType === 'operation' && !command.taskModelConfig) {
-      return { success: false, error: 'Task model configuration is required for operation execution' };
-    }
-
-    // Validate input names
-    const invalidInputs = command.inputs.filter(i => !i.name?.trim());
+    // Validate input names if provided
+    const inputs = command.inputs || [];
+    const invalidInputs = inputs.filter(i => !i.name?.trim());
     if (invalidInputs.length > 0) {
       return { success: false, error: 'All inputs must have names' };
     }
 
-    // Validate output names
-    const invalidOutputs = command.outputs.filter(o => !o.name?.trim());
+    // Validate output names if provided
+    const outputs = command.outputs || [];
+    const invalidOutputs = outputs.filter(o => !o.name?.trim());
     if (invalidOutputs.length > 0) {
       return { success: false, error: 'All outputs must have names' };
     }
@@ -103,6 +89,10 @@ export async function createSkill(command: {
     const service = getSkillApplicationService();
     const result = await service.createSkill({
       ...command,
+      inputs: inputs,
+      outputs: outputs,
+      instructions: command.instructions || '',
+      tools: command.tools || [],
       organizationId: agent.organizationId.value
     });
 
@@ -161,17 +151,17 @@ export async function createOrganizationSkill(command: {
   organizationId: number;
   name: string;
   description?: string;
-  inputs: InputDefinition[];
-  outputs: OutputDefinition[];
-  instructions: string;
-  tools: ToolConfigDTO[];
+  inputs?: InputDefinition[];
+  outputs?: OutputDefinition[];
+  instructions?: string;
+  tools?: ToolConfigDTO[];
   model?: string | null;
-  agentType?: string | null; // "tool_calling" (default) or "code_agent"
+  agentType?: string | null;
   executionType?: SkillExecutionType;
   taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
   toolExecutionConfig?: ToolExecutionConfig;
   writeConfig?: WriteConfig;
-  steps?: SkillStep[]; // Steps for 'agent' (step-based) execution
+  steps?: SkillStep[];
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -182,36 +172,21 @@ export async function createOrganizationSkill(command: {
     // Check permission to create organization skills
     await requirePermission("skills:create");
 
-    // Validation
+    // Validation - only name is required
     if (!command.name?.trim()) {
       return { success: false, error: 'Skill name is required' };
     }
 
-    const executionType = command.executionType || 'agentic';
-
-    // Instructions required for agentic execution
-    if (executionType === 'agentic' && !command.instructions?.trim()) {
-      return { success: false, error: 'Instructions are required for agentic execution' };
-    }
-
-    // Steps required for agent (step-based) execution
-    if (executionType === 'agent' && (!command.steps || command.steps.length === 0)) {
-      return { success: false, error: 'Steps are required for agent (step-based) execution' };
-    }
-
-    // Task model config required for operation mode
-    if (executionType === 'operation' && !command.taskModelConfig) {
-      return { success: false, error: 'Task model configuration is required for operation execution' };
-    }
-
-    // Validate input names
-    const invalidInputs = command.inputs.filter(i => !i.name?.trim());
+    // Validate input names if provided
+    const inputs = command.inputs || [];
+    const invalidInputs = inputs.filter(i => !i.name?.trim());
     if (invalidInputs.length > 0) {
       return { success: false, error: 'All inputs must have names' };
     }
 
-    // Validate output names
-    const invalidOutputs = command.outputs.filter(o => !o.name?.trim());
+    // Validate output names if provided
+    const outputs = command.outputs || [];
+    const invalidOutputs = outputs.filter(o => !o.name?.trim());
     if (invalidOutputs.length > 0) {
       return { success: false, error: 'All outputs must have names' };
     }
@@ -220,14 +195,14 @@ export async function createOrganizationSkill(command: {
 
     // Create organization skill without agentId (null for organization-scoped)
     const result = await service.createSkill({
-      agentId: null, // null for organization skills
+      agentId: null,
       organizationId: command.organizationId,
       name: command.name,
       description: command.description,
-      inputs: command.inputs,
-      outputs: command.outputs,
-      instructions: command.instructions,
-      tools: command.tools,
+      inputs: inputs,
+      outputs: outputs,
+      instructions: command.instructions || '',
+      tools: command.tools || [],
       model: command.model,
       agentType: command.agentType,
       executionType: command.executionType,

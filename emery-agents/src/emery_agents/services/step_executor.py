@@ -4,11 +4,22 @@ import asyncio
 import json
 import logging
 import re
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, asdict, field
 from typing import Any, AsyncIterator, Callable, Dict, List, Literal, Optional, Set
+
+from tenacity import (
+    AsyncRetrying,
+    stop_after_attempt,
+    wait_fixed,
+    wait_exponential,
+    retry_if_exception,
+    RetryError
+)
 
 from ..grpc.generated import agent_worker_pb2
 from ..types import SkillExecutionResult
+from ..utils.error_classifier import classify_error
 from .agent_factory import AgentFactory, AgentConfig
 from .tool_loader import UnifiedToolLoader
 
@@ -16,11 +27,14 @@ logger = logging.getLogger(__name__)
 
 
 # Simple condition pattern: "value operator value"
-# Supports: >, <, >=, <=, ==, !=
 _CONDITION_PATTERN = re.compile(
     r'^(.+?)\s*(>=|<=|==|!=|>|<)\s*(.+)$'
 )
 
+
+# =============================================================================
+# Internal Dataclasses - Clean types for step execution
+# =============================================================================
 
 @dataclass
 class StepProgress:
@@ -31,18 +45,196 @@ class StepProgress:
     status: Literal["pending", "running", "completed", "failed", "skipped"]
     result: Optional[str] = None
     error: Optional[str] = None
+    continued_after_error: bool = False
+    retries_attempted: int = 0
 
+
+@dataclass
+class StepError:
+    """Error details for storing in step context."""
+    message: str
+    error_type: str
+    step_name: str
+    timestamp: float
+    retries_attempted: int = 0
+
+
+@dataclass
+class ErrorConfig:
+    """Error handling configuration for a step."""
+    continue_on_error: bool = False
+    error_output_var: str = "__error__"
+
+
+@dataclass
+class RetryConfig:
+    """Retry configuration for error recovery."""
+    max_attempts: int = 3
+    backoff_ms: int = 1000
+    backoff_type: Literal["fixed", "exponential", "linear"] = "exponential"
+
+
+@dataclass
+class StepOutput:
+    """Step output routing - determines which steps to execute based on outcome."""
+    type: Literal["success", "error", "condition", "default"]
+    condition: str = ""
+    next_steps: List[str] = field(default_factory=list)
+
+
+@dataclass
+class LoopConfig:
+    """Loop configuration for iteration support."""
+    type: Literal["for_each", "while", "until"]
+    items_var: str = ""          # For for_each: variable containing array
+    current_item_var: str = "item"  # Variable name for current item
+    condition: str = ""          # For while/until: condition expression
+    max_iterations: int = 100    # Safety limit
+
+
+@dataclass
+class InputDef:
+    """Input definition for a step."""
+    name: str
+    required: bool = False
+    type: str = "text"
+
+
+@dataclass
+class OutputDef:
+    """Output definition for a step."""
+    name: str
+    type: str = "text"
+
+
+@dataclass
+class Step:
+    """Internal representation of a workflow step."""
+    name: str
+    instruction: str = ""
+    skill_id: int = 0
+    tools: List[str] = field(default_factory=list)
+    inputs: Dict[str, str] = field(default_factory=dict)
+    outputs: Dict[str, str] = field(default_factory=dict)
+    condition: str = ""
+    input_defs: List[InputDef] = field(default_factory=list)
+    output_defs: List[OutputDef] = field(default_factory=list)
+    error_config: Optional[ErrorConfig] = None
+    retry_config: Optional[RetryConfig] = None
+    step_outputs: List[StepOutput] = field(default_factory=list)
+    parallel_group: str = ""  # Steps with same group execute concurrently
+    loop_config: Optional[LoopConfig] = None  # For iteration support
+
+    @classmethod
+    def from_proto(cls, proto: 'agent_worker_pb2.SkillStep') -> 'Step':
+        """Convert proto SkillStep to internal Step."""
+        # Parse error config
+        error_config = None
+        if proto.error_config and proto.error_config.continue_on_error:
+            error_config = ErrorConfig(
+                continue_on_error=proto.error_config.continue_on_error,
+                error_output_var=proto.error_config.error_output_var or "__error__"
+            )
+
+        # Parse retry config
+        retry_config = None
+        if proto.retry_config and proto.retry_config.max_attempts > 0:
+            retry_config = RetryConfig(
+                max_attempts=proto.retry_config.max_attempts,
+                backoff_ms=proto.retry_config.backoff_ms or 1000,
+                backoff_type=proto.retry_config.backoff_type or "exponential"
+            )
+
+        # Parse step outputs
+        step_outputs = []
+        for output in proto.step_outputs:
+            step_outputs.append(StepOutput(
+                type=output.type or "default",
+                condition=output.condition or "",
+                next_steps=list(output.next_steps)
+            ))
+
+        # Parse input/output defs
+        input_defs = [
+            InputDef(name=d.name, required=d.required, type=d.type or "text")
+            for d in proto.input_defs
+        ]
+        output_defs = [
+            OutputDef(name=d.name, type=d.type or "text")
+            for d in proto.output_defs
+        ]
+
+        # Parse loop config
+        loop_config = None
+        if proto.loop_config and proto.loop_config.type:
+            loop_config = LoopConfig(
+                type=proto.loop_config.type,
+                items_var=proto.loop_config.items_var or "",
+                current_item_var=proto.loop_config.current_item_var or "item",
+                condition=proto.loop_config.condition or "",
+                max_iterations=proto.loop_config.max_iterations or 100
+            )
+
+        return cls(
+            name=proto.name,
+            instruction=proto.instruction or "",
+            skill_id=proto.skill_id,
+            tools=list(proto.tools),
+            inputs=dict(proto.inputs),
+            outputs=dict(proto.outputs),
+            condition=proto.condition or "",
+            input_defs=input_defs,
+            output_defs=output_defs,
+            error_config=error_config,
+            retry_config=retry_config,
+            step_outputs=step_outputs,
+            parallel_group=proto.parallel_group or "",
+            loop_config=loop_config
+        )
+
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+def _is_retryable_error(exception: Exception) -> bool:
+    """Check if an error should be retried using the error classifier."""
+    classified = classify_error(exception)
+    return classified.auto_retry
+
+
+def _get_wait_strategy(config: RetryConfig):
+    """Get tenacity wait strategy based on config."""
+    if config.backoff_type == "exponential":
+        return wait_exponential(
+            multiplier=config.backoff_ms / 1000,
+            min=config.backoff_ms / 1000,
+            max=60
+        )
+    elif config.backoff_type == "linear":
+        return wait_exponential(
+            multiplier=config.backoff_ms / 1000,
+            min=config.backoff_ms / 1000,
+            max=60,
+            exp_base=1.5
+        )
+    else:  # fixed
+        return wait_fixed(config.backoff_ms / 1000)
+
+
+# =============================================================================
+# Step Executor Service
+# =============================================================================
 
 class StepExecutorService:
-    """Execute skills with step-based workflows (DAG execution).
+    """Execute skills with DAG-based workflows.
 
-    Handles execution_type='agent' skills that have a steps[] configuration.
-    Each step can either:
-    - Execute an inline instruction with a sub-agent
-    - Delegate to another skill by skill_id
-
-    Data is passed between steps via a shared step_context using
-    {{variable}} syntax in inputs/outputs.
+    Supports:
+    - Sequential execution (steps without output routing)
+    - Output-based routing (steps with step_outputs)
+    - Error handling with continue_on_error
+    - Retry with configurable backoff
+    - Conditional branching based on step results
     """
 
     def __init__(
@@ -51,13 +243,6 @@ class StepExecutorService:
         agent_factory: AgentFactory,
         skill_executor_callback: Optional[Callable] = None
     ):
-        """Initialize step executor.
-
-        Args:
-            tool_loader: Tool loader for creating step-specific tools
-            agent_factory: Factory for creating sub-agents per step
-            skill_executor_callback: Callback to execute delegated skills
-        """
         self.tool_loader = tool_loader
         self.agent_factory = agent_factory
         self.skill_executor_callback = skill_executor_callback
@@ -72,7 +257,7 @@ class StepExecutorService:
         organization_id: Optional[int] = None,
         _execution_stack: Optional[Set[int]] = None
     ) -> AsyncIterator[StepProgress]:
-        """Execute steps sequentially, passing data between them.
+        """Execute steps as a DAG workflow.
 
         Args:
             steps: List of SkillStep proto messages
@@ -86,111 +271,638 @@ class StepExecutorService:
         Yields:
             StepProgress updates as each step executes
         """
-        # Initialize step context with initial inputs
+        # Convert proto steps to internal Step objects
+        internal_steps = [Step.from_proto(s) for s in steps]
+        step_by_name: Dict[str, Step] = {s.name: s for s in internal_steps}
+
+        # Initialize execution state
         step_context: Dict[str, Any] = dict(initial_inputs)
-        # Create execution stack for this call chain if not provided
         execution_stack = _execution_stack if _execution_stack is not None else set()
+        executed_steps: Set[str] = set()
+        total_steps = len(internal_steps)
 
-        total_steps = len(steps)
-        logger.info(f"🚀 Starting step-based execution with {total_steps} steps")
+        logger.info(f"🚀 Starting DAG execution with {total_steps} steps")
 
-        for i, step in enumerate(steps):
-            step_name = step.name or f"step_{i + 1}"
-            step_number = i + 1
+        # Start with the first step
+        pending_steps: List[str] = [internal_steps[0].name] if internal_steps else []
+        step_counter = 0
 
-            # Yield running status
-            yield StepProgress(
-                step=step_number,
-                total=total_steps,
-                name=step_name,
-                status="running"
-            )
+        while pending_steps:
+            # Get batch of steps to execute (parallel group or single)
+            batch = self._get_parallel_batch(pending_steps, step_by_name, executed_steps)
 
-            try:
-                # Check condition if specified (future feature)
+            if not batch:
+                continue
+
+            if len(batch) > 1:
+                # Parallel execution
+                logger.info(f"⚡ Executing {len(batch)} steps in parallel: {[s.name for s in batch]}")
+                async for progress in self._execute_parallel_batch(
+                    batch=batch,
+                    step_counter=step_counter,
+                    total_steps=total_steps,
+                    step_context=step_context,
+                    available_skills=available_skills,
+                    execution_stack=execution_stack,
+                    org_model=org_model,
+                    api_key=api_key,
+                    organization_id=organization_id,
+                    internal_steps=internal_steps,
+                    pending_steps=pending_steps,
+                    executed_steps=executed_steps
+                ):
+                    yield progress
+                step_counter += len(batch)
+            else:
+                # Single step execution
+                step = batch[0]
+                step_name = step.name
+                step_counter += 1
+                executed_steps.add(step_name)
+
+                # Yield running status
+                yield StepProgress(
+                    step=step_counter,
+                    total=total_steps,
+                    name=step_name,
+                    status="running"
+                )
+
+                # Check entry condition
                 if step.condition:
-                    condition_result = self._evaluate_condition(step.condition, step_context)
-                    if not condition_result:
+                    if not self._evaluate_condition(step.condition, step_context):
                         logger.info(f"⏭️ Step {step_name}: condition not met, skipping")
                         yield StepProgress(
-                            step=step_number,
+                            step=step_counter,
                             total=total_steps,
                             name=step_name,
                             status="skipped",
-                            result="Skipped (condition not met)"
+                            result="Condition not met"
+                        )
+                        self._queue_next_steps(
+                            step, internal_steps, pending_steps, executed_steps,
+                            "success", step_context
                         )
                         continue
 
-                # Resolve inputs from step_context
-                # Use explicit input mappings if provided, otherwise auto-resolve from inputDefs
-                input_mappings = dict(step.inputs)
-                if not input_mappings and step.input_defs:
-                    # Auto-generate mappings: each inputDef.name looks for same-named context var
-                    input_mappings = {id.name: f"{{{{{id.name}}}}}" for id in step.input_defs}
-                    logger.debug(f"📥 Auto-generated input mappings from inputDefs: {list(input_mappings.keys())}")
-                step_inputs = self._resolve_inputs(input_mappings, step_context)
-                logger.info(f"📥 Step {step_name}: resolved {len(step_inputs)} inputs")
+                # Execute the step
+                retries_attempted = 0
+                execution_status: Literal["success", "error"] = "success"
 
-                if step.skill_id:
-                    # Execute referenced skill
-                    result = await self._execute_skill_step(
+                try:
+                    result, retries_attempted = await self._execute_step(
                         step=step,
-                        step_inputs=step_inputs,
+                        step_context=step_context,
                         available_skills=available_skills,
+                        execution_stack=execution_stack,
                         org_model=org_model,
                         api_key=api_key,
-                        organization_id=organization_id,
-                        execution_stack=execution_stack
+                        organization_id=organization_id
+                    )
+
+                    # Capture outputs
+                    self._capture_outputs(step, result, step_context)
+
+                    result_str = str(result)[:500] if result else "No result"
+                    logger.info(f"✅ Step {step_name}: completed")
+
+                    yield StepProgress(
+                        step=step_counter,
+                        total=total_steps,
+                        name=step_name,
+                        status="completed",
+                        result=result_str,
+                        retries_attempted=retries_attempted
+                    )
+
+                except Exception as e:
+                    error_msg = str(e)
+                    error_type = type(e).__name__
+                    execution_status = "error"
+
+                    if retries_attempted > 0:
+                        logger.error(f"❌ Step {step_name} failed after {retries_attempted} retries: {error_msg}")
+                    else:
+                        logger.error(f"❌ Step {step_name} failed: {error_msg}")
+
+                    # Store error in context
+                    step_error = StepError(
+                        message=error_msg,
+                        error_type=error_type,
+                        step_name=step_name,
+                        timestamp=time.time(),
+                        retries_attempted=retries_attempted
+                    )
+
+                    error_var = step.error_config.error_output_var if step.error_config else "__error__"
+                    step_context[error_var] = asdict(step_error)
+                    step_context.setdefault("__errors__", {})[step_name] = asdict(step_error)
+
+                    # Check if we should continue
+                    continue_on_error = step.error_config and step.error_config.continue_on_error
+
+                    if continue_on_error:
+                        logger.info(f"⚠️ Step {step_name} failed but continuing (continue_on_error=True)")
+                        yield StepProgress(
+                            step=step_counter,
+                            total=total_steps,
+                            name=step_name,
+                            status="failed",
+                            error=error_msg,
+                            continued_after_error=True,
+                            retries_attempted=retries_attempted
+                        )
+                    else:
+                        yield StepProgress(
+                            step=step_counter,
+                            total=total_steps,
+                            name=step_name,
+                            status="failed",
+                            error=error_msg,
+                            retries_attempted=retries_attempted
+                        )
+                        raise
+
+                # Queue next steps based on outputs
+                self._queue_next_steps(
+                    step, internal_steps, pending_steps, executed_steps,
+                    execution_status, step_context
+                )
+
+        logger.info(f"🏁 DAG execution complete: {step_counter} steps executed")
+
+    def _get_parallel_batch(
+        self,
+        pending_steps: List[str],
+        step_by_name: Dict[str, Step],
+        executed_steps: Set[str]
+    ) -> List[Step]:
+        """Get batch of steps to execute - either parallel group or single step."""
+        while pending_steps:
+            step_name = pending_steps.pop(0)
+
+            # Skip if already executed
+            if step_name in executed_steps:
+                continue
+
+            step = step_by_name.get(step_name)
+            if not step:
+                continue
+
+            # If step has a parallel group, find all other pending steps in same group
+            if step.parallel_group:
+                batch = [step]
+                remaining = []
+
+                for other_name in pending_steps:
+                    if other_name in executed_steps:
+                        continue
+                    other_step = step_by_name.get(other_name)
+                    if other_step and other_step.parallel_group == step.parallel_group:
+                        batch.append(other_step)
+                    else:
+                        remaining.append(other_name)
+
+                # Update pending_steps to remove batched items
+                pending_steps.clear()
+                pending_steps.extend(remaining)
+
+                return batch
+
+            return [step]
+
+        return []
+
+    async def _execute_parallel_batch(
+        self,
+        batch: List[Step],
+        step_counter: int,
+        total_steps: int,
+        step_context: Dict[str, Any],
+        available_skills: Dict[int, 'agent_worker_pb2.SkillConfig'],
+        execution_stack: Set[int],
+        org_model: Optional[str],
+        api_key: Optional[str],
+        organization_id: Optional[int],
+        internal_steps: List[Step],
+        pending_steps: List[str],
+        executed_steps: Set[str]
+    ) -> AsyncIterator[StepProgress]:
+        """Execute a batch of steps in parallel using asyncio.gather."""
+        # Mark all as executed
+        for step in batch:
+            executed_steps.add(step.name)
+
+        # Yield running status for all
+        for i, step in enumerate(batch):
+            yield StepProgress(
+                step=step_counter + i + 1,
+                total=total_steps,
+                name=step.name,
+                status="running"
+            )
+
+        # Create tasks for parallel execution
+        async def execute_one(step: Step) -> tuple[Step, Any, int, Optional[Exception]]:
+            """Execute single step and return result or exception."""
+            try:
+                result, retries = await self._execute_step(
+                    step=step,
+                    step_context=step_context,
+                    available_skills=available_skills,
+                    execution_stack=execution_stack,
+                    org_model=org_model,
+                    api_key=api_key,
+                    organization_id=organization_id
+                )
+                return step, result, retries, None
+            except Exception as e:
+                return step, None, 0, e
+
+        # Execute all in parallel
+        tasks = [execute_one(step) for step in batch]
+        results = await asyncio.gather(*tasks)
+
+        # Process results
+        for i, (step, result, retries, error) in enumerate(results):
+            step_num = step_counter + i + 1
+
+            if error is None:
+                # Success
+                self._capture_outputs(step, result, step_context)
+                result_str = str(result)[:500] if result else "No result"
+                logger.info(f"✅ Step {step.name}: completed (parallel)")
+
+                yield StepProgress(
+                    step=step_num,
+                    total=total_steps,
+                    name=step.name,
+                    status="completed",
+                    result=result_str,
+                    retries_attempted=retries
+                )
+
+                self._queue_next_steps(
+                    step, internal_steps, pending_steps, executed_steps,
+                    "success", step_context
+                )
+            else:
+                # Error
+                error_msg = str(error)
+                error_type = type(error).__name__
+                logger.error(f"❌ Step {step.name} failed (parallel): {error_msg}")
+
+                step_error = StepError(
+                    message=error_msg,
+                    error_type=error_type,
+                    step_name=step.name,
+                    timestamp=time.time(),
+                    retries_attempted=retries
+                )
+
+                error_var = step.error_config.error_output_var if step.error_config else "__error__"
+                step_context[error_var] = asdict(step_error)
+                step_context.setdefault("__errors__", {})[step.name] = asdict(step_error)
+
+                continue_on_error = step.error_config and step.error_config.continue_on_error
+
+                if continue_on_error:
+                    yield StepProgress(
+                        step=step_num,
+                        total=total_steps,
+                        name=step.name,
+                        status="failed",
+                        error=error_msg,
+                        continued_after_error=True,
+                        retries_attempted=retries
+                    )
+                    self._queue_next_steps(
+                        step, internal_steps, pending_steps, executed_steps,
+                        "error", step_context
                     )
                 else:
-                    # Execute inline instruction with sub-agent
-                    result = await self._execute_inline_step(
-                        step=step,
-                        step_inputs=step_inputs,
-                        step_context=step_context,
-                        org_model=org_model
+                    yield StepProgress(
+                        step=step_num,
+                        total=total_steps,
+                        name=step.name,
+                        status="failed",
+                        error=error_msg,
+                        retries_attempted=retries
                     )
+                    raise error
 
-                # Capture outputs to step_context
-                # Use explicit output mappings if provided, otherwise auto-generate from outputDefs
-                output_mappings = dict(step.outputs)
-                if not output_mappings and step.output_defs:
-                    # Auto-generate mappings: each outputDef.name maps to itself
-                    output_mappings = {od.name: od.name for od in step.output_defs}
-                    logger.debug(f"📤 Auto-generated output mappings from outputDefs: {list(output_mappings.keys())}")
-                self._capture_outputs(output_mappings, result, step_context)
+    def _queue_next_steps(
+        self,
+        current_step: Step,
+        all_steps: List[Step],
+        pending_steps: List[str],
+        executed_steps: Set[str],
+        execution_status: Literal["success", "error"],
+        context: Dict[str, Any]
+    ) -> None:
+        """Determine and queue next steps based on outputs or sequential order."""
+        next_step_names: List[str] = []
 
-                result_str = str(result)[:500] if result else "No result"
-                logger.info(f"✅ Step {step_name}: completed")
+        if current_step.step_outputs:
+            # Use output-based routing
+            next_step_names = self._get_next_steps_from_outputs(
+                current_step, execution_status, context
+            )
+        else:
+            # Sequential: find the next step in the array
+            try:
+                current_idx = next(
+                    i for i, s in enumerate(all_steps) if s.name == current_step.name
+                )
+                if current_idx + 1 < len(all_steps):
+                    next_step_names = [all_steps[current_idx + 1].name]
+            except StopIteration:
+                pass
 
-                yield StepProgress(
-                    step=step_number,
-                    total=total_steps,
-                    name=step_name,
-                    status="completed",
-                    result=result_str
+        # Add to pending (avoid duplicates and already executed)
+        for name in next_step_names:
+            if name not in executed_steps and name not in pending_steps:
+                pending_steps.append(name)
+                logger.debug(f"📍 Queued next step: {name}")
+
+    def _get_next_steps_from_outputs(
+        self,
+        step: Step,
+        execution_status: Literal["success", "error"],
+        context: Dict[str, Any]
+    ) -> List[str]:
+        """Determine next steps based on step outputs and execution status."""
+        next_steps: List[str] = []
+        default_steps: List[str] = []
+
+        for output in step.step_outputs:
+            if output.type == "success" and execution_status == "success":
+                next_steps.extend(output.next_steps)
+                logger.debug(f"📍 Success output: routing to {output.next_steps}")
+
+            elif output.type == "error" and execution_status == "error":
+                next_steps.extend(output.next_steps)
+                logger.debug(f"📍 Error output: routing to {output.next_steps}")
+
+            elif output.type == "condition" and output.condition:
+                if self._evaluate_condition(output.condition, context):
+                    next_steps.extend(output.next_steps)
+                    logger.debug(f"📍 Condition '{output.condition}' matched: routing to {output.next_steps}")
+
+            elif output.type == "default":
+                default_steps.extend(output.next_steps)
+
+        # Use default if no other matches
+        if not next_steps and default_steps:
+            next_steps = default_steps
+            logger.debug(f"📍 Using default output: {default_steps}")
+
+        return next_steps
+
+    async def _execute_step(
+        self,
+        step: Step,
+        step_context: Dict[str, Any],
+        available_skills: Dict[int, 'agent_worker_pb2.SkillConfig'],
+        execution_stack: Set[int],
+        org_model: Optional[str],
+        api_key: Optional[str],
+        organization_id: Optional[int]
+    ) -> tuple[Any, int]:
+        """Execute a single step with optional retry and loop support.
+
+        Returns:
+            Tuple of (result, retries_attempted)
+        """
+        # Handle loop execution if configured
+        if step.loop_config:
+            return await self._execute_step_with_loop(
+                step=step,
+                step_context=step_context,
+                available_skills=available_skills,
+                execution_stack=execution_stack,
+                org_model=org_model,
+                api_key=api_key,
+                organization_id=organization_id
+            )
+
+        # Resolve inputs
+        input_mappings = step.inputs
+        if not input_mappings and step.input_defs:
+            input_mappings = {d.name: f"{{{{{d.name}}}}}" for d in step.input_defs}
+        step_inputs = self._resolve_inputs(input_mappings, step_context)
+        logger.info(f"📥 Step {step.name}: resolved {len(step_inputs)} inputs")
+
+        async def _do_execute() -> Any:
+            if step.skill_id:
+                return await self._execute_skill_step(
+                    step, step_inputs, available_skills, org_model,
+                    api_key, organization_id, execution_stack
+                )
+            else:
+                return await self._execute_inline_step(
+                    step, step_inputs, step_context, org_model
                 )
 
-            except Exception as e:
-                error_msg = str(e)
-                logger.error(f"❌ Step {step_name} failed: {error_msg}")
+        retries_attempted = 0
 
-                yield StepProgress(
-                    step=step_number,
-                    total=total_steps,
-                    name=step_name,
-                    status="failed",
-                    error=error_msg
+        if step.retry_config and step.retry_config.max_attempts > 1:
+            max_attempts = step.retry_config.max_attempts
+            try:
+                async for attempt in AsyncRetrying(
+                    stop=stop_after_attempt(max_attempts),
+                    wait=_get_wait_strategy(step.retry_config),
+                    retry=retry_if_exception(_is_retryable_error),
+                    reraise=True
+                ):
+                    with attempt:
+                        retries_attempted = attempt.retry_state.attempt_number - 1
+                        if retries_attempted > 0:
+                            logger.info(f"🔄 Retry {retries_attempted}/{max_attempts - 1} for step {step.name}")
+                        result = await _do_execute()
+                return result, retries_attempted
+            except RetryError as e:
+                retries_attempted = max_attempts - 1
+                raise e.last_attempt.exception()
+        else:
+            result = await _do_execute()
+            return result, 0
+
+    async def _execute_step_with_loop(
+        self,
+        step: Step,
+        step_context: Dict[str, Any],
+        available_skills: Dict[int, 'agent_worker_pb2.SkillConfig'],
+        execution_stack: Set[int],
+        org_model: Optional[str],
+        api_key: Optional[str],
+        organization_id: Optional[int]
+    ) -> tuple[Any, int]:
+        """Execute a step with loop iteration.
+
+        Supports:
+        - for_each: Iterate over array in items_var
+        - while: Repeat while condition is true
+        - until: Repeat until condition is true
+
+        Returns:
+            Tuple of (accumulated results, total retries)
+        """
+        loop_config = step.loop_config
+        if not loop_config:
+            raise ValueError("Loop config required for loop execution")
+
+        loop_type = loop_config.type
+        max_iterations = loop_config.max_iterations
+        current_item_var = loop_config.current_item_var or "item"
+        results: List[Any] = []
+        total_retries = 0
+
+        logger.info(f"🔁 Starting {loop_type} loop for step {step.name} (max: {max_iterations})")
+
+        # Create a step copy without loop_config to avoid infinite recursion
+        step_without_loop = Step(
+            name=step.name,
+            instruction=step.instruction,
+            skill_id=step.skill_id,
+            tools=step.tools,
+            inputs=step.inputs,
+            outputs=step.outputs,
+            condition=step.condition,
+            input_defs=step.input_defs,
+            output_defs=step.output_defs,
+            error_config=step.error_config,
+            retry_config=step.retry_config,
+            step_outputs=step.step_outputs,
+            parallel_group=step.parallel_group,
+            loop_config=None  # Remove loop config to prevent recursion
+        )
+
+        if loop_type == "for_each":
+            # Get items from context
+            items_var = loop_config.items_var
+            if not items_var:
+                raise ValueError("for_each loop requires items_var")
+
+            items = step_context.get(items_var, [])
+            if not isinstance(items, (list, tuple)):
+                logger.warning(f"items_var '{items_var}' is not a list, wrapping as single item")
+                items = [items] if items else []
+
+            iteration_count = min(len(items), max_iterations)
+            logger.info(f"🔁 for_each: iterating over {iteration_count} items from '{items_var}'")
+
+            for i, item in enumerate(items[:max_iterations]):
+                # Set loop variables in context
+                step_context[current_item_var] = item
+                step_context["__loop_index__"] = i
+                step_context["__loop_iteration__"] = i + 1
+
+                logger.info(f"🔁 Iteration {i + 1}/{iteration_count}: {current_item_var}={str(item)[:50]}")
+
+                result, retries = await self._execute_step(
+                    step=step_without_loop,
+                    step_context=step_context,
+                    available_skills=available_skills,
+                    execution_stack=execution_stack,
+                    org_model=org_model,
+                    api_key=api_key,
+                    organization_id=organization_id
                 )
+                results.append(result)
+                total_retries += retries
 
-                # Stop execution on failure (can be made configurable later)
-                raise
+            # Clean up loop variables
+            step_context.pop(current_item_var, None)
+            step_context.pop("__loop_index__", None)
+            step_context.pop("__loop_iteration__", None)
 
-        logger.info(f"🏁 Step-based execution complete: {total_steps} steps")
+        elif loop_type == "while":
+            # Repeat while condition is true
+            condition = loop_config.condition
+            if not condition:
+                raise ValueError("while loop requires condition")
+
+            iteration = 0
+            while iteration < max_iterations:
+                if not self._evaluate_condition(condition, step_context):
+                    logger.info(f"🔁 while loop: condition '{condition}' is false, stopping")
+                    break
+
+                step_context["__loop_index__"] = iteration
+                step_context["__loop_iteration__"] = iteration + 1
+
+                logger.info(f"🔁 while iteration {iteration + 1}: condition=true")
+
+                result, retries = await self._execute_step(
+                    step=step_without_loop,
+                    step_context=step_context,
+                    available_skills=available_skills,
+                    execution_stack=execution_stack,
+                    org_model=org_model,
+                    api_key=api_key,
+                    organization_id=organization_id
+                )
+                results.append(result)
+                total_retries += retries
+                iteration += 1
+
+            if iteration >= max_iterations:
+                logger.warning(f"🔁 while loop: reached max iterations ({max_iterations})")
+
+            step_context.pop("__loop_index__", None)
+            step_context.pop("__loop_iteration__", None)
+
+        elif loop_type == "until":
+            # Repeat until condition becomes true
+            condition = loop_config.condition
+            if not condition:
+                raise ValueError("until loop requires condition")
+
+            iteration = 0
+            while iteration < max_iterations:
+                step_context["__loop_index__"] = iteration
+                step_context["__loop_iteration__"] = iteration + 1
+
+                logger.info(f"🔁 until iteration {iteration + 1}")
+
+                result, retries = await self._execute_step(
+                    step=step_without_loop,
+                    step_context=step_context,
+                    available_skills=available_skills,
+                    execution_stack=execution_stack,
+                    org_model=org_model,
+                    api_key=api_key,
+                    organization_id=organization_id
+                )
+                results.append(result)
+                total_retries += retries
+                iteration += 1
+
+                # Check condition after execution
+                if self._evaluate_condition(condition, step_context):
+                    logger.info(f"🔁 until loop: condition '{condition}' is now true, stopping")
+                    break
+
+            if iteration >= max_iterations:
+                logger.warning(f"🔁 until loop: reached max iterations ({max_iterations})")
+
+            step_context.pop("__loop_index__", None)
+            step_context.pop("__loop_iteration__", None)
+
+        else:
+            raise ValueError(f"Unknown loop type: {loop_type}")
+
+        logger.info(f"🔁 Loop completed: {len(results)} iterations, {total_retries} total retries")
+
+        # Store results array in context
+        step_context[f"{step.name}_results"] = results
+
+        return results, total_retries
 
     async def _execute_skill_step(
         self,
-        step: 'agent_worker_pb2.SkillStep',
+        step: Step,
         step_inputs: Dict[str, Any],
         available_skills: Dict[int, 'agent_worker_pb2.SkillConfig'],
         org_model: Optional[str],
@@ -205,7 +917,6 @@ class StepExecutorService:
         if not skill_config:
             raise ValueError(f"Skill {skill_id} not found in available skills")
 
-        # Circular dependency detection - only check skills currently executing in this chain
         if skill_id in execution_stack:
             raise ValueError(
                 f"Circular dependency detected: skill {skill_id} ({skill_config.name}) "
@@ -217,55 +928,40 @@ class StepExecutorService:
         if not self.skill_executor_callback:
             raise ValueError("No skill executor callback configured for skill delegation")
 
-        # Add to execution stack for this call chain
         execution_stack.add(skill_id)
         try:
-            # Execute via callback (handles operation/tool/write/agent routing)
             result = self.skill_executor_callback(
                 skill_config=skill_config,
                 runtime_inputs=step_inputs,
-                capture_outputs=True  # We need outputs for chaining
+                capture_outputs=True
             )
 
-            # Await if the callback returns a coroutine
             if asyncio.iscoroutine(result):
                 result = await result
 
-            # Handle SkillExecutionResult
             if isinstance(result, SkillExecutionResult):
-                # Return captured outputs if available, otherwise the result string
-                if result.captured_outputs:
-                    return result.captured_outputs
-                return result.result
+                return result.captured_outputs if result.captured_outputs else result.result
 
             return result
         finally:
-            # Remove from stack when this skill completes
             execution_stack.discard(skill_id)
 
     async def _execute_inline_step(
         self,
-        step: 'agent_worker_pb2.SkillStep',
+        step: Step,
         step_inputs: Dict[str, Any],
         step_context: Dict[str, Any],
         org_model: Optional[str]
     ) -> Any:
         """Execute a step with inline instruction using a sub-agent."""
-        # Inject context into instruction
         instruction = self._inject_context(step.instruction, step_context)
-
         logger.info(f"📝 Inline step instruction: {instruction[:100]}...")
 
-        # Load only the tools specified for this step
         step_tools = []
         if step.tools:
             try:
-                # Create tool configs from tool names
                 from ..grpc.generated.agent_worker_pb2 import ToolConfig
-                tool_configs = [
-                    ToolConfig(name=tool_name)
-                    for tool_name in step.tools
-                ]
+                tool_configs = [ToolConfig(name=name) for name in step.tools]
                 step_tools = self.tool_loader.load_tools_from_configs(
                     tool_configs=tool_configs,
                     api_key=None,
@@ -275,7 +971,6 @@ class StepExecutorService:
             except Exception as e:
                 logger.warning(f"Failed to load some step tools: {e}")
 
-        # Add inputs to the task
         task_parts = [instruction]
         if step_inputs:
             task_parts.append("\n\nInputs:")
@@ -284,11 +979,10 @@ class StepExecutorService:
 
         task = "\n".join(task_parts)
 
-        # Create sub-agent for this step
         agent_config = AgentConfig(
             tools=step_tools,
             org_model=org_model,
-            max_steps=5,  # Limit steps per inline execution
+            max_steps=5,
             agent_name=f"step_{step.name}",
             agent_description=f"Sub-agent for step: {step.name}",
             enable_caching=False,
@@ -296,67 +990,47 @@ class StepExecutorService:
         )
 
         sub_agent = self.agent_factory.create_agent(agent_config)
-
-        # Execute
-        result = sub_agent.run(task=task, stream=False, reset=True)
-
-        return result
+        return sub_agent.run(task=task, stream=False, reset=True)
 
     def _resolve_inputs(
         self,
         input_mappings: Dict[str, str],
         context: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Resolve input mappings from step_context.
-
-        Args:
-            input_mappings: Map of param_name -> "{{source_var}}" or literal
-            context: Current step context with resolved values
-
-        Returns:
-            Resolved input values
-        """
+        """Resolve input mappings from step_context."""
         resolved = {}
         for param_name, source in input_mappings.items():
             if source.startswith("{{") and source.endswith("}}"):
-                # Variable reference
                 var_name = source[2:-2].strip()
                 if var_name in context:
                     resolved[param_name] = context[var_name]
                 else:
                     logger.warning(f"Variable '{var_name}' not found in step context")
             else:
-                # Literal value
                 resolved[param_name] = source
         return resolved
 
     def _capture_outputs(
         self,
-        output_mappings: Dict[str, str],
+        step: Step,
         result: Any,
         context: Dict[str, Any]
     ) -> None:
-        """Capture outputs to step_context.
+        """Capture outputs to step_context."""
+        output_mappings = step.outputs
+        if not output_mappings and step.output_defs:
+            output_mappings = {d.name: d.name for d in step.output_defs}
 
-        Args:
-            output_mappings: Map of output_name -> target_var_name
-            result: The step result (can be dict, string, or other)
-            context: Step context to update
-        """
         if not output_mappings:
             return
 
         for output_name, target_var in output_mappings.items():
             if isinstance(result, dict):
-                # Extract from dict
                 if output_name in result:
                     context[target_var] = result[output_name]
-                else:
-                    # If output_name is "result", use the whole dict
-                    if output_name == "result":
-                        context[target_var] = result
+                elif output_name == "result":
+                    context[target_var] = result
             else:
-                # For non-dict results, use the whole result
                 context[target_var] = result
 
         logger.debug(f"📤 Captured outputs: {list(output_mappings.values())}")
@@ -367,7 +1041,6 @@ class StepExecutorService:
         for key, value in context.items():
             placeholder = f"{{{{{key}}}}}"
             if placeholder in result:
-                # Convert value to string for injection
                 if isinstance(value, (dict, list)):
                     value_str = json.dumps(value)
                 else:
@@ -376,18 +1049,11 @@ class StepExecutorService:
         return result
 
     def _evaluate_condition(self, condition: str, context: Dict[str, Any]) -> bool:
-        """Safely evaluate simple conditions like '{{count}} > 0'.
-
-        Supports: >, <, >=, <=, ==, !=
-        For complex conditions, returns True (execute the step).
-        """
-        # Inject context first
+        """Safely evaluate simple conditions like '{{count}} > 0'."""
         expr = self._inject_context(condition, context)
 
-        # Match simple comparison: "left op right"
         match = _CONDITION_PATTERN.match(expr.strip())
         if not match:
-            # If no comparison found, treat as truthy check
             logger.debug(f"Condition '{expr}' - treating as truthy check")
             return bool(expr.strip())
 
@@ -416,19 +1082,16 @@ class StepExecutorService:
 
     def _parse_value(self, value_str: str) -> Any:
         """Parse a string value into appropriate Python type."""
-        # Try as int
         try:
             return int(value_str)
         except ValueError:
             pass
 
-        # Try as float
         try:
             return float(value_str)
         except ValueError:
             pass
 
-        # Handle boolean/null strings
         lower = value_str.lower()
         if lower == 'true':
             return True
@@ -437,14 +1100,16 @@ class StepExecutorService:
         if lower in ('none', 'null'):
             return None
 
-        # Handle quoted strings
         if (value_str.startswith('"') and value_str.endswith('"')) or \
            (value_str.startswith("'") and value_str.endswith("'")):
             return value_str[1:-1]
 
-        # Return as string
         return value_str
 
+
+# =============================================================================
+# Synchronous Wrapper
+# =============================================================================
 
 def execute_steps_sync(
     step_executor: StepExecutorService,
@@ -455,10 +1120,7 @@ def execute_steps_sync(
     api_key: Optional[str] = None,
     organization_id: Optional[int] = None
 ) -> SkillExecutionResult:
-    """Synchronous wrapper for step execution.
-
-    Collects all step progress and returns final result.
-    """
+    """Synchronous wrapper for step execution."""
     from ..utils import run_async_in_thread
 
     async def collect_results():
@@ -481,7 +1143,6 @@ def execute_steps_sync(
 
     results, final_result = run_async_in_thread(collect_results())
 
-    # Build captured outputs from all completed steps
     captured = {}
     for progress in results:
         if progress.status == "completed" and progress.result:

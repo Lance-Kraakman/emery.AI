@@ -544,7 +544,33 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
         name: output.name,
         type: output.type || 'text',
         outputMapping: undefined  // Step-level outputs typically don't have table mappings
-      })) || []
+      })) || [],
+      // DAG execution configuration
+      errorConfig: step.errorConfig ? {
+        continueOnError: step.errorConfig.continueOnError,
+        errorOutputVar: step.errorConfig.errorOutputVar || ''
+      } : undefined,
+      retryConfig: step.retryConfig ? {
+        maxAttempts: step.retryConfig.maxAttempts,
+        backoffMs: step.retryConfig.backoffMs,
+        backoffType: step.retryConfig.backoffType
+      } : undefined,
+      // Output routing for DAG branching
+      stepOutputs: step.stepOutputs?.map(output => ({
+        type: output.type,
+        condition: output.condition || '',
+        nextSteps: output.nextSteps || []
+      })) || [],
+      // Parallel execution
+      parallelGroup: step.parallelGroup || '',
+      // Loop/iteration support
+      loopConfig: step.loopConfig ? {
+        type: step.loopConfig.type,
+        itemsVar: step.loopConfig.itemsVar || '',
+        currentItemVar: step.loopConfig.currentItemVar || '',
+        condition: step.loopConfig.condition || '',
+        maxIterations: step.loopConfig.maxIterations || 100
+      } : undefined
     })) || []
   };
 }

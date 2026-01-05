@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import type { SkillFormData } from './SkillEditor';
-import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
-import { updateSkill, deleteSkill, uploadSkillAttachment, getSkillsByAgent, getOrganizationSkills } from '@/app/actions/skills';
+import { updateSkill, deleteSkill, getSkillsByAgent, getOrganizationSkills } from '@/app/actions/skills';
 import { useOrganizationPlan } from '@/stores/app-state.store';
 
 interface UseSkillEditorOptions {
@@ -28,17 +27,8 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
     description: skill.description,
     inputs: skill.inputs,
     outputs: skill.outputs,
-    instructions: skill.instructions,
-    tools: skill.tools,
-    model: skill.model,
-    agentType: skill.agentType,
-    content: skill.content,
-    pendingAttachments: [],
-    executionType: skill.executionType,
-    taskModelConfig: skill.taskModelConfig,
-    toolExecutionConfig: skill.toolExecutionConfig,
-    writeConfig: skill.writeConfig,
-    steps: skill.steps || []
+    steps: skill.steps || [],
+    model: skill.model
   });
 
   // Ref to always have current formData (fixes stale closure in handleSave)
@@ -47,15 +37,13 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
     formDataRef.current = formData;
   }, [formData]);
 
-  // Fetch available skills for step builder
+  // Fetch available skills for workflow canvas skillRef nodes
   useEffect(() => {
     async function fetchSkills() {
       let result;
       if (agentId) {
-        // Agent-scoped skill: fetch skills for this agent
         result = await getSkillsByAgent(agentId);
       } else {
-        // Org-level skill: fetch all org-level skills
         result = await getOrganizationSkills(skill.organizationId);
       }
 
@@ -83,55 +71,13 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
     setIsSaving(true);
 
     try {
-      // Upload pending attachments
-      let updatedContent = [...(currentFormData.content || [])];
-
-      if (currentFormData.pendingAttachments && currentFormData.pendingAttachments.length > 0) {
-        toast.info(`Uploading ${currentFormData.pendingAttachments.length} attachment(s)...`);
-
-        for (const file of currentFormData.pendingAttachments) {
-          const attachFormData = new FormData();
-          attachFormData.append('file', file);
-          attachFormData.append('type', file.type.startsWith('image/') ? 'image' : 'file');
-
-          const uploadResult = await uploadSkillAttachment(skill.id, attachFormData);
-
-          if (uploadResult.success && uploadResult.data) {
-            const metadata = uploadResult.data;
-            const messagePart: MessagePart = metadata.type === 'image'
-              ? { imageUrl: { url: metadata.url } }
-              : {
-                  file: {
-                    url: metadata.url,
-                    filename: metadata.filename,
-                    size: metadata.sizeBytes,
-                    mimeType: metadata.mimeType
-                  }
-                };
-            updatedContent.push(messagePart);
-          } else {
-            console.error('Failed to upload attachment:', file.name, uploadResult.error);
-            toast.error(`Failed to upload ${file.name}`);
-          }
-        }
-      }
-
-      // Update skill
       const result = await updateSkill(skill.id, {
         name: currentFormData.name,
         description: currentFormData.description,
         inputs: currentFormData.inputs,
         outputs: currentFormData.outputs,
-        instructions: currentFormData.instructions,
-        tools: currentFormData.tools,
-        model: currentFormData.model,
-        agentType: currentFormData.agentType,
-        content: updatedContent,
-        executionType: currentFormData.executionType,
-        taskModelConfig: currentFormData.taskModelConfig,
-        toolExecutionConfig: currentFormData.toolExecutionConfig,
-        writeConfig: currentFormData.writeConfig,
-        steps: currentFormData.steps || []
+        steps: currentFormData.steps,
+        model: currentFormData.model
       });
 
       if (!result.success) {

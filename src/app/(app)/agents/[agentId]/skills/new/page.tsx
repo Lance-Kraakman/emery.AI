@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { getAgent } from '@/app/actions/agents';
 import { NewSkillView } from '../components/NewSkillView';
-import { CenteredCanvasLayout } from '@/components/layouts/CenteredCanvasLayout';
+import { CanvasBase } from '@/components/canvas/CanvasBase';
 
 interface PageProps {
   params: Promise<{
@@ -42,8 +42,8 @@ export default async function NewSkillPage({ params, searchParams }: PageProps) 
     : undefined;
 
   return (
-    <CenteredCanvasLayout>
+    <CanvasBase>
       <NewSkillView agent={agent} templateId={templateId} />
-    </CenteredCanvasLayout>
+    </CanvasBase>
   );
 }
