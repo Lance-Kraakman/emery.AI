@@ -549,7 +549,7 @@ export function UnifiedChatInput<T = ToolDTO>({
         {/* Textarea with Popover for both variable and tool dropdowns */}
         <Popover
           open={showDropdown}
-          onOpenChange={(open) => { if (!open) setShowDropdown(false); }}
+          onOpenChange={() => {}}
         >
           <PopoverAnchor asChild>
             <Textarea
@@ -573,13 +573,16 @@ export function UnifiedChatInput<T = ToolDTO>({
           </PopoverAnchor>
 
           <PopoverContent
-            className={dropdownType === 'tools' ? "w-[440px] p-0 z-[100] max-h-[500px] flex flex-col" : "w-[300px] p-2 z-[100]"}
+            className={dropdownType === 'tools' ? "w-[440px] p-0 z-[100] max-h-[500px] flex flex-col overflow-hidden" : "w-[300px] p-2 z-[100]"}
             align="start"
             side="bottom"
             sideOffset={4}
             onOpenAutoFocus={(e) => e.preventDefault()}
+            onCloseAutoFocus={(e) => e.preventDefault()}
             onPointerDownOutside={(e) => e.preventDefault()}
             onInteractOutside={(e) => e.preventDefault()}
+            onFocusOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={() => setShowDropdown(false)}
           >
             {dropdownType === 'variables' ? (
               <>
