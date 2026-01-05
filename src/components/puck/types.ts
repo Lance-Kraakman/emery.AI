@@ -34,6 +34,7 @@ import { LinkFieldProps } from "./blocks/LinkField/LinkField";
 import type { LoginBlockProps } from "./blocks/LoginBlock";
 import type { SignOutBlockProps } from "./blocks/SignOutBlock";
 import type { EditorBlockProps } from "./blocks/EditorBlock/types";
+import type { MarkdownBlockProps } from "./blocks/MarkdownBlock";
 import type { ConditionalBlockProps } from "./blocks/ConditionalBlock";
 import type { DialogBlockProps } from "./blocks/DialogBlock";
 
@@ -99,6 +100,7 @@ export type Components = {
   LoginBlock: LoginBlockProps;
   SignOutBlock: SignOutBlockProps;
   EditorBlock: EditorBlockProps;
+  MarkdownBlock: MarkdownBlockProps;
 };
 
 export type UserConfig = Config<{

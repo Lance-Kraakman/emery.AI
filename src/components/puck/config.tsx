@@ -34,6 +34,7 @@ import FileFieldConfig from "./blocks/FileField";
 import DocumentFieldConfig from "./blocks/DocumentField";
 import LinkFieldConfig from "./blocks/LinkField";
 import { EditorBlock } from "./blocks/EditorBlock";
+import { MarkdownBlock } from "./blocks/MarkdownBlock";
 
 import Root from "./root";
 import { UserConfig } from "./types";
@@ -67,7 +68,7 @@ export const config: UserConfig = {
     },
     content: {
       title: "Content",
-      components: ["EditorBlock"],
+      components: ["EditorBlock", "MarkdownBlock"],
     },
     fields: {
       title: "Fields",
@@ -116,6 +117,7 @@ export const config: UserConfig = {
     LoginBlock,
     SignOutBlock,
     EditorBlock,
+    MarkdownBlock,
   },
 };
 
