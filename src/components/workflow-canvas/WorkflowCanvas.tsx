@@ -91,6 +91,7 @@ export interface WorkflowCanvasProps {
   // Expose internal state to parent (for external config panels)
   onNodeSelect?: (id: string | null) => void;
   onNodesExpose?: (nodes: WorkflowNode[]) => void;
+  onEdgesExpose?: (edges: WorkflowEdge[]) => void;
   onUpdateNodeExpose?: (fn: (id: string, data: Partial<WorkflowNodeData>) => void) => void;
   onDeleteNodeExpose?: (fn: (id: string) => void) => void;
 }
@@ -105,6 +106,7 @@ function WorkflowCanvasInner({
   className,
   onNodeSelect,
   onNodesExpose,
+  onEdgesExpose,
   onUpdateNodeExpose,
   onDeleteNodeExpose,
 }: WorkflowCanvasProps) {
@@ -128,6 +130,11 @@ function WorkflowCanvasInner({
   React.useEffect(() => {
     onNodesExpose?.(nodes);
   }, [nodes, onNodesExpose]);
+
+  // Expose edges to parent when they change
+  React.useEffect(() => {
+    onEdgesExpose?.(edges);
+  }, [edges, onEdgesExpose]);
 
   // Expose updateNode function to parent
   React.useEffect(() => {

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { InputDefinition, OutputDefinition } from '@/app/mappers/skill-mapper';
 import type { SkillStep } from '@/ddd/domain/skills/entities/skill';
-import type { WorkflowNode, WorkflowNodeData } from '@/components/workflow-canvas/types';
+import type { WorkflowNode, WorkflowNodeData, WorkflowEdge } from '@/components/workflow-canvas/types';
 import type { WorkflowVariable } from '@/components/workflow-canvas/WorkflowVariableInput';
 import { NodeConfigContent } from './NodeConfigContent';
 import { RootSkillConfig } from './RootSkillConfig';
@@ -52,6 +52,7 @@ export function SkillEditor({
 }: SkillEditorProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [nodes, setNodes] = useState<WorkflowNode[]>([]);
+  const [edges, setEdges] = useState<WorkflowEdge[]>([]);
   const updateNodeRef = useRef<((id: string, data: Partial<WorkflowNodeData>) => void) | null>(null);
   const deleteNodeRef = useRef<((id: string) => void) | null>(null);
 
@@ -65,6 +66,10 @@ export function SkillEditor({
 
   const handleNodesChange = useCallback((newNodes: WorkflowNode[]) => {
     setNodes(newNodes);
+  }, []);
+
+  const handleEdgesChange = useCallback((newEdges: WorkflowEdge[]) => {
+    setEdges(newEdges);
   }, []);
 
   const handleUpdateNodeRef = useCallback((fn: (id: string, data: Partial<WorkflowNodeData>) => void) => {
@@ -88,11 +93,11 @@ export function SkillEditor({
 
   const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
 
-  // Build workflow variables from skill inputs for autocomplete
+  // Build workflow variables from skill inputs and upstream node outputs
   const workflowVariables = useMemo((): WorkflowVariable[] => {
     const vars: WorkflowVariable[] = [];
 
-    // Skill inputs
+    // 1. Skill inputs (always available)
     for (const input of value.inputs) {
       vars.push({
         name: input.name,
@@ -102,11 +107,30 @@ export function SkillEditor({
       });
     }
 
-    // TODO: Add previous step outputs when we implement node I/O tracking
+    // 2. Outputs from upstream connected nodes
+    if (selectedNodeId && nodes.length > 0 && edges.length > 0) {
+      // Find all edges that point TO the selected node
+      const incomingEdges = edges.filter(e => e.target === selectedNodeId);
+
+      for (const edge of incomingEdges) {
+        const sourceNode = nodes.find(n => n.id === edge.source);
+        if (sourceNode?.data.outputDefs) {
+          for (const output of sourceNode.data.outputDefs) {
+            vars.push({
+              name: output.name,
+              label: `${sourceNode.data.name}: ${output.name}`,
+              description: output.type ? `Type: ${output.type}` : undefined,
+              group: 'output',
+            });
+          }
+        }
+      }
+    }
+
     // TODO: Add loop context variables (item, index) when inside a loop
 
     return vars;
-  }, [value.inputs]);
+  }, [value.inputs, selectedNodeId, nodes, edges]);
 
   // Node type labels for panel header
   const nodeTypeLabels: Record<string, string> = {
@@ -132,6 +156,7 @@ export function SkillEditor({
         showConfigPanel={false}
         onNodeSelect={handleNodeSelect}
         onNodesExpose={handleNodesChange}
+        onEdgesExpose={handleEdgesChange}
         onUpdateNodeExpose={handleUpdateNodeRef}
         onDeleteNodeExpose={handleDeleteNodeRef}
       />
