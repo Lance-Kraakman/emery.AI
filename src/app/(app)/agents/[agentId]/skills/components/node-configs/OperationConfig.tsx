@@ -5,6 +5,20 @@ import { Textarea } from '@/components/ui/textarea';
 import { TaskModelForm } from '../editor/TaskModelForm';
 import type { BaseConfigProps, OperationNodeData } from './types';
 
+// Operations that support prompt templates
+const OPERATIONS_WITH_TEMPLATES = [
+  'text-to-image',
+  'image-to-image',
+  'text-to-video',
+  'speech-to-text',
+  'text-to-speech',
+  'summarization',
+  'translation',
+  'question-answering',
+  'zero-shot-classification',
+  'feature-extraction',
+];
+
 interface OperationConfigProps extends BaseConfigProps<OperationNodeData> {
   organizationTier?: 'free' | 'pro' | 'max' | 'enterprise';
 }
@@ -18,6 +32,10 @@ export function OperationConfig({
   organizationTier,
   disabled,
 }: OperationConfigProps) {
+  // Only show prompt template for operations that support it
+  const taskType = data.taskModelConfig?.taskType || '';
+  const shouldShowTemplate = OPERATIONS_WITH_TEMPLATES.includes(taskType);
+
   return (
     <div className="space-y-4">
       <TaskModelForm
@@ -30,7 +48,7 @@ export function OperationConfig({
         isReadOnly={disabled}
       />
 
-      {data.promptTemplate !== undefined && (
+      {shouldShowTemplate && (
         <div className="space-y-1.5">
           <Label htmlFor="promptTemplate" className="text-xs">
             Prompt Template

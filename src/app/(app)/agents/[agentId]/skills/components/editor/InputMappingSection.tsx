@@ -372,8 +372,9 @@ export function InputMappingSection({
           {!isReadOnly && unmappedInputs.length > 0 && (
             <div className="flex items-center gap-2 pt-1">
               <Select
-                value=""
-                onValueChange={handleAddMapping}
+                onValueChange={(value) => {
+                  handleAddMapping(value);
+                }}
               >
                 <SelectTrigger className="h-7 w-[180px] text-[11px]">
                   <SelectValue placeholder="Add mapping for input..." />
