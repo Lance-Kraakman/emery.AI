@@ -57,27 +57,28 @@ export function DeletableEdge({
   };
 
   // Edge styling based on edge data label (set when edge is created)
+  // Uses semantic Tailwind colors that work in both light/dark modes
   const getEdgeStyle = (): React.CSSProperties => {
     const edgeType = data?.label;
     switch (edgeType) {
       case 'error':
         return {
-          stroke: '#ef4444',
+          stroke: 'var(--color-destructive, #ef4444)',
           strokeDasharray: '5,5',
         };
       case 'condition':
         return {
-          stroke: '#3b82f6',
+          stroke: 'var(--color-primary, #3b82f6)',
         };
       case 'default':
         return {
-          stroke: '#6b7280',
+          stroke: 'var(--color-muted-foreground, #6b7280)',
           strokeDasharray: '3,3',
         };
       case 'success':
       default:
         return {
-          stroke: '#22c55e',
+          stroke: 'var(--color-success, #22c55e)',
         };
     }
   };

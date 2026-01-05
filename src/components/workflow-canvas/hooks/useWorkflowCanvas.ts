@@ -141,12 +141,10 @@ export function useWorkflowCanvas({
       setEdges((eds) =>
         eds.filter((edge) => edge.source !== id && edge.target !== id)
       );
-
-      if (selectedNodeId === id) {
-        setSelectedNodeId(null);
-      }
+      // Use functional update to avoid dependency on selectedNodeId
+      setSelectedNodeId((current) => (current === id ? null : current));
     },
-    [setNodes, setEdges, selectedNodeId]
+    [setNodes, setEdges]
   );
 
   return {

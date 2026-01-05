@@ -181,7 +181,7 @@ class AgentConfig(_message.Message):
     def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., skills: _Optional[_Iterable[_Union[SkillConfig, _Mapping]]] = ..., default_model: _Optional[str] = ...) -> None: ...
 
 class SkillConfig(_message.Message):
-    __slots__ = ("id", "name", "description", "inputs", "outputs", "instructions", "tools", "model", "content", "agent_type", "execution_type", "task_model_config", "tool_execution_config", "write_config", "steps")
+    __slots__ = ("id", "name", "description", "inputs", "outputs", "instructions", "tools", "model", "content", "agent_type", "execution_type", "task_model_config", "tool_execution_config", "write_config", "read_config", "steps")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -196,6 +196,7 @@ class SkillConfig(_message.Message):
     TASK_MODEL_CONFIG_FIELD_NUMBER: _ClassVar[int]
     TOOL_EXECUTION_CONFIG_FIELD_NUMBER: _ClassVar[int]
     WRITE_CONFIG_FIELD_NUMBER: _ClassVar[int]
+    READ_CONFIG_FIELD_NUMBER: _ClassVar[int]
     STEPS_FIELD_NUMBER: _ClassVar[int]
     id: int
     name: str
@@ -211,8 +212,9 @@ class SkillConfig(_message.Message):
     task_model_config: TaskModelConfig
     tool_execution_config: ToolExecutionConfig
     write_config: WriteConfig
+    read_config: ReadConfig
     steps: _containers.RepeatedCompositeFieldContainer[SkillStep]
-    def __init__(self, id: _Optional[int] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., inputs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., outputs: _Optional[_Iterable[_Union[OutputDefinition, _Mapping]]] = ..., instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ..., content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., agent_type: _Optional[str] = ..., execution_type: _Optional[str] = ..., task_model_config: _Optional[_Union[TaskModelConfig, _Mapping]] = ..., tool_execution_config: _Optional[_Union[ToolExecutionConfig, _Mapping]] = ..., write_config: _Optional[_Union[WriteConfig, _Mapping]] = ..., steps: _Optional[_Iterable[_Union[SkillStep, _Mapping]]] = ...) -> None: ...
+    def __init__(self, id: _Optional[int] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., inputs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., outputs: _Optional[_Iterable[_Union[OutputDefinition, _Mapping]]] = ..., instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ..., content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., agent_type: _Optional[str] = ..., execution_type: _Optional[str] = ..., task_model_config: _Optional[_Union[TaskModelConfig, _Mapping]] = ..., tool_execution_config: _Optional[_Union[ToolExecutionConfig, _Mapping]] = ..., write_config: _Optional[_Union[WriteConfig, _Mapping]] = ..., read_config: _Optional[_Union[ReadConfig, _Mapping]] = ..., steps: _Optional[_Iterable[_Union[SkillStep, _Mapping]]] = ...) -> None: ...
 
 class InputFieldSource(_message.Message):
     __slots__ = ("table_id", "field_id", "row_source")
@@ -295,7 +297,7 @@ class LoopConfig(_message.Message):
     def __init__(self, type: _Optional[str] = ..., items_var: _Optional[str] = ..., current_item_var: _Optional[str] = ..., condition: _Optional[str] = ..., max_iterations: _Optional[int] = ...) -> None: ...
 
 class SkillStep(_message.Message):
-    __slots__ = ("name", "instruction", "skill_id", "tools", "inputs", "outputs", "parallel", "condition", "input_defs", "output_defs", "error_config", "retry_config", "step_outputs", "parallel_group", "loop_config")
+    __slots__ = ("name", "instruction", "skill_id", "tools", "inputs", "outputs", "parallel", "condition", "input_defs", "output_defs", "error_config", "retry_config", "step_outputs", "parallel_group", "loop_config", "read_config", "write_config", "tool_execution_config", "task_model_config")
     class InputsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -325,6 +327,10 @@ class SkillStep(_message.Message):
     STEP_OUTPUTS_FIELD_NUMBER: _ClassVar[int]
     PARALLEL_GROUP_FIELD_NUMBER: _ClassVar[int]
     LOOP_CONFIG_FIELD_NUMBER: _ClassVar[int]
+    READ_CONFIG_FIELD_NUMBER: _ClassVar[int]
+    WRITE_CONFIG_FIELD_NUMBER: _ClassVar[int]
+    TOOL_EXECUTION_CONFIG_FIELD_NUMBER: _ClassVar[int]
+    TASK_MODEL_CONFIG_FIELD_NUMBER: _ClassVar[int]
     name: str
     instruction: str
     skill_id: int
@@ -340,7 +346,11 @@ class SkillStep(_message.Message):
     step_outputs: _containers.RepeatedCompositeFieldContainer[StepOutput]
     parallel_group: str
     loop_config: LoopConfig
-    def __init__(self, name: _Optional[str] = ..., instruction: _Optional[str] = ..., skill_id: _Optional[int] = ..., tools: _Optional[_Iterable[str]] = ..., inputs: _Optional[_Mapping[str, str]] = ..., outputs: _Optional[_Mapping[str, str]] = ..., parallel: bool = ..., condition: _Optional[str] = ..., input_defs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., output_defs: _Optional[_Iterable[_Union[OutputDefinition, _Mapping]]] = ..., error_config: _Optional[_Union[ErrorConfig, _Mapping]] = ..., retry_config: _Optional[_Union[RetryConfig, _Mapping]] = ..., step_outputs: _Optional[_Iterable[_Union[StepOutput, _Mapping]]] = ..., parallel_group: _Optional[str] = ..., loop_config: _Optional[_Union[LoopConfig, _Mapping]] = ...) -> None: ...
+    read_config: ReadConfig
+    write_config: WriteConfig
+    tool_execution_config: ToolExecutionConfig
+    task_model_config: TaskModelConfig
+    def __init__(self, name: _Optional[str] = ..., instruction: _Optional[str] = ..., skill_id: _Optional[int] = ..., tools: _Optional[_Iterable[str]] = ..., inputs: _Optional[_Mapping[str, str]] = ..., outputs: _Optional[_Mapping[str, str]] = ..., parallel: bool = ..., condition: _Optional[str] = ..., input_defs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., output_defs: _Optional[_Iterable[_Union[OutputDefinition, _Mapping]]] = ..., error_config: _Optional[_Union[ErrorConfig, _Mapping]] = ..., retry_config: _Optional[_Union[RetryConfig, _Mapping]] = ..., step_outputs: _Optional[_Iterable[_Union[StepOutput, _Mapping]]] = ..., parallel_group: _Optional[str] = ..., loop_config: _Optional[_Union[LoopConfig, _Mapping]] = ..., read_config: _Optional[_Union[ReadConfig, _Mapping]] = ..., write_config: _Optional[_Union[WriteConfig, _Mapping]] = ..., tool_execution_config: _Optional[_Union[ToolExecutionConfig, _Mapping]] = ..., task_model_config: _Optional[_Union[TaskModelConfig, _Mapping]] = ...) -> None: ...
 
 class TaskModelConfig(_message.Message):
     __slots__ = ("model_id", "task_type", "parameters")
@@ -404,6 +414,40 @@ class UpdateMatchConfig(_message.Message):
     skill_input_name: str
     target_field_id: int
     def __init__(self, skill_input_name: _Optional[str] = ..., target_field_id: _Optional[int] = ...) -> None: ...
+
+class ReadConfig(_message.Message):
+    __slots__ = ("mode", "source_table_id", "row_id_source", "query_filters", "query_limit", "field_mappings")
+    MODE_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_TABLE_ID_FIELD_NUMBER: _ClassVar[int]
+    ROW_ID_SOURCE_FIELD_NUMBER: _ClassVar[int]
+    QUERY_FILTERS_FIELD_NUMBER: _ClassVar[int]
+    QUERY_LIMIT_FIELD_NUMBER: _ClassVar[int]
+    FIELD_MAPPINGS_FIELD_NUMBER: _ClassVar[int]
+    mode: str
+    source_table_id: int
+    row_id_source: RowIdSource
+    query_filters: _containers.RepeatedCompositeFieldContainer[QueryFilter]
+    query_limit: int
+    field_mappings: _containers.RepeatedCompositeFieldContainer[ReadFieldMapping]
+    def __init__(self, mode: _Optional[str] = ..., source_table_id: _Optional[int] = ..., row_id_source: _Optional[_Union[RowIdSource, _Mapping]] = ..., query_filters: _Optional[_Iterable[_Union[QueryFilter, _Mapping]]] = ..., query_limit: _Optional[int] = ..., field_mappings: _Optional[_Iterable[_Union[ReadFieldMapping, _Mapping]]] = ...) -> None: ...
+
+class QueryFilter(_message.Message):
+    __slots__ = ("field_id", "operator", "value_source")
+    FIELD_ID_FIELD_NUMBER: _ClassVar[int]
+    OPERATOR_FIELD_NUMBER: _ClassVar[int]
+    VALUE_SOURCE_FIELD_NUMBER: _ClassVar[int]
+    field_id: int
+    operator: str
+    value_source: RowIdSource
+    def __init__(self, field_id: _Optional[int] = ..., operator: _Optional[str] = ..., value_source: _Optional[_Union[RowIdSource, _Mapping]] = ...) -> None: ...
+
+class ReadFieldMapping(_message.Message):
+    __slots__ = ("source_field_id", "target_variable")
+    SOURCE_FIELD_ID_FIELD_NUMBER: _ClassVar[int]
+    TARGET_VARIABLE_FIELD_NUMBER: _ClassVar[int]
+    source_field_id: int
+    target_variable: str
+    def __init__(self, source_field_id: _Optional[int] = ..., target_variable: _Optional[str] = ...) -> None: ...
 
 class TargetFieldMetadata(_message.Message):
     __slots__ = ("field_type", "options", "max_selections", "field_name")

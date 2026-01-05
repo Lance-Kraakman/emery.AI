@@ -11,7 +11,7 @@
  * 2. Uncontrolled mode: Uses steps prop and manages state internally
  */
 
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -108,7 +108,6 @@ function WorkflowCanvasInner({
   onUpdateNodeExpose,
   onDeleteNodeExpose,
 }: WorkflowCanvasProps) {
-  const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
 
   // Internal state management
@@ -251,7 +250,6 @@ function WorkflowCanvasInner({
 
   return (
     <div
-      ref={reactFlowWrapper}
       className={cn(
         'h-full w-full rounded-lg border bg-background',
         disabled && 'pointer-events-none opacity-50',

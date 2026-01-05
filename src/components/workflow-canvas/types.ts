@@ -5,7 +5,7 @@
  * Maps between React Flow nodes/edges and SkillStep[] data.
  */
 
-import type { Node, Edge, XYPosition } from '@xyflow/react';
+import type { Node, Edge, XYPosition, NodeChange, EdgeChange } from '@xyflow/react';
 import type {
   SkillStep,
   InputDefinition,
@@ -28,8 +28,8 @@ import type {
 export type { WorkflowNodeType };
 
 /**
- * Base data shared by all node types
- * Uses index signature for React Flow compatibility
+ * Base data shared by all node types.
+ * Index signature required for React Flow Node<T> compatibility.
  */
 interface BaseNodeData {
   [key: string]: unknown;
@@ -141,6 +141,9 @@ export type WorkflowNode = Node<WorkflowNodeData, WorkflowNodeType>;
 
 export type WorkflowEdgeType = 'success' | 'error' | 'condition' | 'default';
 
+/**
+ * Edge data with index signature for React Flow Edge<T> compatibility.
+ */
 export interface WorkflowEdgeData {
   [key: string]: unknown;
   label?: string;
@@ -189,8 +192,8 @@ export interface UseWorkflowCanvasReturn {
   edges: WorkflowEdge[];
   setNodes: React.Dispatch<React.SetStateAction<WorkflowNode[]>>;
   setEdges: React.Dispatch<React.SetStateAction<WorkflowEdge[]>>;
-  onNodesChange: (changes: any) => void;
-  onEdgesChange: (changes: any) => void;
+  onNodesChange: (changes: NodeChange<WorkflowNode>[]) => void;
+  onEdgesChange: (changes: EdgeChange<WorkflowEdge>[]) => void;
   selectedNodeId: string | null;
   setSelectedNodeId: (id: string | null) => void;
   addNode: (type: WorkflowNodeType, position: XYPosition) => void;

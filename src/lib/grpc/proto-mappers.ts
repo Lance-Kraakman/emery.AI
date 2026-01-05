@@ -517,6 +517,22 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
         targetFieldId: skill.writeConfig.updateMatch.targetFieldId
       } : undefined
     } : undefined,
+    // Map read config for 'read' execution type
+    readConfig: skill.readConfig ? {
+      mode: skill.readConfig.mode,
+      sourceTableId: skill.readConfig.sourceTableId,
+      rowIdSource: skill.readConfig.rowIdSource ? mapRowIdSourceToProto(skill.readConfig.rowIdSource) : undefined,
+      queryFilters: skill.readConfig.queryFilters?.map(f => ({
+        fieldId: f.fieldId,
+        operator: f.operator,
+        valueSource: mapRowIdSourceToProto(f.valueSource)
+      })) || [],
+      queryLimit: skill.readConfig.queryLimit || 100,
+      fieldMappings: skill.readConfig.fieldMappings.map(m => ({
+        sourceFieldId: m.sourceFieldId,
+        targetVariable: m.targetVariable
+      }))
+    } : undefined,
     // Map steps for 'agent' (step-based) execution type
     steps: skill.steps?.map(step => ({
       name: step.name,
@@ -570,6 +586,49 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
         currentItemVar: step.loopConfig.currentItemVar || '',
         condition: step.loopConfig.condition || '',
         maxIterations: step.loopConfig.maxIterations || 100
+      } : undefined,
+      // Step-level execution configs (for non-agentic steps)
+      readConfig: step.readConfig ? {
+        mode: step.readConfig.mode,
+        sourceTableId: step.readConfig.sourceTableId,
+        rowIdSource: step.readConfig.rowIdSource ? mapRowIdSourceToProto(step.readConfig.rowIdSource) : undefined,
+        queryFilters: step.readConfig.queryFilters?.map(f => ({
+          fieldId: f.fieldId,
+          operator: f.operator,
+          valueSource: mapRowIdSourceToProto(f.valueSource)
+        })) || [],
+        queryLimit: step.readConfig.queryLimit || 100,
+        fieldMappings: step.readConfig.fieldMappings.map(m => ({
+          sourceFieldId: m.sourceFieldId,
+          targetVariable: m.targetVariable
+        }))
+      } : undefined,
+      writeConfig: step.writeConfig ? {
+        targetTableId: step.writeConfig.targetTableId,
+        rowAction: step.writeConfig.rowAction,
+        fieldMappings: step.writeConfig.fieldMappings.map(m => ({
+          skillInputName: m.skillInputName,
+          targetFieldId: m.targetFieldId
+        })),
+        updateMatch: step.writeConfig.updateMatch ? {
+          skillInputName: step.writeConfig.updateMatch.skillInputName,
+          targetFieldId: step.writeConfig.updateMatch.targetFieldId
+        } : undefined
+      } : undefined,
+      toolExecutionConfig: step.toolExecutionConfig ? {
+        toolId: step.toolExecutionConfig.toolId,
+        inputMappings: step.toolExecutionConfig.inputMappings.map(m => ({
+          toolParam: m.toolParam,
+          skillInputName: m.skillInputName || '',
+          staticValue: m.staticValue !== undefined ? String(m.staticValue) : ''
+        }))
+      } : undefined,
+      taskModelConfig: step.taskModelConfig ? {
+        modelId: step.taskModelConfig.modelId || '',
+        taskType: step.taskModelConfig.taskType || '',
+        parameters: Object.fromEntries(
+          Object.entries(step.taskModelConfig.parameters || {}).map(([k, v]) => [k, String(v)])
+        )
       } : undefined
     })) || []
   };

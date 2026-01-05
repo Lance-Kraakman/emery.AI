@@ -8,7 +8,7 @@
  * infrastructure provides implementations (gRPC, local, HTTP, etc.)
  */
 
-import type { SkillExecutionType } from '@/ddd/domain/skills/entities/skill';
+import type { SkillExecutionType, RowIdSource, QueryFilter, ReadFieldMapping } from '@/ddd/domain/skills/entities/skill';
 
 /**
  * Enriched skill for execution (from SkillEnrichmentService)
@@ -43,6 +43,15 @@ export interface ExecutionSkill {
     fieldMappings: Array<{ skillInputName: string; targetFieldId: number }>;
     updateMatch?: { skillInputName: string; targetFieldId: number };
   };
+  // Optional config for 'read' execution type
+  readConfig?: {
+    mode: 'single_row' | 'query';
+    sourceTableId: number;
+    rowIdSource?: RowIdSource;
+    queryFilters?: QueryFilter[];
+    queryLimit?: number;
+    fieldMappings: ReadFieldMapping[];
+  };
   // Optional steps for 'agent' (step-based) execution type
   steps?: Array<{
     name: string;
@@ -74,6 +83,30 @@ export interface ExecutionSkill {
       currentItemVar?: string;
       condition?: string;
       maxIterations?: number;
+    };
+    // Step-level execution configs (for inline execution nodes)
+    taskModelConfig?: {
+      modelId: string;
+      taskType: string;
+      parameters?: Record<string, any>;
+    };
+    toolExecutionConfig?: {
+      toolId: string;
+      inputMappings: Array<{ toolParam: string; skillInputName?: string; staticValue?: any }>;
+    };
+    writeConfig?: {
+      targetTableId: number;
+      rowAction: 'create' | 'update';
+      fieldMappings: Array<{ skillInputName: string; targetFieldId: number }>;
+      updateMatch?: { skillInputName: string; targetFieldId: number };
+    };
+    readConfig?: {
+      mode: 'single_row' | 'query';
+      sourceTableId: number;
+      rowIdSource?: RowIdSource;
+      queryFilters?: QueryFilter[];
+      queryLimit?: number;
+      fieldMappings: ReadFieldMapping[];
     };
   }>;
 }

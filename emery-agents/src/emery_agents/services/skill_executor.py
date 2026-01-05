@@ -52,6 +52,10 @@ class SkillExecutorService:
         """Check if skill uses direct table write (no LLM)."""
         return skill_config.execution_type == 'write'
 
+    def _is_read_skill(self, skill_config: 'agent_worker_pb2.SkillConfig') -> bool:
+        """Check if skill uses direct table read (no LLM)."""
+        return skill_config.execution_type == 'read'
+
     def _is_agentic_skill(self, skill_config: 'agent_worker_pb2.SkillConfig') -> bool:
         """Check if skill uses agentic execution (flat instructions, LLM orchestration)."""
         # 'agentic' is the explicit type, but also treat empty/missing as agentic for backwards compat
@@ -108,6 +112,11 @@ class SkillExecutorService:
                 )
             elif self._is_write_skill(skill_config):
                 return self._execute_write(
+                    skill_config, runtime_inputs,
+                    api_key=api_key, organization_id=organization_id
+                )
+            elif self._is_read_skill(skill_config):
+                return self._execute_read(
                     skill_config, runtime_inputs,
                     api_key=api_key, organization_id=organization_id
                 )
@@ -500,6 +509,162 @@ class SkillExecutorService:
         except httpx.RequestError as e:
             logger.error(f"❌ Table write request failed: {e}")
             raise ValueError(f"Table write request failed: {e}")
+
+    def _execute_read(
+        self,
+        skill_config: 'agent_worker_pb2.SkillConfig',
+        runtime_inputs: Dict[str, Any],
+        api_key: Optional[str] = None,
+        organization_id: Optional[int] = None
+    ) -> SkillExecutionResult:
+        """Execute skill via direct table read (no LLM orchestration).
+
+        Args:
+            skill_config: Skill configuration with read_config
+            runtime_inputs: Runtime inputs from caller
+            api_key: API key for authentication
+            organization_id: Organization ID for RLS context
+
+        Returns:
+            SkillExecutionResult with read data mapped to output variables
+        """
+        import os
+        import httpx
+
+        read_config = skill_config.read_config
+        if not read_config or not read_config.source_table_id:
+            raise ValueError(f"Read skill '{skill_config.name}' missing read_config.source_table_id")
+
+        table_id = read_config.source_table_id
+        mode = read_config.mode or 'single_row'
+
+        logger.info(f"📖 Direct table read: {skill_config.name} -> table {table_id} ({mode})")
+
+        # Build API request
+        nextjs_base = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
+        base_url = f"{nextjs_base}/api"
+
+        headers = {
+            "Content-Type": "application/json"
+        }
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        if organization_id:
+            headers["X-Organization-ID"] = str(organization_id)
+
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                if mode == 'single_row':
+                    # Single row read - resolve row ID from source
+                    row_id = self._resolve_row_id_source(read_config.row_id_source, runtime_inputs)
+                    if not row_id:
+                        raise ValueError("Could not resolve row ID for single_row read")
+
+                    response = client.get(
+                        f"{base_url}/rows/{table_id}/{row_id}",
+                        headers=headers
+                    )
+                    if response.status_code >= 400:
+                        error_detail = response.text[:500]
+                        logger.error(f"❌ Table read failed: {response.status_code} - {error_detail}")
+                        raise ValueError(f"Table read failed: {error_detail}")
+
+                    row = response.json()
+                    rows = [row] if row else []
+
+                else:  # query mode
+                    # Build query filters
+                    filters = self._build_query_filters(read_config.query_filters, runtime_inputs)
+                    limit = read_config.query_limit or 100
+
+                    # Build filter params for API
+                    params = {"limit": limit}
+                    for i, f in enumerate(filters):
+                        params[f"filter[field_{f['field_id']}]"] = f"{f['operator']}:{f['value']}"
+
+                    response = client.get(
+                        f"{base_url}/rows/{table_id}",
+                        headers=headers,
+                        params=params
+                    )
+                    if response.status_code >= 400:
+                        error_detail = response.text[:500]
+                        logger.error(f"❌ Table query failed: {response.status_code} - {error_detail}")
+                        raise ValueError(f"Table query failed: {error_detail}")
+
+                    result = response.json()
+                    rows = result.get("rows", []) if isinstance(result, dict) else result
+
+                # Map fields to output variables
+                outputs = {}
+                for mapping in read_config.field_mappings:
+                    field_key = f"field_{mapping.source_field_id}"
+                    target_var = mapping.target_variable
+
+                    if mode == 'single_row' and rows:
+                        outputs[target_var] = rows[0].get(field_key)
+                    else:
+                        outputs[target_var] = [r.get(field_key) for r in rows]
+
+                logger.info(f"✅ Table read complete: {skill_config.name}, {len(outputs)} outputs")
+                return SkillExecutionResult(
+                    result=json.dumps({"rows": rows, "count": len(rows)}),
+                    captured_outputs=outputs
+                )
+
+        except httpx.RequestError as e:
+            logger.error(f"❌ Table read request failed: {e}")
+            raise ValueError(f"Table read request failed: {e}")
+
+    def _resolve_row_id_source(
+        self,
+        row_id_source: 'agent_worker_pb2.RowIdSource',
+        runtime_inputs: Dict[str, Any]
+    ) -> Optional[str]:
+        """Resolve row ID from source configuration."""
+        if not row_id_source:
+            return None
+
+        source_type = row_id_source.type
+        if source_type == 'static':
+            return row_id_source.static_id
+        elif source_type == 'skill_input':
+            input_name = row_id_source.skill_input
+            return str(runtime_inputs.get(input_name, ''))
+        elif source_type == 'skill_output':
+            # For skill_output, we'd need step context - not available at skill level
+            return row_id_source.skill_output
+        else:
+            logger.warning(f"Unknown row_id_source type: {source_type}")
+            return None
+
+    def _build_query_filters(
+        self,
+        query_filters: List['agent_worker_pb2.QueryFilter'],
+        runtime_inputs: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Build query filters from proto config."""
+        filters = []
+        for qf in query_filters:
+            field_id = qf.field_id
+            operator = qf.operator
+
+            # Resolve value from source
+            value_source = qf.value_source
+            if value_source.type == 'static':
+                value = value_source.static_id
+            elif value_source.type == 'skill_input':
+                value = runtime_inputs.get(value_source.skill_input, '')
+            else:
+                value = ''
+
+            filters.append({
+                "field_id": field_id,
+                "operator": operator,
+                "value": value
+            })
+
+        return filters
 
     def _execute_steps(
         self,

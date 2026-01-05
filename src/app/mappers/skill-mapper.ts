@@ -1,9 +1,24 @@
-import type { Skill, SkillParameterType, SkillExecutionType, TaskModelConfig, SkillStep, ToolExecutionConfig, WriteConfig, InputMappingConfig, InputDefinition, OutputDefinition } from '@/ddd/domain/skills/entities/skill';
+import type {
+  Skill,
+  SkillParameterType,
+  SkillExecutionType,
+  TaskModelConfig,
+  SkillStep,
+  ToolExecutionConfig,
+  WriteConfig,
+  InputMappingConfig,
+  InputDefinition,
+  OutputDefinition,
+  // Multi-table mapping types
+  TableReference,
+  FieldSource,
+  RowIdSource,
+} from '@/ddd/domain/skills/entities/skill';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 
 // Re-export unified types from domain
-export type { InputDefinition, OutputDefinition };
+export type { InputDefinition, OutputDefinition, TableReference, FieldSource, RowIdSource };
 
 /**
  * DTO for Tool Configuration
@@ -26,36 +41,8 @@ export interface TargetFieldMetadata {
 }
 
 // =============================================================================
-// Multi-Table Output Mapping Types (typed references, no string parsing)
+// Multi-Table Output Mapping Types (re-exported from domain for convenience)
 // =============================================================================
-
-/**
- * Reference to a field from a previous table mapping result
- */
-export interface TableReference {
-  order: number;            // Which table mapping (1, 2, 3...)
-  field: string;            // 'row_id' or field name from that table
-}
-
-/**
- * Typed field source - skill output, skill input, or reference to previous table
- * Discriminated union for type-safe source selection
- */
-export type FieldSource =
-  | { type: 'skill_output'; name: string }
-  | { type: 'skill_input'; name: string }
-  | { type: 'table_ref'; order: number; field: string };
-
-/**
- * Source for row ID in update mode - determines which row to update
- * Discriminated union for type-safe row ID resolution
- */
-export type RowIdSource =
-  | { type: 'static'; staticId: string }
-  | { type: 'skill_input'; skillInput: string }
-  | { type: 'skill_output'; skillOutput: string }
-  | { type: 'table_ref'; tableRef: TableReference }
-  | { type: 'source_row' };
 
 /**
  * DTO for Field Mapping

@@ -338,7 +338,7 @@ export interface SkillConfig {
   content: MessagePart[];
   /** Optional: "tool_calling" (default) or "code_agent" */
   agentType: string;
-  /** 'agentic' (flat LLM), 'agent' (step-based DAG), 'operation', 'tool', or 'write' */
+  /** 'agentic', 'agent' (step-based DAG), 'operation', 'tool', 'write', or 'read' */
   executionType: string;
   /** Config for operation execution (when execution_type='operation') */
   taskModelConfig:
@@ -351,6 +351,10 @@ export interface SkillConfig {
   /** Config for write execution (when execution_type='write') */
   writeConfig:
     | WriteConfig
+    | undefined;
+  /** Config for read execution (when execution_type='read') */
+  readConfig:
+    | ReadConfig
     | undefined;
   /** Steps for step-based execution (when execution_type='agent') */
   steps: SkillStep[];
@@ -475,7 +479,23 @@ export interface SkillStep {
   /** Parallel execution */
   parallelGroup: string;
   /** Loop/iteration support */
-  loopConfig: LoopConfig | undefined;
+  loopConfig:
+    | LoopConfig
+    | undefined;
+  /** Step-level execution configs (for non-agentic steps) */
+  readConfig:
+    | ReadConfig
+    | undefined;
+  /** For write steps */
+  writeConfig:
+    | WriteConfig
+    | undefined;
+  /** For tool steps */
+  toolExecutionConfig:
+    | ToolExecutionConfig
+    | undefined;
+  /** For operation steps */
+  taskModelConfig: TaskModelConfig | undefined;
 }
 
 export interface SkillStep_InputsEntry {
@@ -553,6 +573,45 @@ export interface UpdateMatchConfig {
   skillInputName: string;
   /** Field to match against */
   targetFieldId: number;
+}
+
+/**
+ * Configuration for direct table read (when execution_type='read')
+ * Reads data from a table without LLM orchestration
+ */
+export interface ReadConfig {
+  /** 'single_row' or 'query' */
+  mode: string;
+  /** Table to read from */
+  sourceTableId: number;
+  /** For single_row mode: which row to read */
+  rowIdSource:
+    | RowIdSource
+    | undefined;
+  /** For query mode: filter conditions */
+  queryFilters: QueryFilter[];
+  /** For query mode: max rows to return (default: 100) */
+  queryLimit: number;
+  /** Map table fields to output variables */
+  fieldMappings: ReadFieldMapping[];
+}
+
+/** Filter condition for query mode reads */
+export interface QueryFilter {
+  /** Field to filter on */
+  fieldId: number;
+  /** 'equals', 'not_equals', 'contains', 'gt', 'lt', 'gte', 'lte', 'is_empty', 'is_not_empty' */
+  operator: string;
+  /** Source for filter value (reuses RowIdSource for flexibility) */
+  valueSource: RowIdSource | undefined;
+}
+
+/** Maps table field to output variable */
+export interface ReadFieldMapping {
+  /** Table field ID to read from */
+  sourceFieldId: number;
+  /** Output variable name to store value */
+  targetVariable: string;
 }
 
 /** Target field metadata - provides LLM guidance based on database field type */
@@ -2187,6 +2246,7 @@ function createBaseSkillConfig(): SkillConfig {
     taskModelConfig: undefined,
     toolExecutionConfig: undefined,
     writeConfig: undefined,
+    readConfig: undefined,
     steps: [],
   };
 }
@@ -2234,6 +2294,9 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     }
     if (message.writeConfig !== undefined) {
       WriteConfig.encode(message.writeConfig, writer.uint32(114).fork()).join();
+    }
+    if (message.readConfig !== undefined) {
+      ReadConfig.encode(message.readConfig, writer.uint32(122).fork()).join();
     }
     for (const v of message.steps) {
       SkillStep.encode(v!, writer.uint32(162).fork()).join();
@@ -2360,6 +2423,14 @@ export const SkillConfig: MessageFns<SkillConfig> = {
           message.writeConfig = WriteConfig.decode(reader, reader.uint32());
           continue;
         }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.readConfig = ReadConfig.decode(reader, reader.uint32());
+          continue;
+        }
         case 20: {
           if (tag !== 162) {
             break;
@@ -2399,6 +2470,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
         ? ToolExecutionConfig.fromJSON(object.toolExecutionConfig)
         : undefined,
       writeConfig: isSet(object.writeConfig) ? WriteConfig.fromJSON(object.writeConfig) : undefined,
+      readConfig: isSet(object.readConfig) ? ReadConfig.fromJSON(object.readConfig) : undefined,
       steps: globalThis.Array.isArray(object?.steps) ? object.steps.map((e: any) => SkillStep.fromJSON(e)) : [],
     };
   },
@@ -2447,6 +2519,9 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     if (message.writeConfig !== undefined) {
       obj.writeConfig = WriteConfig.toJSON(message.writeConfig);
     }
+    if (message.readConfig !== undefined) {
+      obj.readConfig = ReadConfig.toJSON(message.readConfig);
+    }
     if (message.steps?.length) {
       obj.steps = message.steps.map((e) => SkillStep.toJSON(e));
     }
@@ -2477,6 +2552,9 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       : undefined;
     message.writeConfig = (object.writeConfig !== undefined && object.writeConfig !== null)
       ? WriteConfig.fromPartial(object.writeConfig)
+      : undefined;
+    message.readConfig = (object.readConfig !== undefined && object.readConfig !== null)
+      ? ReadConfig.fromPartial(object.readConfig)
       : undefined;
     message.steps = object.steps?.map((e) => SkillStep.fromPartial(e)) || [];
     return message;
@@ -3244,6 +3322,10 @@ function createBaseSkillStep(): SkillStep {
     stepOutputs: [],
     parallelGroup: "",
     loopConfig: undefined,
+    readConfig: undefined,
+    writeConfig: undefined,
+    toolExecutionConfig: undefined,
+    taskModelConfig: undefined,
   };
 }
 
@@ -3293,6 +3375,18 @@ export const SkillStep: MessageFns<SkillStep> = {
     }
     if (message.loopConfig !== undefined) {
       LoopConfig.encode(message.loopConfig, writer.uint32(122).fork()).join();
+    }
+    if (message.readConfig !== undefined) {
+      ReadConfig.encode(message.readConfig, writer.uint32(130).fork()).join();
+    }
+    if (message.writeConfig !== undefined) {
+      WriteConfig.encode(message.writeConfig, writer.uint32(138).fork()).join();
+    }
+    if (message.toolExecutionConfig !== undefined) {
+      ToolExecutionConfig.encode(message.toolExecutionConfig, writer.uint32(146).fork()).join();
+    }
+    if (message.taskModelConfig !== undefined) {
+      TaskModelConfig.encode(message.taskModelConfig, writer.uint32(154).fork()).join();
     }
     return writer;
   },
@@ -3430,6 +3524,38 @@ export const SkillStep: MessageFns<SkillStep> = {
           message.loopConfig = LoopConfig.decode(reader, reader.uint32());
           continue;
         }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.readConfig = ReadConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 17: {
+          if (tag !== 138) {
+            break;
+          }
+
+          message.writeConfig = WriteConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.toolExecutionConfig = ToolExecutionConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 19: {
+          if (tag !== 154) {
+            break;
+          }
+
+          message.taskModelConfig = TaskModelConfig.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3472,6 +3598,12 @@ export const SkillStep: MessageFns<SkillStep> = {
         : [],
       parallelGroup: isSet(object.parallelGroup) ? globalThis.String(object.parallelGroup) : "",
       loopConfig: isSet(object.loopConfig) ? LoopConfig.fromJSON(object.loopConfig) : undefined,
+      readConfig: isSet(object.readConfig) ? ReadConfig.fromJSON(object.readConfig) : undefined,
+      writeConfig: isSet(object.writeConfig) ? WriteConfig.fromJSON(object.writeConfig) : undefined,
+      toolExecutionConfig: isSet(object.toolExecutionConfig)
+        ? ToolExecutionConfig.fromJSON(object.toolExecutionConfig)
+        : undefined,
+      taskModelConfig: isSet(object.taskModelConfig) ? TaskModelConfig.fromJSON(object.taskModelConfig) : undefined,
     };
   },
 
@@ -3534,6 +3666,18 @@ export const SkillStep: MessageFns<SkillStep> = {
     if (message.loopConfig !== undefined) {
       obj.loopConfig = LoopConfig.toJSON(message.loopConfig);
     }
+    if (message.readConfig !== undefined) {
+      obj.readConfig = ReadConfig.toJSON(message.readConfig);
+    }
+    if (message.writeConfig !== undefined) {
+      obj.writeConfig = WriteConfig.toJSON(message.writeConfig);
+    }
+    if (message.toolExecutionConfig !== undefined) {
+      obj.toolExecutionConfig = ToolExecutionConfig.toJSON(message.toolExecutionConfig);
+    }
+    if (message.taskModelConfig !== undefined) {
+      obj.taskModelConfig = TaskModelConfig.toJSON(message.taskModelConfig);
+    }
     return obj;
   },
 
@@ -3572,6 +3716,18 @@ export const SkillStep: MessageFns<SkillStep> = {
     message.parallelGroup = object.parallelGroup ?? "";
     message.loopConfig = (object.loopConfig !== undefined && object.loopConfig !== null)
       ? LoopConfig.fromPartial(object.loopConfig)
+      : undefined;
+    message.readConfig = (object.readConfig !== undefined && object.readConfig !== null)
+      ? ReadConfig.fromPartial(object.readConfig)
+      : undefined;
+    message.writeConfig = (object.writeConfig !== undefined && object.writeConfig !== null)
+      ? WriteConfig.fromPartial(object.writeConfig)
+      : undefined;
+    message.toolExecutionConfig = (object.toolExecutionConfig !== undefined && object.toolExecutionConfig !== null)
+      ? ToolExecutionConfig.fromPartial(object.toolExecutionConfig)
+      : undefined;
+    message.taskModelConfig = (object.taskModelConfig !== undefined && object.taskModelConfig !== null)
+      ? TaskModelConfig.fromPartial(object.taskModelConfig)
       : undefined;
     return message;
   },
@@ -4351,6 +4507,322 @@ export const UpdateMatchConfig: MessageFns<UpdateMatchConfig> = {
     const message = createBaseUpdateMatchConfig();
     message.skillInputName = object.skillInputName ?? "";
     message.targetFieldId = object.targetFieldId ?? 0;
+    return message;
+  },
+};
+
+function createBaseReadConfig(): ReadConfig {
+  return { mode: "", sourceTableId: 0, rowIdSource: undefined, queryFilters: [], queryLimit: 0, fieldMappings: [] };
+}
+
+export const ReadConfig: MessageFns<ReadConfig> = {
+  encode(message: ReadConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.mode !== "") {
+      writer.uint32(10).string(message.mode);
+    }
+    if (message.sourceTableId !== 0) {
+      writer.uint32(16).int32(message.sourceTableId);
+    }
+    if (message.rowIdSource !== undefined) {
+      RowIdSource.encode(message.rowIdSource, writer.uint32(26).fork()).join();
+    }
+    for (const v of message.queryFilters) {
+      QueryFilter.encode(v!, writer.uint32(34).fork()).join();
+    }
+    if (message.queryLimit !== 0) {
+      writer.uint32(40).int32(message.queryLimit);
+    }
+    for (const v of message.fieldMappings) {
+      ReadFieldMapping.encode(v!, writer.uint32(50).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ReadConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseReadConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.mode = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.sourceTableId = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.rowIdSource = RowIdSource.decode(reader, reader.uint32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.queryFilters.push(QueryFilter.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.queryLimit = reader.int32();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.fieldMappings.push(ReadFieldMapping.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ReadConfig {
+    return {
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
+      sourceTableId: isSet(object.sourceTableId) ? globalThis.Number(object.sourceTableId) : 0,
+      rowIdSource: isSet(object.rowIdSource) ? RowIdSource.fromJSON(object.rowIdSource) : undefined,
+      queryFilters: globalThis.Array.isArray(object?.queryFilters)
+        ? object.queryFilters.map((e: any) => QueryFilter.fromJSON(e))
+        : [],
+      queryLimit: isSet(object.queryLimit) ? globalThis.Number(object.queryLimit) : 0,
+      fieldMappings: globalThis.Array.isArray(object?.fieldMappings)
+        ? object.fieldMappings.map((e: any) => ReadFieldMapping.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ReadConfig): unknown {
+    const obj: any = {};
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
+    if (message.sourceTableId !== 0) {
+      obj.sourceTableId = Math.round(message.sourceTableId);
+    }
+    if (message.rowIdSource !== undefined) {
+      obj.rowIdSource = RowIdSource.toJSON(message.rowIdSource);
+    }
+    if (message.queryFilters?.length) {
+      obj.queryFilters = message.queryFilters.map((e) => QueryFilter.toJSON(e));
+    }
+    if (message.queryLimit !== 0) {
+      obj.queryLimit = Math.round(message.queryLimit);
+    }
+    if (message.fieldMappings?.length) {
+      obj.fieldMappings = message.fieldMappings.map((e) => ReadFieldMapping.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ReadConfig>, I>>(base?: I): ReadConfig {
+    return ReadConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ReadConfig>, I>>(object: I): ReadConfig {
+    const message = createBaseReadConfig();
+    message.mode = object.mode ?? "";
+    message.sourceTableId = object.sourceTableId ?? 0;
+    message.rowIdSource = (object.rowIdSource !== undefined && object.rowIdSource !== null)
+      ? RowIdSource.fromPartial(object.rowIdSource)
+      : undefined;
+    message.queryFilters = object.queryFilters?.map((e) => QueryFilter.fromPartial(e)) || [];
+    message.queryLimit = object.queryLimit ?? 0;
+    message.fieldMappings = object.fieldMappings?.map((e) => ReadFieldMapping.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseQueryFilter(): QueryFilter {
+  return { fieldId: 0, operator: "", valueSource: undefined };
+}
+
+export const QueryFilter: MessageFns<QueryFilter> = {
+  encode(message: QueryFilter, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.fieldId !== 0) {
+      writer.uint32(8).int32(message.fieldId);
+    }
+    if (message.operator !== "") {
+      writer.uint32(18).string(message.operator);
+    }
+    if (message.valueSource !== undefined) {
+      RowIdSource.encode(message.valueSource, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QueryFilter {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseQueryFilter();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.fieldId = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.operator = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.valueSource = RowIdSource.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryFilter {
+    return {
+      fieldId: isSet(object.fieldId) ? globalThis.Number(object.fieldId) : 0,
+      operator: isSet(object.operator) ? globalThis.String(object.operator) : "",
+      valueSource: isSet(object.valueSource) ? RowIdSource.fromJSON(object.valueSource) : undefined,
+    };
+  },
+
+  toJSON(message: QueryFilter): unknown {
+    const obj: any = {};
+    if (message.fieldId !== 0) {
+      obj.fieldId = Math.round(message.fieldId);
+    }
+    if (message.operator !== "") {
+      obj.operator = message.operator;
+    }
+    if (message.valueSource !== undefined) {
+      obj.valueSource = RowIdSource.toJSON(message.valueSource);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<QueryFilter>, I>>(base?: I): QueryFilter {
+    return QueryFilter.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<QueryFilter>, I>>(object: I): QueryFilter {
+    const message = createBaseQueryFilter();
+    message.fieldId = object.fieldId ?? 0;
+    message.operator = object.operator ?? "";
+    message.valueSource = (object.valueSource !== undefined && object.valueSource !== null)
+      ? RowIdSource.fromPartial(object.valueSource)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseReadFieldMapping(): ReadFieldMapping {
+  return { sourceFieldId: 0, targetVariable: "" };
+}
+
+export const ReadFieldMapping: MessageFns<ReadFieldMapping> = {
+  encode(message: ReadFieldMapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.sourceFieldId !== 0) {
+      writer.uint32(8).int32(message.sourceFieldId);
+    }
+    if (message.targetVariable !== "") {
+      writer.uint32(18).string(message.targetVariable);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ReadFieldMapping {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseReadFieldMapping();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.sourceFieldId = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.targetVariable = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ReadFieldMapping {
+    return {
+      sourceFieldId: isSet(object.sourceFieldId) ? globalThis.Number(object.sourceFieldId) : 0,
+      targetVariable: isSet(object.targetVariable) ? globalThis.String(object.targetVariable) : "",
+    };
+  },
+
+  toJSON(message: ReadFieldMapping): unknown {
+    const obj: any = {};
+    if (message.sourceFieldId !== 0) {
+      obj.sourceFieldId = Math.round(message.sourceFieldId);
+    }
+    if (message.targetVariable !== "") {
+      obj.targetVariable = message.targetVariable;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ReadFieldMapping>, I>>(base?: I): ReadFieldMapping {
+    return ReadFieldMapping.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ReadFieldMapping>, I>>(object: I): ReadFieldMapping {
+    const message = createBaseReadFieldMapping();
+    message.sourceFieldId = object.sourceFieldId ?? 0;
+    message.targetVariable = object.targetVariable ?? "";
     return message;
   },
 };

@@ -93,6 +93,41 @@ class LoopConfig:
 
 
 @dataclass
+class ReadConfig:
+    """Read configuration for direct table read steps."""
+    mode: str = "single_row"
+    source_table_id: int = 0
+    row_id_source: Optional[Any] = None  # Proto RowIdSource
+    query_filters: List[Any] = field(default_factory=list)  # Proto QueryFilter
+    query_limit: int = 100
+    field_mappings: List[Any] = field(default_factory=list)  # Proto ReadFieldMapping
+
+
+@dataclass
+class WriteConfig:
+    """Write configuration for direct table write steps."""
+    target_table_id: int = 0
+    row_action: str = "create"
+    field_mappings: List[Any] = field(default_factory=list)
+    update_match: Optional[Any] = None
+
+
+@dataclass
+class ToolExecutionConfig:
+    """Tool execution configuration for direct tool call steps."""
+    tool_id: str = ""
+    input_mappings: List[Any] = field(default_factory=list)
+
+
+@dataclass
+class TaskModelConfig:
+    """Task model configuration for direct inference steps."""
+    model_id: str = ""
+    task_type: str = ""
+    parameters: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class InputDef:
     """Input definition for a step."""
     name: str
@@ -124,6 +159,11 @@ class Step:
     step_outputs: List[StepOutput] = field(default_factory=list)
     parallel_group: str = ""  # Steps with same group execute concurrently
     loop_config: Optional[LoopConfig] = None  # For iteration support
+    # Step-level execution configs (for inline execution nodes)
+    read_config: Optional[ReadConfig] = None
+    write_config: Optional[WriteConfig] = None
+    tool_execution_config: Optional[ToolExecutionConfig] = None
+    task_model_config: Optional[TaskModelConfig] = None
 
     @classmethod
     def from_proto(cls, proto: 'agent_worker_pb2.SkillStep') -> 'Step':
@@ -175,6 +215,42 @@ class Step:
                 max_iterations=proto.loop_config.max_iterations or 100
             )
 
+        # Parse step-level execution configs
+        read_config = None
+        if proto.HasField('read_config') and proto.read_config.source_table_id:
+            read_config = ReadConfig(
+                mode=proto.read_config.mode or "single_row",
+                source_table_id=proto.read_config.source_table_id,
+                row_id_source=proto.read_config.row_id_source if proto.read_config.HasField('row_id_source') else None,
+                query_filters=list(proto.read_config.query_filters),
+                query_limit=proto.read_config.query_limit or 100,
+                field_mappings=list(proto.read_config.field_mappings)
+            )
+
+        write_config = None
+        if proto.HasField('write_config') and proto.write_config.target_table_id:
+            write_config = WriteConfig(
+                target_table_id=proto.write_config.target_table_id,
+                row_action=proto.write_config.row_action or "create",
+                field_mappings=list(proto.write_config.field_mappings),
+                update_match=proto.write_config.update_match if proto.write_config.HasField('update_match') else None
+            )
+
+        tool_execution_config = None
+        if proto.HasField('tool_execution_config') and proto.tool_execution_config.tool_id:
+            tool_execution_config = ToolExecutionConfig(
+                tool_id=proto.tool_execution_config.tool_id,
+                input_mappings=list(proto.tool_execution_config.input_mappings)
+            )
+
+        task_model_config = None
+        if proto.HasField('task_model_config') and proto.task_model_config.model_id:
+            task_model_config = TaskModelConfig(
+                model_id=proto.task_model_config.model_id,
+                task_type=proto.task_model_config.task_type or "",
+                parameters=dict(proto.task_model_config.parameters)
+            )
+
         return cls(
             name=proto.name,
             instruction=proto.instruction or "",
@@ -189,7 +265,11 @@ class Step:
             retry_config=retry_config,
             step_outputs=step_outputs,
             parallel_group=proto.parallel_group or "",
-            loop_config=loop_config
+            loop_config=loop_config,
+            read_config=read_config,
+            write_config=write_config,
+            tool_execution_config=tool_execution_config,
+            task_model_config=task_model_config
         )
 
 
@@ -699,6 +779,22 @@ class StepExecutorService:
                     step, step_inputs, available_skills, org_model,
                     api_key, organization_id, execution_stack
                 )
+            elif step.read_config:
+                return await self._execute_read_step(
+                    step, step_inputs, api_key, organization_id
+                )
+            elif step.write_config:
+                return await self._execute_write_step(
+                    step, step_inputs, api_key, organization_id
+                )
+            elif step.tool_execution_config:
+                return await self._execute_tool_step(
+                    step, step_inputs, api_key, organization_id
+                )
+            elif step.task_model_config:
+                return await self._execute_operation_step(
+                    step, step_inputs, api_key, organization_id
+                )
             else:
                 return await self._execute_inline_step(
                     step, step_inputs, step_context, org_model
@@ -991,6 +1087,297 @@ class StepExecutorService:
 
         sub_agent = self.agent_factory.create_agent(agent_config)
         return sub_agent.run(task=task, stream=False, reset=True)
+
+    async def _execute_read_step(
+        self,
+        step: Step,
+        step_inputs: Dict[str, Any],
+        api_key: Optional[str],
+        organization_id: Optional[int]
+    ) -> Dict[str, Any]:
+        """Execute a direct table read step (no LLM)."""
+        import os
+        import httpx
+
+        read_config = step.read_config
+        if not read_config or not read_config.source_table_id:
+            raise ValueError(f"Read step '{step.name}' missing source_table_id")
+
+        table_id = read_config.source_table_id
+        mode = read_config.mode or "single_row"
+
+        logger.info(f"📖 Step {step.name}: table read -> table {table_id} ({mode})")
+
+        nextjs_base = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
+        base_url = f"{nextjs_base}/api"
+
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        if organization_id:
+            headers["X-Organization-ID"] = str(organization_id)
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            if mode == "single_row":
+                row_id = self._resolve_row_id_source(read_config.row_id_source, step_inputs)
+                if not row_id:
+                    raise ValueError("Could not resolve row ID for single_row read")
+
+                response = await client.get(
+                    f"{base_url}/rows/{table_id}/{row_id}",
+                    headers=headers
+                )
+                if response.status_code >= 400:
+                    raise ValueError(f"Table read failed: {response.text[:500]}")
+
+                row = response.json()
+                rows = [row] if row else []
+            else:  # query mode
+                filters = self._build_query_filters(read_config.query_filters, step_inputs)
+                limit = read_config.query_limit or 100
+
+                params = {"limit": limit}
+                for i, f in enumerate(filters):
+                    params[f"filter[field_{f['field_id']}]"] = f"{f['operator']}:{f['value']}"
+
+                response = await client.get(
+                    f"{base_url}/rows/{table_id}",
+                    headers=headers,
+                    params=params
+                )
+                if response.status_code >= 400:
+                    raise ValueError(f"Table query failed: {response.text[:500]}")
+
+                result = response.json()
+                rows = result.get("rows", []) if isinstance(result, dict) else result
+
+            # Map fields to output variables
+            outputs = {}
+            for mapping in read_config.field_mappings:
+                field_key = f"field_{mapping.source_field_id}"
+                target_var = mapping.target_variable
+
+                if mode == "single_row" and rows:
+                    outputs[target_var] = rows[0].get(field_key)
+                else:
+                    outputs[target_var] = [r.get(field_key) for r in rows]
+
+            logger.info(f"✅ Step {step.name}: read complete, {len(outputs)} outputs")
+            return outputs
+
+    async def _execute_write_step(
+        self,
+        step: Step,
+        step_inputs: Dict[str, Any],
+        api_key: Optional[str],
+        organization_id: Optional[int]
+    ) -> Dict[str, Any]:
+        """Execute a direct table write step (no LLM)."""
+        import os
+        import httpx
+
+        write_config = step.write_config
+        if not write_config or not write_config.target_table_id:
+            raise ValueError(f"Write step '{step.name}' missing target_table_id")
+
+        table_id = write_config.target_table_id
+        row_action = write_config.row_action or "create"
+
+        logger.info(f"📝 Step {step.name}: table write -> table {table_id} ({row_action})")
+
+        # Build field values from mappings
+        field_values = {}
+        for mapping in write_config.field_mappings:
+            skill_input = mapping.skill_input_name
+            field_id = str(mapping.target_field_id)
+            if skill_input in step_inputs:
+                field_values[field_id] = step_inputs[skill_input]
+
+        nextjs_base = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
+        base_url = f"{nextjs_base}/api"
+
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        if organization_id:
+            headers["X-Organization-ID"] = str(organization_id)
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            if row_action == "create":
+                response = await client.post(
+                    f"{base_url}/rows",
+                    headers=headers,
+                    json={"tableId": table_id, "data": field_values}
+                )
+            elif row_action == "update":
+                if not write_config.update_match:
+                    raise ValueError("Write step update mode requires update_match")
+                match_input = write_config.update_match.skill_input_name
+                match_field_id = str(write_config.update_match.target_field_id)
+                if match_input not in step_inputs:
+                    raise ValueError(f"Update match input '{match_input}' not in step inputs")
+                match_value = step_inputs[match_input]
+                response = await client.put(
+                    f"{base_url}/rows",
+                    headers=headers,
+                    json={
+                        "tableId": table_id,
+                        "matchField": match_field_id,
+                        "matchValue": match_value,
+                        "data": field_values
+                    }
+                )
+            else:
+                raise ValueError(f"Unknown row_action: {row_action}")
+
+            if response.status_code >= 400:
+                raise ValueError(f"Table write failed: {response.text[:500]}")
+
+            result = response.json()
+            logger.info(f"✅ Step {step.name}: write complete")
+            return result
+
+    async def _execute_tool_step(
+        self,
+        step: Step,
+        step_inputs: Dict[str, Any],
+        api_key: Optional[str],
+        organization_id: Optional[int]
+    ) -> Any:
+        """Execute a direct tool call step (no LLM)."""
+        tool_config = step.tool_execution_config
+        if not tool_config or not tool_config.tool_id:
+            raise ValueError(f"Tool step '{step.name}' missing tool_id")
+
+        tool_id = tool_config.tool_id
+        logger.info(f"🔧 Step {step.name}: tool execution -> {tool_id}")
+
+        # Build tool inputs from mappings
+        tool_inputs = {}
+        for mapping in tool_config.input_mappings:
+            if mapping.skill_input_name:
+                value = step_inputs.get(mapping.skill_input_name)
+                if value is not None:
+                    tool_inputs[mapping.tool_param] = value
+            elif mapping.static_value:
+                tool_inputs[mapping.tool_param] = mapping.static_value
+
+        # Load the specific Pipedream tool
+        from ..grpc.generated.agent_worker_pb2 import ToolConfig as ProtoToolConfig
+        proto_tool_config = ProtoToolConfig(name=tool_id, tool_type="pipedream", config={})
+
+        tools = self.tool_loader.load_tools_from_configs(
+            tool_configs=[proto_tool_config],
+            api_key=api_key,
+            api_key_mode="user"
+        )
+
+        if not tools:
+            raise ValueError(f"Failed to load tool: {tool_id}")
+
+        tool = tools[0]
+        result = tool.forward(**tool_inputs)
+        logger.info(f"✅ Step {step.name}: tool execution complete")
+
+        if isinstance(result, dict):
+            return result
+        elif isinstance(result, str):
+            return {"result": result}
+        else:
+            return {"result": str(result)}
+
+    async def _execute_operation_step(
+        self,
+        step: Step,
+        step_inputs: Dict[str, Any],
+        api_key: Optional[str],
+        organization_id: Optional[int]
+    ) -> Any:
+        """Execute a direct inference step (no LLM orchestration)."""
+        from ..clients import HuggingFaceInferenceClient, TaskResult
+        from ..utils import run_async_in_thread
+
+        task_config = step.task_model_config
+        if not task_config or not task_config.model_id:
+            raise ValueError(f"Operation step '{step.name}' missing model_id")
+
+        model_id = task_config.model_id
+        task_type = task_config.task_type
+        parameters = task_config.parameters
+
+        logger.info(f"🚀 Step {step.name}: direct inference -> {model_id} ({task_type})")
+
+        client = HuggingFaceInferenceClient()
+
+        if not client.supports_task_type(task_type):
+            raise ValueError(f"Task type '{task_type}' not supported")
+
+        # Execute inference (sync wrapper for async client)
+        result: TaskResult = run_async_in_thread(
+            client.execute_task(
+                model_id=model_id,
+                task_type=task_type,
+                inputs=step_inputs,
+                parameters=parameters
+            )
+        )
+
+        logger.info(f"✅ Step {step.name}: inference complete")
+
+        if result.is_text:
+            return {"result": str(result.data)}
+        elif result.is_structured:
+            return result.data
+        else:
+            return {"result": f"Binary result: {len(result.data)} bytes"}
+
+    def _resolve_row_id_source(
+        self,
+        row_id_source: Any,
+        step_inputs: Dict[str, Any]
+    ) -> Optional[str]:
+        """Resolve row ID from source configuration."""
+        if not row_id_source:
+            return None
+
+        source_type = row_id_source.type
+        if source_type == "static":
+            return row_id_source.static_id
+        elif source_type == "skill_input":
+            input_name = row_id_source.skill_input
+            return str(step_inputs.get(input_name, ""))
+        elif source_type == "skill_output":
+            return row_id_source.skill_output
+        else:
+            logger.warning(f"Unknown row_id_source type: {source_type}")
+            return None
+
+    def _build_query_filters(
+        self,
+        query_filters: List[Any],
+        step_inputs: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Build query filters from config."""
+        filters = []
+        for qf in query_filters:
+            field_id = qf.field_id
+            operator = qf.operator
+
+            value_source = qf.value_source
+            if value_source.type == "static":
+                value = value_source.static_id
+            elif value_source.type == "skill_input":
+                value = step_inputs.get(value_source.skill_input, "")
+            else:
+                value = ""
+
+            filters.append({
+                "field_id": field_id,
+                "operator": operator,
+                "value": value
+            })
+
+        return filters
 
     def _resolve_inputs(
         self,
