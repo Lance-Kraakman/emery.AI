@@ -83,6 +83,13 @@ export interface AgenticNodeData extends BaseNodeData {
   tools: ToolConfig[];
   agentType?: 'tool_calling' | 'code_agent';
   model?: string | null;
+  attachments?: Array<{
+    url: string;
+    filename: string;
+    type: 'image' | 'file';
+    size?: number;
+    s3Key?: string;
+  }>;
 }
 
 /**

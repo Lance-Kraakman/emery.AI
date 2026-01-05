@@ -46,6 +46,7 @@ interface SkillEditorProps {
 export function SkillEditor({
   value,
   onChange,
+  skillId,
   organizationTier = 'free',
   availableSkills = [],
   isReadOnly = false,
@@ -243,6 +244,7 @@ export function SkillEditor({
               availableSkills={availableSkills}
               workflowVariables={workflowVariables}
               organizationTier={organizationTier}
+              skillId={skillId}
               disabled={isReadOnly}
             />
           ) : (

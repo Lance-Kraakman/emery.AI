@@ -17,6 +17,11 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import {
+  Popover,
+  PopoverContent,
+  PopoverAnchor,
+} from '@/components/ui/popover';
 import { ToolDropdown } from '@/components/chat/ToolDropdown';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { toolResolverService } from '@/ddd/domain/tools/services/tool-resolver-service';
@@ -541,25 +546,74 @@ export function UnifiedChatInput<T = ToolDTO>({
           </Button>
         )}
 
-        {/* Textarea */}
-        <Textarea
-          ref={inputRef}
-          id={id}
-          value={inputValue}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          disabled={disabled}
-          rows={mode === 'chat' ? 1 : undefined}
-          className={
-            isSingleLine && mode === 'chat'
-              ? "resize-none px-3 py-2 flex-1 min-w-0"
-              : mode === 'form'
-              ? "resize-y px-3 py-2 pb-10"
-              : "resize-none px-3 pr-12 pb-10"
-          }
-          style={mode === 'form' && minHeight ? { minHeight } : undefined}
-        />
+        {/* Textarea with Popover for variable dropdown */}
+        <Popover
+          open={showDropdown && dropdownType === 'variables'}
+          onOpenChange={(open) => { if (!open) setShowDropdown(false); }}
+        >
+          <PopoverAnchor asChild>
+            <Textarea
+              ref={inputRef}
+              id={id}
+              value={inputValue}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              disabled={disabled}
+              rows={mode === 'chat' ? 1 : undefined}
+              className={
+                isSingleLine && mode === 'chat'
+                  ? "resize-none px-3 py-2 flex-1 min-w-0"
+                  : mode === 'form'
+                  ? "resize-y px-3 py-2 pb-10"
+                  : "resize-none px-3 pr-12 pb-10"
+              }
+              style={mode === 'form' && minHeight ? { minHeight } : undefined}
+            />
+          </PopoverAnchor>
+
+          <PopoverContent
+            className="w-[300px] p-2 z-[100]"
+            align="start"
+            side="bottom"
+            sideOffset={4}
+            onOpenAutoFocus={(e) => e.preventDefault()}
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onInteractOutside={(e) => e.preventDefault()}
+          >
+            <div className="text-xs font-medium text-muted-foreground px-2 py-1.5">
+              Variables
+            </div>
+            {(!variables || variables.length === 0) ? (
+              <div className="px-3 py-3 text-sm text-muted-foreground">
+                <p className="mb-1">No variables available.</p>
+                <p className="text-xs">Define skill inputs in the Skill Config panel (click empty canvas) to use them as variables.</p>
+              </div>
+            ) : (
+              <>
+                {variables
+                  .filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase()))
+                  .map((variable, index) => (
+                    <button
+                      key={variable.name}
+                      className={`w-full text-left px-3 py-2 rounded transition-colors flex flex-col gap-1 ${
+                        index === selectedIndex ? 'bg-accent' : 'hover:bg-accent'
+                      }`}
+                      onClick={() => handleVariableSelect(variable)}
+                    >
+                      <div className="font-mono text-sm">{`{{${variable.name}}}`}</div>
+                      <div className="text-xs text-muted-foreground">{variable.description}</div>
+                    </button>
+                  ))}
+                {variables.filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase())).length === 0 && (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">
+                    No matching variables found
+                  </div>
+                )}
+              </>
+            )}
+          </PopoverContent>
+        </Popover>
 
         {/* Send button - inline when single-line in chat mode */}
         {enableSendButton && isSingleLine && mode === 'chat' && (
@@ -632,8 +686,8 @@ export function UnifiedChatInput<T = ToolDTO>({
           />
         )}
 
-        {/* Tool/Variable Dropdown */}
-        {dropdownType === 'tools' ? (
+        {/* Tool Dropdown (uses its own positioning) */}
+        {dropdownType === 'tools' && (
           <ToolDropdown
             query={dropdownQuery}
             isOpen={showDropdown}
@@ -641,52 +695,6 @@ export function UnifiedChatInput<T = ToolDTO>({
             onSelect={handleToolSelect}
             position={dropdownPosition}
           />
-        ) : (
-          /* Variable Dropdown */
-          showDropdown && dropdownType === 'variables' && (
-            <div
-              className="fixed z-[100] bg-popover border rounded-lg shadow-lg w-[440px] overflow-auto"
-              style={{
-                bottom: dropdownPosition.bottom,
-                left: dropdownPosition.left,
-                maxHeight: dropdownPosition.maxHeight || 300
-              }}
-            >
-              <div className="p-2">
-                <div className="text-xs font-medium text-muted-foreground px-2 py-1.5">
-                  Variables
-                </div>
-                {(!variables || variables.length === 0) ? (
-                  <div className="px-3 py-3 text-sm text-muted-foreground">
-                    <p className="mb-1">No variables available.</p>
-                    <p className="text-xs">Define skill inputs in the Skill Config panel (click empty canvas) to use them as variables.</p>
-                  </div>
-                ) : (
-                  <>
-                    {variables
-                      .filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase()))
-                      .map((variable, index) => (
-                        <button
-                          key={variable.name}
-                          className={`w-full text-left px-3 py-2 rounded transition-colors flex flex-col gap-1 ${
-                            index === selectedIndex ? 'bg-accent' : 'hover:bg-accent'
-                          }`}
-                          onClick={() => handleVariableSelect(variable)}
-                        >
-                          <div className="font-mono text-sm">{`{{${variable.name}}}`}</div>
-                          <div className="text-xs text-muted-foreground">{variable.description}</div>
-                        </button>
-                      ))}
-                    {variables.filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase())).length === 0 && (
-                      <div className="px-3 py-2 text-sm text-muted-foreground">
-                        No matching variables found
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          )
         )}
       </div>
     </div>

@@ -41,6 +41,7 @@ interface NodeConfigContentProps {
   availableSkills: AvailableSkill[];
   workflowVariables?: WorkflowVariable[];
   organizationTier?: 'free' | 'pro' | 'max' | 'enterprise';
+  skillId?: number;
   disabled?: boolean;
 }
 
@@ -56,6 +57,7 @@ export function NodeConfigContent({
   availableSkills,
   workflowVariables = [],
   organizationTier = 'free',
+  skillId,
   disabled = false,
 }: NodeConfigContentProps) {
   const { type, data } = node;
@@ -113,6 +115,7 @@ export function NodeConfigContent({
           data={data as AgenticNodeData}
           onUpdate={handleUpdate}
           variables={workflowVariables}
+          skillId={skillId}
           disabled={disabled}
         />
       )}
