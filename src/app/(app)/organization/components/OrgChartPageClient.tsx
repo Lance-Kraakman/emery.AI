@@ -12,6 +12,7 @@ import dynamic from 'next/dynamic';
 import { Loading } from '@/components/ui/loading';
 import { CanvasBase } from '@/components/canvas';
 import { useEmeryStore } from '@/contexts/EmeryStoreProvider';
+import type { OrgChartCanvasMetadata } from '@/components/org-chart/types';
 
 // Dynamic import to prevent SSR issues with React Flow
 const OrgChartEditorClient = dynamic(
@@ -30,9 +31,11 @@ interface OrgChartPageClientProps {
     executionType?: string;
     agentId: number | null;
   }>;
+  /** Saved canvas metadata */
+  canvasMetadata?: OrgChartCanvasMetadata | null;
 }
 
-export function OrgChartPageClient({ skills }: OrgChartPageClientProps) {
+export function OrgChartPageClient({ skills, canvasMetadata }: OrgChartPageClientProps) {
   const { data, isLoading } = useEmeryStore();
   const { agents = [], databases = [] } = data || {};
 
@@ -67,6 +70,7 @@ export function OrgChartPageClient({ skills }: OrgChartPageClientProps) {
         agents={agentData}
         skills={skills}
         databases={databaseData}
+        canvasMetadata={canvasMetadata ?? undefined}
       />
     </CanvasBase>
   );

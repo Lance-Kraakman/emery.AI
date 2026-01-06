@@ -6,7 +6,9 @@ import { revalidatePath } from "next/cache";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import { requireResourcePermission } from "./permissions";
 import { withAuthContext } from '@/lib/auth/with-context';
+import { auth } from '@/lib/auth';
 import type { Result } from "./types";
+import type { OrgChartCanvasMetadata } from '@/components/org-chart/types';
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
@@ -77,6 +79,82 @@ export async function updateOrganizationSettings(data: {
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to save settings"
+      };
+    }
+  });
+}
+
+/**
+ * Save org chart canvas metadata (sticky notes, positions, expanded states)
+ * Stores in organization.viewConfig.orgChartCanvas
+ */
+export async function saveOrgChartCanvasMetadata(
+  canvasMetadata: OrgChartCanvasMetadata
+): Promise<Result> {
+  return withAuthContext(async () => {
+    try {
+      const session = await auth();
+      if (!session?.user?.currentOrganizationId) {
+        return { success: false, error: "Not authenticated" };
+      }
+
+      const organizationId = session.user.currentOrganizationId;
+      const orgRepo = getOrganizationRepository();
+
+      // Get current org to preserve other viewConfig properties
+      const org = await orgRepo.findById(OrganizationId.fromNumber(organizationId));
+      if (!org) {
+        return { success: false, error: "Organization not found" };
+      }
+
+      // Merge canvas metadata into viewConfig
+      const updatedViewConfig = {
+        ...org.viewConfig,
+        orgChartCanvas: canvasMetadata,
+      };
+
+      await orgRepo.update(OrganizationId.fromNumber(organizationId), {
+        viewConfig: updatedViewConfig,
+      });
+
+      // Don't revalidate to prevent reload loops during auto-save
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to save org chart canvas metadata:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to save canvas metadata"
+      };
+    }
+  });
+}
+
+/**
+ * Get org chart canvas metadata from organization.viewConfig
+ */
+export async function getOrgChartCanvasMetadata(): Promise<Result<OrgChartCanvasMetadata | null>> {
+  return withAuthContext(async () => {
+    try {
+      const session = await auth();
+      if (!session?.user?.currentOrganizationId) {
+        return { success: false, error: "Not authenticated" };
+      }
+
+      const organizationId = session.user.currentOrganizationId;
+      const orgRepo = getOrganizationRepository();
+
+      const org = await orgRepo.findById(OrganizationId.fromNumber(organizationId));
+      if (!org) {
+        return { success: false, error: "Organization not found" };
+      }
+
+      const canvasMetadata = org.viewConfig?.orgChartCanvas as OrgChartCanvasMetadata | undefined;
+      return { success: true, data: canvasMetadata ?? null };
+    } catch (error) {
+      console.error("Failed to get org chart canvas metadata:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to get canvas metadata"
       };
     }
   });

@@ -5,7 +5,7 @@
  * Builds hierarchy from EmeryStore data and manages canvas state.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   useNodesState,
   useEdgesState,
@@ -22,8 +22,10 @@ import type {
   StickyNoteData,
   UseOrgChartCanvasReturn,
   OrgChartCanvasMetadata,
+  PersistedOrgChartStickyNote,
 } from '../types';
 import { orgChartNodeSizes } from '../theme';
+import { saveOrgChartCanvasMetadata } from '@/app/actions/organizations';
 
 // =============================================================================
 // Types
@@ -663,6 +665,71 @@ export function useOrgChartCanvas({
     },
     [nodes, onSelect]
   );
+
+  // ==========================================================================
+  // Auto-save Canvas Metadata
+  // ==========================================================================
+
+  // Extract canvas metadata from current state
+  const extractCanvasMetadata = useCallback((): OrgChartCanvasMetadata => {
+    const agentPositions: Record<number, { x: number; y: number }> = {};
+    const agentExpandedStates: Record<number, boolean> = {};
+    const stickyNotes: PersistedOrgChartStickyNote[] = [];
+
+    nodes.forEach((node) => {
+      if (node.type === 'agent') {
+        const data = node.data as AgentContainerNodeData;
+        agentPositions[data.agentId] = { x: node.position.x, y: node.position.y };
+        agentExpandedStates[data.agentId] = data.isExpanded ?? true;
+      } else if (node.type === 'sticky') {
+        const data = node.data as StickyNoteData;
+        stickyNotes.push({
+          id: node.id,
+          name: data.name,
+          content: data.content,
+          color: data.color,
+          position: node.position,
+          size: node.style ? {
+            width: typeof node.style.width === 'number' ? node.style.width : 200,
+            height: typeof node.style.height === 'number' ? node.style.height : 120,
+          } : undefined,
+        });
+      }
+    });
+
+    return { agentPositions, agentExpandedStates, stickyNotes };
+  }, [nodes]);
+
+  // Debounced auto-save effect
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedRef = useRef<string>('');
+
+  useEffect(() => {
+    // Clear any pending save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Debounce save by 2 seconds
+    saveTimeoutRef.current = setTimeout(() => {
+      const metadata = extractCanvasMetadata();
+      const metadataJson = JSON.stringify(metadata);
+
+      // Only save if something changed
+      if (metadataJson !== lastSavedRef.current) {
+        lastSavedRef.current = metadataJson;
+        saveOrgChartCanvasMetadata(metadata).catch((err) => {
+          console.error('Failed to auto-save canvas metadata:', err);
+        });
+      }
+    }, 2000);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [nodes, extractCanvasMetadata]);
 
   return {
     // State
