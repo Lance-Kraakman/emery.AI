@@ -37,6 +37,7 @@ export const anonymousRole = pgRole('anon', {
 export const databases = pgTable("databases", {
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "cascade" }), // null = org-scoped, set = agent-scoped
   name: text("name").notNull(),
   slug: text("slug").notNull(), // URL-safe database identifier (unique per organization)
   metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata

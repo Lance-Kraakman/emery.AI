@@ -24,6 +24,7 @@ const createDatabaseSchema = z.object({
   name: z.string().min(1, "Database name is required"),
   description: z.string().optional(),
   metadata: z.record(z.any()).optional(),
+  agentId: z.number().optional().nullable(), // null = org-scoped, number = agent-scoped
 })
 
 const updateDatabaseSchema = z.object({
@@ -33,7 +34,7 @@ const updateDatabaseSchema = z.object({
   metadata: z.record(z.any()).optional(),
 })
 
-export async function getDatabases(searchQuery?: string, hasTables?: boolean): Promise<DatabaseDTO[]> {
+export async function getDatabases(searchQuery?: string, hasTables?: boolean, agentId?: number | null): Promise<DatabaseDTO[]> {
   try {
     const session = await requirePermission("database:view");
     const currentOrg = await requireCurrentOrganization();
@@ -43,7 +44,8 @@ export async function getDatabases(searchQuery?: string, hasTables?: boolean): P
     const filters: DatabaseFiltersDTO = {
       organizationId: currentOrg.id,
       searchQuery,
-      hasTables
+      hasTables,
+      agentId
     };
 
     const databases = await databaseApplicationService.getDatabases(filters);
@@ -52,6 +54,20 @@ export async function getDatabases(searchQuery?: string, hasTables?: boolean): P
     console.error('Error fetching databases:', error)
     throw new Error('Failed to fetch databases')
   }
+}
+
+/**
+ * Get databases for a specific agent (agent-scoped databases only)
+ */
+export async function getAgentDatabases(agentId: number): Promise<DatabaseDTO[]> {
+  return getDatabases(undefined, undefined, agentId);
+}
+
+/**
+ * Get organization-scoped databases only (not agent-scoped)
+ */
+export async function getOrgDatabases(): Promise<DatabaseDTO[]> {
+  return getDatabases(undefined, undefined, null);
 }
 
 export async function getDatabase(id: number): Promise<DatabaseDTO> {
@@ -90,7 +106,8 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
       description: validatedData.description,
       metadata: validatedData.metadata,
       organizationId: currentOrg.id,
-      ownerId: session.user.id
+      ownerId: session.user.id,
+      agentId: validatedData.agentId || null
     };
 
     const result = await databaseApplicationService.createDatabase(dto);
@@ -334,13 +351,14 @@ export async function duplicateDatabase(id: number, revalidateUrl?: string): Pro
     // Create new name with " (Copy)" suffix
     const newName = `${originalDatabase.name} (Copy)`;
 
-    // Create the duplicated database
+    // Create the duplicated database (preserve agent scoping)
     const dto: CreateDatabaseDTO = {
       name: newName,
       description: originalDatabase.description || undefined,
       metadata: originalDatabase.metadata || {},
       organizationId: currentOrg.id,
-      ownerId: session.user.id
+      ownerId: session.user.id,
+      agentId: originalDatabase.agentId?.value || null
     };
 
     const result = await databaseApplicationService.createDatabase(dto);

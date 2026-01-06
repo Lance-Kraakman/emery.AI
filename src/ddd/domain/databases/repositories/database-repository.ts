@@ -11,6 +11,7 @@ export interface CreateDatabaseData {
   metadata?: Record<string, any> | null;
   organizationId: number;
   ownerId: string;
+  agentId?: number | null; // null = org-scoped, set = agent-scoped
 }
 
 export interface UpdateDatabaseData {

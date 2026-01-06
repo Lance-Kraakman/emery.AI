@@ -1,7 +1,8 @@
 // AIDEV-NOTE: Database domain entity
 // Represents a logical database containing tables and data
+// Databases can be organization-scoped (agentId = null) or agent-scoped (agentId set)
 
-import { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { DatabaseId, OrganizationId, UserId, AgentId } from '@/ddd/domain/shared/value-objects';
 
 export interface DatabaseConfig {
   name: string;
@@ -9,6 +10,7 @@ export interface DatabaseConfig {
   metadata?: Record<string, any> | null;
   organizationId: OrganizationId;
   ownerId: UserId;
+  agentId?: AgentId | null; // null = org-scoped, set = agent-scoped
 }
 
 export interface DatabasePersistenceData {
@@ -18,6 +20,7 @@ export interface DatabasePersistenceData {
   metadata?: Record<string, any> | null;
   organizationId: number;
   ownerId: string;
+  agentId?: number | null; // null = org-scoped, set = agent-scoped
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -30,6 +33,7 @@ export class Database {
     public readonly metadata: Record<string, any> | null,
     public readonly organizationId: OrganizationId,
     public readonly ownerId: UserId,
+    public readonly agentId: AgentId | null, // null = org-scoped, set = agent-scoped
     public readonly createdAt?: Date | null,
     public readonly updatedAt?: Date | null
   ) {}
@@ -39,6 +43,20 @@ export class Database {
     return this.ownerId;
   }
 
+  /**
+   * Check if this database is agent-scoped
+   */
+  get isAgentScoped(): boolean {
+    return this.agentId !== null;
+  }
+
+  /**
+   * Check if this database is organization-scoped
+   */
+  get isOrgScoped(): boolean {
+    return this.agentId === null;
+  }
+
   static create(config: DatabaseConfig): Database {
     return new Database(
       DatabaseId.temporary(), // Will be set by repository when saved
@@ -46,7 +64,8 @@ export class Database {
       config.slug,
       config.metadata || null,
       config.organizationId,
-      config.ownerId
+      config.ownerId,
+      config.agentId || null
     );
   }
 
@@ -58,6 +77,7 @@ export class Database {
       data.metadata || null,
       OrganizationId.fromNumber(data.organizationId),
       UserId.fromString(data.ownerId),
+      data.agentId ? AgentId.fromNumber(data.agentId) : null,
       data.createdAt || null,
       data.updatedAt || null
     );
@@ -71,6 +91,7 @@ export class Database {
       metadata: this.metadata,
       organizationId: this.organizationId.value,
       ownerId: this.ownerId.value,
+      agentId: this.agentId?.value || null,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt
     };

@@ -13,7 +13,7 @@ const logger = createDebugLogger('DatabaseService');
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import { Database } from '@/ddd/domain/databases/entities/database';
 import type { Result } from '@/ddd/domain/shared/result';
-import { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { DatabaseId, OrganizationId, UserId, AgentId } from '@/ddd/domain/shared/value-objects';
 import type { CreateDatabaseDTO, UpdateDatabaseDTO, DatabaseFiltersDTO, DatabaseDTO } from '@/app/dtos/database.dto';
 import { DatabaseMapper } from '@/app/mappers/database-mapper';
 
@@ -59,13 +59,17 @@ export class DatabaseApplicationService {
         ? { description: dto.description, ...dto.metadata }
         : dto.metadata || null;
 
+      // Convert agentId if provided
+      const agentId = dto.agentId ? AgentId.fromNumber(dto.agentId) : null;
+
       // Create database using domain entity
       const database = Database.create({
         name: dto.name.trim(),
         slug,
         metadata,
         organizationId,
-        ownerId: createdBy
+        ownerId: createdBy,
+        agentId
       });
 
       // Create database using repository
@@ -74,7 +78,8 @@ export class DatabaseApplicationService {
         slug: database.slug,
         metadata: database.metadata,
         organizationId: database.organizationId.value,
-        ownerId: database.ownerId.value
+        ownerId: database.ownerId.value,
+        agentId: database.agentId?.value || null
       };
       const savedDatabase = await this.databaseRepository.create(createData);
 
@@ -221,6 +226,20 @@ export class DatabaseApplicationService {
       const organizationId = OrganizationId.fromNumber(filters.organizationId);
 
       let databases = await this.databaseRepository.findByOrganization(organizationId);
+
+      // Apply agent scope filter
+      // agentId === null means org-scoped only
+      // agentId === number means agent-scoped only
+      // agentId === undefined means all databases
+      if (filters.agentId !== undefined) {
+        if (filters.agentId === null) {
+          // Only org-scoped databases (no agent)
+          databases = databases.filter(db => db.agentId === null);
+        } else {
+          // Only databases for specific agent
+          databases = databases.filter(db => db.agentId?.value === filters.agentId);
+        }
+      }
 
       // Apply search filter
       if (filters.searchQuery) {

@@ -393,6 +393,13 @@
       "when": 1767675242197,
       "tag": "0055_lively_impossible_man",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1767782400000,
+      "tag": "0056_add_agent_id_to_databases",
+      "breakpoints": true
     }
   ]
 }
