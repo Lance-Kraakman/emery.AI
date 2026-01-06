@@ -16,15 +16,17 @@ import {
   MiniMap,
   Panel,
   SelectionMode,
+  useReactFlow,
   type OnSelectionChangeParams,
   type XYPosition,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
-import { Undo2, Redo2, StickyNote, Plus } from 'lucide-react';
+import { Undo2, Redo2, StickyNote } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { orgChartNodeTypes } from '@/components/org-chart/nodes';
 import { useOrgChartCanvas } from '@/components/org-chart/hooks/useOrgChartCanvas';
+import { EntityPalette } from './EntityPalette';
 import type { OrgChartCanvasMetadata, OrgChartNodeType } from '@/components/org-chart/types';
 
 interface OrgChartCanvasProps {
@@ -58,6 +60,8 @@ interface OrgChartCanvasProps {
   onSelect?: (nodeId: string | null, nodeType?: OrgChartNodeType, entityId?: number) => void;
   /** Callback when an entity should be opened (e.g., navigate to skill editor) */
   onOpenEntity?: (entityType: OrgChartNodeType, entityId: number) => void;
+  /** Callback when a new entity should be created */
+  onCreateEntity?: (entityType: OrgChartNodeType, agentId?: number) => void;
 }
 
 export function OrgChartCanvas({
@@ -68,6 +72,7 @@ export function OrgChartCanvas({
   disabled = false,
   onSelect,
   onOpenEntity,
+  onCreateEntity,
 }: OrgChartCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
@@ -247,7 +252,7 @@ export function OrgChartCanvas({
             </Button>
           </div>
 
-          {/* Add tools */}
+          {/* Add sticky note */}
           {!disabled && (
             <div className="flex gap-1 bg-card border rounded-lg shadow-sm p-1">
               <Button
@@ -262,6 +267,16 @@ export function OrgChartCanvas({
             </div>
           )}
         </Panel>
+
+        {/* Entity palette */}
+        {!disabled && onCreateEntity && (
+          <Panel position="top-right">
+            <EntityPalette
+              disabled={disabled}
+              onCreateEntity={(type) => onCreateEntity(type)}
+            />
+          </Panel>
+        )}
 
         {/* Selection info panel */}
         {selectedNodeId && (

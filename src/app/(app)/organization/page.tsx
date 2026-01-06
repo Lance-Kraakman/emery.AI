@@ -1,71 +1,32 @@
-'use client';
-
 /**
- * Organization Page
+ * Organization Page (Server Component)
  *
- * Displays the org chart editor with hierarchical view of agents and their resources.
- * Uses the new OrgChartEditorClient with React Flow canvas.
+ * Fetches skills data server-side and passes to client component.
+ * Client component handles EmeryStore data (agents, databases).
  */
 
-import React from 'react';
-import dynamic from 'next/dynamic';
-import { Loading } from '@/components/ui/loading';
-import { CanvasBase } from '@/components/canvas';
-import { useEmeryStore } from '@/contexts/EmeryStoreProvider';
+import { auth } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+import { getSkillsByOrganization } from '@/app/actions/skills';
+import { OrgChartPageClient } from './components/OrgChartPageClient';
 
-// Dynamic import to prevent SSR issues with React Flow
-const OrgChartEditorClient = dynamic(
-  () => import('./components/OrgChartEditorClient'),
-  {
-    ssr: false,
-    loading: () => <Loading text="Loading organization chart..." />,
-  }
-);
+export default async function OrganizationPage() {
+  const session = await auth();
 
-export default function OrganizationPage() {
-  const { data, isLoading } = useEmeryStore();
-  const { agents = [], databases = [] } = data || {};
-
-  if (isLoading) {
-    return (
-      <CanvasBase>
-        <Loading text="Loading organization data..." />
-      </CanvasBase>
-    );
+  if (!session?.user?.currentOrganizationId) {
+    redirect('/login');
   }
 
-  // Transform data for the editor
-  const agentData = agents.map((agent: any) => ({
-    id: agent.id,
-    name: agent.name,
-    role: agent.role || undefined,
-    status: agent.status || undefined,
+  // Fetch skills server-side
+  const skillsResult = await getSkillsByOrganization(session.user.currentOrganizationId);
+
+  // Transform to lightweight format for canvas
+  const skillData = (skillsResult.data ?? []).map((skill) => ({
+    id: skill.id,
+    name: skill.name,
+    executionType: skill.executionType,
+    agentId: skill.agentId ?? null,
   }));
 
-  // Skills would need to be fetched separately - for now, pass empty array
-  // TODO: Add skills fetching via server action or store selector
-  const skillData: Array<{
-    id: number;
-    name: string;
-    executionType?: string;
-    agentId?: number | null;
-  }> = [];
-
-  const databaseData = databases.map((db: any) => ({
-    id: db.id,
-    name: db.name,
-    slug: db.slug,
-    agentId: db.agentId || null,
-    tableCount: db.tables?.length || 0,
-  }));
-
-  return (
-    <CanvasBase>
-      <OrgChartEditorClient
-        agents={agentData}
-        skills={skillData}
-        databases={databaseData}
-      />
-    </CanvasBase>
-  );
+  return <OrgChartPageClient skills={skillData} />;
 }
