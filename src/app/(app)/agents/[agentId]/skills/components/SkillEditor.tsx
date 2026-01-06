@@ -56,6 +56,7 @@ export function SkillEditor({
   const [nodes, setNodes] = useState<WorkflowNode[]>([]);
   const [edges, setEdges] = useState<WorkflowEdge[]>([]);
   const updateNodeRef = useRef<((id: string, data: Partial<WorkflowNodeData>) => void) | null>(null);
+  const renameNodeRef = useRef<((id: string, newName: string) => void) | null>(null);
   const deleteNodeRef = useRef<((id: string) => void) | null>(null);
 
   const handleStepsChange = useCallback((steps: SkillStep[]) => {
@@ -80,6 +81,14 @@ export function SkillEditor({
 
   const handleUpdateNode = useCallback((id: string, data: Partial<WorkflowNodeData>) => {
     updateNodeRef.current?.(id, data);
+  }, []);
+
+  const handleRenameNodeRef = useCallback((fn: (id: string, newName: string) => void) => {
+    renameNodeRef.current = fn;
+  }, []);
+
+  const handleRenameNode = useCallback((id: string, newName: string) => {
+    renameNodeRef.current?.(id, newName);
   }, []);
 
   const handleDeleteNodeRef = useCallback((fn: (id: string) => void) => {
@@ -127,6 +136,7 @@ export function SkillEditor({
         onNodesExpose={handleNodesChange}
         onEdgesExpose={handleEdgesChange}
         onUpdateNodeExpose={handleUpdateNodeRef}
+        onRenameNodeExpose={handleRenameNodeRef}
         onDeleteNodeExpose={handleDeleteNodeRef}
       />
 
@@ -176,6 +186,7 @@ export function SkillEditor({
             <NodeConfigContent
               node={selectedNode}
               onUpdateNode={handleUpdateNode}
+              onRenameNode={handleRenameNode}
               skillInputs={value.inputs}
               availableSkills={availableSkills}
               workflowVariables={workflowVariables}

@@ -417,45 +417,58 @@ export function WriteConfigForm({
                 </Button>
               </div>
               <div className="space-y-1.5">
-                {fields.map((field) => (
-                  <div key={field.id} className="flex items-center gap-1.5">
-                    <div className="flex-1">
-                      <Select
-                        value={getMappingForField(field.id) || '__none__'}
-                        onValueChange={(val) => {
-                          handleMappingChange(
-                            field.id,
-                            val === '__none__' ? undefined : val
-                          );
-                        }}
-                        disabled={disabled}
-                      >
-                        <SelectTrigger className="h-7 text-xs">
-                          <SelectValue placeholder="Select..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">
-                            <span className="text-muted-foreground">—</span>
-                          </SelectItem>
-                          {workflowVariables.map(v => (
-                            <SelectItem key={v.name} value={v.name}>
-                              {v.label || v.name}
+                {fields.map((field) => {
+                  const currentMapping = getMappingForField(field.id);
+                  // Check if current mapping exists in available variables
+                  const isOrphanedMapping = currentMapping &&
+                    !workflowVariables.some(v => v.name === currentMapping);
+
+                  return (
+                    <div key={field.id} className="flex items-center gap-1.5">
+                      <div className="flex-1">
+                        <Select
+                          value={currentMapping || '__none__'}
+                          onValueChange={(val) => {
+                            handleMappingChange(
+                              field.id,
+                              val === '__none__' ? undefined : val
+                            );
+                          }}
+                          disabled={disabled}
+                        >
+                          <SelectTrigger className="h-7 text-xs">
+                            <SelectValue placeholder="Select..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">
+                              <span className="text-muted-foreground">—</span>
                             </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <span className="text-muted-foreground text-xs">→</span>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs truncate">{field.name}</span>
-                        {field.required && (
-                          <span className="text-[9px] text-destructive">*</span>
-                        )}
+                            {/* Show orphaned mapping so it displays correctly */}
+                            {isOrphanedMapping && (
+                              <SelectItem value={currentMapping}>
+                                <span className="text-amber-600">{currentMapping} (missing)</span>
+                              </SelectItem>
+                            )}
+                            {workflowVariables.map(v => (
+                              <SelectItem key={v.name} value={v.name}>
+                                {v.label || v.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <span className="text-muted-foreground text-xs">→</span>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs truncate">{field.name}</span>
+                          {field.required && (
+                            <span className="text-[9px] text-destructive">*</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

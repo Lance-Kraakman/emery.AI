@@ -35,6 +35,7 @@ import {
 interface NodeConfigContentProps {
   node: WorkflowNode;
   onUpdateNode: (id: string, data: Partial<WorkflowNodeData>) => void;
+  onRenameNode: (id: string, newName: string) => void;
   skillInputs: InputDefinition[];
   availableSkills: AvailableSkill[];
   workflowVariables?: WorkflowVariable[];
@@ -51,6 +52,7 @@ interface NodeConfigContentProps {
 export function NodeConfigContent({
   node,
   onUpdateNode,
+  onRenameNode,
   skillInputs,
   availableSkills,
   workflowVariables = [],
@@ -64,9 +66,14 @@ export function NodeConfigContent({
     onUpdateNode(node.id, updates);
   };
 
+  const handleNameChange = (newName: string) => {
+    // Use renameNode to cascade variable reference updates
+    onRenameNode(node.id, newName);
+  };
+
   return (
     <div className="space-y-4">
-      {/* Name field - common to all */}
+      {/* Name field - common to all, uses rename to cascade variable refs */}
       <div className="space-y-1.5">
         <Label htmlFor="name" className="text-xs">
           Name
@@ -74,7 +81,7 @@ export function NodeConfigContent({
         <Input
           id="name"
           value={data.name}
-          onChange={(e) => handleUpdate({ name: e.target.value })}
+          onChange={(e) => handleNameChange(e.target.value)}
           disabled={disabled}
           className="h-8 text-sm"
         />

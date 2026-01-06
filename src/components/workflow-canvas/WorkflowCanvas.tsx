@@ -93,6 +93,7 @@ export interface WorkflowCanvasProps {
   onNodesExpose?: (nodes: WorkflowNode[]) => void;
   onEdgesExpose?: (edges: WorkflowEdge[]) => void;
   onUpdateNodeExpose?: (fn: (id: string, data: Partial<WorkflowNodeData>) => void) => void;
+  onRenameNodeExpose?: (fn: (id: string, newName: string) => void) => void;
   onDeleteNodeExpose?: (fn: (id: string) => void) => void;
 }
 
@@ -108,6 +109,7 @@ function WorkflowCanvasInner({
   onNodesExpose,
   onEdgesExpose,
   onUpdateNodeExpose,
+  onRenameNodeExpose,
   onDeleteNodeExpose,
 }: WorkflowCanvasProps) {
   const { screenToFlowPosition } = useReactFlow();
@@ -123,6 +125,7 @@ function WorkflowCanvasInner({
     setSelectedNodeId: internalSetSelectedNodeId,
     addNode,
     updateNode,
+    renameNode,
     deleteNode,
   } = useWorkflowCanvas({ steps, onChange });
 
@@ -140,6 +143,11 @@ function WorkflowCanvasInner({
   React.useEffect(() => {
     onUpdateNodeExpose?.(updateNode);
   }, [updateNode, onUpdateNodeExpose]);
+
+  // Expose renameNode function to parent
+  React.useEffect(() => {
+    onRenameNodeExpose?.(renameNode);
+  }, [renameNode, onRenameNodeExpose]);
 
   // Expose deleteNode function to parent
   React.useEffect(() => {

@@ -205,6 +205,7 @@ export interface UseWorkflowCanvasReturn {
   setSelectedNodeId: (id: string | null) => void;
   addNode: (type: WorkflowNodeType, position: XYPosition) => void;
   updateNode: (id: string, data: Partial<WorkflowNodeData>) => void;
+  renameNode: (id: string, newName: string) => void;
   deleteNode: (id: string) => void;
 }
 

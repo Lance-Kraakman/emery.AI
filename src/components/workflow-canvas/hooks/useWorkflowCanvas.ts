@@ -26,6 +26,7 @@ import {
   flowToSteps,
   getDefaultNodeData,
 } from '../utils/flow-converters';
+import { cascadeRenameInNodeData } from '../utils/rename-cascade';
 
 interface UseWorkflowCanvasProps {
   steps: SkillStep[];
@@ -112,12 +113,12 @@ export function useWorkflowCanvas({
    */
   const addNode = useCallback(
     (type: WorkflowNodeType, position: XYPosition) => {
-      const id = `${type}_${Date.now()}`;
+      const id = crypto.randomUUID();
       const newNode: WorkflowNode = {
         id,
         type,
         position,
-        data: getDefaultNodeData(type),
+        data: getDefaultNodeData(type, id),
       };
 
       setNodes((nds) => [...nds, newNode]);
@@ -157,6 +158,37 @@ export function useWorkflowCanvas({
     [setNodes, setEdges]
   );
 
+  /**
+   * Rename a node and cascade update all variable references in other nodes.
+   * This ensures {{oldName.xxx}} references are updated to {{newName.xxx}}.
+   */
+  const renameNode = useCallback(
+    (id: string, newName: string) => {
+      setNodes((nds) => {
+        // Find the node to get old name
+        const node = nds.find((n) => n.id === id);
+        if (!node) return nds;
+
+        const oldName = node.data.name;
+        if (oldName === newName) return nds;
+
+        // Update all nodes: rename target node, cascade refs in others
+        return nds.map((n) => {
+          if (n.id === id) {
+            // Update this node's name
+            return { ...n, data: { ...n.data, name: newName } as WorkflowNodeData };
+          }
+          // Cascade: update variable references in other nodes
+          return {
+            ...n,
+            data: cascadeRenameInNodeData(n.data, oldName, newName),
+          };
+        });
+      });
+    },
+    [setNodes]
+  );
+
   return {
     nodes,
     edges,
@@ -168,6 +200,7 @@ export function useWorkflowCanvas({
     setSelectedNodeId,
     addNode,
     updateNode,
+    renameNode,
     deleteNode,
   };
 }

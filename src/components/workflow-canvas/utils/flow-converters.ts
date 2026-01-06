@@ -158,12 +158,16 @@ export function stepsToFlow(steps: SkillStep[]): {
   const nodes: WorkflowNode[] = [];
   const edges: WorkflowEdge[] = [];
 
+  // Build name→id map for resolving edge targets
+  // (stepOutputs.nextSteps contains names, not IDs)
+  const nameToId = new Map(steps.map(s => [s.name, s.id]));
+
   steps.forEach((step, index) => {
     const nodeType = getNodeType(step);
     const position = step._position || getDefaultPosition(index);
 
     nodes.push({
-      id: step.name,
+      id: step.id,  // Use stable ID
       type: nodeType,
       position,
       data: stepToNodeData(step),
@@ -173,10 +177,13 @@ export function stepsToFlow(steps: SkillStep[]): {
     if (step.stepOutputs) {
       step.stepOutputs.forEach((output, outputIndex) => {
         output.nextSteps.forEach((targetName) => {
+          const targetId = nameToId.get(targetName);
+          if (!targetId) return; // Skip if target not found
+
           edges.push({
-            id: `${step.name}-${targetName}-${output.type}-${outputIndex}`,
-            source: step.name,
-            target: targetName,
+            id: `${step.id}-${targetId}-${output.type}-${outputIndex}`,
+            source: step.id,
+            target: targetId,
             sourceHandle: output.type === 'condition'
               ? `cond_${outputIndex}`
               : output.type,
@@ -283,8 +290,13 @@ function nodeDataToStep(node: WorkflowNode): Partial<SkillStep> {
 
 /**
  * Group edges by type to create stepOutputs
+ * @param edges - outgoing edges from a node
+ * @param idToName - map to convert node IDs to names for stepOutputs.nextSteps
  */
-function groupEdgesByType(edges: WorkflowEdge[]): StepOutput[] {
+function groupEdgesByType(
+  edges: WorkflowEdge[],
+  idToName: Map<string, string>
+): StepOutput[] {
   const outputMap = new Map<string, StepOutput>();
 
   edges.forEach((edge) => {
@@ -301,7 +313,9 @@ function groupEdgesByType(edges: WorkflowEdge[]): StepOutput[] {
       });
     }
 
-    outputMap.get(key)!.nextSteps.push(edge.target);
+    // Convert ID to name for nextSteps (uses names for readability)
+    const targetName = idToName.get(edge.target) || edge.target;
+    outputMap.get(key)!.nextSteps.push(targetName);
   });
 
   return Array.from(outputMap.values());
@@ -314,12 +328,17 @@ export function flowToSteps(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[]
 ): SkillStep[] {
+  // Build id→name map for converting edge targets back to names
+  // (stepOutputs.nextSteps uses names for readability)
+  const idToName = new Map(nodes.map(n => [n.id, n.data.name]));
+
   return nodes.map((node) => {
     const outgoingEdges = edges.filter((e) => e.source === node.id);
-    const stepOutputs = groupEdgesByType(outgoingEdges);
+    const stepOutputs = groupEdgesByType(outgoingEdges, idToName);
 
     return {
-      name: node.id,
+      id: node.id,           // Stable ID
+      name: node.data.name,  // Display name from data
       ...nodeDataToStep(node),
       // Always set stepOutputs explicitly (empty array = no outgoing edges)
       stepOutputs,
@@ -334,9 +353,13 @@ export function flowToSteps(
 
 /**
  * Get default data for a new node
+ * @param type - the node type
+ * @param id - the stable node ID (used to derive a friendly name suffix)
  */
-export function getDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
-  const baseName = `${type}_${Date.now()}`;
+export function getDefaultNodeData(type: WorkflowNodeType, id: string): WorkflowNodeData {
+  // Use first 8 chars of UUID for a short, unique suffix
+  const shortId = id.slice(0, 8);
+  const baseName = `${type}_${shortId}`;
 
   switch (type) {
     case 'skillRef':

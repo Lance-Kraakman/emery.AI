@@ -101,12 +101,21 @@ export interface ConditionStepConfig {
 }
 
 /**
+ * Node Identity - simple type for passing node {id, name} pairs
+ */
+export interface NodeIdentity {
+  id: string;
+  name: string;
+}
+
+/**
  * Skill Step - defines a single step in a workflow
  * Each step has a nodeType determining its execution behavior.
  */
 export interface SkillStep {
   // Identity
-  name: string;
+  id: string;                             // Stable UUID (for edges and references)
+  name: string;                           // Display name (user-editable)
   nodeType?: WorkflowNodeType;            // Node type (defaults to 'agentic' for backwards compat)
 
   // Node-type specific data (only one populated per step based on nodeType)
