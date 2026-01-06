@@ -188,17 +188,8 @@ export function stepsToFlow(steps: SkillStep[]): {
           });
         });
       });
-    } else if (index < steps.length - 1) {
-      // Sequential: connect to next step if no stepOutputs defined
-      edges.push({
-        id: `${step.name}-${steps[index + 1].name}-sequential`,
-        source: step.name,
-        target: steps[index + 1].name,
-        sourceHandle: 'success',
-        type: 'success',
-        data: { label: 'success' },
-      });
     }
+    // Note: No sequential fallback - only explicit edges are created
   });
 
   return { nodes, edges };
@@ -330,7 +321,8 @@ export function flowToSteps(
     return {
       name: node.id,
       ...nodeDataToStep(node),
-      stepOutputs: stepOutputs.length > 0 ? stepOutputs : undefined,
+      // Always set stepOutputs explicitly (empty array = no outgoing edges)
+      stepOutputs,
       _position: node.position,
     } as SkillStep;
   });
