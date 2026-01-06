@@ -13,7 +13,7 @@ import {
   type Connection,
   type XYPosition,
 } from '@xyflow/react';
-import type { SkillStep } from '@/ddd/domain/skills/entities/skill';
+import type { SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
 import type {
   WorkflowNode,
   WorkflowEdge,
@@ -25,12 +25,14 @@ import {
   stepsToFlow,
   flowToSteps,
   getDefaultNodeData,
+  type FlowToStepsResult,
 } from '../utils/flow-converters';
 import { cascadeRenameInNodeData } from '../utils/rename-cascade';
 
 interface UseWorkflowCanvasProps {
   steps: SkillStep[];
-  onChange: (steps: SkillStep[]) => void;
+  canvasMetadata?: CanvasMetadata;
+  onChange: (result: FlowToStepsResult) => void;
 }
 
 // History state for undo/redo
@@ -41,6 +43,7 @@ interface HistoryState {
 
 export function useWorkflowCanvas({
   steps,
+  canvasMetadata,
   onChange,
 }: UseWorkflowCanvasProps): UseWorkflowCanvasReturn {
   // React Flow state
@@ -50,10 +53,10 @@ export function useWorkflowCanvas({
   // Multi-selection state (Set for O(1) lookups)
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
 
-  // Undo/Redo history (limited to 50 states)
+  // Undo/Redo history (limited to 10 states to reduce memory usage)
   const [past, setPast] = useState<HistoryState[]>([]);
   const [future, setFuture] = useState<HistoryState[]>([]);
-  const MAX_HISTORY = 50;
+  const MAX_HISTORY = 10;
 
   // Clipboard state (localStorage key for cross-tab support)
   const CLIPBOARD_KEY = 'workflow-canvas-clipboard';
@@ -78,7 +81,7 @@ export function useWorkflowCanvas({
 
     if (stepsChanged || isInitialLoad) {
       isSyncingFromParent.current = true;
-      const { nodes: newNodes, edges: newEdges } = stepsToFlow(steps);
+      const { nodes: newNodes, edges: newEdges } = stepsToFlow(steps, canvasMetadata);
       setNodes(newNodes);
       setEdges(newEdges);
       lastStepsRef.current = steps;
@@ -88,7 +91,7 @@ export function useWorkflowCanvas({
         isSyncingFromParent.current = false;
       });
     }
-  }, [steps, nodes.length, setNodes, setEdges]);
+  }, [steps, canvasMetadata, nodes.length, setNodes, setEdges]);
 
   // ==========================================================================
   // Sync: Canvas nodes/edges → Parent steps (on internal changes)
@@ -96,9 +99,9 @@ export function useWorkflowCanvas({
   const syncToParent = useCallback(() => {
     if (isSyncingFromParent.current) return;
 
-    const newSteps = flowToSteps(nodes, edges);
-    lastStepsRef.current = newSteps;
-    onChange(newSteps);
+    const result = flowToSteps(nodes, edges);
+    lastStepsRef.current = result.steps;
+    onChange(result);
   }, [nodes, edges, onChange]);
 
   // Debounced sync on node/edge changes
@@ -401,6 +404,7 @@ export function useWorkflowCanvas({
    */
   const toggleDisabled = useCallback(() => {
     if (selectedNodeIds.size === 0) return;
+    pushHistory();
 
     setNodes((nds) =>
       nds.map((node) => {
@@ -416,7 +420,7 @@ export function useWorkflowCanvas({
         return node;
       })
     );
-  }, [selectedNodeIds, setNodes]);
+  }, [selectedNodeIds, setNodes, pushHistory]);
 
   /**
    * Rename a node and cascade update all variable references in other nodes.

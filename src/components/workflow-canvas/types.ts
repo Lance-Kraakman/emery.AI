@@ -261,3 +261,27 @@ export interface UseWorkflowCanvasReturn {
 }
 
 // Note: SkillStep now includes _position directly in domain types
+
+// =============================================================================
+// Canvas Metadata (persisted to DB, separate from execution steps)
+// =============================================================================
+
+/**
+ * Persisted sticky note data for canvas_metadata column
+ */
+export interface PersistedStickyNote {
+  id: string;
+  name: string;
+  content: string;
+  color?: StickyNodeData['color'];
+  position: { x: number; y: number };
+  size?: { width: number; height: number };
+}
+
+/**
+ * Canvas metadata stored in DB - annotations and visual elements
+ * that don't affect workflow execution
+ */
+export interface CanvasMetadata {
+  stickyNotes?: PersistedStickyNote[];
+}

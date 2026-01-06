@@ -396,6 +396,21 @@ export interface ToolConfig {
 }
 
 /**
+ * Canvas Metadata - visual annotations that don't affect execution
+ * Stored separately from steps to avoid polluting the execution graph
+ */
+export interface CanvasMetadata {
+  stickyNotes?: Array<{
+    id: string;
+    name: string;
+    content: string;
+    color?: 'yellow' | 'blue' | 'green' | 'pink' | 'purple';
+    position: { x: number; y: number };
+    size?: { width: number; height: number };
+  }>;
+}
+
+/**
  * Skill Entity
  *
  * AIDEV-NOTE: Simplified single-instruction model
@@ -430,6 +445,7 @@ export interface Skill {
   readonly writeConfig?: WriteConfig; // Config for 'write' execution
   readonly readConfig?: ReadConfig; // Config for 'read' execution
   readonly steps?: SkillStep[]; // Steps for 'agent' execution (step-based DAG workflow)
+  readonly canvasMetadata?: CanvasMetadata; // Canvas annotations (sticky notes) - doesn't affect execution
   readonly isSystem: boolean; // System skills cannot be deleted by users
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -456,6 +472,7 @@ export interface CreateSkillProps {
   writeConfig?: WriteConfig; // Config for 'write' execution
   readConfig?: ReadConfig; // Config for 'read' execution
   steps?: SkillStep[]; // Steps for 'agent' execution (step-based DAG workflow)
+  canvasMetadata?: CanvasMetadata; // Canvas annotations (sticky notes)
 }
 
 /**
@@ -477,6 +494,7 @@ export interface UpdateSkillProps {
   writeConfig?: WriteConfig | null; // Config for 'write' execution (null to clear)
   readConfig?: ReadConfig | null; // Config for 'read' execution (null to clear)
   steps?: SkillStep[] | null; // Steps for 'agent' execution (null to clear)
+  canvasMetadata?: CanvasMetadata | null; // Canvas annotations (null to clear)
 }
 
 /**
@@ -560,6 +578,7 @@ export class SkillEntity {
       toolExecutionConfig: props.toolExecutionConfig,
       writeConfig: props.writeConfig,
       steps: props.steps,
+      canvasMetadata: props.canvasMetadata,
       isSystem: false // User-created skills are never system skills
     };
   }
@@ -634,6 +653,9 @@ export class SkillEntity {
       steps: updates.steps !== undefined
         ? (updates.steps === null ? undefined : updates.steps)
         : skill.steps,
+      canvasMetadata: updates.canvasMetadata !== undefined
+        ? (updates.canvasMetadata === null ? undefined : updates.canvasMetadata)
+        : skill.canvasMetadata,
       updatedAt: new Date()
     };
   }

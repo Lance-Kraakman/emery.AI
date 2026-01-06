@@ -9,6 +9,7 @@ import type {
   InputMappingConfig,
   InputDefinition,
   OutputDefinition,
+  CanvasMetadata,
   // Multi-table mapping types
   TableReference,
   FieldSource,
@@ -112,6 +113,7 @@ export interface SkillDTO {
   toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
   writeConfig?: WriteConfig; // Config for 'write' execution
   steps?: SkillStep[]; // Steps for 'agent' (step-based) execution
+  canvasMetadata?: CanvasMetadata; // Canvas annotations (sticky notes)
   isSystem: boolean; // System skills cannot be deleted by users
   createdAt: string;
   updatedAt: string;
@@ -149,6 +151,7 @@ export class SkillMapper {
       toolExecutionConfig: skill.toolExecutionConfig,
       writeConfig: skill.writeConfig,
       steps: skill.steps,
+      canvasMetadata: skill.canvasMetadata,
       isSystem: skill.isSystem,
       createdAt: skill.createdAt.toISOString(),
       updatedAt: skill.updatedAt.toISOString()

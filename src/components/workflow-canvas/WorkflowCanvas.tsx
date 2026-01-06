@@ -49,7 +49,8 @@ import type {
   WorkflowNodeData,
   AvailableSkill,
 } from './types';
-import type { SkillStep, InputDefinition } from '@/ddd/domain/skills/entities/skill';
+import type { SkillStep, InputDefinition, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
+import type { FlowToStepsResult } from './utils/flow-converters';
 import { useWorkflowCanvas } from './hooks/useWorkflowCanvas';
 import { NodePalette } from './NodePalette';
 import { NodeConfigPanel } from './NodeConfigPanel';
@@ -98,10 +99,11 @@ const edgeTypes = {
 export interface WorkflowCanvasProps {
   // Required props
   steps: SkillStep[];
-  onChange: (steps: SkillStep[]) => void;
+  onChange: (result: FlowToStepsResult) => void;
   skillInputs: InputDefinition[];
 
   // Optional props
+  canvasMetadata?: CanvasMetadata;
   availableSkills?: AvailableSkill[];
   disabled?: boolean;
   showConfigPanel?: boolean;
@@ -120,6 +122,7 @@ function WorkflowCanvasInner({
   steps,
   onChange,
   skillInputs,
+  canvasMetadata,
   availableSkills = [],
   disabled = false,
   showConfigPanel = true,
@@ -171,7 +174,7 @@ function WorkflowCanvasInner({
     toggleDisabled,
     addStickyNote,
     updateMousePosition,
-  } = useWorkflowCanvas({ steps, onChange });
+  } = useWorkflowCanvas({ steps, canvasMetadata, onChange });
 
   // Expose nodes to parent when they change
   React.useEffect(() => {

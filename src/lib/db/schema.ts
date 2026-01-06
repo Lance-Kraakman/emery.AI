@@ -1051,6 +1051,19 @@ export const skills = pgTable("skills", {
     condition?: string;                     // Optional condition (future)
   }>>(),
 
+  // Canvas metadata - visual annotations (sticky notes) that don't affect execution
+  // Stored separately from steps to avoid polluting the execution graph
+  canvasMetadata: jsonb("canvas_metadata").$type<{
+    stickyNotes?: Array<{
+      id: string;
+      name: string;
+      content: string;
+      color?: 'yellow' | 'blue' | 'green' | 'pink' | 'purple';
+      position: { x: number; y: number };
+      size?: { width: number; height: number };
+    }>;
+  }>(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

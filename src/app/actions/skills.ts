@@ -14,7 +14,7 @@ import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
-import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, SkillStep } from '@/ddd/domain/skills/entities/skill';
+import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
 
 /**
  * Server Actions for Skill Management
@@ -277,6 +277,7 @@ export async function updateSkill(
     toolExecutionConfig?: ToolExecutionConfig | null;
     writeConfig?: WriteConfig | null;
     steps?: SkillStep[] | null; // Steps for 'agent' (step-based) execution
+    canvasMetadata?: CanvasMetadata | null; // Canvas annotations (sticky notes)
     content?: MessagePart[]; // Skill-level attachments
   }
 ): Promise<Result<SkillDTO>> {

@@ -10,6 +10,7 @@ import type {
   SkillStep,
   StepOutput,
   WorkflowNodeType,
+  CanvasMetadata,
 } from '@/ddd/domain/skills/entities/skill';
 import type {
   WorkflowNode,
@@ -24,6 +25,7 @@ import type {
   ToolNodeData,
   WriteNodeData,
   ReadNodeData,
+  StickyNodeData,
 } from '../types';
 
 /**
@@ -158,8 +160,13 @@ function getDefaultPosition(index: number): XYPosition {
 
 /**
  * Convert SkillStep[] to React Flow nodes and edges
+ * @param steps - Workflow steps (execution graph)
+ * @param canvasMetadata - Optional canvas annotations (sticky notes)
  */
-export function stepsToFlow(steps: SkillStep[]): {
+export function stepsToFlow(
+  steps: SkillStep[],
+  canvasMetadata?: CanvasMetadata
+): {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
 } {
@@ -206,6 +213,25 @@ export function stepsToFlow(steps: SkillStep[]): {
     }
     // Note: No sequential fallback - only explicit edges are created
   });
+
+  // Add sticky notes from canvas metadata
+  if (canvasMetadata?.stickyNotes) {
+    canvasMetadata.stickyNotes.forEach((sticky) => {
+      nodes.push({
+        id: sticky.id,
+        type: 'sticky',
+        position: sticky.position,
+        data: {
+          name: sticky.name,
+          content: sticky.content,
+          color: sticky.color || 'yellow',
+        } as StickyNodeData,
+        style: sticky.size
+          ? { width: sticky.size.width, height: sticky.size.height }
+          : { width: 200, height: 120 },
+      } as WorkflowNode);
+    });
+  }
 
   return { nodes, edges };
 }
@@ -332,20 +358,30 @@ function groupEdgesByType(
 }
 
 /**
- * Convert React Flow nodes and edges back to SkillStep[]
+ * Result of converting React Flow back to domain data
+ */
+export interface FlowToStepsResult {
+  steps: SkillStep[];
+  canvasMetadata: CanvasMetadata;
+}
+
+/**
+ * Convert React Flow nodes and edges back to SkillStep[] and CanvasMetadata
+ * Separates execution steps from canvas annotations (sticky notes)
  */
 export function flowToSteps(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[]
-): SkillStep[] {
-  // Filter out sticky notes (canvas annotations that aren't workflow steps)
+): FlowToStepsResult {
+  // Separate sticky notes from workflow nodes
+  const stickyNodes = nodes.filter(n => n.type === 'sticky');
   const workflowNodes = nodes.filter(n => n.type !== 'sticky');
 
   // Build id→name map for converting edge targets back to names
   // (stepOutputs.nextSteps uses names for readability)
   const idToName = new Map(workflowNodes.map(n => [n.id, n.data.name]));
 
-  return workflowNodes.map((node) => {
+  const steps = workflowNodes.map((node) => {
     const outgoingEdges = edges.filter((e) => e.source === node.id);
     const stepOutputs = groupEdgesByType(outgoingEdges, idToName);
 
@@ -358,6 +394,25 @@ export function flowToSteps(
       _position: node.position,
     } as SkillStep;
   });
+
+  // Extract sticky notes to canvas metadata
+  const canvasMetadata: CanvasMetadata = {
+    stickyNotes: stickyNodes.map((node) => {
+      const data = node.data as StickyNodeData;
+      return {
+        id: node.id,
+        name: data.name,
+        content: data.content,
+        color: data.color,
+        position: node.position,
+        size: node.style
+          ? { width: node.style.width as number, height: node.style.height as number }
+          : undefined,
+      };
+    }),
+  };
+
+  return { steps, canvasMetadata };
 }
 
 // =============================================================================

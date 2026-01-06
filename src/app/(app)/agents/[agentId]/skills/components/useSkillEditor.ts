@@ -28,6 +28,7 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
     inputs: skill.inputs,
     outputs: skill.outputs,
     steps: skill.steps || [],
+    canvasMetadata: skill.canvasMetadata,
     model: skill.model
   });
 
@@ -77,6 +78,7 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
         inputs: currentFormData.inputs,
         outputs: currentFormData.outputs,
         steps: currentFormData.steps,
+        canvasMetadata: currentFormData.canvasMetadata,
         model: currentFormData.model
       });
 

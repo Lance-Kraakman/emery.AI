@@ -6,7 +6,7 @@
 
 export { WorkflowCanvas } from './WorkflowCanvas';
 export { useWorkflowCanvas } from './hooks/useWorkflowCanvas';
-export { stepsToFlow, flowToSteps, getDefaultNodeData } from './utils/flow-converters';
+export { stepsToFlow, flowToSteps, getDefaultNodeData, type FlowToStepsResult } from './utils/flow-converters';
 
 // Node components
 export { SkillRefNode } from './nodes/SkillRefNode';

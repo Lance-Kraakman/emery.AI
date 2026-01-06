@@ -6,7 +6,8 @@ import { X, Settings2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { InputDefinition, OutputDefinition } from '@/app/mappers/skill-mapper';
-import type { SkillStep } from '@/ddd/domain/skills/entities/skill';
+import type { SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
+import type { FlowToStepsResult } from '@/components/workflow-canvas/utils/flow-converters';
 import type { WorkflowNode, WorkflowNodeData, WorkflowEdge } from '@/components/workflow-canvas/types';
 import type { WorkflowVariable } from '@/components/workflow-canvas/WorkflowVariableInput';
 import { inferVariablesForNode } from '@/components/workflow-canvas/utils/variable-inference';
@@ -23,6 +24,7 @@ export interface SkillFormData {
   inputs: InputDefinition[];
   outputs: OutputDefinition[];
   steps: SkillStep[];
+  canvasMetadata?: CanvasMetadata; // Canvas annotations (sticky notes)
   model?: string | null;
 }
 
@@ -59,8 +61,8 @@ export function SkillEditor({
   const renameNodeRef = useRef<((id: string, newName: string) => void) | null>(null);
   const deleteNodeRef = useRef<((id: string) => void) | null>(null);
 
-  const handleStepsChange = useCallback((steps: SkillStep[]) => {
-    onChange({ ...value, steps });
+  const handleCanvasChange = useCallback((result: FlowToStepsResult) => {
+    onChange({ ...value, steps: result.steps, canvasMetadata: result.canvasMetadata });
   }, [onChange, value]);
 
   const handleNodeSelect = useCallback((id: string | null) => {
@@ -127,7 +129,8 @@ export function SkillEditor({
       {/* Full-height Canvas - uncontrolled mode */}
       <WorkflowCanvas
         steps={value.steps || []}
-        onChange={handleStepsChange}
+        canvasMetadata={value.canvasMetadata}
+        onChange={handleCanvasChange}
         skillInputs={value.inputs}
         availableSkills={availableSkills}
         disabled={isReadOnly}

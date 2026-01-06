@@ -101,6 +101,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
         toolExecutionConfig: props.toolExecutionConfig || null,
         writeConfig: props.writeConfig || null,
         steps: props.steps || null,
+        canvasMetadata: props.canvasMetadata || null,
         createdAt: now,
         updatedAt: now
       })
@@ -160,6 +161,9 @@ export class DrizzleSkillRepository implements ISkillRepository {
     if (updates.steps !== undefined) {
       updateData.steps = updates.steps;
       console.log('[DrizzleSkillRepository] Setting updateData.steps:', updateData.steps);
+    }
+    if (updates.canvasMetadata !== undefined) {
+      updateData.canvasMetadata = updates.canvasMetadata;
     }
 
     console.log('[DrizzleSkillRepository] Final updateData keys:', Object.keys(updateData));
@@ -248,6 +252,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
       toolExecutionConfig: record.toolExecutionConfig || undefined,
       writeConfig: record.writeConfig || undefined,
       steps: record.steps || undefined,
+      canvasMetadata: record.canvasMetadata || undefined,
       isSystem: record.isSystem ?? false,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
