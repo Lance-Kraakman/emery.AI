@@ -35,6 +35,7 @@ export interface ExecutionSkill {
   toolExecutionConfig?: {
     toolId: string;
     inputMappings: Array<{ toolParam: string; skillInputName?: string; staticValue?: any }>;
+    outputTableId?: number;
   };
   // Optional config for 'write' execution type
   writeConfig?: {
@@ -93,6 +94,7 @@ export interface ExecutionSkill {
     toolExecutionConfig?: {
       toolId: string;
       inputMappings: Array<{ toolParam: string; skillInputName?: string; staticValue?: any }>;
+      outputTableId?: number;
     };
     writeConfig?: {
       targetTableId: number;

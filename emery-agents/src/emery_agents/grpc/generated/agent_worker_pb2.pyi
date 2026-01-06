@@ -370,12 +370,14 @@ class TaskModelConfig(_message.Message):
     def __init__(self, model_id: _Optional[str] = ..., task_type: _Optional[str] = ..., parameters: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class ToolExecutionConfig(_message.Message):
-    __slots__ = ("tool_id", "input_mappings")
+    __slots__ = ("tool_id", "input_mappings", "output_table_id")
     TOOL_ID_FIELD_NUMBER: _ClassVar[int]
     INPUT_MAPPINGS_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     tool_id: str
     input_mappings: _containers.RepeatedCompositeFieldContainer[ToolInputMapping]
-    def __init__(self, tool_id: _Optional[str] = ..., input_mappings: _Optional[_Iterable[_Union[ToolInputMapping, _Mapping]]] = ...) -> None: ...
+    output_table_id: int
+    def __init__(self, tool_id: _Optional[str] = ..., input_mappings: _Optional[_Iterable[_Union[ToolInputMapping, _Mapping]]] = ..., output_table_id: _Optional[int] = ...) -> None: ...
 
 class ToolInputMapping(_message.Message):
     __slots__ = ("tool_param", "skill_input_name", "static_value")

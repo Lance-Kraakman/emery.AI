@@ -532,6 +532,8 @@ export interface ToolExecutionConfig {
   toolId: string;
   /** Map skill inputs to tool parameters */
   inputMappings: ToolInputMapping[];
+  /** Table to store outputs (schema auto-discovered from response) */
+  outputTableId?: number | undefined;
 }
 
 /** Maps skill input to tool parameter */
@@ -4078,7 +4080,7 @@ export const TaskModelConfig_ParametersEntry: MessageFns<TaskModelConfig_Paramet
 };
 
 function createBaseToolExecutionConfig(): ToolExecutionConfig {
-  return { toolId: "", inputMappings: [] };
+  return { toolId: "", inputMappings: [], outputTableId: undefined };
 }
 
 export const ToolExecutionConfig: MessageFns<ToolExecutionConfig> = {
@@ -4088,6 +4090,9 @@ export const ToolExecutionConfig: MessageFns<ToolExecutionConfig> = {
     }
     for (const v of message.inputMappings) {
       ToolInputMapping.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.outputTableId !== undefined) {
+      writer.uint32(24).int32(message.outputTableId);
     }
     return writer;
   },
@@ -4115,6 +4120,14 @@ export const ToolExecutionConfig: MessageFns<ToolExecutionConfig> = {
           message.inputMappings.push(ToolInputMapping.decode(reader, reader.uint32()));
           continue;
         }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.outputTableId = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4130,6 +4143,7 @@ export const ToolExecutionConfig: MessageFns<ToolExecutionConfig> = {
       inputMappings: globalThis.Array.isArray(object?.inputMappings)
         ? object.inputMappings.map((e: any) => ToolInputMapping.fromJSON(e))
         : [],
+      outputTableId: isSet(object.outputTableId) ? globalThis.Number(object.outputTableId) : undefined,
     };
   },
 
@@ -4141,6 +4155,9 @@ export const ToolExecutionConfig: MessageFns<ToolExecutionConfig> = {
     if (message.inputMappings?.length) {
       obj.inputMappings = message.inputMappings.map((e) => ToolInputMapping.toJSON(e));
     }
+    if (message.outputTableId !== undefined) {
+      obj.outputTableId = Math.round(message.outputTableId);
+    }
     return obj;
   },
 
@@ -4151,6 +4168,7 @@ export const ToolExecutionConfig: MessageFns<ToolExecutionConfig> = {
     const message = createBaseToolExecutionConfig();
     message.toolId = object.toolId ?? "";
     message.inputMappings = object.inputMappings?.map((e) => ToolInputMapping.fromPartial(e)) || [];
+    message.outputTableId = object.outputTableId ?? undefined;
     return message;
   },
 };

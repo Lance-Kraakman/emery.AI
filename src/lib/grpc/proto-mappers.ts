@@ -502,7 +502,8 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
         toolParam: m.toolParam,
         skillInputName: m.skillInputName || '',
         staticValue: m.staticValue !== undefined ? String(m.staticValue) : ''
-      }))
+      })),
+      outputTableId: skill.toolExecutionConfig.outputTableId
     } : undefined,
     // Map write config for 'write' execution type
     writeConfig: skill.writeConfig ? {
@@ -621,7 +622,8 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
           toolParam: m.toolParam,
           skillInputName: m.skillInputName || '',
           staticValue: m.staticValue !== undefined ? String(m.staticValue) : ''
-        }))
+        })),
+        outputTableId: step.toolExecutionConfig.outputTableId
       } : undefined,
       taskModelConfig: step.taskModelConfig ? {
         modelId: step.taskModelConfig.modelId || '',
