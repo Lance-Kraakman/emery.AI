@@ -1,13 +1,13 @@
 'use client';
 
 import React from 'react';
-import { useRouter } from 'next/navigation';
-import { Save, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ShareButton } from '@/components/permissions/ShareButton';
 import { ShareDialog } from '@/components/permissions/ShareDialog';
 import { ModelSelector } from '@/components/ai/ModelSelector';
+import { SaveStatusIndicator } from '@/components/ui/save-status-indicator';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { SkillEditor } from './SkillEditor';
@@ -20,22 +20,19 @@ interface EditSkillViewProps {
 
 /**
  * Full-page skill editor view with minimal header.
- * Header contains: back, name, model, delete, share, save.
- * Canvas fills the remaining height.
+ * Header contains: name, save status, model, delete, share.
+ * Canvas fills the remaining height. Auto-saves on changes.
  */
 export function EditSkillView({ agent, skill }: EditSkillViewProps) {
-  const router = useRouter();
-
   const {
     formData,
     setFormData,
-    isSaving,
+    saveStatus,
     isDeleting,
     shareDialogOpen,
     setShareDialogOpen,
     availableSkills,
     organizationTier,
-    handleSave,
     handleDelete,
   } = useSkillEditor({
     skill,
@@ -53,6 +50,8 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
           placeholder="Skill name..."
           className="h-8 w-64 text-sm"
         />
+
+        <SaveStatusIndicator status={saveStatus} />
 
         <ModelSelector
           value={formData.model}
@@ -85,16 +84,6 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
           variant="outline"
           size="sm"
         />
-
-        <Button
-          onClick={handleSave}
-          disabled={isSaving}
-          size="sm"
-          className="gap-1.5 h-8"
-        >
-          <Save className="h-3.5 w-3.5" />
-          {isSaving ? 'Saving...' : 'Save'}
-        </Button>
       </div>
 
       {/* Full-height Editor */}
