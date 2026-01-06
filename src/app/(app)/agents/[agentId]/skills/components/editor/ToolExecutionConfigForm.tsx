@@ -1,14 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Search, ChevronDown, ChevronRight, Plus, X, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Search, Loader2, X, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { getPipedreamTools, getPipedreamToolById, type PipedreamToolMetadata, type PipedreamToolsGrouped } from '@/app/actions/tools';
+import { searchPipedreamTools, getPipedreamApps, getPipedreamToolById, type PipedreamToolMetadata } from '@/app/actions/tools';
 import type { ToolExecutionConfig, ToolInputMapping, InputDefinition } from '@/ddd/domain/skills/entities/skill';
 
 interface ToolExecutionConfigFormProps {
@@ -19,9 +19,15 @@ interface ToolExecutionConfigFormProps {
   disabled?: boolean;
 }
 
+interface AppOption {
+  id: string;
+  name: string;
+  toolCount: number;
+}
+
 /**
  * Form for configuring direct tool execution (executionType='tool').
- * Allows selecting a Pipedream tool and mapping skill inputs to tool parameters.
+ * Uses paginated search for performance with large tool sets.
  */
 export function ToolExecutionConfigForm({
   value,
@@ -30,28 +36,75 @@ export function ToolExecutionConfigForm({
   onInputDefinitionsChange,
   disabled
 }: ToolExecutionConfigFormProps) {
-  const [toolsGrouped, setToolsGrouped] = useState<PipedreamToolsGrouped>({});
+  const [tools, setTools] = useState<PipedreamToolMetadata[]>([]);
+  const [apps, setApps] = useState<AppOption[]>([]);
   const [selectedTool, setSelectedTool] = useState<PipedreamToolMetadata | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
-  const [isLoading, setIsLoading] = useState(true);
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isLoadingApps, setIsLoadingApps] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [offset, setOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const LIMIT = 20;
 
-  // Load Pipedream tools on mount
+  // Load apps on mount (small list, ok to load all)
   useEffect(() => {
-    async function loadTools() {
-      setIsLoading(true);
-      setError(null);
-      const result = await getPipedreamTools();
+    async function loadApps() {
+      setIsLoadingApps(true);
+      const result = await getPipedreamApps();
       if (result.success && result.data) {
-        setToolsGrouped(result.data);
-      } else {
-        setError(result.error || 'Failed to load tools');
+        setApps(result.data);
       }
-      setIsLoading(false);
+      setIsLoadingApps(false);
     }
-    loadTools();
+    loadApps();
   }, []);
+
+  // Search tools with debounce
+  const searchTools = useCallback(async (query: string, appId: string | null, newOffset: number = 0) => {
+    setIsSearching(true);
+    setError(null);
+
+    const result = await searchPipedreamTools({
+      query,
+      appId: appId || undefined,
+      limit: LIMIT,
+      offset: newOffset,
+    });
+
+    if (result.success && result.data) {
+      if (newOffset === 0) {
+        setTools(result.data.tools);
+      } else {
+        setTools(prev => [...prev, ...result.data!.tools]);
+      }
+      setHasMore(result.data.hasMore);
+      setOffset(newOffset);
+    } else {
+      setError(result.error || 'Failed to search tools');
+    }
+
+    setIsSearching(false);
+  }, []);
+
+  // Debounced search on query/app change
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      searchTools(searchQuery, selectedAppId, 0);
+    }, 300);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery, selectedAppId, searchTools]);
 
   // Load selected tool details when value changes
   useEffect(() => {
@@ -60,8 +113,6 @@ export function ToolExecutionConfigForm({
         const result = await getPipedreamToolById(value.toolId);
         if (result.success && result.data) {
           setSelectedTool(result.data);
-          // Expand the app containing this tool
-          setExpandedApps(prev => new Set([...prev, result.data!.app]));
         }
       } else {
         setSelectedTool(null);
@@ -70,32 +121,12 @@ export function ToolExecutionConfigForm({
     loadSelectedTool();
   }, [value?.toolId]);
 
-  // Filter tools by search query
-  const filteredTools = useMemo(() => {
-    if (!searchQuery.trim()) return toolsGrouped;
-
-    const query = searchQuery.toLowerCase();
-    const filtered: PipedreamToolsGrouped = {};
-
-    for (const [appName, tools] of Object.entries(toolsGrouped)) {
-      const matchingTools = tools.filter(
-        tool =>
-          tool.name.toLowerCase().includes(query) ||
-          tool.description.toLowerCase().includes(query) ||
-          appName.toLowerCase().includes(query)
-      );
-      if (matchingTools.length > 0) {
-        filtered[appName] = matchingTools;
-      }
+  // Load more tools
+  const loadMore = useCallback(() => {
+    if (!isSearching && hasMore) {
+      searchTools(searchQuery, selectedAppId, offset + LIMIT);
     }
-
-    return filtered;
-  }, [toolsGrouped, searchQuery]);
-
-  // Get sorted app names
-  const sortedAppNames = useMemo(() => {
-    return Object.keys(filteredTools).sort((a, b) => a.localeCompare(b));
-  }, [filteredTools]);
+  }, [isSearching, hasMore, searchQuery, selectedAppId, offset, searchTools]);
 
   // Handle tool selection
   const handleSelectTool = (tool: PipedreamToolMetadata) => {
@@ -163,33 +194,12 @@ export function ToolExecutionConfigForm({
     });
   };
 
-  // Toggle app expansion
-  const toggleApp = (appName: string) => {
-    setExpandedApps(prev => {
-      const next = new Set(prev);
-      if (next.has(appName)) {
-        next.delete(appName);
-      } else {
-        next.add(appName);
-      }
-      return next;
-    });
-  };
-
   // Clear tool selection
   const handleClearTool = () => {
     setSelectedTool(null);
     onChange(undefined);
     onInputDefinitionsChange([]);
   };
-
-  if (isLoading) {
-    return (
-      <div className="p-4 text-center text-muted-foreground">
-        Loading tools...
-      </div>
-    );
-  }
 
   if (error) {
     return (
@@ -285,8 +295,8 @@ export function ToolExecutionConfigForm({
       ) : (
         /* Tool Selector */
         <div className="border rounded-lg">
-          {/* Search */}
-          <div className="p-3 border-b">
+          {/* Search and Filter */}
+          <div className="p-3 border-b space-y-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -297,61 +307,81 @@ export function ToolExecutionConfigForm({
                 disabled={disabled}
               />
             </div>
+            {/* App Filter */}
+            <Select
+              value={selectedAppId || '__all__'}
+              onValueChange={(v) => setSelectedAppId(v === '__all__' ? null : v)}
+              disabled={disabled || isLoadingApps}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="All apps" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All apps</SelectItem>
+                {apps.map(app => (
+                  <SelectItem key={app.id} value={app.id}>
+                    <span className="capitalize">{app.name}</span>
+                    <span className="text-muted-foreground ml-1">({app.toolCount})</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Tool List */}
           <div className="max-h-[300px] overflow-y-auto">
-            {sortedAppNames.length === 0 ? (
+            {isSearching && tools.length === 0 ? (
+              <div className="p-4 text-center text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Searching...
+              </div>
+            ) : tools.length === 0 ? (
               <div className="p-4 text-center text-muted-foreground">
-                No tools found
+                {searchQuery || selectedAppId ? 'No tools found' : 'Start typing to search tools'}
               </div>
             ) : (
-              sortedAppNames.map(appName => (
-                <div key={appName} className="border-b last:border-b-0">
-                  {/* App Header */}
+              <>
+                {tools.map(tool => (
                   <button
+                    key={tool.id}
                     type="button"
-                    onClick={() => toggleApp(appName)}
-                    className="w-full flex items-center gap-2 p-3 hover:bg-accent/50 transition-colors"
+                    onClick={() => handleSelectTool(tool)}
+                    className={cn(
+                      'w-full text-left p-3 hover:bg-accent/50 transition-colors border-b last:border-b-0',
+                      'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-inset'
+                    )}
                     disabled={disabled}
                   >
-                    {expandedApps.has(appName) ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <span className="font-medium capitalize">
-                      {appName.replace(/^_/, '').replace(/_/g, ' ')}
-                    </span>
-                    <Badge variant="secondary" className="text-xs ml-auto">
-                      {filteredTools[appName].length}
-                    </Badge>
-                  </button>
-
-                  {/* App Tools */}
-                  {expandedApps.has(appName) && (
-                    <div className="bg-muted/30">
-                      {filteredTools[appName].map(tool => (
-                        <button
-                          key={tool.id}
-                          type="button"
-                          onClick={() => handleSelectTool(tool)}
-                          className={cn(
-                            'w-full text-left p-3 pl-10 hover:bg-accent/50 transition-colors border-t',
-                            'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-inset'
-                          )}
-                          disabled={disabled}
-                        >
-                          <div className="font-medium text-sm">{tool.name}</div>
-                          <div className="text-xs text-muted-foreground line-clamp-1">
-                            {tool.description}
-                          </div>
-                        </button>
-                      ))}
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{tool.name}</span>
+                      <Badge variant="secondary" className="text-[10px] capitalize">
+                        {tool.app.replace(/^_/, '').replace(/_/g, ' ')}
+                      </Badge>
                     </div>
-                  )}
-                </div>
-              ))
+                    <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                      {tool.description}
+                    </div>
+                  </button>
+                ))}
+                {/* Load More */}
+                {hasMore && (
+                  <button
+                    type="button"
+                    onClick={loadMore}
+                    disabled={isSearching}
+                    className="w-full p-3 text-center text-sm text-primary hover:bg-accent/50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {isSearching ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      'Load more'
+                    )}
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>

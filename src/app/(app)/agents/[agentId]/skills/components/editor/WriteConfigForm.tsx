@@ -111,28 +111,36 @@ export function WriteConfigForm({
     });
   };
 
-  // Auto-create skill inputs from table fields
+  // Auto-map workflow variables to table fields
   const handleAutoCreateInputs = () => {
     if (!fields.length) return;
 
-    // Create skill inputs from fields
-    const newInputs: InputDefinition[] = fields.map(field => ({
-      name: field.name,
-      type: mapFieldTypeToSkillType(field.type),
-      required: field.required ?? false
-    }));
+    const mappings: WriteFieldMapping[] = [];
 
-    onInputDefinitionsChange(newInputs);
+    for (const field of fields) {
+      // Normalize field name for matching (lowercase, underscores)
+      const normalizedFieldName = field.name.toLowerCase().replace(/\s+/g, '_');
 
-    // Create field mappings
-    const mappings: WriteFieldMapping[] = fields.map(field => ({
-      skillInputName: field.name,
-      targetFieldId: field.id
-    }));
+      // Find a workflow variable that matches this field name
+      // Match either by suffix (e.g., "read_123.name" matches "name")
+      // or by exact name (e.g., "name" matches "name")
+      const matchingVar = workflowVariables.find(v => {
+        const varName = v.name.toLowerCase();
+        // Check if variable ends with .fieldName or is exactly fieldName
+        return varName.endsWith(`.${normalizedFieldName}`) || varName === normalizedFieldName;
+      });
+
+      if (matchingVar) {
+        mappings.push({
+          skillInputName: matchingVar.name, // Use full variable name like "read_123.name"
+          targetFieldId: field.id,
+        });
+      }
+    }
 
     onChange({
       ...value!,
-      fieldMappings: mappings
+      fieldMappings: mappings,
     });
   };
 

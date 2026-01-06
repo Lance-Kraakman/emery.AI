@@ -347,6 +347,129 @@ export async function getPipedreamTools(): Promise<Result<PipedreamToolsGrouped>
 }
 
 /**
+ * Search Pipedream tools with pagination - for performance with large tool sets
+ * AIDEV-NOTE: Uses search on demand instead of loading all tools upfront
+ */
+export async function searchPipedreamTools(options: {
+  query?: string;
+  appId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<Result<{ tools: PipedreamToolMetadata[]; hasMore: boolean; totalCount: number }>> {
+  try {
+    await requireAuth();
+
+    const { query = '', appId, limit = 20, offset = 0 } = options;
+
+    // Build WHERE conditions
+    const conditions = [sql`${tools.config}->>'type' = 'oauth'`];
+
+    if (appId) {
+      conditions.push(eq(tools.appId, appId));
+    }
+
+    if (query.trim()) {
+      const searchPattern = `%${query.toLowerCase()}%`;
+      conditions.push(
+        sql`(LOWER(${tools.displayName}) LIKE ${searchPattern} OR LOWER(${tools.description}) LIKE ${searchPattern} OR LOWER(${tools.appId}) LIKE ${searchPattern})`
+      );
+    }
+
+    // Get total count first
+    const countResult = await db.select({ count: sql<number>`count(*)` })
+      .from(tools)
+      .where(and(...conditions));
+    const totalCount = Number(countResult[0]?.count || 0);
+
+    // Query with pagination
+    const rows = await db.select({
+      id: tools.id,
+      displayName: tools.displayName,
+      description: tools.description,
+      appId: tools.appId,
+      config: tools.config,
+    })
+      .from(tools)
+      .where(and(...conditions))
+      .orderBy(tools.displayName)
+      .limit(limit)
+      .offset(offset);
+
+    // Convert to PipedreamToolMetadata
+    const toolsData: PipedreamToolMetadata[] = rows.map((row: typeof rows[number]) => {
+      const config = row.config as OAuthToolDefinitionData;
+      return {
+        id: row.id,
+        app: row.appId,
+        name: row.displayName,
+        description: row.description || '',
+        type: 'action' as const,
+        inputs: config.parameters ? Object.fromEntries(
+          Object.entries(config.parameters).map(([key, param]) => [
+            key,
+            {
+              type: param.type,
+              description: param.description || '',
+              required: param.required,
+            }
+          ])
+        ) : {},
+      };
+    });
+
+    return {
+      success: true,
+      data: {
+        tools: toolsData,
+        hasMore: offset + limit < totalCount,
+        totalCount,
+      }
+    };
+  } catch (error: unknown) {
+    console.error('[ToolActions] Error searching Pipedream tools:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to search Pipedream tools'
+    };
+  }
+}
+
+/**
+ * Get available Pipedream app names for filtering
+ */
+export async function getPipedreamApps(): Promise<Result<{ id: string; name: string; toolCount: number }[]>> {
+  try {
+    await requireAuth();
+
+    const apps = await db.select({
+      appId: tools.appId,
+      count: sql<number>`count(*)`,
+    })
+      .from(tools)
+      .where(sql`${tools.config}->>'type' = 'oauth'`)
+      .groupBy(tools.appId)
+      .orderBy(tools.appId);
+
+    const appList = apps.map((row: typeof apps[number]) => ({
+      id: row.appId,
+      name: row.appId.replace(/^_/, '').replace(/_/g, ' '),
+      toolCount: Number(row.count),
+    }));
+
+    return {
+      success: true,
+      data: appList,
+    };
+  } catch (error: unknown) {
+    console.error('[ToolActions] Error getting Pipedream apps:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get Pipedream apps'
+    };
+  }
+}
+
+/**
  * Get a specific Pipedream tool by ID from the database
  */
 export async function getPipedreamToolById(toolId: string): Promise<Result<PipedreamToolMetadata | null>> {
