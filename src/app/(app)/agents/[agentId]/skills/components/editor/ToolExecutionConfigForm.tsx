@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Search, Loader2, X, AlertCircle } from 'lucide-react';
+import { Search, Loader2, X, AlertCircle, Play, Database, Plus } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -9,13 +9,24 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { searchPipedreamTools, getPipedreamApps, getPipedreamToolById, type PipedreamToolMetadata } from '@/app/actions/tools';
+import { getTables } from '@/app/actions/tables';
+import { getFields } from '@/app/actions/fields';
+import type { TableDTO } from '@/app/mappers/table-mapper';
+import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { ToolExecutionConfig, ToolInputMapping, InputDefinition } from '@/ddd/domain/skills/entities/skill';
+
+interface DiscoveredOutput {
+  name: string;
+  type: string;
+  tableName?: string;
+}
 
 interface ToolExecutionConfigFormProps {
   value: ToolExecutionConfig | undefined;
   onChange: (config: ToolExecutionConfig | undefined) => void;
   skillInputs: InputDefinition[];
   onInputDefinitionsChange: (inputs: InputDefinition[]) => void;
+  onDiscoveredOutputsChange?: (outputs: DiscoveredOutput[]) => void;
   disabled?: boolean;
 }
 
@@ -34,6 +45,7 @@ export function ToolExecutionConfigForm({
   onChange,
   skillInputs,
   onInputDefinitionsChange,
+  onDiscoveredOutputsChange,
   disabled
 }: ToolExecutionConfigFormProps) {
   const [tools, setTools] = useState<PipedreamToolMetadata[]>([]);
@@ -49,6 +61,13 @@ export function ToolExecutionConfigForm({
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const LIMIT = 20;
 
+  // Output table state
+  const [tables, setTables] = useState<TableDTO[]>([]);
+  const [isLoadingTables, setIsLoadingTables] = useState(false);
+  const [isTestRunning, setIsTestRunning] = useState(false);
+  const [testRunError, setTestRunError] = useState<string | null>(null);
+  const [discoveredOutputs, setDiscoveredOutputs] = useState<DiscoveredOutput[]>([]);
+
   // Load apps on mount (small list, ok to load all)
   useEffect(() => {
     async function loadApps() {
@@ -61,6 +80,22 @@ export function ToolExecutionConfigForm({
     }
     loadApps();
   }, []);
+
+  // Load tables when tool is selected
+  useEffect(() => {
+    async function loadTables() {
+      if (!selectedTool) return;
+      setIsLoadingTables(true);
+      try {
+        const tablesData = await getTables();
+        setTables(tablesData || []);
+      } catch (err) {
+        console.error('Error loading tables:', err);
+      }
+      setIsLoadingTables(false);
+    }
+    loadTables();
+  }, [selectedTool]);
 
   // Search tools with debounce
   const searchTools = useCallback(async (query: string, appId: string | null, newOffset: number = 0) => {
@@ -199,6 +234,87 @@ export function ToolExecutionConfigForm({
     setSelectedTool(null);
     onChange(undefined);
     onInputDefinitionsChange([]);
+    setDiscoveredOutputs([]);
+    onDiscoveredOutputsChange?.([]);
+  };
+
+  // Handle output table selection
+  const handleOutputTableChange = async (tableId: number | null) => {
+    if (!value) return;
+
+    onChange({
+      ...value,
+      outputTableId: tableId || undefined
+    });
+
+    // If table selected, load its columns as discovered outputs
+    if (tableId) {
+      const selectedTable = tables.find(t => t.id === tableId);
+      if (selectedTable) {
+        try {
+          const fields = await getFields(tableId);
+          // Filter out system fields (id, etc.)
+          const writableFields = fields.filter(f => f.name !== 'id' && f.type !== 'autonumber');
+          const outputs: DiscoveredOutput[] = writableFields.map(f => ({
+            name: f.name,
+            type: f.type,
+            tableName: selectedTable.name
+          }));
+          setDiscoveredOutputs(outputs);
+          onDiscoveredOutputsChange?.(outputs);
+        } catch (err) {
+          console.error('Error loading table fields:', err);
+        }
+      }
+    } else {
+      setDiscoveredOutputs([]);
+      onDiscoveredOutputsChange?.([]);
+    }
+  };
+
+  // Handle test run to discover output schema
+  const handleTestRun = async () => {
+    if (!value?.toolId || !value?.outputTableId) {
+      setTestRunError('Select a tool and output table first');
+      return;
+    }
+
+    setIsTestRunning(true);
+    setTestRunError(null);
+
+    try {
+      const response = await fetch('/api/tools/test-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toolId: value.toolId,
+          tableId: value.outputTableId,
+          // Use empty/default values for required inputs
+          inputs: {}
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Test run failed');
+      }
+
+      // Update discovered outputs from response
+      if (result.discoveredColumns) {
+        const outputs: DiscoveredOutput[] = result.discoveredColumns.map((col: { name: string; type: string }) => ({
+          name: col.name,
+          type: col.type,
+          tableName: tables.find(t => t.id === value.outputTableId)?.name
+        }));
+        setDiscoveredOutputs(outputs);
+        onDiscoveredOutputsChange?.(outputs);
+      }
+    } catch (err) {
+      setTestRunError(err instanceof Error ? err.message : 'Test run failed');
+    } finally {
+      setIsTestRunning(false);
+    }
   };
 
   if (error) {
@@ -291,6 +407,83 @@ export function ToolExecutionConfigForm({
               </div>
             </div>
           )}
+
+          {/* Output Table Connection */}
+          <div className="mt-4 space-y-3 pt-3 border-t">
+            <div>
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <Database className="h-3.5 w-3.5" />
+                Output Table
+              </Label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Connect a table to store outputs. Run test to auto-discover columns.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Select
+                value={value?.outputTableId?.toString() || '__none__'}
+                onValueChange={(val) => {
+                  if (val === '__none__') {
+                    handleOutputTableChange(null);
+                  } else {
+                    handleOutputTableChange(parseInt(val));
+                  }
+                }}
+                disabled={disabled || isLoadingTables}
+              >
+                <SelectTrigger className="flex-1 h-8 text-sm">
+                  <SelectValue placeholder="Select table..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No output table</SelectItem>
+                  {tables.map(table => (
+                    <SelectItem key={table.id} value={table.id.toString()}>
+                      {table.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTestRun}
+                disabled={disabled || !value?.outputTableId || isTestRunning}
+                className="h-8 px-3"
+              >
+                {isTestRunning ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <>
+                    <Play className="h-3 w-3 mr-1" />
+                    Test
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Test run error */}
+            {testRunError && (
+              <div className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {testRunError}
+              </div>
+            )}
+
+            {/* Discovered outputs */}
+            {discoveredOutputs.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Discovered Outputs</Label>
+                <div className="flex flex-wrap gap-1">
+                  {discoveredOutputs.map((output) => (
+                    <Badge key={output.name} variant="secondary" className="text-[10px]">
+                      {output.name}
+                      <span className="text-muted-foreground ml-1">({output.type})</span>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         /* Tool Selector */

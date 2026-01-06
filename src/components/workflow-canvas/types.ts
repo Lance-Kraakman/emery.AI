@@ -115,6 +115,12 @@ export interface OperationNodeData extends BaseNodeData {
  */
 export interface ToolNodeData extends BaseNodeData {
   toolExecutionConfig?: ToolExecutionConfig;
+  /** Discovered outputs from connected table (populated by UI after test run) */
+  discoveredOutputs?: Array<{
+    name: string;
+    type: string;
+    tableName?: string;
+  }>;
 }
 
 /**

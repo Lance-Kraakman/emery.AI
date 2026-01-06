@@ -18,6 +18,7 @@ import type {
   ConditionNodeData,
   SkillRefNodeData,
 } from '../types';
+import { TASK_OUTPUT_SCHEMAS } from '@/lib/constants/task-output-schemas';
 
 /**
  * Inferred output from a node
@@ -26,6 +27,29 @@ interface InferredOutput {
   name: string;
   description: string;
   type: 'text' | 'number' | 'json' | 'boolean';
+}
+
+/**
+ * Map output types from various sources to InferredOutput type
+ */
+function mapOutputType(type?: string): InferredOutput['type'] {
+  switch (type?.toLowerCase()) {
+    case 'number':
+    case 'integer':
+      return 'number';
+    case 'boolean':
+      return 'boolean';
+    case 'json':
+    case 'document':
+    case 'embedding':
+    case 'file':
+    case 'relation':
+    case 'object':
+    case 'array':
+      return 'json';
+    default:
+      return 'text';
+  }
 }
 
 /**
@@ -59,7 +83,16 @@ export function getNodeOutputs(node: WorkflowNode): InferredOutput[] {
     }
 
     case 'agentic': {
-      // Agentic nodes output the LLM response
+      // Agentic nodes use user-defined outputDefs
+      const data = node.data as AgenticNodeData;
+      if (data.outputDefs?.length) {
+        return data.outputDefs.map((output) => ({
+          name: output.name,
+          description: output.description || `Output from ${node.data.name}`,
+          type: mapOutputType(output.type),
+        }));
+      }
+      // Fallback for nodes without defined outputs
       return [
         {
           name: 'result',
@@ -70,7 +103,18 @@ export function getNodeOutputs(node: WorkflowNode): InferredOutput[] {
     }
 
     case 'tool': {
-      // Tool nodes output the tool response
+      // Tool nodes use discovered outputs from connected table
+      const data = node.data as ToolNodeData;
+      if (data.discoveredOutputs?.length) {
+        return data.discoveredOutputs.map((output) => ({
+          name: output.name,
+          description: output.tableName
+            ? `Column from ${output.tableName}`
+            : 'Tool output',
+          type: mapOutputType(output.type),
+        }));
+      }
+      // Fallback for nodes without discovered outputs
       return [
         {
           name: 'result',
@@ -81,9 +125,18 @@ export function getNodeOutputs(node: WorkflowNode): InferredOutput[] {
     }
 
     case 'operation': {
-      // Operation nodes output the model response
+      // Operation nodes use TASK_OUTPUT_SCHEMAS based on task type
       const data = node.data as OperationNodeData;
       const taskType = data.taskModelConfig?.taskType;
+
+      if (taskType && TASK_OUTPUT_SCHEMAS[taskType]) {
+        return TASK_OUTPUT_SCHEMAS[taskType].map((field) => ({
+          name: field.field,
+          description: field.description || `${taskType} output`,
+          type: mapOutputType(field.type),
+        }));
+      }
+      // Fallback for unknown task types
       return [
         {
           name: 'result',

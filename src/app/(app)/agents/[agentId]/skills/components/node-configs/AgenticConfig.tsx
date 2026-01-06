@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
 import { uploadSkillAttachment, deleteSkillAttachment } from '@/app/actions/skills';
+import { OutputDefinitionsSection } from '../editor/OutputDefinitionsSection';
 import type { ConfigWithVariables, AgenticNodeData } from './types';
 
 interface AgenticConfigProps extends ConfigWithVariables<AgenticNodeData> {
@@ -152,6 +153,19 @@ export function AgenticConfig({
           </div>
         </div>
       )}
+
+      {/* Outputs - available downstream as variables */}
+      <div className="space-y-1 pt-2 border-t">
+        <Label className="text-xs">Outputs</Label>
+        <p className="text-[10px] text-muted-foreground">
+          Define values to extract. Available downstream as variables.
+        </p>
+        <OutputDefinitionsSection
+          outputs={data.outputDefs || []}
+          onOutputsChange={(outputs) => onUpdate({ outputDefs: outputs })}
+          isReadOnly={disabled}
+        />
+      </div>
     </div>
   );
 }

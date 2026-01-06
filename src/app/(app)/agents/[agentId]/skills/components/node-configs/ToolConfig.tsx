@@ -18,6 +18,7 @@ export function ToolConfig({
       onChange={(toolExecutionConfig) => onUpdate({ toolExecutionConfig })}
       skillInputs={skillInputs}
       onInputDefinitionsChange={(inputs) => onUpdate({ inputDefs: inputs })}
+      onDiscoveredOutputsChange={(outputs) => onUpdate({ discoveredOutputs: outputs })}
       disabled={disabled}
     />
   );

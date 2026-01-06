@@ -179,6 +179,7 @@ export interface ToolInputMapping {
 export interface ToolExecutionConfig {
   toolId: string;                    // e.g., 'gmail-send-email', 'slack-send-message'
   inputMappings: ToolInputMapping[]; // Map skill inputs → tool params
+  outputTableId?: number;            // Connected table for outputs (schema auto-discovered)
 }
 
 // =============================================================================

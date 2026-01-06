@@ -252,6 +252,7 @@ message TaskModelConfig {
 message ToolExecutionConfig {
   string tool_id = 1;                  // Pipedream tool ID (e.g., 'gmail-send-email', 'slack-send-message')
   repeated ToolInputMapping input_mappings = 2; // Map skill inputs to tool parameters
+  optional int32 output_table_id = 3;  // Table to store outputs (schema auto-discovered from response)
 }
 
 // Maps skill input to tool parameter

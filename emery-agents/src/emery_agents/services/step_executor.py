@@ -32,6 +32,46 @@ _CONDITION_PATTERN = re.compile(
 )
 
 
+def _flatten_json(obj: Any, prefix: str = '', max_depth: int = 5) -> Dict[str, Any]:
+    """Flatten nested JSON object into flat key-value structure.
+
+    Used for converting tool responses into named outputs.
+    Nested keys are joined with underscores.
+    """
+    result: Dict[str, Any] = {}
+
+    if max_depth <= 0 or obj is None:
+        if prefix:
+            result[prefix] = obj
+        return result
+
+    if not isinstance(obj, dict):
+        if prefix:
+            result[prefix] = obj
+        else:
+            result['result'] = obj
+        return result
+
+    for key, value in obj.items():
+        new_key = f"{prefix}_{key}" if prefix else key
+
+        if value is None:
+            result[new_key] = None
+        elif isinstance(value, (str, int, float, bool)):
+            result[new_key] = value
+        elif isinstance(value, list):
+            # Store arrays as-is (JSON)
+            result[new_key] = value
+        elif isinstance(value, dict):
+            # Recurse into nested objects
+            nested = _flatten_json(value, new_key, max_depth - 1)
+            result.update(nested)
+        else:
+            result[new_key] = str(value)
+
+    return result
+
+
 # =============================================================================
 # Internal Dataclasses - Clean types for step execution
 # =============================================================================
@@ -117,6 +157,7 @@ class ToolExecutionConfig:
     """Tool execution configuration for direct tool call steps."""
     tool_id: str = ""
     input_mappings: List[Any] = field(default_factory=list)
+    output_table_id: Optional[int] = None  # Table to store flattened outputs
 
 
 @dataclass
@@ -240,7 +281,8 @@ class Step:
         if proto.HasField('tool_execution_config') and proto.tool_execution_config.tool_id:
             tool_execution_config = ToolExecutionConfig(
                 tool_id=proto.tool_execution_config.tool_id,
-                input_mappings=list(proto.tool_execution_config.input_mappings)
+                input_mappings=list(proto.tool_execution_config.input_mappings),
+                output_table_id=proto.tool_execution_config.output_table_id if proto.tool_execution_config.HasField('output_table_id') else None
             )
 
         task_model_config = None
@@ -1244,7 +1286,11 @@ class StepExecutorService:
         api_key: Optional[str],
         organization_id: Optional[int]
     ) -> Any:
-        """Execute a direct tool call step (no LLM)."""
+        """Execute a direct tool call step (no LLM).
+
+        If output_table_id is configured, the JSON response is flattened
+        and returned as named outputs matching table columns.
+        """
         tool_config = step.tool_execution_config
         if not tool_config or not tool_config.tool_id:
             raise ValueError(f"Tool step '{step.name}' missing tool_id")
@@ -1279,12 +1325,22 @@ class StepExecutorService:
         result = tool.forward(**tool_inputs)
         logger.info(f"✅ Step {step.name}: tool execution complete")
 
+        # Convert result to dict if needed
         if isinstance(result, dict):
-            return result
+            result_dict = result
         elif isinstance(result, str):
-            return {"result": result}
+            result_dict = {"result": result}
         else:
-            return {"result": str(result)}
+            result_dict = {"result": str(result)}
+
+        # If output table is configured, flatten the response for named outputs
+        # The flattened keys become available as workflow variables (e.g., {{tool_1.threadId}})
+        if tool_config.output_table_id:
+            flattened = _flatten_json(result_dict)
+            logger.info(f"📊 Step {step.name}: flattened to {len(flattened)} outputs for table {tool_config.output_table_id}")
+            return flattened
+
+        return result_dict
 
     async def _execute_operation_step(
         self,
