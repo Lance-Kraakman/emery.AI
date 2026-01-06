@@ -47,6 +47,7 @@ export const ConditionNode = memo(function ConditionNode({
       selected={selected}
       theme="condition"
       outputHandles={outputHandles}
+      isDisabled={data.isDisabled}
     />
   );
 });

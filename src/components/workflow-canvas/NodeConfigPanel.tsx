@@ -49,7 +49,22 @@ export function NodeConfigPanel({
     );
   }
 
-  const { type, data } = selectedNode;
+  // Sticky notes don't have config panel
+  if (selectedNode.type === 'sticky') {
+    return (
+      <Card className="shadow-lg">
+        <CardContent className="p-6 text-center text-muted-foreground">
+          <Settings2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">Sticky note selected</p>
+          <p className="text-xs mt-1">Double-click to edit</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { type } = selectedNode;
+  // After sticky check, we know data is WorkflowNodeData
+  const data = selectedNode.data as import('./types').WorkflowNodeData;
 
   const handleUpdate = (updates: Record<string, any>) => {
     onUpdateNode(nodeId!, updates);

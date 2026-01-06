@@ -60,7 +60,19 @@ export function NodeConfigContent({
   skillId,
   disabled = false,
 }: NodeConfigContentProps) {
-  const { type, data } = node;
+  // Sticky notes don't have config content
+  if (node.type === 'sticky') {
+    return (
+      <div className="p-4 text-center text-muted-foreground">
+        <p className="text-sm">Sticky note selected</p>
+        <p className="text-xs mt-1">Double-click to edit</p>
+      </div>
+    );
+  }
+
+  const { type } = node;
+  // After sticky check, we know data is WorkflowNodeData
+  const data = node.data as WorkflowNodeData;
 
   const handleUpdate = (updates: Partial<WorkflowNodeData>) => {
     onUpdateNode(node.id, updates);

@@ -16,5 +16,5 @@ export const WriteNode = memo(function WriteNode({
   data,
   selected,
 }: WriteNodeProps) {
-  return <BaseNode name={data.name} selected={selected} theme="write" />;
+  return <BaseNode name={data.name} selected={selected} theme="write" isDisabled={data.isDisabled} />;
 });

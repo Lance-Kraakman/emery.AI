@@ -16,5 +16,5 @@ export const LoopNode = memo(function LoopNode({
   data,
   selected,
 }: LoopNodeProps) {
-  return <BaseNode name={data.name} selected={selected} theme="loop" />;
+  return <BaseNode name={data.name} selected={selected} theme="loop" isDisabled={data.isDisabled} />;
 });

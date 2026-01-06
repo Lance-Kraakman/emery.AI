@@ -16,5 +16,5 @@ export const SkillRefNode = memo(function SkillRefNode({
   data,
   selected,
 }: SkillRefNodeProps) {
-  return <BaseNode name={data.name} selected={selected} theme="skill_ref" />;
+  return <BaseNode name={data.name} selected={selected} theme="skill_ref" isDisabled={data.isDisabled} />;
 });

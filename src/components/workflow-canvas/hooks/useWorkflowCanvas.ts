@@ -33,6 +33,12 @@ interface UseWorkflowCanvasProps {
   onChange: (steps: SkillStep[]) => void;
 }
 
+// History state for undo/redo
+interface HistoryState {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+}
+
 export function useWorkflowCanvas({
   steps,
   onChange,
@@ -41,8 +47,19 @@ export function useWorkflowCanvas({
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<WorkflowEdge>([]);
 
-  // Selection state
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  // Multi-selection state (Set for O(1) lookups)
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
+
+  // Undo/Redo history (limited to 50 states)
+  const [past, setPast] = useState<HistoryState[]>([]);
+  const [future, setFuture] = useState<HistoryState[]>([]);
+  const MAX_HISTORY = 50;
+
+  // Clipboard state (localStorage key for cross-tab support)
+  const CLIPBOARD_KEY = 'workflow-canvas-clipboard';
+
+  // Mouse position tracking for paste
+  const mousePositionRef = useRef<XYPosition>({ x: 100, y: 100 });
 
   // Track if we're syncing from parent to prevent loops
   const isSyncingFromParent = useRef(false);
@@ -105,6 +122,53 @@ export function useWorkflowCanvas({
   }, [nodes, edges, syncToParent]);
 
   // ==========================================================================
+  // History Management (Undo/Redo) - Must be defined before node operations
+  // ==========================================================================
+
+  /**
+   * Push current state to history stack
+   */
+  const pushHistory = useCallback(() => {
+    setPast((p) => {
+      const newPast = [...p.slice(-(MAX_HISTORY - 1)), { nodes, edges }];
+      return newPast;
+    });
+    setFuture([]); // Clear redo stack on new action
+  }, [nodes, edges]);
+
+  /**
+   * Undo last action
+   */
+  const undo = useCallback(() => {
+    if (past.length === 0) return;
+
+    const previous = past[past.length - 1];
+    const newPast = past.slice(0, -1);
+
+    setPast(newPast);
+    setFuture((f) => [{ nodes, edges }, ...f]);
+    setNodes(previous.nodes);
+    setEdges(previous.edges);
+    setSelectedNodeIds(new Set());
+  }, [past, nodes, edges, setNodes, setEdges]);
+
+  /**
+   * Redo last undone action
+   */
+  const redo = useCallback(() => {
+    if (future.length === 0) return;
+
+    const next = future[0];
+    const newFuture = future.slice(1);
+
+    setFuture(newFuture);
+    setPast((p) => [...p, { nodes, edges }]);
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setSelectedNodeIds(new Set());
+  }, [future, nodes, edges, setNodes, setEdges]);
+
+  // ==========================================================================
   // Node Operations
   // ==========================================================================
 
@@ -113,6 +177,7 @@ export function useWorkflowCanvas({
    */
   const addNode = useCallback(
     (type: WorkflowNodeType, position: XYPosition) => {
+      pushHistory();
       const id = crypto.randomUUID();
       const newNode: WorkflowNode = {
         id,
@@ -122,9 +187,34 @@ export function useWorkflowCanvas({
       };
 
       setNodes((nds) => [...nds, newNode]);
-      setSelectedNodeId(id);
+      setSelectedNodeIds(new Set([id]));
     },
-    [setNodes]
+    [setNodes, pushHistory]
+  );
+
+  /**
+   * Add a sticky note (canvas annotation, not a workflow step)
+   */
+  const addStickyNote = useCallback(
+    (position: XYPosition) => {
+      pushHistory();
+      const id = crypto.randomUUID();
+      const newNode = {
+        id,
+        type: 'sticky' as const,
+        position,
+        data: {
+          name: 'Note',
+          content: '',
+          color: 'yellow' as const,
+        },
+        style: { width: 200, height: 120 },
+      };
+
+      setNodes((nds) => [...nds, newNode as WorkflowNode]);
+      setSelectedNodeIds(new Set([id]));
+    },
+    [setNodes, pushHistory]
   );
 
   /**
@@ -148,15 +238,185 @@ export function useWorkflowCanvas({
    */
   const deleteNode = useCallback(
     (id: string) => {
+      pushHistory();
       setNodes((nds) => nds.filter((node) => node.id !== id));
       setEdges((eds) =>
         eds.filter((edge) => edge.source !== id && edge.target !== id)
       );
-      // Use functional update to avoid dependency on selectedNodeId
-      setSelectedNodeId((current) => (current === id ? null : current));
+      setSelectedNodeIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
     },
-    [setNodes, setEdges]
+    [setNodes, setEdges, pushHistory]
   );
+
+  /**
+   * Delete multiple nodes and their connected edges
+   */
+  const deleteNodes = useCallback(
+    (ids: Set<string>) => {
+      if (ids.size === 0) return;
+      pushHistory();
+      setNodes((nds) => nds.filter((node) => !ids.has(node.id)));
+      setEdges((eds) =>
+        eds.filter((edge) => !ids.has(edge.source) && !ids.has(edge.target))
+      );
+      setSelectedNodeIds(new Set());
+    },
+    [setNodes, setEdges, pushHistory]
+  );
+
+  // ==========================================================================
+  // Clipboard Operations (Copy/Paste/Duplicate)
+  // ==========================================================================
+
+  /**
+   * Copy selected nodes to clipboard
+   */
+  const copyNodes = useCallback(() => {
+    if (selectedNodeIds.size === 0) return;
+
+    const selectedNodes = nodes.filter((n) => selectedNodeIds.has(n.id));
+    const selectedEdges = edges.filter(
+      (e) => selectedNodeIds.has(e.source) && selectedNodeIds.has(e.target)
+    );
+
+    // Calculate bounding box center for relative positioning
+    const minX = Math.min(...selectedNodes.map((n) => n.position.x));
+    const minY = Math.min(...selectedNodes.map((n) => n.position.y));
+
+    const clipboardData = {
+      nodes: selectedNodes.map((n) => ({
+        ...n,
+        position: { x: n.position.x - minX, y: n.position.y - minY },
+      })),
+      edges: selectedEdges,
+    };
+
+    localStorage.setItem(CLIPBOARD_KEY, JSON.stringify(clipboardData));
+    return selectedNodes.length;
+  }, [nodes, edges, selectedNodeIds]);
+
+  /**
+   * Paste nodes from clipboard at mouse position
+   */
+  const pasteNodes = useCallback(
+    (position?: XYPosition) => {
+      const clipboardJson = localStorage.getItem(CLIPBOARD_KEY);
+      if (!clipboardJson) return;
+
+      try {
+        const clipboardData = JSON.parse(clipboardJson) as {
+          nodes: WorkflowNode[];
+          edges: WorkflowEdge[];
+        };
+
+        if (!clipboardData.nodes?.length) return;
+
+        pushHistory();
+
+        // Generate new IDs mapping
+        const idMap = new Map<string, string>();
+        clipboardData.nodes.forEach((n) => {
+          idMap.set(n.id, crypto.randomUUID());
+        });
+
+        // Paste position (mouse or offset from 0,0)
+        const pastePos = position || mousePositionRef.current;
+
+        // Create new nodes with new IDs and positions
+        const newNodes: WorkflowNode[] = clipboardData.nodes.map((n) => ({
+          ...n,
+          id: idMap.get(n.id)!,
+          position: {
+            x: pastePos.x + n.position.x,
+            y: pastePos.y + n.position.y,
+          },
+          data: {
+            ...n.data,
+            name: `${n.data.name}_copy`,
+          } as WorkflowNodeData,
+        }));
+
+        // Create new edges with updated IDs
+        const newEdges: WorkflowEdge[] = clipboardData.edges.map((e) => ({
+          ...e,
+          id: `${idMap.get(e.source)}-${idMap.get(e.target)}-${e.type}-copy`,
+          source: idMap.get(e.source)!,
+          target: idMap.get(e.target)!,
+        }));
+
+        setNodes((nds) => [...nds, ...newNodes]);
+        setEdges((eds) => [...eds, ...newEdges]);
+
+        // Select the newly pasted nodes
+        setSelectedNodeIds(new Set(newNodes.map((n) => n.id)));
+      } catch (e) {
+        console.error('Failed to paste nodes:', e);
+      }
+    },
+    [setNodes, setEdges, pushHistory]
+  );
+
+  /**
+   * Duplicate selected nodes in place (offset by 20,20)
+   */
+  const duplicateNodes = useCallback(() => {
+    copyNodes();
+    // Offset from first selected node position
+    const firstSelected = nodes.find((n) => selectedNodeIds.has(n.id));
+    if (firstSelected) {
+      pasteNodes({
+        x: firstSelected.position.x + 30,
+        y: firstSelected.position.y + 30,
+      });
+    }
+  }, [copyNodes, pasteNodes, nodes, selectedNodeIds]);
+
+  /**
+   * Select all nodes
+   */
+  const selectAll = useCallback(() => {
+    setSelectedNodeIds(new Set(nodes.map((n) => n.id)));
+  }, [nodes]);
+
+  /**
+   * Clear selection
+   */
+  const clearSelection = useCallback(() => {
+    setSelectedNodeIds(new Set());
+  }, []);
+
+  /**
+   * Update mouse position (called from canvas)
+   */
+  const updateMousePosition = useCallback((pos: XYPosition) => {
+    mousePositionRef.current = pos;
+  }, []);
+
+  /**
+   * Toggle disabled state for selected nodes
+   */
+  const toggleDisabled = useCallback(() => {
+    if (selectedNodeIds.size === 0) return;
+
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (selectedNodeIds.has(node.id)) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              isDisabled: !node.data.isDisabled,
+            } as WorkflowNodeData,
+          };
+        }
+        return node;
+      })
+    );
+  }, [selectedNodeIds, setNodes]);
 
   /**
    * Rename a node and cascade update all variable references in other nodes.
@@ -189,18 +449,54 @@ export function useWorkflowCanvas({
     [setNodes]
   );
 
+  // Backwards compatibility: single selected node ID (first in set)
+  const selectedNodeId = selectedNodeIds.size > 0 ? Array.from(selectedNodeIds)[0] : null;
+
+  // Backwards compatibility: setSelectedNodeId sets single selection
+  const setSelectedNodeId = useCallback((id: string | null) => {
+    setSelectedNodeIds(id ? new Set([id]) : new Set());
+  }, []);
+
   return {
+    // State
     nodes,
     edges,
     setNodes,
     setEdges,
     onNodesChange,
     onEdgesChange,
+
+    // Single selection (backwards compatible)
     selectedNodeId,
     setSelectedNodeId,
+
+    // Multi-selection
+    selectedNodeIds,
+    setSelectedNodeIds,
+    selectAll,
+    clearSelection,
+
+    // Node operations
     addNode,
+    addStickyNote,
     updateNode,
     renameNode,
     deleteNode,
+    deleteNodes,
+
+    // Clipboard operations
+    copyNodes,
+    pasteNodes,
+    duplicateNodes,
+
+    // History operations
+    undo,
+    redo,
+    canUndo: past.length > 0,
+    canRedo: future.length > 0,
+
+    // Other operations
+    toggleDisabled,
+    updateMousePosition,
   };
 }

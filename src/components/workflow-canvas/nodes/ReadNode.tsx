@@ -16,5 +16,5 @@ export const ReadNode = memo(function ReadNode({
   data,
   selected,
 }: ReadNodeProps) {
-  return <BaseNode name={data.name} selected={selected} theme="read" />;
+  return <BaseNode name={data.name} selected={selected} theme="read" isDisabled={data.isDisabled} />;
 });

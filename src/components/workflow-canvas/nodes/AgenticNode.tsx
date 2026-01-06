@@ -16,5 +16,5 @@ export const AgenticNode = memo(function AgenticNode({
   data,
   selected,
 }: AgenticNodeProps) {
-  return <BaseNode name={data.name} selected={selected} theme="agentic" />;
+  return <BaseNode name={data.name} selected={selected} theme="agentic" isDisabled={data.isDisabled} />;
 });

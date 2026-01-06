@@ -28,6 +28,12 @@ import type {
 export type { WorkflowNodeType };
 
 /**
+ * Extended canvas node types (includes annotation nodes)
+ * Sticky notes are canvas-only and don't become SkillSteps
+ */
+export type CanvasNodeType = WorkflowNodeType | 'sticky';
+
+/**
  * Base data shared by all node types.
  * Index signature required for React Flow Node<T> compatibility.
  */
@@ -39,6 +45,8 @@ interface BaseNodeData {
   errorConfig?: ErrorConfig;
   retryConfig?: RetryConfig;
   parallelGroup?: string;
+  /** If true, node is disabled and will be skipped during execution */
+  isDisabled?: boolean;
 }
 
 /**
@@ -125,7 +133,17 @@ export interface ReadNodeData extends BaseNodeData {
 }
 
 /**
- * Union type for all node data
+ * Sticky note - Canvas annotation (not a workflow step)
+ */
+export interface StickyNodeData {
+  [key: string]: unknown;
+  name: string; // Title
+  content: string; // Note content
+  color?: 'yellow' | 'blue' | 'green' | 'pink' | 'purple';
+}
+
+/**
+ * Union type for all workflow node data (excludes sticky notes)
  */
 export type WorkflowNodeData =
   | SkillRefNodeData
@@ -138,9 +156,14 @@ export type WorkflowNodeData =
   | ReadNodeData;
 
 /**
- * Workflow node with typed data
+ * Union type for all canvas node data (includes sticky notes)
  */
-export type WorkflowNode = Node<WorkflowNodeData, WorkflowNodeType>;
+export type CanvasNodeData = WorkflowNodeData | StickyNodeData;
+
+/**
+ * Workflow node with typed data (includes sticky notes)
+ */
+export type WorkflowNode = Node<CanvasNodeData, CanvasNodeType>;
 
 // =============================================================================
 // Edge Types
@@ -195,18 +218,46 @@ export interface NodeConfigPanelProps {
 // =============================================================================
 
 export interface UseWorkflowCanvasReturn {
+  // State
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   setNodes: React.Dispatch<React.SetStateAction<WorkflowNode[]>>;
   setEdges: React.Dispatch<React.SetStateAction<WorkflowEdge[]>>;
   onNodesChange: (changes: NodeChange<WorkflowNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<WorkflowEdge>[]) => void;
+
+  // Single selection (backwards compatible)
   selectedNodeId: string | null;
   setSelectedNodeId: (id: string | null) => void;
+
+  // Multi-selection
+  selectedNodeIds: Set<string>;
+  setSelectedNodeIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  selectAll: () => void;
+  clearSelection: () => void;
+
+  // Node operations
   addNode: (type: WorkflowNodeType, position: XYPosition) => void;
+  addStickyNote: (position: XYPosition) => void;
   updateNode: (id: string, data: Partial<WorkflowNodeData>) => void;
   renameNode: (id: string, newName: string) => void;
   deleteNode: (id: string) => void;
+  deleteNodes: (ids: Set<string>) => void;
+
+  // Clipboard operations
+  copyNodes: () => number | undefined;
+  pasteNodes: (position?: XYPosition) => void;
+  duplicateNodes: () => void;
+
+  // History operations
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+
+  // Other operations
+  toggleDisabled: () => void;
+  updateMousePosition: (pos: XYPosition) => void;
 }
 
 // Note: SkillStep now includes _position directly in domain types

@@ -16,5 +16,5 @@ export const ToolNode = memo(function ToolNode({
   data,
   selected,
 }: ToolNodeProps) {
-  return <BaseNode name={data.name} selected={selected} theme="tool" />;
+  return <BaseNode name={data.name} selected={selected} theme="tool" isDisabled={data.isDisabled} />;
 });

@@ -52,6 +52,8 @@ interface BaseNodeProps {
    * - Array: custom handle configuration
    */
   outputHandles?: 'standard' | 'none' | CustomHandleConfig[];
+  /** Whether this node is disabled (skipped during execution) */
+  isDisabled?: boolean;
 }
 
 /**
@@ -64,6 +66,7 @@ export const BaseNode = memo(function BaseNode({
   selected,
   theme,
   outputHandles = 'standard',
+  isDisabled = false,
 }: BaseNodeProps) {
   const themeConfig = nodeTheme[theme];
 
@@ -72,7 +75,8 @@ export const BaseNode = memo(function BaseNode({
       className={cn(
         'w-[140px] rounded-lg border bg-card shadow-sm transition-all',
         selected && 'ring-2 ring-primary shadow-md',
-        !selected && 'hover:shadow-md'
+        !selected && 'hover:shadow-md',
+        isDisabled && 'opacity-50 border-dashed'
       )}
     >
       {/* Input handle - always present */}

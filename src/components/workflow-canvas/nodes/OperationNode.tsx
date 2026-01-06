@@ -16,5 +16,5 @@ export const OperationNode = memo(function OperationNode({
   data,
   selected,
 }: OperationNodeProps) {
-  return <BaseNode name={data.name} selected={selected} theme="operation" />;
+  return <BaseNode name={data.name} selected={selected} theme="operation" isDisabled={data.isDisabled} />;
 });

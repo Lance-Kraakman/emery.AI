@@ -15,6 +15,7 @@ import type {
   WorkflowNode,
   WorkflowEdge,
   WorkflowNodeData,
+  CanvasNodeData,
   SkillRefNodeData,
   ConditionNodeData,
   LoopNodeData,
@@ -24,6 +25,13 @@ import type {
   WriteNodeData,
   ReadNodeData,
 } from '../types';
+
+/**
+ * Type guard to check if node data is workflow data (not a sticky note)
+ */
+function isWorkflowNodeData(data: CanvasNodeData): data is WorkflowNodeData {
+  return 'inputDefs' in data || 'outputDefs' in data || !('content' in data);
+}
 
 // =============================================================================
 // SkillStep[] → Nodes/Edges
@@ -208,9 +216,11 @@ export function stepsToFlow(steps: SkillStep[]): {
 
 /**
  * Convert node data back to SkillStep fields
+ * Note: Only called for workflow nodes (sticky notes are filtered out before this)
  */
 function nodeDataToStep(node: WorkflowNode): Partial<SkillStep> {
-  const data = node.data;
+  // Cast to WorkflowNodeData since sticky notes are filtered out before calling this
+  const data = node.data as WorkflowNodeData;
   const base: Partial<SkillStep> = {
     nodeType: node.type as WorkflowNodeType,
     inputDefs: data.inputDefs,
@@ -328,11 +338,14 @@ export function flowToSteps(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[]
 ): SkillStep[] {
+  // Filter out sticky notes (canvas annotations that aren't workflow steps)
+  const workflowNodes = nodes.filter(n => n.type !== 'sticky');
+
   // Build id→name map for converting edge targets back to names
   // (stepOutputs.nextSteps uses names for readability)
-  const idToName = new Map(nodes.map(n => [n.id, n.data.name]));
+  const idToName = new Map(workflowNodes.map(n => [n.id, n.data.name]));
 
-  return nodes.map((node) => {
+  return workflowNodes.map((node) => {
     const outgoingEdges = edges.filter((e) => e.source === node.id);
     const stepOutputs = groupEdgesByType(outgoingEdges, idToName);
 
