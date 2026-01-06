@@ -7,7 +7,7 @@
  * Shows hierarchical org structure with agents as containers.
  */
 
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -22,11 +22,14 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
-import { Undo2, Redo2, StickyNote } from 'lucide-react';
+import { Undo2, Redo2, StickyNote, Search, Maximize, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { orgChartNodeTypes } from '@/components/org-chart/nodes';
+import { orgChartEdgeTypes } from '@/components/org-chart/edges';
 import { useOrgChartCanvas } from '@/components/org-chart/hooks/useOrgChartCanvas';
 import { EntityPalette } from './EntityPalette';
+import { SearchDialog } from './SearchDialog';
 import type { OrgChartCanvasMetadata, OrgChartNodeType } from '@/components/org-chart/types';
 
 interface OrgChartCanvasProps {
@@ -75,10 +78,12 @@ export function OrgChartCanvas({
   onCreateEntity,
 }: OrgChartCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   const {
     nodes,
     edges,
+    setNodes,
     onNodesChange,
     onEdgesChange,
     selectedNodeId,
@@ -121,6 +126,12 @@ export function OrgChartCanvas({
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
+      // Cmd/Ctrl + K = Open search
+      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+        event.preventDefault();
+        setIsSearchOpen(true);
+        return;
+      }
       // Cmd/Ctrl + Z = Undo
       if ((event.metaKey || event.ctrlKey) && event.key === 'z' && !event.shiftKey) {
         event.preventDefault();
@@ -139,6 +150,51 @@ export function OrgChartCanvas({
     },
     [undo, redo, deleteNodes, selectedNodeIds]
   );
+
+  // Handle search result selection
+  const handleSearchSelect = useCallback(
+    (nodeId: string, nodeType: OrgChartNodeType, entityId: number) => {
+      setSelectedNodeId(nodeId);
+      if (onSelect) {
+        onSelect(nodeId, nodeType, entityId);
+      }
+    },
+    [setSelectedNodeId, onSelect]
+  );
+
+  // Simple auto-arrange: position agents in a grid, with their resources inside
+  const handleAutoArrange = useCallback(() => {
+    const agentNodes = nodes.filter((n) => n.type === 'agent');
+    const orgResourcesNode = nodes.find((n) => n.type === 'org_resources');
+    const otherNodes = nodes.filter((n) => n.type !== 'agent' && n.type !== 'org_resources');
+
+    const PADDING = 50;
+    const AGENT_WIDTH = 350;
+    const AGENT_HEIGHT = 300;
+    const COLS = 3;
+
+    let newNodes = [...nodes];
+
+    // Position org resources at top
+    if (orgResourcesNode) {
+      newNodes = newNodes.map((n) =>
+        n.id === orgResourcesNode.id ? { ...n, position: { x: PADDING, y: PADDING } } : n
+      );
+    }
+
+    // Position agents in a grid below org resources
+    const startY = orgResourcesNode ? PADDING + 200 : PADDING;
+    agentNodes.forEach((agent, index) => {
+      const row = Math.floor(index / COLS);
+      const col = index % COLS;
+      const x = PADDING + col * (AGENT_WIDTH + PADDING);
+      const y = startY + row * (AGENT_HEIGHT + PADDING);
+
+      newNodes = newNodes.map((n) => (n.id === agent.id ? { ...n, position: { x, y } } : n));
+    });
+
+    setNodes(newNodes);
+  }, [nodes, setNodes]);
 
   // Handle node double-click (open editor)
   const handleNodeDoubleClick = useCallback(
@@ -181,6 +237,11 @@ export function OrgChartCanvas({
         onSelectionChange={handleSelectionChange}
         onNodeDoubleClick={handleNodeDoubleClick}
         nodeTypes={orgChartNodeTypes}
+        edgeTypes={orgChartEdgeTypes}
+        defaultEdgeOptions={{
+          type: 'reference',
+          animated: false,
+        }}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.1}
@@ -228,44 +289,100 @@ export function OrgChartCanvas({
 
         {/* Toolbar panel */}
         <Panel position="top-left" className="flex gap-2">
-          {/* Undo/Redo */}
-          <div className="flex gap-1 bg-card border rounded-lg shadow-sm p-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={undo}
-              disabled={disabled || !canUndo}
-              title="Undo (Cmd+Z)"
-            >
-              <Undo2 className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={redo}
-              disabled={disabled || !canRedo}
-              title="Redo (Cmd+Shift+Z)"
-            >
-              <Redo2 className="h-4 w-4" />
-            </Button>
-          </div>
-
-          {/* Add sticky note */}
-          {!disabled && (
+          <TooltipProvider delayDuration={300}>
+            {/* Undo/Redo */}
             <div className="flex gap-1 bg-card border rounded-lg shadow-sm p-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={handleAddStickyNote}
-                title="Add Note"
-              >
-                <StickyNote className="h-4 w-4" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={undo}
+                    disabled={disabled || !canUndo}
+                  >
+                    <Undo2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Undo <kbd className="ml-1 text-[10px] opacity-60">⌘Z</kbd></p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={redo}
+                    disabled={disabled || !canRedo}
+                  >
+                    <Redo2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Redo <kbd className="ml-1 text-[10px] opacity-60">⌘⇧Z</kbd></p>
+                </TooltipContent>
+              </Tooltip>
             </div>
-          )}
+
+            {/* Layout tools */}
+            {!disabled && (
+              <div className="flex gap-1 bg-card border rounded-lg shadow-sm p-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={handleAutoArrange}
+                    >
+                      <LayoutGrid className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>Auto-arrange</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+
+            {/* Add tools */}
+            {!disabled && (
+              <div className="flex gap-1 bg-card border rounded-lg shadow-sm p-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={handleAddStickyNote}
+                    >
+                      <StickyNote className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>Add Note</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setIsSearchOpen(true)}
+                    >
+                      <Search className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>Search <kbd className="ml-1 text-[10px] opacity-60">⌘K</kbd></p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+          </TooltipProvider>
         </Panel>
 
         {/* Entity palette */}
@@ -285,6 +402,16 @@ export function OrgChartCanvas({
           </Panel>
         )}
       </ReactFlow>
+
+      {/* Search dialog */}
+      <SearchDialog
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        agents={agents}
+        skills={skills}
+        databases={databases}
+        onSelectEntity={handleSearchSelect}
+      />
     </div>
   );
 }
