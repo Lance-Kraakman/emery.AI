@@ -20,10 +20,13 @@ import {
   SkillConfigPanel,
   DatabaseConfigPanel,
 } from '@/components/org-chart/panels';
-import { createAgent } from '@/app/actions/agents';
-import { createSkill } from '@/app/actions/skills';
-import { createDatabase } from '@/app/actions/databases';
+import { createAgent, deleteAgent } from '@/app/actions/agents';
+import { createSkill, deleteSkill } from '@/app/actions/skills';
+import { createDatabase, deleteDatabase } from '@/app/actions/databases';
+import { TriggerConfigModal } from '@/app/(app)/agents/components/modals/TriggerConfigModal';
+import { useEmeryAgent } from '@/contexts/EmeryStoreProvider';
 import type { OrgChartNodeType, OrgChartCanvasMetadata } from '@/components/org-chart/types';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
 
 interface OrgChartEditorClientProps {
   /** Initial agents */
@@ -32,6 +35,12 @@ interface OrgChartEditorClientProps {
     name: string;
     role?: string;
     status?: string;
+    automations?: Array<{
+      name?: string;
+      enabled: boolean;
+      skillId: number;
+      trigger: { type: string; enabled: boolean };
+    }>;
   }>;
   /** Initial skills */
   skills: Array<{
@@ -47,6 +56,12 @@ interface OrgChartEditorClientProps {
     slug: string;
     agentId?: number | null;
     tableCount?: number;
+    tables?: Array<{
+      id: number;
+      name: string;
+      slug: string;
+      rowCount?: number;
+    }>;
   }>;
   /** Saved canvas metadata */
   canvasMetadata?: OrgChartCanvasMetadata;
@@ -64,6 +79,15 @@ export function OrgChartEditorClient({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeType, setSelectedNodeType] = useState<OrgChartNodeType | undefined>();
   const [selectedEntityId, setSelectedEntityId] = useState<number | undefined>();
+
+  // Trigger config modal state (lifted from AgentConfigPanel for proper overlay)
+  const [triggerModalOpen, setTriggerModalOpen] = useState(false);
+  const [triggerModalMode, setTriggerModalMode] = useState<'create' | 'edit'>('create');
+  const [triggerModalAgentId, setTriggerModalAgentId] = useState<number | null>(null);
+  const [triggerModalScheduleIndex, setTriggerModalScheduleIndex] = useState<number | undefined>();
+
+  // Get full agent data for modal (only when modal needs to open)
+  const triggerModalAgent = useEmeryAgent(triggerModalAgentId ?? 0) as AgentDTO | undefined;
 
   // Handle selection from canvas
   const handleSelect = useCallback(
@@ -116,6 +140,24 @@ export function OrgChartEditorClient({
     setSelectedNodeId(null);
     setSelectedNodeType(undefined);
     setSelectedEntityId(undefined);
+  }, []);
+
+  // Handle opening trigger config modal (from AgentConfigPanel)
+  const handleOpenTriggerModal = useCallback(
+    (agentId: number, mode: 'create' | 'edit', scheduleIndex?: number) => {
+      setTriggerModalAgentId(agentId);
+      setTriggerModalMode(mode);
+      setTriggerModalScheduleIndex(scheduleIndex);
+      setTriggerModalOpen(true);
+    },
+    []
+  );
+
+  // Handle closing trigger config modal
+  const handleCloseTriggerModal = useCallback(() => {
+    setTriggerModalOpen(false);
+    setTriggerModalAgentId(null);
+    setTriggerModalScheduleIndex(undefined);
   }, []);
 
   // Handle creating a new entity - returns the created entity for node creation
@@ -255,15 +297,93 @@ export function OrgChartEditorClient({
     return agent?.name;
   };
 
+  // Handle deleting entities
+  const handleDeleteEntities = useCallback(
+    async (items: Array<{ type: OrgChartNodeType; entityId: number }>): Promise<boolean> => {
+      const loadingToastId = toast.loading(`Deleting ${items.length} item${items.length !== 1 ? 's' : ''}...`);
+
+      try {
+        // Delete in order: agents first (will cascade delete skills), then skills, then databases
+        const agents = items.filter((i) => i.type === 'agent');
+        const skills = items.filter((i) => i.type === 'skill');
+        const databases = items.filter((i) => i.type === 'database');
+
+        let hasError = false;
+
+        // Delete agents (cascades to their skills)
+        for (const item of agents) {
+          const result = await deleteAgent(item.entityId);
+          if (!result.success) {
+            console.error(`Failed to delete agent ${item.entityId}:`, result.error);
+            hasError = true;
+          }
+        }
+
+        // Delete skills (skip if parent agent was deleted)
+        const deletedAgentIds = new Set(agents.map((a) => a.entityId));
+        for (const item of skills) {
+          // Check if this skill's agent was deleted
+          const skill = items.find((s) => s.type === 'skill' && s.entityId === item.entityId);
+          const skillData = items.find((s) => s.entityId === item.entityId);
+          // Just try to delete - server will handle if already gone
+          const result = await deleteSkill(item.entityId);
+          if (!result.success && !result.error?.includes('not found')) {
+            console.error(`Failed to delete skill ${item.entityId}:`, result.error);
+            hasError = true;
+          }
+        }
+
+        // Delete databases
+        for (const item of databases) {
+          const result = await deleteDatabase(item.entityId);
+          if (!result.success) {
+            console.error(`Failed to delete database ${item.entityId}:`, result.error);
+            hasError = true;
+          }
+        }
+
+        toast.dismiss(loadingToastId);
+
+        if (hasError) {
+          toast.error('Some items could not be deleted');
+          return false;
+        } else {
+          toast.success(`Deleted ${items.length} item${items.length !== 1 ? 's' : ''}`);
+          // Clear selection
+          setSelectedNodeId(null);
+          setSelectedNodeType(undefined);
+          setSelectedEntityId(undefined);
+          return true;
+        }
+      } catch (error) {
+        console.error('Error deleting entities:', error);
+        toast.dismiss(loadingToastId);
+        toast.error('An error occurred while deleting');
+        return false;
+      }
+    },
+    []
+  );
+
   // Render config panel based on selected node type
   const renderConfigPanel = () => {
     if (selectedNodeType === 'agent' && selectedAgent) {
+      // Get skill names for automation display
+      const getSkillName = (skillId: number) => {
+        const skill = skills.find((s) => s.id === skillId);
+        return skill?.name;
+      };
+
       return (
         <AgentConfigPanel
           agent={selectedAgent}
           skillCount={agentSkillCount}
           databaseCount={agentDatabaseCount}
           onOpenAgent={() => handleOpenEntity('agent', selectedAgent.id)}
+          getSkillName={getSkillName}
+          onOpenTriggerModal={(mode, scheduleIndex) =>
+            handleOpenTriggerModal(selectedAgent.id, mode, scheduleIndex)
+          }
         />
       );
     }
@@ -312,6 +432,7 @@ export function OrgChartEditorClient({
           onSelect={handleSelect}
           onOpenEntity={handleOpenEntity}
           onCreateEntity={handleCreateEntity}
+          onDeleteEntities={handleDeleteEntities}
         />
 
         {/* Floating Config Panel - matching skill editor style */}
@@ -349,6 +470,18 @@ export function OrgChartEditorClient({
           </div>
         )}
       </div>
+
+      {/* Trigger Config Modal - rendered at root level for proper overlay */}
+      {triggerModalAgent && triggerModalAgentId && (
+        <TriggerConfigModal
+          isOpen={triggerModalOpen}
+          onClose={handleCloseTriggerModal}
+          agent={triggerModalAgent}
+          onUpdate={() => router.refresh()}
+          mode={triggerModalMode}
+          scheduleIndex={triggerModalScheduleIndex}
+        />
+      )}
     </ReactFlowProvider>
   );
 }

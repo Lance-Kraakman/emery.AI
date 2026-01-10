@@ -46,6 +46,7 @@ export function OrgChartPageClient({ skills, canvasMetadata }: OrgChartPageClien
       name: agent.name,
       role: agent.role || undefined,
       status: agent.status || undefined,
+      automations: agent.automations || [],
     })),
     [agents]
   );
@@ -57,6 +58,12 @@ export function OrgChartPageClient({ skills, canvasMetadata }: OrgChartPageClien
       slug: db.slug,
       agentId: db.agentId || null,
       tableCount: db.tables?.length || 0,
+      tables: (db.tables || []).map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        rowCount: t.rowCount || 0,
+      })),
     })),
     [databases]
   );

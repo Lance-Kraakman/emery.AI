@@ -36,6 +36,7 @@ import {
   arrangeChildrenInGrid,
   calculateAgentDimensions,
 } from '@/components/org-chart/utils';
+import { DeleteConfirmationDialog, buildDeleteImpactItems } from '@/components/org-chart/dialogs';
 import { EntityPalette } from './EntityPalette';
 import { SearchDialog } from './SearchDialog';
 import { StickyNoteProvider } from '@/components/shared/StickyNoteContext';
@@ -74,6 +75,8 @@ interface OrgChartCanvasProps {
   onOpenEntity?: (entityType: OrgChartNodeType, entityId: number) => void;
   /** Callback when a new entity should be created - returns the created entity */
   onCreateEntity?: (entityType: OrgChartNodeType, agentId?: number) => Promise<{ id: number; name: string; [key: string]: any } | null>;
+  /** Callback when entities should be deleted - returns true if successful */
+  onDeleteEntities?: (items: Array<{ type: OrgChartNodeType; entityId: number }>) => Promise<boolean>;
 }
 
 export function OrgChartCanvas({
@@ -85,9 +88,13 @@ export function OrgChartCanvas({
   onSelect,
   onOpenEntity,
   onCreateEntity,
+  onDeleteEntities,
 }: OrgChartCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Memoize onSelect wrapper to prevent hook callback recreation
   const handleSelectInternal = useCallback(
@@ -256,14 +263,70 @@ export function OrgChartCanvas({
         event.preventDefault();
         redo();
       }
-      // Delete/Backspace = Delete selected nodes
+      // Delete/Backspace = Show delete confirmation
       if ((event.key === 'Delete' || event.key === 'Backspace') && selectedNodeIds.size > 0) {
         event.preventDefault();
-        deleteNodes(selectedNodeIds);
+        // Filter out sticky notes from deletion confirmation (they're canvas-only)
+        const nodesToDelete = new Set<string>();
+        selectedNodeIds.forEach((id) => {
+          const node = nodes.find((n) => n.id === id);
+          if (node && node.type !== 'sticky') {
+            nodesToDelete.add(id);
+          } else if (node?.type === 'sticky') {
+            // Immediately delete sticky notes (canvas-only, no server data)
+            deleteNodes(new Set([id]));
+          }
+        });
+        if (nodesToDelete.size > 0) {
+          setPendingDeleteIds(nodesToDelete);
+          setIsDeleteDialogOpen(true);
+        }
       }
     },
-    [undo, redo, deleteNodes, selectedNodeIds]
+    [undo, redo, deleteNodes, selectedNodeIds, nodes]
   );
+
+  // Handle delete confirmation
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!onDeleteEntities || pendingDeleteIds.size === 0) {
+      // No server deletion callback - just delete from canvas
+      deleteNodes(pendingDeleteIds);
+      setIsDeleteDialogOpen(false);
+      setPendingDeleteIds(new Set());
+      return;
+    }
+
+    setIsDeleting(true);
+
+    // Build list of entities to delete
+    const itemsToDelete: Array<{ type: OrgChartNodeType; entityId: number }> = [];
+    pendingDeleteIds.forEach((nodeId) => {
+      const node = nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      const match = nodeId.match(/^([a-z_]+)-(\d+)$/);
+      if (match) {
+        itemsToDelete.push({
+          type: match[1] as OrgChartNodeType,
+          entityId: parseInt(match[2], 10),
+        });
+      }
+    });
+
+    try {
+      const success = await onDeleteEntities(itemsToDelete);
+      if (success) {
+        // Remove nodes from canvas
+        deleteNodes(pendingDeleteIds);
+      }
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
+      setPendingDeleteIds(new Set());
+    }
+  }, [onDeleteEntities, pendingDeleteIds, deleteNodes, nodes]);
+
+  // Build delete impact items for the dialog
+  const deleteImpactItems = buildDeleteImpactItems(pendingDeleteIds, nodes, skills, databases);
 
   // Handle search result selection
   const handleSearchSelect = useCallback(
@@ -556,6 +619,18 @@ export function OrgChartCanvas({
         skills={skills}
         databases={databases}
         onSelectEntity={handleSearchSelect}
+      />
+
+      {/* Delete confirmation dialog */}
+      <DeleteConfirmationDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => {
+          setIsDeleteDialogOpen(false);
+          setPendingDeleteIds(new Set());
+        }}
+        onConfirm={handleDeleteConfirm}
+        isDeleting={isDeleting}
+        itemsToDelete={deleteImpactItems}
       />
     </div>
   );
