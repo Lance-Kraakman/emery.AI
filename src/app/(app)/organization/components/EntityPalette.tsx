@@ -68,7 +68,7 @@ export function EntityPalette({ disabled, onCreateEntity }: EntityPaletteProps) 
   };
 
   return (
-    <Card className="w-48 shadow-lg">
+    <Card className="w-48 shadow-lg bg-background">
       <CardHeader className="p-3 pb-2">
         <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
           <Plus className="h-3 w-3" />

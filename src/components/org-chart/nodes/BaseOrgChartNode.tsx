@@ -74,7 +74,7 @@ export const BaseOrgChartNode = memo(function BaseOrgChartNode({
   return (
     <div
       className={cn(
-        'w-[160px] rounded-lg border bg-card shadow-sm transition-all cursor-pointer',
+        'min-w-[180px] max-w-[240px] rounded-lg border bg-card shadow-sm transition-all cursor-pointer',
         selected && 'ring-2 ring-primary shadow-md',
         !selected && 'hover:shadow-md hover:border-primary/50',
         config.border
@@ -99,14 +99,14 @@ export const BaseOrgChartNode = memo(function BaseOrgChartNode({
       )}
 
       {/* Compact content: icon + name + badge */}
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex items-center gap-2 px-3 py-2.5">
         <IconBadge nodeType={nodeType} />
-        <div className="flex-1 min-w-0">
-          <span className="text-xs font-medium truncate block">{name}</span>
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <span className="text-sm font-medium truncate block leading-tight">{name}</span>
           {badge && (
             <span
               className={cn(
-                'text-[10px] px-1.5 py-0.5 rounded-full inline-block mt-0.5',
+                'text-[10px] px-1.5 py-0.5 rounded-full inline-block mt-1',
                 badgeColor || 'bg-muted text-muted-foreground'
               )}
             >

@@ -7,7 +7,7 @@
  * Handles loading state and data transformation.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Loading } from '@/components/ui/loading';
 import { CanvasBase } from '@/components/canvas';
@@ -39,6 +39,28 @@ export function OrgChartPageClient({ skills, canvasMetadata }: OrgChartPageClien
   const { data, isLoading } = useEmeryStore();
   const { agents = [], databases = [] } = data || {};
 
+  // Memoize data transformations to prevent infinite re-render loops
+  const agentData = useMemo(() =>
+    agents.map((agent: any) => ({
+      id: agent.id,
+      name: agent.name,
+      role: agent.role || undefined,
+      status: agent.status || undefined,
+    })),
+    [agents]
+  );
+
+  const databaseData = useMemo(() =>
+    databases.map((db: any) => ({
+      id: db.id,
+      name: db.name,
+      slug: db.slug,
+      agentId: db.agentId || null,
+      tableCount: db.tables?.length || 0,
+    })),
+    [databases]
+  );
+
   if (isLoading) {
     return (
       <CanvasBase>
@@ -46,23 +68,6 @@ export function OrgChartPageClient({ skills, canvasMetadata }: OrgChartPageClien
       </CanvasBase>
     );
   }
-
-  // Transform agent data for the editor
-  const agentData = agents.map((agent: any) => ({
-    id: agent.id,
-    name: agent.name,
-    role: agent.role || undefined,
-    status: agent.status || undefined,
-  }));
-
-  // Transform database data for the editor
-  const databaseData = databases.map((db: any) => ({
-    id: db.id,
-    name: db.name,
-    slug: db.slug,
-    agentId: db.agentId || null,
-    tableCount: db.tables?.length || 0,
-  }));
 
   return (
     <CanvasBase>

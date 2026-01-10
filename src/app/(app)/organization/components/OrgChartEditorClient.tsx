@@ -10,7 +10,7 @@
 import React, { useState, useCallback, useMemo, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ReactFlowProvider } from '@xyflow/react';
-import { X, Loader2 } from 'lucide-react';
+import { X, Settings2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -94,11 +94,8 @@ export function OrgChartEditorClient({
           }
           break;
         case 'database':
-          // Navigate to data page with database selected
-          const db = databases.find((d) => d.id === entityId);
-          if (db) {
-            router.push(`/data/${db.slug}`);
-          }
+          // Navigate to data page with database ID
+          router.push(`/data/${entityId}`);
           break;
         case 'app':
           // Navigate to app builder
@@ -121,74 +118,99 @@ export function OrgChartEditorClient({
     setSelectedEntityId(undefined);
   }, []);
 
-  // Handle creating a new entity
+  // Handle creating a new entity - returns the created entity for node creation
   const handleCreateEntity = useCallback(
-    async (entityType: OrgChartNodeType, agentId?: number) => {
-      startTransition(async () => {
-        try {
-          switch (entityType) {
-            case 'agent': {
-              const result = await createAgent({
-                name: 'New Agent',
-                role: '',
+    async (entityType: OrgChartNodeType, agentId?: number): Promise<{ id: number; name: string; [key: string]: any } | null> => {
+      // Show loading toast immediately
+      const entityLabel = entityType.charAt(0).toUpperCase() + entityType.slice(1);
+      const loadingToastId = toast.loading(`Creating ${entityLabel}...`);
+
+      try {
+        switch (entityType) {
+          case 'agent': {
+            const result = await createAgent({
+              name: 'New Agent',
+              role: '',
+            });
+            toast.dismiss(loadingToastId);
+            if (result.success && result.data?.id) {
+              toast.success('Agent created', {
+                action: {
+                  label: 'Configure',
+                  onClick: () => router.push(`/agents/${result.data!.id}`),
+                },
               });
-              if (result.success && result.data?.id) {
-                toast.success('Agent created');
-                router.push(`/agents/${result.data.id}`);
-              } else {
-                toast.error(result.error || 'Failed to create agent');
-              }
-              break;
+              return result.data;
+            } else {
+              toast.error(result.error || 'Failed to create agent');
+              return null;
             }
-
-            case 'skill': {
-              // Skills require an agent ID
-              // If no agent ID provided, we need to pick one
-              if (!agentId && agents.length > 0) {
-                // Use first agent as default
-                agentId = agents[0].id;
-              }
-
-              if (!agentId) {
-                toast.error('Create an agent first before adding skills');
-                return;
-              }
-
-              const skillResult = await createSkill({
-                agentId,
-                name: 'New Skill',
-              });
-              if (skillResult.success && skillResult.data?.id) {
-                toast.success('Skill created');
-                router.push(`/agents/${agentId}/skills?skillId=${skillResult.data.id}`);
-              } else {
-                toast.error(skillResult.error || 'Failed to create skill');
-              }
-              break;
-            }
-
-            case 'database': {
-              const dbResult = await createDatabase({
-                name: 'New Database',
-                agentId: agentId ?? null, // null = org-scoped
-              });
-              if (dbResult.success && dbResult.data?.slug) {
-                toast.success('Database created');
-                router.push(`/data/${dbResult.data.slug}`);
-              } else {
-                toast.error(dbResult.error || 'Failed to create database');
-              }
-              break;
-            }
-
-            default:
-              break;
           }
-        } catch (error) {
-          console.error('Error creating entity:', error);
-          toast.error('An error occurred while creating the entity');
+
+          case 'skill': {
+            // Skills require an agent ID
+            // If no agent ID provided, we need to pick one
+            let effectiveAgentId = agentId;
+            if (!effectiveAgentId && agents.length > 0) {
+              // Use first agent as default
+              effectiveAgentId = agents[0].id;
+            }
+
+            if (!effectiveAgentId) {
+              toast.dismiss(loadingToastId);
+              toast.error('Create an agent first before adding skills');
+              return null;
+            }
+
+            const skillResult = await createSkill({
+              agentId: effectiveAgentId,
+              name: 'New Skill',
+            });
+            toast.dismiss(loadingToastId);
+            if (skillResult.success && skillResult.data?.id) {
+              toast.success('Skill created', {
+                action: {
+                  label: 'Edit',
+                  onClick: () => router.push(`/agents/${effectiveAgentId}/skills?skillId=${skillResult.data!.id}`),
+                },
+              });
+              return { ...skillResult.data, agentId: effectiveAgentId };
+            } else {
+              toast.error(skillResult.error || 'Failed to create skill');
+              return null;
+            }
+          }
+
+          case 'database': {
+            const dbResult = await createDatabase({
+              name: 'New Database',
+              agentId: agentId ?? null, // null = org-scoped
+            });
+            toast.dismiss(loadingToastId);
+            if (dbResult.success && dbResult.data?.id) {
+              toast.success('Database created', {
+                action: {
+                  label: 'Open',
+                  onClick: () => router.push(`/data/${dbResult.data!.id}`),
+                },
+              });
+              return { ...dbResult.data, agentId: agentId ?? null };
+            } else {
+              toast.error(dbResult.error || 'Failed to create database');
+              return null;
+            }
+          }
+
+          default:
+            toast.dismiss(loadingToastId);
+            return null;
         }
-      });
+      } catch (error) {
+        console.error('Error creating entity:', error);
+        toast.dismiss(loadingToastId);
+        toast.error('An error occurred while creating the entity');
+        return null;
+      }
     },
     [router, agents]
   );
@@ -280,49 +302,50 @@ export function OrgChartEditorClient({
 
   return (
     <ReactFlowProvider>
-      <div className="flex h-full w-full">
-        {/* Main canvas area */}
-        <div className="flex-1 h-full">
-          <OrgChartCanvas
-            agents={agents}
-            skills={skills}
-            databases={databases}
-            canvasMetadata={canvasMetadata}
-            onSelect={handleSelect}
-            onOpenEntity={handleOpenEntity}
-            onCreateEntity={handleCreateEntity}
-          />
-        </div>
+      <div className="relative h-full w-full">
+        {/* Full-height Canvas */}
+        <OrgChartCanvas
+          agents={agents}
+          skills={skills}
+          databases={databases}
+          canvasMetadata={canvasMetadata}
+          onSelect={handleSelect}
+          onOpenEntity={handleOpenEntity}
+          onCreateEntity={handleCreateEntity}
+        />
 
-        {/* Side panel (shown when something is selected) */}
+        {/* Floating Config Panel - matching skill editor style */}
         {selectedNodeId && selectedNodeType && (
           <div
             className={cn(
-              'w-80 border-l bg-card overflow-y-auto',
+              'absolute top-2 right-2 w-80 max-h-[calc(100%-1rem)] bg-background/50 backdrop-blur-sm border rounded-lg shadow-lg overflow-hidden flex flex-col',
               'transition-all duration-200'
             )}
           >
             {/* Panel header */}
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="font-semibold text-sm capitalize">
-                {selectedNodeType === 'org_resources'
-                  ? 'Organization Resources'
-                  : selectedNodeType === 'sticky'
-                    ? 'Note'
-                    : `${selectedNodeType} Details`}
-              </h3>
+            <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30 shrink-0">
+              <div className="flex items-center gap-2">
+                <Settings2 className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">
+                  {selectedNodeType === 'org_resources'
+                    ? 'Organization Resources'
+                    : selectedNodeType === 'sticky'
+                      ? 'Note'
+                      : `${selectedNodeType.charAt(0).toUpperCase() + selectedNodeType.slice(1)} Details`}
+                </span>
+              </div>
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-6 w-6"
+                size="sm"
+                className="h-6 w-6 p-0"
                 onClick={handleClosePanel}
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
               </Button>
             </div>
 
             {/* Panel content */}
-            <div className="p-4">{renderConfigPanel()}</div>
+            <div className="flex-1 overflow-y-auto p-3">{renderConfigPanel()}</div>
           </div>
         )}
       </div>

@@ -27,10 +27,11 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { orgChartNodeTypes } from '@/components/org-chart/nodes';
 import { orgChartEdgeTypes } from '@/components/org-chart/edges';
-import { useOrgChartCanvas } from '@/components/org-chart/hooks/useOrgChartCanvas';
+import { useOrgChart } from '@/components/org-chart/hooks';
 import { EntityPalette } from './EntityPalette';
 import { SearchDialog } from './SearchDialog';
-import type { OrgChartCanvasMetadata, OrgChartNodeType } from '@/components/org-chart/types';
+import { StickyNoteProvider } from '@/components/shared/StickyNoteContext';
+import type { OrgChartCanvasMetadata, OrgChartNodeType, AgentContainerNodeData } from '@/components/org-chart/types';
 
 interface OrgChartCanvasProps {
   /** Initial agents */
@@ -63,8 +64,8 @@ interface OrgChartCanvasProps {
   onSelect?: (nodeId: string | null, nodeType?: OrgChartNodeType, entityId?: number) => void;
   /** Callback when an entity should be opened (e.g., navigate to skill editor) */
   onOpenEntity?: (entityType: OrgChartNodeType, entityId: number) => void;
-  /** Callback when a new entity should be created */
-  onCreateEntity?: (entityType: OrgChartNodeType, agentId?: number) => void;
+  /** Callback when a new entity should be created - returns the created entity */
+  onCreateEntity?: (entityType: OrgChartNodeType, agentId?: number) => Promise<{ id: number; name: string; [key: string]: any } | null>;
 }
 
 export function OrgChartCanvas({
@@ -80,6 +81,19 @@ export function OrgChartCanvas({
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
+  // Memoize onSelect wrapper to prevent hook callback recreation
+  const handleSelectInternal = useCallback(
+    (nodeId: string | null, nodeType?: OrgChartNodeType) => {
+      if (onSelect) {
+        // Parse entity ID from node ID
+        const match = nodeId?.match(/^([a-z_]+)-(\d+)$/);
+        const entityId = match ? parseInt(match[2], 10) : undefined;
+        onSelect(nodeId, nodeType, entityId);
+      }
+    },
+    [onSelect]
+  );
+
   const {
     nodes,
     edges,
@@ -90,26 +104,118 @@ export function OrgChartCanvas({
     setSelectedNodeId,
     selectedNodeIds,
     addStickyNote,
+    updateNode,
     deleteNodes,
     undo,
     redo,
     canUndo,
     canRedo,
     toggleAgentExpanded,
-  } = useOrgChartCanvas({
+    addAgentNode,
+    addSkillNode,
+    addDatabaseNode,
+  } = useOrgChart({
     agents,
     skills,
     databases,
     canvasMetadata,
-    onSelect: (nodeId, nodeType) => {
-      if (onSelect) {
-        // Parse entity ID from node ID
-        const match = nodeId?.match(/^([a-z_]+)-(\d+)$/);
-        const entityId = match ? parseInt(match[2], 10) : undefined;
-        onSelect(nodeId, nodeType, entityId);
+    onSelect: handleSelectInternal,
+  });
+
+  // Handler for sticky note updates
+  const handleUpdateStickyNote = useCallback(
+    (id: string, data: { name?: string; content?: string }) => {
+      updateNode(id, data);
+    },
+    [updateNode]
+  );
+
+  // Get React Flow instance for coordinate conversion
+  const reactFlowInstance = useReactFlow();
+
+  // Handle drag over for entity palette
+  const handleDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  // Handle drop from entity palette
+  const handleDrop = useCallback(
+    async (event: React.DragEvent) => {
+      event.preventDefault();
+
+      const entityType = event.dataTransfer.getData('application/orgchart-entity') as OrgChartNodeType;
+      if (!entityType || !onCreateEntity) return;
+
+      // Get drop position in flow coordinates
+      // screenToFlowPosition expects screen/client coordinates directly
+      const position = reactFlowInstance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+
+      // Check if dropping inside an agent container by checking bounds directly
+      // React Flow stores resized dimensions in node.width/height or node.measured, not node.style
+      const agentNodes = nodes.filter((n) => n.type === 'agent');
+      const targetAgent = agentNodes.find((agentNode) => {
+        const nodeAny = agentNode as any;
+        const nodeWidth = nodeAny.width ?? nodeAny.measured?.width ?? (agentNode.style?.width as number) ?? 400;
+        const nodeHeight = nodeAny.height ?? nodeAny.measured?.height ?? (agentNode.style?.height as number) ?? 140;
+        return (
+          position.x >= agentNode.position.x &&
+          position.x <= agentNode.position.x + nodeWidth &&
+          position.y >= agentNode.position.y &&
+          position.y <= agentNode.position.y + nodeHeight
+        );
+      });
+      const agentId = targetAgent
+        ? (targetAgent.data as AgentContainerNodeData).agentId
+        : null;
+
+      // If dropping inside an agent, convert absolute position to relative position
+      // React Flow expects child node positions to be relative to their parent
+      const nodePosition = targetAgent
+        ? { x: position.x - targetAgent.position.x, y: position.y - targetAgent.position.y }
+        : position;
+
+      // Create entity on server first, then add node at drop position
+      switch (entityType) {
+        case 'agent': {
+          const createdAgent = await onCreateEntity('agent');
+          if (createdAgent) {
+            addAgentNode(
+              { id: createdAgent.id, name: createdAgent.name, role: createdAgent.role },
+              position // Agents use absolute position
+            );
+          }
+          break;
+        }
+        case 'skill': {
+          // Skills can be agent-scoped or org-level (null agentId)
+          const createdSkill = await onCreateEntity('skill', agentId ?? undefined);
+          if (createdSkill) {
+            addSkillNode(
+              { id: createdSkill.id, name: createdSkill.name, agentId },
+              nodePosition // Relative if inside agent
+            );
+          }
+          break;
+        }
+        case 'database': {
+          // Databases can be org-level (null) or agent-scoped
+          const createdDb = await onCreateEntity('database', agentId ?? undefined);
+          if (createdDb) {
+            addDatabaseNode(
+              { id: createdDb.id, name: createdDb.name, slug: createdDb.slug || 'db', agentId },
+              nodePosition // Relative if inside agent
+            );
+          }
+          break;
+        }
       }
     },
-  });
+    [reactFlowInstance, onCreateEntity, addAgentNode, addSkillNode, addDatabaseNode, nodes]
+  );
 
   // Handle selection changes
   const handleSelectionChange = useCallback(
@@ -229,13 +335,16 @@ export function OrgChartCanvas({
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
-      <ReactFlow
+      <StickyNoteProvider updateNote={handleUpdateStickyNote}>
+        <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={disabled ? undefined : onNodesChange}
         onEdgesChange={disabled ? undefined : onEdgesChange}
         onSelectionChange={handleSelectionChange}
         onNodeDoubleClick={handleNodeDoubleClick}
+        onDragOver={disabled ? undefined : handleDragOver}
+        onDrop={disabled ? undefined : handleDrop}
         nodeTypes={orgChartNodeTypes}
         edgeTypes={orgChartEdgeTypes}
         defaultEdgeOptions={{
@@ -287,11 +396,11 @@ export function OrgChartCanvas({
           maskColor="rgba(0, 0, 0, 0.1)"
         />
 
-        {/* Toolbar panel */}
-        <Panel position="top-left" className="flex gap-2">
-          <TooltipProvider delayDuration={300}>
-            {/* Undo/Redo */}
-            <div className="flex gap-1 bg-card border rounded-lg shadow-sm p-1">
+        {/* Left panel - toolbar + entity palette in vertical stack */}
+        <Panel position="top-left" className="flex flex-col gap-2">
+          {/* Toolbar - glassmorphic style */}
+          <div className="flex gap-1 bg-background/50 backdrop-blur-sm border rounded-lg shadow-sm p-1">
+            <TooltipProvider delayDuration={300}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -324,76 +433,67 @@ export function OrgChartCanvas({
                   <p>Redo <kbd className="ml-1 text-[10px] opacity-60">⌘⇧Z</kbd></p>
                 </TooltipContent>
               </Tooltip>
-            </div>
+              {!disabled && (
+                <>
+                  <div className="w-px h-6 bg-border mx-0.5" />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={handleAutoArrange}
+                      >
+                        <LayoutGrid className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p>Auto-arrange</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={handleAddStickyNote}
+                      >
+                        <StickyNote className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p>Add Note</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setIsSearchOpen(true)}
+                      >
+                        <Search className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p>Search <kbd className="ml-1 text-[10px] opacity-60">⌘K</kbd></p>
+                    </TooltipContent>
+                  </Tooltip>
+                </>
+              )}
+            </TooltipProvider>
+          </div>
 
-            {/* Layout tools */}
-            {!disabled && (
-              <div className="flex gap-1 bg-card border rounded-lg shadow-sm p-1">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={handleAutoArrange}
-                    >
-                      <LayoutGrid className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <p>Auto-arrange</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            )}
-
-            {/* Add tools */}
-            {!disabled && (
-              <div className="flex gap-1 bg-card border rounded-lg shadow-sm p-1">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={handleAddStickyNote}
-                    >
-                      <StickyNote className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <p>Add Note</p>
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setIsSearchOpen(true)}
-                    >
-                      <Search className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <p>Search <kbd className="ml-1 text-[10px] opacity-60">⌘K</kbd></p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            )}
-          </TooltipProvider>
-        </Panel>
-
-        {/* Entity palette */}
-        {!disabled && onCreateEntity && (
-          <Panel position="top-right">
+          {/* Entity palette - below toolbar */}
+          {!disabled && onCreateEntity && (
             <EntityPalette
               disabled={disabled}
               onCreateEntity={(type) => onCreateEntity(type)}
             />
-          </Panel>
-        )}
+          )}
+        </Panel>
 
         {/* Selection info panel */}
         {selectedNodeId && (
@@ -402,6 +502,7 @@ export function OrgChartCanvas({
           </Panel>
         )}
       </ReactFlow>
+      </StickyNoteProvider>
 
       {/* Search dialog */}
       <SearchDialog
