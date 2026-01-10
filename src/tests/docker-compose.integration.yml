@@ -193,22 +193,22 @@ services:
     networks:
       - integration-test-network
 
-  # Cloudflare Tunnel for exposing webhooks to Pipedream during local dev
-  # Configure tunnel in Cloudflare Dashboard: Zero Trust → Networks → Tunnels
-  # Point to: http://app-integration:3000
-  # Requires TUNNEL_TOKEN in .env.local (get from Cloudflare Dashboard)
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: emery-integration-cloudflared
-    restart: unless-stopped
-    command: tunnel --no-autoupdate --protocol http2 run
-    env_file:
-      - ../../.env.local
-    depends_on:
-      app-integration:
-        condition: service_healthy
-    networks:
-      - integration-test-network
+  # # Cloudflare Tunnel for exposing webhooks to Pipedream during local dev
+  # # Configure tunnel in Cloudflare Dashboard: Zero Trust → Networks → Tunnels
+  # # Point to: http://app-integration:3000
+  # # Requires TUNNEL_TOKEN in .env.local (get from Cloudflare Dashboard)
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: emery-integration-cloudflared
+  #   restart: unless-stopped
+  #   command: tunnel --no-autoupdate --protocol http2 run
+  #   env_file:
+  #     - ../../.env.local
+  #   depends_on:
+  #     app-integration:
+  #       condition: service_healthy
+  #   networks:
+  #     - integration-test-network
 
 volumes:
   integration_postgres_data:  # Isolated volume for integration tests

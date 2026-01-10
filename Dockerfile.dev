@@ -18,17 +18,18 @@ RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
 # Install pnpm globally
 RUN npm i -g pnpm
 
-# AIDEV-NOTE: Skip dependency installation in dev mode
-# Dependencies are provided via volume mount from host (faster iteration)
+# Copy package files first for better caching
+COPY package.json pnpm-lock.yaml ./
+
+# Install dependencies inside container (Linux binaries)
+RUN pnpm install --frozen-lockfile
+
 # Copy source code
 COPY . .
 
 # Set development environment
 ENV NODE_ENV=development
 ENV NEXT_TELEMETRY_DISABLED=1
-
-# Copy entrypoint script
-COPY entrypoint.sh .
 
 EXPOSE 3000
 ENTRYPOINT ["./entrypoint.sh"]
