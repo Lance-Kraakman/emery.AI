@@ -88,16 +88,17 @@ export function getNodeDimensions(node: OrgChartNode): { width: number; height: 
  */
 export function calculateAgentContentHeight(childCount: number): number {
   const rows = Math.ceil(childCount / 2);
-  return 60 + rows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+  const contentStartY = orgChartNodeSizes.containerHeaderHeight + orgChartNodeSizes.containerPadding;
+  return contentStartY + rows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap) + orgChartNodeSizes.containerPadding;
 }
 
 /**
  * Ensure a position is within the agent content area (below header).
- * Header is approximately 50px tall.
  */
 export function ensureContentAreaPosition(position: XYPosition, hasParent: boolean): XYPosition {
   if (!hasParent) return position;
-  return { x: position.x, y: Math.max(50, position.y) };
+  const minY = orgChartNodeSizes.containerHeaderHeight + orgChartNodeSizes.containerPadding;
+  return { x: Math.max(orgChartNodeSizes.containerPadding, position.x), y: Math.max(minY, position.y) };
 }
 
 // =============================================================================
@@ -194,6 +195,7 @@ export function arrangeChildrenInGrid(
 
   const childIds = new Set(children.map((c) => c.id));
   let index = 0;
+  const contentStartY = orgChartNodeSizes.containerHeaderHeight + orgChartNodeSizes.containerPadding;
 
   return nodes.map((node) => {
     if (!childIds.has(node.id)) return node;
@@ -201,7 +203,7 @@ export function arrangeChildrenInGrid(
     const col = index % 2;
     const row = Math.floor(index / 2);
     const x = orgChartNodeSizes.containerPadding + col * (orgChartNodeSizes.nodeWidth + orgChartNodeSizes.childNodeGap);
-    const y = 50 + row * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+    const y = contentStartY + row * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
 
     index++;
     return { ...node, position: { x, y } };
@@ -280,9 +282,10 @@ export function createSkillNode(
     finalPosition = savedPosition;
   } else if (parentId && indexInParent !== undefined) {
     // Inside agent container - calculate grid position
+    const contentStartY = orgChartNodeSizes.containerHeaderHeight + orgChartNodeSizes.containerPadding;
     finalPosition = {
       x: orgChartNodeSizes.containerPadding + (indexInParent % 2) * (orgChartNodeSizes.nodeWidth + orgChartNodeSizes.childNodeGap),
-      y: 50 + Math.floor(indexInParent / 2) * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap),
+      y: contentStartY + Math.floor(indexInParent / 2) * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap),
     };
   } else {
     finalPosition = { x: 50, y: 50 };
@@ -323,9 +326,10 @@ export function createDatabaseNode(
     finalPosition = savedPosition;
   } else if (parentId && indexInParent !== undefined) {
     // Inside agent container - calculate grid position
+    const contentStartY = orgChartNodeSizes.containerHeaderHeight + orgChartNodeSizes.containerPadding;
     finalPosition = {
       x: orgChartNodeSizes.containerPadding + (indexInParent % 2) * (orgChartNodeSizes.nodeWidth + orgChartNodeSizes.childNodeGap),
-      y: 50 + Math.floor(indexInParent / 2) * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap),
+      y: contentStartY + Math.floor(indexInParent / 2) * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap),
     };
   } else {
     finalPosition = { x: 50, y: 50 };
