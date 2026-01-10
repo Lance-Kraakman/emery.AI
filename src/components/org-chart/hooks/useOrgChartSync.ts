@@ -19,11 +19,53 @@ import {
   createSkillNode,
   createDatabaseNode,
   makeNodeId,
+  getNodeDimensions,
+  calculateAgentContentHeight,
+  ensureContentAreaPosition,
   type Agent,
   type Skill,
   type Database,
 } from '../utils';
 import { orgChartNodeSizes } from '../theme';
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Update an agent node's child count and optionally resize if content doesn't fit.
+ */
+function updateAgentWithChild(
+  nodes: OrgChartNode[],
+  agentNodeId: string,
+  countKey: 'skillCount' | 'databaseCount'
+): OrgChartNode[] {
+  const agentIndex = nodes.findIndex((n) => n.id === agentNodeId);
+  if (agentIndex === -1) return nodes;
+
+  const agentNode = nodes[agentIndex];
+  const data = agentNode.data as AgentContainerNodeData;
+  if (!data.isExpanded) return nodes;
+
+  const childCount = nodes.filter((n) => n.parentId === agentNodeId).length;
+  const neededHeight = calculateAgentContentHeight(childCount);
+  const { height: currentHeight } = getNodeDimensions(agentNode);
+
+  const newData = { ...data, [countKey]: (data[countKey] ?? 0) + 1 };
+
+  if (neededHeight > currentHeight) {
+    const newHeight = Math.max(orgChartNodeSizes.containerMinHeight, neededHeight);
+    nodes[agentIndex] = {
+      ...agentNode,
+      style: { ...agentNode.style, height: newHeight },
+      data: newData,
+    };
+  } else {
+    nodes[agentIndex] = { ...agentNode, data: newData };
+  }
+
+  return nodes;
+}
 
 export interface SyncProps {
   agents: Agent[];
@@ -70,57 +112,16 @@ export function useOrgChartSync(
     [setNodes]
   );
 
-  // Add real skill node (called after server creates it)
-  // Also auto-resizes parent agent if expanded and if needed
+  // Add skill node and auto-resize parent agent if needed
   const addSkillNode = useCallback(
     (skill: Skill, position: XYPosition) => {
       const { canvasMetadata } = propsRef.current;
       setNodes((nds) => {
-        const newNodes = [...nds];
+        const adjustedPosition = ensureContentAreaPosition(position, !!skill.agentId);
+        let newNodes = [...nds, createSkillNode(skill, adjustedPosition, canvasMetadata)];
 
-        // Ensure skill is placed in content area (below header, y >= 50)
-        const adjustedPosition = skill.agentId
-          ? { x: position.x, y: Math.max(50, position.y) }
-          : position;
-
-        newNodes.push(createSkillNode(skill, adjustedPosition, canvasMetadata));
-
-        // Auto-resize parent agent if skill belongs to one and if needed
         if (skill.agentId) {
-          const agentNodeId = makeNodeId('agent', skill.agentId);
-          const agentIndex = newNodes.findIndex((n) => n.id === agentNodeId);
-          if (agentIndex !== -1) {
-            const agentNode = newNodes[agentIndex];
-            const data = agentNode.data as AgentContainerNodeData;
-
-            if (data.isExpanded) {
-              // Count all children for this agent
-              const childCount = newNodes.filter((n) => n.parentId === agentNodeId).length;
-              const rows = Math.ceil(childCount / 2);
-              const neededHeight = 60 + rows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
-
-              // Get current height from node.width/height or measured or style
-              const nodeAny = agentNode as any;
-              const currentHeight = nodeAny.height ?? nodeAny.measured?.height ??
-                (typeof agentNode.style?.height === 'number' ? agentNode.style.height : orgChartNodeSizes.containerMinHeight);
-
-              // Only resize if needed
-              if (neededHeight > currentHeight) {
-                const newHeight = Math.max(orgChartNodeSizes.containerMinHeight, neededHeight);
-                newNodes[agentIndex] = {
-                  ...agentNode,
-                  style: { ...agentNode.style, height: newHeight },
-                  data: { ...data, skillCount: (data.skillCount ?? 0) + 1 },
-                };
-              } else {
-                // Just update the skill count
-                newNodes[agentIndex] = {
-                  ...agentNode,
-                  data: { ...data, skillCount: (data.skillCount ?? 0) + 1 },
-                };
-              }
-            }
-          }
+          newNodes = updateAgentWithChild(newNodes, makeNodeId('agent', skill.agentId), 'skillCount');
         }
 
         return newNodes;
@@ -129,57 +130,16 @@ export function useOrgChartSync(
     [setNodes]
   );
 
-  // Add real database node (called after server creates it)
-  // Also auto-resizes parent agent if expanded and if needed
+  // Add database node and auto-resize parent agent if needed
   const addDatabaseNode = useCallback(
     (database: Database, position: XYPosition) => {
       const { canvasMetadata } = propsRef.current;
       setNodes((nds) => {
-        const newNodes = [...nds];
+        const adjustedPosition = ensureContentAreaPosition(position, !!database.agentId);
+        let newNodes = [...nds, createDatabaseNode(database, adjustedPosition, canvasMetadata)];
 
-        // Ensure database is placed in content area (below header, y >= 50)
-        const adjustedPosition = database.agentId
-          ? { x: position.x, y: Math.max(50, position.y) }
-          : position;
-
-        newNodes.push(createDatabaseNode(database, adjustedPosition, canvasMetadata));
-
-        // Auto-resize parent agent if database belongs to one and if needed
         if (database.agentId) {
-          const agentNodeId = makeNodeId('agent', database.agentId);
-          const agentIndex = newNodes.findIndex((n) => n.id === agentNodeId);
-          if (agentIndex !== -1) {
-            const agentNode = newNodes[agentIndex];
-            const data = agentNode.data as AgentContainerNodeData;
-
-            if (data.isExpanded) {
-              // Count all children for this agent
-              const childCount = newNodes.filter((n) => n.parentId === agentNodeId).length;
-              const rows = Math.ceil(childCount / 2);
-              const neededHeight = 60 + rows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
-
-              // Get current height from node.width/height or measured or style
-              const nodeAny = agentNode as any;
-              const currentHeight = nodeAny.height ?? nodeAny.measured?.height ??
-                (typeof agentNode.style?.height === 'number' ? agentNode.style.height : orgChartNodeSizes.containerMinHeight);
-
-              // Only resize if needed
-              if (neededHeight > currentHeight) {
-                const newHeight = Math.max(orgChartNodeSizes.containerMinHeight, neededHeight);
-                newNodes[agentIndex] = {
-                  ...agentNode,
-                  style: { ...agentNode.style, height: newHeight },
-                  data: { ...data, databaseCount: (data.databaseCount ?? 0) + 1 },
-                };
-              } else {
-                // Just update the database count
-                newNodes[agentIndex] = {
-                  ...agentNode,
-                  data: { ...data, databaseCount: (data.databaseCount ?? 0) + 1 },
-                };
-              }
-            }
-          }
+          newNodes = updateAgentWithChild(newNodes, makeNodeId('agent', database.agentId), 'databaseCount');
         }
 
         return newNodes;

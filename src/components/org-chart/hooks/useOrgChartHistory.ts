@@ -23,6 +23,46 @@ export interface UseOrgChartHistoryReturn {
 
 const MAX_HISTORY = 10;
 
+// =============================================================================
+// Clone Utilities
+// =============================================================================
+
+/**
+ * Deep clone a node, preserving React Flow's dimension properties.
+ * React Flow stores resized dimensions in node.width/height/measured.
+ */
+function cloneNode(node: OrgChartNode): OrgChartNode {
+  const nodeAny = node as any;
+  return {
+    ...node,
+    data: { ...node.data },
+    style: node.style ? { ...node.style } : undefined,
+    width: nodeAny.width,
+    height: nodeAny.height,
+    measured: nodeAny.measured ? { ...nodeAny.measured } : undefined,
+  } as OrgChartNode;
+}
+
+/**
+ * Deep clone an edge.
+ */
+function cloneEdge(edge: OrgChartEdge): OrgChartEdge {
+  return {
+    ...edge,
+    data: edge.data ? { ...edge.data } : undefined,
+  } as OrgChartEdge;
+}
+
+/**
+ * Create a deep clone of the current state for history.
+ */
+function cloneState(nodes: OrgChartNode[], edges: OrgChartEdge[]): HistoryState {
+  return {
+    nodes: nodes.map(cloneNode),
+    edges: edges.map(cloneEdge),
+  };
+}
+
 export function useOrgChartHistory(
   nodes: OrgChartNode[],
   edges: OrgChartEdge[],
@@ -34,24 +74,7 @@ export function useOrgChartHistory(
   const [future, setFuture] = useState<HistoryState[]>([]);
 
   const pushHistory = useCallback(() => {
-    setPast((p) => {
-      // Deep clone nodes to preserve all properties including width, height, measured, style
-      const clonedNodes = nodes.map((node) => ({
-        ...node,
-        data: { ...node.data },
-        style: node.style ? { ...node.style } : undefined,
-        // Preserve React Flow's dimension properties
-        width: (node as any).width,
-        height: (node as any).height,
-        measured: (node as any).measured ? { ...(node as any).measured } : undefined,
-      })) as OrgChartNode[];
-      const clonedEdges = edges.map((edge) => ({
-        ...edge,
-        data: edge.data ? { ...edge.data } : undefined,
-      })) as OrgChartEdge[];
-      const newPast = [...p.slice(-(MAX_HISTORY - 1)), { nodes: clonedNodes, edges: clonedEdges }];
-      return newPast;
-    });
+    setPast((p) => [...p.slice(-(MAX_HISTORY - 1)), cloneState(nodes, edges)]);
     setFuture([]);
   }, [nodes, edges]);
 
@@ -60,20 +83,7 @@ export function useOrgChartHistory(
 
     const previous = past[past.length - 1];
     setPast((p) => p.slice(0, -1));
-    // Deep clone current state before pushing to future
-    const clonedNodes = nodes.map((node) => ({
-      ...node,
-      data: { ...node.data },
-      style: node.style ? { ...node.style } : undefined,
-      width: (node as any).width,
-      height: (node as any).height,
-      measured: (node as any).measured ? { ...(node as any).measured } : undefined,
-    })) as OrgChartNode[];
-    const clonedEdges = edges.map((edge) => ({
-      ...edge,
-      data: edge.data ? { ...edge.data } : undefined,
-    })) as OrgChartEdge[];
-    setFuture((f) => [{ nodes: clonedNodes, edges: clonedEdges }, ...f]);
+    setFuture((f) => [cloneState(nodes, edges), ...f]);
     setNodes(previous.nodes);
     setEdges(previous.edges);
     setSelectedNodeIds(new Set());
@@ -84,20 +94,7 @@ export function useOrgChartHistory(
 
     const next = future[0];
     setFuture((f) => f.slice(1));
-    // Deep clone current state before pushing to past
-    const clonedNodes = nodes.map((node) => ({
-      ...node,
-      data: { ...node.data },
-      style: node.style ? { ...node.style } : undefined,
-      width: (node as any).width,
-      height: (node as any).height,
-      measured: (node as any).measured ? { ...(node as any).measured } : undefined,
-    })) as OrgChartNode[];
-    const clonedEdges = edges.map((edge) => ({
-      ...edge,
-      data: edge.data ? { ...edge.data } : undefined,
-    })) as OrgChartEdge[];
-    setPast((p) => [...p, { nodes: clonedNodes, edges: clonedEdges }]);
+    setPast((p) => [...p, cloneState(nodes, edges)]);
     setNodes(next.nodes);
     setEdges(next.edges);
     setSelectedNodeIds(new Set());

@@ -65,6 +65,42 @@ export function parseNodeId(nodeId: string): { type: OrgChartNodeType; entityId:
 }
 
 // =============================================================================
+// Node Dimension Utilities
+// =============================================================================
+
+/**
+ * Get actual node dimensions from React Flow node.
+ * React Flow stores resized dimensions in node.width/height or node.measured,
+ * falling back to node.style for initial values.
+ */
+export function getNodeDimensions(node: OrgChartNode): { width: number; height: number } {
+  const nodeAny = node as any;
+  return {
+    width: nodeAny.width ?? nodeAny.measured?.width ??
+      (typeof node.style?.width === 'number' ? node.style.width : orgChartNodeSizes.containerMinWidth),
+    height: nodeAny.height ?? nodeAny.measured?.height ??
+      (typeof node.style?.height === 'number' ? node.style.height : orgChartNodeSizes.containerMinHeight),
+  };
+}
+
+/**
+ * Calculate required height for an agent container based on child count.
+ */
+export function calculateAgentContentHeight(childCount: number): number {
+  const rows = Math.ceil(childCount / 2);
+  return 60 + rows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+}
+
+/**
+ * Ensure a position is within the agent content area (below header).
+ * Header is approximately 50px tall.
+ */
+export function ensureContentAreaPosition(position: XYPosition, hasParent: boolean): XYPosition {
+  if (!hasParent) return position;
+  return { x: position.x, y: Math.max(50, position.y) };
+}
+
+// =============================================================================
 // Node Creation Functions
 // =============================================================================
 
@@ -349,13 +385,7 @@ export function extractMetadataFromNodes(nodes: OrgChartNode[]): OrgChartCanvasM
       const data = node.data as AgentContainerNodeData;
       agentPositions[data.agentId] = { x: node.position.x, y: node.position.y };
       agentExpandedStates[data.agentId] = data.isExpanded ?? true;
-      // React Flow stores resized dimensions in node.width/height or node.measured, not node.style
-      const nodeAny = node as any;
-      const width = nodeAny.width ?? nodeAny.measured?.width ??
-        (typeof node.style?.width === 'number' ? node.style.width : orgChartNodeSizes.containerMinWidth);
-      const height = nodeAny.height ?? nodeAny.measured?.height ??
-        (typeof node.style?.height === 'number' ? node.style.height : orgChartNodeSizes.containerMinHeight);
-      agentDimensions[data.agentId] = { width, height };
+      agentDimensions[data.agentId] = getNodeDimensions(node);
     } else if (node.type === 'skill') {
       const data = node.data as SkillNodeData;
       // Save all skill positions (relative to parent if inside agent)
