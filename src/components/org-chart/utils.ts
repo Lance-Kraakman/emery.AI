@@ -101,6 +101,114 @@ export function ensureContentAreaPosition(position: XYPosition, hasParent: boole
 }
 
 // =============================================================================
+// Auto-Arrange Layout Utilities
+// =============================================================================
+
+/**
+ * Calculate agent container dimensions based on child count.
+ * Returns width and height that will fit children in a 2-column grid.
+ */
+export function calculateAgentDimensions(childCount: number): { width: number; height: number } {
+  const width = orgChartNodeSizes.containerMinWidth;
+  const height = Math.max(
+    orgChartNodeSizes.containerMinHeight,
+    calculateAgentContentHeight(childCount)
+  );
+  return { width, height };
+}
+
+/**
+ * Arrange a list of node IDs horizontally in a row.
+ * Updates node positions in place and returns the row height.
+ */
+export function arrangeNodesInRow(
+  nodes: OrgChartNode[],
+  nodeIds: Set<string>,
+  startX: number,
+  startY: number,
+  gap: number,
+  nodeWidth: number
+): { updatedNodes: OrgChartNode[]; rowHeight: number } {
+  let currentX = startX;
+  let maxHeight = 0;
+
+  const updatedNodes = nodes.map((node) => {
+    if (!nodeIds.has(node.id)) return node;
+
+    const { height } = getNodeDimensions(node);
+    maxHeight = Math.max(maxHeight, height);
+
+    const updatedNode = { ...node, position: { x: currentX, y: startY } };
+    currentX += nodeWidth + gap;
+    return updatedNode;
+  });
+
+  return { updatedNodes, rowHeight: maxHeight };
+}
+
+/**
+ * Arrange agents in horizontal rows, wrapping to new row when exceeding max width.
+ */
+export function arrangeAgentsInRows(
+  nodes: OrgChartNode[],
+  agentIds: string[],
+  startX: number,
+  startY: number,
+  gap: number,
+  maxRowWidth: number
+): OrgChartNode[] {
+  let currentX = startX;
+  let currentY = startY;
+  let rowMaxHeight = 0;
+
+  return nodes.map((node) => {
+    if (!agentIds.includes(node.id)) return node;
+
+    const { width, height } = getNodeDimensions(node);
+
+    // Check if we need to wrap to next row
+    if (currentX + width > maxRowWidth && currentX > startX) {
+      currentX = startX;
+      currentY += rowMaxHeight + gap;
+      rowMaxHeight = 0;
+    }
+
+    const updatedNode = { ...node, position: { x: currentX, y: currentY } };
+    currentX += width + gap;
+    rowMaxHeight = Math.max(rowMaxHeight, height);
+
+    return updatedNode;
+  });
+}
+
+/**
+ * Arrange children inside an agent container in a 2-column grid.
+ * Children positions are relative to the parent agent.
+ */
+export function arrangeChildrenInGrid(
+  nodes: OrgChartNode[],
+  parentId: string
+): OrgChartNode[] {
+  const children = nodes.filter((n) => n.parentId === parentId);
+  if (children.length === 0) return nodes;
+
+  const childIds = new Set(children.map((c) => c.id));
+  let index = 0;
+
+  return nodes.map((node) => {
+    if (!childIds.has(node.id)) return node;
+
+    const col = index % 2;
+    const row = Math.floor(index / 2);
+    const x = orgChartNodeSizes.containerPadding + col * (orgChartNodeSizes.nodeWidth + orgChartNodeSizes.childNodeGap);
+    const y = 50 + row * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+
+    index++;
+    return { ...node, position: { x, y } };
+  });
+}
+
+// =============================================================================
 // Node Creation Functions
 // =============================================================================
 

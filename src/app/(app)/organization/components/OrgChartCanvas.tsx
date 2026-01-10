@@ -27,7 +27,15 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { orgChartNodeTypes } from '@/components/org-chart/nodes';
 import { orgChartEdgeTypes } from '@/components/org-chart/edges';
+import { orgChartNodeSizes } from '@/components/org-chart/theme';
 import { useOrgChart } from '@/components/org-chart/hooks';
+import {
+  getNodeDimensions,
+  arrangeNodesInRow,
+  arrangeAgentsInRows,
+  arrangeChildrenInGrid,
+  calculateAgentDimensions,
+} from '@/components/org-chart/utils';
 import { EntityPalette } from './EntityPalette';
 import { SearchDialog } from './SearchDialog';
 import { StickyNoteProvider } from '@/components/shared/StickyNoteContext';
@@ -268,36 +276,72 @@ export function OrgChartCanvas({
     [setSelectedNodeId, onSelect]
   );
 
-  // Simple auto-arrange: position agents in a grid, with their resources inside
+  // Auto-arrange: horizontal org-chart style layout
   const handleAutoArrange = useCallback(() => {
-    const agentNodes = nodes.filter((n) => n.type === 'agent');
-    const orgResourcesNode = nodes.find((n) => n.type === 'org_resources');
-    const otherNodes = nodes.filter((n) => n.type !== 'agent' && n.type !== 'org_resources');
-
+    const GAP = 40;
     const PADDING = 50;
-    const AGENT_WIDTH = 350;
-    const AGENT_HEIGHT = 300;
-    const COLS = 3;
-
+    const MAX_ROW_WIDTH = 1600;
+    let currentY = PADDING;
     let newNodes = [...nodes];
 
-    // Position org resources at top
-    if (orgResourcesNode) {
-      newNodes = newNodes.map((n) =>
-        n.id === orgResourcesNode.id ? { ...n, position: { x: PADDING, y: PADDING } } : n
+    // 1. Arrange org-level skills in a horizontal row
+    const orgSkillIds = new Set(
+      newNodes.filter((n) => n.type === 'skill' && !n.parentId).map((n) => n.id)
+    );
+    if (orgSkillIds.size > 0) {
+      const result = arrangeNodesInRow(
+        newNodes,
+        orgSkillIds,
+        PADDING,
+        currentY,
+        GAP,
+        orgChartNodeSizes.nodeWidth
       );
+      newNodes = result.updatedNodes;
+      currentY += Math.max(result.rowHeight, orgChartNodeSizes.nodeHeight) + GAP;
     }
 
-    // Position agents in a grid below org resources
-    const startY = orgResourcesNode ? PADDING + 200 : PADDING;
-    agentNodes.forEach((agent, index) => {
-      const row = Math.floor(index / COLS);
-      const col = index % COLS;
-      const x = PADDING + col * (AGENT_WIDTH + PADDING);
-      const y = startY + row * (AGENT_HEIGHT + PADDING);
+    // 2. Arrange org-level databases in a horizontal row
+    const orgDatabaseIds = new Set(
+      newNodes.filter((n) => n.type === 'database' && !n.parentId).map((n) => n.id)
+    );
+    if (orgDatabaseIds.size > 0) {
+      const result = arrangeNodesInRow(
+        newNodes,
+        orgDatabaseIds,
+        PADDING,
+        currentY,
+        GAP,
+        orgChartNodeSizes.nodeWidth
+      );
+      newNodes = result.updatedNodes;
+      currentY += Math.max(result.rowHeight, orgChartNodeSizes.nodeHeight) + GAP;
+    }
 
-      newNodes = newNodes.map((n) => (n.id === agent.id ? { ...n, position: { x, y } } : n));
+    // 3. Size agents based on their children and arrange in horizontal rows
+    const agentIds = newNodes.filter((n) => n.type === 'agent').map((n) => n.id);
+
+    // First, resize agents to fit their children
+    newNodes = newNodes.map((node) => {
+      if (node.type !== 'agent') return node;
+      const data = node.data as AgentContainerNodeData;
+      const childCount = (data.skillCount ?? 0) + (data.databaseCount ?? 0);
+      const { width, height } = calculateAgentDimensions(childCount);
+      return {
+        ...node,
+        style: { ...node.style, width, height },
+      };
     });
+
+    // Arrange agents in horizontal rows
+    newNodes = arrangeAgentsInRows(newNodes, agentIds, PADDING, currentY, GAP, MAX_ROW_WIDTH);
+
+    // 4. Arrange children inside each agent in a 2-column grid
+    for (const agentId of agentIds) {
+      newNodes = arrangeChildrenInGrid(newNodes, agentId);
+    }
+
+    // 5. Keep sticky notes in their relative positions (don't rearrange)
 
     setNodes(newNodes);
   }, [nodes, setNodes]);
