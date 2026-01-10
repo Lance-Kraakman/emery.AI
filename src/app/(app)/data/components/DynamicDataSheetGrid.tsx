@@ -102,6 +102,9 @@ interface DynamicDataSheetGridProps {
   sortState?: { field?: string, order?: 'asc' | 'desc' };
   onSort?: (field: string, direction: 'asc' | 'desc') => void;
   onClearSort?: () => void;
+  // Navigation context (for back button from org chart)
+  returnTo?: string | null;
+  onBack?: () => void;
 }
 
 // Row number component for gutter column
@@ -457,7 +460,9 @@ export function DynamicDataSheetGrid({
   onClearFilters,
   sortState,
   onSort,
-  onClearSort
+  onClearSort,
+  returnTo,
+  onBack
 }: DynamicDataSheetGridProps) {
   // Use custom hook for grid state management
   const { state, dispatch } = useGridState(rows)
@@ -756,7 +761,9 @@ export function DynamicDataSheetGrid({
     onUpdateRow,
     onAddRows,
     onDeleteRow,
-    onScroll
+    onScroll,
+    returnTo,
+    onBack
   }
 
   return (

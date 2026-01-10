@@ -18,7 +18,7 @@ import React from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
-import { Search, Settings, RefreshCw, Filter, X, Save, Check } from 'lucide-react'
+import { Search, Settings, RefreshCw, Filter, X, Save, Check, ArrowLeft } from 'lucide-react'
 import { FilterPopover } from '../FilterPopover'
 import { FilterChip } from '../FilterChip'
 import { ViewSelector } from '../ViewSelector'
@@ -48,8 +48,13 @@ export const GridHeaderBar = () => {
     onRemoveFilter,
     onClearFilters,
     sortState,
-    onClearSort
+    onClearSort,
+    returnTo,
+    onBack
   } = useGrid()
+
+  // Show back button when navigated from org chart
+  const showBackButton = returnTo?.startsWith('org-chart') && onBack
 
   // State for Save View dialog
   const [isSaveViewDialogOpen, setIsSaveViewDialogOpen] = React.useState(false)
@@ -101,8 +106,19 @@ export const GridHeaderBar = () => {
   return (
     <>
     <div className="flex items-center justify-between h-[50px] px-4 border border-border border-b-0 bg-background rounded-t-md">
-      {/* Left: Table info - compact but always visible */}
+      {/* Left: Back button + Table info - compact but always visible */}
       <div className="flex items-center gap-2 shrink-0">
+        {showBackButton && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onBack}
+            className="h-8 px-2 gap-1 text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="text-xs">Org Chart</span>
+          </Button>
+        )}
         <h2 className="text-sm font-semibold truncate max-w-[140px]">{tableName}</h2>
         <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-1">
           {isLoading && <RefreshCw className="h-3 w-3 animate-spin" />}

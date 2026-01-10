@@ -42,6 +42,7 @@ export interface Database {
   slug: string;
   agentId?: number | null;
   tableCount?: number;
+  tables?: Array<{ id: number; name: string }>;
 }
 
 // =============================================================================
@@ -347,6 +348,8 @@ export function createDatabaseNode(
       slug: db.slug,
       agentId: db.agentId ?? null,
       tableCount: db.tableCount,
+      // Include first 5 tables for inline display
+      tables: db.tables?.slice(0, 5).map(t => ({ id: t.id, name: t.name })),
     } as DatabaseNodeData,
   };
 }

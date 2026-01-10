@@ -27,6 +27,7 @@ export { useOrgChartSync } from './useOrgChartSync';
 export { useOrgChartHistory } from './useOrgChartHistory';
 export { useOrgChartSelection } from './useOrgChartSelection';
 export { useOrgChartPersistence } from './useOrgChartPersistence';
+export { useOrgChartSession } from './useOrgChartSession';
 
 export interface UseOrgChartProps {
   agents: Agent[];

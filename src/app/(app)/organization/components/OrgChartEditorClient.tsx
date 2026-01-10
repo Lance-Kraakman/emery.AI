@@ -7,8 +7,8 @@
  * Wraps OrgChartCanvas with side panel configuration.
  */
 
-import React, { useState, useCallback, useMemo, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useCallback, useMemo, useTransition, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ReactFlowProvider } from '@xyflow/react';
 import { X, Settings2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -20,10 +20,12 @@ import {
   SkillConfigPanel,
   DatabaseConfigPanel,
 } from '@/components/org-chart/panels';
+import { useOrgChartSession } from '@/components/org-chart/hooks';
 import { createAgent, deleteAgent } from '@/app/actions/agents';
 import { createSkill, deleteSkill } from '@/app/actions/skills';
 import { createDatabase, deleteDatabase } from '@/app/actions/databases';
 import { TriggerConfigModal } from '@/app/(app)/agents/components/modals/TriggerConfigModal';
+import { CreateTableDialog } from '@/app/(app)/data/components/CreateTableDialog';
 import { useEmeryAgent } from '@/contexts/EmeryStoreProvider';
 import type { OrgChartNodeType, OrgChartCanvasMetadata } from '@/components/org-chart/types';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
@@ -74,11 +76,53 @@ export function OrgChartEditorClient({
   canvasMetadata,
 }: OrgChartEditorClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  // Selection state
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [selectedNodeType, setSelectedNodeType] = useState<OrgChartNodeType | undefined>();
-  const [selectedEntityId, setSelectedEntityId] = useState<number | undefined>();
+  // Read initial selection from URL (for restoring state after navigation)
+  const initialSelectedFromUrl = searchParams.get('selected');
+
+  // Session-based state persistence (selected node, viewport)
+  const {
+    selectedNodeId: sessionSelectedNodeId,
+    setSelectedNodeId: setSessionSelectedNodeId,
+    viewport: sessionViewport,
+    setViewport: setSessionViewport,
+  } = useOrgChartSession({
+    initialSelectedNodeId: initialSelectedFromUrl,
+    initialViewport: canvasMetadata?.viewport,
+  });
+
+  // Derived selection state from session
+  const selectedNodeId = sessionSelectedNodeId;
+  const [selectedNodeType, setSelectedNodeType] = useState<OrgChartNodeType | undefined>(() => {
+    if (!sessionSelectedNodeId) return undefined;
+    const match = sessionSelectedNodeId.match(/^([a-z_]+)-(\d+)$/);
+    return match ? match[1] as OrgChartNodeType : undefined;
+  });
+  const [selectedEntityId, setSelectedEntityId] = useState<number | undefined>(() => {
+    if (!sessionSelectedNodeId) return undefined;
+    const match = sessionSelectedNodeId.match(/^([a-z_]+)-(\d+)$/);
+    return match ? parseInt(match[2], 10) : undefined;
+  });
+
+  // Sync selection type/id when session selected node changes
+  useEffect(() => {
+    if (sessionSelectedNodeId) {
+      const match = sessionSelectedNodeId.match(/^([a-z_]+)-(\d+)$/);
+      if (match) {
+        setSelectedNodeType(match[1] as OrgChartNodeType);
+        setSelectedEntityId(parseInt(match[2], 10));
+      }
+    } else {
+      setSelectedNodeType(undefined);
+      setSelectedEntityId(undefined);
+    }
+  }, [sessionSelectedNodeId]);
+
+  // Wrapper to update session selected node
+  const setSelectedNodeId = useCallback((nodeId: string | null) => {
+    setSessionSelectedNodeId(nodeId);
+  }, [setSessionSelectedNodeId]);
 
   // Trigger config modal state (lifted from AgentConfigPanel for proper overlay)
   const [triggerModalOpen, setTriggerModalOpen] = useState(false);
@@ -88,6 +132,9 @@ export function OrgChartEditorClient({
 
   // Get full agent data for modal (only when modal needs to open)
   const triggerModalAgent = useEmeryAgent(triggerModalAgentId ?? 0) as AgentDTO | undefined;
+
+  // Create table dialog state (lifted from DatabaseConfigPanel for proper overlay)
+  const [createTableDatabaseId, setCreateTableDatabaseId] = useState<number | null>(null);
 
   // Handle selection from canvas
   const handleSelect = useCallback(
@@ -99,9 +146,18 @@ export function OrgChartEditorClient({
     []
   );
 
+  // Build return URL with selected node for state preservation
+  const buildReturnUrl = useCallback((nodeId?: string) => {
+    const selected = nodeId || selectedNodeId;
+    return selected ? `org-chart&selected=${selected}` : 'org-chart';
+  }, [selectedNodeId]);
+
   // Handle opening an entity (navigate to editor)
   const handleOpenEntity = useCallback(
     (entityType: OrgChartNodeType, entityId: number) => {
+      const nodeId = `${entityType}-${entityId}`;
+      const returnTo = buildReturnUrl(nodeId);
+
       switch (entityType) {
         case 'agent':
           router.push(`/agents/${entityId}`);
@@ -110,16 +166,15 @@ export function OrgChartEditorClient({
           // Find the agent ID for this skill to build the correct URL
           const skill = skills.find((s) => s.id === entityId);
           if (skill?.agentId) {
-            router.push(`/agents/${skill.agentId}/skills?skillId=${entityId}`);
+            router.push(`/agents/${skill.agentId}/skills?skillId=${entityId}&returnTo=${returnTo}`);
           } else {
-            // Org-level skill - need to handle differently
-            // For now, navigate to first agent that has access
-            router.push(`/agents?skillId=${entityId}`);
+            // Org-level skill
+            router.push(`/skills/${entityId}?returnTo=${returnTo}`);
           }
           break;
         case 'database':
-          // Navigate to data page with database ID
-          router.push(`/data/${entityId}`);
+          // No database-specific page - users click individual tables instead
+          // Double-clicking a database just selects it (shows side panel)
           break;
         case 'app':
           // Navigate to app builder
@@ -129,7 +184,7 @@ export function OrgChartEditorClient({
           break;
       }
     },
-    [router, skills, databases]
+    [router, skills, databases, buildReturnUrl]
   );
 
   // Loading state for entity creation
@@ -403,7 +458,7 @@ export function OrgChartEditorClient({
         <DatabaseConfigPanel
           database={selectedDatabase}
           agentName={getAgentName(selectedDatabase.agentId)}
-          onOpenData={() => handleOpenEntity('database', selectedDatabase.id)}
+          onAddTable={() => setCreateTableDatabaseId(selectedDatabase.id)}
         />
       );
     }
@@ -433,6 +488,8 @@ export function OrgChartEditorClient({
           onOpenEntity={handleOpenEntity}
           onCreateEntity={handleCreateEntity}
           onDeleteEntities={handleDeleteEntities}
+          initialViewport={sessionViewport}
+          onViewportChange={setSessionViewport}
         />
 
         {/* Floating Config Panel - matching skill editor style */}
@@ -480,6 +537,17 @@ export function OrgChartEditorClient({
           onUpdate={() => router.refresh()}
           mode={triggerModalMode}
           scheduleIndex={triggerModalScheduleIndex}
+        />
+      )}
+
+      {/* Create Table Dialog - rendered at root level for proper overlay */}
+      {createTableDatabaseId !== null && (
+        <CreateTableDialog
+          isOpen={true}
+          onClose={() => setCreateTableDatabaseId(null)}
+          onTableCreated={() => router.refresh()}
+          selectedDatabaseId={createTableDatabaseId}
+          returnTo="org-chart"
         />
       )}
     </ReactFlowProvider>

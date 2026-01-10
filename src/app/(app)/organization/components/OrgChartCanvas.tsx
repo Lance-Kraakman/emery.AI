@@ -77,6 +77,10 @@ interface OrgChartCanvasProps {
   onCreateEntity?: (entityType: OrgChartNodeType, agentId?: number) => Promise<{ id: number; name: string; [key: string]: any } | null>;
   /** Callback when entities should be deleted - returns true if successful */
   onDeleteEntities?: (items: Array<{ type: OrgChartNodeType; entityId: number }>) => Promise<boolean>;
+  /** Initial viewport from session/metadata (if provided, overrides fitView) */
+  initialViewport?: { x: number; y: number; zoom: number } | null;
+  /** Callback when viewport changes (for session persistence) */
+  onViewportChange?: (viewport: { x: number; y: number; zoom: number }) => void;
 }
 
 export function OrgChartCanvas({
@@ -89,6 +93,8 @@ export function OrgChartCanvas({
   onOpenEntity,
   onCreateEntity,
   onDeleteEntities,
+  initialViewport,
+  onViewportChange,
 }: OrgChartCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -458,8 +464,14 @@ export function OrgChartCanvas({
           type: 'reference',
           animated: false,
         }}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
+        // Use saved viewport if available, otherwise fit view
+        {...(initialViewport
+          ? { defaultViewport: initialViewport }
+          : { fitView: true, fitViewOptions: { padding: 0.2 } }
+        )}
+        onMoveEnd={(_, viewport) => {
+          onViewportChange?.({ x: viewport.x, y: viewport.y, zoom: viewport.zoom });
+        }}
         minZoom={0.1}
         maxZoom={2}
         deleteKeyCode={null} // We handle delete manually

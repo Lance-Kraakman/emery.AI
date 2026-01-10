@@ -30,6 +30,10 @@ export interface GridContextValue {
   tableId: number
   organizationId: number
 
+  // Navigation context (for back button from org chart)
+  returnTo?: string | null
+  onBack?: () => void
+
   // Data state
   fields: FieldDTO[]
   rows: DSGRow[]

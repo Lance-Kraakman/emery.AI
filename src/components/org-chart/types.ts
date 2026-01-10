@@ -80,6 +80,8 @@ export interface DatabaseNodeData extends BaseOrgChartNodeData {
   slug: string;
   agentId?: number | null; // null = org-scoped
   tableCount?: number;
+  /** First few tables for inline display in node */
+  tables?: Array<{ id: number; name: string }>;
 }
 
 /**
@@ -293,4 +295,17 @@ export interface OrgChartCanvasMetadata {
   skillPositions?: Record<number, { x: number; y: number }>;
   /** Database positions (keyed by databaseId) - relative to parent if inside agent */
   databasePositions?: Record<number, { x: number; y: number }>;
+  /** Viewport state (zoom and pan) */
+  viewport?: { x: number; y: number; zoom: number };
+}
+
+/**
+ * Session state for quick restore (stored in sessionStorage)
+ * Includes transient state that doesn't need permanent persistence
+ */
+export interface OrgChartSessionState {
+  /** Currently selected node ID */
+  selectedNodeId?: string | null;
+  /** Viewport state (zoom and pan) - cached for quick restore */
+  viewport?: { x: number; y: number; zoom: number };
 }

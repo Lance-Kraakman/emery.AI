@@ -1,12 +1,12 @@
 "use client"
 
 import React, { useEffect, useMemo, useCallback, useRef } from "react"
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { useStore } from '@tanstack/react-store'
 import { toast } from 'sonner'
 import debounce from 'lodash/debounce'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Settings, Plus, Search, TableIcon as Table, Database } from "lucide-react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
@@ -106,8 +106,23 @@ interface DataViewsClientSimplifiedProps {
 }
 
 export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplifiedProps = {}) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnTo = searchParams.get('returnTo')
   const queryClient = useQueryClient()
   const { data, isLoading: dataLoading, error: dataError } = useEmery()
+
+  // Handle back navigation based on returnTo param
+  const handleBack = () => {
+    if (returnTo?.startsWith('org-chart')) {
+      // Parse selected node from returnTo (format: org-chart&selected=database-5)
+      const selectedMatch = returnTo.match(/selected=([^&]+)/)
+      const selected = selectedMatch ? selectedMatch[1] : null
+      router.push(selected ? `/organization?selected=${selected}` : '/organization')
+    } else {
+      router.back()
+    }
+  }
 
   // Find the initial table across all databases
   const findTableById = (id: number): TableDTO | undefined => {
@@ -681,6 +696,8 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
             sortState={sortBy}
             onSort={handleSort}
             onClearSort={handleClearSort}
+            returnTo={returnTo}
+            onBack={handleBack}
           />
         )}
       </div>

@@ -18,9 +18,11 @@ interface CreateTableDialogProps {
   onClose: () => void
   onTableCreated: () => void
   selectedDatabaseId?: number
+  /** Optional return context for back button (e.g., 'org-chart') */
+  returnTo?: string
 }
 
-export function CreateTableDialog({ isOpen, onClose, onTableCreated, selectedDatabaseId }: CreateTableDialogProps) {
+export function CreateTableDialog({ isOpen, onClose, onTableCreated, selectedDatabaseId, returnTo }: CreateTableDialogProps) {
   const { data } = useEmery()
   const router = useRouter()
   const [error, setError] = useState("")
@@ -46,8 +48,9 @@ export function CreateTableDialog({ isOpen, onClose, onTableCreated, selectedDat
           // This prevents the race condition where URL changes but table isn't in cache yet
           appStateActions.addTable(result.data)
 
-          // Navigate to the new table page
-          router.push(`/data/${result.data.id}`)
+          // Navigate to the new table page (include returnTo if provided)
+          const returnParam = returnTo ? `?returnTo=${returnTo}` : ''
+          router.push(`/data/${result.data.id}${returnParam}`)
 
           // Reset form and close dialog
           form.reset()

@@ -9,7 +9,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Database, ExternalLink, Bot, Building2, Table2, Plus, Check, X, Loader2, ChevronRight } from 'lucide-react';
+import { Database, Bot, Building2, Table2, Plus, Check, X, Loader2, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -31,13 +31,14 @@ interface DatabaseConfigPanelProps {
     }>;
   };
   agentName?: string;
-  onOpenData: () => void;
+  /** Callback to open create table dialog (handled by parent for proper overlay) */
+  onAddTable?: () => void;
 }
 
 export function DatabaseConfigPanel({
   database,
   agentName,
-  onOpenData,
+  onAddTable,
 }: DatabaseConfigPanelProps) {
   const router = useRouter();
   const isOrgScoped = database.agentId === null || database.agentId === undefined;
@@ -81,9 +82,11 @@ export function DatabaseConfigPanel({
     setIsEditingName(false);
   };
 
-  // Navigate to table
+  // Navigate to table with return context (route expects table ID in path)
+  // Include database as selected node for when user returns
   const handleOpenTable = (tableId: number) => {
-    router.push(`/data/${database.id}?tableId=${tableId}`);
+    const databaseNodeId = `database-${database.id}`;
+    router.push(`/data/${tableId}?returnTo=org-chart%26selected=${databaseNodeId}`);
   };
 
   return (
@@ -211,34 +214,20 @@ export function DatabaseConfigPanel({
           </div>
         )}
 
-        {/* Add table - navigates to data view */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full mt-2"
-          onClick={onOpenData}
-        >
-          <Plus className="h-3.5 w-3.5 mr-1.5" />
-          Add Table
-        </Button>
+        {/* Add table - opens dialog */}
+        {onAddTable && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full mt-2"
+            onClick={onAddTable}
+          >
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            Add Table
+          </Button>
+        )}
       </div>
 
-      {/* Actions */}
-      <div className="pt-2 space-y-2 border-t">
-        <Button onClick={onOpenData} className="w-full" size="sm">
-          <Database className="h-4 w-4 mr-2" />
-          Open Data View
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={() => window.open(`/data/${database.id}`, '_blank')}
-        >
-          <ExternalLink className="h-4 w-4 mr-2" />
-          Open in New Tab
-        </Button>
-      </div>
     </div>
   );
 }
