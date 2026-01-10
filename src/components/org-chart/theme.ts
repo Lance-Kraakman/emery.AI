@@ -149,17 +149,17 @@ export const orgChartHandles = {
  */
 export const orgChartNodeSizes = {
   /** Standard node width for resource nodes */
-  nodeWidth: 160,
+  nodeWidth: 180,
   /** Compact node height */
-  nodeHeight: 48,
+  nodeHeight: 52,
   /** Container node minimum width */
-  containerMinWidth: 280,
+  containerMinWidth: 400,
   /** Container node minimum height */
-  containerMinHeight: 120,
+  containerMinHeight: 140,
   /** Padding inside container nodes */
   containerPadding: 16,
   /** Gap between child nodes inside container */
-  childNodeGap: 12,
+  childNodeGap: 16,
 } as const;
 
 /**

@@ -11,7 +11,10 @@ export * from './types';
 export * from './theme';
 
 // Hooks
-export { useOrgChartCanvas } from './hooks/useOrgChartCanvas';
+export { useOrgChart } from './hooks';
+
+// Utils
+export * from './utils';
 
 // Nodes
 export {

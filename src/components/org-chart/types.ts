@@ -287,4 +287,10 @@ export interface OrgChartCanvasMetadata {
   agentPositions?: Record<number, { x: number; y: number }>;
   /** Agent expanded states */
   agentExpandedStates?: Record<number, boolean>;
+  /** Agent container dimensions (keyed by agentId) */
+  agentDimensions?: Record<number, { width: number; height: number }>;
+  /** Skill positions (keyed by skillId) - relative to parent if inside agent */
+  skillPositions?: Record<number, { x: number; y: number }>;
+  /** Database positions (keyed by databaseId) - relative to parent if inside agent */
+  databasePositions?: Record<number, { x: number; y: number }>;
 }
