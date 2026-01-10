@@ -19,9 +19,10 @@ interface NewSkillViewProps {
 }
 
 /**
- * Full-page new skill view with minimal header.
- * Header contains: back, name, model, save.
- * Canvas fills the remaining height.
+ * Full-page new skill view with floating panels.
+ * Left panel: name + template badge
+ * Right panel: model selector + save button
+ * Canvas fills full height.
  */
 export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
   const router = useRouter();
@@ -120,22 +121,32 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Minimal Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b shrink-0">
+    <div className="relative h-full w-full">
+      {/* Full-height Editor */}
+      <SkillEditor
+        value={formData}
+        onChange={setFormData}
+        agentId={agent.id}
+        organizationTier={organizationTier}
+      />
+
+      {/* Floating Name Panel - positioned after NodePalette (w-48 + margin) */}
+      <div className="absolute top-2 left-56 z-10 flex items-center gap-2 bg-background/50 backdrop-blur-sm border rounded-lg shadow-sm px-3 py-2">
         <Input
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           placeholder="Skill name..."
-          className="h-8 w-64 text-sm"
+          className="h-8 w-48 text-sm bg-transparent border-0 focus-visible:ring-1"
         />
-
         {templateName && (
-          <Badge variant="secondary" className="text-xs">
-            Based on: {templateName}
+          <Badge variant="secondary" className="text-xs whitespace-nowrap">
+            From: {templateName}
           </Badge>
         )}
+      </div>
 
+      {/* Floating Top-Right Panel - Model & Save (above the config panel) */}
+      <div className="absolute top-2 right-[22rem] z-10 flex items-center gap-2 bg-background/50 backdrop-blur-sm border rounded-lg shadow-sm px-3 py-2">
         <ModelSelector
           value={formData.model}
           onChange={(model) => setFormData({ ...formData, model })}
@@ -144,11 +155,8 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
           inheritLabel="Inherit"
           inheritFromModel={agent.defaultModel || 'IBM Granite 3.3 8B'}
           requiredCapabilities={['toolCalling']}
-          className="w-[180px] h-8"
+          className="w-[160px] h-8"
         />
-
-        <div className="flex-1" />
-
         <Button
           onClick={handleSave}
           disabled={isSaving}
@@ -156,18 +164,8 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
           className="gap-1.5 h-8"
         >
           <Save className="h-3.5 w-3.5" />
-          {isSaving ? 'Creating...' : 'Create Skill'}
+          {isSaving ? 'Creating...' : 'Create'}
         </Button>
-      </div>
-
-      {/* Full-height Editor */}
-      <div className="flex-1 min-h-0">
-        <SkillEditor
-          value={formData}
-          onChange={setFormData}
-          agentId={agent.id}
-          organizationTier={organizationTier}
-        />
       </div>
     </div>
   );

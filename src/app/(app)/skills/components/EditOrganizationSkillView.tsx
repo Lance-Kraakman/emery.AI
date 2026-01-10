@@ -2,13 +2,14 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Save, Trash2, Globe, Lock, Copy } from 'lucide-react';
+import { Trash2, Globe, Lock, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ShareButton } from '@/components/permissions/ShareButton';
 import { ShareDialog } from '@/components/permissions/ShareDialog';
 import { ModelSelector } from '@/components/ai/ModelSelector';
+import { SaveStatusIndicator } from '@/components/ui/save-status-indicator';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { duplicateSkill } from '@/app/actions/skills';
 import { toast } from 'sonner';
@@ -30,13 +31,12 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
   const {
     formData,
     setFormData,
-    isSaving,
+    saveStatus,
     isDeleting,
     shareDialogOpen,
     setShareDialogOpen,
     availableSkills,
     organizationTier,
-    handleSave,
     handleDelete,
   } = useSkillEditor({
     skill,
@@ -84,6 +84,8 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
             System
           </Badge>
         )}
+
+        {!isSystem && <SaveStatusIndicator status={saveStatus} />}
 
         <ModelSelector
           value={formData.model}
@@ -138,15 +140,6 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
               variant="outline"
               size="sm"
             />
-            <Button
-              onClick={handleSave}
-              disabled={isSaving}
-              size="sm"
-              className="gap-1.5 h-8"
-            >
-              <Save className="h-3.5 w-3.5" />
-              {isSaving ? 'Saving...' : 'Save'}
-            </Button>
           </>
         )}
       </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ShareButton } from '@/components/permissions/ShareButton';
@@ -19,9 +19,10 @@ interface EditSkillViewProps {
 }
 
 /**
- * Full-page skill editor view with minimal header.
- * Header contains: name, save status, model, delete, share.
- * Canvas fills the remaining height. Auto-saves on changes.
+ * Full-page skill editor view with floating panels.
+ * Left panel: name + save status
+ * Right panel: config + model/delete/share when no node selected
+ * Canvas fills full height. Auto-saves on changes.
  */
 export function EditSkillView({ agent, skill }: EditSkillViewProps) {
   const {
@@ -41,62 +42,30 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
   });
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Minimal Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b shrink-0">
-        <Input
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          placeholder="Skill name..."
-          className="h-8 w-64 text-sm"
-        />
-
-        <SaveStatusIndicator status={saveStatus} />
-
-        <ModelSelector
-          value={formData.model}
-          onChange={(model) => setFormData({ ...formData, model })}
-          organizationTier={organizationTier}
-          showInherit={true}
-          inheritLabel="Inherit"
-          inheritFromModel={agent.defaultModel || 'IBM Granite 3.3 8B'}
-          requiredCapabilities={['toolCalling']}
-          className="w-[180px] h-8"
-        />
-
-        <div className="flex-1" />
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleDelete}
-          disabled={isDeleting}
-          className="gap-1.5 h-8"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          {isDeleting ? 'Deleting...' : 'Delete'}
-        </Button>
-
-        <ShareButton
-          resourceType="skill"
-          resourceId={skill.id}
-          onShare={() => setShareDialogOpen(true)}
-          variant="outline"
-          size="sm"
-        />
-      </div>
-
-      {/* Full-height Editor */}
-      <div className="flex-1 min-h-0">
-        <SkillEditor
-          value={formData}
-          onChange={setFormData}
-          agentId={agent.id}
-          skillId={skill.id}
-          organizationTier={organizationTier}
-          availableSkills={availableSkills}
-        />
-      </div>
+    <div className="relative h-full w-full">
+      {/* Full-height Editor - takes entire space */}
+      <SkillEditor
+        value={formData}
+        onChange={setFormData}
+        agentId={agent.id}
+        skillId={skill.id}
+        organizationTier={organizationTier}
+        availableSkills={availableSkills}
+        // Pass header controls to render in floating panels
+        headerControls={{
+          name: formData.name,
+          onNameChange: (name) => setFormData({ ...formData, name }),
+          saveStatus,
+          model: formData.model,
+          onModelChange: (model) => setFormData({ ...formData, model }),
+          agentDefaultModel: agent.defaultModel || 'IBM Granite 3.3 8B',
+          isDeleting,
+          onDelete: handleDelete,
+          skillId: skill.id,
+          onShareClick: () => setShareDialogOpen(true),
+          organizationTier,
+        }}
+      />
 
       {/* Share Dialog */}
       <ShareDialog
