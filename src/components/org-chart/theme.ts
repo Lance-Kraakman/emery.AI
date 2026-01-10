@@ -160,8 +160,8 @@ export const orgChartNodeSizes = {
   containerPadding: 16,
   /** Gap between child nodes inside container */
   childNodeGap: 16,
-  /** Height of agent container header */
-  containerHeaderHeight: 50,
+  /** Height of agent container header (main header + resource counts bar) */
+  containerHeaderHeight: 80,
 } as const;
 
 /**
