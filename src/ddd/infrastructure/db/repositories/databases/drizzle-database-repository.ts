@@ -146,6 +146,7 @@ export class DrizzleDatabaseRepository
       metadata: record.metadata as Record<string, any> | null,
       organizationId: record.organizationId,
       ownerId: record.ownerId,
+      agentId: record.agentId ?? null,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     });
