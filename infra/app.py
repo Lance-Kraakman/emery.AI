@@ -42,7 +42,6 @@ data_stack = DataStack(
 )
 
 # Create WAF stack in us-east-1 (required for CloudFront)
-# WAF must be deployed before app stack since CloudFront references the Web ACL
 waf_stack_name = f"Emery-WAF-{env_name.capitalize()}"
 waf_env = cdk.Environment(account=aws_account, region="us-east-1")
 
@@ -51,8 +50,13 @@ waf_stack = WAFStack(
     waf_stack_name,
     env_name=env_name,
     env=waf_env,
-    cross_region_references=True  # Enable cross-region references for ARN export
+    # Note: cross_region_references disabled due to Lambda permission issues
+    # WAF ARN is passed via context from workflow instead
 )
+
+# Get WAF ARN from context (passed from workflow after WAF stack deploys)
+# Falls back to None if not provided (for WAF-only deploys)
+waf_acl_arn = app.node.try_get_context("waf_acl_arn")
 
 # Create the app stack with reference to data stack (ECS services, load balancers, CloudFront)
 app_stack = AppStack(
@@ -60,10 +64,9 @@ app_stack = AppStack(
     app_stack_name,
     data_stack=data_stack,
     env_name=env_name,
-    waf_acl_arn=waf_stack.web_acl.attr_arn,
+    waf_acl_arn=waf_acl_arn,
     env=cdk_env,
-    cross_region_references=True  # Enable cross-region references for WAF ARN
 )
-app_stack.add_dependency(waf_stack)
+app_stack.add_dependency(data_stack)
 
 app.synth()

@@ -228,7 +228,19 @@ jobs:
           echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
           echo "🚀 Deploying to ${ENV_NAME} environment with image tag ${IMAGE_TAG}"
 
-      - name: Deploy CDK Stack
+      - name: Deploy WAF Stack
+        working-directory: ./infra
+        run: |
+          source .venv/bin/activate
+          ENV_NAME="${{ steps.deploy_config.outputs.env_name }}"
+          WAF_STACK_NAME="Emery-WAF-${ENV_NAME^}"
+          echo "🛡️ Deploying WAF stack to us-east-1..."
+          cdk deploy ${WAF_STACK_NAME} --require-approval never \
+            -c env=${ENV_NAME} \
+            -c aws_account_id=${{ env.AWS_ACCOUNT_ID }} \
+            -c region=${{ env.AWS_REGION }}
+
+      - name: Deploy App Stacks
         working-directory: ./infra
         env:
           FRONTEND_IMAGE_URI: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.deploy_config.outputs.image_tag }}
@@ -236,13 +248,25 @@ jobs:
         run: |
           source .venv/bin/activate
           ENV_NAME="${{ steps.deploy_config.outputs.env_name }}"
+          WAF_STACK_NAME="Emery-WAF-${ENV_NAME^}"
+
+          # Get WAF ARN from stack output
+          WAF_ACL_ARN=$(aws cloudformation describe-stacks \
+            --stack-name ${WAF_STACK_NAME} \
+            --region us-east-1 \
+            --query 'Stacks[0].Outputs[?OutputKey==`WebACLArn`].OutputValue' \
+            --output text)
+
           echo "🚀 Deploying to ${ENV_NAME} environment..."
+          echo "🛡️ WAF ARN: ${WAF_ACL_ARN}"
           echo "📦 Frontend image: ${FRONTEND_IMAGE_URI}"
           echo "📦 Agent image: ${AGENT_IMAGE_URI}"
-          cdk deploy --require-approval never --all \
+
+          cdk deploy Emery-Data-${ENV_NAME^} Emery-App-${ENV_NAME^} --require-approval never \
             -c env=${ENV_NAME} \
             -c aws_account_id=${{ env.AWS_ACCOUNT_ID }} \
-            -c region=${{ env.AWS_REGION }}
+            -c region=${{ env.AWS_REGION }} \
+            -c waf_acl_arn=${WAF_ACL_ARN}
 
       - name: Deploy Production Frontend (Blue/Green)
         if: success() && startsWith(github.ref, 'refs/tags/v')
