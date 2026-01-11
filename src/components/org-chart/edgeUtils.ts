@@ -21,6 +21,8 @@ export interface NormalizedConnection {
   targetHandle: string;
   edgeType: EdgeType;
   label: string;
+  /** Table ID when connecting to a specific table */
+  tableId?: number;
 }
 
 // =============================================================================
@@ -30,6 +32,8 @@ export interface NormalizedConnection {
 /**
  * Normalize an edge connection so skill is always the source.
  * Returns null if the connection type is not supported.
+ *
+ * @param targetHandle - Optional handle ID (e.g., "table-123" for table connections)
  */
 export function normalizeEdgeConnection(
   sourceId: string,
@@ -37,8 +41,16 @@ export function normalizeEdgeConnection(
   sourceType: string,
   targetType: string,
   sourceSide: HandleSide,
-  targetSide: HandleSide
+  targetSide: HandleSide,
+  targetHandle?: string | null
 ): NormalizedConnection | null {
+  // Parse table ID from handle if present (e.g., "table-123")
+  const parseTableId = (handle?: string | null): number | undefined => {
+    if (!handle?.startsWith('table-')) return undefined;
+    const id = parseInt(handle.split('-')[1], 10);
+    return isNaN(id) ? undefined : id;
+  };
+
   // skill → skill
   if (sourceType === 'skill' && targetType === 'skill') {
     return {
@@ -51,15 +63,17 @@ export function normalizeEdgeConnection(
     };
   }
 
-  // skill → database
+  // skill → database (or skill → table)
   if (sourceType === 'skill' && targetType === 'database') {
+    const tableId = parseTableId(targetHandle);
     return {
       source: sourceId,
       target: targetId,
       sourceHandle: `${sourceSide}-source`,
-      targetHandle: `${targetSide}-target`,
+      targetHandle: targetHandle || `${targetSide}-target`,
       edgeType: 'skill_table',
-      label: 'uses',
+      label: tableId ? 'uses table' : 'uses',
+      tableId,
     };
   }
 

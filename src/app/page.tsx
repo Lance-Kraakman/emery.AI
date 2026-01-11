@@ -8,6 +8,6 @@ export default async function RootPage() {
     redirect("/auth/signin");
   }
 
-  // Redirect authenticated users to apps
-  redirect("/apps");
+  // Redirect authenticated users to organization
+  redirect("/organization");
 }

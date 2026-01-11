@@ -134,6 +134,8 @@ export interface OrgChartEdgeData {
   [key: string]: unknown;
   label?: string;
   edgeType: OrgChartEdgeType;
+  /** Table ID when connecting to a specific table */
+  tableId?: number;
 }
 
 export type OrgChartEdge = Edge<OrgChartEdgeData>;
