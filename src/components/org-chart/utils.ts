@@ -74,6 +74,120 @@ export function parseNodeId(nodeId: string): { type: OrgChartNodeType; entityId:
 }
 
 // =============================================================================
+// Edge Connection Utilities
+// =============================================================================
+
+export type EdgeType = 'skill_ref' | 'skill_table';
+type HandleSide = 'left' | 'right';
+
+interface NormalizedConnection {
+  source: string;
+  target: string;
+  sourceHandle: string;
+  targetHandle: string;
+  edgeType: EdgeType;
+  label: string;
+}
+
+/**
+ * Normalize an edge connection so skill is always the source.
+ * Returns null if the connection type is not supported.
+ */
+export function normalizeEdgeConnection(
+  sourceId: string,
+  targetId: string,
+  sourceType: string,
+  targetType: string,
+  sourceSide: HandleSide,
+  targetSide: HandleSide
+): NormalizedConnection | null {
+  // skill → skill
+  if (sourceType === 'skill' && targetType === 'skill') {
+    return {
+      source: sourceId,
+      target: targetId,
+      sourceHandle: `${sourceSide}-source`,
+      targetHandle: `${targetSide}-target`,
+      edgeType: 'skill_ref',
+      label: 'references',
+    };
+  }
+
+  // skill → database
+  if (sourceType === 'skill' && targetType === 'database') {
+    return {
+      source: sourceId,
+      target: targetId,
+      sourceHandle: `${sourceSide}-source`,
+      targetHandle: `${targetSide}-target`,
+      edgeType: 'skill_table',
+      label: 'uses',
+    };
+  }
+
+  // database → skill (swap to skill → database)
+  if (sourceType === 'database' && targetType === 'skill') {
+    return {
+      source: targetId,
+      target: sourceId,
+      sourceHandle: `${targetSide}-source`,
+      targetHandle: `${sourceSide}-target`,
+      edgeType: 'skill_table',
+      label: 'uses',
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Create an edge object for skill connections.
+ */
+export function createSkillEdge(
+  id: string,
+  skillId: number,
+  targetType: 'skill' | 'database',
+  targetId: number,
+  edgeType: EdgeType,
+  label: string
+): OrgChartEdge {
+  return {
+    id,
+    source: makeNodeId('skill', skillId),
+    target: makeNodeId(targetType, targetId),
+    sourceHandle: 'right-source',
+    targetHandle: 'left-target',
+    type: 'reference',
+    data: { edgeType, label },
+  };
+}
+
+// =============================================================================
+// Layout Utilities
+// =============================================================================
+
+const LAYOUT_PADDING = 50;
+const LAYOUT_GAP = 20;
+const COLUMNS = 4;
+
+/**
+ * Calculate grid position for an item at a given index.
+ * Used for laying out org-level nodes in a 4-column grid.
+ */
+export function calculateGridPosition(
+  index: number,
+  startY: number,
+  itemWidth: number,
+  itemHeight: number,
+  columns = COLUMNS
+): XYPosition {
+  return {
+    x: LAYOUT_PADDING + (index % columns) * (itemWidth + LAYOUT_GAP),
+    y: startY + Math.floor(index / columns) * (itemHeight + LAYOUT_GAP),
+  };
+}
+
+// =============================================================================
 // Node Dimension Utilities
 // =============================================================================
 
@@ -508,6 +622,17 @@ export function createDatabaseNode(
 // =============================================================================
 
 /**
+ * Build a lookup map from table ID to database ID.
+ */
+function buildTableToDatabaseMap(databases: Database[]): Map<number, number> {
+  const map = new Map<number, number>();
+  databases.forEach((db) => {
+    db.tables?.forEach((table) => map.set(table.id, db.id));
+  });
+  return map;
+}
+
+/**
  * Extract edges from skill configurations.
  * Parses skill steps to find database reads/writes and skill references.
  */
@@ -516,85 +641,45 @@ export function extractSkillEdges(
   databases: Database[]
 ): OrgChartEdge[] {
   const edges: OrgChartEdge[] = [];
+  const tableToDatabase = buildTableToDatabaseMap(databases);
+  const seen = new Set<string>();
 
-  // Build table ID -> database ID lookup
-  const tableToDatabase = new Map<number, number>();
-  databases.forEach((db) => {
-    db.tables?.forEach((table) => {
-      tableToDatabase.set(table.id, db.id);
-    });
-  });
-
-  // Set to track unique edges (avoid duplicates)
-  const edgeSet = new Set<string>();
+  const addEdge = (key: string, edge: OrgChartEdge) => {
+    if (!seen.has(key)) {
+      seen.add(key);
+      edges.push(edge);
+    }
+  };
 
   skills.forEach((skill) => {
-    if (!skill.steps) return;
-
-    skill.steps.forEach((step) => {
-      // Check for skill references (skill_ref edges)
+    skill.steps?.forEach((step) => {
+      // Skill references another skill
       if (step.skillId) {
-        const edgeKey = `skill_ref:${skill.id}-${step.skillId}`;
-        if (!edgeSet.has(edgeKey)) {
-          edgeSet.add(edgeKey);
-          edges.push({
-            id: `skill-${skill.id}-ref-${step.skillId}`,
-            source: makeNodeId('skill', skill.id),
-            target: makeNodeId('skill', step.skillId),
-            sourceHandle: 'right-source',
-            targetHandle: 'left-target',
-            type: 'reference',
-            data: {
-              edgeType: 'skill_ref',
-              label: 'references',
-            },
-          });
-        }
+        addEdge(
+          `ref:${skill.id}-${step.skillId}`,
+          createSkillEdge(`skill-${skill.id}-ref-${step.skillId}`, skill.id, 'skill', step.skillId, 'skill_ref', 'references')
+        );
       }
 
-      // Check for read config (skill_table edges)
+      // Skill reads from a table
       if (step.readConfig?.sourceTableId) {
         const dbId = tableToDatabase.get(step.readConfig.sourceTableId);
         if (dbId) {
-          const edgeKey = `skill_table:${skill.id}-${dbId}:read`;
-          if (!edgeSet.has(edgeKey)) {
-            edgeSet.add(edgeKey);
-            edges.push({
-              id: `skill-${skill.id}-reads-db-${dbId}`,
-              source: makeNodeId('skill', skill.id),
-              target: makeNodeId('database', dbId),
-              sourceHandle: 'right-source',
-              targetHandle: 'left-target',
-              type: 'reference',
-              data: {
-                edgeType: 'skill_table',
-                label: 'reads',
-              },
-            });
-          }
+          addEdge(
+            `read:${skill.id}-${dbId}`,
+            createSkillEdge(`skill-${skill.id}-reads-db-${dbId}`, skill.id, 'database', dbId, 'skill_table', 'reads')
+          );
         }
       }
 
-      // Check for write config (skill_table edges)
+      // Skill writes to a table
       if (step.writeConfig?.targetTableId) {
         const dbId = tableToDatabase.get(step.writeConfig.targetTableId);
         if (dbId) {
-          const edgeKey = `skill_table:${skill.id}-${dbId}:write`;
-          if (!edgeSet.has(edgeKey)) {
-            edgeSet.add(edgeKey);
-            edges.push({
-              id: `skill-${skill.id}-writes-db-${dbId}`,
-              source: makeNodeId('skill', skill.id),
-              target: makeNodeId('database', dbId),
-              sourceHandle: 'right-source',
-              targetHandle: 'left-target',
-              type: 'reference',
-              data: {
-                edgeType: 'skill_table',
-                label: 'writes',
-              },
-            });
-          }
+          addEdge(
+            `write:${skill.id}-${dbId}`,
+            createSkillEdge(`skill-${skill.id}-writes-db-${dbId}`, skill.id, 'database', dbId, 'skill_table', 'writes')
+          );
         }
       }
     });
@@ -632,52 +717,43 @@ export function buildOrgChartFromData(
 
   // Add org-level skills
   orgSkills.forEach((skill, index) => {
-    const savedPosition = skillPositions[skill.id];
-    nodes.push(createSkillNode(skill, savedPosition ?? {
-      x: 50 + (index % 4) * (orgChartNodeSizes.nodeWidth + 20),
-      y: 50 + Math.floor(index / 4) * (orgChartNodeSizes.nodeHeight + 20),
-    }, canvasMetadata));
+    const defaultPos = calculateGridPosition(index, LAYOUT_PADDING, orgChartNodeSizes.nodeWidth, orgChartNodeSizes.nodeHeight);
+    nodes.push(createSkillNode(skill, skillPositions[skill.id] ?? defaultPos, canvasMetadata));
   });
 
   // Add org-level databases
-  const dbStartY = orgSkills.length > 0
-    ? 50 + Math.ceil(orgSkills.length / 4) * (orgChartNodeSizes.nodeHeight + 20) + 20
-    : 50;
+  const skillRows = Math.ceil(orgSkills.length / COLUMNS);
+  const dbStartY = LAYOUT_PADDING + skillRows * (orgChartNodeSizes.nodeHeight + LAYOUT_GAP) + (skillRows > 0 ? LAYOUT_GAP : 0);
   orgDatabases.forEach((db, index) => {
-    const savedPosition = databasePositions[db.id];
-    nodes.push(createDatabaseNode(db, savedPosition ?? {
-      x: 50 + (index % 4) * (orgChartNodeSizes.nodeWidth + 20),
-      y: dbStartY + Math.floor(index / 4) * (orgChartNodeSizes.nodeHeight + 20),
-    }, canvasMetadata));
+    const defaultPos = calculateGridPosition(index, dbStartY, orgChartNodeSizes.nodeWidth, orgChartNodeSizes.nodeHeight);
+    nodes.push(createDatabaseNode(db, databasePositions[db.id] ?? defaultPos, canvasMetadata));
   });
 
   // Calculate starting Y for agents (below org resources)
-  const orgResourceRows = Math.ceil(orgSkills.length / 4) + Math.ceil(orgDatabases.length / 4);
-  const agentStartY = orgResourceRows > 0
-    ? 50 + orgResourceRows * (orgChartNodeSizes.nodeHeight + 20) + 40
-    : 50;
+  const dbRows = Math.ceil(orgDatabases.length / COLUMNS);
+  const totalOrgRows = skillRows + dbRows;
+  const agentStartY = LAYOUT_PADDING + totalOrgRows * (orgChartNodeSizes.nodeHeight + LAYOUT_GAP) + (totalOrgRows > 0 ? LAYOUT_GAP * 2 : 0);
 
   // Create agent container nodes with their children
   agents.forEach((agent, agentIndex) => {
-    const savedPosition = agentPositions[agent.id];
     const isExpanded = canvasMetadata?.agentExpandedStates?.[agent.id] ?? true;
-
-    // Get agent's resources
     const agentSkills = skills.filter((s) => s.agentId === agent.id);
     const agentDatabases = databases.filter((d) => d.agentId === agent.id);
-
-    // Calculate container dimensions with sectioned layout
     const defaultHeight = isExpanded
       ? calculateAgentContentHeight(agentSkills.length, agentDatabases.length)
       : 60;
 
-    // Create agent node
+    const defaultPos = calculateGridPosition(
+      agentIndex,
+      agentStartY,
+      orgChartNodeSizes.containerMinWidth,
+      defaultHeight,
+      2 // agents in 2-column grid
+    );
+
     nodes.push(createAgentNode(
       agent,
-      savedPosition ?? {
-        x: 50 + (agentIndex % 2) * (orgChartNodeSizes.containerMinWidth + 40),
-        y: agentStartY + Math.floor(agentIndex / 2) * (defaultHeight + 40),
-      },
+      agentPositions[agent.id] ?? defaultPos,
       canvasMetadata,
       skills,
       databases

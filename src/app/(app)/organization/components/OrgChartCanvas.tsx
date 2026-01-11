@@ -37,6 +37,7 @@ import {
   arrangeChildrenInGrid,
   calculateAgentDimensions,
   getNextGridSlotPosition,
+  normalizeEdgeConnection,
 } from '@/components/org-chart/utils';
 import { DeleteConfirmationDialog, buildDeleteImpactItems } from '@/components/org-chart/dialogs';
 import { EntityPalette } from './EntityPalette';
@@ -272,62 +273,32 @@ export function OrgChartCanvas({
       const targetNode = nodes.find((n) => n.id === connection.target);
       if (!sourceNode || !targetNode) return;
 
-      // Extract which SIDE (left/right) the user dragged from/to
       const sourceSide = connection.sourceHandle?.startsWith('left') ? 'left' : 'right';
       const targetSide = connection.targetHandle?.startsWith('left') ? 'left' : 'right';
 
-      // Normalize direction: skill should always be the source
-      // This handles both skill→database and database→skill drags
-      let actualSource = connection.source!;
-      let actualTarget = connection.target!;
-      let actualSourceHandle: string;
-      let actualTargetHandle: string;
-      let edgeType: 'skill_ref' | 'skill_table' = 'skill_table';
-      let label = 'uses';
+      const normalized = normalizeEdgeConnection(
+        connection.source,
+        connection.target,
+        sourceNode.type!,
+        targetNode.type!,
+        sourceSide,
+        targetSide
+      );
 
-      if (sourceNode.type === 'skill' && targetNode.type === 'skill') {
-        // skill → skill (no swap needed)
-        edgeType = 'skill_ref';
-        label = 'references';
-        actualSourceHandle = `${sourceSide}-source`;
-        actualTargetHandle = `${targetSide}-target`;
-      } else if (sourceNode.type === 'skill' && targetNode.type === 'database') {
-        // skill → database (no swap needed)
-        edgeType = 'skill_table';
-        label = 'uses';
-        actualSourceHandle = `${sourceSide}-source`;
-        actualTargetHandle = `${targetSide}-target`;
-      } else if (sourceNode.type === 'database' && targetNode.type === 'skill') {
-        // database → skill (swap to skill → database)
-        actualSource = connection.target!;
-        actualTarget = connection.source!;
-        // After swap: skill is source, database is target
-        // The side the user dragged TO (targetSide on skill) becomes the source side
-        // The side the user dragged FROM (sourceSide on database) becomes the target side
-        actualSourceHandle = `${targetSide}-source`;
-        actualTargetHandle = `${sourceSide}-target`;
-        edgeType = 'skill_table';
-        label = 'uses';
-      } else {
-        return; // Unsupported connection type
-      }
+      if (!normalized) return;
 
-      // Create unique edge ID
-      const edgeId = `edge-${actualSource}-${actualTarget}-${Date.now()}`;
-
-      // Add edge - sourceHandle must be a *-source handle, targetHandle must be a *-target handle
       setEdges((eds) => [
         ...eds,
         {
-          id: edgeId,
-          source: actualSource,
-          target: actualTarget,
-          sourceHandle: actualSourceHandle,
-          targetHandle: actualTargetHandle,
+          id: `edge-${normalized.source}-${normalized.target}-${Date.now()}`,
+          source: normalized.source,
+          target: normalized.target,
+          sourceHandle: normalized.sourceHandle,
+          targetHandle: normalized.targetHandle,
           type: 'reference',
           data: {
-            edgeType,
-            label,
+            edgeType: normalized.edgeType,
+            label: normalized.label,
           },
         },
       ]);
