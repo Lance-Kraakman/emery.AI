@@ -86,8 +86,8 @@ jobs:
           load: ${{ github.event_name == 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=frontend-${{ github.ref_name }}
-          cache-to: type=gha,mode=max,scope=frontend-${{ github.ref_name }}
+          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:cache
+          cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:cache,mode=max,image-manifest=true
           build-args: |
             BUILDKIT_INLINE_CACHE=1
 
@@ -150,8 +150,8 @@ jobs:
           load: ${{ github.event_name == 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=agent-${{ github.ref_name }}
-          cache-to: type=gha,mode=max,scope=agent-${{ github.ref_name }}
+          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:cache
+          cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}:cache,mode=max,image-manifest=true
           build-args: |
             BUILDKIT_INLINE_CACHE=1
 
