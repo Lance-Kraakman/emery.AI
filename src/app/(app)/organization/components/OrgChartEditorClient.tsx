@@ -138,7 +138,7 @@ export function OrgChartEditorClient({
 
   // Connected edges for selected skill (passed from canvas on selection)
   const [selectedEdges, setSelectedEdges] = useState<
-    Array<{ id: string; target: string; edgeType: string }>
+    Array<{ id: string; target: string; edgeType: string; tableId?: number }>
   >([]);
 
   // Handle selection from canvas - includes connected edges for skills
@@ -147,7 +147,7 @@ export function OrgChartEditorClient({
       nodeId: string | null,
       nodeType?: OrgChartNodeType,
       entityId?: number,
-      connectedEdges?: Array<{ id: string; target: string; edgeType: string }>
+      connectedEdges?: Array<{ id: string; target: string; edgeType: string; tableId?: number }>
     ) => {
       console.log('[OrgChartEditorClient] handleSelect called:', { nodeId, nodeType, entityId, connectedEdges });
       setSelectedNodeId(nodeId);
@@ -178,10 +178,10 @@ export function OrgChartEditorClient({
           // Find the agent ID for this skill to build the correct URL
           const skill = skills.find((s) => s.id === entityId);
           if (skill?.agentId) {
-            router.push(`/agents/${skill.agentId}/skills?skillId=${entityId}&returnTo=${returnTo}`);
+            router.push(`/agents/${skill.agentId}/skills/${entityId}`);
           } else {
             // Org-level skill
-            router.push(`/skills/${entityId}?returnTo=${returnTo}`);
+            router.push(`/skills/${entityId}`);
           }
           break;
         case 'database':
@@ -276,7 +276,7 @@ export function OrgChartEditorClient({
               toast.success('Skill created', {
                 action: {
                   label: 'Edit',
-                  onClick: () => router.push(`/agents/${effectiveAgentId}/skills?skillId=${skillResult.data!.id}`),
+                  onClick: () => router.push(`/agents/${effectiveAgentId}/skills/${skillResult.data!.id}`),
                 },
               });
               return { ...skillResult.data, agentId: effectiveAgentId };

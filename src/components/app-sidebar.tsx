@@ -345,6 +345,23 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
+        {/* Organization */}
+        <SidebarGroup>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname === "/organization" || pathname?.startsWith("/organization")}
+              >
+                <Link href="/organization">
+                  <Users className="h-4 w-4" />
+                  <span>Organization</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroup>
+
         {/* Apps */}
         <NestedSidebarSection<AppData, PageData>
           icon={FileText}

@@ -44,7 +44,7 @@ import { EntityPalette } from './EntityPalette';
 import { SearchDialog } from './SearchDialog';
 import { StickyNoteProvider } from '@/components/shared/StickyNoteContext';
 import { OrgChartDragProvider } from '@/components/org-chart/context';
-import type { OrgChartCanvasMetadata, OrgChartNodeType, AgentContainerNodeData } from '@/components/org-chart/types';
+import type { OrgChartCanvasMetadata, OrgChartNodeType, AgentContainerNodeData, OrgChartEdge } from '@/components/org-chart/types';
 
 interface OrgChartCanvasProps {
   /** Initial agents */
@@ -78,7 +78,7 @@ interface OrgChartCanvasProps {
     nodeId: string | null,
     nodeType?: OrgChartNodeType,
     entityId?: number,
-    connectedEdges?: Array<{ id: string; target: string; edgeType: string }>
+    connectedEdges?: Array<{ id: string; target: string; edgeType: string; tableId?: number }>
   ) => void;
   /** Callback when an entity should be opened (e.g., navigate to skill editor) */
   onOpenEntity?: (entityType: OrgChartNodeType, entityId: number) => void;
@@ -243,18 +243,23 @@ export function OrgChartCanvas({
 
   // Validate connection attempts - only allow valid edge types
   const isValidConnection = useCallback(
-    (connection: Connection | { source: string; target: string }) => {
+    (connection: Connection | { source: string; target: string; targetHandle?: string | null }) => {
       const sourceNode = nodes.find((n) => n.id === connection.source);
       const targetNode = nodes.find((n) => n.id === connection.target);
 
       if (!sourceNode || !targetNode) return false;
 
-      // Only allow skill → skill or skill → database
+      // Only allow skill → skill or skill → table (require table handle for databases)
       if (sourceNode.type === 'skill') {
-        return targetNode.type === 'skill' || targetNode.type === 'database';
+        if (targetNode.type === 'skill') return true;
+        // For databases, require a table-level handle (no DB-level connections)
+        if (targetNode.type === 'database') {
+          return connection.targetHandle?.startsWith('table-') ?? false;
+        }
+        return false;
       }
 
-      // Database → skill is normalized in handleConnect, allow it
+      // Database → skill is normalized in handleConnect, allow it (table handle on source)
       if (sourceNode.type === 'database' && targetNode.type === 'skill') {
         return true;
       }
@@ -274,7 +279,10 @@ export function OrgChartCanvas({
       if (!sourceNode || !targetNode) return;
 
       const sourceSide = connection.sourceHandle?.startsWith('left') ? 'left' : 'right';
-      const targetSide = connection.targetHandle?.startsWith('left') ? 'left' : 'right';
+      // For table handles, keep the handle ID; otherwise determine side
+      const targetSide = connection.targetHandle?.startsWith('table-')
+        ? 'left' // table handles are on the left
+        : connection.targetHandle?.startsWith('left') ? 'left' : 'right';
 
       const normalized = normalizeEdgeConnection(
         connection.source,
@@ -282,26 +290,30 @@ export function OrgChartCanvas({
         sourceNode.type!,
         targetNode.type!,
         sourceSide,
-        targetSide
+        targetSide,
+        connection.targetHandle // Pass the handle for table-level connections
       );
 
       if (!normalized) return;
 
-      setEdges((eds) => [
-        ...eds,
-        {
-          id: `edge-${normalized.source}-${normalized.target}-${Date.now()}`,
-          source: normalized.source,
-          target: normalized.target,
-          sourceHandle: normalized.sourceHandle,
-          targetHandle: normalized.targetHandle,
-          type: 'reference',
-          data: {
-            edgeType: normalized.edgeType,
-            label: normalized.label,
-          },
-        },
-      ]);
+      // Build edge with optional tableId in data
+      const edgeData: NonNullable<OrgChartEdge['data']> = {
+        edgeType: normalized.edgeType as NonNullable<OrgChartEdge['data']>['edgeType'],
+        label: normalized.label,
+        tableId: normalized.tableId,
+      };
+
+      const newEdge: OrgChartEdge = {
+        id: `edge-${normalized.source}-${normalized.target}-${normalized.tableId || Date.now()}`,
+        source: normalized.source,
+        target: normalized.target,
+        sourceHandle: normalized.sourceHandle,
+        targetHandle: normalized.targetHandle,
+        type: 'reference',
+        data: edgeData,
+      };
+
+      setEdges((eds) => [...eds, newEdge]);
     },
     [nodes, setEdges]
   );
@@ -320,12 +332,13 @@ export function OrgChartCanvas({
           const match = node.id.match(/^([a-z_]+)-(\d+)$/);
           const entityId = match ? parseInt(match[2], 10) : undefined;
 
-          // For skills, include connected edges
+          // For skills, include connected edges with tableId
           const connectedEdges = node.type === 'skill'
             ? edges.filter((e) => e.source === node.id).map((e) => ({
                 id: e.id,
                 target: e.target,
                 edgeType: ((e.data as any)?.edgeType as string) || 'skill_table',
+                tableId: (e.data as any)?.tableId as number | undefined,
               }))
             : undefined;
 

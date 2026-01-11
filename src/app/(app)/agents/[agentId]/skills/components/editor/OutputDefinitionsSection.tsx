@@ -30,7 +30,6 @@ const fieldTypeToOutputType: Record<FieldType, OutputDefinition['type'] | null> 
   'phone': 'phone',
   'json': 'json',
   'relation': 'text',  // Relations output display value as text
-  // Read-only/system fields - skip these
   'embedding': null,
   'autonumber': null,
   'last-updated': null,

@@ -4,13 +4,15 @@
  * DatabaseNode Component
  *
  * Node representing a database with inline table list.
- * Shows icon, name, and up to 3 tables with overflow indicator.
+ * Shows icon, name, and all tables with connection handles.
  */
 
 import React, { memo, useCallback } from 'react';
+import { Handle, Position } from '@xyflow/react';
 import { useRouter } from 'next/navigation';
 import { Table2 } from 'lucide-react';
 import { BaseOrgChartNode } from './BaseOrgChartNode';
+import { orgChartHandles } from '../theme';
 import type { DatabaseNodeData } from '../types';
 
 interface DatabaseNodeProps {
@@ -20,11 +22,7 @@ interface DatabaseNodeProps {
 
 export const DatabaseNode = memo(function DatabaseNode({ data, selected }: DatabaseNodeProps) {
   const router = useRouter();
-  const { name, tableCount, tables = [] } = data;
-
-  const displayTables = tables.slice(0, 3);
-  const totalTables = tableCount ?? tables.length;
-  const moreCount = totalTables - displayTables.length;
+  const { name, tables = [] } = data;
 
   const handleTableClick = useCallback((e: React.MouseEvent, tableId: number) => {
     e.stopPropagation();
@@ -32,24 +30,31 @@ export const DatabaseNode = memo(function DatabaseNode({ data, selected }: Datab
   }, [router, data.databaseId]);
 
   return (
-    <BaseOrgChartNode name={name} selected={selected} nodeType="database" showHandles>
-      {displayTables.length > 0 ? (
+    <BaseOrgChartNode name={name} selected={selected} nodeType="database">
+      {tables.length > 0 ? (
         <div className="px-3 pb-2.5 space-y-0.5">
-          {displayTables.map(table => (
-            <button
+          {tables.map(table => (
+            <div
               key={table.id}
-              onClick={(e) => handleTableClick(e, table.id)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full text-left"
+              className="relative flex items-center gap-1.5 py-0.5 group"
             >
-              <Table2 className="h-3 w-3 text-cyan-500 shrink-0" />
-              <span className="truncate">{table.name}</span>
-            </button>
+              {/* Table-level connection handle */}
+              <Handle
+                type="target"
+                position={Position.Left}
+                id={`table-${table.id}`}
+                className={orgChartHandles.referenceTarget.className}
+                style={{ left: -4, top: '50%', transform: 'translateY(-50%)' }}
+              />
+              <button
+                onClick={(e) => handleTableClick(e, table.id)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full text-left"
+              >
+                <Table2 className="h-3 w-3 text-cyan-500 shrink-0" />
+                <span className="truncate">{table.name}</span>
+              </button>
+            </div>
           ))}
-          {moreCount > 0 && (
-            <span className="text-[10px] text-muted-foreground/60 pl-4">
-              +{moreCount} more
-            </span>
-          )}
         </div>
       ) : (
         <div className="px-3 pb-2.5 text-xs text-muted-foreground/50 italic">
