@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { AlertTriangle, Bot, Sparkles, Database, Table2, Clock, Loader2 } from 'lucide-react';
+import { AlertTriangle, Bot, Sparkles, Database, Clock, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { OrgChartNode, OrgChartNodeType, AgentContainerNodeData, SkillNodeData, DatabaseNodeData } from '../types';
 
@@ -53,9 +53,6 @@ const typeIcons: Record<OrgChartNodeType, React.ReactNode> = {
   agent: <Bot className="h-4 w-4 text-emerald-500" />,
   skill: <Sparkles className="h-4 w-4 text-violet-500" />,
   database: <Database className="h-4 w-4 text-slate-500" />,
-  table: <Table2 className="h-4 w-4 text-cyan-500" />,
-  automation: <Clock className="h-4 w-4 text-amber-500" />,
-  app: <Database className="h-4 w-4 text-rose-500" />,
   sticky: <Database className="h-4 w-4 text-yellow-500" />,
   org_resources: <Database className="h-4 w-4 text-blue-500" />,
 };
@@ -64,9 +61,6 @@ const typeLabels: Record<OrgChartNodeType, string> = {
   agent: 'Agent',
   skill: 'Skill',
   database: 'Database',
-  table: 'Table',
-  automation: 'Automation',
-  app: 'App',
   sticky: 'Note',
   org_resources: 'Resource',
 };
@@ -226,10 +220,13 @@ export function buildDeleteImpactItems(
     // Skip child nodes if parent is also selected
     if (node.parentId && selectedNodeIds.has(node.parentId)) continue;
 
+    // Get name from data (sticky notes use 'Note' as fallback since they don't have a name field)
+    const name = node.type === 'sticky' ? 'Note' : ('name' in node.data ? node.data.name as string : 'Unknown');
+
     const item: DeleteImpactItem = {
       type: node.type as OrgChartNodeType,
       id: node.id,
-      name: node.data.name,
+      name,
       entityId: 0,
     };
 

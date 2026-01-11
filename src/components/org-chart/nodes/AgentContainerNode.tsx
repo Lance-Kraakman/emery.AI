@@ -5,13 +5,16 @@
  *
  * Container node for an agent that holds its skills, databases, and automations.
  * Uses React Flow's parent/child node system for grouping.
+ * Skills are rendered in top section, databases in bottom section.
  */
 
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { NodeResizer } from '@xyflow/react';
 import { cn } from '@/lib/utils';
-import { Bot, ChevronDown, ChevronRight, Sparkles, Database, Clock } from 'lucide-react';
+import { Bot, ChevronDown, ChevronRight, Sparkles, Database, Plus } from 'lucide-react';
 import { orgChartNodeTheme, orgChartNodeSizes } from '../theme';
+import { getAgentSectionLayout } from '../utils';
+import { useOrgChartDragSafe } from '../context';
 import type { AgentContainerNodeData } from '../types';
 
 interface AgentContainerNodeProps {
@@ -19,20 +22,64 @@ interface AgentContainerNodeProps {
   selected: boolean;
 }
 
+/**
+ * Placeholder slot component for adding new items
+ */
+function PlaceholderSlot({
+  isHighlighted,
+  colorClass,
+}: {
+  isHighlighted: boolean;
+  colorClass: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-center justify-center rounded-lg border-2 border-dashed transition-all',
+        isHighlighted
+          ? `${colorClass} scale-105`
+          : 'border-muted-foreground/20 hover:border-muted-foreground/40'
+      )}
+      style={{
+        width: orgChartNodeSizes.nodeWidth,
+        height: orgChartNodeSizes.nodeHeight,
+      }}
+    >
+      <Plus
+        className={cn(
+          'h-4 w-4 transition-colors',
+          isHighlighted ? 'text-current' : 'text-muted-foreground/40'
+        )}
+      />
+    </div>
+  );
+}
+
 export const AgentContainerNode = memo(function AgentContainerNode({
   data,
   selected,
 }: AgentContainerNodeProps) {
   const config = orgChartNodeTheme.agent;
+  const { dragType, isDragging } = useOrgChartDragSafe();
   const {
     name,
     role,
     status,
     skillCount = 0,
     databaseCount = 0,
-    automationCount = 0,
     isExpanded = true,
   } = data;
+
+  // Calculate section positions for labels
+  const sectionLayout = useMemo(
+    () => getAgentSectionLayout(skillCount, databaseCount),
+    [skillCount, databaseCount]
+  );
+
+  // Determine if this agent accepts the current drag type
+  const canAcceptDrag = isDragging && (dragType === 'skill' || dragType === 'database');
+  const isDraggingSkill = isDragging && dragType === 'skill';
+  const isDraggingDatabase = isDragging && dragType === 'database';
 
   return (
     <>
@@ -51,7 +98,9 @@ export const AgentContainerNode = memo(function AgentContainerNode({
           config.bg,
           config.border,
           selected && 'ring-2 ring-primary shadow-lg',
-          !selected && 'hover:shadow-md'
+          !selected && 'hover:shadow-md',
+          // Drag feedback
+          canAcceptDrag && 'ring-2 ring-primary/50 border-primary shadow-lg shadow-primary/20'
         )}
       >
         {/* Header */}
@@ -97,38 +146,77 @@ export const AgentContainerNode = memo(function AgentContainerNode({
           )}
         </div>
 
-        {/* Resource counts (always visible) */}
-        <div className="flex items-center gap-4 px-4 py-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <Sparkles className="h-3 w-3 text-violet-500" />
-            <span>{skillCount}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Database className="h-3 w-3 text-slate-500" />
-            <span>{databaseCount}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Clock className="h-3 w-3 text-amber-500" />
-            <span>{automationCount}</span>
-          </div>
-        </div>
-
-        {/* Expanded content area (children render here via React Flow) */}
+        {/* Expanded content area with sections */}
         {isExpanded && (
           <div
-            className="relative px-2 py-2"
+            className="relative px-4 pb-4"
             style={{
-              minHeight: orgChartNodeSizes.containerMinHeight - 90,
+              minHeight: Math.max(
+                orgChartNodeSizes.containerMinHeight - orgChartNodeSizes.containerHeaderHeight,
+                sectionLayout.totalHeight - orgChartNodeSizes.containerHeaderHeight
+              ),
             }}
           >
-            {/* Placeholder when empty */}
-            {skillCount + databaseCount + automationCount === 0 && (
-              <div className="absolute inset-4 flex items-center justify-center border-2 border-dashed border-muted rounded-lg">
-                <p className="text-xs text-muted-foreground">
-                  Drop skills or databases here
-                </p>
+            {/* Skills Section */}
+            <div className="mb-2">
+              {/* Section Header */}
+              <div className="flex items-center gap-1.5 mb-2 mt-2">
+                <Sparkles className="h-3 w-3 text-violet-500" />
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Skills
+                </span>
+                {skillCount > 0 && (
+                  <span className="text-[10px] text-muted-foreground">({skillCount})</span>
+                )}
               </div>
-            )}
+
+              {/* Skills placeholder slot - shown when empty or as drop target */}
+              {skillCount === 0 && (
+                <PlaceholderSlot
+                  isHighlighted={isDraggingSkill}
+                  colorClass="border-violet-400 bg-violet-50/50 dark:bg-violet-900/20 text-violet-500"
+                />
+              )}
+            </div>
+
+            {/* Section Divider */}
+            <div
+              className="absolute border-t border-dashed border-muted-foreground/20"
+              style={{
+                left: orgChartNodeSizes.containerPadding,
+                right: orgChartNodeSizes.containerPadding,
+                top: sectionLayout.skillsEndY - orgChartNodeSizes.sectionGap / 2,
+              }}
+            />
+
+            {/* Databases Section */}
+            <div
+              style={{
+                position: 'absolute',
+                left: orgChartNodeSizes.containerPadding,
+                right: orgChartNodeSizes.containerPadding,
+                top: sectionLayout.databasesStartY,
+              }}
+            >
+              {/* Section Header */}
+              <div className="flex items-center gap-1.5 mb-2">
+                <Database className="h-3 w-3 text-slate-500" />
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Databases
+                </span>
+                {databaseCount > 0 && (
+                  <span className="text-[10px] text-muted-foreground">({databaseCount})</span>
+                )}
+              </div>
+
+              {/* Databases placeholder slot - shown when empty or as drop target */}
+              {databaseCount === 0 && (
+                <PlaceholderSlot
+                  isHighlighted={isDraggingDatabase}
+                  colorClass="border-slate-400 bg-slate-50/50 dark:bg-slate-800/20 text-slate-500"
+                />
+              )}
+            </div>
           </div>
         )}
       </div>

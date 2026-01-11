@@ -9,9 +9,6 @@ import {
   Bot,
   Sparkles,
   Database,
-  Table2,
-  Clock,
-  AppWindow,
   Folder,
   StickyNote,
 } from 'lucide-react';
@@ -52,24 +49,6 @@ export const orgChartNodeTheme: Record<OrgChartNodeType, OrgChartNodeThemeConfig
     border: 'border-slate-300 dark:border-slate-700',
     text: 'text-slate-700 dark:text-slate-300',
     icon: Database,
-  },
-  table: {
-    bg: 'bg-cyan-50 dark:bg-cyan-950',
-    border: 'border-cyan-300 dark:border-cyan-700',
-    text: 'text-cyan-700 dark:text-cyan-300',
-    icon: Table2,
-  },
-  automation: {
-    bg: 'bg-amber-50 dark:bg-amber-950',
-    border: 'border-amber-300 dark:border-amber-700',
-    text: 'text-amber-700 dark:text-amber-300',
-    icon: Clock,
-  },
-  app: {
-    bg: 'bg-rose-50 dark:bg-rose-950',
-    border: 'border-rose-300 dark:border-rose-700',
-    text: 'text-rose-700 dark:text-rose-300',
-    icon: AppWindow,
   },
   sticky: {
     bg: 'bg-yellow-100 dark:bg-yellow-900',
@@ -181,9 +160,6 @@ export function getNodeTypeLabel(type: OrgChartNodeType): string {
     agent: 'Agent',
     skill: 'Skill',
     database: 'Database',
-    table: 'Table',
-    automation: 'Automation',
-    app: 'App',
     sticky: 'Note',
     org_resources: 'Organization',
   };

@@ -16,9 +16,6 @@ import type { Node, Edge, XYPosition, NodeChange, EdgeChange } from '@xyflow/rea
  * - agent: Container node for agent resources
  * - skill: Skill belonging to agent or org
  * - database: Database belonging to agent or org
- * - table: Table within a database
- * - automation: Automation trigger for an agent
- * - app: Puck app (org-level only)
  * - sticky: Annotation (same as workflow-canvas)
  * - org_resources: Section header for org-level resources
  */
@@ -26,9 +23,6 @@ export type OrgChartNodeType =
   | 'agent'
   | 'skill'
   | 'database'
-  | 'table'
-  | 'automation'
-  | 'app'
   | 'sticky'
   | 'org_resources';
 
@@ -85,43 +79,12 @@ export interface DatabaseNodeData extends BaseOrgChartNodeData {
 }
 
 /**
- * Table node data
- */
-export interface TableNodeData extends BaseOrgChartNodeData {
-  tableId: number;
-  databaseId: number;
-  slug: string;
-  fieldCount?: number;
-  rowCount?: number;
-}
-
-/**
- * Automation node data
- */
-export interface AutomationNodeData extends BaseOrgChartNodeData {
-  automationIndex: number; // Index in agent's automations array
-  agentId: number;
-  triggerType: string;
-  skillId?: number;
-  isEnabled?: boolean;
-}
-
-/**
- * App node data (Puck apps)
- */
-export interface AppNodeData extends BaseOrgChartNodeData {
-  appId: number;
-  slug: string;
-  pageCount?: number;
-}
-
-/**
  * Sticky note data (same as workflow-canvas)
+ * Content is TipTap HTML (users can format first line as heading for title)
  */
 export interface StickyNoteData {
   [key: string]: unknown;
-  name: string;
-  content: string;
+  content: string; // TipTap HTML content
   color?: 'yellow' | 'blue' | 'green' | 'pink' | 'purple';
 }
 
@@ -139,9 +102,6 @@ export type OrgChartNodeData =
   | AgentContainerNodeData
   | SkillNodeData
   | DatabaseNodeData
-  | TableNodeData
-  | AutomationNodeData
-  | AppNodeData
   | StickyNoteData
   | OrgResourcesNodeData;
 
@@ -182,6 +142,16 @@ export type OrgChartEdge = Edge<OrgChartEdgeData>;
 // Component Props
 // =============================================================================
 
+/**
+ * Minimal step data needed for edge extraction
+ */
+export interface SkillStepEdgeData {
+  id: string;
+  skillId?: number; // For skill_ref edges
+  readConfig?: { sourceTableId?: number };
+  writeConfig?: { targetTableId?: number };
+}
+
 export interface OrgChartCanvasProps {
   /** Initial agents to display */
   agents: Array<{
@@ -196,6 +166,7 @@ export interface OrgChartCanvasProps {
     name: string;
     executionType?: string;
     agentId?: number | null;
+    steps?: SkillStepEdgeData[];
   }>;
   /** Initial databases */
   databases: Array<{
@@ -204,6 +175,7 @@ export interface OrgChartCanvasProps {
     slug: string;
     agentId?: number | null;
     tableCount?: number;
+    tables?: Array<{ id: number; name: string; slug?: string }>;
   }>;
   /** Whether the canvas is read-only */
   disabled?: boolean;
@@ -273,11 +245,23 @@ export interface UseOrgChartCanvasReturn {
  */
 export interface PersistedOrgChartStickyNote {
   id: string;
-  name: string;
-  content: string;
+  content: string; // TipTap HTML content
   color?: StickyNoteData['color'];
   position: { x: number; y: number };
   size?: { width: number; height: number };
+}
+
+/**
+ * Persisted edge for org chart
+ */
+export interface PersistedOrgChartEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+  edgeType: OrgChartEdgeType;
+  label?: string;
 }
 
 /**
@@ -297,6 +281,8 @@ export interface OrgChartCanvasMetadata {
   databasePositions?: Record<number, { x: number; y: number }>;
   /** Viewport state (zoom and pan) */
   viewport?: { x: number; y: number; zoom: number };
+  /** Manual edges (connections between skills and databases) */
+  edges?: PersistedOrgChartEdge[];
 }
 
 /**

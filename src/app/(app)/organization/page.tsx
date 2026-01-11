@@ -25,11 +25,19 @@ export default async function OrganizationPage() {
   ]);
 
   // Transform to lightweight format for canvas
+  // Include steps for edge extraction (skill→database, skill→skill connections)
   const skillData = (skillsResult.data ?? []).map((skill) => ({
     id: skill.id,
     name: skill.name,
     executionType: skill.executionType,
     agentId: skill.agentId ?? null,
+    // Extract minimal step data needed for edge generation
+    steps: skill.steps?.map((step) => ({
+      id: step.id,
+      skillId: step.skillId, // For skill_ref edges
+      readConfig: step.readConfig ? { sourceTableId: step.readConfig.sourceTableId } : undefined,
+      writeConfig: step.writeConfig ? { targetTableId: step.writeConfig.targetTableId } : undefined,
+    })),
   }));
 
   const canvasMetadata = canvasMetadataResult.success ? canvasMetadataResult.data : undefined;

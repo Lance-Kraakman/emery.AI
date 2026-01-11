@@ -101,8 +101,8 @@ export function useOrgChart(props: UseOrgChartProps): UseOrgChartReturn {
     state.setEdges
   );
 
-  // Auto-save persistence - pass nodes directly so changes trigger saves
-  useOrgChartPersistence(state.nodes, sync.isInitialized);
+  // Auto-save persistence - pass nodes and edges so changes trigger saves
+  useOrgChartPersistence(state.nodes, state.edges, sync.isInitialized);
 
   // Wrap operations to include history push
   const deleteNode = useCallback(

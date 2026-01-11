@@ -7,3 +7,4 @@
 export { AgentConfigPanel } from './AgentConfigPanel';
 export { SkillConfigPanel } from './SkillConfigPanel';
 export { DatabaseConfigPanel } from './DatabaseConfigPanel';
+export { EdgeConfigPanel } from './EdgeConfigPanel';

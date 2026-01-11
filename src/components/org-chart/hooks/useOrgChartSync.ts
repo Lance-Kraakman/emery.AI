@@ -47,8 +47,15 @@ function updateAgentWithChild(
   const data = agentNode.data as AgentContainerNodeData;
   if (!data.isExpanded) return nodes;
 
-  const childCount = nodes.filter((n) => n.parentId === agentNodeId).length;
-  const neededHeight = calculateAgentContentHeight(childCount);
+  // Calculate new counts for sectioned layout
+  const newSkillCount = countKey === 'skillCount'
+    ? (data.skillCount ?? 0) + 1
+    : (data.skillCount ?? 0);
+  const newDatabaseCount = countKey === 'databaseCount'
+    ? (data.databaseCount ?? 0) + 1
+    : (data.databaseCount ?? 0);
+
+  const neededHeight = calculateAgentContentHeight(newSkillCount, newDatabaseCount);
   const { height: currentHeight } = getNodeDimensions(agentNode);
 
   const newData = { ...data, [countKey]: (data[countKey] ?? 0) + 1 };

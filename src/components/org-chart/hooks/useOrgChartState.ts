@@ -106,8 +106,7 @@ export function useOrgChartState(): UseOrgChartStateReturn {
         position,
         style: { width: 200, height: 120 },
         data: {
-          name: 'Note',
-          content: '',
+          content: '<p></p>',
           color: 'yellow',
         } as StickyNoteData,
       };

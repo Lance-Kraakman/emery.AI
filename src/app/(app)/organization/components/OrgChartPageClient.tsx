@@ -30,6 +30,12 @@ interface OrgChartPageClientProps {
     name: string;
     executionType?: string;
     agentId: number | null;
+    steps?: Array<{
+      id: string;
+      skillId?: number;
+      readConfig?: { sourceTableId?: number };
+      writeConfig?: { targetTableId?: number };
+    }>;
   }>;
   /** Saved canvas metadata */
   canvasMetadata?: OrgChartCanvasMetadata | null;

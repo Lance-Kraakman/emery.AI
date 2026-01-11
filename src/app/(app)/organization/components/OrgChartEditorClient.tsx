@@ -136,12 +136,24 @@ export function OrgChartEditorClient({
   // Create table dialog state (lifted from DatabaseConfigPanel for proper overlay)
   const [createTableDatabaseId, setCreateTableDatabaseId] = useState<number | null>(null);
 
-  // Handle selection from canvas
+  // Connected edges for selected skill (passed from canvas on selection)
+  const [selectedEdges, setSelectedEdges] = useState<
+    Array<{ id: string; target: string; edgeType: string }>
+  >([]);
+
+  // Handle selection from canvas - includes connected edges for skills
   const handleSelect = useCallback(
-    (nodeId: string | null, nodeType?: OrgChartNodeType, entityId?: number) => {
+    (
+      nodeId: string | null,
+      nodeType?: OrgChartNodeType,
+      entityId?: number,
+      connectedEdges?: Array<{ id: string; target: string; edgeType: string }>
+    ) => {
+      console.log('[OrgChartEditorClient] handleSelect called:', { nodeId, nodeType, entityId, connectedEdges });
       setSelectedNodeId(nodeId);
       setSelectedNodeType(nodeType);
       setSelectedEntityId(entityId);
+      setSelectedEdges(connectedEdges || []);
     },
     []
   );
@@ -175,10 +187,6 @@ export function OrgChartEditorClient({
         case 'database':
           // No database-specific page - users click individual tables instead
           // Double-clicking a database just selects it (shows side panel)
-          break;
-        case 'app':
-          // Navigate to app builder
-          router.push(`/apps/${entityId}`);
           break;
         default:
           break;
@@ -444,11 +452,29 @@ export function OrgChartEditorClient({
     }
 
     if (selectedNodeType === 'skill' && selectedSkill) {
+      // selectedEdges already contains edges where this skill is the source
+      // Each edge has { id, target, edgeType }
+
+      // Get connected database info (for skill_table edges)
+      const connectedDatabaseIds = selectedEdges
+        .filter((e) => e.target.startsWith('database-'))
+        .map((e) => parseInt(e.target.replace('database-', ''), 10));
+      const connectedDatabases = databases.filter((d) => connectedDatabaseIds.includes(d.id));
+
+      // Get connected skill info (for skill_ref edges)
+      const connectedSkillIds = selectedEdges
+        .filter((e) => e.target.startsWith('skill-'))
+        .map((e) => parseInt(e.target.replace('skill-', ''), 10));
+      const connectedSkillsList = skills.filter((s) => connectedSkillIds.includes(s.id));
+
       return (
         <SkillConfigPanel
           skill={selectedSkill}
           agentName={getAgentName(selectedSkill.agentId)}
           onOpenEditor={() => handleOpenEntity('skill', selectedSkill.id)}
+          edges={selectedEdges}
+          databases={connectedDatabases}
+          connectedSkills={connectedSkillsList}
         />
       );
     }

@@ -11,6 +11,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bot, Sparkles, Database, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useOrgChartDragSafe } from '@/components/org-chart/context';
 import type { OrgChartNodeType } from '@/components/org-chart/types';
 
 interface PaletteItem {
@@ -56,9 +57,16 @@ interface EntityPaletteProps {
  * EntityPalette - Drag-and-drop palette for adding entities to org chart
  */
 export function EntityPalette({ disabled, onCreateEntity }: EntityPaletteProps) {
+  const { setDragType } = useOrgChartDragSafe();
+
   const onDragStart = (event: React.DragEvent, nodeType: OrgChartNodeType) => {
     event.dataTransfer.setData('application/orgchart-entity', nodeType);
     event.dataTransfer.effectAllowed = 'move';
+    setDragType(nodeType);
+  };
+
+  const onDragEnd = () => {
+    setDragType(null);
   };
 
   const handleClick = (type: OrgChartNodeType) => {
@@ -81,6 +89,7 @@ export function EntityPalette({ disabled, onCreateEntity }: EntityPaletteProps) 
             key={item.type}
             draggable={!disabled}
             onDragStart={(e) => onDragStart(e, item.type)}
+            onDragEnd={onDragEnd}
             onClick={() => handleClick(item.type)}
             className={cn(
               'flex items-center gap-2 p-2 rounded-md cursor-grab',
