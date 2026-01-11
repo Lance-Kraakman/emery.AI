@@ -19,6 +19,7 @@ import {
   useReactFlow,
   type OnSelectionChangeParams,
   type XYPosition,
+  type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
@@ -35,11 +36,13 @@ import {
   arrangeAgentsInRows,
   arrangeChildrenInGrid,
   calculateAgentDimensions,
+  getNextGridSlotPosition,
 } from '@/components/org-chart/utils';
 import { DeleteConfirmationDialog, buildDeleteImpactItems } from '@/components/org-chart/dialogs';
 import { EntityPalette } from './EntityPalette';
 import { SearchDialog } from './SearchDialog';
 import { StickyNoteProvider } from '@/components/shared/StickyNoteContext';
+import { OrgChartDragProvider } from '@/components/org-chart/context';
 import type { OrgChartCanvasMetadata, OrgChartNodeType, AgentContainerNodeData } from '@/components/org-chart/types';
 
 interface OrgChartCanvasProps {
@@ -69,8 +72,13 @@ interface OrgChartCanvasProps {
   canvasMetadata?: OrgChartCanvasMetadata;
   /** Whether the canvas is read-only */
   disabled?: boolean;
-  /** Callback when an entity is selected */
-  onSelect?: (nodeId: string | null, nodeType?: OrgChartNodeType, entityId?: number) => void;
+  /** Callback when an entity is selected - includes connected edges for skills */
+  onSelect?: (
+    nodeId: string | null,
+    nodeType?: OrgChartNodeType,
+    entityId?: number,
+    connectedEdges?: Array<{ id: string; target: string; edgeType: string }>
+  ) => void;
   /** Callback when an entity should be opened (e.g., navigate to skill editor) */
   onOpenEntity?: (entityType: OrgChartNodeType, entityId: number) => void;
   /** Callback when a new entity should be created - returns the created entity */
@@ -102,23 +110,14 @@ export function OrgChartCanvas({
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Memoize onSelect wrapper to prevent hook callback recreation
-  const handleSelectInternal = useCallback(
-    (nodeId: string | null, nodeType?: OrgChartNodeType) => {
-      if (onSelect) {
-        // Parse entity ID from node ID
-        const match = nodeId?.match(/^([a-z_]+)-(\d+)$/);
-        const entityId = match ? parseInt(match[2], 10) : undefined;
-        onSelect(nodeId, nodeType, entityId);
-      }
-    },
-    [onSelect]
-  );
+  // Note: We don't pass onSelect to useOrgChart - we handle it in handleSelectionChange
+  // so we have access to edges at selection time
 
   const {
     nodes,
     edges,
     setNodes,
+    setEdges,
     onNodesChange,
     onEdgesChange,
     selectedNodeId,
@@ -140,7 +139,7 @@ export function OrgChartCanvas({
     skills,
     databases,
     canvasMetadata,
-    onSelect: handleSelectInternal,
+    // onSelect is handled in handleSelectionChange where we have access to edges
   });
 
   // Handler for sticky note updates
@@ -192,12 +191,7 @@ export function OrgChartCanvas({
       const agentId = targetAgent
         ? (targetAgent.data as AgentContainerNodeData).agentId
         : null;
-
-      // If dropping inside an agent, convert absolute position to relative position
-      // React Flow expects child node positions to be relative to their parent
-      const nodePosition = targetAgent
-        ? { x: position.x - targetAgent.position.x, y: position.y - targetAgent.position.y }
-        : position;
+      const agentData = targetAgent?.data as AgentContainerNodeData | undefined;
 
       // Create entity on server first, then add node at drop position
       switch (entityType) {
@@ -215,9 +209,13 @@ export function OrgChartCanvas({
           // Skills can be agent-scoped or org-level (null agentId)
           const createdSkill = await onCreateEntity('skill', agentId ?? undefined);
           if (createdSkill) {
+            // If dropping inside agent, snap to grid slot; otherwise use drop position
+            const nodePosition = targetAgent
+              ? getNextGridSlotPosition('skill', agentData?.skillCount ?? 0)
+              : position;
             addSkillNode(
               { id: createdSkill.id, name: createdSkill.name, agentId },
-              nodePosition // Relative if inside agent
+              nodePosition
             );
           }
           break;
@@ -226,9 +224,13 @@ export function OrgChartCanvas({
           // Databases can be org-level (null) or agent-scoped
           const createdDb = await onCreateEntity('database', agentId ?? undefined);
           if (createdDb) {
+            // If dropping inside agent, snap to grid slot; otherwise use drop position
+            const nodePosition = targetAgent
+              ? getNextGridSlotPosition('database', agentData?.databaseCount ?? 0)
+              : position;
             addDatabaseNode(
               { id: createdDb.id, name: createdDb.name, slug: createdDb.slug || 'db', agentId },
-              nodePosition // Relative if inside agent
+              nodePosition
             );
           }
           break;
@@ -238,16 +240,161 @@ export function OrgChartCanvas({
     [reactFlowInstance, onCreateEntity, addAgentNode, addSkillNode, addDatabaseNode, nodes]
   );
 
+  // Validate connection attempts - only allow valid edge types
+  const isValidConnection = useCallback(
+    (connection: Connection | { source: string; target: string }) => {
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      const targetNode = nodes.find((n) => n.id === connection.target);
+
+      if (!sourceNode || !targetNode) return false;
+
+      // Only allow skill → skill or skill → database
+      if (sourceNode.type === 'skill') {
+        return targetNode.type === 'skill' || targetNode.type === 'database';
+      }
+
+      // Database → skill is normalized in handleConnect, allow it
+      if (sourceNode.type === 'database' && targetNode.type === 'skill') {
+        return true;
+      }
+
+      return false;
+    },
+    [nodes]
+  );
+
+  // Handle manual edge creation (drag from handle to handle)
+  const handleConnect = useCallback(
+    (connection: Connection) => {
+      console.log('[OrgChartCanvas] handleConnect called with:', {
+        source: connection.source,
+        target: connection.target,
+        sourceHandle: connection.sourceHandle,
+        targetHandle: connection.targetHandle,
+      });
+
+      if (!connection.source || !connection.target) return;
+
+      // Determine edge type based on source/target node types
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      const targetNode = nodes.find((n) => n.id === connection.target);
+
+      console.log('[OrgChartCanvas] Found nodes:', {
+        sourceNode: sourceNode ? { id: sourceNode.id, type: sourceNode.type, parentId: sourceNode.parentId } : null,
+        targetNode: targetNode ? { id: targetNode.id, type: targetNode.type, parentId: targetNode.parentId } : null,
+      });
+
+      if (!sourceNode || !targetNode) return;
+
+      // Extract which SIDE (left/right) the user dragged from/to
+      const sourceSide = connection.sourceHandle?.startsWith('left') ? 'left' : 'right';
+      const targetSide = connection.targetHandle?.startsWith('left') ? 'left' : 'right';
+
+      // Normalize direction: skill should always be the source
+      // This handles both skill→database and database→skill drags
+      let actualSource = connection.source!;
+      let actualTarget = connection.target!;
+      let actualSourceHandle: string;
+      let actualTargetHandle: string;
+      let edgeType: 'skill_ref' | 'skill_table' = 'skill_table';
+      let label = 'uses';
+
+      if (sourceNode.type === 'skill' && targetNode.type === 'skill') {
+        // skill → skill (no swap needed)
+        edgeType = 'skill_ref';
+        label = 'references';
+        actualSourceHandle = `${sourceSide}-source`;
+        actualTargetHandle = `${targetSide}-target`;
+      } else if (sourceNode.type === 'skill' && targetNode.type === 'database') {
+        // skill → database (no swap needed)
+        edgeType = 'skill_table';
+        label = 'uses';
+        actualSourceHandle = `${sourceSide}-source`;
+        actualTargetHandle = `${targetSide}-target`;
+      } else if (sourceNode.type === 'database' && targetNode.type === 'skill') {
+        // database → skill (swap to skill → database)
+        actualSource = connection.target!;
+        actualTarget = connection.source!;
+        // After swap: skill is source, database is target
+        // The side the user dragged TO (targetSide on skill) becomes the source side
+        // The side the user dragged FROM (sourceSide on database) becomes the target side
+        actualSourceHandle = `${targetSide}-source`;
+        actualTargetHandle = `${sourceSide}-target`;
+        edgeType = 'skill_table';
+        label = 'uses';
+      } else {
+        // Unsupported connection type
+        console.log('[OrgChartCanvas] Unsupported edge type:', sourceNode.type, '→', targetNode.type);
+        return;
+      }
+
+      // Create unique edge ID
+      const edgeId = `edge-${actualSource}-${actualTarget}-${Date.now()}`;
+
+      // Add edge - sourceHandle must be a *-source handle, targetHandle must be a *-target handle
+      setEdges((eds) => [
+        ...eds,
+        {
+          id: edgeId,
+          source: actualSource,
+          target: actualTarget,
+          sourceHandle: actualSourceHandle,
+          targetHandle: actualTargetHandle,
+          type: 'reference',
+          data: {
+            edgeType,
+            label,
+          },
+        },
+      ]);
+    },
+    [nodes, setEdges]
+  );
+
   // Handle selection changes
+  // Handle selection changes - includes edges for skills
   const handleSelectionChange = useCallback(
     ({ nodes: selectedNodes }: OnSelectionChangeParams) => {
+      console.log('[OrgChartCanvas] handleSelectionChange called, selectedNodes:', selectedNodes);
+
       if (selectedNodes.length === 0) {
+        console.log('[OrgChartCanvas] No nodes selected, calling onSelect(null)');
         setSelectedNodeId(null);
+        if (onSelect) {
+          onSelect(null);
+        }
       } else if (selectedNodes.length === 1) {
-        setSelectedNodeId(selectedNodes[0].id);
+        const node = selectedNodes[0];
+        setSelectedNodeId(node.id);
+
+        if (onSelect) {
+          // Parse entity ID from node ID (e.g., "skill-123" -> 123)
+          const match = node.id.match(/^([a-z_]+)-(\d+)$/);
+          const entityId = match ? parseInt(match[2], 10) : undefined;
+
+          // For skills, include connected edges
+          let connectedEdges: Array<{ id: string; target: string; edgeType: string }> | undefined;
+          if (node.type === 'skill') {
+            console.log('[OrgChartCanvas] Skill selected:', node.id);
+            console.log('[OrgChartCanvas] All edges:', edges);
+            console.log('[OrgChartCanvas] Edges for this skill:', edges.filter((e) => e.source === node.id));
+
+            connectedEdges = edges
+              .filter((e) => e.source === node.id)
+              .map((e) => ({
+                id: e.id,
+                target: e.target,
+                edgeType: ((e.data as any)?.edgeType as string) || 'skill_table',
+              }));
+
+            console.log('[OrgChartCanvas] Connected edges to pass:', connectedEdges);
+          }
+
+          onSelect(node.id, node.type as OrgChartNodeType, entityId, connectedEdges);
+        }
       }
     },
-    [setSelectedNodeId]
+    [setSelectedNodeId, onSelect, edges]
   );
 
   // Handle keyboard shortcuts
@@ -269,27 +416,37 @@ export function OrgChartCanvas({
         event.preventDefault();
         redo();
       }
-      // Delete/Backspace = Show delete confirmation
-      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedNodeIds.size > 0) {
+      // Delete/Backspace = Delete edges or show node delete confirmation
+      if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
-        // Filter out sticky notes from deletion confirmation (they're canvas-only)
-        const nodesToDelete = new Set<string>();
-        selectedNodeIds.forEach((id) => {
-          const node = nodes.find((n) => n.id === id);
-          if (node && node.type !== 'sticky') {
-            nodesToDelete.add(id);
-          } else if (node?.type === 'sticky') {
-            // Immediately delete sticky notes (canvas-only, no server data)
-            deleteNodes(new Set([id]));
+
+        // Delete selected edges directly (no confirmation needed - they're canvas-only)
+        const selectedEdges = edges.filter((e) => e.selected);
+        if (selectedEdges.length > 0) {
+          setEdges((eds) => eds.filter((e) => !e.selected));
+        }
+
+        // Handle node deletion with confirmation
+        if (selectedNodeIds.size > 0) {
+          // Filter out sticky notes from deletion confirmation (they're canvas-only)
+          const nodesToDelete = new Set<string>();
+          selectedNodeIds.forEach((id) => {
+            const node = nodes.find((n) => n.id === id);
+            if (node && node.type !== 'sticky') {
+              nodesToDelete.add(id);
+            } else if (node?.type === 'sticky') {
+              // Immediately delete sticky notes (canvas-only, no server data)
+              deleteNodes(new Set([id]));
+            }
+          });
+          if (nodesToDelete.size > 0) {
+            setPendingDeleteIds(nodesToDelete);
+            setIsDeleteDialogOpen(true);
           }
-        });
-        if (nodesToDelete.size > 0) {
-          setPendingDeleteIds(nodesToDelete);
-          setIsDeleteDialogOpen(true);
         }
       }
     },
-    [undo, redo, deleteNodes, selectedNodeIds, nodes]
+    [undo, redo, deleteNodes, selectedNodeIds, nodes, edges, setEdges]
   );
 
   // Handle delete confirmation
@@ -390,12 +547,14 @@ export function OrgChartCanvas({
     // 3. Size agents based on their children and arrange in horizontal rows
     const agentIds = newNodes.filter((n) => n.type === 'agent').map((n) => n.id);
 
-    // First, resize agents to fit their children
+    // First, resize agents to fit their children (sectioned layout)
     newNodes = newNodes.map((node) => {
       if (node.type !== 'agent') return node;
       const data = node.data as AgentContainerNodeData;
-      const childCount = (data.skillCount ?? 0) + (data.databaseCount ?? 0);
-      const { width, height } = calculateAgentDimensions(childCount);
+      const { width, height } = calculateAgentDimensions(
+        data.skillCount ?? 0,
+        data.databaseCount ?? 0
+      );
       return {
         ...node,
         style: { ...node.style, width, height },
@@ -442,6 +601,7 @@ export function OrgChartCanvas({
   }, [addStickyNote]);
 
   return (
+    <OrgChartDragProvider>
     <div
       ref={reactFlowWrapper}
       className="h-full w-full"
@@ -454,6 +614,8 @@ export function OrgChartCanvas({
         edges={edges}
         onNodesChange={disabled ? undefined : onNodesChange}
         onEdgesChange={disabled ? undefined : onEdgesChange}
+        onConnect={disabled ? undefined : handleConnect}
+        isValidConnection={isValidConnection}
         onSelectionChange={handleSelectionChange}
         onNodeDoubleClick={handleNodeDoubleClick}
         onDragOver={disabled ? undefined : handleDragOver}
@@ -645,6 +807,7 @@ export function OrgChartCanvas({
         itemsToDelete={deleteImpactItems}
       />
     </div>
+    </OrgChartDragProvider>
   );
 }
 

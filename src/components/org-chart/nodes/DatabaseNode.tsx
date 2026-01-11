@@ -49,21 +49,33 @@ export const DatabaseNode = memo(function DatabaseNode({ data, selected }: Datab
         config.border
       )}
     >
-      {/* Handles for connections (hidden for child nodes) */}
-      {!isChild && (
-        <>
-          <Handle
-            type={orgChartHandles.referenceTarget.type}
-            position={orgChartHandles.referenceTarget.position}
-            className={orgChartHandles.referenceTarget.className}
-          />
-          <Handle
-            type={orgChartHandles.referenceSource.type}
-            position={orgChartHandles.referenceSource.position}
-            className={orgChartHandles.referenceSource.className}
-          />
-        </>
-      )}
+      {/* Handles for connections - 4 handles (2 per side) so connections work from either side */}
+      {/* Left side - both source and target */}
+      <Handle
+        id="left-target"
+        type="target"
+        position={Position.Left}
+        className={orgChartHandles.referenceTarget.className}
+      />
+      <Handle
+        id="left-source"
+        type="source"
+        position={Position.Left}
+        className={orgChartHandles.referenceSource.className}
+      />
+      {/* Right side - both source and target */}
+      <Handle
+        id="right-target"
+        type="target"
+        position={Position.Right}
+        className={orgChartHandles.referenceTarget.className}
+      />
+      <Handle
+        id="right-source"
+        type="source"
+        position={Position.Right}
+        className={orgChartHandles.referenceSource.className}
+      />
 
       {/* Header: icon + name */}
       <div className="flex items-center gap-2 px-3 py-2.5">

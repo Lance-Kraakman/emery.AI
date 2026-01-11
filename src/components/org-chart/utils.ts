@@ -8,6 +8,7 @@ import type { XYPosition } from '@xyflow/react';
 import type {
   OrgChartNode,
   OrgChartEdge,
+  OrgChartEdgeData,
   OrgChartNodeType,
   OrgChartCanvasMetadata,
   AgentContainerNodeData,
@@ -15,6 +16,7 @@ import type {
   DatabaseNodeData,
   StickyNoteData,
   PersistedOrgChartStickyNote,
+  PersistedOrgChartEdge,
 } from './types';
 import { orgChartNodeSizes } from './theme';
 
@@ -34,6 +36,12 @@ export interface Skill {
   name: string;
   executionType?: string;
   agentId?: number | null;
+  steps?: Array<{
+    id: string;
+    skillId?: number;
+    readConfig?: { sourceTableId?: number };
+    writeConfig?: { targetTableId?: number };
+  }>;
 }
 
 export interface Database {
@@ -85,12 +93,31 @@ export function getNodeDimensions(node: OrgChartNode): { width: number; height: 
 }
 
 /**
- * Calculate required height for an agent container based on child count.
+ * Calculate required height for an agent container based on child counts.
+ * Now supports sectioned layout with skills and databases in separate sections.
  */
-export function calculateAgentContentHeight(childCount: number): number {
-  const rows = Math.ceil(childCount / 2);
+export function calculateAgentContentHeight(
+  skillCount: number,
+  databaseCount: number
+): number {
   const contentStartY = orgChartNodeSizes.containerHeaderHeight + orgChartNodeSizes.containerPadding;
-  return contentStartY + rows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap) + orgChartNodeSizes.containerPadding;
+
+  // Calculate skills section height
+  const skillRows = Math.ceil(skillCount / 2);
+  const skillSectionHeight = skillRows > 0
+    ? skillRows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap)
+    : 0;
+
+  // Add section gap if we have both skills and databases
+  const sectionGap = (skillCount > 0 && databaseCount > 0) ? orgChartNodeSizes.sectionGap : 0;
+
+  // Calculate databases section height
+  const databaseRows = Math.ceil(databaseCount / 2);
+  const databaseSectionHeight = databaseRows > 0
+    ? databaseRows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap)
+    : 0;
+
+  return contentStartY + skillSectionHeight + sectionGap + databaseSectionHeight + orgChartNodeSizes.containerPadding;
 }
 
 /**
@@ -107,14 +134,17 @@ export function ensureContentAreaPosition(position: XYPosition, hasParent: boole
 // =============================================================================
 
 /**
- * Calculate agent container dimensions based on child count.
- * Returns width and height that will fit children in a 2-column grid.
+ * Calculate agent container dimensions based on child counts.
+ * Returns width and height that will fit children in sectioned 2-column grids.
  */
-export function calculateAgentDimensions(childCount: number): { width: number; height: number } {
+export function calculateAgentDimensions(
+  skillCount: number,
+  databaseCount: number
+): { width: number; height: number } {
   const width = orgChartNodeSizes.containerMinWidth;
   const height = Math.max(
     orgChartNodeSizes.containerMinHeight,
-    calculateAgentContentHeight(childCount)
+    calculateAgentContentHeight(skillCount, databaseCount)
   );
   return { width, height };
 }
@@ -186,6 +216,7 @@ export function arrangeAgentsInRows(
 /**
  * Arrange children inside an agent container in a 2-column grid.
  * Children positions are relative to the parent agent.
+ * Separates skills (top) from databases (bottom) with a section gap.
  */
 export function arrangeChildrenInGrid(
   nodes: OrgChartNode[],
@@ -194,21 +225,139 @@ export function arrangeChildrenInGrid(
   const children = nodes.filter((n) => n.parentId === parentId);
   if (children.length === 0) return nodes;
 
+  // Separate children by type: skills first, then databases
+  const skills = children.filter((c) => c.type === 'skill');
+  const databases = children.filter((c) => c.type === 'database');
+  const other = children.filter((c) => c.type !== 'skill' && c.type !== 'database');
+
   const childIds = new Set(children.map((c) => c.id));
-  let index = 0;
   const contentStartY = orgChartNodeSizes.containerHeaderHeight + orgChartNodeSizes.containerPadding;
 
-  return nodes.map((node) => {
-    if (!childIds.has(node.id)) return node;
-
+  // Calculate positions for skills section
+  const skillPositions = new Map<string, { x: number; y: number }>();
+  skills.forEach((node, index) => {
     const col = index % 2;
     const row = Math.floor(index / 2);
     const x = orgChartNodeSizes.containerPadding + col * (orgChartNodeSizes.nodeWidth + orgChartNodeSizes.childNodeGap);
     const y = contentStartY + row * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
-
-    index++;
-    return { ...node, position: { x, y } };
+    skillPositions.set(node.id, { x, y });
   });
+
+  // Calculate where databases section starts
+  const skillRows = Math.ceil(skills.length / 2);
+  const skillSectionHeight = skillRows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+  const databaseStartY = contentStartY +
+    (skills.length > 0 ? skillSectionHeight + orgChartNodeSizes.sectionGap : 0);
+
+  // Calculate positions for databases section
+  const databasePositions = new Map<string, { x: number; y: number }>();
+  databases.forEach((node, index) => {
+    const col = index % 2;
+    const row = Math.floor(index / 2);
+    const x = orgChartNodeSizes.containerPadding + col * (orgChartNodeSizes.nodeWidth + orgChartNodeSizes.childNodeGap);
+    const y = databaseStartY + row * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+    databasePositions.set(node.id, { x, y });
+  });
+
+  // Calculate positions for other nodes (after databases)
+  const databaseRows = Math.ceil(databases.length / 2);
+  const databaseSectionHeight = databaseRows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+  const otherStartY = databaseStartY +
+    (databases.length > 0 ? databaseSectionHeight + orgChartNodeSizes.sectionGap : 0);
+
+  const otherPositions = new Map<string, { x: number; y: number }>();
+  other.forEach((node, index) => {
+    const col = index % 2;
+    const row = Math.floor(index / 2);
+    const x = orgChartNodeSizes.containerPadding + col * (orgChartNodeSizes.nodeWidth + orgChartNodeSizes.childNodeGap);
+    const y = otherStartY + row * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+    otherPositions.set(node.id, { x, y });
+  });
+
+  return nodes.map((node) => {
+    if (!childIds.has(node.id)) return node;
+
+    const pos = skillPositions.get(node.id) ||
+                databasePositions.get(node.id) ||
+                otherPositions.get(node.id);
+
+    if (pos) {
+      return { ...node, position: pos };
+    }
+    return node;
+  });
+}
+
+/**
+ * Calculate section layout info for an agent container.
+ * Used by AgentContainerNode to render section labels and drop zones.
+ */
+export function getAgentSectionLayout(
+  skillCount: number,
+  databaseCount: number
+): {
+  skillsStartY: number;
+  skillsEndY: number;
+  databasesStartY: number;
+  databasesEndY: number;
+  totalHeight: number;
+} {
+  const contentStartY = orgChartNodeSizes.containerHeaderHeight + orgChartNodeSizes.containerPadding;
+
+  // Skills section
+  const skillRows = Math.ceil(Math.max(skillCount, 1) / 2); // At least 1 row for drop zone
+  const skillSectionHeight = skillRows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+  const skillsStartY = contentStartY;
+  const skillsEndY = contentStartY + skillSectionHeight;
+
+  // Databases section
+  const databaseStartY = skillsEndY + (skillCount > 0 ? orgChartNodeSizes.sectionGap : 0);
+  const databaseRows = Math.ceil(Math.max(databaseCount, 1) / 2); // At least 1 row for drop zone
+  const databaseSectionHeight = databaseRows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+  const databasesEndY = databaseStartY + databaseSectionHeight;
+
+  return {
+    skillsStartY,
+    skillsEndY,
+    databasesStartY: databaseStartY,
+    databasesEndY,
+    totalHeight: databasesEndY + orgChartNodeSizes.containerPadding,
+  };
+}
+
+/**
+ * Calculate the next available grid slot position for a dropped item.
+ * Used when dropping skills/databases into an agent container.
+ *
+ * @param entityType - 'skill' or 'database'
+ * @param existingCount - Current count of items of that type in the agent
+ * @returns Relative position within the agent container
+ */
+export function getNextGridSlotPosition(
+  entityType: 'skill' | 'database',
+  existingCount: number
+): XYPosition {
+  const { containerPadding, nodeWidth, nodeHeight, childNodeGap, containerHeaderHeight, sectionGap, sectionLabelHeight } = orgChartNodeSizes;
+
+  // 2-column grid layout
+  const col = existingCount % 2;
+  const row = Math.floor(existingCount / 2);
+
+  const x = containerPadding + col * (nodeWidth + childNodeGap);
+
+  // Skills start after header + section label, databases start after skills section
+  if (entityType === 'skill') {
+    const y = containerHeaderHeight + sectionLabelHeight + row * (nodeHeight + childNodeGap);
+    return { x, y };
+  } else {
+    // Database section starts after skills
+    // Assuming at least 1 skill row for the section header
+    const skillRows = 1; // Minimum row for drop zone
+    const skillSectionEnd = containerHeaderHeight + sectionLabelHeight + skillRows * (nodeHeight + childNodeGap);
+    const databaseSectionStart = skillSectionEnd + sectionGap + sectionLabelHeight;
+    const y = databaseSectionStart + row * (nodeHeight + childNodeGap);
+    return { x, y };
+  }
 }
 
 // =============================================================================
@@ -355,6 +504,106 @@ export function createDatabaseNode(
 }
 
 // =============================================================================
+// Edge Extraction
+// =============================================================================
+
+/**
+ * Extract edges from skill configurations.
+ * Parses skill steps to find database reads/writes and skill references.
+ */
+export function extractSkillEdges(
+  skills: Skill[],
+  databases: Database[]
+): OrgChartEdge[] {
+  const edges: OrgChartEdge[] = [];
+
+  // Build table ID -> database ID lookup
+  const tableToDatabase = new Map<number, number>();
+  databases.forEach((db) => {
+    db.tables?.forEach((table) => {
+      tableToDatabase.set(table.id, db.id);
+    });
+  });
+
+  // Set to track unique edges (avoid duplicates)
+  const edgeSet = new Set<string>();
+
+  skills.forEach((skill) => {
+    if (!skill.steps) return;
+
+    skill.steps.forEach((step) => {
+      // Check for skill references (skill_ref edges)
+      if (step.skillId) {
+        const edgeKey = `skill_ref:${skill.id}-${step.skillId}`;
+        if (!edgeSet.has(edgeKey)) {
+          edgeSet.add(edgeKey);
+          edges.push({
+            id: `skill-${skill.id}-ref-${step.skillId}`,
+            source: makeNodeId('skill', skill.id),
+            target: makeNodeId('skill', step.skillId),
+            sourceHandle: 'right-source',
+            targetHandle: 'left-target',
+            type: 'reference',
+            data: {
+              edgeType: 'skill_ref',
+              label: 'references',
+            },
+          });
+        }
+      }
+
+      // Check for read config (skill_table edges)
+      if (step.readConfig?.sourceTableId) {
+        const dbId = tableToDatabase.get(step.readConfig.sourceTableId);
+        if (dbId) {
+          const edgeKey = `skill_table:${skill.id}-${dbId}:read`;
+          if (!edgeSet.has(edgeKey)) {
+            edgeSet.add(edgeKey);
+            edges.push({
+              id: `skill-${skill.id}-reads-db-${dbId}`,
+              source: makeNodeId('skill', skill.id),
+              target: makeNodeId('database', dbId),
+              sourceHandle: 'right-source',
+              targetHandle: 'left-target',
+              type: 'reference',
+              data: {
+                edgeType: 'skill_table',
+                label: 'reads',
+              },
+            });
+          }
+        }
+      }
+
+      // Check for write config (skill_table edges)
+      if (step.writeConfig?.targetTableId) {
+        const dbId = tableToDatabase.get(step.writeConfig.targetTableId);
+        if (dbId) {
+          const edgeKey = `skill_table:${skill.id}-${dbId}:write`;
+          if (!edgeSet.has(edgeKey)) {
+            edgeSet.add(edgeKey);
+            edges.push({
+              id: `skill-${skill.id}-writes-db-${dbId}`,
+              source: makeNodeId('skill', skill.id),
+              target: makeNodeId('database', dbId),
+              sourceHandle: 'right-source',
+              targetHandle: 'left-target',
+              type: 'reference',
+              data: {
+                edgeType: 'skill_table',
+                label: 'writes',
+              },
+            });
+          }
+        }
+      }
+    });
+  });
+
+  return edges;
+}
+
+// =============================================================================
 // Build Chart from Data
 // =============================================================================
 
@@ -368,7 +617,9 @@ export function buildOrgChartFromData(
   canvasMetadata?: OrgChartCanvasMetadata
 ): { nodes: OrgChartNode[]; edges: OrgChartEdge[] } {
   const nodes: OrgChartNode[] = [];
-  const edges: OrgChartEdge[] = [];
+
+  // Extract edges from skill configurations (reads/writes/references)
+  const edges = extractSkillEdges(skills, databases);
 
   // Get saved positions from metadata
   const agentPositions = canvasMetadata?.agentPositions ?? {};
@@ -415,14 +666,9 @@ export function buildOrgChartFromData(
     const agentSkills = skills.filter((s) => s.agentId === agent.id);
     const agentDatabases = databases.filter((d) => d.agentId === agent.id);
 
-    // Calculate container dimensions
-    const childCount = agentSkills.length + agentDatabases.length;
-    const rows = Math.ceil(childCount / 2);
+    // Calculate container dimensions with sectioned layout
     const defaultHeight = isExpanded
-      ? Math.max(
-          orgChartNodeSizes.containerMinHeight,
-          60 + rows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap)
-        )
+      ? calculateAgentContentHeight(agentSkills.length, agentDatabases.length)
       : 60;
 
     // Create agent node
@@ -477,6 +723,28 @@ export function buildOrgChartFromData(
     });
   }
 
+  // Restore saved manual edges from metadata
+  if (canvasMetadata?.edges) {
+    canvasMetadata.edges.forEach((savedEdge) => {
+      // Check if edge already exists (from auto-generation)
+      const exists = edges.some((e) => e.id === savedEdge.id);
+      if (!exists) {
+        edges.push({
+          id: savedEdge.id,
+          source: savedEdge.source,
+          target: savedEdge.target,
+          sourceHandle: savedEdge.sourceHandle ?? 'right-source',
+          targetHandle: savedEdge.targetHandle ?? 'left-target',
+          type: 'reference',
+          data: {
+            edgeType: savedEdge.edgeType,
+            label: savedEdge.label,
+          },
+        });
+      }
+    });
+  }
+
   return { nodes, edges };
 }
 
@@ -485,15 +753,19 @@ export function buildOrgChartFromData(
 // =============================================================================
 
 /**
- * Extract canvas metadata from current nodes for persistence
+ * Extract canvas metadata from current nodes and edges for persistence
  */
-export function extractMetadataFromNodes(nodes: OrgChartNode[]): OrgChartCanvasMetadata {
+export function extractMetadataFromNodes(
+  nodes: OrgChartNode[],
+  edges?: OrgChartEdge[]
+): OrgChartCanvasMetadata {
   const agentPositions: Record<number, { x: number; y: number }> = {};
   const agentExpandedStates: Record<number, boolean> = {};
   const agentDimensions: Record<number, { width: number; height: number }> = {};
   const skillPositions: Record<number, { x: number; y: number }> = {};
   const databasePositions: Record<number, { x: number; y: number }> = {};
   const stickyNotes: PersistedOrgChartStickyNote[] = [];
+  const persistedEdges: PersistedOrgChartEdge[] = [];
 
   nodes.forEach((node) => {
     if (node.type === 'agent') {
@@ -529,6 +801,28 @@ export function extractMetadataFromNodes(nodes: OrgChartNode[]): OrgChartCanvasM
     }
   });
 
+  // Extract manual edges for persistence (only reference edges, not auto-generated)
+  if (edges) {
+    edges.forEach((edge) => {
+      // Only persist edges that start with 'edge-' (manually created)
+      // Auto-generated edges have IDs like 'skill-123-ref-456'
+      if (edge.id.startsWith('edge-')) {
+        const edgeData = edge.data as OrgChartEdgeData | undefined;
+        if (edgeData?.edgeType && edgeData.edgeType !== 'containment') {
+          persistedEdges.push({
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            sourceHandle: edge.sourceHandle,
+            targetHandle: edge.targetHandle,
+            edgeType: edgeData.edgeType,
+            label: edgeData.label,
+          });
+        }
+      }
+    });
+  }
+
   return {
     agentPositions,
     agentExpandedStates,
@@ -536,5 +830,6 @@ export function extractMetadataFromNodes(nodes: OrgChartNode[]): OrgChartCanvasM
     skillPositions,
     databasePositions,
     stickyNotes,
+    edges: persistedEdges.length > 0 ? persistedEdges : undefined,
   };
 }

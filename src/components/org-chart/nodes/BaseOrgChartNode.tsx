@@ -82,17 +82,33 @@ export const BaseOrgChartNode = memo(function BaseOrgChartNode({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
     >
-      {/* Handles for connections (usually hidden for child nodes) */}
-      {showHandles && !isChild && (
+      {/* Handles for connections - 4 handles (2 per side) so connections work from either side */}
+      {showHandles && (
         <>
+          {/* Left side - both source and target */}
           <Handle
-            type={orgChartHandles.referenceTarget.type}
-            position={orgChartHandles.referenceTarget.position}
+            id="left-target"
+            type="target"
+            position={Position.Left}
             className={orgChartHandles.referenceTarget.className}
           />
           <Handle
-            type={orgChartHandles.referenceSource.type}
-            position={orgChartHandles.referenceSource.position}
+            id="left-source"
+            type="source"
+            position={Position.Left}
+            className={orgChartHandles.referenceSource.className}
+          />
+          {/* Right side - both source and target */}
+          <Handle
+            id="right-target"
+            type="target"
+            position={Position.Right}
+            className={orgChartHandles.referenceTarget.className}
+          />
+          <Handle
+            id="right-source"
+            type="source"
+            position={Position.Right}
             className={orgChartHandles.referenceSource.className}
           />
         </>
