@@ -5,7 +5,6 @@
  * Extends workflow-canvas theme patterns with entity-specific styling.
  */
 
-import { Position } from '@xyflow/react';
 import {
   Bot,
   Sparkles,
@@ -116,32 +115,13 @@ export const stickyNoteColors = {
 export type StickyNoteColor = keyof typeof stickyNoteColors;
 
 /**
- * Standard handle configurations for relationship edges
+ * Handle styling for org chart nodes
  */
 export const orgChartHandles = {
-  // For connecting to parent containers
-  parentConnection: {
-    type: 'target' as const,
-    position: Position.Top,
-    className: '!bg-muted-foreground !w-2 !h-2',
-  },
-  // For connecting to child nodes
-  childConnection: {
-    type: 'source' as const,
-    position: Position.Bottom,
-    className: '!bg-muted-foreground !w-2 !h-2',
-  },
-  // For reference edges (skill->skill, automation->skill)
-  referenceSource: {
-    type: 'source' as const,
-    position: Position.Right,
-    className: '!bg-violet-500 !w-2 !h-2',
-  },
-  referenceTarget: {
-    type: 'target' as const,
-    position: Position.Left,
-    className: '!bg-violet-500 !w-2 !h-2',
-  },
+  /** Style for source handles (outgoing connections) */
+  referenceSource: { className: '!bg-violet-500 !w-2 !h-2' },
+  /** Style for target handles (incoming connections) */
+  referenceTarget: { className: '!bg-violet-500 !w-2 !h-2' },
 } as const;
 
 /**
@@ -162,6 +142,10 @@ export const orgChartNodeSizes = {
   childNodeGap: 16,
   /** Height of agent container header (main header + resource counts bar) */
   containerHeaderHeight: 80,
+  /** Gap between sections (skills and databases) inside agent */
+  sectionGap: 24,
+  /** Height of section label */
+  sectionLabelHeight: 20,
 } as const;
 
 /**

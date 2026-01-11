@@ -18,9 +18,7 @@ interface SkillNodeProps {
 }
 
 export const SkillNode = memo(function SkillNode({ data, selected }: SkillNodeProps) {
-  const { name, executionType, agentId } = data;
-
-  // Format execution type for display
+  const { name, executionType } = data;
   const badgeText = executionType || 'agentic';
   const badgeColor = getSkillTypeBadgeColor(executionType);
 
@@ -31,8 +29,7 @@ export const SkillNode = memo(function SkillNode({ data, selected }: SkillNodePr
       nodeType="skill"
       badge={badgeText}
       badgeColor={badgeColor}
-      isChild={agentId !== null && agentId !== undefined}
-      showHandles={false}
+      showHandles
     />
   );
 });

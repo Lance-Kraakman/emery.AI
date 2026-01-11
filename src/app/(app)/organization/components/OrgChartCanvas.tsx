@@ -266,24 +266,10 @@ export function OrgChartCanvas({
   // Handle manual edge creation (drag from handle to handle)
   const handleConnect = useCallback(
     (connection: Connection) => {
-      console.log('[OrgChartCanvas] handleConnect called with:', {
-        source: connection.source,
-        target: connection.target,
-        sourceHandle: connection.sourceHandle,
-        targetHandle: connection.targetHandle,
-      });
-
       if (!connection.source || !connection.target) return;
 
-      // Determine edge type based on source/target node types
       const sourceNode = nodes.find((n) => n.id === connection.source);
       const targetNode = nodes.find((n) => n.id === connection.target);
-
-      console.log('[OrgChartCanvas] Found nodes:', {
-        sourceNode: sourceNode ? { id: sourceNode.id, type: sourceNode.type, parentId: sourceNode.parentId } : null,
-        targetNode: targetNode ? { id: targetNode.id, type: targetNode.type, parentId: targetNode.parentId } : null,
-      });
-
       if (!sourceNode || !targetNode) return;
 
       // Extract which SIDE (left/right) the user dragged from/to
@@ -323,9 +309,7 @@ export function OrgChartCanvas({
         edgeType = 'skill_table';
         label = 'uses';
       } else {
-        // Unsupported connection type
-        console.log('[OrgChartCanvas] Unsupported edge type:', sourceNode.type, '→', targetNode.type);
-        return;
+        return; // Unsupported connection type
       }
 
       // Create unique edge ID
@@ -351,44 +335,28 @@ export function OrgChartCanvas({
     [nodes, setEdges]
   );
 
-  // Handle selection changes
   // Handle selection changes - includes edges for skills
   const handleSelectionChange = useCallback(
     ({ nodes: selectedNodes }: OnSelectionChangeParams) => {
-      console.log('[OrgChartCanvas] handleSelectionChange called, selectedNodes:', selectedNodes);
-
       if (selectedNodes.length === 0) {
-        console.log('[OrgChartCanvas] No nodes selected, calling onSelect(null)');
         setSelectedNodeId(null);
-        if (onSelect) {
-          onSelect(null);
-        }
+        onSelect?.(null);
       } else if (selectedNodes.length === 1) {
         const node = selectedNodes[0];
         setSelectedNodeId(node.id);
 
         if (onSelect) {
-          // Parse entity ID from node ID (e.g., "skill-123" -> 123)
           const match = node.id.match(/^([a-z_]+)-(\d+)$/);
           const entityId = match ? parseInt(match[2], 10) : undefined;
 
           // For skills, include connected edges
-          let connectedEdges: Array<{ id: string; target: string; edgeType: string }> | undefined;
-          if (node.type === 'skill') {
-            console.log('[OrgChartCanvas] Skill selected:', node.id);
-            console.log('[OrgChartCanvas] All edges:', edges);
-            console.log('[OrgChartCanvas] Edges for this skill:', edges.filter((e) => e.source === node.id));
-
-            connectedEdges = edges
-              .filter((e) => e.source === node.id)
-              .map((e) => ({
+          const connectedEdges = node.type === 'skill'
+            ? edges.filter((e) => e.source === node.id).map((e) => ({
                 id: e.id,
                 target: e.target,
                 edgeType: ((e.data as any)?.edgeType as string) || 'skill_table',
-              }));
-
-            console.log('[OrgChartCanvas] Connected edges to pass:', connectedEdges);
-          }
+              }))
+            : undefined;
 
           onSelect(node.id, node.type as OrgChartNodeType, entityId, connectedEdges);
         }

@@ -5,16 +5,12 @@
  *
  * Node representing a database with inline table list.
  * Shows icon, name, and up to 3 tables with overflow indicator.
- * Tables are clickable and navigate to the table view.
  */
 
 import React, { memo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Handle, Position } from '@xyflow/react';
 import { Table2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { IconBadge } from './BaseOrgChartNode';
-import { orgChartNodeTheme, orgChartHandles } from '../theme';
+import { BaseOrgChartNode } from './BaseOrgChartNode';
 import type { DatabaseNodeData } from '../types';
 
 interface DatabaseNodeProps {
@@ -24,66 +20,19 @@ interface DatabaseNodeProps {
 
 export const DatabaseNode = memo(function DatabaseNode({ data, selected }: DatabaseNodeProps) {
   const router = useRouter();
-  const { name, tableCount, tables = [], agentId } = data;
-  const config = orgChartNodeTheme.database;
-  const isChild = agentId !== null && agentId !== undefined;
+  const { name, tableCount, tables = [] } = data;
 
-  // Show max 3 tables inline
   const displayTables = tables.slice(0, 3);
   const totalTables = tableCount ?? tables.length;
   const moreCount = totalTables - displayTables.length;
 
-  // Handle table click - navigate to table view with database as selected node for return
   const handleTableClick = useCallback((e: React.MouseEvent, tableId: number) => {
-    e.stopPropagation(); // Prevent node selection
-    const databaseNodeId = `database-${data.databaseId}`;
-    router.push(`/data/${tableId}?returnTo=org-chart%26selected=${databaseNodeId}`);
+    e.stopPropagation();
+    router.push(`/data/${tableId}?returnTo=org-chart%26selected=database-${data.databaseId}`);
   }, [router, data.databaseId]);
 
   return (
-    <div
-      className={cn(
-        'min-w-[180px] max-w-[240px] rounded-lg border bg-card shadow-sm transition-all cursor-pointer',
-        selected && 'ring-2 ring-primary shadow-md',
-        !selected && 'hover:shadow-md hover:border-primary/50',
-        config.border
-      )}
-    >
-      {/* Handles for connections - 4 handles (2 per side) so connections work from either side */}
-      {/* Left side - both source and target */}
-      <Handle
-        id="left-target"
-        type="target"
-        position={Position.Left}
-        className={orgChartHandles.referenceTarget.className}
-      />
-      <Handle
-        id="left-source"
-        type="source"
-        position={Position.Left}
-        className={orgChartHandles.referenceSource.className}
-      />
-      {/* Right side - both source and target */}
-      <Handle
-        id="right-target"
-        type="target"
-        position={Position.Right}
-        className={orgChartHandles.referenceTarget.className}
-      />
-      <Handle
-        id="right-source"
-        type="source"
-        position={Position.Right}
-        className={orgChartHandles.referenceSource.className}
-      />
-
-      {/* Header: icon + name */}
-      <div className="flex items-center gap-2 px-3 py-2.5">
-        <IconBadge nodeType="database" />
-        <span className="text-sm font-medium truncate flex-1">{name}</span>
-      </div>
-
-      {/* Tables list (compact, clickable) */}
+    <BaseOrgChartNode name={name} selected={selected} nodeType="database" showHandles>
       {displayTables.length > 0 ? (
         <div className="px-3 pb-2.5 space-y-0.5">
           {displayTables.map(table => (
@@ -107,7 +56,7 @@ export const DatabaseNode = memo(function DatabaseNode({ data, selected }: Datab
           No tables
         </div>
       )}
-    </div>
+    </BaseOrgChartNode>
   );
 });
 

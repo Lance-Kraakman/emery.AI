@@ -10,7 +10,7 @@
 import React, { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { cn } from '@/lib/utils';
-import { orgChartNodeTheme, orgChartHandles, type OrgChartNodeThemeConfig } from '../theme';
+import { orgChartNodeTheme, orgChartHandles } from '../theme';
 import type { OrgChartNodeType } from '../types';
 
 /**
@@ -32,6 +32,24 @@ export function IconBadge({ nodeType }: IconBadgeProps) {
 }
 
 /**
+ * NodeHandles - Bidirectional connection handles for org chart nodes
+ *
+ * Renders 4 handles (2 per side) so users can connect from either side.
+ */
+export function NodeHandles() {
+  return (
+    <>
+      {/* Left side */}
+      <Handle id="left-target" type="target" position={Position.Left} className={orgChartHandles.referenceTarget.className} />
+      <Handle id="left-source" type="source" position={Position.Left} className={orgChartHandles.referenceSource.className} />
+      {/* Right side */}
+      <Handle id="right-target" type="target" position={Position.Right} className={orgChartHandles.referenceTarget.className} />
+      <Handle id="right-source" type="source" position={Position.Right} className={orgChartHandles.referenceSource.className} />
+    </>
+  );
+}
+
+/**
  * BaseOrgChartNode props
  */
 interface BaseOrgChartNodeProps {
@@ -47,12 +65,8 @@ interface BaseOrgChartNodeProps {
   badgeColor?: string;
   /** Whether to show handles for connections */
   showHandles?: boolean;
-  /** Whether node is inside a container (affects positioning) */
-  isChild?: boolean;
-  /** Optional onClick handler */
-  onClick?: () => void;
-  /** Optional double-click handler (e.g., open editor) */
-  onDoubleClick?: () => void;
+  /** Optional additional content below the header */
+  children?: React.ReactNode;
 }
 
 /**
@@ -65,9 +79,7 @@ export const BaseOrgChartNode = memo(function BaseOrgChartNode({
   badge,
   badgeColor,
   showHandles = false,
-  isChild = false,
-  onClick,
-  onDoubleClick,
+  children,
 }: BaseOrgChartNodeProps) {
   const config = orgChartNodeTheme[nodeType];
 
@@ -79,42 +91,10 @@ export const BaseOrgChartNode = memo(function BaseOrgChartNode({
         !selected && 'hover:shadow-md hover:border-primary/50',
         config.border
       )}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
     >
-      {/* Handles for connections - 4 handles (2 per side) so connections work from either side */}
-      {showHandles && (
-        <>
-          {/* Left side - both source and target */}
-          <Handle
-            id="left-target"
-            type="target"
-            position={Position.Left}
-            className={orgChartHandles.referenceTarget.className}
-          />
-          <Handle
-            id="left-source"
-            type="source"
-            position={Position.Left}
-            className={orgChartHandles.referenceSource.className}
-          />
-          {/* Right side - both source and target */}
-          <Handle
-            id="right-target"
-            type="target"
-            position={Position.Right}
-            className={orgChartHandles.referenceTarget.className}
-          />
-          <Handle
-            id="right-source"
-            type="source"
-            position={Position.Right}
-            className={orgChartHandles.referenceSource.className}
-          />
-        </>
-      )}
+      {showHandles && <NodeHandles />}
 
-      {/* Compact content: icon + name + badge */}
+      {/* Header: icon + name + badge */}
       <div className="flex items-center gap-2 px-3 py-2.5">
         <IconBadge nodeType={nodeType} />
         <div className="flex-1 min-w-0 overflow-hidden">
@@ -131,6 +111,8 @@ export const BaseOrgChartNode = memo(function BaseOrgChartNode({
           )}
         </div>
       </div>
+
+      {children}
     </div>
   );
 });
