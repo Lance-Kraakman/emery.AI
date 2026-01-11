@@ -143,9 +143,9 @@ export interface ReadNodeData extends BaseNodeData {
  */
 export interface StickyNodeData {
   [key: string]: unknown;
-  name: string; // Title
-  content: string; // Note content
+  content: string;
   color?: 'yellow' | 'blue' | 'green' | 'pink' | 'purple';
+  textSize?: 'sm' | 'md' | 'lg';
 }
 
 /**
@@ -277,8 +277,7 @@ export interface UseWorkflowCanvasReturn {
  */
 export interface PersistedStickyNote {
   id: string;
-  name: string;
-  content: string;
+  content: string; // TipTap HTML content
   color?: StickyNodeData['color'];
   position: { x: number; y: number };
   size?: { width: number; height: number };

@@ -80,12 +80,12 @@ export interface DatabaseNodeData extends BaseOrgChartNodeData {
 
 /**
  * Sticky note data (same as workflow-canvas)
- * Content is TipTap HTML (users can format first line as heading for title)
  */
 export interface StickyNoteData {
   [key: string]: unknown;
-  content: string; // TipTap HTML content
+  content: string;
   color?: 'yellow' | 'blue' | 'green' | 'pink' | 'purple';
+  textSize?: 'sm' | 'md' | 'lg';
 }
 
 /**

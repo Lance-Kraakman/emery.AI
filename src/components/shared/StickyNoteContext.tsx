@@ -9,8 +9,14 @@
 
 import React, { createContext, useContext } from 'react';
 
+interface StickyNoteUpdate {
+  content?: string;
+  color?: 'yellow' | 'blue' | 'green' | 'pink' | 'purple';
+  textSize?: 'sm' | 'md' | 'lg';
+}
+
 interface StickyNoteContextValue {
-  updateNote: (id: string, data: { name?: string; content?: string }) => void;
+  updateNote: (id: string, data: StickyNoteUpdate) => void;
 }
 
 const StickyNoteContext = createContext<StickyNoteContextValue | null>(null);
@@ -20,7 +26,7 @@ export function StickyNoteProvider({
   updateNote,
 }: {
   children: React.ReactNode;
-  updateNote: (id: string, data: { name?: string; content?: string }) => void;
+  updateNote: (id: string, data: StickyNoteUpdate) => void;
 }) {
   return (
     <StickyNoteContext.Provider value={{ updateNote }}>

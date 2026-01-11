@@ -207,8 +207,7 @@ export function useWorkflowCanvas({
         type: 'sticky' as const,
         position,
         data: {
-          name: 'Note',
-          content: '',
+          content: '<p></p>',
           color: 'yellow' as const,
         },
         style: { width: 200, height: 120 },
@@ -431,10 +430,12 @@ export function useWorkflowCanvas({
       setNodes((nds) => {
         // Find the node to get old name
         const node = nds.find((n) => n.id === id);
-        if (!node) return nds;
+        if (!node || node.type === 'sticky') return nds;
 
-        const oldName = node.data.name;
-        if (oldName === newName) return nds;
+        // Cast to WorkflowNodeData since we've ruled out sticky nodes
+        const nodeData = node.data as WorkflowNodeData;
+        const oldName = nodeData.name;
+        if (!oldName || oldName === newName) return nds;
 
         // Update all nodes: rename target node, cascade refs in others
         return nds.map((n) => {
@@ -442,10 +443,12 @@ export function useWorkflowCanvas({
             // Update this node's name
             return { ...n, data: { ...n.data, name: newName } as WorkflowNodeData };
           }
+          // Skip sticky nodes - they don't have variable references
+          if (n.type === 'sticky') return n;
           // Cascade: update variable references in other nodes
           return {
             ...n,
-            data: cascadeRenameInNodeData(n.data, oldName, newName),
+            data: cascadeRenameInNodeData(n.data as WorkflowNodeData, oldName, newName),
           };
         });
       });

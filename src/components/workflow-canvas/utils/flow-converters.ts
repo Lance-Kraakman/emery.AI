@@ -222,7 +222,6 @@ export function stepsToFlow(
         type: 'sticky',
         position: sticky.position,
         data: {
-          name: sticky.name,
           content: sticky.content,
           color: sticky.color || 'yellow',
         } as StickyNodeData,
@@ -379,15 +378,17 @@ export function flowToSteps(
 
   // Build id→name map for converting edge targets back to names
   // (stepOutputs.nextSteps uses names for readability)
-  const idToName = new Map(workflowNodes.map(n => [n.id, n.data.name]));
+  // Note: workflow nodes always have name, sticky nodes are filtered out
+  const idToName = new Map(workflowNodes.map(n => [n.id, (n.data as WorkflowNodeData).name]));
 
   const steps = workflowNodes.map((node) => {
+    const data = node.data as WorkflowNodeData;
     const outgoingEdges = edges.filter((e) => e.source === node.id);
     const stepOutputs = groupEdgesByType(outgoingEdges, idToName);
 
     return {
       id: node.id,           // Stable ID
-      name: node.data.name,  // Display name from data
+      name: data.name,       // Display name from data
       ...nodeDataToStep(node),
       // Always set stepOutputs explicitly (empty array = no outgoing edges)
       stepOutputs,
@@ -401,7 +402,6 @@ export function flowToSteps(
       const data = node.data as StickyNodeData;
       return {
         id: node.id,
-        name: data.name,
         content: data.content,
         color: data.color,
         position: node.position,

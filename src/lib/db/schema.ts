@@ -1057,8 +1057,7 @@ export const skills = pgTable("skills", {
   canvasMetadata: jsonb("canvas_metadata").$type<{
     stickyNotes?: Array<{
       id: string;
-      name: string;
-      content: string;
+      content: string;  // TipTap HTML content (users can format first line as heading for title)
       color?: 'yellow' | 'blue' | 'green' | 'pink' | 'purple';
       position: { x: number; y: number };
       size?: { width: number; height: number };
