@@ -6,7 +6,7 @@ import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
 import { type Result, type CreateAgentData, type CreateAgentClientData } from "./types";
-import { getAgentApplicationService } from "@/ddd/application/di/container";
+import { getAgentApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from "@/app/dtos/agent.dto";
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
 import type { UpdateAgentData } from '@/ddd/domain/agents/entities/agent';
@@ -19,14 +19,20 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("agents:manage");
+      const currentOrg = await requireCurrentOrganization();
       const agentApplicationService = getAgentApplicationService();
 
-      // Serialize schedules if they're ScheduleConfiguration instances
-      const scheduleDTOs = data.schedules?.map(schedule => {
-        if (schedule && typeof schedule === 'object' && 'toJSON' in schedule && typeof schedule.toJSON === 'function') {
-          return schedule.toJSON();
+      // Serialize automations if they're AutomationConfiguration instances
+      const automationDTOs = data.automations?.map(automation => {
+        if (automation && typeof automation === 'object' && 'trigger' in automation &&
+            automation.trigger && typeof automation.trigger === 'object' &&
+            'toJSON' in automation.trigger && typeof automation.trigger.toJSON === 'function') {
+          return {
+            ...automation,
+            trigger: automation.trigger.toJSON()
+          };
         }
-        return schedule;
+        return automation;
       });
 
       // Build DTO - Application Service handles Value Object conversion
@@ -37,7 +43,7 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
         persona: data.persona,
         ownerId: session.user.id,
         organizationId: session.user.currentOrganizationId,
-        schedules: scheduleDTOs as any,
+        automations: automationDTOs as any,
         status: (() => {
           const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
           return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
@@ -54,6 +60,25 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
           error: result.error || "Failed to create agent"
         };
       }
+
+      // AUDIT: Log agent creation
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'agent',
+          eventCategory: 'agent_crud',
+          eventAction: 'create',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'agent',
+          resourceId: String(result.data.id),
+          resourceName: result.data.name,
+          eventData: { role: data.role, status: dto.status },
+          success: true,
+        }
+      );
 
       // Note: RAG reindexing is now handled automatically by database triggers
 
@@ -82,19 +107,24 @@ export async function createAgent(data: CreateAgentData, revalidateUrl?: string)
 // Helper function for creating agents from client data (with plain types)
 export async function createAgentFromClient(data: CreateAgentClientData): Promise<Result> {
   // AIDEV-NOTE: Serialize TriggerConfig instances to JSON for database storage
-  const schedules = data.schedules
-    ?.filter(schedule => schedule != null)
-    ?.map(schedule => {
-      if (schedule && typeof schedule === 'object' && 'toJSON' in schedule && typeof schedule.toJSON === 'function') {
-        return schedule.toJSON();
+  const automations = data.automations
+    ?.filter(automation => automation != null)
+    ?.map(automation => {
+      if (automation && typeof automation === 'object' && 'trigger' in automation &&
+          automation.trigger && typeof automation.trigger === 'object' &&
+          'toJSON' in automation.trigger && typeof automation.trigger.toJSON === 'function') {
+        return {
+          ...automation,
+          trigger: automation.trigger.toJSON()
+        };
       }
-      return schedule;
+      return automation;
     });
 
   // Convert client data to domain data format
   const domainData: CreateAgentData = {
     ...data,
-    schedules: schedules || data.schedules,
+    automations: automations || data.automations,
     status: data.status ? AgentStatus.fromString(data.status) : AgentStatus.active(),
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
     ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
@@ -124,21 +154,26 @@ export async function updateAgentFromClient(agentId: number, data: Partial<Creat
   // AIDEV-NOTE: Serialize TriggerConfig instances to JSON for database storage
   // TriggerConfig.toJSON() must be called to convert class instances to plain objects
   // Otherwise Drizzle receives class instances and serializes them as empty objects
-  const schedules = data.schedules
-    ?.filter(schedule => schedule !== null && schedule !== undefined)
-    ?.map(schedule => {
-      // If it's a TriggerConfig instance with toJSON method, serialize it
-      if (schedule && typeof schedule === 'object' && 'toJSON' in schedule && typeof schedule.toJSON === 'function') {
-        return schedule.toJSON();
+  const automations = data.automations
+    ?.filter(automation => automation !== null && automation !== undefined)
+    ?.map(automation => {
+      // If it has a trigger with toJSON method, serialize the trigger
+      if (automation && typeof automation === 'object' && 'trigger' in automation &&
+          automation.trigger && typeof automation.trigger === 'object' &&
+          'toJSON' in automation.trigger && typeof automation.trigger.toJSON === 'function') {
+        return {
+          ...automation,
+          trigger: automation.trigger.toJSON()
+        };
       }
       // If it's already a plain object, keep it as-is
-      return schedule;
+      return automation;
     });
 
   // Convert client data to domain data format
   const domainData: Partial<CreateAgentData> = {
     ...data,
-    schedules: schedules !== undefined ? schedules : data.schedules,
+    automations: automations !== undefined ? automations : data.automations,
     status: data.status ? AgentStatus.fromString(data.status) : undefined,
     organizationId: data.organizationId ? OrganizationId.fromNumber(data.organizationId) : undefined,
     ownerId: data.ownerId ? UserId.fromString(data.ownerId) : undefined,
@@ -237,29 +272,35 @@ export async function updateAgent(agentId: number, data: Partial<UpdateAgentData
 
       // Check resource-specific permission for updating this specific agent
       const session = await requireResourcePermission("agents:manage", "agent", agentId);
+      const currentOrg = await requireCurrentOrganization();
       const agentApplicationService = getAgentApplicationService();
 
       // LOGGING: Start of update operation
       console.log('[agents.ts/updateAgent] Starting agent update', {
         agentId,
-        hasSchedules: !!data.schedules,
-        scheduleCount: data.schedules?.length,
+        hasAutomations: !!data.automations,
+        automationCount: data.automations?.length,
         dataKeys: Object.keys(data)
       });
 
-      // Serialize schedules if they're ScheduleConfiguration instances
-      const scheduleDTOs = data.schedules?.map(schedule => {
-        if (schedule && typeof schedule === 'object' && 'toJSON' in schedule && typeof schedule.toJSON === 'function') {
-          return schedule.toJSON();
+      // Serialize automations if they're AutomationConfiguration instances
+      const automationDTOs = data.automations?.map(automation => {
+        if (automation && typeof automation === 'object' && 'trigger' in automation &&
+            automation.trigger && typeof automation.trigger === 'object' &&
+            'toJSON' in automation.trigger && typeof automation.trigger.toJSON === 'function') {
+          return {
+            ...automation,
+            trigger: automation.trigger.toJSON()
+          };
         }
-        return schedule;
+        return automation;
       });
 
-      // LOGGING: Schedules serialized
-      if (scheduleDTOs) {
-        console.log('[agents.ts/updateAgent] Schedules serialized', {
-          count: scheduleDTOs.length,
-          schedules: scheduleDTOs
+      // LOGGING: Automations serialized
+      if (automationDTOs) {
+        console.log('[agents.ts/updateAgent] Automations serialized', {
+          count: automationDTOs.length,
+          automations: automationDTOs
         });
       }
 
@@ -271,7 +312,7 @@ export async function updateAgent(agentId: number, data: Partial<UpdateAgentData
         description: data.description,
         persona: data.persona,
         ownerId: data.ownerId instanceof UserId ? data.ownerId.value : data.ownerId,
-        schedules: scheduleDTOs as any,
+        automations: automationDTOs as any,
         status: (() => {
           const statusValue = typeof data.status === 'string' ? data.status : data.status?.value;
           return (statusValue === 'active' || statusValue === 'inactive' || statusValue === 'archived')
@@ -285,8 +326,8 @@ export async function updateAgent(agentId: number, data: Partial<UpdateAgentData
       // LOGGING: DTO built, calling application service
       console.log('[agents.ts/updateAgent] DTO built, calling application service', {
         dto,
-        hasSchedules: !!dto.schedules,
-        scheduleCount: dto.schedules?.length
+        hasAutomations: !!dto.automations,
+        automationCount: dto.automations?.length
       });
 
       const result = await agentApplicationService.updateAgent(dto);
@@ -304,6 +345,25 @@ export async function updateAgent(agentId: number, data: Partial<UpdateAgentData
           error: result.error || "Failed to update agent"
         };
       }
+
+      // AUDIT: Log agent update
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'agent',
+          eventCategory: 'agent_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'agent',
+          resourceId: String(agentId),
+          resourceName: result.data.name,
+          eventData: { updatedFields: Object.keys(data) },
+          success: true,
+        }
+      );
 
       // Revalidate the appropriate path
       if (revalidateUrl) {
@@ -339,30 +399,54 @@ export async function deleteAgent(agentId: number, revalidateUrl?: string): Prom
       }
 
       const session = await requirePermission("agents:manage");
-    const agentApplicationService = getAgentApplicationService();
+      const currentOrg = await requireCurrentOrganization();
+      const agentApplicationService = getAgentApplicationService();
 
-    const result = await agentApplicationService.deleteAgent(AgentId.fromNumber(agentId));
+      // AUDIT: Get agent name BEFORE deletion
+      const agentToDelete = await agentApplicationService.getAgent(AgentId.fromNumber(agentId));
+      const agentName = agentToDelete?.name;
 
-    if (!result.success) {
+      const result = await agentApplicationService.deleteAgent(AgentId.fromNumber(agentId));
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || "Failed to delete agent"
+        };
+      }
+
+      // AUDIT: Log agent deletion
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'agent',
+          eventCategory: 'agent_crud',
+          eventAction: 'delete',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'agent',
+          resourceId: String(agentId),
+          resourceName: agentName,
+          eventData: {},
+          success: true,
+        }
+      );
+
+      // Revalidate the appropriate path
+      if (revalidateUrl) {
+        revalidatePath(revalidateUrl);
+      } else {
+        revalidatePath('/manage'); // Default path for agent operations
+      }
+
       return {
-        success: false,
-        error: result.error || "Failed to delete agent"
+        success: true,
+        data: { message: "Agent deleted successfully" },
       };
-    }
-
-    // Revalidate the appropriate path
-    if (revalidateUrl) {
-      revalidatePath(revalidateUrl);
-    } else {
-      revalidatePath('/manage'); // Default path for agent operations
-    }
-
-    return {
-      success: true,
-      data: { message: "Agent deleted successfully" },
-    };
-  } catch (error) {
-    console.error("Error deleting agent:", error);
+    } catch (error) {
+      console.error("Error deleting agent:", error);
       return {
         success: false,
         error: "Failed to delete agent",
@@ -407,7 +491,7 @@ export async function duplicateAgent(agentId: number, revalidateUrl?: string): P
         persona: originalAgent.persona,
         ownerId: session.user.id,
         organizationId: currentOrg.id,
-        schedules: originalAgent.schedules as any,
+        automations: originalAgent.automations as any,
         status: originalAgent.status.value as 'active' | 'inactive' | 'archived'
       };
 
@@ -419,6 +503,25 @@ export async function duplicateAgent(agentId: number, revalidateUrl?: string): P
           error: result.error || "Failed to duplicate agent"
         };
       }
+
+      // AUDIT: Log agent duplication
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'agent',
+          eventCategory: 'agent_crud',
+          eventAction: 'create',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'agent',
+          resourceId: String(result.data.id),
+          resourceName: result.data.name,
+          eventData: { duplicatedFrom: agentId, originalName: originalAgent.name },
+          success: true,
+        }
+      );
 
       // Revalidate the appropriate path
       if (revalidateUrl) {
@@ -436,6 +539,104 @@ export async function duplicateAgent(agentId: number, revalidateUrl?: string): P
       return {
         success: false,
         error: "Failed to duplicate agent",
+      };
+    }
+  });
+}
+
+// =============================================================================
+// Pipedream Source Deployment
+// =============================================================================
+
+export interface DeployPipedreamSourceInput {
+  agentId: number;
+  triggerId: string;      // Tool ID from tools table (e.g., "gmail-new-email-received")
+  connectionId: string;   // User's OAuth connection ID (e.g., "apn_QPhBxVA")
+  appSlug: string;        // App slug (e.g., "gmail", "slack")
+  configuredProps?: Record<string, any>;
+}
+
+export interface DeployPipedreamSourceResult {
+  sourceId: string;
+  webhookId: string;
+  subscriptionId: string;
+}
+
+/**
+ * Deploy a Pipedream event source for an agent's automation trigger
+ *
+ * AIDEV-NOTE: This wraps the Pipedream sources service to make it available
+ * as a server action. Needed because deploySource uses PIPEDREAM_API_KEY.
+ */
+export async function deployPipedreamSource(
+  input: DeployPipedreamSourceInput
+): Promise<Result<DeployPipedreamSourceResult>> {
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("agents:manage");
+      const currentOrg = await requireCurrentOrganization();
+      const { agentId, triggerId, connectionId, appSlug, configuredProps } = input;
+
+      console.log('[AgentActions] Deploying Pipedream source:', {
+        agentId,
+        triggerId,
+        connectionId,
+        appSlug,
+        userId: session.user.id
+      });
+
+      // Import dynamically to avoid issues with server-only code
+      const { deploySource } = await import('@/lib/pipedream/sources');
+
+      // Build webhook URL for this agent
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      const webhookUrl = `${baseUrl}/api/webhooks/pipedream/${agentId}`;
+
+      console.log('[AgentActions] Webhook URL:', webhookUrl);
+
+      // Deploy the source
+      const result = await deploySource({
+        userId: session.user.id,
+        triggerId,
+        webhookUrl,
+        connectionId,
+        appSlug,
+        configuredProps
+      });
+
+      console.log('[AgentActions] Source deployed:', result);
+
+      // AUDIT: Log Pipedream source deployment
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'agent',
+          eventCategory: 'agent_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'agent',
+          resourceId: String(agentId),
+          eventData: { action: 'deploy_pipedream_source', appSlug, triggerId, sourceId: result.sourceId },
+          success: true,
+        }
+      );
+
+      return {
+        success: true,
+        data: {
+          sourceId: result.sourceId,
+          webhookId: result.webhookId,
+          subscriptionId: result.subscriptionId
+        }
+      };
+    } catch (error) {
+      console.error('[AgentActions] Failed to deploy Pipedream source:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to deploy Pipedream source'
       };
     }
   });

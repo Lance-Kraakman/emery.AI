@@ -1,291 +1,285 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp, Save, Plus, X, Settings } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
+import { WorkflowCanvas } from '@/components/workflow-canvas';
+import { X, Settings2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
+import { ShareButton } from '@/components/permissions/ShareButton';
 import { ModelSelector } from '@/components/ai/ModelSelector';
-import { InstructionsInput } from './editor/InstructionsInput';
-import { SkillInputsSection } from './editor/SkillInputsSection';
-import { SkillOutputsSection } from './editor/SkillOutputsSection';
-import type { ToolConfigDTO, SkillInput, SkillOutput } from '@/app/mappers/skill-mapper';
-import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import { SaveStatusIndicator, type SaveStatus } from '@/components/ui/save-status-indicator';
+import type { InputDefinition, OutputDefinition } from '@/app/mappers/skill-mapper';
+import type { SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
+import type { FlowToStepsResult } from '@/components/workflow-canvas/utils/flow-converters';
+import type { WorkflowNode, WorkflowNodeData, WorkflowEdge } from '@/components/workflow-canvas/types';
+import type { WorkflowVariable } from '@/components/workflow-canvas/WorkflowVariableInput';
+import { inferVariablesForNode } from '@/components/workflow-canvas/utils/variable-inference';
+import { NodeConfigContent } from './NodeConfigContent';
+import { RootSkillConfig } from './RootSkillConfig';
 
+/**
+ * Simplified SkillFormData - all skills are now workflows
+ * Node-specific configs live inside the steps (SkillStep[])
+ */
 export interface SkillFormData {
   name: string;
   description: string;
-  inputs: SkillInput[];
-  outputs: SkillOutput[];
-  instructions: string;
-  tools: ToolConfigDTO[];
-  model?: string | null; // Optional model override for this skill
-  content?: MessagePart[]; // Existing uploaded attachments
-  pendingAttachments?: File[]; // New attachments to upload on save
+  inputs: InputDefinition[];
+  outputs: OutputDefinition[];
+  steps: SkillStep[];
+  canvasMetadata?: CanvasMetadata; // Canvas annotations (sticky notes)
+  model?: string | null;
+}
+
+/**
+ * Header controls for floating panels (passed from EditSkillView)
+ */
+export interface SkillEditorHeaderControls {
+  name: string;
+  onNameChange: (name: string) => void;
+  saveStatus: SaveStatus;
+  model?: string | null;
+  onModelChange: (model: string | null) => void;
+  agentDefaultModel: string;
+  isDeleting: boolean;
+  onDelete: () => void;
+  skillId: number;
+  onShareClick: () => void;
+  organizationTier: 'free' | 'pro' | 'max' | 'enterprise';
 }
 
 interface SkillEditorProps {
   value: SkillFormData;
   onChange: (value: SkillFormData) => void;
-  agentId?: number | null; // Optional: null for organization skills, number for agent-scoped skills
+  agentId?: number | null;
   skillId?: number;
-  onSave?: () => void;
-  isSaving?: boolean;
-  agentDefaultModel?: string | null; // Agent's default model for inheritance display
-  organizationTier?: 'free' | 'pro' | 'enterprise'; // For filtering available models
-  availableModels?: string[]; // Organization's whitelist of allowed models
+  agentDefaultModel?: string | null;
+  organizationTier?: 'free' | 'pro' | 'max' | 'enterprise';
+  availableModels?: string[];
+  availableSkills?: { id: number; name: string }[];
+  isReadOnly?: boolean;
+  /** Header controls for floating panels (passed from EditSkillView) */
+  headerControls?: SkillEditorHeaderControls;
 }
 
 /**
- * Simplified Skill Editor
+ * Unified Skill Editor with Workflow Canvas
  *
- * AIDEV-NOTE: Removed multi-step workflow, replaced with:
- * - Single natural language instructions textarea
- * - Explicit Inputs section (name + required/optional)
- * - Explicit Outputs section (name only)
- * - Tools tracked automatically via @ mentions
+ * Full-height canvas with floating config panel overlay.
+ * Panel shows node config when selected, root I/O config when nothing selected.
  */
 export function SkillEditor({
   value,
   onChange,
-  agentId,
   skillId,
-  onSave,
-  isSaving,
-  agentDefaultModel,
   organizationTier = 'free',
-  availableModels,
+  availableSkills = [],
+  isReadOnly = false,
+  headerControls,
 }: SkillEditorProps) {
-  const [localValue, setLocalValue] = useState(value);
-  const [showDescription, setShowDescription] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [nodes, setNodes] = useState<WorkflowNode[]>([]);
+  const [edges, setEdges] = useState<WorkflowEdge[]>([]);
+  const updateNodeRef = useRef<((id: string, data: Partial<WorkflowNodeData>) => void) | null>(null);
+  const renameNodeRef = useRef<((id: string, newName: string) => void) | null>(null);
+  const deleteNodeRef = useRef<((id: string) => void) | null>(null);
 
-  // Sync with external value changes
-  useEffect(() => {
-    setLocalValue(value);
-  }, [value]);
+  const handleCanvasChange = useCallback((result: FlowToStepsResult) => {
+    onChange({ ...value, steps: result.steps, canvasMetadata: result.canvasMetadata });
+  }, [onChange, value]);
 
-  const handleChange = (updates: Partial<SkillFormData>) => {
-    const newValue = { ...localValue, ...updates };
-    setLocalValue(newValue);
-    onChange(newValue);
+  const handleNodeSelect = useCallback((id: string | null) => {
+    setSelectedNodeId(id);
+  }, []);
+
+  const handleNodesChange = useCallback((newNodes: WorkflowNode[]) => {
+    setNodes(newNodes);
+  }, []);
+
+  const handleEdgesChange = useCallback((newEdges: WorkflowEdge[]) => {
+    setEdges(newEdges);
+  }, []);
+
+  const handleUpdateNodeRef = useCallback((fn: (id: string, data: Partial<WorkflowNodeData>) => void) => {
+    updateNodeRef.current = fn;
+  }, []);
+
+  const handleUpdateNode = useCallback((id: string, data: Partial<WorkflowNodeData>) => {
+    updateNodeRef.current?.(id, data);
+  }, []);
+
+  const handleRenameNodeRef = useCallback((fn: (id: string, newName: string) => void) => {
+    renameNodeRef.current = fn;
+  }, []);
+
+  const handleRenameNode = useCallback((id: string, newName: string) => {
+    renameNodeRef.current?.(id, newName);
+  }, []);
+
+  const handleDeleteNodeRef = useCallback((fn: (id: string) => void) => {
+    deleteNodeRef.current = fn;
+  }, []);
+
+  const handleDeleteNode = useCallback(() => {
+    if (selectedNodeId) {
+      deleteNodeRef.current?.(selectedNodeId);
+      setSelectedNodeId(null);
+    }
+  }, [selectedNodeId]);
+
+  const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
+
+  // Build workflow variables from skill inputs and upstream node outputs
+  // Uses auto-inference based on node types and connections
+  const workflowVariables = useMemo((): WorkflowVariable[] => {
+    return inferVariablesForNode(selectedNodeId, nodes, edges, value.inputs);
+  }, [selectedNodeId, nodes, edges, value.inputs]);
+
+  // Node type labels for panel header
+  const nodeTypeLabels: Record<string, string> = {
+    instruction: 'Instruction',
+    skillRef: 'Skill Reference',
+    condition: 'Condition',
+    loop: 'Loop',
+    agentic: 'Agentic',
+    operation: 'Operation',
+    tool: 'Tool',
+    write: 'Write',
   };
-
-  // Attachment handlers
-  const handleAttachmentAdd = (file: File) => {
-    const newAttachments = [...(localValue.pendingAttachments || []), file];
-    handleChange({ pendingAttachments: newAttachments });
-  };
-
-  const handleAttachmentRemove = (index: number) => {
-    const newAttachments = (localValue.pendingAttachments || []).filter((_, i) => i !== index);
-    handleChange({ pendingAttachments: newAttachments });
-  };
-
-  const handleExistingAttachmentRemove = (index: number) => {
-    const newContent = (localValue.content || []).filter((_, i) => i !== index);
-    handleChange({ content: newContent });
-  };
-
-  // Convert MessageParts to existingAttachments format for UnifiedChatInput
-  const existingAttachments = (localValue.content || [])
-    .filter(part => part.imageUrl || part.file)
-    .map(part => ({
-      url: part.imageUrl?.url || part.file?.url || '',
-      filename: part.file?.filename || 'Image',
-      type: (part.imageUrl ? 'image' : 'file') as 'image' | 'file',
-      size: part.file?.size
-    }));
 
   return (
-    <div className="space-y-6">
-      {/* Inline Name + Create Button */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="flex-1">
-            <Input
-              id="name"
-              value={localValue.name}
-              onChange={(e) => handleChange({ name: e.target.value })}
-              placeholder="e.g., Send Welcome Email, Generate Report, Analyze Data..."
-              className="text-base h-10"
-            />
-          </div>
-          {onSave && (
-            <Button onClick={onSave} disabled={isSaving} className="h-10">
-              <Save className="h-4 w-4 mr-2" />
-              {isSaving ? 'Creating...' : 'Create Skill'}
-            </Button>
-          )}
-        </div>
+    <div className="relative h-full w-full">
+      {/* Full-height Canvas - uncontrolled mode */}
+      <WorkflowCanvas
+        steps={value.steps || []}
+        canvasMetadata={value.canvasMetadata}
+        onChange={handleCanvasChange}
+        skillInputs={value.inputs}
+        availableSkills={availableSkills}
+        disabled={isReadOnly}
+        showConfigPanel={false}
+        onNodeSelect={handleNodeSelect}
+        onNodesExpose={handleNodesChange}
+        onEdgesExpose={handleEdgesChange}
+        onUpdateNodeExpose={handleUpdateNodeRef}
+        onRenameNodeExpose={handleRenameNodeRef}
+        onDeleteNodeExpose={handleDeleteNodeRef}
+      />
 
-        {/* Add Description Link */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => setShowDescription(!showDescription)}
-        >
-          {showDescription ? (
-            <>
-              <ChevronUp className="h-3 w-3 mr-1" />
-              Hide description
-            </>
-          ) : (
-            <>
-              <ChevronDown className="h-3 w-3 mr-1" />
-              Add description
-            </>
-          )}
-        </Button>
-
-        {/* Collapsible Description */}
-        {showDescription && (
-          <Textarea
-            id="description"
-            value={localValue.description}
-            onChange={(e) => handleChange({ description: e.target.value })}
-            placeholder="Briefly describe what this skill does..."
-            rows={2}
-            className="text-base"
+      {/* Floating Name Panel - positioned after NodePalette (w-48 + margin) */}
+      {headerControls && (
+        <div className="absolute top-2 left-56 z-10 flex items-center gap-2 bg-background/50 backdrop-blur-sm border rounded-lg shadow-sm px-3 py-2">
+          <Input
+            value={headerControls.name}
+            onChange={(e) => headerControls.onNameChange(e.target.value)}
+            placeholder="Skill name..."
+            className="h-8 w-48 text-sm bg-transparent border-0 focus-visible:ring-1"
           />
-        )}
-      </div>
-
-      {/* Inputs Section */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-sm text-muted-foreground">Inputs</Label>
-          <span className="text-xs text-muted-foreground">
-            {localValue.inputs.length} input{localValue.inputs.length !== 1 ? 's' : ''}
-          </span>
+          <SaveStatusIndicator status={headerControls.saveStatus} />
         </div>
-        <SkillInputsSection
-          inputs={localValue.inputs}
-          onInputsChange={(inputs) => handleChange({ inputs })}
-        />
-        <p className="text-xs text-muted-foreground">
-          Reference inputs in instructions using {'{input_name}'} syntax
-        </p>
-      </div>
+      )}
 
-      {/* Instructions Section */}
-      <div className="space-y-3">
-        <Label className="text-base font-semibold">Instructions</Label>
-
-        {/* Selected Tools Display - ABOVE instructions (like chat UI) */}
-        {localValue.tools.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            {localValue.tools.map((tool, index) => (
-              <div key={index} className="relative flex items-center group">
-                <div
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs
-                    transition-colors duration-150 flex-shrink-0 max-w-xs
-                    border-border bg-background hover:bg-muted/50"
-                  title={tool.config?.displayName || tool.name}
-                >
-                  <span className="truncate font-medium">
-                    {tool.config?.displayName || tool.name}
-                  </span>
-                </div>
-
-                {/* Remove button */}
-                <button
-                  onClick={() => {
-                    const newTools = localValue.tools.filter((_, i) => i !== index);
-                    handleChange({ tools: newTools });
-                  }}
-                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="Remove tool"
-                >
-                  <X className="w-2 h-2" />
-                </button>
-              </div>
-            ))}
+      {/* Floating Config Panel (Right) */}
+      <div
+        className={cn(
+          'absolute top-2 right-2 z-10 w-80 max-h-[calc(100%-1rem)] bg-background/50 backdrop-blur-sm border rounded-lg shadow-lg overflow-hidden flex flex-col',
+          'transition-all duration-200'
+        )}
+      >
+        {/* Panel Header */}
+        <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30 shrink-0">
+          <div className="flex items-center gap-2">
+            <Settings2 className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">
+              {selectedNode
+                ? nodeTypeLabels[selectedNode.type] || 'Node'
+                : 'Skill Config'}
+            </span>
           </div>
-        )}
-
-        <InstructionsInput
-          value={localValue.instructions}
-          onChange={(text) => handleChange({ instructions: text })}
-          onToolsChange={(tools) => handleChange({ tools })}
-          tools={localValue.tools}
-          stepIndex={0}
-          pendingAttachments={localValue.pendingAttachments}
-          onAttachmentAdd={handleAttachmentAdd}
-          onAttachmentRemove={handleAttachmentRemove}
-          existingAttachments={existingAttachments}
-          onExistingAttachmentRemove={handleExistingAttachmentRemove}
-        />
-
-        <p className="text-xs text-muted-foreground">
-          Type @ to reference tools, documents, or other skills. Selected tools will appear above.
-        </p>
-      </div>
-
-      {/* Outputs Section */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-sm text-muted-foreground">Outputs</Label>
-          <span className="text-xs text-muted-foreground">
-            {localValue.outputs.length} output{localValue.outputs.length !== 1 ? 's' : ''}
-          </span>
+          {selectedNode ? (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={handleDeleteNode}
+                title="Delete node (Delete/Backspace)"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => setSelectedNodeId(null)}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : headerControls ? (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={headerControls.onDelete}
+                disabled={headerControls.isDeleting}
+                title="Delete skill"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+              <ShareButton
+                resourceType="skill"
+                resourceId={headerControls.skillId}
+                onShare={headerControls.onShareClick}
+                variant="ghost"
+                size="sm"
+              />
+            </div>
+          ) : null}
         </div>
-        <SkillOutputsSection
-          outputs={localValue.outputs}
-          onOutputsChange={(outputs) => handleChange({ outputs })}
-        />
-        <p className="text-xs text-muted-foreground">
-          Define what data this skill returns
-        </p>
-      </div>
 
-      {/* Advanced Settings Section */}
-      <div className="space-y-3 border-t pt-6">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-        >
-          {showAdvanced ? (
-            <>
-              <ChevronUp className="h-3 w-3 mr-1" />
-              Hide advanced settings
-            </>
+        {/* Panel Content */}
+        <div className="flex-1 overflow-y-auto p-3">
+          {selectedNode ? (
+            <NodeConfigContent
+              node={selectedNode}
+              onUpdateNode={handleUpdateNode}
+              onRenameNode={handleRenameNode}
+              skillInputs={value.inputs}
+              availableSkills={availableSkills}
+              workflowVariables={workflowVariables}
+              organizationTier={organizationTier}
+              skillId={skillId}
+              disabled={isReadOnly}
+            />
           ) : (
             <>
-              <Settings className="h-3 w-3 mr-1" />
-              Advanced settings
+              {/* Model selector when no node selected */}
+              {headerControls && (
+                <div className="mb-4">
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Model</label>
+                  <ModelSelector
+                    value={headerControls.model}
+                    onChange={headerControls.onModelChange}
+                    organizationTier={headerControls.organizationTier}
+                    showInherit={true}
+                    inheritLabel="Inherit"
+                    inheritFromModel={headerControls.agentDefaultModel}
+                    requiredCapabilities={['toolCalling']}
+                    className="w-full h-8"
+                  />
+                </div>
+              )}
+              <RootSkillConfig
+                value={value}
+                onChange={onChange}
+                isReadOnly={isReadOnly}
+              />
             </>
           )}
-        </Button>
-
-        {showAdvanced && (
-          <div className="space-y-4">
-            {/* Model Selection */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">AI Model</Label>
-              <ModelSelector
-                value={localValue.model}
-                onChange={(model) => handleChange({ model })}
-                organizationTier={organizationTier}
-                availableModels={availableModels}
-                showInherit={true}
-                inheritLabel="Inherit from agent"
-                inheritFromModel={agentDefaultModel || 'IBM Granite 3.3 8B'}
-                requiredCapabilities={['toolCalling']}
-              />
-              <p className="text-xs text-muted-foreground">
-                Override the AI model used for this skill. Different models have different costs and capabilities.
-              </p>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );

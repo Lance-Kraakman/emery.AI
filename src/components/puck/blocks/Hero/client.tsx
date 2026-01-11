@@ -5,8 +5,9 @@ import { quotes } from "./quotes";
 import { AutoField, FieldLabel } from "@measured/puck";
 import { Link2 } from "lucide-react";
 import HeroComponent, { HeroProps } from "./Hero";
-import { backgroundColorField, textColorField, fontFamilyField, fontWeightField } from "../../fields/standard-fields";
-import { createLinkActionField } from "../../custom-fields";
+import { backgroundColorField, textColorField, fontFamilyField, fontWeightField, paddingField, textAlignField } from "../../fields/standard-fields";
+import type { FourSidedSpacing } from "../../types/spacing-types";
+import { createLinkActionField, createVariableTextField } from "../../custom-fields";
 
 export const Hero: ComponentConfig<HeroProps> = {
   fields: {
@@ -74,8 +75,8 @@ export const Hero: ComponentConfig<HeroProps> = {
       },
       getItemSummary: (item) => item.label,
     },
-    title: { type: "text", contentEditable: true },
-    description: { type: "textarea", contentEditable: true },
+    title: createVariableTextField({ label: 'Title' }),
+    description: createVariableTextField({ label: 'Description', multiline: true }),
     buttons: {
       type: "array",
       min: 1,
@@ -102,12 +103,13 @@ export const Hero: ComponentConfig<HeroProps> = {
       },
     },
     align: {
-      type: "radio",
+      ...textAlignField,
       options: [
         { label: "left", value: "left" },
         { label: "center", value: "center" },
       ],
     },
+    padding: paddingField,
     image: {
       type: "object",
       objectFields: {
@@ -170,7 +172,7 @@ export const Hero: ComponentConfig<HeroProps> = {
     align: "left",
     description: "Description",
     buttons: [{ label: "Learn more", action: { actionType: "none" } }],
-    padding: "64px",
+    padding: undefined,
     titleColor: undefined,
     subtitleColor: undefined,
     backgroundColor: undefined,

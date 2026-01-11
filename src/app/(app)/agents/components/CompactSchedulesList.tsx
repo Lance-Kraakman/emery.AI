@@ -1,23 +1,24 @@
 'use client';
 
 import React from 'react';
-import { Calendar, Clock, ChevronRight, Plus, Database, Webhook } from 'lucide-react';
+import { Calendar, Clock, ChevronRight, Plus, Database, Webhook, Zap } from 'lucide-react';
 import { RRule } from 'rrule';
-import type { ScheduleConfigurationDTO } from '@/app/dtos/schedule.dto';
+import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
 
 interface CompactSchedulesListProps {
-  schedules: ScheduleConfigurationDTO[];
+  schedules: AutomationConfigurationDTO[];
   onManageSchedules?: () => void;
   className?: string;
 }
 
-const TRIGGER_ICONS = {
+const TRIGGER_ICONS: Record<string, typeof Calendar> = {
   CALENDAR: Calendar,
   DATABASE_EVENT: Database,
-  WEBHOOK: Webhook
+  WEBHOOK: Webhook,
+  PIPEDREAM_EVENT: Zap
 };
 
-function getScheduleDescription(schedule: ScheduleConfigurationDTO): string {
+function getScheduleDescription(schedule: AutomationConfigurationDTO): string {
   const trigger = schedule.trigger;
 
   switch (trigger.type) {
@@ -27,13 +28,15 @@ function getScheduleDescription(schedule: ScheduleConfigurationDTO): string {
         const text = rrule.toText();
         return text.charAt(0).toUpperCase() + text.slice(1);
       } catch (error) {
-        return 'Invalid schedule';
+        return 'Invalid configuration';
       }
     case 'DATABASE_EVENT':
       const ops = trigger.operations.join(', ');
       return `On ${ops} ${trigger.tableId ? `(${trigger.tableId})` : '(all tables)'}`;
     case 'WEBHOOK':
       return 'Webhook trigger';
+    case 'PIPEDREAM_EVENT':
+      return `External: ${(trigger as any).triggerType || 'event'}`;
     default:
       return 'Unknown trigger';
   }
@@ -51,7 +54,7 @@ export function CompactSchedulesList({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />
-          <h4 className="text-sm font-semibold">Schedules</h4>
+          <h4 className="text-sm font-semibold">Automations</h4>
           <span className="text-xs text-muted-foreground">
             ({activeSchedules.length}/{schedules.length})
           </span>
@@ -60,7 +63,7 @@ export function CompactSchedulesList({
           <button
             onClick={onManageSchedules}
             className="p-1 hover:bg-accent rounded transition-colors"
-            title="Manage schedules"
+            title="Manage automations"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -69,7 +72,7 @@ export function CompactSchedulesList({
 
       {schedules.length === 0 ? (
         <div className="text-xs text-muted-foreground text-center py-4 border rounded-md bg-muted/20">
-          No schedules configured
+          No automations configured
         </div>
       ) : (
         <div className="space-y-1">
@@ -87,7 +90,7 @@ export function CompactSchedulesList({
                   <TriggerIcon className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">
-                      {schedule.name || schedule.taskInstructions.task.substring(0, 40) + '...'}
+                      {schedule.name || `Skill ${schedule.skillId}`}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
                       {getScheduleDescription(schedule)}

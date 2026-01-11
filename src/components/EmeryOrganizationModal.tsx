@@ -143,12 +143,12 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
         <DialogTrigger asChild>
           {isCollapsed ? (
             <Button variant="ghost" size="icon" className="h-12 w-12">
-              <img src="/assets/dashlet/logo_icon.svg" alt="Dashlet" className="h-6 w-6" />
+              <img src="/assets/braintable/logo_logo.png" alt="Braintable" className="h-6 w-6" />
             </Button>
           ) : (
             <Button variant="ghost" className="w-full justify-start h-12 px-4">
               <div className="flex flex-col items-start min-w-0 flex-1">
-                <img src="/assets/dashlet/header_logo.svg" alt="Dashlet" className="h-5 mb-1" />
+                <img src="/assets/braintable/text_only_logo.png" alt="Braintable" className="h-5 mb-1" />
                 <span className="truncate text-xs text-muted-foreground">{currentOrg.name}</span>
               </div>
             </Button>

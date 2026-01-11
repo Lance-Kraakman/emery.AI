@@ -44,7 +44,7 @@ export default async function SystemSettingsPage() {
         <Suspense fallback={<SystemSettingsSkeleton />}>
           <SystemSettingsClient
             organizationId={session.user.currentOrganizationId}
-            organizationTier={organization.tier || 'free'}
+            organizationTier={organization.plan || 'free'}
             currentModel={organization.defaultModel || null}
             availableModels={organization.availableModels || []}
           />

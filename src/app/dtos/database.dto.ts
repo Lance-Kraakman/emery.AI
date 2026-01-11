@@ -16,6 +16,7 @@ export interface CreateDatabaseDTO {
   description?: string;
   organizationId: number;
   ownerId: string;
+  agentId?: number | null; // null = org-scoped, set = agent-scoped
   metadata?: Record<string, any>;
 }
 
@@ -34,6 +35,7 @@ export interface UpdateDatabaseDTO {
  */
 export interface DatabaseFiltersDTO {
   organizationId: number;
+  agentId?: number | null; // Filter by agent (null = org-scoped only)
   searchQuery?: string;
   hasTables?: boolean;
 }

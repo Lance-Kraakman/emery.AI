@@ -1,18 +1,20 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getSkillApplicationService, getAgentApplicationService, getStorageQuotaApplicationService } from '@/ddd/application/di/container';
+import { getSkillApplicationService, getAgentApplicationService, getStorageQuotaApplicationService, getAuditApplicationService } from '@/ddd/application/di/container';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { SkillMapper } from '@/app/mappers/skill-mapper';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { requirePermission, requireResourcePermission } from './permissions';
 import type { Result } from '@/ddd/domain/shared/result';
-import type { SkillInput, SkillOutput, ToolConfigDTO } from '@/app/mappers/skill-mapper';
+import type { InputDefinition, OutputDefinition, ToolConfigDTO } from '@/app/mappers/skill-mapper';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
 
 /**
  * Server Actions for Skill Management
@@ -30,16 +32,24 @@ import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
  */
 
 /**
- * Create a new skill with inputs, outputs, and single instruction block
+ * Create a new skill
+ * All skills are now workflows - node configs live in steps[]
  */
 export async function createSkill(command: {
   agentId: number;
   name: string;
   description?: string;
-  inputs: SkillInput[];
-  outputs: SkillOutput[];
-  instructions: string;
-  tools: ToolConfigDTO[];
+  inputs?: InputDefinition[];
+  outputs?: OutputDefinition[];
+  instructions?: string;
+  tools?: ToolConfigDTO[];
+  model?: string | null;
+  agentType?: string | null;
+  executionType?: SkillExecutionType;
+  taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
+  toolExecutionConfig?: ToolExecutionConfig;
+  writeConfig?: WriteConfig;
+  steps?: SkillStep[];
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -47,26 +57,24 @@ export async function createSkill(command: {
       return { success: false, error: 'Unauthorized' };
     }
 
-    // Check permission to manage the agent (agent-scoped skills require agent management permission)
+    // Check permission to manage the agent
     await requireResourcePermission("agents:manage", "agent", command.agentId);
 
-    // Validation
+    // Validation - only name is required
     if (!command.name?.trim()) {
       return { success: false, error: 'Skill name is required' };
     }
 
-    if (!command.instructions?.trim()) {
-      return { success: false, error: 'Instructions are required' };
-    }
-
-    // Validate input names
-    const invalidInputs = command.inputs.filter(i => !i.name?.trim());
+    // Validate input names if provided
+    const inputs = command.inputs || [];
+    const invalidInputs = inputs.filter(i => !i.name?.trim());
     if (invalidInputs.length > 0) {
       return { success: false, error: 'All inputs must have names' };
     }
 
-    // Validate output names
-    const invalidOutputs = command.outputs.filter(o => !o.name?.trim());
+    // Validate output names if provided
+    const outputs = command.outputs || [];
+    const invalidOutputs = outputs.filter(o => !o.name?.trim());
     if (invalidOutputs.length > 0) {
       return { success: false, error: 'All outputs must have names' };
     }
@@ -81,6 +89,10 @@ export async function createSkill(command: {
     const service = getSkillApplicationService();
     const result = await service.createSkill({
       ...command,
+      inputs: inputs,
+      outputs: outputs,
+      instructions: command.instructions || '',
+      tools: command.tools || [],
       organizationId: agent.organizationId.value
     });
 
@@ -93,6 +105,27 @@ export async function createSkill(command: {
     if (!skillResult.success || !skillResult.data) {
       return { success: false, error: 'Failed to fetch created skill' };
     }
+
+    // AUDIT: Log skill creation
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(agent.organizationId.value),
+      {
+        eventType: 'agent',
+        eventCategory: 'skill_crud',
+        eventAction: 'create',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'skill',
+        resourceId: String(result.data!.value),
+        resourceName: command.name,
+        parentResourceType: 'agent',
+        parentResourceId: String(command.agentId),
+        eventData: { executionType: command.executionType },
+        success: true,
+      }
+    );
 
     // Revalidate sidebar and skill pages
     revalidatePath(`/agents/${command.agentId}/skills`);
@@ -118,10 +151,17 @@ export async function createOrganizationSkill(command: {
   organizationId: number;
   name: string;
   description?: string;
-  inputs: SkillInput[];
-  outputs: SkillOutput[];
-  instructions: string;
-  tools: ToolConfigDTO[];
+  inputs?: InputDefinition[];
+  outputs?: OutputDefinition[];
+  instructions?: string;
+  tools?: ToolConfigDTO[];
+  model?: string | null;
+  agentType?: string | null;
+  executionType?: SkillExecutionType;
+  taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
+  toolExecutionConfig?: ToolExecutionConfig;
+  writeConfig?: WriteConfig;
+  steps?: SkillStep[];
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -132,23 +172,21 @@ export async function createOrganizationSkill(command: {
     // Check permission to create organization skills
     await requirePermission("skills:create");
 
-    // Validation
+    // Validation - only name is required
     if (!command.name?.trim()) {
       return { success: false, error: 'Skill name is required' };
     }
 
-    if (!command.instructions?.trim()) {
-      return { success: false, error: 'Instructions are required' };
-    }
-
-    // Validate input names
-    const invalidInputs = command.inputs.filter(i => !i.name?.trim());
+    // Validate input names if provided
+    const inputs = command.inputs || [];
+    const invalidInputs = inputs.filter(i => !i.name?.trim());
     if (invalidInputs.length > 0) {
       return { success: false, error: 'All inputs must have names' };
     }
 
-    // Validate output names
-    const invalidOutputs = command.outputs.filter(o => !o.name?.trim());
+    // Validate output names if provided
+    const outputs = command.outputs || [];
+    const invalidOutputs = outputs.filter(o => !o.name?.trim());
     if (invalidOutputs.length > 0) {
       return { success: false, error: 'All outputs must have names' };
     }
@@ -157,14 +195,21 @@ export async function createOrganizationSkill(command: {
 
     // Create organization skill without agentId (null for organization-scoped)
     const result = await service.createSkill({
-      agentId: null, // null for organization skills
+      agentId: null,
       organizationId: command.organizationId,
       name: command.name,
       description: command.description,
-      inputs: command.inputs,
-      outputs: command.outputs,
-      instructions: command.instructions,
-      tools: command.tools
+      inputs: inputs,
+      outputs: outputs,
+      instructions: command.instructions || '',
+      tools: command.tools || [],
+      model: command.model,
+      agentType: command.agentType,
+      executionType: command.executionType,
+      taskModelConfig: command.taskModelConfig,
+      toolExecutionConfig: command.toolExecutionConfig,
+      writeConfig: command.writeConfig,
+      steps: command.steps
     });
 
     if (!result.success) {
@@ -176,6 +221,25 @@ export async function createOrganizationSkill(command: {
     if (!skillResult.success || !skillResult.data) {
       return { success: false, error: 'Failed to fetch created skill' };
     }
+
+    // AUDIT: Log organization skill creation
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(command.organizationId),
+      {
+        eventType: 'agent',
+        eventCategory: 'skill_crud',
+        eventAction: 'create',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'skill',
+        resourceId: String(result.data!.value),
+        resourceName: command.name,
+        eventData: { executionType: command.executionType, isOrganizationSkill: true },
+        success: true,
+      }
+    );
 
     // Revalidate sidebar and skills pages
     revalidatePath('/skills');
@@ -202,10 +266,18 @@ export async function updateSkill(
   command: {
     name?: string;
     description?: string;
-    inputs?: SkillInput[];
-    outputs?: SkillOutput[];
+    inputs?: InputDefinition[];
+    outputs?: OutputDefinition[];
     instructions?: string;
     tools?: ToolConfigDTO[];
+    model?: string | null;
+    agentType?: string | null; // "tool_calling" (default) or "code_agent"
+    executionType?: SkillExecutionType;
+    taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> } | null;
+    toolExecutionConfig?: ToolExecutionConfig | null;
+    writeConfig?: WriteConfig | null;
+    steps?: SkillStep[] | null; // Steps for 'agent' (step-based) execution
+    canvasMetadata?: CanvasMetadata | null; // Canvas annotations (sticky notes)
     content?: MessagePart[]; // Skill-level attachments
   }
 ): Promise<Result<SkillDTO>> {
@@ -225,6 +297,11 @@ export async function updateSkill(
 
     const skill = skillResult.data;
 
+    // Prevent editing of system skills
+    if (skill.isSystem) {
+      return { success: false, error: 'System skills cannot be edited. Duplicate this skill to create your own version.' };
+    }
+
     // Check appropriate permission based on skill type
     if (skill.agentId) {
       // Agent-scoped skill: check agent management permission
@@ -233,6 +310,12 @@ export async function updateSkill(
       // Org-level skill: check skill management permission
       await requireResourcePermission("skills:manage", "skill", skillId);
     }
+
+    console.log('[updateSkill] action received:', {
+      stepsInCommand: 'steps' in command,
+      steps: command.steps,
+      stepsLength: command.steps?.length
+    });
 
     const result = await service.updateSkill(skillId, command);
 
@@ -245,6 +328,27 @@ export async function updateSkill(
     if (!updatedSkillResult.success || !updatedSkillResult.data) {
       return { success: false, error: 'Failed to fetch updated skill' };
     }
+
+    // AUDIT: Log skill update
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      skill.organizationId,
+      {
+        eventType: 'agent',
+        eventCategory: 'skill_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'skill',
+        resourceId: String(skillId),
+        resourceName: updatedSkillResult.data.name,
+        parentResourceType: skill.agentId ? 'agent' : undefined,
+        parentResourceId: skill.agentId ? String(skill.agentId.value) : undefined,
+        eventData: { updatedFields: Object.keys(command) },
+        success: true,
+      }
+    );
 
     // Revalidate sidebar and skill pages
     const updatedSkill = updatedSkillResult.data;
@@ -270,6 +374,7 @@ export async function updateSkill(
 
 /**
  * Delete a skill
+ * System skills (isSystem=true) cannot be deleted
  */
 export async function deleteSkill(skillId: number): Promise<Result<void>> {
   try {
@@ -289,6 +394,11 @@ export async function deleteSkill(skillId: number): Promise<Result<void>> {
     const skill = skillResult.data;
     const agentId = skill.agentId?.value ?? null;
 
+    // Prevent deletion of system skills
+    if (skill.isSystem) {
+      return { success: false, error: 'System skills cannot be deleted. You can duplicate this skill to create your own version.' };
+    }
+
     // Check appropriate permission based on skill type
     if (skill.agentId) {
       // Agent-scoped skill: check agent management permission
@@ -301,6 +411,27 @@ export async function deleteSkill(skillId: number): Promise<Result<void>> {
     const result = await service.deleteSkill(skillId);
 
     if (result.success) {
+      // AUDIT: Log skill deletion
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        skill.organizationId,
+        {
+          eventType: 'agent',
+          eventCategory: 'skill_crud',
+          eventAction: 'delete',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'skill',
+          resourceId: String(skillId),
+          resourceName: skill.name,
+          parentResourceType: skill.agentId ? 'agent' : undefined,
+          parentResourceId: skill.agentId ? String(skill.agentId.value) : undefined,
+          eventData: {},
+          success: true,
+        }
+      );
+
       // Revalidate sidebar and skill pages
       if (agentId) {
         revalidatePath(`/agents/${agentId}/skills`);
@@ -344,7 +475,7 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
     // Create new name with " (Copy)" suffix
     const newName = `${originalSkill.name} (Copy)`;
 
-    // Create the duplicate skill
+    // Create the duplicate skill (copy all settings including execution type)
     const createResult = await service.createSkill({
       agentId: originalSkill.agentId?.value || null,
       organizationId: originalSkill.organizationId.value,
@@ -353,7 +484,14 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
       inputs: originalSkill.inputs,
       outputs: originalSkill.outputs,
       instructions: originalSkill.instructions,
-      tools: originalSkill.tools
+      tools: originalSkill.tools,
+      model: originalSkill.model,
+      agentType: originalSkill.agentType,
+      executionType: originalSkill.executionType,
+      taskModelConfig: originalSkill.taskModelConfig,
+      toolExecutionConfig: originalSkill.toolExecutionConfig,
+      writeConfig: originalSkill.writeConfig,
+      steps: originalSkill.steps
     });
 
     if (!createResult.success || !createResult.data) {
@@ -368,6 +506,27 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
     if (!newSkillResult.success || !newSkillResult.data) {
       return { success: false, error: 'Failed to fetch duplicated skill' };
     }
+
+    // AUDIT: Log skill duplication
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      originalSkill.organizationId,
+      {
+        eventType: 'agent',
+        eventCategory: 'skill_crud',
+        eventAction: 'create',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'skill',
+        resourceId: String(createResult.data.value),
+        resourceName: newName,
+        parentResourceType: originalSkill.agentId ? 'agent' : undefined,
+        parentResourceId: originalSkill.agentId ? String(originalSkill.agentId.value) : undefined,
+        eventData: { duplicatedFrom: skillId, originalName: originalSkill.name },
+        success: true,
+      }
+    );
 
     // Revalidate sidebar and skill pages
     if (originalSkill.agentId) {

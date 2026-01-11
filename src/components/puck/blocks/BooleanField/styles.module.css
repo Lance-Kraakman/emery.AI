@@ -1,0 +1,127 @@
+/* BooleanField Styles */
+
+.booleanField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* Inline label position */
+.booleanField.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+
+/* When inline, don't let label grow */
+.booleanField.inline .label {
+  flex-shrink: 0;
+}
+
+/* Text display */
+.text {
+  color: hsl(var(--foreground));
+  line-height: 1.5;
+}
+
+.text.sm {
+  font-size: 0.875rem;
+}
+
+.text.base {
+  font-size: 1rem;
+}
+
+.text.lg {
+  font-size: 1.125rem;
+}
+
+/* Badge display */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  border-radius: 9999px;
+  width: fit-content;
+}
+
+.badge.sm {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+}
+
+.badge.base {
+  font-size: 0.875rem;
+  padding: 0.25rem 0.75rem;
+}
+
+.badge.lg {
+  font-size: 1rem;
+  padding: 0.375rem 1rem;
+}
+
+.badgeTrue {
+  background-color: hsl(var(--success, 142 76% 36%) / 0.1);
+  color: hsl(var(--success, 142 76% 36%));
+  border: 1px solid hsl(var(--success, 142 76% 36%) / 0.3);
+}
+
+.badgeFalse {
+  background-color: hsl(var(--muted) / 0.5);
+  color: hsl(var(--muted-foreground));
+  border: 1px solid hsl(var(--border));
+}
+
+/* Icon display */
+.icon {
+  flex-shrink: 0;
+}
+
+.iconTrue {
+  color: hsl(var(--success, 142 76% 36%));
+}
+
+.iconFalse {
+  color: hsl(var(--muted-foreground));
+}
+
+/* Warning state (not in context) */
+.warning {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  background-color: hsl(var(--destructive) / 0.1);
+  border: 1px solid hsl(var(--destructive) / 0.3);
+}
+
+.warningIcon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.warningText {
+  font-size: 0.875rem;
+  color: hsl(var(--destructive));
+}
+
+/* Edit mode container */
+.editContainer {
+  width: 100%;
+}
+
+/* Validation error text */
+.error {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: hsl(var(--destructive));
+}

@@ -6,40 +6,43 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { getInvitationApplicationService, getUserRoleApplicationService } from "@/ddd/application/di/container";
+import { getInvitationApplicationService, getUserRoleApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import type { SendInvitationCommand, AcceptInvitationCommand } from "@/ddd/application/services/invitations/invitation-application-service";
 import { EmailAddress, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
-import { SystemRoleType, SYSTEM_ROLES } from "@/ddd/domain/rbac/entities/role";
+import { SystemRoleType, SYSTEM_ROLES, SYSTEM_ROLE_IDS } from "@/ddd/domain/rbac/entities/role";
 import { toInvitationDTO, toInvitationDTOs } from "@/app/mappers/invitation-mapper";
 import type { InvitationDTO } from "@/app/dtos/invitation.dto";
+import { OrganizationMapper, OrganizationMemberDTO } from "../mappers/organization-mapper";
 
 export async function inviteUser(formData: FormData): Promise<Result> {
   return withAuthContext(async () => {
     try {
       const session = await requirePermission("users:manage");
-    const currentOrg = await requireCurrentOrganization();
-    const email = formData.get("email") as string;
-    const systemRole = formData.get("systemRole") as string;
+      const currentOrg = await requireCurrentOrganization();
+      const email = formData.get("email") as string;
+      // For now, use default Member role since we're migrating to multi-role
+      const roleIdsStr = formData.get("roleIds") as string;
+      const roleIds = roleIdsStr ? JSON.parse(roleIdsStr) as number[] : [SYSTEM_ROLE_IDS.MEMBER];
 
-    if (!email || !systemRole) {
-      return {
-        success: false,
-        error: "Email and system role are required"
+      if (!email) {
+        return {
+          success: false,
+          error: "Email is required"
+        };
+      }
+
+      const invitationApplicationService = getInvitationApplicationService();
+      
+      const command: SendInvitationCommand = {
+        organizationId: currentOrg.id,
+        invitedBy: session.user.id,
+        email,
+        roleIds: roleIds.length > 0 ? roleIds : [SYSTEM_ROLE_IDS.MEMBER],
+        expiryDays: 7, // Default to 7 days
+        sendEmail: true
       };
-    }
-
-    const invitationApplicationService = getInvitationApplicationService();
-    
-    const command: SendInvitationCommand = {
-      organizationId: currentOrg.id,
-      invitedBy: session.user.id,
-      email,
-      systemRole: systemRole as SystemRoleType,
-      expiryDays: 7, // Default to 7 days
-      sendEmail: true
-    };
 
     const result = await invitationApplicationService.sendInvitation(command);
 
@@ -49,6 +52,29 @@ export async function inviteUser(formData: FormData): Promise<Result> {
         error: result.error || "Failed to send invitation"
       };
     }
+
+    // Audit log the invitation
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'security',
+        eventCategory: 'invitation_crud',
+        eventAction: 'create',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'invitation',
+        resourceId: result.data ? String(result.data.id.value) : 'unknown',
+        resourceName: email,
+        eventData: {
+          email,
+          roleIds,
+          expiryDays: 7,
+        },
+        success: true,
+      }
+    );
 
     revalidatePath("/organization/settings/users");
     return {
@@ -68,8 +94,6 @@ export async function inviteUser(formData: FormData): Promise<Result> {
 
 export async function acceptInvitation(token: string): Promise<Result> {
   try {
-    const session = await requirePermission("users:invite");
-    
     if (!token) {
       return {
         success: false,
@@ -78,12 +102,49 @@ export async function acceptInvitation(token: string): Promise<Result> {
     }
 
     const invitationApplicationService = getInvitationApplicationService();
-    
+
+    // First, get the invitation to find the email (token is the authentication)
+    const invitationResult = await invitationApplicationService.getInvitationByToken(token);
+    if (!invitationResult.success || !invitationResult.data) {
+      return {
+        success: false,
+        error: invitationResult.error || "Invalid or expired invitation"
+      };
+    }
+
+    const invitation = invitationResult.data;
+
+    // Try to get session if user is logged in (optional)
+    const { getSessionSafe } = await import("./permissions");
+    const session = await getSessionSafe();
+
+    // Determine the accepting user's email
+    // If logged in, verify email matches; if not logged in, use invitation email (token validates the request)
+    let acceptingUserEmail: string;
+    let userName: string | undefined;
+
+    if (session?.user?.email) {
+      // User is logged in - verify email matches
+      if (session.user.email.toLowerCase() !== invitation.email.value.toLowerCase()) {
+        return {
+          success: false,
+          error: "You must be signed in with the email address this invitation was sent to"
+        };
+      }
+      acceptingUserEmail = session.user.email;
+      userName = session.user.name || undefined;
+    } else {
+      // User is NOT logged in - the token authenticates the request
+      // Use the email from the invitation itself
+      acceptingUserEmail = invitation.email.value;
+      userName = undefined;
+    }
+
     const command: AcceptInvitationCommand = {
       token,
-      acceptingUserEmail: session.user.email || '',
+      acceptingUserEmail,
       userData: {
-        name: session.user.name || undefined
+        name: userName
       }
     };
 
@@ -96,9 +157,32 @@ export async function acceptInvitation(token: string): Promise<Result> {
       };
     }
 
+    // Audit log the invitation acceptance
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      invitation.organizationId,
+      {
+        eventType: 'security',
+        eventCategory: 'invitation_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session?.user?.id || acceptingUserEmail,
+        actorName: userName,
+        resourceType: 'invitation',
+        resourceId: String(invitation.id.value),
+        resourceName: acceptingUserEmail,
+        eventData: {
+          action: 'accepted',
+          email: acceptingUserEmail,
+          organizationId: invitation.organizationId.value,
+        },
+        success: true,
+      }
+    );
+
     revalidatePath("/organization/settings/users");
     revalidatePath("/dashboard"); // User may now have access to new organization
-    
+
     return {
       success: true,
       data: result.data,
@@ -115,7 +199,7 @@ export async function acceptInvitation(token: string): Promise<Result> {
 
 // AIDEV-NOTE: This functionality is now handled by the OrganizationRepository
 // through the getMembers method. Consider moving this to organization actions.
-export async function getOrganizationMembers(): Promise<Array<{id: string, name: string, email: string, systemRole: SystemRoleType | string}>> {
+export async function getOrganizationMembers(): Promise<Array<OrganizationMemberDTO>> {
   try {
     const session = await requirePermission("users:view");
     const currentOrg = await requireCurrentOrganization();
@@ -126,12 +210,7 @@ export async function getOrganizationMembers(): Promise<Array<{id: string, name:
     });
     
     // Convert domain objects to DTOs for UI
-    return members.map(member => ({
-      id: member.userId.value,
-      name: member.name || 'Unknown User',
-      email: member.email?.value || '',
-      systemRole: member.systemRole
-    }));
+    return members.map(member => (OrganizationMapper.memberToDTO(member)));
   } catch (error) {
     console.error("Error fetching organization members:", error);
     return [];
@@ -160,7 +239,8 @@ export async function getPendingInvitations(): Promise<InvitationDTO[]> {
 export async function revokeInvitation(invitationId: number): Promise<Result> {
   try {
     const session = await requirePermission("users:manage");
-    
+    const currentOrg = await requireCurrentOrganization();
+
     if (!invitationId) {
       return {
         success: false,
@@ -169,6 +249,7 @@ export async function revokeInvitation(invitationId: number): Promise<Result> {
     }
 
     const invitationApplicationService = getInvitationApplicationService();
+
     const result = await invitationApplicationService.revokeInvitation(invitationId, session.user.id);
 
     if (!result.success) {
@@ -177,6 +258,28 @@ export async function revokeInvitation(invitationId: number): Promise<Result> {
         error: result.error || "Failed to revoke invitation"
       };
     }
+
+    // Audit log the revocation
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'security',
+        eventCategory: 'invitation_crud',
+        eventAction: 'delete',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'invitation',
+        resourceId: String(invitationId),
+        resourceName: `invitation-${invitationId}`,
+        eventData: {
+          action: 'revoked',
+          invitationId,
+        },
+        success: true,
+      }
+    );
 
     revalidatePath("/organization/settings/users");
     return {
@@ -198,7 +301,8 @@ export async function revokeInvitation(invitationId: number): Promise<Result> {
 export async function resendInvitation(invitationId: number): Promise<Result> {
   try {
     const session = await requirePermission("users:manage");
-    
+    const currentOrg = await requireCurrentOrganization();
+
     if (!invitationId) {
       return {
         success: false,
@@ -215,6 +319,28 @@ export async function resendInvitation(invitationId: number): Promise<Result> {
         error: result.error || "Failed to resend invitation"
       };
     }
+
+    // Audit log the resend
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'security',
+        eventCategory: 'invitation_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'invitation',
+        resourceId: String(invitationId),
+        resourceName: result.data?.email?.value || 'unknown',
+        eventData: {
+          action: 'resent',
+          email: result.data?.email?.value,
+        },
+        success: true,
+      }
+    );
 
     revalidatePath("/organization/settings/users");
     return {

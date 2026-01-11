@@ -39,9 +39,9 @@ export default defineConfig({
       WORKER_ADDRESS: 'localhost:50053',
       GRPC_TOOLS_ADDRESS: 'localhost:50054',
       NODE_ENV: 'test',
-      // AI/ML API Keys  
-      HF_TOKEN: '***REMOVED***',
-      OPENAI_API_KEY: '***REMOVED***',
+      // AI/ML API Keys - loaded from environment
+      HF_TOKEN: process.env.HF_TOKEN || '',
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
       // AI/ML API Keys for real functionality (not mocked)
       // S3 Configuration (MinIO for integration tests - matches .env.local.test)
       AWS_ACCESS_KEY_ID: 'minioadmin',

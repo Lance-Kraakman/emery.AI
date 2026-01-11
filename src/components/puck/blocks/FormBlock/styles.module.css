@@ -13,26 +13,6 @@
   gap: 1.5rem;
 }
 
-/* Form header */
-.formHeader {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.formTitle {
-  font-size: 1.875rem;
-  font-weight: 700;
-  color: var(--theme-text, #1e293b);
-  line-height: 1.2;
-}
-
-.formDescription {
-  color: var(--theme-text-muted, #64748b);
-  font-size: 1rem;
-  line-height: 1.5;
-}
-
 /* Progress section */
 .progressSection {
   display: flex;
@@ -43,7 +23,7 @@
 .progressLabel {
   display: flex;
   justify-content: space-between;
-  font-size: 0.875rem;
+  font-size: var(--theme-font-sm, 0.875rem);
   color: var(--theme-text-muted, #64748b);
 }
 
@@ -76,7 +56,7 @@
 }
 
 .fieldLabel {
-  font-size: 0.875rem;
+  font-size: var(--theme-font-sm, 0.875rem);
   font-weight: 500;
   color: var(--theme-text, #1e293b);
 }
@@ -87,7 +67,7 @@
 }
 
 .fieldDescription {
-  font-size: 0.875rem;
+  font-size: var(--theme-font-sm, 0.875rem);
   color: var(--theme-text-muted, #64748b);
   margin-top: 0.25rem;
 }
@@ -98,7 +78,7 @@
 .select {
   width: 100%;
   padding: 0.5rem 0.75rem;
-  font-size: 1rem;
+  font-size: var(--theme-font-base, 1rem);
   color: var(--theme-text, #1e293b);
   background: var(--theme-surface, #ffffff);
   border: var(--theme-border-width, 1px) solid var(--theme-border, #e2e8f0);
@@ -143,7 +123,7 @@
 
 .checkboxLabel,
 .radioLabel {
-  font-size: 0.875rem;
+  font-size: var(--theme-font-sm, 0.875rem);
   color: var(--theme-text, #1e293b);
   cursor: pointer;
 }
@@ -157,13 +137,13 @@
 }
 
 .errorText {
-  font-size: 0.875rem;
+  font-size: var(--theme-font-sm, 0.875rem);
   color: var(--theme-error, #ef4444);
   font-weight: 500;
 }
 
 .fieldError {
-  font-size: 0.875rem;
+  font-size: var(--theme-font-sm, 0.875rem);
   color: var(--theme-error, #ef4444);
   margin-top: 0.25rem;
 }
@@ -181,7 +161,7 @@
 /* Buttons */
 .button {
   padding: 0.5rem 1rem;
-  font-size: 0.875rem;
+  font-size: var(--theme-font-sm, 0.875rem);
   font-weight: 500;
   border-radius: var(--theme-border-radius, 0.375rem);
   cursor: pointer;
@@ -257,14 +237,14 @@
 }
 
 .successTitle {
-  font-size: 1.5rem;
+  font-size: var(--theme-font-2xl, 1.5rem);
   font-weight: 700;
   color: var(--theme-text, #1e293b);
 }
 
 .successMessage {
   color: var(--theme-text-muted, #64748b);
-  font-size: 1rem;
+  font-size: var(--theme-font-base, 1rem);
 }
 
 /* Placeholder */
@@ -281,6 +261,6 @@
 
 .placeholderText {
   color: var(--theme-text-muted, #64748b);
-  font-size: 1rem;
+  font-size: var(--theme-font-base, 1rem);
   text-align: center;
 }

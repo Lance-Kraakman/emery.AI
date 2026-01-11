@@ -1,236 +1,37 @@
 "use client";
 
-import React, { useEffect, useState, type ReactNode } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { Puck, Data, usePuck, resolveAllData, Button as PuckButton } from "@measured/puck";
+import React, { useEffect, useState, useMemo, useCallback, type ReactNode } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Puck, Data, resolveAllData } from "@measured/puck";
 import "@measured/puck/puck.css";
 import "@/styles/puck-theme.css";
 import { config } from "@/components/puck/config";
-import { getPage, getPages, updatePage, updatePageContent, publishPage, unpublishPage } from "@/app/actions/puck-pages";
+import { getPage, getPages, updatePage, publishPage, unpublishPage } from "@/app/actions/puck-pages";
 import { getApp } from "@/app/actions/puck-apps";
 import { getCurrentOrganization } from "@/app/actions/user-organizations";
 import type { PageDTO } from "@/app/mappers/puck-page-mapper";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import type { OrganizationDTO } from "@/app/mappers/organization-mapper";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Globe, Eye, ExternalLink, Copy, Check } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Loading } from "@/components/ui/loading";
 import { toast } from "sonner";
-import { ThemeProvider } from "@/components/puck/theme-context";
-import { LinkContextProvider } from "@/components/puck/link-context";
+import { PageContextProvider } from "@/components/puck/contexts/PageContext";
 import { PuckEditorThemeProvider, usePuckEditorTheme } from "@/components/puck/puck-editor-theme-context";
-import { createPuckUIOverrides } from "@/components/puck/overrides";
 import { PuckSession } from "@/lib/puck/session-storage";
-import { PublicUrlDisplay } from "./components/PublicUrlDisplay";
-
-// Sidebar state persistence component
-// AIDEV-NOTE: This component handles saving/restoring Puck's sidebar state to sessionStorage
-// so that sidebar visibility persists across page reloads (especially after theme changes)
-function SidebarStatePersistence({ pageId }: { pageId: number }) {
-  const { appState, dispatch } = usePuck();
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  // Restore sidebar state on mount
-  useEffect(() => {
-    if (isInitialized) return;
-
-    const savedLeftState = PuckSession.getSidebarState(pageId, 'left');
-    const savedRightState = PuckSession.getSidebarState(pageId, 'right');
-
-    if (savedLeftState !== null || savedRightState !== null) {
-      const uiUpdate: { leftSideBarVisible?: boolean; rightSideBarVisible?: boolean } = {};
-
-      if (savedLeftState !== null) {
-        uiUpdate.leftSideBarVisible = savedLeftState;
-      }
-
-      if (savedRightState !== null) {
-        uiUpdate.rightSideBarVisible = savedRightState;
-      }
-
-      dispatch({ type: 'setUi', ui: uiUpdate });
-    }
-
-    setIsInitialized(true);
-  }, [pageId, dispatch, isInitialized]);
-
-  // Save sidebar state whenever it changes
-  useEffect(() => {
-    if (!isInitialized) return; // Don't save initial state
-
-    const leftVisible = appState.ui.leftSideBarVisible;
-    const rightVisible = appState.ui.rightSideBarVisible;
-
-    if (leftVisible !== undefined) {
-      PuckSession.setSidebarState(pageId, 'left', leftVisible);
-    }
-
-    if (rightVisible !== undefined) {
-      PuckSession.setSidebarState(pageId, 'right', rightVisible);
-    }
-  }, [appState.ui.leftSideBarVisible, appState.ui.rightSideBarVisible, pageId, isInitialized]);
-
-  return null; // This component doesn't render anything
-}
-
-// Custom header actions component with full Puck controls
-function CustomHeaderActions({
-  children,
-  pageId,
-  appId,
-  page,
-  app,
-  organization,
-  onPublish,
-  loadedFromSessionStorage,
-  setLoadedFromSessionStorage,
-}: {
-  children: ReactNode;
-  pageId: number;
-  appId: number;
-  page: PageDTO;
-  app: AppDTO;
-  organization: OrganizationDTO | null;
-  onPublish: () => void;
-  loadedFromSessionStorage: boolean;
-  setLoadedFromSessionStorage: (value: boolean) => void;
-}) {
-  const router = useRouter();
-  const { appState, history } = usePuck();
-  const themeContext = usePuckEditorTheme();
-  const [copiedUrl, setCopiedUrl] = useState(false);
-
-  // Detect unsaved changes: Puck history OR sessionStorage OR theme changes
-  const hasUnsavedChanges = history.hasPast || loadedFromSessionStorage || themeContext.hasUnsavedChanges;
-
-  // Build public URL
-  const publicUrl = organization?.slug && app.slug && page.slug
-    ? `/public/${organization.slug}/${app.slug}/${page.slug}`
-    : null;
-  const fullPublicUrl = typeof window !== 'undefined' && publicUrl
-    ? `${window.location.origin}${publicUrl}`
-    : null;
-
-  const handleSave = async () => {
-    try {
-      // Save theme first if needed
-      if (themeContext.hasUnsavedChanges) {
-        const themeData = PuckSession.getTheme(pageId);
-        if (themeData) {
-          await themeContext.saveTheme(themeData);
-        }
-      }
-
-      // Save page content (no revalidation - prevents page reload)
-      const result = await updatePageContent({
-        id: pageId,
-        templateData: appState.data
-      });
-
-      if (!result.success) {
-        toast.error(result.error || "Failed to save page");
-        return;
-      }
-
-      toast.success("Page saved successfully!");
-
-      // Clean up sessionStorage
-      PuckSession.clearData(pageId);
-      setLoadedFromSessionStorage(false);
-    } catch (err) {
-      console.error('Error saving page:', err);
-      toast.error("Failed to save page");
-    }
-  };
-
-  const handlePreview = () => {
-    // Get current data from Puck's state (no re-render!)
-    const currentData = appState.data;
-
-    // Save current data to sessionStorage so preview can access unsaved changes
-    PuckSession.setData(pageId, currentData);
-
-    // Navigate to preview route
-    router.push(`/apps/${appId}/pages/${pageId}/preview`);
-  };
-
-  const handleCopyUrl = async () => {
-    if (fullPublicUrl) {
-      await navigator.clipboard.writeText(fullPublicUrl);
-      setCopiedUrl(true);
-      toast.success("URL copied to clipboard!");
-      setTimeout(() => setCopiedUrl(false), 2000);
-    }
-  };
-
-  const handleOpenPublicPage = () => {
-    if (publicUrl) {
-      window.open(publicUrl, '_blank');
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-2 w-full min-w-0">
-      {/* Public URL display (left side) */}
-      {page.isPublic && publicUrl && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-md border border-border">
-          <span className="text-xs text-muted-foreground font-mono truncate max-w-[150px] sm:max-w-[300px]" title={fullPublicUrl || undefined}>
-            {publicUrl}
-          </span>
-          <button
-            onClick={handleCopyUrl}
-            className="p-1 hover:bg-background rounded transition-colors"
-            title="Copy URL"
-          >
-            {copiedUrl ? (
-              <Check size={14} className="text-green-600" />
-            ) : (
-              <Copy size={14} className="text-muted-foreground" />
-            )}
-          </button>
-          <button
-            onClick={handleOpenPublicPage}
-            className="p-1 hover:bg-background rounded transition-colors"
-            title="Open in new tab"
-          >
-            <ExternalLink size={14} className="text-muted-foreground" />
-          </button>
-        </div>
-      )}
-
-      {/* Spacer to push actions to the right */}
-      <div className="flex-1" />
-
-      {/* Custom Action Buttons using Puck's Button component */}
-      <div className="flex gap-2 items-center flex-shrink-0">
-        <Button
-          onClick={handleSave}
-          disabled={!hasUnsavedChanges}
-        >
-          {hasUnsavedChanges ? "Save Changes" : "Saved"}
-        </Button>
-
-        <Button
-          onClick={handlePreview}
-        >
-          <Eye size={16} className="mr-1" />
-          Preview
-        </Button>
-
-        <Button
-          onClick={onPublish}
-        >
-          <Globe size={16} className="mr-1" />
-          {page.isPublic ? "Make Private" : "Make Public"}
-        </Button>
-      </div>
-    </div>
-  );
-}
+import { updatePageState, updatePageDialogs } from "@/app/actions/puck-pages";
+import type { PageStateConfig } from "@/components/puck/types/state";
+import type { PageDialogsConfig } from "@/ddd/domain/puck/value-objects/page-dialogs";
+import { PuckEditorLayout } from "@/components/puck/PuckEditorLayout";
+import { StateProvider } from "@/components/puck/contexts/StateContext";
+import { EditingStackProvider } from "@/components/puck/contexts/EditingStackContext";
+import { createPuckUIOverrides } from "@/components/puck/overrides";
+import type { EditingContextItem, EditingTarget } from "@/components/puck/types/editing-context";
 
 export default function PageEditPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const appId = parseInt(params.id as string);
   const pageId = parseInt(params.pageId as string);
 
@@ -238,10 +39,44 @@ export default function PageEditPage() {
   const [app, setApp] = useState<AppDTO | null>(null);
   const [organization, setOrganization] = useState<OrganizationDTO | null>(null);
   const [pages, setPages] = useState<PageDTO[]>([]);
-  const [initialData, setInitialData] = useState<Data>({ content: [], root: {}, zones: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loadedFromSessionStorage, setLoadedFromSessionStorage] = useState(false);
+
+  // True editing stack - tracks full path for nested editing (Page > DataBlock A > DataBlock B)
+  const [editingStack, setEditingStack] = useState<EditingContextItem[]>([{ type: 'page' }]);
+
+  // Page data is the source of truth
+  const [pageData, setPageData] = useState<Data>({ content: [], root: { props: {} }, zones: {} });
+
+  // Empty data constant
+  const emptyData: Data = useMemo(() => ({ content: [], root: { props: {} }, zones: {} }), []);
+
+  // Current editing context is the last item in the stack
+  const currentContext = editingStack[editingStack.length - 1];
+
+
+  // Convert to legacy EditingTarget format for backward compatibility with PuckEditorLayout
+  const editingTarget: EditingTarget = currentContext.type === 'page'
+    ? 'page'
+    : currentContext.type === 'dialog'
+      ? { dialogId: currentContext.dialogId, dialogName: currentContext.dialogName }
+      : 'page'; // DataBlock uses its own handling
+
+  // Convert URLSearchParams to Record for QueryParamContext
+  const queryParamsObject: Record<string, string | string[]> = {};
+  searchParams.forEach((value, key) => {
+    const existing = queryParamsObject[key];
+    if (existing) {
+      if (Array.isArray(existing)) {
+        existing.push(value);
+      } else {
+        queryParamsObject[key] = [existing, value];
+      }
+    } else {
+      queryParamsObject[key] = value;
+    }
+  });
 
   useEffect(() => {
     async function loadPage() {
@@ -271,8 +106,8 @@ export default function PageEditPage() {
         const savedData = PuckSession.getData(pageId);
         if (savedData) {
           try {
-            const resolvedData = await resolveAllData(savedData, config, {});
-            setInitialData(resolvedData);
+            const resolvedData = await resolveAllData(savedData, config, queryParamsObject);
+            setPageData(resolvedData);
             setLoadedFromSessionStorage(true);
             setLoading(false);
             return;
@@ -284,8 +119,8 @@ export default function PageEditPage() {
 
         // Load from database
         const rawData = pageResult.data.templateData || { content: [], root: {}, zones: {} };
-        const resolvedData = await resolveAllData(rawData, config, {});
-        setInitialData(resolvedData);
+        const resolvedData = await resolveAllData(rawData, config, queryParamsObject);
+        setPageData(resolvedData);
       } catch (err) {
         console.error('Error loading page:', err);
         setError(err instanceof Error ? err.message : 'Failed to load page');
@@ -297,7 +132,109 @@ export default function PageEditPage() {
     if (pageId && appId) {
       loadPage();
     }
-  }, [pageId, appId]);
+  }, [pageId, appId, searchParams]);
+
+  // Derive currentData based on editing context (page or dialog only)
+  // DataBlock templates are now edited inline via slots, no separate editing level needed
+  const currentData = useMemo(() => {
+    if (editingStack.length === 1 && editingStack[0].type === 'page') {
+      return pageData;
+    }
+
+    // Check for dialog editing
+    const currentLevel = editingStack[editingStack.length - 1];
+    if (currentLevel.type === 'dialog') {
+      const dialog = page?.pageDialogs?.dialogs?.find(d => d.id === currentLevel.dialogId);
+      if (!dialog?.content) {
+        console.warn(`[currentData] Dialog ${currentLevel.dialogId} not found in page dialogs`);
+        return emptyData;
+      }
+      return dialog.content;
+    }
+
+    return pageData;
+  }, [editingStack, pageData, page?.pageDialogs, emptyData]);
+
+  // Handler to start editing a dialog's content - push onto stack
+  const handleEditDialogContent = (dialogId: string) => {
+    const dialog = page?.pageDialogs?.dialogs?.find(d => d.id === dialogId);
+    if (dialog) {
+      // Save page to session before entering nested content
+      PuckSession.setData(pageId, pageData);
+      setEditingStack(prev => [...prev, { type: 'dialog', dialogId, dialogName: dialog.name }]);
+    }
+  };
+
+  // Handler to navigate back one level - pop from stack
+  const handleBackToPage = () => {
+    setEditingStack(prev => {
+      if (prev.length <= 1) return prev; // Can't go back from page level
+      return prev.slice(0, -1);
+    });
+  };
+
+  // Handler to navigate to a specific level in the stack
+  // Accepts currentAppState to save current content before navigating
+  const handleNavigateToLevel = useCallback((level: number, currentAppState?: Data) => {
+    // If currentAppState is provided, save it to pageData first
+    if (currentAppState) {
+      const currentLevel = editingStack[editingStack.length - 1];
+      if (currentLevel.type === 'page') {
+        // If at page level, the appState IS the pageData
+        setPageData(currentAppState);
+        PuckSession.setData(pageId, currentAppState);
+      }
+      // Dialog content is stored separately, no need to update pageData
+    }
+
+    // Update editing stack
+    setEditingStack(prev => {
+      if (level < 0 || level >= prev.length) return prev;
+      return prev.slice(0, level + 1);
+    });
+  }, [editingStack, pageId]);
+
+  // Handler to update pageData with current Puck appState
+  const handleUpdatePageData = useCallback((currentAppState: Data): Data => {
+    setPageData(currentAppState);
+    PuckSession.setData(pageId, currentAppState);
+    return currentAppState;
+  }, [pageId]);
+
+  // Callback when page data is saved
+  const handlePageDataSaved = (data: Data) => {
+    setPageData(data);
+  };
+
+  // Callback when dialog data is saved - update page.pageDialogs
+  const handleDialogDataSaved = (dialogId: string, data: Data) => {
+    // Update page.pageDialogs directly
+    setPage(prev => {
+      if (!prev || !prev.pageDialogs) return prev;
+      return {
+        ...prev,
+        pageDialogs: {
+          ...prev.pageDialogs,
+          dialogs: prev.pageDialogs.dialogs.map(d =>
+            d.id === dialogId ? { ...d, content: data } : d
+          )
+        }
+      };
+    });
+  };
+
+  // Editing stack actions for the context provider
+  // Note: DataBlock templates are now edited inline via slots, no pushDataBlock needed
+  const editingStackActions = useMemo(() => ({
+    pushDialog: (dialogId: string, dialogName: string) => {
+      const dialog = page?.pageDialogs?.dialogs?.find(d => d.id === dialogId);
+      if (dialog) {
+        handleEditDialogContent(dialogId);
+      }
+    },
+    pop: handleBackToPage,
+    navigateToLevel: (level: number, currentAppState?: Data) => handleNavigateToLevel(level, currentAppState),
+  }), [page?.pageDialogs?.dialogs, handleNavigateToLevel]);
 
   const handlePublish = async () => {
     if (!page) return;
@@ -368,6 +305,40 @@ export default function PageEditPage() {
     }
   };
 
+  const handleSavePageState = async (pageState: PageStateConfig | undefined) => {
+    try {
+      const result = await updatePageState(pageId, pageState);
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update page state");
+        return;
+      }
+
+      // Update local state to reflect changes
+      setPage(prev => prev ? { ...prev, pageState } : null);
+    } catch (error) {
+      console.error('Error updating page state:', error);
+      toast.error("Failed to update page state");
+    }
+  };
+
+  const handleSavePageDialogs = async (pageDialogs: PageDialogsConfig | undefined) => {
+    try {
+      const result = await updatePageDialogs(pageId, pageDialogs);
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update page dialogs");
+        return;
+      }
+
+      // Update local state to reflect changes
+      setPage(prev => prev ? { ...prev, pageDialogs } : null);
+    } catch (error) {
+      console.error('Error updating page dialogs:', error);
+      toast.error("Failed to update page dialogs");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -391,80 +362,181 @@ export default function PageEditPage() {
 
   return (
     <PuckEditorThemeProvider pageId={pageId} page={page} app={app}>
-      <LinkContextProvider
-        value={{
-          orgSlug: organization?.slug ?? undefined,
-          appSlug: app.slug,
-          appId: app.id,
-          pages: pages,
-          isEditing: true,
-          isPreview: false,
-        }}
+      <EditorPageContextWrapper
+        orgSlug={organization?.slug ?? undefined}
+        appSlug={app.slug}
+        appId={app.id}
+        pages={pages}
+        params={queryParamsObject}
       >
-        <ThemeProviderWrapper>
-          <div className="h-screen">
-            <Puck
-            config={config}
-            data={initialData}
-            ui={{
-              leftSideBarWidth: 180,
-              rightSideBarWidth: 180,
-            }}
-            viewports={[
-              { width: 360, height: "auto", icon: "Smartphone", label: "Mobile" },
-              { width: 768, height: "auto", icon: "Tablet", label: "Tablet" },
-              { width: 1440, height: "auto", icon: "Monitor", label: "Desktop" }
-            ]}
-            iframe={{
-              enabled: true,
-              waitForStyles: true,
-            }}
-            overrides={{
-              ...createPuckUIOverrides({
-                pageId: pageId,
-                pageName: page.name,
-                pageSlug: page.slug,
-                pageIsPublic: page.isPublic,
-                pageRequiresAuth: page.requiresAuth,
-                pageAllowedRoles: page.allowedRoles || [],
-                onSavePageSettings: handleSavePageSettings,
-                onSaveAccessSettings: handleSaveAccessSettings,
-                themeMode: "page",
-              }),
-              header: ({ children }) => (
-                <div className="bg-transparent">{children}</div>
-              ),
-              puck: ({ children }) => (
-                <div>
-                  <SidebarStatePersistence pageId={pageId} />
-                  {children}
-                </div>
-              ),
-              headerActions: ({ children }) => (
-                <CustomHeaderActions
-                  pageId={pageId}
-                  appId={appId}
-                  page={page}
-                  app={app}
-                  organization={organization}
-                  onPublish={handlePublish}
-                  loadedFromSessionStorage={loadedFromSessionStorage}
-                  setLoadedFromSessionStorage={setLoadedFromSessionStorage}
-                >
-                  {children}
-                </CustomHeaderActions>
-              )
-            }}
-          />
-        </div>
-      </ThemeProviderWrapper>
-      </LinkContextProvider>
+        <StateProvider pageState={page.pageState}>
+          <EditingStackProvider value={editingStackActions}>
+            <PuckEditorWrapper
+              currentContext={currentContext}
+              editingStack={editingStack}
+              currentData={currentData}
+              pageData={pageData}
+              pageId={pageId}
+              appId={appId}
+              page={page}
+              app={app}
+              organization={organization}
+              loadedFromSessionStorage={loadedFromSessionStorage}
+              setLoadedFromSessionStorage={setLoadedFromSessionStorage}
+              onPublish={handlePublish}
+              onSavePageSettings={handleSavePageSettings}
+              onSaveAccessSettings={handleSaveAccessSettings}
+              onSavePageState={handleSavePageState}
+              onSavePageDialogs={handleSavePageDialogs}
+              editingTarget={editingTarget}
+              onEditDialogContent={handleEditDialogContent}
+              onBackToPage={handleBackToPage}
+              onNavigateToLevel={handleNavigateToLevel}
+              onUpdatePageData={handleUpdatePageData}
+              onPageDataSaved={handlePageDataSaved}
+              onDialogDataSaved={handleDialogDataSaved}
+            />
+          </EditingStackProvider>
+        </StateProvider>
+      </EditorPageContextWrapper>
     </PuckEditorThemeProvider>
   );
 }
 
-// Wrapper component to provide theme from context to Puck components
-function ThemeProviderWrapper({ children }: { children: ReactNode }) {
+// Wrapper component that reads theme from PuckEditorThemeProvider and provides unified PageContext
+interface EditorPageContextWrapperProps {
+  children: ReactNode;
+  orgSlug?: string;
+  appSlug: string;
+  appId: number;
+  pages: PageDTO[];
+  params: Record<string, string | string[]>;
+}
+
+function EditorPageContextWrapper({
+  children,
+  orgSlug,
+  appSlug,
+  appId,
+  pages,
+  params,
+}: EditorPageContextWrapperProps) {
   const { currentTheme } = usePuckEditorTheme();
-  return <ThemeProvider value={currentTheme}>{children}</ThemeProvider>;
+  return (
+    <PageContextProvider
+      value={{
+        orgSlug,
+        appSlug,
+        appId,
+        pages,
+        isEditing: true,
+        isPreview: false,
+        params,
+        theme: currentTheme,
+      }}
+    >
+      {children}
+    </PageContextProvider>
+  );
+}
+
+/**
+ * PuckEditorWrapper - Wraps Puck for page/dialog editing
+ *
+ * DataBlock templates are now edited inline via slots, no separate editing level needed.
+ */
+interface PuckEditorWrapperProps {
+  currentContext: EditingContextItem;
+  editingStack: EditingContextItem[];
+  currentData: Data;
+  pageData: Data;
+  pageId: number;
+  appId: number;
+  page: PageDTO;
+  app: AppDTO;
+  organization: OrganizationDTO | null;
+  loadedFromSessionStorage: boolean;
+  setLoadedFromSessionStorage: (value: boolean) => void;
+  onPublish: () => Promise<void>;
+  onSavePageSettings: (data: { name: string; slug: string }) => Promise<void>;
+  onSaveAccessSettings: (data: { requiresAuth: boolean; allowedRoles: string[] }) => Promise<void>;
+  onSavePageState: (pageState: PageStateConfig | undefined) => Promise<void>;
+  onSavePageDialogs: (pageDialogs: PageDialogsConfig | undefined) => Promise<void>;
+  editingTarget: EditingTarget;
+  onEditDialogContent: (dialogId: string) => void;
+  onBackToPage: () => void;
+  onNavigateToLevel: (level: number, currentAppState?: Data) => void;
+  onUpdatePageData: (currentAppState: Data) => Data;
+  onPageDataSaved: (data: Data) => void;
+  onDialogDataSaved: (dialogId: string, data: Data) => void;
+}
+
+function PuckEditorWrapper({
+  editingStack,
+  currentData,
+  pageData,
+  pageId,
+  appId,
+  page,
+  app,
+  organization,
+  loadedFromSessionStorage,
+  setLoadedFromSessionStorage,
+  onPublish,
+  onSavePageSettings,
+  onSaveAccessSettings,
+  onSavePageState,
+  onSavePageDialogs,
+  editingTarget,
+  onEditDialogContent,
+  onBackToPage,
+  onNavigateToLevel,
+  onUpdatePageData,
+  onPageDataSaved,
+  onDialogDataSaved,
+}: PuckEditorWrapperProps) {
+  // Puck key includes editing context so it remounts when switching page/dialog
+  const currentLevel = editingStack[editingStack.length - 1];
+  const contextKey = currentLevel.type === 'page'
+    ? 'page'
+    : `dialog-${currentLevel.dialogId}`;
+  const puckKey = `${pageId}-${contextKey}`;
+
+  return (
+    <Puck
+      key={puckKey}
+      config={config}
+      data={currentData}
+      iframe={{
+        enabled: true,
+        waitForStyles: true,
+      }}
+      overrides={createPuckUIOverrides()}
+    >
+      <PuckEditorLayout
+        pageId={pageId}
+        appId={appId}
+        page={page}
+        app={app}
+        organization={organization}
+        pageData={pageData}
+        loadedFromSessionStorage={loadedFromSessionStorage}
+        setLoadedFromSessionStorage={setLoadedFromSessionStorage}
+        onPublish={onPublish}
+        onSavePageSettings={onSavePageSettings}
+        onSaveAccessSettings={onSaveAccessSettings}
+        onSavePageState={onSavePageState}
+        onSavePageDialogs={onSavePageDialogs}
+        themeMode="page"
+        editingTarget={editingTarget}
+        editingStack={editingStack}
+        onEditDialogContent={onEditDialogContent}
+        onBackToPage={onBackToPage}
+        onNavigateToLevel={onNavigateToLevel}
+        onUpdatePageData={onUpdatePageData}
+        onPageDataSaved={onPageDataSaved}
+        onDialogDataSaved={onDialogDataSaved}
+      />
+    </Puck>
+  );
 }

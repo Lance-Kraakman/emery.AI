@@ -19,13 +19,13 @@ import type {
   HistoryMessage,
   ChatContext,
   ContentChunk,
-  RagContext,
   ProcessingComplete,
   ProcessingError,
   StepProgress,
   MessagePart
 } from './generated/agent_worker';
 import { toProtoMessageParts } from './mappers/message-part-mapper';
+import { mapSkillToProto } from './proto-mappers';
 
 // Load protobuf definition
 const PROTO_PATH = path.join(process.cwd(), 'proto', 'agent_worker.proto');
@@ -46,13 +46,13 @@ export interface ChatProcessingOptions {
   tools?: ToolConfig[];          // Available tools for the chat
   skills?: any[];                // Fully resolved skill definitions with instructions, tools, inputs, outputs, content
   defaultModel?: string | null;  // Organization's default AI model
+  userApiKey?: string;           // User API key for managed agents (skill_builder, etc.)
 }
 
 export interface StreamingChatResponse {
-  type: 'content' | 'rag_context' | 'complete' | 'error' | 'step_progress';
+  type: 'content' | 'complete' | 'error' | 'step_progress';
   content?: string;
   sequence?: number;
-  ragContext?: RagContext;
   complete?: ProcessingComplete;
   error?: ProcessingError;
   stepProgress?: StepProgress;
@@ -151,22 +151,10 @@ export class ChatProcessingClient {
     // Combine system tools and skill reference tools
     const allTools = [...systemTools, ...skillReferenceTools];
 
-    // Build full SkillConfig definitions
-    const skillConfigs = (options.skills || []).map(skill => ({
-      id: skill.id,  // Include skill ID
-      name: skill.name,
-      description: skill.description || '',
-      inputs: skill.inputs || [],
-      outputs: skill.outputs || [],
-      instructions: skill.instructions || '',
-      tools: (skill.tools || []).map((t: any) => ({
-        name: t.name,
-        version: '',
-        config: t.config || {}
-      })),
-      model: skill.model || '',
-      content: skill.content || []
-    }));
+    // Build full SkillConfig definitions using proto mapper
+    // AIDEV-NOTE: mapSkillToProto properly converts outputMapping.source fields to proto format
+    // (skill_output/skill_input/table_ref oneof fields) which Python expects
+    const skillConfigs = (options.skills || []).map(skill => mapSkillToProto(skill));
 
     const agentConfig = {
       name: '', // Chat agents don't have a specific name
@@ -191,7 +179,8 @@ export class ChatProcessingClient {
       agentConfig: agentConfig,
       model: options.defaultModel || '', // Pass organization's default model or empty string for system default
       messageId: actualMessageId, // Add message ID for cancellation tracking
-      sessionId: actualSessionId // Session ID for stateful agent persistence
+      sessionId: actualSessionId, // Session ID for stateful agent persistence
+      userApiKey: options.userApiKey || '' // User API key for managed agents (skill_builder, etc.)
     };
 
     // Add context if provided
@@ -210,7 +199,6 @@ export class ChatProcessingClient {
       call.on('data', (response: ProcessMessageResponse) => {
         console.log(`[CHAT-GRPC-CLIENT] Received streaming response:`, {
           hasContentChunk: !!response.contentChunk,
-          hasRagContext: !!response.ragContext,
           hasComplete: !!response.complete,
           hasError: !!response.error,
           hasStepProgress: !!response.stepProgress,
@@ -233,12 +221,6 @@ export class ChatProcessingClient {
             type: 'content',
             content: response.contentChunk.content,
             sequence: response.contentChunk.sequence,
-            timestamp: response.timestamp
-          };
-        } else if (response.ragContext) {
-          streamingResponse = {
-            type: 'rag_context',
-            ragContext: response.ragContext,
             timestamp: response.timestamp
           };
         } else if (response.complete) {

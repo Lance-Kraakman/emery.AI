@@ -3,6 +3,18 @@
  * Supports hierarchical theming: App → Page → Component
  */
 
+import type {
+  FourSidedSpacing,
+  FourCornerRadius,
+} from '@/lib/types/spacing-types';
+import {
+  DEFAULT_FOUR_SIDED_SPACING,
+  DEFAULT_FOUR_CORNER_RADIUS,
+} from '@/lib/types/spacing-types';
+
+// Re-export for convenience
+export type { FourSidedSpacing, FourCornerRadius };
+
 export interface ThemeColors {
   primary: string;
   secondary: string;
@@ -27,11 +39,29 @@ export interface ThemeTypography {
 export interface ThemeSpacing {
   unit: string;
   scale: number;
+  /** Default padding for blocks (per-side) */
+  defaultPadding: FourSidedSpacing;
+  /** Default margin for blocks (per-side) */
+  defaultMargin: FourSidedSpacing;
 }
 
 export interface ThemeBorders {
-  radius: string;
+  /** Default border radius for blocks (per-corner) */
+  radius: FourCornerRadius;
   width: string;
+}
+
+export interface ThemeAlignment {
+  /** Default text alignment for text components */
+  defaultTextAlign: "left" | "center" | "right" | "justify";
+  /** Default horizontal alignment for flex containers */
+  defaultJustifyContent: "start" | "center" | "end" | "space-between" | "space-around";
+  /** Default vertical alignment for flex containers */
+  defaultAlignItems: "start" | "center" | "end" | "stretch";
+  /** Default horizontal alignment for grid containers */
+  defaultJustifyItems: "start" | "center" | "end" | "stretch";
+  /** Default vertical alignment for grid containers */
+  defaultAlignContent: "start" | "center" | "end" | "stretch";
 }
 
 export interface ThemeConfigProps {
@@ -39,6 +69,7 @@ export interface ThemeConfigProps {
   typography: ThemeTypography;
   spacing: ThemeSpacing;
   borders: ThemeBorders;
+  alignment: ThemeAlignment;
 }
 
 /**
@@ -66,10 +97,19 @@ export const DEFAULT_THEME: ThemeConfigProps = {
   spacing: {
     unit: '0.25rem',
     scale: 1.5,
+    defaultPadding: DEFAULT_FOUR_SIDED_SPACING,
+    defaultMargin: { top: 0, right: 0, bottom: 0, left: 0, linked: true },
   },
   borders: {
-    radius: '0.5rem',
+    radius: DEFAULT_FOUR_CORNER_RADIUS,
     width: '1px',
+  },
+  alignment: {
+    defaultTextAlign: 'left',
+    defaultJustifyContent: 'start',
+    defaultAlignItems: 'start',
+    defaultJustifyItems: 'start',
+    defaultAlignContent: 'start',
   },
 };
 
@@ -92,6 +132,7 @@ export class ThemeConfig {
       typography: { ...DEFAULT_THEME.typography, ...props.typography },
       spacing: { ...DEFAULT_THEME.spacing, ...props.spacing },
       borders: { ...DEFAULT_THEME.borders, ...props.borders },
+      alignment: { ...DEFAULT_THEME.alignment, ...props.alignment },
     };
     return new ThemeConfig(config);
   }
@@ -122,6 +163,7 @@ export class ThemeConfig {
       typography: { ...base._config.typography, ...override._config.typography },
       spacing: { ...base._config.spacing, ...override._config.spacing },
       borders: { ...base._config.borders, ...override._config.borders },
+      alignment: { ...base._config.alignment, ...override._config.alignment },
     };
     return new ThemeConfig(merged);
   }
@@ -153,9 +195,45 @@ export class ThemeConfig {
       throw new Error('Spacing scale must be positive');
     }
 
-    // Validate borders
-    if (!this._config.borders.radius) {
-      throw new Error('Border radius is required');
+    // Validate defaultPadding
+    if (this._config.spacing.defaultPadding) {
+      this.validateFourSidedSpacing(this._config.spacing.defaultPadding, 'defaultPadding');
+    }
+
+    // Validate defaultMargin
+    if (this._config.spacing.defaultMargin) {
+      this.validateFourSidedSpacing(this._config.spacing.defaultMargin, 'defaultMargin');
+    }
+
+    // Validate borders radius
+    if (this._config.borders.radius) {
+      this.validateFourCornerRadius(this._config.borders.radius, 'radius');
+    }
+  }
+
+  /**
+   * Validate FourSidedSpacing
+   */
+  private validateFourSidedSpacing(spacing: FourSidedSpacing, name: string): void {
+    const sides = ['top', 'right', 'bottom', 'left'] as const;
+    for (const side of sides) {
+      const value = spacing[side];
+      if (typeof value !== 'number' || value < 0 || value > 10) {
+        throw new Error(`Invalid ${name}.${side}: must be a number between 0 and 10`);
+      }
+    }
+  }
+
+  /**
+   * Validate FourCornerRadius
+   */
+  private validateFourCornerRadius(radius: FourCornerRadius, name: string): void {
+    const corners = ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'] as const;
+    for (const corner of corners) {
+      const value = radius[corner];
+      if (typeof value !== 'number' || value < 0 || value > 10) {
+        throw new Error(`Invalid ${name}.${corner}: must be a number between 0 and 10`);
+      }
     }
   }
 
@@ -181,6 +259,17 @@ export class ThemeConfig {
   toCSSVariables(): Record<string, string> {
     // Parse base font size for typography scale calculations
     const baseFontSize = parseFloat(this._config.typography.fontSize);
+
+    // Helper to calculate spacing from level
+    const getSpacingValue = (level: number): string => {
+      const unit = parseFloat(this._config.spacing.unit);
+      const scale = this._config.spacing.scale;
+      const value = unit * Math.pow(scale, level);
+      return `${value}rem`;
+    };
+
+    const { defaultPadding, defaultMargin } = this._config.spacing;
+    const { radius } = this._config.borders;
 
     return {
       // Colors
@@ -213,12 +302,53 @@ export class ThemeConfig {
       '--theme-font-4xl': `${baseFontSize * 2.25}px`,     // 36px at 16px base
       '--theme-font-5xl': `${baseFontSize * 3}px`,        // 48px at 16px base
 
-      // Spacing and Borders
+      // Base Spacing
       '--theme-spacing-unit': this._config.spacing.unit,
       '--theme-spacing-scale': this._config.spacing.scale.toString(),
-      '--theme-border-radius': this._config.borders.radius,
+
+      // Default Padding (per-side)
+      '--theme-padding-top': getSpacingValue(defaultPadding.top),
+      '--theme-padding-right': getSpacingValue(defaultPadding.right),
+      '--theme-padding-bottom': getSpacingValue(defaultPadding.bottom),
+      '--theme-padding-left': getSpacingValue(defaultPadding.left),
+
+      // Default Margin (per-side)
+      '--theme-margin-top': getSpacingValue(defaultMargin.top),
+      '--theme-margin-right': getSpacingValue(defaultMargin.right),
+      '--theme-margin-bottom': getSpacingValue(defaultMargin.bottom),
+      '--theme-margin-left': getSpacingValue(defaultMargin.left),
+
+      // Border Radius (per-corner)
+      '--theme-border-radius-tl': getSpacingValue(radius.topLeft),
+      '--theme-border-radius-tr': getSpacingValue(radius.topRight),
+      '--theme-border-radius-br': getSpacingValue(radius.bottomRight),
+      '--theme-border-radius-bl': getSpacingValue(radius.bottomLeft),
+      // Keep shorthand for backward compat (uses top-left as default)
+      '--theme-border-radius': getSpacingValue(radius.topLeft),
       '--theme-border-width': this._config.borders.width,
+
+      // Alignment defaults
+      '--theme-text-align': this._config.alignment.defaultTextAlign,
+      '--theme-justify-content': this.mapFlexValue(this._config.alignment.defaultJustifyContent),
+      '--theme-align-items': this.mapFlexValue(this._config.alignment.defaultAlignItems),
+      '--theme-justify-items': this.mapFlexValue(this._config.alignment.defaultJustifyItems),
+      '--theme-align-content': this.mapFlexValue(this._config.alignment.defaultAlignContent),
     };
+  }
+
+  /**
+   * Map puck alignment values to CSS flexbox values
+   */
+  private mapFlexValue(value: string): string {
+    const flexMap: Record<string, string> = {
+      'start': 'flex-start',
+      'end': 'flex-end',
+      'center': 'center',
+      'stretch': 'stretch',
+      'space-between': 'space-between',
+      'space-around': 'space-around',
+    };
+    return flexMap[value] || value;
   }
 
   /**
@@ -245,6 +375,10 @@ export class ThemeConfig {
 
   get borders(): ThemeBorders {
     return { ...this._config.borders };
+  }
+
+  get alignment(): ThemeAlignment {
+    return { ...this._config.alignment };
   }
 
   /**

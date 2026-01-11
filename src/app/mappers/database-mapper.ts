@@ -6,6 +6,7 @@ export interface DatabaseDTO {
   slug: string;
   metadata?: Record<string, any> | null;
   organizationId: number;
+  agentId?: number | null; // null = org-scoped, set = agent-scoped
   createdBy: string;
   createdAt?: Date | null;
   updatedAt?: Date | null;
@@ -20,6 +21,7 @@ export class DatabaseMapper {
       slug: database.slug,
       metadata: database.metadata,
       organizationId: database.organizationId.value,
+      agentId: database.agentId?.value || null,
       createdBy: database.createdBy.value,
       createdAt: database.createdAt,
       updatedAt: database.updatedAt,

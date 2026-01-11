@@ -4,14 +4,23 @@ import styles from "./styles.module.css";
 import { getClassNameFactory } from "@/components/puck/lib";
 import { Section } from "../../components/Section";
 import { WithLayout, withLayout } from "../../components/Layout";
+import { spacingField, paddingField, justifyContentField, alignItemsField } from "../../fields/standard-fields";
+import type { FourSidedSpacing } from "../../types/spacing-types";
+import { useTheme } from "../../contexts/PageContext";
+import { computeFourSidedShorthand } from "../../utils/spacing";
 
 const getClassName = getClassNameFactory("Flex", styles);
 
+export type ItemStyle = "none" | "card" | "bordered" | "subtle";
+
 export type FlexProps = WithLayout<{
   justifyContent: "start" | "center" | "end";
+  alignItems: "start" | "center" | "end" | "stretch";
   direction: "row" | "column";
-  gap: number;
+  gap: string;
   wrap: "wrap" | "nowrap";
+  itemStyle?: ItemStyle;
+  itemPadding?: FourSidedSpacing;
   items: Slot;
 }>;
 
@@ -25,20 +34,9 @@ const FlexInternal: ComponentConfig<FlexProps> = {
         { label: "Column", value: "column" },
       ],
     },
-    justifyContent: {
-      label: "Justify Content",
-      type: "radio",
-      options: [
-        { label: "Start", value: "start" },
-        { label: "Center", value: "center" },
-        { label: "End", value: "end" },
-      ],
-    },
-    gap: {
-      label: "Gap",
-      type: "number",
-      min: 0,
-    },
+    justifyContent: justifyContentField,
+    alignItems: alignItemsField,
+    gap: spacingField,
     wrap: {
       label: "Wrap",
       type: "radio",
@@ -47,31 +45,72 @@ const FlexInternal: ComponentConfig<FlexProps> = {
         { label: "false", value: "nowrap" },
       ],
     },
+    itemStyle: {
+      type: "select",
+      label: "Item Style",
+      options: [
+        { value: "none", label: "None" },
+        { value: "card", label: "Card" },
+        { value: "bordered", label: "Bordered" },
+        { value: "subtle", label: "Subtle" },
+      ],
+    },
+    itemPadding: {
+      ...paddingField,
+      label: "Item Padding",
+    },
     items: {
       type: "slot",
     },
   },
   defaultProps: {
     justifyContent: "start",
+    alignItems: "start",
     direction: "row",
-    gap: 24,
+    gap: "4",
     wrap: "wrap",
+    itemStyle: "none",
+    itemPadding: undefined,
     layout: {
       grow: true,
     },
     items: [],
   },
-  render: ({ justifyContent, direction, gap, wrap, items: Items }) => {
+  render: function FlexRender({
+    justifyContent,
+    alignItems,
+    direction,
+    gap,
+    wrap,
+    itemStyle,
+    itemPadding,
+    items: Items,
+  }) {
+    const theme = useTheme();
+    const hasItemStyle = itemStyle && itemStyle !== "none";
+
+    // Compute item padding as shorthand CSS value
+    const itemPaddingStyle = itemPadding
+      ? computeFourSidedShorthand(itemPadding, theme)
+      : undefined;
+
     return (
       <Section style={{ height: "100%" }}>
         <Items
-          className={getClassName()}
+          className={getClassName({
+            hasItemStyle,
+            [`item-${itemStyle}`]: hasItemStyle,
+          })}
           style={{
             justifyContent,
+            alignItems,
             flexDirection: direction,
-            gap,
+            gap: `var(--spacing-${gap}, 24px)`,
             flexWrap: wrap,
-          }}
+            ...(itemPaddingStyle && {
+              "--flex-item-padding": itemPaddingStyle,
+            }),
+          } as React.CSSProperties}
           disallow={["Hero", "Stats"]}
         />
       </Section>

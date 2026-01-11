@@ -1,24 +1,29 @@
 /**
  * Scheduling Domain - Public Exports
- * 
+ *
  * Main entry point for the scheduling domain
  * Centralized exports for trigger configurations and scheduling types
  */
 
 // Value Objects - Trigger Configurations
-export { TriggerConfigs } from './value-objects/trigger-config';
+export { TriggerConfigs, TriggerConfigFromJSON } from './value-objects/trigger-config';
 export type {
   TriggerType,
   TriggerConfig,
+  DatabaseOperation
+} from './value-objects/trigger-config';
+export {
+  BaseTriggerConfig,
   CalendarTriggerConfig,
   DatabaseEventTriggerConfig,
-  WebhookTriggerConfig
+  WebhookTriggerConfig,
+  PipedreamEventTriggerConfig
 } from './value-objects/trigger-config';
 
 // Common Types - Scheduling Interfaces
 export type {
   TaskExecutionRequest,
-  ScheduleTaskRequest,
+  AutomationTaskRequest,
   ScheduledTask,
   TaskProcessingStats,
   ExecutionStats,
@@ -33,5 +38,5 @@ export type {
 export { TriggerMatchingService } from './services/trigger-matching-service';
 export type {
   ITriggerMatchingService,
-  MatchedSchedule
+  MatchedAutomation
 } from './services/trigger-matching-service';

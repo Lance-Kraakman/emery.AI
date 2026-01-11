@@ -27,19 +27,9 @@ export interface MessageCompleteEvent {
   type: 'message_complete'
   metadata: {
     executionSteps: ExecutionStep[]
-    ragSources: any[]
     modelUsed: string
     totalTokens: number
   }
-}
-
-/**
- * RAG context event with sources
- */
-export interface RagContextEvent {
-  type: 'rag_context'
-  sources: any[]
-  contextUsed: boolean
 }
 
 /**
@@ -49,7 +39,6 @@ export type SSEChatEvent =
   | StepProgressEvent
   | ContentEvent
   | MessageCompleteEvent
-  | RagContextEvent
 
 /**
  * Type guards for event discrimination
@@ -64,8 +53,4 @@ export function isContentEvent(event: any): event is ContentEvent {
 
 export function isMessageCompleteEvent(event: any): event is MessageCompleteEvent {
   return event?.type === 'message_complete'
-}
-
-export function isRagContextEvent(event: any): event is RagContextEvent {
-  return event?.type === 'rag_context'
 }

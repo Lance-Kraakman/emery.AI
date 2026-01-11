@@ -43,7 +43,7 @@ export function CompactPermissionList({
   const loadAvailablePermissions = async () => {
     try {
       setLoading(true);
-      const permissions = await getAvailablePermissions() as Permission[];
+      const permissions = await getAvailablePermissions();
       setAvailablePermissions(permissions);
 
       // Expand all groups by default for better UX

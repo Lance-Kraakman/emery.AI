@@ -13,7 +13,7 @@ import { FieldId, OrganizationId, TableId, UserId } from "@/ddd/domain/shared/va
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import type { Result } from "./types";
-import type { DocumentFieldValue, FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
+import { DocumentFieldValue, FileFieldValue } from "@/ddd/domain/tables/value-objects/field-values";
 
 /**
  * Fetch document field value using domain service
@@ -82,6 +82,11 @@ export async function fetchTiptapDocumentContent(
       hasData: !!result.data,
       error: result.error
     });
+
+    // Log the full content to see what's being loaded
+    if (result.success && result.data) {
+      console.log('[FETCH-TIPTAP-ACTION] Loaded content:', JSON.stringify(result.data.content, null, 2));
+    }
 
     return result;
   } catch (error) {
@@ -207,6 +212,9 @@ export async function updateTiptapDocumentContent(
   fieldId: number,
   content: object
 ): Promise<Result<DocumentFieldValue>> {
+  // Log the full content to see what's being saved
+  console.log('[UPDATE-TIPTAP-ACTION] Content to save:', JSON.stringify(content, null, 2));
+
   try {
     await requirePermission("table:manage");
 

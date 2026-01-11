@@ -17,10 +17,28 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import {
+  Popover,
+  PopoverContent,
+  PopoverAnchor,
+} from '@/components/ui/popover';
 import { ToolDropdown } from '@/components/chat/ToolDropdown';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { toolResolverService } from '@/ddd/domain/tools/services/tool-resolver-service';
 import { useChatInputState } from '@/hooks/useChatInputState';
+import { cn } from '@/lib/utils';
+
+// File validation constants - consolidated for paste, drag-drop, and file picker
+const FILE_CONFIG = {
+  maxSize: 50 * 1024 * 1024, // 50MB
+  acceptedTypes: [
+    'image/', 'audio/', 'video/',
+    'application/pdf', 'application/msword',
+    'application/vnd.openxmlformats-officedocument',
+    'text/'
+  ],
+  acceptAttribute: 'image/*,audio/*,video/*,.pdf,.doc,.docx,.txt'
+} as const;
 
 interface UnifiedChatInputProps<T = ToolDTO> {
   // Core text input
@@ -104,7 +122,9 @@ export function UnifiedChatInput<T = ToolDTO>({
   const [dropdownType, setDropdownType] = useState<'tools' | 'variables'>('tools');
   const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number; maxHeight?: number }>({ left: 0 });
   const [selectedIndex, setSelectedIndex] = useState(0); // For keyboard navigation in variable dropdown
-  const [selectedTools, setSelectedTools] = useState<T[]>(tools || []);
+  const [isDragOver, setIsDragOver] = useState(false); // Visual feedback for drag-drop
+  // Use tools prop directly - no local state to avoid sync issues
+  const selectedTools = tools || [];
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -116,12 +136,7 @@ export function UnifiedChatInput<T = ToolDTO>({
   });
   const isSingleLine = mode === 'chat' ? chatInputState.isSingleLine : false;
 
-  // Sync selected tools with prop
-  useEffect(() => {
-    if (tools) {
-      setSelectedTools(tools);
-    }
-  }, [tools]);
+  // selectedTools now derived directly from props - no sync needed
 
   // Reset selected index when dropdown query changes
   useEffect(() => {
@@ -135,10 +150,10 @@ export function UnifiedChatInput<T = ToolDTO>({
 
     setInputValue(value);
 
-    // Find @ or $ symbol before cursor
+    // Find @ or { symbol before cursor
     const beforeCursor = value.slice(0, cursorPos);
     const atMatch = beforeCursor.match(/@([^@]*)$/);
-    const dollarMatch = beforeCursor.match(/\$([^\s$]*)$/);
+    const braceMatch = beforeCursor.match(/\{([^{}\s]*)$/);
 
     // Don't show dropdown if we're in a completed tool reference
     const isCompletedTool = atMatch && (
@@ -151,9 +166,9 @@ export function UnifiedChatInput<T = ToolDTO>({
       atMatch[0].startsWith('@skill:')
     );
 
-    // Check for $ variable trigger (only if variables are provided)
-    if (dollarMatch && variables && variables.length > 0) {
-      const query = dollarMatch[1] || '';
+    // Check for { variable trigger
+    if (braceMatch) {
+      const query = braceMatch[1] || '';
       setDropdownQuery(query);
       setDropdownType('variables');
       setShowDropdown(true);
@@ -244,8 +259,7 @@ export function UnifiedChatInput<T = ToolDTO>({
       setInputValue(newValue);
 
       // Add to selected tools (cast ToolDTO to T for generic compatibility)
-      const updatedTools = [...selectedTools, tool as T];
-      setSelectedTools(updatedTools);
+      const updatedTools = [...(tools || []), tool as T];
       onToolsChange?.(updatedTools);
 
       // Position cursor after inserted text
@@ -261,22 +275,22 @@ export function UnifiedChatInput<T = ToolDTO>({
     setShowDropdown(false);
   };
 
-  // Handle variable selection - insert ${variableName} at cursor
+  // Handle variable selection - insert {{variableName}} at cursor
   const handleVariableSelect = (variable: { name: string; description: string }) => {
     const cursorPos = inputRef.current?.selectionStart || 0;
     const beforeCursor = inputValue.slice(0, cursorPos);
     const afterCursor = inputValue.slice(cursorPos);
 
-    // Find and replace the $ query with the full variable reference
-    const dollarMatch = beforeCursor.match(/\$[^\s$]*$/);
-    if (dollarMatch) {
-      const beforeDollar = beforeCursor.slice(0, dollarMatch.index);
-      const variableText = `\${${variable.name}}`;
-      const newValue = beforeDollar + variableText + ' ' + afterCursor;
+    // Find and replace the { query with the full variable reference
+    const braceMatch = beforeCursor.match(/\{[^{}\s]*$/);
+    if (braceMatch) {
+      const beforeBrace = beforeCursor.slice(0, braceMatch.index);
+      const variableText = `{{${variable.name}}}`;
+      const newValue = beforeBrace + variableText + ' ' + afterCursor;
       setInputValue(newValue);
 
       // Position cursor after inserted text
-      const newCursorPos = beforeDollar.length + variableText.length + 1;
+      const newCursorPos = beforeBrace.length + variableText.length + 1;
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
@@ -354,6 +368,22 @@ export function UnifiedChatInput<T = ToolDTO>({
     }
   };
 
+  // File validation helper - shared by file picker, paste, and drag-drop
+  const validateAndAddFile = (file: File) => {
+    if (file.size > FILE_CONFIG.maxSize) {
+      alert(`File ${file.name} is too large. Maximum size is 50MB.`);
+      return;
+    }
+
+    const isAccepted = FILE_CONFIG.acceptedTypes.some(type => file.type.startsWith(type));
+    if (!isAccepted) {
+      alert(`File type ${file.type || 'unknown'} is not supported.`);
+      return;
+    }
+
+    onAttachmentAdd?.(file);
+  };
+
   // File upload handlers
   const handleFileButtonClick = () => {
     fileInputRef.current?.click();
@@ -361,35 +391,47 @@ export function UnifiedChatInput<T = ToolDTO>({
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    files.forEach(file => {
-      // Validate file type and size
-      const maxSize = 50 * 1024 * 1024; // 50MB
-      if (file.size > maxSize) {
-        alert(`File ${file.name} is too large. Maximum size is 50MB.`);
-        return;
+    files.forEach(validateAndAddFile);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Paste handler - supports pasting images from clipboard (Ctrl+V / Cmd+V)
+  const handlePaste = (e: React.ClipboardEvent) => {
+    if (!enableAttachments || disabled) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          validateAndAddFile(file);
+        }
       }
-
-      // Accept images, audio, documents, and common file types
-      const acceptedTypes = [
-        'image/', 'audio/', 'video/',
-        'application/pdf', 'application/msword',
-        'application/vnd.openxmlformats-officedocument',
-        'text/'
-      ];
-
-      const isAccepted = acceptedTypes.some(type => file.type.startsWith(type));
-      if (!isAccepted) {
-        alert(`File type ${file.type} is not supported.`);
-        return;
-      }
-
-      onAttachmentAdd?.(file);
-    });
-
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
     }
+  };
+
+  // Drag-drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!enableAttachments || disabled) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (!enableAttachments || disabled) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    files.forEach(validateAndAddFile);
   };
 
   // Get icon for file type
@@ -434,7 +476,16 @@ export function UnifiedChatInput<T = ToolDTO>({
       {/* Help text */}
       {helpText && <p className="text-sm text-muted-foreground mb-2">{helpText}</p>}
 
-      <div className="relative">
+      <div
+        className={cn(
+          "relative",
+          isDragOver && "ring-2 ring-primary ring-offset-2 rounded-md"
+        )}
+        onPaste={handlePaste}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         {/* Attachment previews - show both existing and pending */}
         {enableAttachments && (existingAttachments.length > 0 || pendingAttachments.length > 0) && (
         <div className="mb-2 flex flex-wrap gap-2">
@@ -495,25 +546,89 @@ export function UnifiedChatInput<T = ToolDTO>({
           </Button>
         )}
 
-        {/* Textarea */}
-        <Textarea
-          ref={inputRef}
-          id={id}
-          value={inputValue}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          disabled={disabled}
-          rows={mode === 'chat' ? 1 : undefined}
-          className={
-            isSingleLine && mode === 'chat'
-              ? "resize-none px-3 py-2 flex-1 min-w-0"
-              : mode === 'form'
-              ? "resize-y px-3 py-2 pb-10"
-              : "resize-none px-3 pr-12 pb-10"
-          }
-          style={mode === 'form' && minHeight ? { minHeight } : undefined}
-        />
+        {/* Textarea with Popover for both variable and tool dropdowns */}
+        <Popover
+          open={showDropdown}
+          onOpenChange={() => {}}
+        >
+          <PopoverAnchor asChild>
+            <Textarea
+              ref={inputRef}
+              id={id}
+              value={inputValue}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              disabled={disabled}
+              rows={mode === 'chat' ? 1 : undefined}
+              className={
+                isSingleLine && mode === 'chat'
+                  ? "resize-none px-3 py-2 flex-1 min-w-0"
+                  : mode === 'form'
+                  ? "resize-y px-3 py-2 pb-10"
+                  : "resize-none px-3 pr-12 pb-10"
+              }
+              style={mode === 'form' && minHeight ? { minHeight } : undefined}
+            />
+          </PopoverAnchor>
+
+          <PopoverContent
+            className={dropdownType === 'tools' ? "w-[440px] p-0 z-[100] max-h-[500px] flex flex-col overflow-hidden" : "w-[300px] p-2 z-[100]"}
+            align="start"
+            side="bottom"
+            sideOffset={4}
+            onOpenAutoFocus={(e) => e.preventDefault()}
+            onCloseAutoFocus={(e) => e.preventDefault()}
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onInteractOutside={(e) => e.preventDefault()}
+            onFocusOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={() => setShowDropdown(false)}
+          >
+            {dropdownType === 'variables' ? (
+              <>
+                <div className="text-xs font-medium text-muted-foreground px-2 py-1.5">
+                  Variables
+                </div>
+                {(!variables || variables.length === 0) ? (
+                  <div className="px-3 py-3 text-sm text-muted-foreground">
+                    <p className="mb-1">No variables available.</p>
+                    <p className="text-xs">Define skill inputs in the Skill Config panel (click empty canvas) to use them as variables.</p>
+                  </div>
+                ) : (
+                  <>
+                    {variables
+                      .filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase()))
+                      .map((variable, index) => (
+                        <button
+                          key={variable.name}
+                          className={`w-full text-left px-3 py-2 rounded transition-colors flex flex-col gap-1 ${
+                            index === selectedIndex ? 'bg-accent' : 'hover:bg-accent'
+                          }`}
+                          onClick={() => handleVariableSelect(variable)}
+                        >
+                          <div className="font-mono text-sm">{`{{${variable.name}}}`}</div>
+                          <div className="text-xs text-muted-foreground">{variable.description}</div>
+                        </button>
+                      ))}
+                    {variables.filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase())).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-muted-foreground">
+                        No matching variables found
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            ) : (
+              <ToolDropdown
+                query={dropdownQuery}
+                isOpen={showDropdown}
+                onClose={() => setShowDropdown(false)}
+                onSelect={handleToolSelect}
+                renderMode="content"
+              />
+            )}
+          </PopoverContent>
+        </Popover>
 
         {/* Send button - inline when single-line in chat mode */}
         {enableSendButton && isSingleLine && mode === 'chat' && (
@@ -580,59 +695,12 @@ export function UnifiedChatInput<T = ToolDTO>({
             ref={fileInputRef}
             type="file"
             multiple
-            accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.txt"
+            accept={FILE_CONFIG.acceptAttribute}
             onChange={handleFileSelect}
             className="hidden"
           />
         )}
 
-        {/* Tool/Variable Dropdown */}
-        {dropdownType === 'tools' ? (
-          <ToolDropdown
-            query={dropdownQuery}
-            isOpen={showDropdown}
-            onClose={() => setShowDropdown(false)}
-            onSelect={handleToolSelect}
-            position={dropdownPosition}
-          />
-        ) : (
-          /* Variable Dropdown */
-          showDropdown && variables && (
-            <div
-              className="fixed z-[100] bg-popover border rounded-lg shadow-lg w-[440px] overflow-auto"
-              style={{
-                bottom: dropdownPosition.bottom,
-                left: dropdownPosition.left,
-                maxHeight: dropdownPosition.maxHeight || 300
-              }}
-            >
-              <div className="p-2">
-                <div className="text-xs font-medium text-muted-foreground px-2 py-1.5">
-                  Variables
-                </div>
-                {variables
-                  .filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase()))
-                  .map((variable, index) => (
-                    <button
-                      key={variable.name}
-                      className={`w-full text-left px-3 py-2 rounded transition-colors flex flex-col gap-1 ${
-                        index === selectedIndex ? 'bg-accent' : 'hover:bg-accent'
-                      }`}
-                      onClick={() => handleVariableSelect(variable)}
-                    >
-                      <div className="font-mono text-sm">${variable.name}</div>
-                      <div className="text-xs text-muted-foreground">{variable.description}</div>
-                    </button>
-                  ))}
-                {variables.filter(v => v.name.toLowerCase().includes(dropdownQuery.toLowerCase())).length === 0 && (
-                  <div className="px-3 py-2 text-sm text-muted-foreground">
-                    No variables found
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        )}
       </div>
     </div>
     </div>

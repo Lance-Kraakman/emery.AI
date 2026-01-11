@@ -8,6 +8,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { getToolInsertTextWithParameters } from './tool-dropdown/utils';
 import { useToolFilters } from './hooks/useToolFilters';
@@ -28,6 +29,11 @@ interface ToolDropdownProps {
     left: number;
     maxHeight?: number;
   };
+  /**
+   * 'fixed' = legacy fixed positioning (default)
+   * 'content' = just render content, no wrapper (for use inside Popover)
+   */
+  renderMode?: 'fixed' | 'content';
 }
 
 export function ToolDropdown({
@@ -35,12 +41,14 @@ export function ToolDropdown({
   isOpen,
   onClose,
   onSelect,
-  position
+  position,
+  renderMode = 'fixed'
 }: ToolDropdownProps) {
   const [isClient, setIsClient] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [focusedCategoryIndex, setFocusedCategoryIndex] = useState(-1);
   const [isInCategoryMode, setIsInCategoryMode] = useState(false);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
 
   // Fix hydration mismatch
   useEffect(() => {
@@ -162,47 +170,52 @@ export function ToolDropdown({
 
   if (!isOpen || !isClient) return null;
 
-  return (
-    <div
-      className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-[440px] flex flex-col text-gray-900"
-      style={{
-        ...(position?.top !== undefined ? { top: position.top } : {}),
-        ...(position?.bottom !== undefined ? { bottom: position.bottom } : {}),
-        left: position?.left || 0,
-        height: position?.maxHeight ? `${position.maxHeight}px` : '600px',
-      }}
-      data-tool-dropdown
-      aria-label="Toolbox"
-      role="dialog"
-    >
-      {/* Category Filters */}
-      <CategoryFilters
-        selectedCategories={filters.selectedCategories}
-        onToggleCategory={filters.toggleCategory}
-        focusedIndex={focusedCategoryIndex}
-        isInCategoryMode={isInCategoryMode}
-      />
+  // Content rendered inside either fixed wrapper or directly (for Popover use)
+  const content = (
+    <>
+      {/* Compact header with icon filters and expand toggle */}
+      <div className="px-2.5 py-2 border-b border-border flex items-center gap-2">
+        <CategoryFilters
+          selectedCategories={filters.selectedCategories}
+          onToggleCategory={filters.toggleCategory}
+          focusedIndex={focusedCategoryIndex}
+          isInCategoryMode={isInCategoryMode}
+          compact={true}
+        />
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setFiltersExpanded(!filtersExpanded);
+          }}
+          className="ml-auto p-1 rounded hover:bg-accent text-muted-foreground"
+          title={filtersExpanded ? 'Hide filters' : 'Show more filters'}
+        >
+          {filtersExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+      </div>
 
-      {/* Advanced Filters */}
-      <AdvancedFilters
-        selectedApps={filters.selectedApps}
-        onSelectApps={filters.setSelectedApps}
-        appSearchQuery={appFilter.appSearchQuery}
-        onAppSearchChange={appFilter.setAppSearchQuery}
-        showAppDropdown={appFilter.showAppDropdown}
-        onShowAppDropdown={appFilter.setShowAppDropdown}
-        availableApps={appFilter.availableApps}
-        filteredApps={appFilter.filteredApps}
-        isLoadingApps={appFilter.isLoadingApps}
-        connectedOnly={filters.connectedOnly}
-        onConnectedOnlyChange={filters.setConnectedOnly}
-        requiresConnection={filters.requiresConnection}
-        onRequiresConnectionChange={filters.setRequiresConnection}
-        showReferenceTools={filters.showReferenceTools}
-        onShowReferenceToolsChange={filters.setShowReferenceTools}
-        hasActiveFilters={filters.hasActiveFilters}
-        onClearAll={filters.clearAllFilters}
-      />
+      {/* Advanced Filters - collapsible */}
+      {filtersExpanded && (
+        <AdvancedFilters
+          selectedApps={filters.selectedApps}
+          onSelectApps={filters.setSelectedApps}
+          appSearchQuery={appFilter.appSearchQuery}
+          onAppSearchChange={appFilter.setAppSearchQuery}
+          showAppDropdown={appFilter.showAppDropdown}
+          onShowAppDropdown={appFilter.setShowAppDropdown}
+          availableApps={appFilter.availableApps}
+          filteredApps={appFilter.filteredApps}
+          isLoadingApps={appFilter.isLoadingApps}
+          connectedOnly={filters.connectedOnly}
+          onConnectedOnlyChange={filters.setConnectedOnly}
+          requiresConnection={filters.requiresConnection}
+          onRequiresConnectionChange={filters.setRequiresConnection}
+          showReferenceTools={filters.showReferenceTools}
+          onShowReferenceToolsChange={filters.setShowReferenceTools}
+          hasActiveFilters={filters.hasActiveFilters}
+          onClearAll={filters.clearAllFilters}
+        />
+      )}
 
       {/* Results */}
       <ToolList
@@ -216,6 +229,29 @@ export function ToolDropdown({
         query={query}
         availableApps={appFilter.availableApps || []}
       />
+    </>
+  );
+
+  // For Popover use - just return content without wrapper
+  if (renderMode === 'content') {
+    return content;
+  }
+
+  // Legacy fixed positioning mode
+  return (
+    <div
+      className="fixed bg-popover border border-border rounded-lg shadow-lg z-50 w-[440px] flex flex-col text-foreground"
+      style={{
+        ...(position?.top !== undefined ? { top: position.top } : {}),
+        ...(position?.bottom !== undefined ? { bottom: position.bottom } : {}),
+        left: position?.left || 0,
+        height: position?.maxHeight ? `${position.maxHeight}px` : '600px',
+      }}
+      data-tool-dropdown
+      aria-label="Toolbox"
+      role="dialog"
+    >
+      {content}
     </div>
   );
 }

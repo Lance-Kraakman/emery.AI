@@ -68,10 +68,13 @@ export interface ITokenUsageRepository {
 
   /**
    * Update organization's current month usage counter
+   * @param totalTokens - Raw token count for analytics
+   * @param creditsUsed - Calculated credits for billing (NOT the same as tokens!)
    */
   updateOrganizationUsage(
     organizationId: OrganizationId,
-    totalTokens: number
+    totalTokens: number,
+    creditsUsed: number
   ): Promise<void>;
 
   /**

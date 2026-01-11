@@ -17,12 +17,13 @@ import { eq } from 'drizzle-orm';
 
 /**
  * Check if user is a superuser/admin
+ * SECURITY: Case-insensitive email comparison
  */
 async function isAdmin(userEmail: string | null | undefined): Promise<boolean> {
   if (!userEmail) return false;
 
-  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(email => email.trim()) || [];
-  return adminEmails.includes(userEmail);
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(email => email.trim().toLowerCase()) || [];
+  return adminEmails.includes(userEmail.toLowerCase());
 }
 
 /**
@@ -169,7 +170,7 @@ export async function POST(req: Request) {
       },
     });
 
-    // Create subscription
+    // Create subscription with invoicing (no payment method required)
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
       items: [
@@ -177,6 +178,9 @@ export async function POST(req: Request) {
           price: price.id,
         },
       ],
+      collection_method: 'send_invoice',
+      days_until_due: 30,
+      payment_behavior: 'default_incomplete',
       metadata: {
         organizationId: organizationId.toString(),
         tier: 'enterprise',

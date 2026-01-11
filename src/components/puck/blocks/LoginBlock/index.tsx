@@ -9,7 +9,8 @@ import {
   borderColorField,
   borderRadiusField
 } from "@/components/puck/fields/standard-fields";
-import { createLinkActionField, type LinkActionConfig } from "@/components/puck/custom-fields";
+import { createLinkActionField, createVariableTextField, type LinkActionConfig } from "@/components/puck/custom-fields";
+import type { FourCornerRadius } from "@/components/puck/types/spacing-types";
 
 export type LoginBlockProps = {
   title: string;
@@ -24,20 +25,14 @@ export type LoginBlockProps = {
   buttonColor?: string;
   buttonTextColor?: string;
   borderColor?: string;
-  borderRadius?: string;
+  radius?: FourCornerRadius;
 };
 
 export const LoginBlock: ComponentConfig<LoginBlockProps> = {
   label: "Login",
   fields: {
-    title: {
-      type: "text",
-      label: "Title",
-    },
-    description: {
-      type: "textarea",
-      label: "Description",
-    },
+    title: createVariableTextField({ label: 'Title' }),
+    description: createVariableTextField({ label: 'Description', multiline: true }),
     showGithub: {
       type: "radio",
       label: "Show GitHub Login",
@@ -78,7 +73,7 @@ export const LoginBlock: ComponentConfig<LoginBlockProps> = {
       label: "Button Text Color (Optional)",
     },
     borderColor: borderColorField,
-    borderRadius: borderRadiusField,
+    radius: borderRadiusField,
   },
   defaultProps: {
     title: "Sign In",
@@ -94,7 +89,7 @@ export const LoginBlock: ComponentConfig<LoginBlockProps> = {
     buttonColor: undefined,
     buttonTextColor: undefined,
     borderColor: undefined,
-    borderRadius: undefined,
+    radius: undefined,
   },
   render: (props) => {
     return <_LoginBlock {...props} />;

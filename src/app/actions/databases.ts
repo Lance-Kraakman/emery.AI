@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache"
 import { requirePermission, requireResourcePermission } from "./permissions"
 import { requireCurrentOrganization } from "./user-organizations"
 import { withAuthContext } from '@/lib/auth/with-context';
-import { getDatabaseApplicationService } from "@/ddd/application/di/container"
+import { getDatabaseApplicationService, getAuditApplicationService } from "@/ddd/application/di/container"
 import type { Result } from "./types"
 
 import type {
@@ -24,6 +24,7 @@ const createDatabaseSchema = z.object({
   name: z.string().min(1, "Database name is required"),
   description: z.string().optional(),
   metadata: z.record(z.any()).optional(),
+  agentId: z.number().optional().nullable(), // null = org-scoped, number = agent-scoped
 })
 
 const updateDatabaseSchema = z.object({
@@ -33,7 +34,7 @@ const updateDatabaseSchema = z.object({
   metadata: z.record(z.any()).optional(),
 })
 
-export async function getDatabases(searchQuery?: string, hasTables?: boolean): Promise<DatabaseDTO[]> {
+export async function getDatabases(searchQuery?: string, hasTables?: boolean, agentId?: number | null): Promise<DatabaseDTO[]> {
   try {
     const session = await requirePermission("database:view");
     const currentOrg = await requireCurrentOrganization();
@@ -43,7 +44,8 @@ export async function getDatabases(searchQuery?: string, hasTables?: boolean): P
     const filters: DatabaseFiltersDTO = {
       organizationId: currentOrg.id,
       searchQuery,
-      hasTables
+      hasTables,
+      agentId
     };
 
     const databases = await databaseApplicationService.getDatabases(filters);
@@ -52,6 +54,20 @@ export async function getDatabases(searchQuery?: string, hasTables?: boolean): P
     console.error('Error fetching databases:', error)
     throw new Error('Failed to fetch databases')
   }
+}
+
+/**
+ * Get databases for a specific agent (agent-scoped databases only)
+ */
+export async function getAgentDatabases(agentId: number): Promise<DatabaseDTO[]> {
+  return getDatabases(undefined, undefined, agentId);
+}
+
+/**
+ * Get organization-scoped databases only (not agent-scoped)
+ */
+export async function getOrgDatabases(): Promise<DatabaseDTO[]> {
+  return getDatabases(undefined, undefined, null);
 }
 
 export async function getDatabase(id: number): Promise<DatabaseDTO> {
@@ -90,7 +106,8 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
       description: validatedData.description,
       metadata: validatedData.metadata,
       organizationId: currentOrg.id,
-      ownerId: session.user.id
+      ownerId: session.user.id,
+      agentId: validatedData.agentId || null
     };
 
     const result = await databaseApplicationService.createDatabase(dto);
@@ -100,6 +117,27 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
         success: false,
         error: result.error || "Failed to create database"
       };
+    }
+
+    // AUDIT: Log database creation
+    if (result.data) {
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'database',
+          eventCategory: 'database_crud',
+          eventAction: 'create',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'database',
+          resourceId: String(result.data.id),
+          resourceName: result.data.name,
+          eventData: { description: validatedData.description },
+          success: true,
+        }
+      );
     }
 
     // Note: RAG reindexing is now handled automatically by database triggers
@@ -138,7 +176,8 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>,
       return { success: false, error: "Database ID is required" };
     }
 
-    await requireResourcePermission("database:manage", "database", validatedData.id);
+    const session = await requireResourcePermission("database:manage", "database", validatedData.id);
+    const currentOrg = await requireCurrentOrganization();
 
     const databaseApplicationService = getDatabaseApplicationService();
 
@@ -156,6 +195,27 @@ export async function updateDatabase(data: z.infer<typeof updateDatabaseSchema>,
         success: false,
         error: result.error || "Failed to update database"
       };
+    }
+
+    // AUDIT: Log database update
+    if (result.data) {
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'database',
+          eventCategory: 'database_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'database',
+          resourceId: String(validatedData.id),
+          resourceName: result.data.name,
+          eventData: { updates: validatedData },
+          success: true,
+        }
+      );
     }
 
     // Note: RAG reindexing is now handled automatically by database triggers
@@ -192,10 +252,14 @@ export async function deleteDatabase(id: number, revalidateUrl?: string): Promis
       return { success: false, error: "Database ID is required" };
     }
 
-    await requireResourcePermission("database:manage", "database", id);
-
+    const session = await requireResourcePermission("database:manage", "database", id);
     const currentOrg = await requireCurrentOrganization();
     const databaseApplicationService = getDatabaseApplicationService();
+
+    // AUDIT: Get database name BEFORE deletion
+    const databaseToDelete = await databaseApplicationService.getDatabase(DatabaseId.fromNumber(id));
+    const databaseName = databaseToDelete?.name;
+
     const result = await databaseApplicationService.deleteDatabase(DatabaseId.fromNumber(id), OrganizationId.fromNumber(currentOrg.id));
 
     if (!result.success) {
@@ -204,6 +268,25 @@ export async function deleteDatabase(id: number, revalidateUrl?: string): Promis
         error: result.error || "Failed to delete database"
       };
     }
+
+    // AUDIT: Log database deletion
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'database_crud',
+        eventAction: 'delete',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'database',
+        resourceId: String(id),
+        resourceName: databaseName,
+        eventData: {},
+        success: true,
+      }
+    );
 
     // Note: RAG reindexing is now handled automatically by database triggers
 
@@ -268,13 +351,14 @@ export async function duplicateDatabase(id: number, revalidateUrl?: string): Pro
     // Create new name with " (Copy)" suffix
     const newName = `${originalDatabase.name} (Copy)`;
 
-    // Create the duplicated database
+    // Create the duplicated database (preserve agent scoping)
     const dto: CreateDatabaseDTO = {
       name: newName,
       description: originalDatabase.description || undefined,
       metadata: originalDatabase.metadata || {},
       organizationId: currentOrg.id,
-      ownerId: session.user.id
+      ownerId: session.user.id,
+      agentId: originalDatabase.agentId?.value || null
     };
 
     const result = await databaseApplicationService.createDatabase(dto);
@@ -285,6 +369,25 @@ export async function duplicateDatabase(id: number, revalidateUrl?: string): Pro
         error: result.error || "Failed to duplicate database"
       };
     }
+
+    // AUDIT: Log database duplication
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'database_crud',
+        eventAction: 'create',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'database',
+        resourceId: String(result.data.id),
+        resourceName: result.data.name,
+        eventData: { duplicatedFrom: id, originalName: originalDatabase.name },
+        success: true,
+      }
+    );
 
     // TODO: Copy tables from the original database
     // Note: getTablesForDatabase method doesn't exist yet

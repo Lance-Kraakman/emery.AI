@@ -37,7 +37,7 @@ export interface SendInvitationCommand {
   organizationId: number;
   invitedBy: string;
   email: string;
-  systemRole: SystemRoleType; // RBAC system role (required)
+  roleIds: number[]; // Array of role IDs for multi-role assignment (replaces systemRole)
   expiryDays?: number; // defaults to 7 days
   sendEmail?: boolean; // defaults to true
 }
@@ -47,9 +47,9 @@ export interface BulkInvitationCommand {
   invitedBy: string;
   invitations: Array<{
     email: EmailAddress;
-    systemRole?: SystemRoleType;
+    roleIds?: number[]; // Array of role IDs for multi-role assignment
   }>;
-  defaultSystemRole?: SystemRoleType;
+  defaultRoleIds?: number[]; // Default role IDs if not specified per invitation
   expiryDays?: number;
   sendEmail?: boolean;
 }
@@ -113,7 +113,7 @@ export class InvitationApplicationService {
         };
       }
 
-      // Validate email format
+// Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(command.email)) {
         return {
@@ -122,13 +122,27 @@ export class InvitationApplicationService {
         };
       }
 
-      // Validate role
-      const systemRole = command.systemRole;
-      if (!Object.values(SYSTEM_ROLES).includes(systemRole)) {
+      // Validate role IDs
+      if (!command.roleIds || command.roleIds.length === 0) {
         return {
           success: false,
-          error: `Invalid system role: ${systemRole}. Valid roles are: ${Object.values(SYSTEM_ROLES).join(', ')}`
+          error: "At least one role ID is required"
         };
+      }
+
+      // Validate that role IDs exist and are valid for this organization (including system roles)
+      const orgRoles = await this.rbacRepository.findRolesByOrganization(OrganizationId.fromNumber(command.organizationId));
+      const systemRoles = await this.rbacRepository.getSystemRoles();
+      const allValidRoles = [...orgRoles, ...systemRoles];
+      const validRoleIds = allValidRoles.map(role => role.id);
+      
+      for (const roleId of command.roleIds) {
+        if (!validRoleIds.includes(roleId)) {
+          return {
+            success: false,
+            error: `Invalid role ID: ${roleId}. Role must exist in this organization.`
+          };
+        }
       }
 
       // Check if user is already a member
@@ -150,7 +164,7 @@ export class InvitationApplicationService {
       }
 
       // Check member limit for Free tier
-      const tierConfig = getTierConfig(organization.tier || 'free');
+      const tierConfig = getTierConfig(organization.plan || 'free');
       if (tierConfig.maxTeamMembers !== null) {
         const orgWithMembers = await this.organizationRepository.findByIdWithMembers(OrganizationId.fromNumber(command.organizationId));
         const currentMemberCount = orgWithMembers?.memberCount || 0;
@@ -168,7 +182,7 @@ export class InvitationApplicationService {
         organizationId: OrganizationId.fromNumber(command.organizationId),
         invitedBy: UserId.fromString(command.invitedBy),
         email: EmailAddress.fromString(command.email.toLowerCase().trim()),
-        systemRole: systemRole,
+        roleIds: command.roleIds,
         expiresAt: createInvitationExpiry(command.expiryDays)
       };
 
@@ -227,14 +241,14 @@ export class InvitationApplicationService {
       }
 
       // Prepare bulk invitation data - VOs are already validated
-      const bulkData: BulkInvitationData = {
+const bulkData: BulkInvitationData = {
         organizationId: OrganizationId.fromNumber(command.organizationId),
         invitedBy: UserId.fromString(command.invitedBy),
         invitations: command.invitations.map(inv => ({
           email: inv.email,
-          systemRole: inv.systemRole || command.defaultSystemRole || SYSTEM_ROLES.MEMBER
+          roleIds: inv.roleIds || command.defaultRoleIds || [4] // Default to Member role ID
         })),
-        defaultRole: command.defaultSystemRole || SYSTEM_ROLES.MEMBER,
+        defaultRoleIds: command.defaultRoleIds || [4], // Default to Member role ID
         expiresAt: createInvitationExpiry(command.expiryDays)
       };
 
@@ -344,36 +358,31 @@ export class InvitationApplicationService {
         };
       }
 
-      // Add user to organization
+      // Add user to organization (role assignment handled by RBAC)
       const membershipData: CreateUserOrganizationData = {
         userId: user.id,
-        organizationId: invitation.organizationId,
-        systemRole: invitation.systemRole
+        organizationId: invitation.organizationId
       };
-
+      
       const userOrganization = await this.userRepository.addUserToOrganization(membershipData);
 
-      // Assign the role in RBAC system
+      // Assign the roles in RBAC system
       try {
-        // Get all roles for the organization (including system roles)
-        const roles = await this.rbacRepository.findRolesByOrganization(invitation.organizationId);
-        
-        // Find the system role by name
-        const systemRole = roles.find((r: any) => r.name === invitation.systemRole && r.isSystem);
-        
-        if (systemRole) {
-          // Assign the role to the user
-          await this.rbacRepository.assignRole(
-            user.id,
-            systemRole.id,
-            invitation.organizationId
-          );
-          console.log(`✅ Assigned role ${invitation.systemRole} (ID: ${systemRole.id}) to user ${user.id.value} in org ${invitation.organizationId.value} via invitation`);
-        } else {
-          console.error(`⚠️ System role '${invitation.systemRole}' not found in organization ${invitation.organizationId.value}. User accepted invitation without role assignment.`);
+        // Assign all roles from the invitation
+        for (const roleId of invitation.roleIds) {
+          try {
+            await this.rbacRepository.assignRole(
+              user.id,
+              roleId,
+              invitation.organizationId
+            );
+            console.log(`✅ Assigned role ID ${roleId} to user ${user.id.value} in org ${invitation.organizationId.value} via invitation`);
+          } catch (roleAssignmentError) {
+            console.error(`⚠️ Failed to assign role ID ${roleId} to user ${user.id.value}:`, roleAssignmentError);
+          }
         }
       } catch (roleError) {
-        console.error('Error assigning role after accepting invitation:', roleError);
+        console.error('Error assigning roles after accepting invitation:', roleError);
         // Don't fail the whole operation - user is already added to org
       }
 

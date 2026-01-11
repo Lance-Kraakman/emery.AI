@@ -8,7 +8,7 @@
  * Each domain has its own registration module in ./modules/ directory.
  */
 
-import type { DbClient } from '@/lib/db/client';
+import { db as rawDb, type DbClient } from '@/lib/db/client';
 import { contextAwareDb, type ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
 import type { RepositoryRegistry } from './registry';
 
@@ -24,6 +24,7 @@ import { registerToolsServices, type ToolsServices } from './modules/tools-regis
 import { registerConnectionServices, type ConnectionServices } from './modules/connection-registration';
 import { registerDelegationServices, type DelegationServices } from './modules/delegation-registration';
 import { registerPuckServices, type PuckServices } from './modules/puck-registration';
+import { registerAuditServices, type AuditServices } from './modules/audit-registration';
 
 export class DIContainer {
   private static instance: DIContainer;
@@ -111,8 +112,10 @@ export class DIContainer {
 
     // Phase 4.5: Register view services (Puck integration)
     // Depends on: table application service
+    // AIDEV-NOTE: rawDb is passed for public view queries (bypasses RLS for requiresAuth=false views)
     const viewServices = registerViewServices({
       db,
+      rawDb,
       tableApplicationService: databaseServices.tableApplicationService
     });
     this.registerServices('view', viewServices);
@@ -165,6 +168,14 @@ export class DIContainer {
       (agentServices.agentApplicationService as any).connectionService = connectionServices.connectionApplicationService;
     }
 
+    // Phase 10: Register audit services
+    // Depends on: organization repository (for plan-based retention)
+    const auditServices = registerAuditServices({
+      db,
+      organizationRepository: coreServices.organizationRepository
+    });
+    this.registerServices('audit', auditServices);
+
     this.isInitialized = true;
     console.log('✅ DIContainer initialized with all domain services');
   }
@@ -174,7 +185,7 @@ export class DIContainer {
    */
   private registerServices(
     domain: string,
-    services: CoreServices | BillingServices | AgentServices | SkillServices | DatabaseServices | ViewServices | ChatServices | ToolsServices | ConnectionServices | DelegationServices | PuckServices
+    services: CoreServices | BillingServices | AgentServices | SkillServices | DatabaseServices | ViewServices | ChatServices | ToolsServices | ConnectionServices | DelegationServices | PuckServices | AuditServices
   ): void {
     // Map service names to container keys
     const serviceKeyMappings: Record<string, string> = {
@@ -207,6 +218,7 @@ export class DIContainer {
       // Skill domain (formerly Capability)
       'skillRepository': 'ISkillRepository',
       'skillApplicationService': 'SkillApplicationService',
+      'skillEnrichmentService': 'SkillEnrichmentService',
 
       // Database domain
       'databaseRepository': 'IDatabaseRepository',
@@ -246,7 +258,14 @@ export class DIContainer {
       'puckAppRepository': 'IAppRepository',
       'puckPageRepository': 'IPuckPageRepository',
       'puckAppApplicationService': 'AppApplicationService',
-      'puckPageApplicationService': 'PuckPageApplicationService'
+      'puckPageApplicationService': 'PuckPageApplicationService',
+      'templateRepository': 'ITemplateRepository',
+      'templateApplicationService': 'TemplateApplicationService',
+
+      // Audit domain
+      'auditRepository': 'IAuditRepository',
+      'rowHistoryRepository': 'IRowHistoryRepository',
+      'auditApplicationService': 'AuditApplicationService'
     };
 
     // Register all services from the module
@@ -380,10 +399,15 @@ export {
   // Puck services
   getAppRepository,
   getPuckPageRepository,
+  getTemplateRepository,
   getAppApplicationService,
   getPuckPageApplicationService,
+  getTemplateApplicationService,
 
   // View services
   getViewRepository,
-  getViewApplicationService
+  getViewApplicationService,
+
+  // Audit services
+  getAuditApplicationService
 } from './getters';

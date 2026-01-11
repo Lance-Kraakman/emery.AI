@@ -24,6 +24,8 @@ import {
 } from 'lucide-react'
 import type { ImageAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
+import { useOptionalTheme } from '@/components/puck/contexts/PageContext'
+import { getViewerContainerStyle, getThemedBackground, getThemedSectionStyle } from './theme-utils'
 
 const logger = createDebugLogger('ImageArtifactViewer')
 
@@ -44,6 +46,7 @@ export function ImageArtifactViewer({
   const [rotation, setRotation] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [imageError, setImageError] = useState(false)
+  const theme = useOptionalTheme()
 
   // Zoom controls
   const handleZoomIn = () => setZoom(prev => Math.min(prev + 25, 300))
@@ -87,11 +90,20 @@ export function ImageArtifactViewer({
   if (inline) {
     // Compact inline version for chat messages
     return (
-      <div className={`rounded-lg border border-border overflow-hidden bg-card ${className}`}>
+      <div
+        className={`rounded-lg border overflow-hidden ${!theme ? 'border-border bg-card' : ''} ${className}`}
+        style={getViewerContainerStyle(theme)}
+      >
         {/* Inline Image */}
-        <div className="relative bg-gray-50 dark:bg-gray-900">
+        <div
+          className={`relative ${!theme ? 'bg-gray-50 dark:bg-gray-900' : ''}`}
+          style={getThemedBackground(theme, 'surface')}
+        >
           {imageError ? (
-            <div className="flex items-center justify-center h-48 bg-gray-100 dark:bg-gray-800">
+            <div
+              className={`flex items-center justify-center h-48 ${!theme ? 'bg-gray-100 dark:bg-gray-800' : ''}`}
+              style={getThemedBackground(theme, 'surface')}
+            >
               <div className="text-center text-sm text-muted-foreground">
                 <ImageIcon className="w-12 h-12 mx-auto mb-2 opacity-50" />
                 <p>Failed to load image</p>
@@ -123,7 +135,10 @@ export function ImageArtifactViewer({
         </div>
 
         {/* Inline metadata */}
-        <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-muted/10">
+        <div
+          className={`flex items-center justify-between px-3 py-2 border-t ${!theme ? 'border-border bg-muted/10' : ''}`}
+          style={getThemedSectionStyle(theme)}
+        >
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <ImageIcon className="w-4 h-4 text-green-600 flex-shrink-0" />
             <span className="text-xs font-medium truncate">{attachment.filename}</span>
@@ -244,9 +259,15 @@ export function ImageArtifactViewer({
 
   // Full viewer version (for canvas/modal)
   return (
-    <div className={`h-full flex flex-col bg-card ${className}`}>
+    <div
+      className={`h-full flex flex-col ${!theme ? 'bg-card' : ''} ${className}`}
+      style={getViewerContainerStyle(theme)}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
+      <div
+        className={`flex items-center justify-between p-3 border-b ${!theme ? 'border-border bg-muted/10' : ''}`}
+        style={getThemedSectionStyle(theme)}
+      >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <ImageIcon className="w-5 h-5 text-green-600 flex-shrink-0" />
           <div className="min-w-0 flex-1">
@@ -330,7 +351,10 @@ export function ImageArtifactViewer({
       </div>
 
       {/* Image content */}
-      <div className="flex-1 overflow-auto flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div
+        className={`flex-1 overflow-auto flex items-center justify-center ${!theme ? 'bg-gray-50 dark:bg-gray-900' : ''}`}
+        style={getThemedBackground(theme, 'surface')}
+      >
         {imageError ? (
           <div className="text-center text-muted-foreground">
             <ImageIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
@@ -351,7 +375,10 @@ export function ImageArtifactViewer({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between p-3 border-t border-border bg-muted/10 text-xs text-muted-foreground flex-shrink-0">
+      <div
+        className={`flex items-center justify-between p-3 border-t text-xs flex-shrink-0 ${!theme ? 'border-border bg-muted/10 text-muted-foreground' : ''}`}
+        style={{ ...getThemedSectionStyle(theme), color: theme ? 'var(--theme-text-muted)' : undefined }}
+      >
         <div className="flex items-center gap-4">
           {attachment.width && attachment.height && (
             <span>{attachment.width} × {attachment.height} px</span>

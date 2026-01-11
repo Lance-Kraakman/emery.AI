@@ -7,9 +7,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { LogOut, ChevronDown } from "lucide-react";
-import { useLinkContext } from "@/components/puck/link-context";
+import { useLinkContext, useTheme } from "@/components/puck/contexts/PageContext";
 import { resolveLinkAction } from "@/components/puck/utils/resolve-link-action";
 import type { LinkActionConfig } from "@/components/puck/custom-fields/link-action-field";
+import type { FourCornerRadius } from "@/components/puck/types/spacing-types";
+import { computeFourCornerRadiusShorthand } from "@/components/puck/utils/spacing";
 
 export interface SignOutBlockProps {
   buttonText: string;
@@ -24,7 +26,7 @@ export interface SignOutBlockProps {
   buttonColor?: string;
   buttonTextColor?: string;
   borderColor?: string;
-  borderRadius?: string;
+  radius?: FourCornerRadius;
 }
 
 export function SignOutBlock({
@@ -40,8 +42,10 @@ export function SignOutBlock({
   buttonColor,
   buttonTextColor,
   borderColor,
-  borderRadius,
+  radius,
 }: SignOutBlockProps) {
+  const theme = useTheme();
+  const borderRadius = radius ? computeFourCornerRadiusShorthand(radius, theme) : undefined;
   const { isAuthenticated, isLoading, user, appId } = usePublicAppAuth();
   const { data: sessionData } = useSession();
   const isPreviewMode = appId === 0;

@@ -2,7 +2,7 @@ import React from 'react';
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { NewOrganizationSkillView } from '../components/NewOrganizationSkillView';
-import { CenteredCanvasLayout } from '@/components/layouts/CenteredCanvasLayout';
+import { CanvasBase } from '@/components/canvas/CanvasBase';
 
 interface PageProps {
   searchParams: Promise<{
@@ -27,8 +27,8 @@ export default async function NewOrganizationSkillPage({ searchParams }: PagePro
   const templateId = resolvedParams.templateId ? parseInt(resolvedParams.templateId, 10) : undefined;
 
   return (
-    <CenteredCanvasLayout>
+    <CanvasBase>
       <NewOrganizationSkillView organizationId={organizationId} templateId={templateId} />
-    </CenteredCanvasLayout>
+    </CanvasBase>
   );
 }

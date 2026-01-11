@@ -26,6 +26,7 @@ export class DrizzleDatabaseRepository
         metadata: data.metadata,
         organizationId: data.organizationId,
         ownerId: data.ownerId,
+        agentId: data.agentId || null,
         createdAt: new Date(),
         updatedAt: new Date()
       })
@@ -93,7 +94,7 @@ export class DrizzleDatabaseRepository
   // Legacy save method - kept for backward compatibility during transition
   async save(database: Database): Promise<Database> {
     const data = database.toPersistence();
-    
+
     if (data.id && data.id > 0) {
       // Update existing database
       const [record] = await this.db
@@ -106,7 +107,7 @@ export class DrizzleDatabaseRepository
         })
         .where(eq(databases.id, data.id))
         .returning();
-      
+
       return this.fromPersistence(record);
     } else {
       // Create new database
@@ -118,6 +119,7 @@ export class DrizzleDatabaseRepository
           metadata: data.metadata,
           organizationId: data.organizationId,
           ownerId: data.ownerId,
+          agentId: data.agentId || null,
           createdAt: new Date(),
           updatedAt: new Date()
         })
@@ -144,6 +146,7 @@ export class DrizzleDatabaseRepository
       metadata: record.metadata as Record<string, any> | null,
       organizationId: record.organizationId,
       ownerId: record.ownerId,
+      agentId: record.agentId ?? null,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     });

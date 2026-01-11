@@ -1,9 +1,14 @@
 /**
  * FileArtifactViewer - Multi-format file viewer for chat artifacts
- * 
- * Handles PDF, image, text, and other file types with appropriate viewers.
- * Uses existing FileFieldValue DTOs for data consistency.
- * 
+ *
+ * Routes to specialized viewers based on file type:
+ * - CodeViewer for code files (js, ts, py, etc.)
+ * - MarkdownViewer for markdown files
+ * - OfficeViewer for DOCX files
+ * - AudioViewer for audio files
+ * - VideoViewer for video files
+ * - Built-in viewers for PDF, images, text, and generic files
+ *
  * AIDEV-NOTE: File artifact viewer supporting multiple file formats with
  * inline viewing capabilities within chat canvas overlay system.
  */
@@ -30,6 +35,14 @@ import {
 import type { FileArtifact } from '../types/chat-artifacts'
 import { getFileDisplayInfo } from '../types/chat-artifacts'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
+import { CodeViewer } from './CodeViewer'
+import { MarkdownViewer } from './MarkdownViewer'
+import { OfficeViewer } from './OfficeViewer'
+import { AudioViewer } from './AudioViewer'
+import { VideoViewer } from './VideoViewer'
+import { PdfViewer } from './PdfViewer'
+import { useOptionalTheme } from '@/components/puck/contexts/PageContext'
+import { getViewerContainerStyle, getThemedBackground, getThemedSectionStyle } from './theme-utils'
 
 const logger = createDebugLogger('FileArtifactViewer')
 // Note: Old reference search store removed in favor of simplified system
@@ -37,15 +50,77 @@ const logger = createDebugLogger('FileArtifactViewer')
 interface FileArtifactViewerProps{
   artifact: FileArtifact
   onClose?: () => void
+  onSaveContent?: (content: string) => Promise<void>
   className?: string
 }
 
 export function FileArtifactViewer({
   artifact,
   onClose,
+  onSaveContent,
   className = ""
 }: FileArtifactViewerProps) {
   const { fileField, viewerType, fileName, fileUrl } = artifact.data
+  const theme = useOptionalTheme()
+
+  // Debug: Log what data we received
+  logger.debug('FileArtifactViewer: opening file', { viewerType, fileName, fileUrl, s3Key: fileField?.s3Key })
+
+  // Route to specialized viewers for new file types
+  switch (viewerType) {
+    case 'pdf':
+      return <PdfViewer artifact={artifact} onClose={onClose} className={className} />
+    case 'code':
+      return <CodeViewer artifact={artifact} onClose={onClose} onSave={onSaveContent} className={className} />
+    case 'markdown':
+      return <MarkdownViewer artifact={artifact} onClose={onClose} onSave={onSaveContent} className={className} />
+    case 'office':
+      return <OfficeViewer artifact={artifact} onClose={onClose} className={className} />
+    case 'audio':
+      return <AudioViewer artifact={artifact} onClose={onClose} className={className} />
+    case 'video':
+      return <VideoViewer artifact={artifact} onClose={onClose} className={className} />
+    // image, text, and generic handled below
+  }
+
+  // Early return if no fileUrl - show error state
+  if (!fileUrl) {
+    return (
+      <div
+        className={`h-full flex flex-col ${!theme ? 'bg-card' : ''} ${className}`}
+        style={getViewerContainerStyle(theme)}
+      >
+        <div
+          className={`flex items-center justify-between p-3 border-b ${!theme ? 'border-border bg-muted/10' : ''}`}
+          style={getThemedSectionStyle(theme)}
+        >
+          <div className="flex items-center gap-3">
+            <File className="w-5 h-5 text-gray-600" />
+            <div>
+              <h3 className="font-medium text-sm">{fileName || 'Unknown File'}</h3>
+              <p className="text-xs text-muted-foreground">Unable to load</p>
+            </div>
+          </div>
+          {onClose && (
+            <Button variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0">
+              <X className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+        <div
+          className={`flex-1 flex items-center justify-center ${!theme ? 'bg-gray-50' : ''}`}
+          style={getThemedBackground(theme, 'surface')}
+        >
+          <div className="text-center p-8">
+            <File className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+            <p className="text-sm font-medium text-gray-600 mb-2">Unable to load file</p>
+            <p className="text-xs text-gray-500">No download URL available. The file may not have been uploaded yet.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const [zoom, setZoom] = useState(100)
   const [rotation, setRotation] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -59,16 +134,28 @@ export function FileArtifactViewer({
   // Load text content for text files
   useEffect(() => {
     if (viewerType === 'text' && fileUrl && !textContent) {
+      logger.debug('TEXT viewer: fetching content', { fileUrl, viewerType })
       setLoadingText(true)
       fetch(fileUrl)
-        .then(response => response.text())
+        .then(response => {
+          logger.debug('TEXT viewer: response received', {
+            status: response.status,
+            ok: response.ok,
+            contentType: response.headers.get('content-type')
+          })
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+          }
+          return response.text()
+        })
         .then(text => {
+          logger.debug('TEXT viewer: content loaded', { length: text.length, preview: text.substring(0, 100) })
           setTextContent(text)
           setLoadingText(false)
         })
         .catch(error => {
-          logger.error('Failed to load text content', error)
-          setTextContent('Failed to load file content.')
+          logger.error('TEXT viewer: failed to load content', error)
+          setTextContent(`Failed to load file content: ${error.message}`)
           setLoadingText(false)
         })
     }
@@ -100,8 +187,6 @@ export function FileArtifactViewer({
     switch (viewerType) {
       case 'image':
         return <ImageIcon className="w-5 h-5 text-green-600" />
-      case 'pdf':
-        return <FileText className="w-5 h-5 text-red-600" />
       case 'text':
         return <FileText className="w-5 h-5 text-blue-600" />
       default:
@@ -114,12 +199,15 @@ export function FileArtifactViewer({
     switch (viewerType) {
       case 'image':
         return (
-          <div className="flex items-center justify-center min-h-[400px] bg-gray-50">
+          <div
+            className={`flex items-center justify-center min-h-[400px] ${!theme ? 'bg-gray-50' : ''}`}
+            style={getThemedBackground(theme, 'surface')}
+          >
             <img
               src={fileUrl}
               alt={fileName}
               className="max-w-full max-h-full object-contain transition-transform duration-200"
-              style={{ 
+              style={{
                 transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
                 maxHeight: isFullscreen ? '80vh' : '400px'
               }}
@@ -130,26 +218,18 @@ export function FileArtifactViewer({
           </div>
         )
 
-      case 'pdf':
-        return (
-          <div className="min-h-[500px] bg-gray-100">
-            <iframe
-              src={fileUrl}
-              className="w-full h-full min-h-[500px] border-0"
-              title={fileName}
-            />
-          </div>
-        )
-
       case 'text':
         return (
-          <div className="min-h-[400px] bg-gray-50 overflow-auto">
+          <div
+            className={`min-h-[400px] overflow-auto ${!theme ? 'bg-gray-50' : ''}`}
+            style={getThemedBackground(theme, 'surface')}
+          >
             {loadingText ? (
               <div className="flex items-center justify-center h-32">
                 <div className="text-sm text-gray-500">Loading text content...</div>
               </div>
             ) : (
-              <pre 
+              <pre
                 className="p-4 text-sm font-mono whitespace-pre-wrap break-words"
                 style={{ fontSize: `${zoom / 100}rem` }}
               >
@@ -159,32 +239,12 @@ export function FileArtifactViewer({
           </div>
         )
 
-      case 'office':
-        return (
-          <div className="min-h-[400px] flex items-center justify-center bg-gray-50">
-            <div className="text-center">
-              <File className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-              <p className="text-sm font-medium mb-2">{fileName}</p>
-              <p className="text-xs text-gray-500 mb-4">
-                Office documents require external application to view
-              </p>
-              <div className="space-x-2">
-                <Button variant="outline" size="sm" onClick={handleDownload}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Download
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleExternalOpen}>
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  Open External
-                </Button>
-              </div>
-            </div>
-          </div>
-        )
-
       default:
         return (
-          <div className="min-h-[400px] flex items-center justify-center bg-gray-50">
+          <div
+            className={`min-h-[400px] flex items-center justify-center ${!theme ? 'bg-gray-50' : ''}`}
+            style={getThemedBackground(theme, 'surface')}
+          >
             <div className="text-center">
               <File className="w-16 h-16 mx-auto mb-4 text-gray-400" />
               <p className="text-sm font-medium mb-2">{fileName}</p>
@@ -208,9 +268,15 @@ export function FileArtifactViewer({
   }
 
   return (
-    <div className={`h-full flex flex-col bg-card ${className}`}>
+    <div
+      className={`h-full flex flex-col ${!theme ? 'bg-card' : ''} ${className}`}
+      style={getViewerContainerStyle(theme)}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
+      <div
+        className={`flex items-center justify-between p-3 border-b ${!theme ? 'border-border bg-muted/10' : ''}`}
+        style={getThemedSectionStyle(theme)}
+      >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {getFileIcon()}
           <div className="min-w-0 flex-1">
@@ -327,16 +393,19 @@ export function FileArtifactViewer({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between p-3 border-t border-border bg-muted/10 text-xs text-muted-foreground flex-shrink-0">
+      <div
+        className={`flex items-center justify-between p-3 border-t text-xs flex-shrink-0 ${!theme ? 'border-border bg-muted/10 text-muted-foreground' : ''}`}
+        style={{ ...getThemedSectionStyle(theme), color: theme ? 'var(--theme-text-muted)' : undefined }}
+      >
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />
             {new Date(fileField.uploadedAt).toLocaleDateString()}
           </span>
-          
+
           <span>{fileField.mimeType}</span>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <span>Table {artifact.data.tableId} • Field {artifact.data.fieldId}</span>
         </div>

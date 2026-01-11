@@ -3,11 +3,22 @@ import { sql } from "drizzle-orm";
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
-import type { ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
+import type { AutomationConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
 import type { PuckDataStructure } from '@/ddd/domain/puck/value-objects/puck-data';
+import type { PageStateConfig } from '@/components/puck/types/state';
+import type { PageDialogsConfig } from '@/ddd/domain/puck/value-objects/page-dialogs';
+
+// AIDEV-NOTE: Template variants for component library functionality
+export interface TemplateVariant {
+  id: string;                    // e.g., "default", "dark", "compact"
+  name: string;                  // Display name
+  description?: string;
+  data: PuckDataStructure["content"];  // Full component tree for this variant
+  isDefault?: boolean;
+}
 import type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
-import type { SkillParameterType, SkillInputFileConfig } from '@/ddd/domain/skills/entities/skill';
+import type { SkillParameterType, OutputDefinition, ToolExecutionConfig, WriteConfig, InputMappingConfig } from '@/ddd/domain/skills/entities/skill';
 
 // AIDEV-NOTE: Authenticated user role for RLS policies
 export const authenticatedRole = pgRole('authenticated', {
@@ -26,9 +37,10 @@ export const anonymousRole = pgRole('anon', {
 export const databases = pgTable("databases", {
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "cascade" }), // null = org-scoped, set = agent-scoped
   name: text("name").notNull(),
   slug: text("slug").notNull(), // URL-safe database identifier (unique per organization)
-  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata for RAG indexing
+  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata
   ownerId: uuid("owner_id").notNull().references(() => users.id), // Database owner - used for 'owned' scope permissions
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -78,7 +90,7 @@ export const tables = pgTable("tables", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
   s3Path: text("s3_path").notNull().unique(), // S3 path for table's Parquet data: org_{id}/db_{id}/table_{id}/
-  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata for RAG indexing
+  metadata: jsonb("metadata").$type<{description?: string; [key: string]: any}>(), // Description and other metadata
   ownerId: uuid("owner_id").notNull().references(() => users.id), // Table owner - used for 'owned' scope permissions
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -148,7 +160,7 @@ export const fields = pgTable("fields", {
   tableId: integer("table_id").notNull().references(() => tables.id),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
-  type: text("type").notNull(), // text, number, boolean, email, url, date, file, relation
+  type: text("type").notNull(), // text, number, boolean, email, url, date, file, relation, json
   orderIndex: integer("order_index").default(0),
   required: boolean("required").default(false),
 
@@ -235,6 +247,20 @@ export const fields = pgTable("fields", {
       )
     )`,
   }),
+
+  // RLS: Allow public access to fields when ANY view on the table has requires_auth = false
+  // NOTE: This grants field access if ANY view on the table is public, not per-view.
+  // This is acceptable since views typically expose all fields anyway.
+  pgPolicy("fields_public_via_view", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`EXISTS (
+      SELECT 1 FROM views v
+      WHERE v.table_id = table_id
+      AND v.requires_auth = false
+    )`,
+  }),
 ]);
 
 // AIDEV-NOTE: Views - Filtered/sorted table configurations (Baserow view pattern) with tables
@@ -245,6 +271,11 @@ export const views = pgTable("views", {
   tableId: integer("table_id").notNull().references(() => tables.id, { onDelete: 'cascade' }),
   name: text("name").notNull(),
   ownerId: uuid("owner_id").notNull().references(() => users.id), // View owner - used for 'owned' scope permissions
+
+  // Whether this view requires authentication to access
+  // AIDEV-NOTE: When false, the view data can be accessed without login (for public pages)
+  // Secure by default - new views require authentication
+  requiresAuth: boolean("requires_auth").notNull().default(true),
 
   // Filter configuration (array of filter conditions)
   filters: jsonb("filters").$type<Array<{
@@ -402,6 +433,15 @@ export const views = pgTable("views", {
       id
     )`,
   }),
+
+  // RLS: Allow public access to views marked as not requiring auth
+  // AIDEV-NOTE: This enables unauthenticated access to views used on public pages
+  pgPolicy("views_public_access", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`requires_auth = false`,
+  }),
 ]);
 
 export const organizations = pgTable("organizations", {
@@ -551,6 +591,9 @@ export const userRoles = pgTable("user_roles", {
   assignedAt: timestamp("assigned_at").defaultNow(),
 }, (table) => [
   unique("unique_user_role_org").on(table.userId, table.roleId, table.organizationId),
+  index("userRoles_user_org_idx").on(table.userId, table.organizationId),
+  index("userRoles_user_idx").on(table.userId),
+  index("userRoles_org_idx").on(table.organizationId),
   pgPolicy("user_roles_tenant_isolation", {
     as: "permissive",
     for: "all",
@@ -771,11 +814,12 @@ export const agents = pgTable("agents", {
   description: text("description"),
   persona: text("persona"),
   ownerId: uuid("owner_id").notNull().references(() => users.id), // Agent owner - used for OAuth credential resolution via proxy
-  schedules: jsonb("schedules").$type<ScheduleConfigurationJSON[]>().default(sql`'[]'::jsonb`).notNull(), // Array of schedule configurations with task instructions
+  automations: jsonb("automations").$type<AutomationConfigurationJSON[]>().default(sql`'[]'::jsonb`).notNull(), // Array of automation configurations (trigger + skill reference)
   databaseId: text("database_id"),
   status: text("status").default("active"),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   apiKey: text("api_key").unique(), // For API authentication
+  webhookToken: text("webhook_token").unique(), // For webhook authentication (Pipedream, etc.)
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
 
   // Model configuration
@@ -947,13 +991,9 @@ export const skills = pgTable("skills", {
     name: string;
     required: boolean;
     type?: SkillParameterType;
-    fileConfig?: SkillInputFileConfig;
-    default?: any;
+    inputMapping?: InputMappingConfig;
   }>>().default([]),
-  outputs: jsonb("outputs").$type<Array<{
-    name: string;
-    type?: SkillParameterType;
-  }>>().default([]),
+  outputs: jsonb("outputs").$type<OutputDefinition[]>().default([]),
   instructions: text("instructions").notNull().default(''),
   tools: jsonb("tools").default('[]').notNull(),
   content: jsonb("content").$type<MessagePart[]>(), // Skill-level attachments (images, files, text)
@@ -964,6 +1004,65 @@ export const skills = pgTable("skills", {
   // See /docs/model-selection-hierarchy.md for complete context-specific hierarchies
   // Status: Schema field exists, NOT yet mapped to Skill entity or exposed in UI
   model: text("model"), // Skill-specific model override (highest priority for skill execution)
+
+  // System skills - pre-built skills that cannot be deleted by users
+  // Used for common operations like Table Operations, Document Operations, etc.
+  isSystem: boolean("is_system").default(false).notNull(),
+
+  // Agent type for skill execution: "tool_calling" (default) or "code_agent"
+  // Follows same pattern as model override
+  // tool_calling: Structured function calls, more reliable for simple tasks
+  // code_agent: Python code execution, better for complex multi-step reasoning
+  agentType: text("agent_type"),
+
+  // Execution type determines how the skill is executed:
+  // - 'agentic': LLM orchestration with flat instructions (default, current behavior)
+  // - 'agent': Step-based DAG execution with structured steps[]
+  // - 'operation': Direct task model execution (bypasses LLM)
+  // - 'tool': Direct Pipedream tool execution
+  // - 'write': Direct table write execution
+  executionType: text("execution_type").default('agentic'),
+
+  // Task model configuration (when executionType is 'operation')
+  // Contains modelId, taskType, and model-specific parameters
+  taskModelConfig: jsonb("task_model_config").$type<{
+    modelId: string;
+    taskType: string;
+    parameters?: Record<string, any>;
+  }>(),
+
+  // Tool execution configuration (when executionType is 'tool')
+  // Direct Pipedream tool call with input mappings
+  toolExecutionConfig: jsonb("tool_execution_config").$type<ToolExecutionConfig>(),
+
+  // Write execution configuration (when executionType is 'write')
+  // Direct table write with field mappings
+  writeConfig: jsonb("write_config").$type<WriteConfig>(),
+
+  // Steps configuration (when executionType is 'agent')
+  // Each step can be an inline instruction or a reference to another skill
+  steps: jsonb("steps").$type<Array<{
+    name: string;                           // Step identifier/name
+    instruction?: string;                   // Inline instruction (if not skill_id)
+    skillId?: number;                       // Reference to another skill by ID
+    tools?: string[];                       // Tools available for this step
+    inputs?: Record<string, string>;        // Input mappings: param_name -> "{{source}}" or literal
+    outputs?: Record<string, string>;       // Output mappings: output_name -> target_var
+    parallel?: boolean;                     // Can run in parallel (future)
+    condition?: string;                     // Optional condition (future)
+  }>>(),
+
+  // Canvas metadata - visual annotations (sticky notes) that don't affect execution
+  // Stored separately from steps to avoid polluting the execution graph
+  canvasMetadata: jsonb("canvas_metadata").$type<{
+    stickyNotes?: Array<{
+      id: string;
+      content: string;  // TipTap HTML content (users can format first line as heading for title)
+      color?: 'yellow' | 'blue' | 'green' | 'pink' | 'purple';
+      position: { x: number; y: number };
+      size?: { width: number; height: number };
+    }>;
+  }>(),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -980,30 +1079,32 @@ export const skills = pgTable("skills", {
     for: "select",
     to: "public",
     using: sql`
-      organization_id = current_setting('app.current_organization_id')::integer
-      AND (
-        (agent_id IS NOT NULL AND EXISTS (
-          SELECT 1 FROM agents a
-          WHERE a.id = agent_id
-          AND (
-            a.owner_id = current_setting('app.current_user_id')::uuid
-            OR user_has_permission(
-              current_setting('app.current_user_id')::uuid,
-              'agents:view',
-              a.organization_id,
-              'agent',
-              a.id
+      is_system = true OR (
+        organization_id = current_setting('app.current_organization_id')::integer
+        AND (
+          (agent_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM agents a
+            WHERE a.id = agent_id
+            AND (
+              a.owner_id = current_setting('app.current_user_id')::uuid
+              OR user_has_permission(
+                current_setting('app.current_user_id')::uuid,
+                'agents:view',
+                a.organization_id,
+                'agent',
+                a.id
+              )
             )
-          )
-        ))
-        OR
-        (agent_id IS NULL AND user_has_permission(
-          current_setting('app.current_user_id')::uuid,
-          'skills:view',
-          organization_id,
-          'skill',
-          id
-        ))
+          ))
+          OR
+          (agent_id IS NULL AND user_has_permission(
+            current_setting('app.current_user_id')::uuid,
+            'skills:view',
+            organization_id,
+            'skill',
+            id
+          ))
+        )
       )
     `
   }),
@@ -1012,57 +1113,61 @@ export const skills = pgTable("skills", {
     for: "all",
     to: "public",
     using: sql`
-      organization_id = current_setting('app.current_organization_id')::integer
-      AND (
-        (agent_id IS NOT NULL AND EXISTS (
-          SELECT 1 FROM agents a
-          WHERE a.id = agent_id
-          AND (
-            a.owner_id = current_setting('app.current_user_id')::uuid
-            OR user_has_permission(
-              current_setting('app.current_user_id')::uuid,
-              'agents:manage',
-              a.organization_id,
-              'agent',
-              a.id
+      is_system = true OR (
+        organization_id = current_setting('app.current_organization_id')::integer
+        AND (
+          (agent_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM agents a
+            WHERE a.id = agent_id
+            AND (
+              a.owner_id = current_setting('app.current_user_id')::uuid
+              OR user_has_permission(
+                current_setting('app.current_user_id')::uuid,
+                'agents:manage',
+                a.organization_id,
+                'agent',
+                a.id
+              )
             )
-          )
-        ))
-        OR
-        (agent_id IS NULL AND user_has_permission(
-          current_setting('app.current_user_id')::uuid,
-          'skills:manage',
-          organization_id,
-          'skill',
-          id
-        ))
+          ))
+          OR
+          (agent_id IS NULL AND user_has_permission(
+            current_setting('app.current_user_id')::uuid,
+            'skills:manage',
+            organization_id,
+            'skill',
+            id
+          ))
+        )
       )
     `,
     withCheck: sql`
-      organization_id = current_setting('app.current_organization_id')::integer
-      AND (
-        (agent_id IS NOT NULL AND EXISTS (
-          SELECT 1 FROM agents a
-          WHERE a.id = agent_id
-          AND (
-            a.owner_id = current_setting('app.current_user_id')::uuid
-            OR user_has_permission(
-              current_setting('app.current_user_id')::uuid,
-              'agents:manage',
-              a.organization_id,
-              'agent',
-              a.id
+      is_system = true OR (
+        organization_id = current_setting('app.current_organization_id')::integer
+        AND (
+          (agent_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM agents a
+            WHERE a.id = agent_id
+            AND (
+              a.owner_id = current_setting('app.current_user_id')::uuid
+              OR user_has_permission(
+                current_setting('app.current_user_id')::uuid,
+                'agents:manage',
+                a.organization_id,
+                'agent',
+                a.id
+              )
             )
-          )
-        ))
-        OR
-        (agent_id IS NULL AND user_has_permission(
-          current_setting('app.current_user_id')::uuid,
-          'skills:manage',
-          organization_id,
-          'skill',
-          id
-        ))
+          ))
+          OR
+          (agent_id IS NULL AND user_has_permission(
+            current_setting('app.current_user_id')::uuid,
+            'skills:manage',
+            organization_id,
+            'skill',
+            id
+          ))
+        )
       )
     `
   }),
@@ -1076,6 +1181,7 @@ export const tasks = pgTable("tasks", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id), // Organization for RLS
   name: text("name").notNull(),
   instructions: jsonb("instructions").notNull(), // Task instructions with tools: {task: string, images?: ImageAttachment[], tools?: ToolConfig[], metadata?: Record<string, any>}
+  skillId: integer("skill_id").references(() => skills.id), // Optional skill to execute instead of raw instructions
   triggerContext: jsonb("trigger_context"), // What triggered this task: {type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL', scheduleName?: string, tableChange?: TableChangeEvent}
   status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed, cancelled, timeout
   result: jsonb("result"), // Final output data
@@ -1200,10 +1306,15 @@ export const chats = pgTable("chats", {
   // Chat metadata
   title: text("title").notNull(),
   description: text("description"),
-  
-  // RAG and AI context
+
+  // Model configuration
+  // AIDEV-NOTE: Used for chat-specific model selection
+  // Hierarchy: chat.model → organization.defaultModel → System Default
+  // See /docs/model-selection-hierarchy.md for complete context-specific hierarchies
+  model: text("model"), // Chat-specific model override (highest priority for chat messages)
+
+  // AI context metadata
   contextMetadata: jsonb("context_metadata").$type<{
-    ragIndexId?: string;
     contextType?: 'tables' | 'agents' | 'files' | 'teams' | 'databases' | 'organizations' | 'tasks' | 'mixed';
     domainSchema?: {
       id?: number;        // Domain entity ID (replaces domainId/tableId)
@@ -1211,8 +1322,6 @@ export const chats = pgTable("chats", {
       type?: string;      // Additional type info if needed
       [key: string]: any; // Flexible domain-specific data
     };
-    primaryRagWeight?: number; // Weight for primary domain context (0.0-1.0)
-    lastRagUpdate?: string;
   }>(),
   
   // Status and lifecycle
@@ -1517,6 +1626,7 @@ export const tools = pgTable("tools", {
   appId: text("app_id").notNull().references(() => appTypes.id), // Always references an app - "emery" for system tools
   icon: text("icon"),                                    // Icon or emoji
   config: jsonb("config").$type<ToolDefinitionData>().notNull(), // Typed JSONB configuration
+  isTrigger: boolean("is_trigger").default(false),       // True for event sources (triggers), false for actions
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1598,6 +1708,83 @@ export const apps = pgTable("apps", {
   }),
 ]);
 
+// AIDEV-NOTE: Puck Templates - Reusable component tree templates for the page builder
+// Templates can be org-wide (appId = null) or app-specific (appId = app.id)
+export const templates = pgTable("templates", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id")
+    .references(() => organizations.id, { onDelete: 'cascade' }), // null for system templates
+  appId: integer("app_id")
+    .references(() => apps.id, { onDelete: 'cascade' }), // null = org-wide, set = app-specific
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category"), // for grouping in UI: 'layout', 'content', 'data', etc.
+  isSystem: boolean("is_system").default(false).notNull(), // true = pre-seeded system template, can't delete
+  thumbnailUrl: text("thumbnail_url"), // optional preview image
+  data: jsonb("data").notNull().$type<PuckDataStructure["content"]>(), // array of ComponentData (the component tree)
+  variants: jsonb("variants").default(sql`'[]'::jsonb`).$type<TemplateVariant[]>(), // pre-defined layout variations
+  createdBy: uuid("created_by")
+    .references(() => users.id), // null for system templates
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("templates_org_idx").on(table.organizationId),
+  index("templates_app_idx").on(table.appId),
+  index("templates_category_idx").on(table.category),
+  index("templates_is_system_idx").on(table.isSystem),
+
+  // View permission: Users can view their org templates OR global system templates
+  pgPolicy("templates_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`is_system = true OR (
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        app_id IS NULL
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'apps:view',
+          organization_id,
+          'app',
+          app_id
+        )
+      )
+    )`,
+  }),
+
+  // Create permission: Users with apps:manage can create templates (not system templates)
+  pgPolicy("templates_create_permission", {
+    as: "permissive",
+    for: "insert",
+    to: "public",
+    withCheck: sql`is_system = false
+      AND organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'apps:manage',
+        organization_id
+      )`,
+  }),
+
+  // Manage permission: Creator or org managers can update/delete templates (not system templates)
+  pgPolicy("templates_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`is_system = false
+      AND organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        created_by = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'apps:manage',
+          organization_id
+        )
+      )`,
+  }),
+]);
+
 export const pages = pgTable("pages", {
   id: serial("id").primaryKey(),
   appId: integer("app_id")
@@ -1612,6 +1799,9 @@ export const pages = pgTable("pages", {
   isPublic: boolean("is_public").default(false).notNull(),
   requiresAuth: boolean("requires_auth").default(false).notNull(),
   allowedRoles: text("allowed_roles").array(),
+  pageVariables: jsonb("page_variables"), // Deprecated - use pageState instead
+  pageState: jsonb("page_state").$type<PageStateConfig>(), // Client-side state configuration
+  pageDialogs: jsonb("page_dialogs").$type<PageDialogsConfig>(), // Dialog configurations
   ownerId: uuid("owner_id")
     .notNull()
     .references(() => users.id), // Page owner - used for 'owned' scope permissions
@@ -1728,5 +1918,139 @@ export const pages = pgTable("pages", {
         )
       )
     `,
+  }),
+]);
+
+// ============================================================================
+// AUDIT TRAIL TABLES
+// ============================================================================
+
+/**
+ * Audit Events - Tracks all system actions for audit trail
+ * Used for: agent executions, skill changes, security events, etc.
+ */
+export const auditEvents = pgTable("audit_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+
+  // Event identification
+  eventType: text("event_type").notNull(), // 'database', 'agent', 'skill', 'app', 'security'
+  eventCategory: text("event_category").notNull(), // 'row_crud', 'task_execution', 'definition', etc.
+  eventAction: text("event_action").notNull(), // 'create', 'update', 'delete', 'execute', etc.
+
+  // Actor information
+  actorType: text("actor_type").notNull(), // 'user', 'agent', 'system', 'webhook', 'public_app'
+  actorId: text("actor_id"),
+  actorName: text("actor_name"),
+
+  // Target resource
+  resourceType: text("resource_type").notNull(), // 'row', 'table', 'agent', 'skill', 'task', etc.
+  resourceId: text("resource_id"),
+  resourceName: text("resource_name"),
+  parentResourceType: text("parent_resource_type"),
+  parentResourceId: text("parent_resource_id"),
+
+  // Event data (flexible JSONB)
+  eventData: jsonb("event_data").notNull().default({}),
+  previousData: jsonb("previous_data"),
+  metadata: jsonb("metadata").default({}),
+
+  // Status and timing
+  occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+  durationMs: integer("duration_ms"),
+  success: boolean("success").notNull().default(true),
+  error: text("error"),
+
+  // Retention management
+  expiresAt: timestamp("expires_at"),
+  archivedAt: timestamp("archived_at"),
+}, (table) => [
+  index("audit_events_org_occurred_idx").on(table.organizationId, table.occurredAt),
+  index("audit_events_resource_idx").on(table.resourceType, table.resourceId),
+  index("audit_events_actor_idx").on(table.actorType, table.actorId),
+  index("audit_events_expires_idx").on(table.expiresAt),
+
+  // RLS: Tenant isolation
+  pgPolicy("audit_events_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  }),
+]);
+
+/**
+ * Row History - Tracks changes to dynamic table rows (Baserow-style)
+ * Provides field-level diff for each row change
+ */
+export const rowHistory = pgTable("row_history", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  tableId: bigint("table_id", { mode: "number" }).notNull().references(() => tables.id, { onDelete: 'cascade' }),
+  rowId: text("row_id").notNull(),
+
+  // Change information
+  operation: text("operation").notNull(), // 'INSERT', 'UPDATE', 'DELETE'
+  version: integer("version").notNull().default(1),
+
+  // Change data
+  fieldChanges: jsonb("field_changes").$type<Record<string, { old: unknown; new: unknown }>>(),
+  rowSnapshot: jsonb("row_snapshot").$type<Record<string, unknown>>(),
+
+  // Actor
+  changedByType: text("changed_by_type").notNull(),
+  changedById: text("changed_by_id"),
+  changedByName: text("changed_by_name"),
+
+  // Timing
+  changedAt: timestamp("changed_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"),
+}, (table) => [
+  index("row_history_table_row_idx").on(table.tableId, table.rowId),
+  index("row_history_org_time_idx").on(table.organizationId, table.changedAt),
+  index("row_history_expires_idx").on(table.expiresAt),
+
+  // RLS: Tenant isolation
+  pgPolicy("row_history_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  }),
+]);
+
+/**
+ * Task Tool Calls - Detailed agent execution tracing
+ * Records each tool call made during task execution (for max plan)
+ */
+export const taskToolCalls = pgTable("task_tool_calls", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  taskId: uuid("task_id").notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+
+  // Tool execution details
+  toolName: text("tool_name").notNull(),
+  toolInput: jsonb("tool_input"),
+  toolOutput: jsonb("tool_output"),
+  toolError: text("tool_error"),
+
+  // Timing
+  startedAt: timestamp("started_at").notNull(),
+  completedAt: timestamp("completed_at"),
+  durationMs: integer("duration_ms"),
+
+  // Sequence and usage
+  callIndex: integer("call_index").notNull(),
+  tokensUsed: integer("tokens_used").default(0),
+}, (table) => [
+  index("task_tool_calls_task_idx").on(table.taskId, table.callIndex),
+  index("task_tool_calls_org_time_idx").on(table.organizationId, table.startedAt),
+
+  // RLS: Tenant isolation
+  pgPolicy("task_tool_calls_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
 ]);

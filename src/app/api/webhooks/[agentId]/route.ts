@@ -67,13 +67,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
     
-    // Find matching webhook schedule
+    // Find matching webhook automation
     let webhookConfig: WebhookTriggerConfig | null = null;
 
-    for (const schedule of agent.schedules) {
-      if (schedule instanceof WebhookTriggerConfig && schedule.isEnabled()) {
-        webhookConfig = schedule;
-        break; // Use first matching enabled webhook schedule
+    for (const automation of agent.automations) {
+      const trigger = TriggerConfigFromJSON(automation.trigger);
+      if (trigger instanceof WebhookTriggerConfig && trigger.isEnabled()) {
+        webhookConfig = trigger;
+        break; // Use first matching enabled webhook automation
       }
     }
 
@@ -219,13 +220,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
     
-    // Find webhook schedule
+    // Find webhook automation
     let webhookConfig: WebhookTriggerConfig | null = null;
 
-    for (const schedule of agent.schedules) {
-      if (schedule instanceof WebhookTriggerConfig) {
-        webhookConfig = schedule;
-        break; // Use first webhook schedule found
+    for (const automation of agent.automations) {
+      const trigger = TriggerConfigFromJSON(automation.trigger);
+      if (trigger instanceof WebhookTriggerConfig) {
+        webhookConfig = trigger;
+        break; // Use first webhook automation found
       }
     }
 

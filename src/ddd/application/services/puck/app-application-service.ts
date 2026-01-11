@@ -2,7 +2,7 @@
 // Handles business logic, validation, and coordination between domain and infrastructure
 // Uses Puck for visual page building, but that's an implementation detail
 
-import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-repository';
+import type { IAppRepository, SidebarAppDTO } from '@/ddd/domain/puck/repositories/app-repository';
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { App } from '@/ddd/domain/puck/entities/app';
@@ -267,6 +267,19 @@ export class AppApplicationService {
     } catch (error) {
       logger.error('Error counting apps:', error);
       return 0;
+    }
+  }
+
+  /**
+   * Get all apps for an organization with their pages (for sidebar)
+   * Uses optimized 2-query approach instead of N+1
+   */
+  async getAppsWithPagesForOrganization(organizationId: OrganizationId): Promise<SidebarAppDTO[]> {
+    try {
+      return await this.appRepository.findByOrganizationWithPages(organizationId);
+    } catch (error) {
+      logger.error('Error getting apps with pages:', error);
+      return [];
     }
   }
 }

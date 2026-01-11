@@ -18,11 +18,14 @@ class SimpleDeltaLakeConfig:
     
     def __init__(self):
         # PostgreSQL configuration (for metadata tracking)
+        # SECURITY: Password must be provided via environment variable
         self.postgres_host = os.getenv("POSTGRES_HOST", "localhost")
         self.postgres_port = int(os.getenv("POSTGRES_PORT", "5433"))
         self.postgres_db = os.getenv("POSTGRES_DB", "emery")
         self.postgres_user = os.getenv("POSTGRES_USER", "postgres")
-        self.postgres_password = os.getenv("POSTGRES_PASSWORD", "dashlet")
+        self.postgres_password = os.environ.get("POSTGRES_PASSWORD")
+        if not self.postgres_password:
+            raise ValueError("POSTGRES_PASSWORD environment variable is required")
         
         # Local storage for Delta tables
         self.delta_storage_path = os.getenv("DELTA_STORAGE_PATH", "/tmp/emery_delta_lake")

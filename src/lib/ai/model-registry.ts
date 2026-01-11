@@ -27,6 +27,33 @@ export interface ModelPricing {
   outputCreditsPerK: number;  // Credits consumed per 1K output tokens
 }
 
+// Task types for different model capabilities
+// AIDEV-NOTE: Must match TASK_TYPE_OPTIONS in TaskModelForm.tsx
+export type ModelTaskType =
+  | 'chat-completion'
+  // Image Generation/Transformation
+  | 'text-to-image'
+  | 'image-to-image'
+  | 'text-to-video'
+  // Audio
+  | 'speech-to-text'
+  | 'text-to-speech'
+  // Vision Analysis
+  | 'object-detection'
+  | 'image-classification'
+  | 'image-segmentation'
+  | 'image-to-text'
+  // Text Processing
+  | 'question-answering'
+  | 'zero-shot-classification'
+  | 'summarization'
+  | 'translation'
+  // Embeddings
+  | 'feature-extraction';
+
+// Output types for chat display
+export type ModelOutputType = 'text' | 'image' | 'audio' | 'video' | 'json' | 'embedding';
+
 export interface ModelMetadata {
   id: string;                 // Unique model identifier (e.g., 'ibm-granite/granite-3.3-8b-instruct')
   name: string;               // Display name
@@ -37,6 +64,10 @@ export interface ModelMetadata {
   contextWindow: number;      // Maximum context length in tokens
   maxOutputTokens: number;    // Maximum output tokens
 
+  // Task and output types (for non-chat models)
+  taskType?: ModelTaskType;   // What kind of task this model performs
+  outputType?: ModelOutputType; // What kind of output it returns in chat
+
   // Capabilities
   capabilities: ModelCapabilities;
 
@@ -44,7 +75,7 @@ export interface ModelMetadata {
   pricing: ModelPricing;
 
   // Access control
-  tier: 'free' | 'pro' | 'enterprise'; // Minimum plan tier required
+  tier: 'free' | 'pro' | 'max' | 'enterprise'; // Minimum plan tier required
 
   // Performance category
   category: 'fast' | 'balanced' | 'advanced';
@@ -54,6 +85,12 @@ export interface ModelMetadata {
     type: 'dedicated' | 'inference-api';
     url?: string;             // For dedicated endpoints
   };
+
+  // Recommended flag for dedicated endpoints with high reliability
+  recommended?: boolean;
+
+  // Description of what the model is recommended for
+  recommendedFor?: string;
 }
 
 /**
@@ -65,7 +102,75 @@ export interface ModelMetadata {
  * - Free tier: Limited quota, slower inference
  */
 export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
-  // Current production model (dedicated endpoint)
+  // Primary recommended model (dedicated endpoint) - Qwen2.5-Coder-32B
+  'Qwen/Qwen2.5-Coder-32B-Instruct': {
+    id: 'Qwen/Qwen2.5-Coder-32B-Instruct',
+    name: 'Qwen 2.5 Coder 32B',
+    provider: 'huggingface',
+    description: 'Primary model on dedicated endpoint. 128K context, excellent for complex reasoning, code generation, tool calling and workflow planning.',
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: false,
+      jsonMode: true,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.30,
+      outputPer1M: 0.80,
+      currency: 'USD',
+      inputCreditsPerK: 0.75,
+      outputCreditsPerK: 2.0,
+    },
+    tier: 'free',
+    category: 'advanced',
+    endpoint: {
+      type: 'dedicated',
+      url: 'https://ehrauj4szamxqrll.us-east-1.aws.endpoints.huggingface.cloud',
+    },
+    recommended: true,
+    recommendedFor: 'Complex reasoning & workflows',
+  },
+
+  // Dedicated endpoint - small & fast for simple tasks
+  'HuggingFaceTB/SmolLM3-3B': {
+    id: 'HuggingFaceTB/SmolLM3-3B',
+    name: 'SmolLM3 3B',
+    provider: 'huggingface',
+    description: 'Fast 3B model on dedicated endpoint. Optimized for simple logical reasoning and quick tasks.',
+    contextWindow: 128000,
+    maxOutputTokens: 2048,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: false,
+      jsonMode: true,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.05,
+      outputPer1M: 0.20,
+      currency: 'USD',
+      inputCreditsPerK: 0.125,
+      outputCreditsPerK: 0.5,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'dedicated',
+      url: 'https://becue6pro40rf66y.us-east-1.aws.endpoints.huggingface.cloud',
+    },
+    recommended: true,
+    recommendedFor: 'Simple & fast tasks',
+  },
+
+  // Dedicated endpoint - fast & cost-efficient
   'ibm-granite/granite-3.3-8b-instruct': {
     id: 'ibm-granite/granite-3.3-8b-instruct',
     name: 'IBM Granite 3.3 8B Instruct',
@@ -93,7 +198,109 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       type: 'dedicated',
       url: 'https://dxv8q9ubsizxcp4v.us-east-1.aws.endpoints.huggingface.cloud',
     },
+    recommended: true,
+    recommendedFor: 'Fast & cost-efficient',
   },
+
+  // ============================================================================
+  // GOOGLE GEMINI MODELS (via OpenAI-compatible API)
+  // ============================================================================
+
+  'google/gemini-2.0-flash': {
+    id: 'google/gemini-2.0-flash',
+    name: 'Gemini 2.0 Flash',
+    provider: 'huggingface', // Uses OpenAI-compatible API
+    description: 'Fast, efficient Gemini model. Great for most tasks with 1M context window.',
+    contextWindow: 1000000,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: true,
+      jsonMode: true,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0.10,
+      outputPer1M: 0.40,
+      currency: 'USD',
+      inputCreditsPerK: 0.25,
+      outputCreditsPerK: 1.0,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+    recommended: true,
+    recommendedFor: 'Fast & reliable fallback',
+  },
+
+  'google/gemini-1.5-pro': {
+    id: 'google/gemini-1.5-pro',
+    name: 'Gemini 1.5 Pro',
+    provider: 'huggingface',
+    description: 'Most capable Gemini model. Excellent reasoning and 2M context window.',
+    contextWindow: 2000000,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: true,
+      jsonMode: true,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 1.25,
+      outputPer1M: 5.00,
+      currency: 'USD',
+      inputCreditsPerK: 3.125,
+      outputCreditsPerK: 12.5,
+    },
+    tier: 'free',
+    category: 'advanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'google/gemini-2.0-flash-lite': {
+    id: 'google/gemini-2.0-flash-lite',
+    name: 'Gemini 2.0 Flash Lite',
+    provider: 'huggingface',
+    description: 'Lightweight Gemini model. Ultra-fast for simple tasks.',
+    contextWindow: 1000000,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: true,
+      jsonMode: true,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0.075,
+      outputPer1M: 0.30,
+      currency: 'USD',
+      inputCreditsPerK: 0.1875,
+      outputCreditsPerK: 0.75,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  // ============================================================================
+  // HUGGINGFACE INFERENCE API MODELS
+  // ============================================================================
 
   // HuggingFace Inference API models (pay-per-use)
   'Qwen/Qwen2.5-7B-Instruct': {
@@ -229,7 +436,7 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       inputCreditsPerK: 0.375,   // 0.375 credits per 1K input tokens
       outputCreditsPerK: 1.5,    // 1.5 credits per 1K output tokens
     },
-    tier: 'pro',             // Pro tier only
+    tier: 'free',
     category: 'balanced',
     endpoint: {
       type: 'inference-api',
@@ -298,6 +505,683 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
   // through HF Inference API. They only work for image-to-text tasks, not conversational AI.
   // SmolVLM models throw: "Task 'conversational' not supported for provider 'replicate'"
   // Phi-4 multimodal is not deployed on HF Inference API (only Azure AI, DeepInfra, etc.)
+
+  // ============================================================================
+  // CHAT LLMs WITH TOOL CALLING - 32B CLASS (Sweet Spot)
+  // Multi-provider support via HuggingFace Inference Providers
+  // ============================================================================
+
+  'Qwen/Qwen2.5-32B-Instruct': {
+    id: 'Qwen/Qwen2.5-32B-Instruct',
+    name: 'Qwen 2.5 32B Instruct',
+    provider: 'huggingface',
+    description: 'Excellent balance of capability and speed. 128K context, strong reasoning and tool calling.',
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: false,
+      jsonMode: true,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.30,
+      outputPer1M: 0.80,
+      currency: 'USD',
+      inputCreditsPerK: 0.75,
+      outputCreditsPerK: 2.0,
+    },
+    tier: 'free',
+    category: 'balanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'Qwen/QwQ-32B': {
+    id: 'Qwen/QwQ-32B',
+    name: 'Qwen QwQ 32B (Reasoning)',
+    provider: 'huggingface',
+    description: 'Specialized reasoning model with chain-of-thought. Excellent for complex problem-solving.',
+    contextWindow: 32768,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: false,
+      jsonMode: true,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.30,
+      outputPer1M: 0.80,
+      currency: 'USD',
+      inputCreditsPerK: 0.75,
+      outputCreditsPerK: 2.0,
+    },
+    tier: 'free',
+    category: 'balanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  // ============================================================================
+  // CHAT LLMs WITH TOOL CALLING - SMALLER (Fast)
+  // ============================================================================
+
+  'meta-llama/Llama-3.1-8B-Instruct': {
+    id: 'meta-llama/Llama-3.1-8B-Instruct',
+    name: 'Llama 3.1 8B Instruct',
+    provider: 'huggingface',
+    description: 'Fast and reliable with 128K context. Multi-provider support (Groq, Together, Fireworks).',
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: false,
+      jsonMode: true,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.10,
+      outputPer1M: 0.40,
+      currency: 'USD',
+      inputCreditsPerK: 0.25,
+      outputCreditsPerK: 1.0,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  // ============================================================================
+  // CHAT LLMs WITH TOOL CALLING - LARGER (Advanced)
+  // ============================================================================
+
+  'meta-llama/Llama-3.1-70B-Instruct': {
+    id: 'meta-llama/Llama-3.1-70B-Instruct',
+    name: 'Llama 3.1 70B Instruct',
+    provider: 'huggingface',
+    description: 'Powerful 70B model with 128K context. Excellent reasoning and tool calling capabilities.',
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: false,
+      jsonMode: true,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.60,
+      outputPer1M: 1.20,
+      currency: 'USD',
+      inputCreditsPerK: 1.5,
+      outputCreditsPerK: 3.0,
+    },
+    tier: 'free',
+    category: 'advanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'Qwen/Qwen2.5-72B-Instruct': {
+    id: 'Qwen/Qwen2.5-72B-Instruct',
+    name: 'Qwen 2.5 72B Instruct',
+    provider: 'huggingface',
+    description: 'Top-tier 72B model with 128K context. State-of-the-art reasoning and tool use.',
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: false,
+      jsonMode: true,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.50,
+      outputPer1M: 1.00,
+      currency: 'USD',
+      inputCreditsPerK: 1.25,
+      outputCreditsPerK: 2.5,
+    },
+    tier: 'free',
+    category: 'advanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'deepseek-ai/DeepSeek-R1': {
+    id: 'deepseek-ai/DeepSeek-R1',
+    name: 'DeepSeek R1 (Reasoning)',
+    provider: 'huggingface',
+    description: 'Advanced reasoning model with extended thinking. Excellent for complex analytical tasks.',
+    contextWindow: 65536,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: false,
+      jsonMode: true,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.50,
+      outputPer1M: 2.00,
+      currency: 'USD',
+      inputCreditsPerK: 1.25,
+      outputCreditsPerK: 5.0,
+    },
+    tier: 'free',
+    category: 'advanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  // ============================================================================
+  // VLM (Vision + Tool Calling)
+  // ============================================================================
+
+  'Qwen/Qwen2.5-VL-32B-Instruct': {
+    id: 'Qwen/Qwen2.5-VL-32B-Instruct',
+    name: 'Qwen 2.5 VL 32B',
+    provider: 'huggingface',
+    description: 'Vision-language model with tool calling. Excellent for image understanding and analysis.',
+    contextWindow: 32768,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: true,
+      jsonMode: true,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0.40,
+      outputPer1M: 1.00,
+      currency: 'USD',
+      inputCreditsPerK: 1.0,
+      outputCreditsPerK: 2.5,
+    },
+    tier: 'free',
+    category: 'balanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'Qwen/Qwen2.5-VL-72B-Instruct': {
+    id: 'Qwen/Qwen2.5-VL-72B-Instruct',
+    name: 'Qwen 2.5 VL 72B',
+    provider: 'huggingface',
+    description: 'Top-tier vision-language model. State-of-the-art image understanding with tool calling.',
+    contextWindow: 32768,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: true,
+      jsonMode: true,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0.60,
+      outputPer1M: 1.20,
+      currency: 'USD',
+      inputCreditsPerK: 1.5,
+      outputCreditsPerK: 3.0,
+    },
+    tier: 'free',
+    category: 'advanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  // ============================================================================
+  // TASK-SPECIFIC MODELS - Image Generation
+  // Returns image file in chat
+  // ============================================================================
+
+  'black-forest-labs/FLUX.1-schnell': {
+    id: 'black-forest-labs/FLUX.1-schnell',
+    name: 'FLUX.1 Schnell',
+    provider: 'huggingface',
+    description: 'Fast image generation. 4 steps, high quality. Returns image file in chat.',
+    contextWindow: 0,
+    maxOutputTokens: 0,
+    taskType: 'text-to-image',
+    outputType: 'image',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0,
+      outputCreditsPerK: 0.5, // Per image
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'black-forest-labs/FLUX.1-dev': {
+    id: 'black-forest-labs/FLUX.1-dev',
+    name: 'FLUX.1 Dev',
+    provider: 'huggingface',
+    description: 'High-quality image generation. More steps, better detail. Returns image file in chat.',
+    contextWindow: 0,
+    maxOutputTokens: 0,
+    taskType: 'text-to-image',
+    outputType: 'image',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0,
+      outputCreditsPerK: 1.0, // Per image
+    },
+    tier: 'free',
+    category: 'balanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  // ============================================================================
+  // TASK-SPECIFIC MODELS - Video Generation
+  // Returns video file in chat
+  // ============================================================================
+
+  'genmo/mochi-1-preview': {
+    id: 'genmo/mochi-1-preview',
+    name: 'Mochi 1 Preview',
+    provider: 'huggingface',
+    description: 'Text-to-video generation. Creates short video clips from text prompts.',
+    contextWindow: 0,
+    maxOutputTokens: 0,
+    taskType: 'text-to-video',
+    outputType: 'video',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0,
+      outputCreditsPerK: 5.0, // Per video
+    },
+    tier: 'free',
+    category: 'balanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  // ============================================================================
+  // TASK-SPECIFIC MODELS - Audio
+  // Speech-to-text returns text, text-to-speech returns audio file
+  // ============================================================================
+
+  'openai/whisper-large-v3': {
+    id: 'openai/whisper-large-v3',
+    name: 'Whisper Large V3',
+    provider: 'huggingface',
+    description: 'State-of-the-art speech recognition. Transcribes audio to text in chat.',
+    contextWindow: 0,
+    maxOutputTokens: 0,
+    taskType: 'speech-to-text',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0.1, // Per minute of audio
+      outputCreditsPerK: 0,
+    },
+    tier: 'free',
+    category: 'balanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'distil-whisper/distil-large-v3': {
+    id: 'distil-whisper/distil-large-v3',
+    name: 'Distil Whisper Large V3',
+    provider: 'huggingface',
+    description: 'Fast speech recognition. 6x faster than Whisper with similar accuracy.',
+    contextWindow: 0,
+    maxOutputTokens: 0,
+    taskType: 'speech-to-text',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0.05, // Per minute of audio
+      outputCreditsPerK: 0,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'suno/bark': {
+    id: 'suno/bark',
+    name: 'Bark TTS',
+    provider: 'huggingface',
+    description: 'Text-to-speech generation. Creates natural-sounding audio from text.',
+    contextWindow: 0,
+    maxOutputTokens: 0,
+    taskType: 'text-to-speech',
+    outputType: 'audio',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0.1, // Per 1K characters
+      outputCreditsPerK: 0,
+    },
+    tier: 'free',
+    category: 'balanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  // ============================================================================
+  // TASK-SPECIFIC MODELS - Vision Analysis
+  // Returns structured data (bounding boxes, labels) as JSON in chat
+  // ============================================================================
+
+  'facebook/detr-resnet-50': {
+    id: 'facebook/detr-resnet-50',
+    name: 'DETR Object Detection',
+    provider: 'huggingface',
+    description: 'Detects objects in images. Returns bounding boxes and labels.',
+    contextWindow: 0,
+    maxOutputTokens: 0,
+    taskType: 'object-detection',
+    outputType: 'json',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: true,
+      jsonMode: false,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0.05, // Per image
+      outputCreditsPerK: 0,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'google/vit-base-patch16-224': {
+    id: 'google/vit-base-patch16-224',
+    name: 'ViT Image Classification',
+    provider: 'huggingface',
+    description: 'Classifies images into categories. Returns labels with confidence scores.',
+    contextWindow: 0,
+    maxOutputTokens: 0,
+    taskType: 'image-classification',
+    outputType: 'json',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: true,
+      jsonMode: false,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0.02, // Per image
+      outputCreditsPerK: 0,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  // ============================================================================
+  // TASK-SPECIFIC MODELS - Text Processing
+  // Returns text in chat
+  // ============================================================================
+
+  'deepset/roberta-base-squad2': {
+    id: 'deepset/roberta-base-squad2',
+    name: 'RoBERTa Question Answering',
+    provider: 'huggingface',
+    description: 'Extractive question answering. Finds answers in provided context.',
+    contextWindow: 512,
+    maxOutputTokens: 0,
+    taskType: 'question-answering',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.01,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0.025,
+      outputCreditsPerK: 0,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'facebook/bart-large-mnli': {
+    id: 'facebook/bart-large-mnli',
+    name: 'BART Zero-Shot Classification',
+    provider: 'huggingface',
+    description: 'Classifies text into custom categories. No training required.',
+    contextWindow: 1024,
+    maxOutputTokens: 0,
+    taskType: 'zero-shot-classification',
+    outputType: 'json',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.02,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0.05,
+      outputCreditsPerK: 0,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'facebook/bart-large-cnn': {
+    id: 'facebook/bart-large-cnn',
+    name: 'BART Summarization',
+    provider: 'huggingface',
+    description: 'Summarizes long text into concise summaries.',
+    contextWindow: 1024,
+    maxOutputTokens: 142,
+    taskType: 'summarization',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.02,
+      outputPer1M: 0.04,
+      currency: 'USD',
+      inputCreditsPerK: 0.05,
+      outputCreditsPerK: 0.1,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  // ============================================================================
+  // TASK-SPECIFIC MODELS - Embeddings
+  // Returns vectors for RAG/semantic search
+  // ============================================================================
+
+  'BAAI/bge-large-en-v1.5': {
+    id: 'BAAI/bge-large-en-v1.5',
+    name: 'BGE Large English',
+    provider: 'huggingface',
+    description: 'High-quality text embeddings for semantic search and RAG. 1024 dimensions.',
+    contextWindow: 512,
+    maxOutputTokens: 0,
+    taskType: 'feature-extraction',
+    outputType: 'embedding',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.01,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0.025,
+      outputCreditsPerK: 0,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'BAAI/bge-m3': {
+    id: 'BAAI/bge-m3',
+    name: 'BGE M3 (Multilingual)',
+    provider: 'huggingface',
+    description: 'Multilingual embeddings supporting 100+ languages. 1024 dimensions.',
+    contextWindow: 8192,
+    maxOutputTokens: 0,
+    taskType: 'feature-extraction',
+    outputType: 'embedding',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.02,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0.05,
+      outputCreditsPerK: 0,
+    },
+    tier: 'free',
+    category: 'balanced',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
 };
 
 /**
@@ -317,8 +1201,8 @@ export function getAllModels(): ModelMetadata[] {
 /**
  * Get models available for a specific tier
  */
-export function getModelsForTier(tier: 'free' | 'pro' | 'enterprise'): ModelMetadata[] {
-  const tierHierarchy = { free: 0, pro: 1, enterprise: 2 };
+export function getModelsForTier(tier: 'free' | 'pro' | 'max' | 'enterprise'): ModelMetadata[] {
+  const tierHierarchy = { free: 0, pro: 1, max: 2, enterprise: 3 };
   const userTierLevel = tierHierarchy[tier];
 
   return getAllModels().filter(model => {
@@ -339,6 +1223,67 @@ export function getModelsByCategory(category: 'fast' | 'balanced' | 'advanced'):
  */
 export function getModelsWithCapability(capability: keyof ModelCapabilities): ModelMetadata[] {
   return getAllModels().filter(model => model.capabilities[capability]);
+}
+
+/**
+ * Get models by task type
+ */
+export function getModelsByTaskType(taskType: ModelTaskType): ModelMetadata[] {
+  return getAllModels().filter(model => model.taskType === taskType);
+}
+
+/**
+ * Get models by output type
+ */
+export function getModelsByOutputType(outputType: ModelOutputType): ModelMetadata[] {
+  return getAllModels().filter(model => model.outputType === outputType);
+}
+
+/**
+ * Get conversational models (multi-turn dialogue)
+ */
+export function getConversationalModels(): ModelMetadata[] {
+  return getAllModels().filter(model =>
+    model.taskType === 'chat-completion' || !model.taskType
+  );
+}
+
+/**
+ * Get chat LLMs suitable for agent/skill execution
+ * These are conversational models that support tool calling
+ * AIDEV-NOTE: Use this for model selectors in agents and skills
+ */
+export function getChatModels(): ModelMetadata[] {
+  return getAllModels().filter(model =>
+    // Must be conversational (chat-completion or no specific task type)
+    (model.taskType === 'chat-completion' || !model.taskType) &&
+    // Must support tool calling for agent workflows
+    model.capabilities.toolCalling
+  );
+}
+
+/**
+ * Get chat LLMs filtered by tier
+ * AIDEV-NOTE: Use this for tier-restricted model selectors
+ */
+export function getChatModelsForTier(tier: 'free' | 'pro' | 'max' | 'enterprise'): ModelMetadata[] {
+  const tierHierarchy = { free: 0, pro: 1, max: 2, enterprise: 3 };
+  const userTierLevel = tierHierarchy[tier];
+
+  return getChatModels().filter(model => {
+    const modelTierLevel = tierHierarchy[model.tier];
+    return modelTierLevel <= userTierLevel;
+  });
+}
+
+/**
+ * Get single-task models (one input → one output)
+ * These still work through chat, but aren't conversational
+ */
+export function getSingleTaskModels(): ModelMetadata[] {
+  return getAllModels().filter(model =>
+    model.taskType && model.taskType !== 'chat-completion'
+  );
 }
 
 /**
@@ -383,11 +1328,18 @@ export function calculateCreditsUsed(
 }
 
 /**
+ * Get recommended models (dedicated endpoints with high reliability)
+ */
+export function getRecommendedModels(): ModelMetadata[] {
+  return getAllModels().filter(model => model.recommended);
+}
+
+/**
  * Get default model for organization tier
  */
-export function getDefaultModelForTier(tier: 'free' | 'pro' | 'enterprise'): string {
-  // Default to production model
-  return 'ibm-granite/granite-3.3-8b-instruct';
+export function getDefaultModelForTier(tier: 'free' | 'pro' | 'max' | 'enterprise'): string {
+  // Default to primary recommended model (dedicated endpoint)
+  return 'Qwen/Qwen2.5-Coder-32B-Instruct';
 }
 
 /**
@@ -395,14 +1347,14 @@ export function getDefaultModelForTier(tier: 'free' | 'pro' | 'enterprise'): str
  */
 export function canAccessModel(
   modelId: string,
-  organizationTier: 'free' | 'pro' | 'enterprise',
+  organizationTier: 'free' | 'pro' | 'max' | 'enterprise',
   availableModels?: string[]
 ): boolean {
   const model = getModelMetadata(modelId);
   if (!model) return false;
 
   // Check tier access
-  const tierHierarchy = { free: 0, pro: 1, enterprise: 2 };
+  const tierHierarchy = { free: 0, pro: 1, max: 2, enterprise: 3 };
   const userTierLevel = tierHierarchy[organizationTier];
   const modelTierLevel = tierHierarchy[model.tier];
 

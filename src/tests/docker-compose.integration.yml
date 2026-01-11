@@ -28,11 +28,10 @@ services:
     ports:
       - "127.0.0.1:3002:3000"  # Different from main (3000) and potential dev (3001)
     env_file:
-      - ../../.env.local.test
+      - ../../.env.local
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
       NODE_ENV: production
-      NEXTAUTH_URL: http://localhost:3002
       # Override WORKER_ADDRESS for internal container network
       WORKER_ADDRESS: agent-chat-integration:50051
       GRPC_TOOLS_ADDRESS: agent-table-integration:50052    # Table operations (internal network)
@@ -43,10 +42,14 @@ services:
       AWS_REGION: us-east-1
       S3_BUCKET_NAME: emery-files
       S3_FORCE_PATH_STYLE: true
+      # Redis for caching (ioredis)
+      REDIS_URL: redis://redis-integration:6379
     depends_on:
       postgres-integration:
         condition: service_healthy
       minio-integration:
+        condition: service_healthy
+      redis-integration:
         condition: service_healthy
       agent-chat-integration:
         condition: service_healthy
@@ -57,6 +60,22 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    networks:
+      - integration-test-network
+
+  redis-integration:
+    image: redis:7-alpine
+    container_name: emery-integration-redis
+    ports:
+      - "127.0.0.1:6380:6379"  # Different from potential dev Redis (6379)
+    command: redis-server --appendonly yes
+    volumes:
+      - integration_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - integration-test-network
 
@@ -89,7 +108,7 @@ services:
     ports:
       - "127.0.0.1:50053:50051"  # Chat processing service
     env_file:
-      - ../../.env.local.test
+      - ../../.env.local
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
       PYTHONPATH: /usr/src/app/src
@@ -118,7 +137,7 @@ services:
     ports:
       - "127.0.0.1:50054:50052"  # Table operations service
     env_file:
-      - ../../.env.local.test
+      - ../../.env.local
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
       PYTHONPATH: /usr/src/app/src
@@ -152,7 +171,7 @@ services:
     container_name: emery-integration-scheduler
     restart: unless-stopped
     env_file:
-      - ../../.env.local.test
+      - ../../.env.local
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
       NODE_ENV: production
@@ -174,9 +193,27 @@ services:
     networks:
       - integration-test-network
 
+  # # Cloudflare Tunnel for exposing webhooks to Pipedream during local dev
+  # # Configure tunnel in Cloudflare Dashboard: Zero Trust → Networks → Tunnels
+  # # Point to: http://app-integration:3000
+  # # Requires TUNNEL_TOKEN in .env.local (get from Cloudflare Dashboard)
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: emery-integration-cloudflared
+  #   restart: unless-stopped
+  #   command: tunnel --no-autoupdate --protocol http2 run
+  #   env_file:
+  #     - ../../.env.local
+  #   depends_on:
+  #     app-integration:
+  #       condition: service_healthy
+  #   networks:
+  #     - integration-test-network
+
 volumes:
   integration_postgres_data:  # Isolated volume for integration tests
   integration_minio_data:     # MinIO data for S3 storage testing
+  integration_redis_data:     # Redis data for caching
 
 networks:
   integration-test-network:

@@ -48,6 +48,7 @@ import { DocumentField } from '@/components/tables/fields/DocumentField'
 import { EmbeddingField } from '@/components/tables/fields/EmbeddingField'
 import { SingleSelectField } from '@/components/tables/fields/SingleSelectField'
 import { MultiSelectField } from '@/components/tables/fields/MultiSelectField'
+import { JSONField } from '@/components/tables/fields/JSONField'
 import { FileTypeDetector } from '@/ddd/domain/tables/services/file-type-detector'
 import { createFileArtifact, createDocumentArtifact } from '@/components/chat/types/chat-artifacts'
 import { uiStateActions } from '@/stores/ui-state.store'
@@ -59,6 +60,7 @@ import { createField, updateField, deleteField } from '@/app/actions/fields'
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { GridContext, GridHeaderBar, type GridContextValue } from './grid'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const logger = createDebugLogger('DynamicDataSheetGrid')
 import type {
@@ -67,7 +69,8 @@ import type {
   DocumentCellProps,
   EmbeddingCellProps,
   SingleSelectCellProps,
-  MultiSelectCellProps
+  MultiSelectCellProps,
+  JSONCellProps
 } from './grid/cell-types'
 
 interface DynamicDataSheetGridProps {
@@ -99,6 +102,9 @@ interface DynamicDataSheetGridProps {
   sortState?: { field?: string, order?: 'asc' | 'desc' };
   onSort?: (field: string, direction: 'asc' | 'desc') => void;
   onClearSort?: () => void;
+  // Navigation context (for back button from org chart)
+  returnTo?: string | null;
+  onBack?: () => void;
 }
 
 // Row number component for gutter column
@@ -111,7 +117,7 @@ const RowNumberCell = ({ rowIndex }: { rowIndex: number }) => {
 }
 
 // Direct field components for DataSheetGrid
-const RelationCell = ({ rowData, setRowData, columnData }: RelationCellProps) => {
+const RelationCell = ({ rowData, setRowData, columnData, focus, active, stopEditing }: RelationCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
   const { field } = columnData
 
@@ -124,21 +130,52 @@ const RelationCell = ({ rowData, setRowData, columnData }: RelationCellProps) =>
       isEditMode={true}
       compact={true}
       relatedTableId={field.relatedTableId ?? undefined}  // Convert null to undefined
-      multiple={false}
+      multiple={field.metadata?.multiple === true}
       required={field.required || false}
+      focus={focus}
+      onClose={() => stopEditing?.({ nextRow: false })}
     />
   )
 }
 
-const FileCell = ({ rowData, setRowData, columnData }: FileCellProps) => {
+const FileCell = ({ rowData, setRowData, columnData, focus, active, stopEditing }: FileCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
   const { field, organizationId, tableId } = columnData
 
-  const handleFileOpen = (file: any) => {
+  const handleFileOpen = async (file: any) => {
     try {
       const fileName = file.name || file.filename || 'Unknown File'
-      const fileUrl = file.url || file.downloadUrl
       const mimeType = file.mimeType || file.contentType
+
+      // Check for temp:// keys - these are pending uploads that can't be previewed yet
+      if (file.s3Key?.startsWith('temp://')) {
+        alert('This file is pending upload. Please save the row first to enable preview.')
+        return
+      }
+
+      // Generate presigned download URL from S3
+      let fileUrl = file.url || file.downloadUrl
+
+      // If no URL, generate one from s3Key using the download-url API
+      if (!fileUrl && file.s3Key) {
+        try {
+          const response = await fetch(`/api/files/download-url?s3Key=${encodeURIComponent(file.s3Key)}`)
+          const result = await response.json()
+          if (result.success && result.data?.downloadUrl) {
+            fileUrl = result.data.downloadUrl
+          } else {
+            console.error('Failed to get download URL - API returned:', result)
+          }
+        } catch (urlError) {
+          console.error('Failed to get download URL:', urlError)
+        }
+      }
+
+      // If we still don't have a fileUrl, show error
+      if (!fileUrl) {
+        alert('Unable to preview file - no download URL available. The file may not have been uploaded yet.')
+        return
+      }
 
       // Create appropriate artifact using LlamaIndex chat-ui system
       if (FileTypeDetector.isTiptapDocument(mimeType)) {
@@ -198,13 +235,20 @@ const FileCell = ({ rowData, setRowData, columnData }: FileCellProps) => {
       compact={true}
       onFileOpen={handleFileOpen}
       maxFiles={10}
+      // Upload context for S3 upload
+      organizationId={organizationId}
+      tableId={tableId}
+      fieldId={field.id}
+      focus={focus}
+      onClose={() => stopEditing?.({ nextRow: false })}
     />
   )
 }
 
-const DocumentCell = ({ rowData, setRowData, columnData }: DocumentCellProps) => {
+const DocumentCell = ({ rowData, setRowData, columnData, rowIndex, focus, active, stopEditing }: DocumentCellProps) => {
   // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
-  const { field, organizationId, tableId } = columnData
+  const { field, organizationId, tableId, data } = columnData
+  const rowId = data[rowIndex]?.id  // Get rowId from data array using rowIndex
 
   const handleDocumentOpen = (file: any) => {
     try {
@@ -271,7 +315,10 @@ const DocumentCell = ({ rowData, setRowData, columnData }: DocumentCellProps) =>
       field={field}
       organizationId={organizationId}
       tableId={tableId}
+      rowId={rowId}
       onDocumentOpen={handleDocumentOpen}
+      focus={focus}
+      onClose={() => stopEditing?.({ nextRow: false })}
     />
   )
 }
@@ -346,6 +393,24 @@ const MultiSelectCell = ({ rowData, setRowData, columnData }: MultiSelectCellPro
   )
 }
 
+const JSONCell = ({ rowData, setRowData, columnData, focus }: JSONCellProps) => {
+  // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
+  // rowData = field value (JSON object/array or null)
+  // setRowData(newValue) = updates the field value
+
+  return (
+    <JSONField
+      value={rowData}  // ✅ rowData IS the field value
+      onChange={(newValue) => {
+        setRowData(newValue)  // ✅ Set field value directly
+      }}
+      isEditMode={true}
+      compact={true}
+      focus={focus}  // ✅ Pass focus for keyboard shortcut support
+    />
+  )
+}
+
 // Loading state component
 const LoadingState = () => (
   <div className="flex items-center justify-center h-32 text-muted-foreground">
@@ -395,7 +460,9 @@ export function DynamicDataSheetGrid({
   onClearFilters,
   sortState,
   onSort,
-  onClearSort
+  onClearSort,
+  returnTo,
+  onBack
 }: DynamicDataSheetGridProps) {
   // Use custom hook for grid state management
   const { state, dispatch } = useGridState(rows)
@@ -525,6 +592,7 @@ export function DynamicDataSheetGrid({
     organizationId,
     tableId,
     availableTables,
+    data: state.data,
     onUpdateRow,
     onEditField: handleEditField,
     onDeleteField: handleDeleteField,
@@ -538,7 +606,14 @@ export function DynamicDataSheetGrid({
     EmbeddingCell,
     SingleSelectCell,
     MultiSelectCell,
+    JSONCell,
   })
+
+  // Create a stable fingerprint of field structure - only changes when fields are added/removed
+  // This is more stable than columns.length which caused jitter during edits
+  const fieldsFingerprint = useMemo(() => {
+    return fields.map(f => f.id).sort().join(',')
+  }, [fields])
 
   /**
    * Event-driven onChange - uses operations parameter for precise change detection
@@ -686,60 +761,64 @@ export function DynamicDataSheetGrid({
     onUpdateRow,
     onAddRows,
     onDeleteRow,
-    onScroll
+    onScroll,
+    returnTo,
+    onBack
   }
 
   return (
-    <GridContext.Provider value={gridValue}>
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Custom Header Bar - integrated with grid */}
-      <div className="flex-shrink-0">
-        <GridHeaderBar />
-      </div>
-
-      {/* DataSheetGrid - fills remaining space, includes built-in "+ Add" button */}
-      <div className="flex-1 min-h-0 border border-t-0 border-border rounded-b-md overflow-hidden dsg-grid-wrapper">
-        {fields.length === 0 ? (
-          // Empty state with access to header controls
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground bg-background">
-            <div className="text-sm mb-2">No fields defined</div>
-            <div className="text-xs">Use the settings menu above to add fields</div>
+    <TooltipProvider delayDuration={300}>
+      <GridContext.Provider value={gridValue}>
+        <div className="h-full flex flex-col overflow-hidden">
+          {/* Custom Header Bar - integrated with grid */}
+          <div className="flex-shrink-0">
+            <GridHeaderBar />
           </div>
-        ) : (
-          <DataSheetGrid
-            key={`grid-${tableId}-${columns.length}-${currentView?.id || 'no-view'}`}  // CRITICAL: Remount on visible column count change or view change, but stable during data updates to preserve scroll position
-            value={state.data}
-            onChange={handleChange}
-            columns={columns}
-            createRow={() => createEmptyDSGRow(fields)}  // ✅ CRITICAL: Preserves IDs
-            duplicateRow={({ rowData }) => ({ ...rowData, id: crypto.randomUUID() })}  // Enable context menu with row duplication
-            lockRows={false}
-            rowKey="id"
-            rowHeight={30}  // Increased to 30 for better readability
-            headerRowHeight={32}  // Reduced from 50 (proportionally smaller)
-            autoAddRow={false}
-            gutterColumn={{   // Enable gutter for row numbers
-              basis: 60,
-              component: RowNumberCell
-            }}
-            onScroll={onScroll}  // Enable infinite scroll
-            style={{ height: '100%' }}  // CRITICAL: Create scrollable container for mouse wheel events
-            className="datasheet-grid"
-          />
-        )}
-      </div>
 
-      {/* Edit Field Dialog */}
-      <EditFieldPanel
-        field={editingField}
-        isOpen={isEditFieldOpen}
-        onClose={() => setIsEditFieldOpen(false)}
-        onSave={handleSaveField}
-        availableTables={availableTables}
-        tableId={tableId}
-      />
-    </div>
-    </GridContext.Provider>
+          {/* DataSheetGrid - fills remaining space, includes built-in "+ Add" button */}
+          <div className="flex-1 min-h-0 border border-t-0 border-border rounded-b-md overflow-hidden dsg-grid-wrapper">
+            {fields.length === 0 ? (
+              // Empty state with access to header controls
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground bg-background">
+                <div className="text-sm mb-2">No fields defined</div>
+                <div className="text-xs">Use the settings menu above to add fields</div>
+              </div>
+            ) : (
+              <DataSheetGrid
+                key={`grid-${tableId}-${currentView?.id || 'default'}-${fieldsFingerprint}`}  // Include field IDs to remount on field add/remove (but not on cell edits)
+                value={state.data}
+                onChange={handleChange}
+                columns={columns}
+                createRow={() => createEmptyDSGRow(fields)}  // ✅ CRITICAL: Preserves IDs
+                duplicateRow={({ rowData }) => ({ ...rowData, id: crypto.randomUUID() })}  // Enable context menu with row duplication
+                lockRows={false}
+                rowKey="id"
+                rowHeight={30}  // Increased to 30 for better readability
+                headerRowHeight={32}  // Reduced from 50 (proportionally smaller)
+                autoAddRow={false}
+                gutterColumn={{   // Enable gutter for row numbers
+                  basis: 60,
+                  component: RowNumberCell
+                }}
+                onScroll={onScroll}  // Enable infinite scroll
+                style={{ height: '100%' }}  // CRITICAL: Create scrollable container for mouse wheel events
+                className="datasheet-grid"
+              />
+            )}
+          </div>
+
+          {/* Edit Field Dialog */}
+          <EditFieldPanel
+            field={editingField}
+            isOpen={isEditFieldOpen}
+            onClose={() => setIsEditFieldOpen(false)}
+            onSave={handleSaveField}
+            availableTables={availableTables}
+            tableId={tableId}
+          />
+        </div>
+      </GridContext.Provider>
+    </TooltipProvider>
   )
 }
 

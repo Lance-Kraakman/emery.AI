@@ -1,4 +1,4 @@
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, or, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
 import { Skill, CreateSkillProps, UpdateSkillProps } from '@/ddd/domain/skills/entities/skill';
@@ -39,7 +39,12 @@ export class DrizzleSkillRepository implements ISkillRepository {
     const results = await this.db
       .select()
       .from(skills)
-      .where(eq(skills.agentId, agentId.value));
+      .where(
+        or(
+          eq(skills.agentId, agentId.value),
+          eq(skills.isSystem, true)
+        )
+      );
 
     return results.map(record => this.toDomain(record));
   }
@@ -49,9 +54,12 @@ export class DrizzleSkillRepository implements ISkillRepository {
       .select()
       .from(skills)
       .where(
-        and(
-          eq(skills.organizationId, organizationId.value),
-          isNull(skills.agentId)
+        or(
+          and(
+            eq(skills.organizationId, organizationId.value),
+            isNull(skills.agentId)
+          ),
+          eq(skills.isSystem, true)
         )
       );
 
@@ -62,7 +70,12 @@ export class DrizzleSkillRepository implements ISkillRepository {
     const results = await this.db
       .select()
       .from(skills)
-      .where(eq(skills.organizationId, organizationId.value));
+      .where(
+        or(
+          eq(skills.organizationId, organizationId.value),
+          eq(skills.isSystem, true)
+        )
+      );
 
     return results.map(record => this.toDomain(record));
   }
@@ -78,9 +91,17 @@ export class DrizzleSkillRepository implements ISkillRepository {
         description: props.description || '',
         inputs: props.inputs || [],
         outputs: props.outputs || [],
-        instructions: props.instructions,
+        instructions: props.instructions || '',
         tools: props.tools || [],
         content: props.content || null,
+        model: props.model ?? null,
+        agentType: props.agentType ?? null,
+        executionType: props.executionType || 'agentic',
+        taskModelConfig: props.taskModelConfig || null,
+        toolExecutionConfig: props.toolExecutionConfig || null,
+        writeConfig: props.writeConfig || null,
+        steps: props.steps || null,
+        canvasMetadata: props.canvasMetadata || null,
         createdAt: now,
         updatedAt: now
       })
@@ -90,6 +111,12 @@ export class DrizzleSkillRepository implements ISkillRepository {
   }
 
   async update(id: SkillId, updates: UpdateSkillProps): Promise<Skill> {
+    console.log('[DrizzleSkillRepository] update called with:', {
+      skillId: id.value,
+      stepsProvided: updates.steps !== undefined,
+      steps: updates.steps,
+      stepsLength: updates.steps?.length
+    });
     const updateData: any = { updatedAt: new Date() };
 
     if (updates.name !== undefined) {
@@ -113,6 +140,33 @@ export class DrizzleSkillRepository implements ISkillRepository {
     if (updates.content !== undefined) {
       updateData.content = updates.content;
     }
+    if (updates.model !== undefined) {
+      updateData.model = updates.model;
+    }
+    if (updates.agentType !== undefined) {
+      updateData.agentType = updates.agentType;
+    }
+    if (updates.executionType !== undefined) {
+      updateData.executionType = updates.executionType;
+    }
+    if (updates.taskModelConfig !== undefined) {
+      updateData.taskModelConfig = updates.taskModelConfig;
+    }
+    if (updates.toolExecutionConfig !== undefined) {
+      updateData.toolExecutionConfig = updates.toolExecutionConfig;
+    }
+    if (updates.writeConfig !== undefined) {
+      updateData.writeConfig = updates.writeConfig;
+    }
+    if (updates.steps !== undefined) {
+      updateData.steps = updates.steps;
+      console.log('[DrizzleSkillRepository] Setting updateData.steps:', updateData.steps);
+    }
+    if (updates.canvasMetadata !== undefined) {
+      updateData.canvasMetadata = updates.canvasMetadata;
+    }
+
+    console.log('[DrizzleSkillRepository] Final updateData keys:', Object.keys(updateData));
 
     const result = await this.db
       .update(skills)
@@ -163,11 +217,15 @@ export class DrizzleSkillRepository implements ISkillRepository {
       .select()
       .from(skills)
       .where(
-        and(
-          eq(skills.organizationId, organizationId.value),
-          isNull(skills.agentId)
+        or(
+          and(
+                eq(skills.organizationId, organizationId.value),
+                isNull(skills.agentId)
+              ),
+          eq(skills.isSystem, true)
         )
-      );
+      )
+      ;
 
     return results.length;
   }
@@ -187,6 +245,15 @@ export class DrizzleSkillRepository implements ISkillRepository {
       instructions: record.instructions || '',
       tools: record.tools || [],
       content: record.content || undefined,
+      model: record.model ?? null,
+      agentType: record.agentType ?? null,
+      executionType: record.executionType || 'agentic',
+      taskModelConfig: record.taskModelConfig || undefined,
+      toolExecutionConfig: record.toolExecutionConfig || undefined,
+      writeConfig: record.writeConfig || undefined,
+      steps: record.steps || undefined,
+      canvasMetadata: record.canvasMetadata || undefined,
+      isSystem: record.isSystem ?? false,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     };

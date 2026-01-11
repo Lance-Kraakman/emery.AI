@@ -20,19 +20,21 @@ export type FilterOperator =
   | "is_empty"
   | "is_not_empty"
   | "is_true"
-  | "is_false";
+  | "is_false"
+  | "in"
+  | "not_in";
 
 export interface FilterConfigProps {
   fieldId: number;
   operator: FilterOperator;
-  value?: string | number | boolean | null;
+  value?: string | number | boolean | null | Array<string | number | null>;
 }
 
 export class FilterConfig {
   private constructor(
     private readonly _fieldId: number,
     private readonly _operator: FilterOperator,
-    private readonly _value?: string | number | boolean | null
+    private readonly _value?: string | number | boolean | null | Array<string | number | null>
   ) {
     this.validate();
   }
@@ -71,7 +73,7 @@ export class FilterConfig {
     return this._operator;
   }
 
-  get value(): string | number | boolean | null | undefined {
+  get value(): string | number | boolean | null | Array<string | number | null> | undefined {
     return this._value;
   }
 
@@ -109,6 +111,10 @@ export class FilterConfig {
         return `${columnName} = TRUE`;
       case "is_false":
         return `${columnName} = FALSE`;
+      case "in":
+        return `${columnName} IN (${this.formatArrayValue()})`;
+      case "not_in":
+        return `${columnName} NOT IN (${this.formatArrayValue()})`;
       default:
         throw new Error(`Unsupported filter operator: ${this._operator}`);
     }
@@ -125,6 +131,20 @@ export class FilterConfig {
       return "NULL";
     }
     return String(this._value);
+  }
+
+  private formatArrayValue(): string {
+    // Handle array values for IN/NOT IN operators
+    const arr = Array.isArray(this._value) ? this._value : [this._value];
+    return arr.map(v => {
+      if (typeof v === "string") {
+        return `'${v.replace(/'/g, "''")}'`;
+      }
+      if (v === null) {
+        return "NULL";
+      }
+      return String(v);
+    }).join(", ");
   }
 
   toJSON(): FilterConfigProps {

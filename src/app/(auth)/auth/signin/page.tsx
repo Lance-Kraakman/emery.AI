@@ -17,10 +17,10 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
   const params = await searchParams
 
   // if (session) {
-  //   redirect("/mission-control/dashboard")
+  //   redirect("/apps")
   // }
 
-  const callbackUrl = params.callbackUrl || '/mission-control/dashboard'
+  const callbackUrl = params.callbackUrl || '/apps'
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">

@@ -6,11 +6,12 @@ Simplified for single-instruction model - removed StepConfig/StepType mapping.
 No complex abstractions - just direct mapping functions.
 """
 
+import json
 from typing import List, Dict, Any, Optional, TypedDict
 from ..generated import agent_worker_pb2
-from ...entities.task import TaskRequest, TriggerData
+from ...entities.task import TaskRequest, TriggerData, SkillInputValue
 from ...entities.agent import AgentConfig
-from ...types import TaskStatus, WorkerStatus
+from ...types import TaskStatus, WorkerStatus, InstructionConfig
 
 
 # Type definitions for structured return values
@@ -56,10 +57,31 @@ class ProtoMapper:
         """Convert protobuf TaskRequest to domain entity."""
         # Convert agent config
 
-        # Convert trigger data
-        trigger_data = TriggerData(
-            payload=dict(proto.trigger_data.payload)
-        )
+        # Convert trigger data with typed skill inputs
+        skill_input_values: List[SkillInputValue] = []
+        if proto.trigger_data and proto.trigger_data.skill_inputs:
+            for input_val in proto.trigger_data.skill_inputs:
+                # Extract value from oneof field
+                value: Any = None
+                if input_val.HasField('string_value'):
+                    value = input_val.string_value
+                elif input_val.HasField('number_value'):
+                    value = input_val.number_value
+                elif input_val.HasField('bool_value'):
+                    value = input_val.bool_value
+                elif input_val.HasField('json_value'):
+                    try:
+                        value = json.loads(input_val.json_value)
+                    except json.JSONDecodeError:
+                        value = input_val.json_value  # Fallback to raw string
+
+                skill_input_values.append(SkillInputValue(
+                    name=input_val.name,
+                    type=input_val.type,
+                    value=value
+                ))
+
+        trigger_data = TriggerData(skill_inputs=skill_input_values)
 
         # Handle oneof execution_mode
         skill_name = None
@@ -67,15 +89,17 @@ class ProtoMapper:
         if proto.HasField("skill_name"):
             skill_name = proto.skill_name
 
-        # Convert instruction config to dict if present
+        # Convert instruction config to dataclass if present
         instruction_config = None
         if proto.HasField("instruction_config"):
-            instruction_config = {
-                'task': proto.instruction_config.task,
-                'tools': list(proto.instruction_config.tools),
-                'servers': list(proto.instruction_config.servers),
-                'model': proto.instruction_config.model
-            }
+            instruction_config = InstructionConfig(
+                task=proto.instruction_config.task,
+                tools=list(proto.instruction_config.tools),
+                servers=list(proto.instruction_config.servers),
+                images=list(proto.instruction_config.images),
+                attachments=list(proto.instruction_config.attachments),
+                model=proto.instruction_config.model or None
+            )
 
         return TaskRequest(
             task_id=proto.task_id,
@@ -88,8 +112,8 @@ class ProtoMapper:
             name=proto.name,
             skill_name=skill_name,
             instruction_config=instruction_config,
-            organization_model=proto.organization_model if proto.HasField("organization_model") else None,
-            agent_model=proto.agent_model if proto.HasField("agent_model") else None
+            organization_model=proto.organization_model or None,
+            agent_model=proto.agent_model or None
         )
 
     def task_progress_to_proto(self, progress: TaskProgressDict) -> agent_worker_pb2.TaskProgress:

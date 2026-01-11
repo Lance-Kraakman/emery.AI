@@ -22,8 +22,8 @@ import {
   Info
 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-import { updateAgentFromClient } from '@/app/actions/agents';
+import { TriggerConfigs, type TriggerConfig, type TriggerType, PipedreamEventTriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { updateAgentFromClient, deployPipedreamSource } from '@/app/actions/agents';
 import { TableSelector } from '../TableSelector';
 import ScheduleManager from '../ScheduleManager';
 import {
@@ -33,11 +33,18 @@ import {
   getTriggerTypeLabel
 } from '../trigger-utils';
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
-import type { ScheduleConfigurationDTO } from '@/app/dtos/schedule.dto';
+import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
 import { uploadTaskAttachment } from '@/app/actions/tasks';
 import type { ImageAttachment, FileAttachment } from '@/ddd/domain/tasks/entities/task';
 import { InstructionTemplateService } from '@/ddd/domain/tasks/services/instruction-template-service';
 import { getSampleRow } from '@/app/actions/rows';
+import { VariablesPanel, type Variable } from '@/components/shared/VariablesPanel';
+import { SkillSelectorForAutomation } from '../SkillSelectorForAutomation';
+import type { AutomationInputMappingDTO } from '@/app/dtos/automation.dto';
+import { getUserOAuthConnections } from '@/app/actions/connections';
+import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getTriggersByApp, type TriggerToolDTO } from '@/app/actions/tools';
 
 interface TriggerConfigModalProps {
   isOpen: boolean;
@@ -59,7 +66,7 @@ interface TriggerTypeOption {
 const triggerTypes: TriggerTypeOption[] = [
   {
     type: 'CALENDAR',
-    title: 'Scheduled',
+    title: 'Recurring',
     description: 'Run on a recurring schedule with timezone support',
     icon: Calendar,
     badge: 'Popular'
@@ -77,56 +84,101 @@ const triggerTypes: TriggerTypeOption[] = [
     description: 'Trigger via external HTTP requests with security',
     icon: Globe,
     badge: 'Integration'
+  },
+  {
+    type: 'PIPEDREAM_EVENT',
+    title: 'External Event',
+    description: 'Trigger from connected apps like Gmail, Slack, etc.',
+    icon: Zap,
+    badge: 'Integration'
   }
 ];
 
 /**
  * Generate sample values for all variables based on trigger type
  * Combines trigger metadata samples with actual table data for DATABASE_EVENT
+ * For PIPEDREAM_EVENT, uses the selected trigger's parameters for dynamic variables
+ * Returns Variable[] compatible with VariablesPanel component
  */
 function generateVariableSamples(
   triggerType: TriggerType,
   scheduleName: string,
-  sampleRowData: Record<string, any> | null
-): Array<{ variable: string; sampleValue: string }> {
-  const samples: Array<{ variable: string; sampleValue: string }> = [];
+  sampleRowData: Record<string, any> | null,
+  selectedTrigger?: TriggerToolDTO | null
+): Variable[] {
+  const samples: Variable[] = [];
 
   // Common trigger variables
-  samples.push({ variable: '$trigger.type', sampleValue: triggerType });
-  samples.push({ variable: '$trigger.scheduleName', sampleValue: scheduleName || 'Daily sync' });
+  samples.push({ name: '$trigger.type', sampleValue: triggerType });
+  samples.push({ name: '$trigger.scheduleName', sampleValue: scheduleName || 'Daily sync' });
 
   if (triggerType === 'CALENDAR') {
     // Calendar-specific variables
     const now = new Date();
     const scheduledTime = new Date(now.getTime() + 3600000); // 1 hour from now
-    samples.push({ variable: '$trigger.scheduledTime', sampleValue: scheduledTime.toISOString() });
-    samples.push({ variable: '$trigger.timezone', sampleValue: 'America/New_York' });
+    samples.push({ name: '$trigger.scheduledTime', sampleValue: scheduledTime.toISOString() });
+    samples.push({ name: '$trigger.timezone', sampleValue: 'America/New_York' });
   } else if (triggerType === 'DATABASE_EVENT') {
     // Database event variables
-    samples.push({ variable: '$table.id', sampleValue: '1' });
-    samples.push({ variable: '$table.name', sampleValue: 'customers' });
-    samples.push({ variable: '$event.operation', sampleValue: 'INSERT' });
-    samples.push({ variable: '$event.rowId', sampleValue: '6a0c5b17-d4dc-4c47-924b-8dc47b8f9c76' });
-    samples.push({ variable: '$event.timestamp', sampleValue: new Date().toISOString() });
+    samples.push({ name: '$table.id', sampleValue: '1' });
+    samples.push({ name: '$table.name', sampleValue: 'customers' });
+    samples.push({ name: '$event.operation', sampleValue: 'INSERT' });
+    samples.push({ name: '$event.rowId', sampleValue: '6a0c5b17-d4dc-4c47-924b-8dc47b8f9c76' });
+    samples.push({ name: '$event.timestamp', sampleValue: new Date().toISOString() });
 
     // Add actual row data if available
     if (sampleRowData) {
       Object.entries(sampleRowData).forEach(([fieldName, value]) => {
         const displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
-        samples.push({ variable: `$row.${fieldName}`, sampleValue: displayValue });
+        samples.push({ name: `$row.${fieldName}`, sampleValue: displayValue });
       });
 
       // Show previousRow example for one field
       const firstField = Object.keys(sampleRowData)[0];
       if (firstField) {
-        samples.push({ variable: `$previousRow.${firstField}`, sampleValue: '(previous value)' });
+        samples.push({ name: `$previousRow.${firstField}`, sampleValue: '(previous value)' });
       }
     }
   } else if (triggerType === 'WEBHOOK') {
     // Webhook-specific variables
-    samples.push({ variable: '$webhook.payload', sampleValue: '{"event": "user.created"}' });
-    samples.push({ variable: '$webhook.headers', sampleValue: '{"content-type": "application/json"}' });
-    samples.push({ variable: '$webhook.origin', sampleValue: 'https://example.com' });
+    samples.push({ name: '$webhook.payload', sampleValue: '{"event": "user.created"}' });
+    samples.push({ name: '$webhook.headers', sampleValue: '{"content-type": "application/json"}' });
+    samples.push({ name: '$webhook.origin', sampleValue: 'https://example.com' });
+  } else if (triggerType === 'PIPEDREAM_EVENT') {
+    // Dynamic variables from selected trigger
+    if (selectedTrigger) {
+      samples.push({ name: '$event.app', sampleValue: selectedTrigger.appId });
+      samples.push({ name: '$event.type', sampleValue: selectedTrigger.id });
+      samples.push({ name: '$event.timestamp', sampleValue: new Date().toISOString() });
+
+      // Add variables from trigger parameters (excluding internal ones)
+      const excludeParams = ['timer', 'triggerType', 'db', 'permissionAlert', 'latencyWarningAlert', 'serviceAccountKeyJsonInstructions'];
+      Object.entries(selectedTrigger.parameters)
+        .filter(([key]) => !excludeParams.includes(key) && !key.endsWith('Alert'))
+        .forEach(([key, param]) => {
+          // Generate sample value based on type
+          let sampleValue: string;
+          if (param.type === 'boolean') {
+            sampleValue = 'true';
+          } else if (param.type === 'string[]') {
+            sampleValue = '["value1", "value2"]';
+          } else if (param.type.includes('number') || param.type.includes('integer')) {
+            sampleValue = '123';
+          } else {
+            sampleValue = '"sample value"';
+          }
+          samples.push({ name: `$event.${key}`, sampleValue });
+        });
+
+      // Always include payload for the full event data
+      samples.push({ name: '$event.payload', sampleValue: '{ ... full event payload ... }' });
+    } else {
+      // Fallback when no trigger selected
+      samples.push({ name: '$event.app', sampleValue: 'gmail' });
+      samples.push({ name: '$event.type', sampleValue: 'new-email' });
+      samples.push({ name: '$event.timestamp', sampleValue: new Date().toISOString() });
+      samples.push({ name: '$event.payload', sampleValue: '{"from": "user@example.com", "subject": "Hello"}' });
+    }
   }
 
   return samples;
@@ -162,12 +214,32 @@ export function TriggerConfigModal({
     requiresSignature: false,
     allowedOrigins: [] as string[]
   });
+  const [pipedreamConfig, setPipedreamConfig] = useState({
+    connectionId: '' as string,
+    triggerId: '' as string,        // Tool ID from tools table
+    triggerType: '' as string,      // Legacy - kept for backward compat
+    props: {} as Record<string, any>
+  });
+
+  // Available connections for PIPEDREAM_EVENT
+  const [connections, setConnections] = useState<ConnectionDTO[]>([]);
+  const [loadingConnections, setLoadingConnections] = useState(false);
+
+  // Available triggers for selected connection's app
+  const [availableTriggers, setAvailableTriggers] = useState<TriggerToolDTO[]>([]);
+  const [selectedTrigger, setSelectedTrigger] = useState<TriggerToolDTO | null>(null);
+  const [loadingTriggers, setLoadingTriggers] = useState(false);
 
   // Task instructions state (NEW - defines WHAT task to execute)
   const [scheduleName, setScheduleName] = useState('');
   const [taskInstructions, setTaskInstructions] = useState('');
   const [taskTools, setTaskTools] = useState<any[]>([]); // ToolConfigDTO[]
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+
+  // Skill selection state (replaces inline instructions)
+  const [selectedSkillId, setSelectedSkillId] = useState<number | null>(null);
+  const [inputMappings, setInputMappings] = useState<AutomationInputMappingDTO[]>([]);
+  const [useSkillMode, setUseSkillMode] = useState(false); // Toggle between skill vs inline instructions
 
   // Sample data for database triggers
   const [sampleRowData, setSampleRowData] = useState<Record<string, any> | null>(null);
@@ -184,14 +256,20 @@ export function TriggerConfigModal({
       setCalendarConfig({ rrule: '', timezone: 'UTC', startDate: undefined });
       setDatabaseConfig({ operations: ['INSERT', 'UPDATE'], tableId: undefined });
       setWebhookConfig({ webhookSecret: '', requiresSignature: false, allowedOrigins: [] });
+      setPipedreamConfig({ connectionId: '', triggerId: '', triggerType: '', props: {} });
+      setAvailableTriggers([]);
+      setSelectedTrigger(null);
       setScheduleName('');
       setTaskInstructions('');
       setTaskTools([]);
       setPendingAttachments([]);
+      setSelectedSkillId(null);
+      setInputMappings([]);
+      setUseSkillMode(true); // Default to skill mode for new automations
       setCurrentStep('select');
-    } else if (mode === 'edit' && agent.schedules[scheduleIndex]) {
+    } else if (mode === 'edit' && agent.automations[scheduleIndex]) {
       // Load existing schedule for editing
-      const schedule = agent.schedules[scheduleIndex];
+      const schedule = agent.automations[scheduleIndex];
       const trigger = schedule.trigger;
       setSelectedType(trigger.type);
 
@@ -216,8 +294,22 @@ export function TriggerConfigModal({
 
       // Load task instructions if available (new format)
       setScheduleName(schedule.name || '');
-      setTaskInstructions(schedule.taskInstructions?.task || '');
-      setTaskTools(schedule.taskInstructions?.tools || []);
+
+      // Load skill selection if present
+      if (schedule.skillId && schedule.skillId > 0) {
+        setSelectedSkillId(schedule.skillId);
+        setInputMappings(schedule.inputMappings || []);
+        setUseSkillMode(true);
+        setTaskInstructions('');
+        setTaskTools([]);
+      } else {
+        // Legacy mode: no skill selected
+        setSelectedSkillId(null);
+        setInputMappings([]);
+        setUseSkillMode(false);
+        setTaskInstructions('');
+        setTaskTools([]);
+      }
 
       setCurrentStep('select');
     }
@@ -250,6 +342,60 @@ export function TriggerConfigModal({
 
     fetchSampleData();
   }, [selectedType, databaseConfig.tableId]);
+
+  // Fetch user connections when PIPEDREAM_EVENT is selected
+  useEffect(() => {
+    const fetchConnections = async () => {
+      if (selectedType !== 'PIPEDREAM_EVENT') {
+        return;
+      }
+
+      setLoadingConnections(true);
+      try {
+        const result = await getUserOAuthConnections();
+        if (result.success && result.data) {
+          setConnections(result.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch connections:', error);
+      } finally {
+        setLoadingConnections(false);
+      }
+    };
+
+    fetchConnections();
+  }, [selectedType]);
+
+  // Fetch available triggers when connection is selected
+  useEffect(() => {
+    const fetchTriggers = async () => {
+      if (!pipedreamConfig.connectionId) {
+        setAvailableTriggers([]);
+        setSelectedTrigger(null);
+        return;
+      }
+
+      // Find the selected connection to get its app
+      const selectedConnection = connections.find(c => c.id === pipedreamConfig.connectionId);
+      if (!selectedConnection) {
+        return;
+      }
+
+      setLoadingTriggers(true);
+      try {
+        const result = await getTriggersByApp(selectedConnection.app);
+        if (result.success && result.data) {
+          setAvailableTriggers(result.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch triggers:', error);
+      } finally {
+        setLoadingTriggers(false);
+      }
+    };
+
+    fetchTriggers();
+  }, [pipedreamConfig.connectionId, connections]);
 
   const handleTypeSelect = (type: TriggerType) => {
     setSelectedType(type);
@@ -286,20 +432,31 @@ export function TriggerConfigModal({
       const validationErrors: string[] = [];
 
       if (!scheduleName?.trim()) {
-        validationErrors.push('Schedule name is required');
+        validationErrors.push('Automation name is required');
       }
 
-      if (!taskInstructions?.trim()) {
-        validationErrors.push('Task instructions are required');
+      // Validate based on mode: skill or inline instructions
+      if (useSkillMode) {
+        if (!selectedSkillId || selectedSkillId === 0) {
+          validationErrors.push('Please select a skill');
+        }
+      } else {
+        if (!taskInstructions?.trim()) {
+          validationErrors.push('Task instructions are required');
+        }
       }
 
       // Validate trigger-specific requirements
       if (selectedType === 'CALENDAR' && !calendarConfig.rrule) {
-        validationErrors.push('Calendar schedule requires an RRule configuration');
+        validationErrors.push('Calendar automation requires an RRule configuration');
       }
 
       if (selectedType === 'DATABASE_EVENT' && databaseConfig.operations.length === 0) {
         validationErrors.push('Database event trigger requires at least one operation');
+      }
+
+      if (selectedType === 'PIPEDREAM_EVENT' && !pipedreamConfig.connectionId) {
+        validationErrors.push('External event trigger requires a connected app');
       }
 
       if (validationErrors.length > 0) {
@@ -334,6 +491,49 @@ export function TriggerConfigModal({
             allowedOrigins: webhookConfig.allowedOrigins.length > 0 ? webhookConfig.allowedOrigins : undefined,
             enabled: true
           });
+          break;
+        case 'PIPEDREAM_EVENT':
+          // Create base trigger config
+          let pipedreamTrigger = TriggerConfigs.pipedreamEvent(
+            pipedreamConfig.connectionId,
+            pipedreamConfig.triggerId || pipedreamConfig.triggerType || 'default',
+            {
+              props: Object.keys(pipedreamConfig.props).length > 0 ? pipedreamConfig.props : undefined,
+              enabled: true
+            }
+          );
+
+          // Deploy source to Pipedream if we have a trigger ID
+          if (pipedreamConfig.triggerId) {
+            // Get the app slug from the selected connection
+            const selectedConnection = connections.find(c => c.id === pipedreamConfig.connectionId);
+            const appSlug = selectedConnection?.app || pipedreamConfig.triggerId.split('-')[0];
+
+            console.log('[TriggerConfigModal] Deploying Pipedream source...');
+            const deployResult = await deployPipedreamSource({
+              agentId: agent.id,
+              triggerId: pipedreamConfig.triggerId,
+              connectionId: pipedreamConfig.connectionId,
+              appSlug,
+              configuredProps: pipedreamConfig.props
+            });
+
+            if (deployResult.success && deployResult.data) {
+              console.log('[TriggerConfigModal] Source deployed:', deployResult.data);
+              // Add deployment IDs to trigger config
+              pipedreamTrigger = pipedreamTrigger.withDeploymentIds({
+                sourceId: deployResult.data.sourceId,
+                webhookId: deployResult.data.webhookId,
+                subscriptionId: deployResult.data.subscriptionId
+              });
+            } else {
+              console.error('[TriggerConfigModal] Source deployment failed:', deployResult.error);
+              // Continue without deployment IDs - source can be deployed later
+              // We still want to save the trigger config so user doesn't lose their work
+            }
+          }
+
+          triggerConfig = pipedreamTrigger;
           break;
         default:
           throw new Error(`Unsupported trigger type: ${selectedType}`);
@@ -383,16 +583,11 @@ export function TriggerConfigModal({
         });
       }
 
-      // Step 2: Create ScheduleConfigurationDTO with trigger + task instructions
-      const newSchedule: ScheduleConfigurationDTO = {
+      // Step 2: Create AutomationConfigurationDTO with trigger + skill reference
+      const newSchedule: AutomationConfigurationDTO = {
         trigger: triggerConfig.toJSON() as any, // AIDEV-NOTE: toJSON() returns plain object compatible with TriggerConfigDTO
-        taskInstructions: {
-          task: taskInstructions,
-          images: imageAttachments.length > 0 ? imageAttachments : undefined,
-          attachments: fileAttachments.length > 0 ? fileAttachments : undefined,
-          tools: taskTools,
-          metadata: {}
-        },
+        skillId: useSkillMode ? (selectedSkillId || 0) : 0,
+        inputMappings: useSkillMode ? inputMappings : [],
         enabled: true,
         name: scheduleName,
         description: manualConfig.description || undefined
@@ -402,38 +597,38 @@ export function TriggerConfigModal({
       console.log('[TriggerConfigModal] Schedule object created', {
         newSchedule,
         hasValidTrigger: !!newSchedule.trigger,
-        hasValidInstructions: !!newSchedule.taskInstructions?.task
+        skillId: newSchedule.skillId
       });
 
-      // Step 3: Update schedules array based on mode
-      let updatedSchedules: ScheduleConfigurationDTO[];
+      // Step 3: Update automations array based on mode
+      let updatedAutomations: AutomationConfigurationDTO[];
 
       // BUGFIX: If in edit mode but the schedule doesn't exist at the index, treat as create
-      const scheduleExists = agent.schedules && agent.schedules[scheduleIndex] !== undefined;
+      const scheduleExists = agent.automations && agent.automations[scheduleIndex] !== undefined;
 
       if (mode === 'create' || !scheduleExists) {
-        // Append new schedule to existing schedules
+        // Append new schedule to existing automations
         if (!scheduleExists && mode === 'edit') {
           console.warn(`[TriggerConfigModal] Edit mode but schedule ${scheduleIndex} doesn't exist. Treating as create.`);
         }
-        updatedSchedules = [...(agent.schedules || []), newSchedule];
+        updatedAutomations = [...(agent.automations || []), newSchedule];
       } else {
         // Replace schedule at specific index
-        updatedSchedules = agent.schedules.map((schedule, i) =>
+        updatedAutomations = agent.automations.map((schedule: AutomationConfigurationDTO, i: number) =>
           i === scheduleIndex ? newSchedule : schedule
         );
       }
 
-      // LOGGING: Schedules array prepared for update
-      console.log('[TriggerConfigModal] Schedules array prepared', {
-        totalSchedules: updatedSchedules.length,
+      // LOGGING: Automations array prepared for update
+      console.log('[TriggerConfigModal] Automations array prepared', {
+        totalAutomations: updatedAutomations.length,
         isCreate: mode === 'create',
         scheduleIndex: mode === 'edit' ? scheduleIndex : 'N/A',
-        updatedSchedules
+        updatedAutomations
       });
 
       const result = await updateAgentFromClient(agent.id, {
-        schedules: updatedSchedules
+        automations: updatedAutomations
       });
 
       // LOGGING: Server action result
@@ -444,7 +639,7 @@ export function TriggerConfigModal({
       });
 
       if (!result.success) {
-        throw new Error(result.error || 'Failed to update schedule configuration');
+        throw new Error(result.error || 'Failed to update automation configuration');
       }
 
       console.log('[TriggerConfigModal] Schedule saved successfully, calling onUpdate and closing modal');
@@ -463,7 +658,7 @@ export function TriggerConfigModal({
     } catch (error) {
       console.error('Error saving schedule configuration:', error);
       setSaveStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to save schedule configuration');
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to save automation configuration');
     } finally {
       setIsSaving(false);
     }
@@ -480,21 +675,27 @@ export function TriggerConfigModal({
           return databaseConfig.operations.length > 0;
         case 'WEBHOOK':
           return true; // Webhook secret is optional
+        case 'PIPEDREAM_EVENT':
+          return !!pipedreamConfig.connectionId && !!pipedreamConfig.triggerId; // Connection and trigger required
         default:
           return false;
       }
     }
 
     if (currentStep === 'instructions') {
-      // Require schedule name and task instructions
-      return !!scheduleName.trim() && !!taskInstructions.trim();
+      // Require schedule name and either skill or task instructions
+      if (!scheduleName.trim()) return false;
+      if (useSkillMode) {
+        return !!selectedSkillId && selectedSkillId > 0;
+      }
+      return !!taskInstructions.trim();
     }
 
     return false;
   };
 
   const getStepTitle = () => {
-    const modePrefix = mode === 'create' ? 'Add Schedule' : `Edit Schedule`;
+    const modePrefix = mode === 'create' ? 'Add Automation' : `Edit Automation`;
 
     switch (currentStep) {
       case 'select':
@@ -559,7 +760,7 @@ export function TriggerConfigModal({
             ) : (
               <Save className="h-4 w-4 mr-2" />
             )}
-            Save Schedule
+            Save Automation
           </Button>
         )}
       </div>
@@ -661,7 +862,7 @@ export function TriggerConfigModal({
               </div>
 
               <div>
-                <Label className="text-base font-medium">Schedule Configuration</Label>
+                <Label className="text-base font-medium">Recurrence Configuration</Label>
                 <div className="mt-2 border rounded-lg">
                   <ScheduleManager
                     initialRRule={calendarConfig.rrule}
@@ -771,29 +972,141 @@ export function TriggerConfigModal({
               </div>
             </div>
           )}
+
+          {selectedType === 'PIPEDREAM_EVENT' && (
+            <div className="space-y-6">
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <h4 className="font-medium text-purple-900 mb-2">External Event Trigger</h4>
+                <p className="text-sm text-purple-700">
+                  Trigger this automation when events occur in connected apps like Gmail, Slack, or other services.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="connection-select">Connected App *</Label>
+                  {loadingConnections ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Loading connections...</span>
+                    </div>
+                  ) : connections.length === 0 ? (
+                    <div className="p-4 border border-dashed rounded-lg text-center">
+                      <p className="text-sm text-muted-foreground mb-2">
+                        No connected apps found. Connect an app first to use external events.
+                      </p>
+                      <Button variant="outline" size="sm" asChild>
+                        <a href="/connections" target="_blank" rel="noopener noreferrer">
+                          Connect an App
+                        </a>
+                      </Button>
+                    </div>
+                  ) : (
+                    <Select
+                      value={pipedreamConfig.connectionId}
+                      onValueChange={(value) => setPipedreamConfig(prev => ({
+                        ...prev,
+                        connectionId: value,
+                        triggerType: '' // Reset trigger type when connection changes
+                      }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a connected app..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {connections.map((conn) => (
+                          <SelectItem key={conn.id} value={conn.id}>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium capitalize">{conn.app}</span>
+                              <span className="text-muted-foreground">({conn.account_name})</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Select which connected account should trigger this automation
+                  </p>
+                </div>
+
+                {pipedreamConfig.connectionId && (
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium">Event Type *</Label>
+                    {loadingTriggers ? (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span className="text-[11px]">Loading event types...</span>
+                      </div>
+                    ) : availableTriggers.length === 0 ? (
+                      <div className="p-3 border border-dashed rounded-lg text-center">
+                        <p className="text-[11px] text-muted-foreground">
+                          No event triggers available for this app yet.
+                        </p>
+                      </div>
+                    ) : (
+                      <Select
+                        value={pipedreamConfig.triggerId}
+                        onValueChange={(id) => {
+                          const trigger = availableTriggers.find(t => t.id === id);
+                          setSelectedTrigger(trigger || null);
+                          setPipedreamConfig(prev => ({
+                            ...prev,
+                            triggerId: id,
+                            triggerType: trigger?.id || '', // Use ID as triggerType for backward compat
+                          }));
+                        }}
+                      >
+                        <SelectTrigger className="h-7 text-[11px]">
+                          <SelectValue placeholder="Select an event type..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableTriggers.map((trigger) => (
+                            <SelectItem key={trigger.id} value={trigger.id}>
+                              <div className="flex flex-col">
+                                <span className="text-[11px]">{trigger.displayName}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">
+                      Select the event that will trigger this automation
+                    </p>
+                    {selectedTrigger && (
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        {selectedTrigger.description}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {currentStep === 'instructions' && (
         <div className="p-6">
           <div className="space-y-6">
-            {/* Schedule Name - Inline */}
+            {/* Automation Name - Inline */}
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2 flex-shrink-0">
-                <Label htmlFor="schedule-name" className="text-sm font-medium whitespace-nowrap">
-                  Schedule Name *
+                <Label htmlFor="automation-name" className="text-sm font-medium whitespace-nowrap">
+                  Automation Name *
                 </Label>
                 <div className="group relative">
                   <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                   <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
                     <p className="text-foreground">
-                      Give this schedule a descriptive name to identify it easily
+                      Give this automation a descriptive name to identify it easily
                     </p>
                   </div>
                 </div>
               </div>
               <Input
-                id="schedule-name"
+                id="automation-name"
                 value={scheduleName}
                 onChange={(e) => setScheduleName(e.target.value)}
                 placeholder="e.g., Daily Sales Report, Weekly Data Sync"
@@ -801,94 +1114,98 @@ export function TriggerConfigModal({
               />
             </div>
 
-            {/* Variables */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium">Variables</Label>
-                <div className="group relative">
-                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                  <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
-                    <p className="text-foreground">
-                      Click any variable to insert it into your task instructions. Values shown are examples.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              {isLoadingSampleData && selectedType === 'DATABASE_EVENT' ? (
-                <div className="p-3 bg-muted/50 rounded-lg border flex items-center justify-center text-xs text-muted-foreground">
-                  Loading sample data...
-                </div>
-              ) : (
-                <div className="p-2.5 bg-muted/50 rounded-lg border max-h-[180px] overflow-y-auto">
-                  <div className="space-y-1">
-                    {generateVariableSamples(selectedType, scheduleName, sampleRowData).map((sample) => (
-                      <div
-                        key={sample.variable}
-                        className="flex items-start gap-2 text-xs cursor-pointer hover:bg-muted/80 p-1 rounded transition-colors"
-                        onClick={() => {
-                          // Insert variable at cursor position
-                          const input = document.getElementById('schedule-task-instructions') as HTMLTextAreaElement;
-                          if (input) {
-                            const start = input.selectionStart;
-                            const end = input.selectionEnd;
-                            const text = taskInstructions;
-                            const before = text.substring(0, start);
-                            const after = text.substring(end);
-                            const variableText = sample.variable.replace('$', '${') + '}';
-                            setTaskInstructions(before + variableText + after);
-                            // Set cursor position after inserted text
-                            setTimeout(() => {
-                              input.focus();
-                              input.setSelectionRange(start + variableText.length, start + variableText.length);
-                            }, 0);
-                          }
-                        }}
-                        title="Click to insert this variable"
-                      >
-                        <span className="font-mono text-muted-foreground min-w-[140px] flex-shrink-0">
-                          {sample.variable}
-                        </span>
-                        <span className="text-muted-foreground flex-shrink-0">→</span>
-                        <span className="font-mono text-foreground break-all">
-                          {sample.sampleValue}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* Mode Toggle: Skill vs Inline Instructions */}
+            <Tabs value={useSkillMode ? 'skill' : 'inline'} onValueChange={(v) => setUseSkillMode(v === 'skill')}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="skill">Select Skill</TabsTrigger>
+                <TabsTrigger value="inline">Custom Instructions</TabsTrigger>
+              </TabsList>
 
-            {/* Task Instructions with @ Tool Mentions */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label className="text-base font-medium">Task Instructions *</Label>
-                <div className="group relative">
-                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                  <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
-                    <p className="text-foreground">
-                      Define what task should be created when this schedule triggers. Use @ to reference tools, documents, files, or agents. When triggered, a new task will be created with these instructions.
-                    </p>
+              {/* Skill Selection Mode */}
+              <TabsContent value="skill" className="mt-4">
+                <SkillSelectorForAutomation
+                  agentId={agent.id}
+                  selectedSkillId={selectedSkillId}
+                  onSkillSelect={setSelectedSkillId}
+                  inputMappings={inputMappings}
+                  onInputMappingsChange={setInputMappings}
+                  triggerType={selectedType}
+                  tableId={selectedType === 'DATABASE_EVENT' ? databaseConfig.tableId : undefined}
+                  sampleRowData={sampleRowData}
+                />
+              </TabsContent>
+
+              {/* Inline Instructions Mode */}
+              <TabsContent value="inline" className="mt-4 space-y-6">
+                {/* Variables */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-medium">Variables</Label>
+                    <div className="group relative">
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                      <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
+                        <p className="text-foreground">
+                          Click any variable to insert it into your task instructions. Values shown are examples.
+                        </p>
+                      </div>
+                    </div>
                   </div>
+                  <VariablesPanel
+                    variables={generateVariableSamples(selectedType, scheduleName, sampleRowData, selectedTrigger)}
+                    onInsert={(formattedVar) => {
+                      // Insert variable at cursor position in task instructions
+                      const input = document.getElementById('automation-task-instructions') as HTMLTextAreaElement;
+                      if (input) {
+                        const start = input.selectionStart;
+                        const end = input.selectionEnd;
+                        const before = taskInstructions.substring(0, start);
+                        const after = taskInstructions.substring(end);
+                        // Convert {$var} format to ${var} format for trigger variables
+                        const variableText = formattedVar.replace('{$', '${');
+                        setTaskInstructions(before + variableText + after);
+                        setTimeout(() => {
+                          input.focus();
+                          input.setSelectionRange(start + variableText.length, start + variableText.length);
+                        }, 0);
+                      }
+                    }}
+                    loading={isLoadingSampleData && selectedType === 'DATABASE_EVENT'}
+                    emptyMessage="No variables available"
+                  />
                 </div>
-              </div>
-              <UnifiedChatInput
-                value={taskInstructions}
-                onChange={setTaskInstructions}
-                tools={taskTools}
-                onToolsChange={setTaskTools}
-                variables={InstructionTemplateService.getAvailableVariables(selectedType)}
-                placeholder="Describe the task to execute... (Type @ to add tools or $ for variables)"
-                id="schedule-task-instructions"
-                mode="form"
-                minHeight="70px"
-                enableSendButton={false}
-                enableAttachments={true}
-                pendingAttachments={pendingAttachments}
-                onAttachmentAdd={handleAttachmentAdd}
-                onAttachmentRemove={handleAttachmentRemove}
-              />
-            </div>
+
+                {/* Task Instructions with @ Tool Mentions */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-base font-medium">Task Instructions *</Label>
+                    <div className="group relative">
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                      <div className="absolute left-0 top-6 hidden group-hover:block z-10 w-64 p-2 bg-popover border rounded-md shadow-md text-xs">
+                        <p className="text-foreground">
+                          Define what task should be created when this automation triggers. Use @ to reference tools, documents, files, or agents. When triggered, a new task will be created with these instructions.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <UnifiedChatInput
+                    value={taskInstructions}
+                    onChange={setTaskInstructions}
+                    tools={taskTools}
+                    onToolsChange={setTaskTools}
+                    variables={InstructionTemplateService.getAvailableVariables(selectedType)}
+                    placeholder="Describe the task to execute... (Type @ to add tools or $ for variables)"
+                    id="automation-task-instructions"
+                    mode="form"
+                    minHeight="70px"
+                    enableSendButton={false}
+                    enableAttachments={true}
+                    pendingAttachments={pendingAttachments}
+                    onAttachmentAdd={handleAttachmentAdd}
+                    onAttachmentRemove={handleAttachmentRemove}
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       )}
@@ -940,33 +1257,65 @@ export function TriggerConfigModal({
                     )}
                   </>
                 )}
+
+                {selectedType === 'PIPEDREAM_EVENT' && (
+                  <>
+                    <div><strong>Connected App:</strong> {connections.find(c => c.id === pipedreamConfig.connectionId)?.app || pipedreamConfig.connectionId}</div>
+                    <div><strong>Event Type:</strong> {pipedreamConfig.triggerType || 'Not specified'}</div>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Task Instructions Summary */}
+            {/* Task Definition Summary */}
             <div className="border rounded-lg p-4">
               <h3 className="font-medium mb-3">Task Definition</h3>
               <div className="space-y-3 text-sm">
                 <div>
-                  <strong>Schedule Name:</strong> {scheduleName || 'Not specified'}
+                  <strong>Automation Name:</strong> {scheduleName || 'Not specified'}
                 </div>
-                <div>
-                  <strong>Task Instructions:</strong>
-                  <div className="mt-2 p-3 bg-muted/50 rounded-md text-sm whitespace-pre-wrap">
-                    {taskInstructions || 'No instructions provided'}
-                  </div>
-                </div>
-                {taskTools.length > 0 && (
-                  <div>
-                    <strong>Tools ({taskTools.length}):</strong>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {taskTools.map((tool, idx) => (
-                        <Badge key={idx} variant="secondary" className="text-xs">
-                          {tool.name}
-                        </Badge>
-                      ))}
+                {useSkillMode ? (
+                  <>
+                    <div>
+                      <strong>Skill:</strong>{' '}
+                      {selectedSkillId ? `Skill ID ${selectedSkillId}` : 'No skill selected'}
                     </div>
-                  </div>
+                    {inputMappings.length > 0 && (
+                      <div>
+                        <strong>Input Mappings ({inputMappings.length}):</strong>
+                        <div className="mt-2 space-y-1">
+                          {inputMappings.map((mapping, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs">
+                              <Badge variant="outline">{mapping.triggerField}</Badge>
+                              <span>→</span>
+                              <Badge variant="secondary">{mapping.skillInputName}</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <strong>Task Instructions:</strong>
+                      <div className="mt-2 p-3 bg-muted/50 rounded-md text-sm whitespace-pre-wrap">
+                        {taskInstructions || 'No instructions provided'}
+                      </div>
+                    </div>
+                    {taskTools.length > 0 && (
+                      <div>
+                        <strong>Tools ({taskTools.length}):</strong>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {taskTools.map((tool, idx) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">
+                              {tool.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -979,7 +1328,7 @@ export function TriggerConfigModal({
                   <div>
                     <h4 className="font-medium">Ready to Save</h4>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Your schedule configuration is complete. When triggered, it will create a task with the instructions you've defined.
+                      Your automation configuration is complete. When triggered, it will create a task with the instructions you've defined.
                     </p>
                   </div>
                 </div>
@@ -991,9 +1340,9 @@ export function TriggerConfigModal({
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
                   <div>
-                    <h4 className="font-medium text-green-900">Schedule Saved Successfully!</h4>
+                    <h4 className="font-medium text-green-900">Automation Saved Successfully!</h4>
                     <p className="text-sm text-green-700 mt-1">
-                      Your schedule has been saved and will be active according to your configuration.
+                      Your automation has been saved and will be active according to your configuration.
                     </p>
                   </div>
                 </div>
@@ -1005,7 +1354,7 @@ export function TriggerConfigModal({
                 <div className="flex items-start gap-3">
                   <X className="h-5 w-5 text-red-600 mt-0.5" />
                   <div>
-                    <h4 className="font-medium text-red-900">Error Saving Schedule</h4>
+                    <h4 className="font-medium text-red-900">Error Saving Automation</h4>
                     <p className="text-sm text-red-700 mt-1">
                       {errorMessage}
                     </p>

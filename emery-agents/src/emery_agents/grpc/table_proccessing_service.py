@@ -18,6 +18,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pandas as pd
 from deltalake import write_deltalake, DeltaTable
+from .table.delta_cache import get_delta_table_cached, invalidate_delta_cache
 from google.protobuf.json_format import Parse, MessageToJson
 from google.protobuf.struct_pb2 import ListValue
 from grpc import ServicerContext
@@ -51,19 +52,38 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
     It provides efficient append-only writes and ACID transaction support.
     """
 
+    def __init__(self):
+        """Initialize the TableService with cached storage options."""
+        # Cache storage options once at startup - they don't change during runtime
+        self._storage_options_cache: Optional[Dict[str, str]] = None
+
     def _get_storage_options(self) -> Dict[str, str]:
-        """Get S3/MinIO storage options for Delta Lake.
+        """Get S3/MinIO storage options for Delta Lake (cached).
 
         Returns storage configuration for connecting to MinIO/S3.
+        Options are cached after first call since they don't change at runtime.
+
+        SECURITY: AWS credentials must be provided via environment variables.
+        No hardcoded defaults to prevent accidental credential exposure.
         """
-        return {
-            "AWS_ACCESS_KEY_ID": os.getenv("AWS_ACCESS_KEY_ID", "minioadmin"),
-            "AWS_SECRET_ACCESS_KEY": os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin"),
-            "AWS_ENDPOINT_URL": os.getenv("AWS_ENDPOINT_URL", "http://minio:9000"),
-            "AWS_REGION": os.getenv("AWS_REGION", "us-east-1"),
-            "AWS_S3_ALLOW_UNSAFE_RENAME": "true",
-            "AWS_ALLOW_HTTP": "true"  # Allow HTTP for MinIO
-        }
+        if self._storage_options_cache is None:
+            # SECURITY: Require credentials, no defaults
+            aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+            aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+            if not aws_access_key or not aws_secret_key:
+                raise ValueError(
+                    "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are required"
+                )
+
+            self._storage_options_cache = {
+                "AWS_ACCESS_KEY_ID": aws_access_key,
+                "AWS_SECRET_ACCESS_KEY": aws_secret_key,
+                "AWS_ENDPOINT_URL": os.getenv("AWS_ENDPOINT_URL", "http://minio:9000"),
+                "AWS_REGION": os.getenv("AWS_REGION", "us-east-1"),
+                "AWS_S3_ALLOW_UNSAFE_RENAME": "true",
+                "AWS_ALLOW_HTTP": "true"  # Allow HTTP for MinIO
+            }
+        return self._storage_options_cache
 
     def _to_s3_uri(self, path: str) -> str:
         """Convert relative path to full S3 URI.
@@ -127,7 +147,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
     
 
-    def _get_delta_table_safe(self, s3_uri: str, storage_options: Dict[str, str], method: str, must_exist: bool = True) -> Tuple[Optional[DeltaTable], Optional[str]]:
+    def _get_delta_table_safe(self, s3_uri: str, storage_options: Dict[str, str], method: str, must_exist: bool = True, use_cache: bool = True) -> Tuple[Optional[DeltaTable], Optional[str]]:
         """Safely load Delta table with error handling.
 
         Args:
@@ -135,12 +155,16 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             storage_options: S3 connection options
             method: Method name for logging
             must_exist: If True, failure to load is an error; if False, it's a warning
+            use_cache: If True, use cached DeltaTable instance (default: True)
 
         Returns:
             Tuple of (delta_table: Optional[DeltaTable], error_msg: Optional[str])
         """
         try:
-            delta_table = DeltaTable(s3_uri, storage_options=storage_options)
+            if use_cache:
+                delta_table = get_delta_table_cached(s3_uri, storage_options)
+            else:
+                delta_table = DeltaTable(s3_uri, storage_options=storage_options)
             self._log_delta_state(delta_table, method)
             return delta_table, None
         except Exception as e:
@@ -148,35 +172,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             log_func(f"[{method}] Delta table not found at {s3_uri}: {e}")
             return None, str(e)
 
-    def _verify_write_operation(self, s3_uri: str, storage_options: dict, method: str, expected_min_rows: int = 0) -> bool:
-        """Verify write operation succeeded by checking Delta table state.
-
-        Args:
-            s3_uri: Full S3 URI to Delta table
-            storage_options: S3 connection options
-            method: Method name for logging
-            expected_min_rows: Minimum expected row count (0 = skip row check)
-
-        Returns:
-            True if verification passed, False otherwise
-        """
-        try:
-            updated_table = DeltaTable(s3_uri, storage_options=storage_options)
-            self._log_delta_state(updated_table, f"{method} AFTER write")
-
-            # Read back to verify data
-            arrow_table = updated_table.to_pyarrow_table()
-            logger.info(f"[{method}] Verification: {arrow_table.num_rows} rows, {arrow_table.num_columns} cols")
-
-            if expected_min_rows > 0 and arrow_table.num_rows < expected_min_rows:
-                logger.error(f"[{method}] VERIFICATION FAILED: Expected >={expected_min_rows} rows, got {arrow_table.num_rows}")
-                return False
-
-            logger.info(f"[{method}] ✅ Verification passed")
-            return True
-        except Exception as e:
-            logger.error(f"[{method}] Verification error: {e}")
-            return False
 
     def CreateTable(self, request: table_service_pb2.CreateTableRequest, context) -> table_service_pb2.TableResponse:
         """Create a new Delta table with the specified schema."""
@@ -257,13 +252,12 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Use library write function
             write_with_schema_evolution(s3_uri, arrow_table, write_mode, storage_options)
 
-            # Verify write succeeded
-            if not self._verify_write_operation(s3_uri, storage_options, "CreateRows", expected_min_rows=1):
-                return table_service_pb2.CreateRowsResponse(
-                    success=False,
-                    message="Verification failed: Table is empty after write"
-                )
-            
+            # Invalidate cache after write
+            invalidate_delta_cache(s3_uri or "")
+
+            # NOTE: Removed _verify_write_operation call - Delta Lake provides ACID guarantees
+            # and verification was adding ~100-200ms latency by reloading entire table from S3
+
             # Create row entities for response (unchanged)
             rows = [
                 table_service_pb2.Row(
@@ -417,8 +411,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Use proper merge operation to update only specific rows, not overwrite entire table
             write_with_merge_operation(s3_uri or "", arrow_table, storage_options)
 
-            # Log post-merge state
-            self._log_delta_state(DeltaTable(s3_uri, storage_options=storage_options), "UpdateRows AFTER merge")
+            # Invalidate cache after write so next read gets fresh data
+            invalidate_delta_cache(s3_uri or "")
 
             logger.info(f"[UpdateRows] ✅ Updated {len(df)} rows in '{request.table_id}'")
             return table_service_pb2.UpdateRowsResponse(success=True, rows_updated=len(df))
@@ -465,8 +459,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # AIDEV-NOTE: Efficient row-level deletes without rewriting entire table
             dt.delete(predicate)
 
-            # Log post-delete state
-            self._log_delta_state(DeltaTable(s3_uri, storage_options=storage_options), "DeleteRows AFTER delete")
+            # Invalidate cache after write so next read gets fresh data
+            invalidate_delta_cache(s3_uri or "")
 
             logger.info(f"[DeleteRows] ✅ Deleted {len(request.row_ids)} rows from '{request.table_id}'")
             return table_service_pb2.DeleteRowsResponse(success=True, rows_deleted=len(request.row_ids))
@@ -498,7 +492,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 return table_service_pb2.QueryRowsResponse(success=False, message=error_response.message)
 
             storage_options = self._get_storage_options()
-            delta_table = DeltaTable(s3_uri, storage_options=storage_options)
+            delta_table = get_delta_table_cached(s3_uri, storage_options)
 
             # Use table library operations
             df, metadata = prepare_query_rows(
@@ -627,7 +621,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
     def UpdateField(self, request: table_service_pb2.UpdateFieldRequest, context) -> table_service_pb2.FieldResponse:
         """Update an existing field in a Delta table with validation and optimized paths."""
         try:
-            self._log_request("UpdateField", table_id=request.table_id, field_name=request.field_name,
+            self._log_request("UpdateField", table_id=request.table_id, field_id=request.field_id,
                             new_field_name=request.updated_field.name, migrate_data=request.migrate_data,
                             organization_id=request.organization_id, s3_path=request.s3_path)
 
@@ -718,15 +712,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 logger.info(f"[UpdateField] Writing empty table for metadata evolution (append mode)")
                 write_with_schema_evolution(s3_uri, normalized_empty, "append", storage_options)
 
-                # Verify the metadata update persisted
-                delta_table_verify = DeltaTable(s3_uri, storage_options=storage_options)
-                schema_verify = get_delta_schema_as_pyarrow(delta_table_verify)
-                verify_field = next((f for f in schema_verify if f.name == field_column_name), None)
-                if verify_field:
-                    logger.info(f"[UpdateField] ✅ Verified metadata persisted: {verify_field.metadata}")
-                else:
-                    logger.warning(f"[UpdateField] ⚠️ Could not find field {field_column_name} after update")
-
+                # Invalidate cache after write so next read gets fresh data
+                invalidate_delta_cache(s3_uri or "")
                 logger.info(f"[UpdateField] ✅ Metadata updated for field ID {request.field_id}")
                 return table_service_pb2.FieldResponse(
                     success=True,
@@ -763,6 +750,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 # Write back with new schema
                 normalized_arrow = normalize_arrow_table_to_large_string(df.to_arrow())
                 write_deltalake(s3_uri, normalized_arrow, mode="overwrite", storage_options=storage_options)
+
+                # Invalidate cache after write
+                invalidate_delta_cache(s3_uri or "")
 
                 logger.info(f"[UpdateField] ✅ Migrated {len(df)} rows for field ID {request.field_id}")
                 return table_service_pb2.FieldResponse(
@@ -848,16 +838,8 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             normalized_arrow = normalize_arrow_table_to_large_string(df.to_arrow())
             write_deltalake(s3_uri, normalized_arrow, mode="overwrite", storage_options=storage_options)
 
-            # Verify deletion by reloading Delta table
-            delta_table_after = DeltaTable(s3_uri, storage_options=storage_options)
-            schema_after = get_delta_schema_as_pyarrow(delta_table_after)
-            columns_after = [f.name for f in schema_after]
-            still_exists = field_column_name in columns_after
-            final_row_count = len(delta_table_after.to_pyarrow_table())
-
-            logger.info(f"[DeleteField] AFTER: Delta schema has {len(columns_after)} columns: {columns_after}")
-            logger.info(f"[DeleteField] Field {field_column_name} {'❌ STILL EXISTS' if still_exists else '✅ confirmed deleted'}")
-            logger.info(f"[DeleteField] Verification: Table has {final_row_count} rows after deletion")
+            # Invalidate cache after write so next read gets fresh data
+            invalidate_delta_cache(s3_uri or "")
             logger.info(f"[DeleteField] ✅ Deleted field ID {request.field_id}")
             return table_service_pb2.DeleteFieldResponse(
                 success=True,

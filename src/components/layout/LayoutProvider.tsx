@@ -28,7 +28,6 @@ interface LayoutContextValue {
   // State
   sidebarState: PanelState
   chatState: PanelState
-  canvasState: PanelState
   canvasType: CanvasType
   breakpoint: LayoutBreakpoint
   isMobile: boolean
@@ -36,12 +35,10 @@ interface LayoutContextValue {
   // Actions
   setSidebarState: (state: PanelState) => void
   setChatState: (state: PanelState) => void
-  setCanvasState: (state: PanelState) => void
   setCanvasType: (type: CanvasType) => void
   setChatContext: (context: ChatContextConfig) => void
   toggleSidebar: () => void
   toggleChat: () => void
-  toggleCanvas: () => void
   resetLayout: () => void
 }
 
@@ -89,7 +86,6 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
   // Use TanStack Store with fine-grained subscriptions
   const sidebarState = useStore(uiStateStore, uiStateSelectors.sidebarState)
   const chatState = useStore(uiStateStore, uiStateSelectors.chatState)
-  const canvasState = useStore(uiStateStore, uiStateSelectors.canvasState)
   const canvasType = useStore(uiStateStore, uiStateSelectors.canvasType)
   const breakpoint = useStore(uiStateStore, uiStateSelectors.breakpoint)
   const isMobile = useStore(uiStateStore, uiStateSelectors.isMobile)
@@ -110,9 +106,6 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
     if (initialState.chatState) {
       uiStateActions.setChatState(initialState.chatState)
     }
-    if (initialState.canvasState) {
-      uiStateActions.setCanvasState(initialState.canvasState)
-    }
     if (initialState.chatContext) {
       uiStateActions.setChatContext(initialState.chatContext)
     }
@@ -123,7 +116,7 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
     function handleResize() {
       const newBreakpoint = getCurrentBreakpoint()
       uiStateActions.setBreakpoint(newBreakpoint)
-      
+
       // Auto-collapse panels on mobile
       if (newBreakpoint === 'mobile') {
         if (sidebarState === 'expanded') {
@@ -132,9 +125,6 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
         if (chatState === 'expanded') {
           uiStateActions.setChatState('collapsed')
         }
-        if (canvasState === 'expanded') {
-          uiStateActions.setCanvasState('collapsed')
-        }
       }
     }
 
@@ -142,7 +132,7 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
       window.addEventListener('resize', handleResize)
       return () => window.removeEventListener('resize', handleResize)
     }
-  }, [sidebarState, chatState, canvasState, isClient])
+  }, [sidebarState, chatState, isClient])
 
   // Action handlers - delegate to store actions
   const setSidebarState = (panelState: PanelState) => {
@@ -151,10 +141,6 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
 
   const setChatState = (panelState: PanelState) => {
     uiStateActions.setChatState(panelState)
-  }
-
-  const setCanvasState = (panelState: PanelState) => {
-    uiStateActions.setCanvasState(panelState)
   }
 
   const setCanvasType = (type: CanvasType) => {
@@ -173,10 +159,6 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
     uiStateActions.toggleChat()
   }
 
-  const toggleCanvas = () => {
-    uiStateActions.toggleCanvas()
-  }
-
   const resetLayout = () => {
     uiStateActions.resetLayout()
   }
@@ -184,19 +166,16 @@ export function LayoutProvider({ children, initialState = {} }: LayoutProviderPr
   const contextValue: LayoutContextValue = {
     sidebarState,
     chatState,
-    canvasState,
     canvasType,
     breakpoint,
     isMobile,
     chatContext,
     setSidebarState,
     setChatState,
-    setCanvasState,
     setCanvasType,
     setChatContext,
     toggleSidebar,
     toggleChat,
-    toggleCanvas,
     resetLayout
   }
 

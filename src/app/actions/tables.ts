@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
-import { getTableApplicationService } from "@/ddd/application/di/container";
+import { getTableApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import { OrganizationId, TableId, DatabaseId, UserId } from "@/ddd/domain/shared/value-objects";
 import type { Result, CreateTableData } from "./types";
 import type { CreateTableCommand, UpdateTableCommand } from "@/ddd/application/services/tables/table-application-service";
@@ -57,15 +57,36 @@ export async function createTable(data: CreateTableData & { databaseId: number; 
       };
     }
 
+    // AUDIT: Log table creation
+    if (result.data) {
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'database',
+          eventCategory: 'table_crud',
+          eventAction: 'create',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'table',
+          resourceId: String(result.data.id.value),
+          resourceName: result.data.name,
+          eventData: { databaseId, description },
+          success: true,
+        }
+      );
+    }
+
     // Note: RAG reindexing is now handled automatically by database triggers
-    
+
     // Revalidate the appropriate path
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
     } else {
       revalidatePath('/data'); // Default path for table operations
     }
-    
+
     return {
       success: true,
       data: result.data ? TableMapper.toDTO(result.data) : null,
@@ -134,7 +155,7 @@ export async function updateTable(
       };
     }
 
-    await requireResourcePermission("database:manage", "table", tableId);
+    const session = await requireResourcePermission("database:manage", "table", tableId);
     const currentOrg = await requireCurrentOrganization();
 
     const tableApplicationService = getTableApplicationService();
@@ -153,6 +174,27 @@ export async function updateTable(
         success: false,
         error: result.error || "Failed to update table"
       };
+    }
+
+    // AUDIT: Log table update
+    if (result.data) {
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'database',
+          eventCategory: 'table_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'table',
+          resourceId: String(tableId),
+          resourceName: result.data.name,
+          eventData: { updates },
+          success: true,
+        }
+      );
     }
 
     // Revalidate the appropriate path
@@ -184,10 +226,14 @@ export async function deleteTable(tableId: number, revalidateUrl?: string): Prom
       };
     }
 
-    await requireResourcePermission("database:manage", "table", tableId);
+    const session = await requireResourcePermission("database:manage", "table", tableId);
     const currentOrg = await requireCurrentOrganization();
 
     const tableApplicationService = getTableApplicationService();
+
+    // AUDIT: Get table name BEFORE deletion
+    const tableToDelete = await tableApplicationService.getTable(TableId.fromNumber(tableId));
+    const tableName = tableToDelete?.name;
 
     const result = await tableApplicationService.deleteTable(TableId.fromNumber(tableId));
 
@@ -198,13 +244,32 @@ export async function deleteTable(tableId: number, revalidateUrl?: string): Prom
       };
     }
 
+    // AUDIT: Log table deletion
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'table_crud',
+        eventAction: 'delete',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'table',
+        resourceId: String(tableId),
+        resourceName: tableName,
+        eventData: {},
+        success: true,
+      }
+    );
+
     // Revalidate the appropriate path
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
     } else {
       revalidatePath('/data'); // Default path for table operations
     }
-    
+
     return {
       success: true,
       data: { message: "Table deleted successfully" },
@@ -279,6 +344,25 @@ export async function duplicateTable(tableId: number, revalidateUrl?: string): P
         error: result.error || "Failed to duplicate table"
       };
     }
+
+    // AUDIT: Log table duplication
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'table_crud',
+        eventAction: 'create',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'table',
+        resourceId: String(result.data.id.value),
+        resourceName: result.data.name,
+        eventData: { duplicatedFrom: tableId, originalName: originalTable.name },
+        success: true,
+      }
+    );
 
     // TODO: Copy fields from original table to new table
     // This would require additional logic to duplicate the table schema

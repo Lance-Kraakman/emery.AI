@@ -27,10 +27,14 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
    * Execute agent via gRPC worker
    */
   async executeAgent(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
-    const { agentId, instructions, tools, executionId, organizationId, timeoutSeconds, onProgress, agentModel, organizationModel } = request;
+    const { agentId, instructions, tools, executionId, organizationId, timeoutSeconds, onProgress, agentModel, organizationModel, skill, skillInputs } = request;
 
     console.log(`[GRPC-EXECUTION-REPO] Starting execution ${executionId} for agent ${agentId}: "${instructions.substring(0, 100)}..."`);
     console.log(`[GRPC-EXECUTION-REPO] Model selection: agentModel=${agentModel || 'none'}, orgModel=${organizationModel || 'none'}`);
+    console.log(`[GRPC-EXECUTION-REPO] Skill execution: ${skill ? `${skill.name} (${skill.executionType})` : 'none'}`);
+    if (skillInputs && Object.keys(skillInputs).length > 0) {
+      console.log(`[GRPC-EXECUTION-REPO] Skill inputs: ${JSON.stringify(skillInputs)}`);
+    }
 
     try {
       // 1. Load agent configuration (delegated to agent repository)
@@ -51,18 +55,41 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       // 4. Enrich agent with API key in tools (following chat pattern)
       const enrichedAgent = this.enrichAgentTools(agent);
 
-      // 5. Create proto task request - always use instruction-based execution
+      // 5. Build typed skill inputs from raw values + skill input definitions
+      // AIDEV-NOTE: Each SkillInputValue carries name, type, and the actual value in the appropriate oneof field
+      const typedSkillInputs: Array<{ name: string; type: string; value: unknown }> = [];
+      if (skillInputs && skill?.inputs) {
+        for (const [name, value] of Object.entries(skillInputs)) {
+          // Look up type from skill input definition
+          const inputDef = skill.inputs.find(i => i.name === name);
+          typedSkillInputs.push({
+            name,
+            type: inputDef?.type || 'text', // Default to 'text' if not found
+            value
+          });
+        }
+      }
+
+      // 6. Create proto task request
+      // Use skill-based execution if skill is provided, otherwise instruction-based
       const taskRequest = createTaskRequest({
         taskId: executionId,
         agentId: agent.id.value,
-        instructionConfig: { // Instruction-based execution with task instructions
-          task: instructions,
-          tools: this.enrichTools((tools || []).map(tool =>
-            tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
-          ), agent.apiKey?.value)
-        },
+        // If skill provided, use skill_name mode; otherwise use instruction_config mode
+        ...(skill ? {
+          skill: skill // Pass skill for skill_name mode execution
+        } : {
+          instructionConfig: { // Instruction-based execution with task instructions
+            task: instructions,
+            tools: this.enrichTools((tools || []).map(tool =>
+              tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
+            ), agent.apiKey?.value)
+          }
+        }),
         agent: enrichedAgent,
-        triggerData: {}, // Empty for proto compatibility
+        // Typed skill inputs from automation inputMappings
+        // The worker extracts these in _create_skill_context() and passes to execute_skill(runtime_inputs=...)
+        skillInputs: typedSkillInputs,
         organizationId: organizationIdStr,
         ownerId: agent.ownerId.value,
         timeoutSeconds: timeoutSeconds || 300,
@@ -70,18 +97,6 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         organizationModel: organizationModel || undefined // Pass organization model for hierarchy
       });
 
-      // AIDEV-DEBUG: Log what we're actually sending to Python
-      console.log('[GRPC-DEBUG] TaskRequest being sent:', JSON.stringify({
-        taskId: taskRequest.taskId,
-        agentId: taskRequest.agentId,
-        hasInstructionConfig: !!taskRequest.instructionConfig,
-        instructionConfig: taskRequest.instructionConfig,
-        instructionsText: instructions,
-        toolsCount: tools?.length || 0,
-        organizationId: taskRequest.organizationId,
-        agentModel: taskRequest.agentModel,
-        organizationModel: taskRequest.organizationModel
-      }, null, 2));
 
       // 5. Initialize execution tracking
       let finalStatus: 'completed' | 'failed' | 'in_progress' = 'in_progress';
@@ -102,21 +117,12 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       await workerClient.executeTask(taskRequest as any, async (progress: TaskProgress) => {
         console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Status: ${progress.status} (${progress.progressPercent}%)`);
 
-        // DEBUG: Log full TaskProgress object
-        console.log(`[GRPC-DEBUG] TaskProgress received:`, JSON.stringify(progress, null, 2));
-        console.log(`[GRPC-DEBUG] outputJson content:`, progress.outputJson);
-
         // Create log message from TaskProgress (simplified - no step info)
         const logMessage = `${progress.status} - ${progress.progressPercent}% ${progress.outputJson ? `| Output: ${progress.outputJson.substring(0, 200)}${progress.outputJson.length > 200 ? '...' : ''}` : ''}${progress.errorMessage ? ` | Error: ${progress.errorMessage}` : ''}`;
 
-        console.log(`[GRPC-DEBUG] Formatted log message:`, logMessage);
-
         // Send log to callback if provided
         if (onProgress) {
-          console.log(`[GRPC-DEBUG] Calling onProgress callback`);
           onProgress(logMessage);
-        } else {
-          console.log(`[GRPC-DEBUG] No onProgress callback provided`);
         }
 
         // Map proto progress to TypeScript types

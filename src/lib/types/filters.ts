@@ -91,6 +91,19 @@ export const SELECT_OPERATORS: readonly FilterOperatorDef[] = [
 ] as const
 
 /**
+ * Operators available for relation fields
+ * Relations store arrays of {id, value}, so we include array operators
+ */
+export const RELATION_OPERATORS: readonly FilterOperatorDef[] = [
+  { value: 'eq', label: 'Links to' },
+  { value: 'ne', label: 'Does not link to' },
+  { value: 'in', label: 'Links to any of' },
+  { value: 'not_in', label: 'Links to none of' },
+  { value: 'is_null', label: 'Has no links' },
+  { value: 'is_not_null', label: 'Has links' },
+] as const
+
+/**
  * Map of field types to their available operators
  */
 export const OPERATORS_BY_FIELD_TYPE = {
@@ -98,7 +111,7 @@ export const OPERATORS_BY_FIELD_TYPE = {
   number: NUMBER_OPERATORS,
   boolean: BOOLEAN_OPERATORS,
   date: DATE_OPERATORS,
-  relation: TEXT_OPERATORS,  // Relations use text-like filtering
+  relation: RELATION_OPERATORS,  // Relations are arrays, support in/not_in
   file: TEXT_OPERATORS,
   document: TEXT_OPERATORS,
   'single-select': SELECT_OPERATORS,
@@ -106,6 +119,7 @@ export const OPERATORS_BY_FIELD_TYPE = {
   autonumber: NUMBER_OPERATORS,  // Autonumbers are numeric
   'last-updated': DATE_OPERATORS,  // Timestamps are dates
   'created-at': DATE_OPERATORS,    // Timestamps are dates
+  json: TEXT_OPERATORS,  // JSON fields use text-like filtering (contains, etc.)
 } as const
 
 /**

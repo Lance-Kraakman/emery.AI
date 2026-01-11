@@ -10,15 +10,15 @@
 
 'use client'
 
-import React, { createContext, useContext, ReactNode, useEffect } from 'react'
+import React, { createContext, useContext, ReactNode, useEffect, useRef } from 'react'
 import { useStore } from '@tanstack/react-store'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { 
-  appStateStore, 
+import {
+  appStateStore,
   appStateSelectors,
   appStateActions,
-  type DatabaseWithTables 
+  type DatabaseWithTables
 } from '@/stores/app-state.store'
 import { storeActions } from '@/stores/actions'
 
@@ -47,7 +47,10 @@ const EmeryStoreContext = createContext<EmeryContextType | undefined>(undefined)
 export function EmeryStoreProvider({ children }: { children: ReactNode }) {
   const { data: session } = useSession()
   const router = useRouter()
-  
+
+  // Track previous organization to prevent unnecessary re-initialization
+  const prevOrgIdRef = useRef<number | undefined>(undefined)
+
   // Subscribe to relevant app state slices with fine-grained reactivity
   const databases = useStore(appStateStore, appStateSelectors.databases)
   const agents = useStore(appStateStore, appStateSelectors.agents)
@@ -57,15 +60,19 @@ export function EmeryStoreProvider({ children }: { children: ReactNode }) {
   const isLoading = useStore(appStateStore, appStateSelectors.isLoading)
   const error = useStore(appStateStore, appStateSelectors.error)
 
-  // Initialize stores when session changes
+  // Initialize stores when organization changes (not on every session update)
   useEffect(() => {
     if (session?.user?.needsSetup && !session?.user?.currentOrganizationId) {
       router.push('/setup')
       return
     }
 
-    if (session?.user?.currentOrganizationId) {
-      storeActions.initializeApplication(session.user.currentOrganizationId)
+    const currentOrgId = session?.user?.currentOrganizationId
+
+    // Only reinitialize if organization actually changed
+    if (currentOrgId && currentOrgId !== prevOrgIdRef.current) {
+      prevOrgIdRef.current = currentOrgId
+      storeActions.initializeApplication(currentOrgId)
     }
   }, [session, router])
 

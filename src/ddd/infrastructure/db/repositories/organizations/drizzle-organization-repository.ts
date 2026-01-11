@@ -85,7 +85,8 @@ export class DrizzleOrganizationRepository
   }
 
   async getMembers(organizationId: OrganizationId): Promise<OrganizationMember[]> {
-    const result = await this.db
+    // Get basic member info
+    const membersResult = await this.db
       .select({
         userId: userOrganizations.userId,
         name: users.name,
@@ -96,7 +97,38 @@ export class DrizzleOrganizationRepository
       .leftJoin(users, eq(userOrganizations.userId, users.id))
       .where(eq(userOrganizations.organizationId, organizationId.value));
 
-    throw new Error('getMembers() not implemented for RBAC system. Use permission-based queries instead.');
+    // Get roles for all members in this organization
+    const rolesResult = await this.db
+      .select({
+        userId: userRoles.userId,
+        roleId: roles.id,
+        roleName: roles.name,
+        isSystem: roles.isSystem,
+      })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(eq(userRoles.organizationId, organizationId.value));
+
+    // Group roles by userId
+    const rolesByUser = new Map<string, Array<{id: number; name: string; isSystem: boolean}>>();
+    for (const role of rolesResult) {
+      const existing = rolesByUser.get(role.userId) || [];
+      existing.push({
+        id: role.roleId,
+        name: role.roleName,
+        isSystem: role.isSystem,
+      });
+      rolesByUser.set(role.userId, existing);
+    }
+
+    // Map to OrganizationMember with roles
+    return membersResult.map((member: { userId: string; name: string | null; email: string | null; joinedAt: Date | null }) => ({
+      userId: UserId.fromString(member.userId),
+      name: member.name,
+      email: member.email ? EmailAddress.fromString(member.email) : null,
+      joinedAt: member.joinedAt,
+      roles: rolesByUser.get(member.userId) || [],
+    }));
   }
 
   async create(data: CreateOrganizationData): Promise<Organization> {
@@ -326,7 +358,7 @@ export class DrizzleOrganizationRepository
       databaseId: data.databaseId,
       viewConfig: data.viewConfig as Record<string, any> | null,
       analysisCapabilities: data.analysisCapabilities,
-      plan: data.plan,
+      plan: data.plan as Organization['plan'],
       stripeCustomerId: data.stripeCustomerId,
       stripeSubscriptionId: data.stripeSubscriptionId,
       stripeSubscriptionStatus: data.stripeSubscriptionStatus,
@@ -336,6 +368,22 @@ export class DrizzleOrganizationRepository
       tokenQuotaMonthly: data.tokenQuotaMonthly,
       tokenUsageCurrentMonth: data.tokenUsageCurrentMonth,
       quotaResetAt: data.quotaResetAt,
+      // Credit system fields
+      creditBalance: data.creditBalance,
+      creditsUsedCurrentMonth: data.creditsUsedCurrentMonth,
+      creditsResetAt: data.creditsResetAt,
+      usageAllowanceCredits: data.usageAllowanceCredits,
+      spendingLimitUsd: data.spendingLimitUsd,
+      billingEmail: data.billingEmail,
+      currentPeriodStart: data.currentPeriodStart,
+      currentPeriodEnd: data.currentPeriodEnd,
+      // Storage tracking fields
+      storageQuotaBytes: data.storageQuotaBytes,
+      storageUsedBytes: data.storageUsedBytes,
+      databaseStorageBytes: data.databaseStorageBytes,
+      chatStorageBytes: data.chatStorageBytes,
+      skillStorageBytes: data.skillStorageBytes,
+      storageOverageNotifiedAt: data.storageOverageNotifiedAt,
       createdAt: data.createdAt
     };
   }
@@ -361,6 +409,22 @@ export class DrizzleOrganizationRepository
       tokenQuotaMonthly: organization.tokenQuotaMonthly,
       tokenUsageCurrentMonth: organization.tokenUsageCurrentMonth,
       quotaResetAt: organization.quotaResetAt,
+      // Credit system fields
+      creditBalance: organization.creditBalance,
+      creditsUsedCurrentMonth: organization.creditsUsedCurrentMonth,
+      creditsResetAt: organization.creditsResetAt,
+      usageAllowanceCredits: organization.usageAllowanceCredits,
+      spendingLimitUsd: organization.spendingLimitUsd,
+      billingEmail: organization.billingEmail,
+      currentPeriodStart: organization.currentPeriodStart,
+      currentPeriodEnd: organization.currentPeriodEnd,
+      // Storage tracking fields
+      storageQuotaBytes: organization.storageQuotaBytes,
+      storageUsedBytes: organization.storageUsedBytes,
+      databaseStorageBytes: organization.databaseStorageBytes,
+      chatStorageBytes: organization.chatStorageBytes,
+      skillStorageBytes: organization.skillStorageBytes,
+      storageOverageNotifiedAt: organization.storageOverageNotifiedAt,
       createdAt: organization.createdAt
     };
   }

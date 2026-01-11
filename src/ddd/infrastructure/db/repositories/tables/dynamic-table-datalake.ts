@@ -21,54 +21,66 @@ import { createDebugLogger } from '@/lib/utils/debug-logger';
 const logger = createDebugLogger('DataLake');
 
 /**
- * Convert field name to field ID for Delta Lake queries
+ * Resolve field identifier to field ID for Delta Lake queries
  * Delta Lake columns use numeric field IDs (79, 80), not field names ('test', 'name')
  *
  * AIDEV-NOTE: System columns (id, created_at, updated_at) are special - they exist on all rows
  * and use their literal names in Delta Lake, not numeric field IDs.
  *
- * @param fieldName - Human-readable field name
+ * Accepts both field names (e.g., 'Patient') and field IDs (e.g., '14'). This allows
+ * ViewService to pass field IDs directly while other callers can still use field names.
+ *
+ * @param fieldNameOrId - Field name or numeric field ID as string
  * @param fields - Table field definitions
  * @returns Numeric field ID as string for user fields, literal name for system columns, or null if not found
  */
-function convertFieldNameToId(
-  fieldName: string,
+function resolveToFieldId(
+  fieldNameOrId: string,
   fields: readonly TableField[]
 ): string | null {
   // AIDEV-NOTE: System columns don't need conversion - they use literal names in Delta Lake
   const systemColumns = ['id', 'created_at', 'updated_at'];
-  if (systemColumns.includes(fieldName)) {
-    logger.debug('System column - no conversion needed', { fieldName });
-    return fieldName; // Return as-is for system columns
+  if (systemColumns.includes(fieldNameOrId)) {
+    logger.debug('System column - no conversion needed', { fieldNameOrId });
+    return fieldNameOrId; // Return as-is for system columns
   }
 
-  const field = fields.find(f => f.name === fieldName);
+  // Check if input is already a valid field ID (numeric string matching a field's ID)
+  // This handles the case when ViewService passes field IDs directly
+  const fieldById = fields.find(f => f.id.value.toString() === fieldNameOrId);
+  if (fieldById) {
+    logger.debug('Input is already a field ID', { fieldId: fieldNameOrId });
+    return fieldNameOrId; // Already an ID, return as-is
+  }
 
-  if (field) {
+  // Try to find by field name
+  const fieldByName = fields.find(f => f.name === fieldNameOrId);
+  if (fieldByName) {
     logger.debug('Converted field name to ID', {
-      fieldName,
-      fieldId: field.id.value.toString()
+      fieldName: fieldNameOrId,
+      fieldId: fieldByName.id.value.toString()
     });
-    return field.id.value.toString();
+    return fieldByName.id.value.toString();
   }
 
   logger.error('Field not found in table schema', {
-    fieldName,
+    fieldNameOrId,
     availableFields: fields.map(f => f.name)
   });
   return null;
 }
 
 /**
- * Convert filter field names to field IDs for Delta Lake queries
+ * Resolve filter field identifiers to field IDs for Delta Lake queries
  *
  * AIDEV-NOTE: System columns (id, created_at, updated_at) are passed through unchanged.
+ * Uses resolveToFieldId which accepts both field names and field IDs.
  *
- * @param filters - Array of filters using field names
+ * @param filters - Array of filters using field names or IDs
  * @param fields - Table field definitions
  * @returns Filters with field names converted to field IDs
  */
-function convertFiltersToFieldIds(
+function resolveFiltersToFieldIds(
   filters: any[],
   fields: readonly TableField[]
 ): any[] {
@@ -80,7 +92,7 @@ function convertFiltersToFieldIds(
       return filter; // Keep system columns as-is
     }
 
-    const fieldId = convertFieldNameToId(filter.field, fields);
+    const fieldId = resolveToFieldId(filter.field, fields);
 
     if (!fieldId) {
       // Field not found - return original filter (will likely fail, but preserves error context)
@@ -276,13 +288,8 @@ export class DynamicTableDataLake {
   }
 
   /**
-   * Retrieve rows from a table using gRPC service
-   * Receives Arrow IPC bytes from Python service for zero-copy transfer
-   * Deserializes to Arrow Table and converts to domain entities
-   * Returns rows and totalCount from gRPC response
-   *
-   * AIDEV-NOTE: Extended to support aggregations for metric/dashboard views.
-   * When aggregations are provided, returns aggregated data instead of raw rows.
+   * Retrieve rows from a table using gRPC service (DynamicTable overload)
+   * Delegates to retrieveRows with raw params
    */
   async retrieveRows(
     table: DynamicTable,
@@ -300,7 +307,50 @@ export class DynamicTableDataLake {
       }>;
     } = {}
   ): Promise<Result<{ rows: Row[]; totalCount: number }>> {
+    return this.retrieveRowsWithParams(
+      {
+        tableId: table.id.value,
+        s3Path: table.storageLocation || `s3://emery-tables/${table.id.value}`,
+        organizationId: table.organizationId.value,
+        fields: table.fields,
+      },
+      options
+    );
+  }
+
+  /**
+   * Retrieve rows using raw table parameters
+   * Receives Arrow IPC bytes from Python service for zero-copy transfer
+   * Deserializes to Arrow Table and converts to domain entities
+   * Returns rows and totalCount from gRPC response
+   *
+   * AIDEV-NOTE: This method accepts raw params instead of DynamicTable entity.
+   * Used when full entity isn't available (e.g., public views with pre-fetched metadata).
+   * Extended to support aggregations for metric/dashboard views.
+   */
+  async retrieveRowsWithParams(
+    params: {
+      tableId: number;
+      s3Path: string;
+      organizationId: number;
+      fields: readonly TableField[];
+    },
+    options: {
+      limit?: number;
+      offset?: number;
+      filters?: Record<string, any>;
+      orderBy?: string;
+      orderDirection?: 'ASC' | 'DESC';
+      aggregations?: Array<{
+        fieldId: string;
+        type: string;
+        alias: string;
+        formatType?: string;
+      }>;
+    } = {}
+  ): Promise<Result<{ rows: Row[]; totalCount: number }>> {
     const startTime = Date.now();
+    const { tableId, s3Path, organizationId, fields } = params;
 
     try {
       const { limit = 1000, offset = 0, filters = {}, orderBy = '', orderDirection = 'ASC', aggregations } = options;
@@ -311,7 +361,7 @@ export class DynamicTableDataLake {
       const aggCount = aggregations?.length || 0;
 
       logger.debug('Query started', {
-        table: `${table.name}(${table.id.value})`,
+        tableId,
         limit,
         offset,
         orderBy: orderClause,
@@ -323,11 +373,11 @@ export class DynamicTableDataLake {
       // Delta Lake columns use numeric field IDs (79, 80), not field names ('test', 'name')
 
       // Convert orderBy from field name to field ID
-      const orderByFieldId = orderBy ? convertFieldNameToId(orderBy, table.fields) || '' : '';
+      const orderByFieldId = orderBy ? resolveToFieldId(orderBy, fields) || '' : '';
 
-      // Convert filter field names to field IDs
+      // Resolve filter field identifiers to field IDs
       const convertedFilters = Array.isArray(filters) && filters.length > 0
-        ? convertFiltersToFieldIds(filters, table.fields)
+        ? resolveFiltersToFieldIds(filters, fields)
         : filters;
 
       // Create query request (with converted field IDs)
@@ -339,11 +389,16 @@ export class DynamicTableDataLake {
         filters: convertedFilters,
         aggregations
       };
+
+      // Import value objects for gRPC mapper
+      const { TableId } = await import('@/ddd/domain/shared/value-objects/table-id');
+      const { OrganizationId } = await import('@/ddd/domain/shared/value-objects/organization-id');
+
       const queryRequest = TableGrpcMapper.toQueryRowsRequest(
-        table.id,
-        table.storageLocation || `s3://emery-tables/${table.id.value}`,
+        TableId.fromNumber(tableId),
+        s3Path,
         queryOptions,
-        table.organizationId
+        OrganizationId.fromNumber(organizationId)
       );
 
       // 2. Send to gRPC service
@@ -355,7 +410,7 @@ export class DynamicTableDataLake {
         const totalCount = response.totalCount || 0;
 
         if (!arrowIpcBytes || arrowIpcBytes.length === 0) {
-          logger.summary('Query completed (empty)', { tableId: table.id.value, totalCount: 0 });
+          logger.summary('Query completed (empty)', { tableId, totalCount: 0 });
           return { success: true, data: { rows: [], totalCount } };
         }
 
@@ -382,23 +437,23 @@ export class DynamicTableDataLake {
 
           // Deserialize from Delta Lake storage (JSON strings → arrays/objects)
           // AIDEV-NOTE: RowSerializer handles complex field type deserialization
-          const deserializedData = RowSerializer.deserializeFromStorage(rowData, table.fields);
+          const deserializedData = RowSerializer.deserializeFromStorage(rowData, fields);
 
           // Convert to domain Row entity with clean deserialized data
-          const row = Row.fromPlainObject(deserializedData, table.id.value, table.fields as any);
+          const row = Row.fromPlainObject(deserializedData, tableId, fields as any);
           rows.push(row);
         }
 
         const elapsed = Date.now() - startTime;
         logger.summary('Query completed', {
-          tableId: table.id.value,
+          tableId,
           retrieved: rows.length,
           total: totalCount,
           time: `${elapsed}ms`
         });
 
         // Log sample row in debug mode only
-        logger.debug('Sample row', rows[0]?.toPlainObject(table.fields));
+        logger.debug('Sample row', rows[0]?.toPlainObject(fields));
 
         return { success: true, data: { rows, totalCount } };
       } else {

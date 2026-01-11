@@ -1,13 +1,13 @@
 "use client";
 
-import { ReactNode, useEffect, useState, useMemo } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import styles from "./Button.module.css";
 import getClassNameFactory from "../../lib/get-class-name-factory";
 import { Loader } from "../Loader";
 import { filterDataAttrs } from "../../lib/filter-data-attrs";
-import { resolveLinkAction, type LinkResolutionContext } from "../../utils/resolve-link-action";
-import type { LinkActionConfig } from "../../custom-fields/link-action-field";
-import { useLinkContext } from "../../link-context";
+import type { Action } from "../../types/actions";
+import { useActionContext } from "../../contexts/ActionContext";
+import { executeActions } from "../../actions/execute-action";
 
 const getClassName = getClassNameFactory("Button", styles);
 
@@ -15,8 +15,7 @@ export const Button = ({
   children,
   href,
   onClick,
-  action,
-  linkContext,
+  actions,
   isEditing,
   variant = "primary",
   type,
@@ -24,6 +23,7 @@ export const Button = ({
   tabIndex,
   newTab,
   fullWidth,
+  containerAlignment,
   icon,
   size = "medium",
   loading: loadingProp = false,
@@ -32,8 +32,7 @@ export const Button = ({
   children: ReactNode;
   href?: string;
   onClick?: (e: any) => void | Promise<void>;
-  action?: LinkActionConfig;
-  linkContext?: LinkResolutionContext;
+  actions?: Action[];
   isEditing?: boolean;
   variant?: "primary" | "secondary";
   type?: "button" | "submit" | "reset";
@@ -41,37 +40,20 @@ export const Button = ({
   tabIndex?: number;
   newTab?: boolean;
   fullWidth?: boolean;
+  containerAlignment?: "left" | "center" | "right";
   icon?: ReactNode;
   size?: "medium" | "large";
   loading?: boolean;
 }) => {
   const [loading, setLoading] = useState(loadingProp);
-  const contextFromProvider = useLinkContext();
+  const buildActionContext = useActionContext();
 
   useEffect(() => setLoading(loadingProp), [loadingProp]);
 
-  // Resolve link action if provided
-  const resolvedAction = useMemo(() => {
-    if (action) {
-      // Merge context from provider with prop-based context (props take precedence)
-      const mergedContext: LinkResolutionContext = {
-        ...contextFromProvider,
-        ...linkContext,
-        isEditing: isEditing !== undefined ? isEditing : contextFromProvider.isEditing || false,
-      };
+  const finalTarget = newTab ? "_blank" : undefined;
+  const finalRel = newTab ? "noreferrer" : undefined;
 
-      return resolveLinkAction(action, mergedContext);
-    }
-    return null;
-  }, [action, linkContext, isEditing, contextFromProvider]);
-
-  // Determine final href, onClick, target, and rel
-  const finalHref = resolvedAction?.href || href;
-  const finalTarget = resolvedAction?.target || (newTab ? "_blank" : undefined);
-  const finalRel = resolvedAction?.rel || (newTab ? "noreferrer" : undefined);
-  const finalOnClick = resolvedAction?.onClick || onClick;
-
-  const ElementType = finalHref ? "a" : type ? "button" : "span";
+  const ElementType = href ? "a" : type ? "button" : "span";
   const dataAttrs = filterDataAttrs(props);
 
   const el = (
@@ -83,11 +65,26 @@ export const Button = ({
         fullWidth,
         [size]: true,
       })}
-      onClick={(e) => {
-        if (!finalOnClick) return;
+      onClick={async (e) => {
+        // Execute actions if provided
+        if (actions && actions.length > 0) {
+          setLoading(true);
+          try {
+            const context = buildActionContext();
+            await executeActions(actions, context);
+          } catch (error) {
+            console.error('[Button] Error executing actions:', error);
+          } finally {
+            setLoading(false);
+          }
+          return;
+        }
+
+        // Fallback to onClick handler
+        if (!onClick) return;
 
         setLoading(true);
-        Promise.resolve(finalOnClick(e)).then(() => {
+        Promise.resolve(onClick(e)).then(() => {
           setLoading(false);
         });
       }}
@@ -96,7 +93,7 @@ export const Button = ({
       tabIndex={tabIndex}
       target={finalTarget}
       rel={finalRel}
-      href={finalHref}
+      href={href}
       {...dataAttrs}
     >
       {icon && <div className={getClassName("icon")}>{icon}</div>}
@@ -108,6 +105,18 @@ export const Button = ({
       )}
     </ElementType>
   );
+
+  // Wrap button in container if containerAlignment is specified
+  if (containerAlignment && !fullWidth) {
+    return (
+      <div className={getClassName({
+        container: true,
+        [`container-${containerAlignment}`]: true,
+      })}>
+        {el}
+      </div>
+    );
+  }
 
   return el;
 };

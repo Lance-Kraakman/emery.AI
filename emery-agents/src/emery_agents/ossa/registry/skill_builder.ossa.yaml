@@ -1,0 +1,124 @@
+apiVersion: ossa/v0.2.9
+kind: Agent
+metadata:
+  name: skill_builder
+  version: "1.0.0"
+  description: "Creates, modifies, and manages AI skills"
+  labels:
+    domain: skill-management
+    capability: skill-operations
+    type: specialist
+spec:
+  role: |
+    You are an expert AI skill engineer for the Emery platform.
+    You help users create, modify, and manage AI skills that define
+    specific capabilities and workflows.
+    
+    Skills in Emery have:
+    - name: Display name
+    - description: What the skill does
+    - instructions: The main prompt defining behavior
+    - inputs/outputs: Structured data definitions
+    - tools: Available capabilities
+    - model: LLM configuration
+    
+    Always validate skill configurations and provide clear explanations
+    of changes being made.
+  
+  llm:
+    provider: openai
+    model: gpt-4
+    temperature: 0.2
+    max_tokens: 4000
+  
+  reasoning:
+    strategy: chain_of_thought
+    max_steps: 15
+    self_reflection:
+      enabled: true
+      confidence_threshold: 0.8
+  
+  capabilities:
+    - name: create_skill
+      description: "Create new AI skills from scratch"
+      inputs:
+        - name: skill_description
+          type: string
+          description: "Natural language description of desired skill"
+        - name: requirements
+          type: object
+          description: "Specific requirements and constraints"
+      outputs:
+        - name: skill_config
+          type: object
+          description: "Complete skill configuration"
+    
+    - name: modify_skill
+      description: "Modify existing AI skills"
+      inputs:
+        - name: skill_id
+          type: string
+          description: "ID of skill to modify"
+        - name: modifications
+          type: object
+          description: "Changes to apply to the skill"
+      outputs:
+        - name: updated_skill
+          type: object
+          description: "Updated skill configuration"
+    
+    - name: validate_skill
+      description: "Validate skill configurations"
+      inputs:
+        - name: skill_config
+          type: object
+          description: "Skill configuration to validate"
+      outputs:
+        - name: validation_result
+          type: object
+          description: "Validation results with any issues"
+  
+  tools:
+    - type: emery_crud
+      resource: skill
+      operations: [create, read, update, delete, list]
+    - type: emery_crud
+      resource: table
+      operations: [read, list]
+      description: "For understanding data structures"
+    - type: template_validator
+      description: "Validate Jinja2 templates and instructions"
+    - type: code_generator
+      description: "Generate code for complex skill logic"
+  
+  execution:
+    mode: interactive
+    max_steps: 15
+    timeout: 600
+    planning:
+      enabled: true
+      require_approval: true
+  
+  security:
+    authentication:
+      type: user_api_key
+    data_boundaries:
+      allowed_resources: [skills, tables, tools]
+      pii_handling: redact
+  
+  observability:
+    tracing:
+      enabled: true
+      sample_rate: 1.0
+      include_plans: true
+    logging:
+      level: debug
+      include_tool_calls: true
+  
+  extensions:
+    emery:
+      agent_type: skill_builder
+      prompt_template: "agents/skill_builder.j2"
+      supports_hitl: true
+      approval_required: true
+      managed_resources: [skill]

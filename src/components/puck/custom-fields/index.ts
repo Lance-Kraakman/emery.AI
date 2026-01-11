@@ -19,13 +19,6 @@ export {
   type FieldMapping,
 } from "./field-mapping-field";
 
-// Filter Builder
-export {
-  createFilterBuilderField,
-  createSimpleFilterBuilderField,
-  type FilterCondition,
-} from "./filter-builder-field";
-
 // Sort Builder
 export {
   createSortBuilderField,
@@ -37,9 +30,33 @@ export {
 // View Management
 export { createViewManagementField } from "./view-management-field";
 
+// Field Selector
+export {
+  createFieldSelectorField,
+  type FieldSelectorFieldConfig,
+} from "./field-selector-field";
+
 // Link Action (Button/Link configuration)
 export {
   createLinkActionField,
   type LinkActionConfig,
   type LinkActionType,
 } from "./link-action-field";
+
+// Actions (for Button, Link blocks)
+export { createActionsField } from "./actions-field";
+
+// Variable Label (for dynamic labels with {fieldName} support)
+export { createVariableLabelField } from "./variable-label-field";
+
+// Variable Text (for text/textarea fields with variable support)
+export {
+  createVariableTextField,
+  type VariableTextFieldOptions,
+} from "./variable-text-field";
+
+// State Key (for selecting UI flags/variables from PageStateConfig)
+export {
+  createStateKeyField,
+  type StateKeyFieldOptions,
+} from "./state-key-field";

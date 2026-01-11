@@ -25,6 +25,7 @@ import type { IToolRegistryService } from '@/ddd/domain/tools/services/tool-regi
 import type { AgentTaskApplicationService } from '@/ddd/application/services/agents/agent-task-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
 import type { SkillApplicationService } from '@/ddd/application/services/skills/skill-application-service';
+import type { SkillEnrichmentService } from '@/ddd/application/services/skills/skill-enrichment-service';
 import type { TeamApplicationService } from '@/ddd/application/services/teams/team-application-service';
 import type { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
 import type { UserRoleApplicationService } from '@/ddd/application/services/user-organizations/user-role-application-service';
@@ -42,8 +43,11 @@ import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-t
 
 import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-repository';
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
+import type { ITemplateRepository } from '@/ddd/domain/puck/repositories/template-repository';
+export type { ITemplateRepository } from '@/ddd/domain/puck/repositories/template-repository';
 import type { AppApplicationService } from '@/ddd/application/services/puck/app-application-service';
 import type { PuckPageApplicationService } from '@/ddd/application/services/puck/puck-page-application-service';
+import type { TemplateApplicationService } from '@/ddd/application/services/puck/template-application-service';
 import type { ViewRepository as IViewRepository } from '@/ddd/domain/views/repositories/view-repository';
 import type { ViewApplicationService } from '@/ddd/application/services/views/view-application-service';
 import type { ITokenUsageRepository } from '@/ddd/domain/billing/repositories/token-usage-repository';
@@ -53,6 +57,7 @@ import type { CreditUsageApplicationService } from '@/ddd/application/services/b
 import type { InvoiceApplicationService } from '@/ddd/application/services/billing/invoice-application-service';
 import type { StorageQuotaApplicationService } from '@/ddd/application/services/billing/storage-quota-application-service';
 import type { StorageRecalculationApplicationService } from '@/ddd/application/services/billing/storage-recalculation-application-service';
+import type { AuditApplicationService } from '@/ddd/application/services/audit/audit-application-service';
 
 import { DIContainer } from './container';
 
@@ -84,6 +89,7 @@ type ServiceMap = {
   AgentTaskApplicationService: AgentTaskApplicationService;
   AgentApplicationService: AgentApplicationService;
   SkillApplicationService: SkillApplicationService;
+  SkillEnrichmentService: SkillEnrichmentService;
   TeamApplicationService: TeamApplicationService;
   DatabaseApplicationService: DatabaseApplicationService;
   UserRoleApplicationService: UserRoleApplicationService;
@@ -102,8 +108,10 @@ type ServiceMap = {
   // Puck Services
   AppRepository: IAppRepository;
   PuckPageRepository: IPuckPageRepository;
+  TemplateRepository: ITemplateRepository;
   AppApplicationService: AppApplicationService;
   PuckPageApplicationService: PuckPageApplicationService;
+  TemplateApplicationService: TemplateApplicationService;
 
   // Data Source Services
   ViewRepository: IViewRepository;
@@ -120,6 +128,9 @@ type ServiceMap = {
   InvoiceApplicationService: InvoiceApplicationService;
   StorageQuotaApplicationService: StorageQuotaApplicationService;
   StorageRecalculationApplicationService: StorageRecalculationApplicationService;
+
+  // Audit Services
+  AuditApplicationService: AuditApplicationService;
 };
 
 /**
@@ -136,6 +147,7 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
     'ConnectionRepository': 'IConnectionRepository',
     'AppRepository': 'IAppRepository',
     'PuckPageRepository': 'IPuckPageRepository',
+    'TemplateRepository': 'ITemplateRepository',
     'ViewRepository': 'ViewRepository',
     'TokenUsageRepository': 'ITokenUsageRepository',
     'InvoiceRepository': 'IInvoiceRepository',
@@ -191,6 +203,7 @@ export const getAgentApplicationService = createGetter('AgentApplicationService'
 
 // Capability application service getters
 export const getSkillApplicationService = createGetter('SkillApplicationService');
+export const getSkillEnrichmentService = createGetter('SkillEnrichmentService');
 
 // Database application service getters
 export const getDatabaseApplicationService = createGetter('DatabaseApplicationService');
@@ -237,10 +250,12 @@ export const getOAuthProxyApplicationService = (): OAuthProxyApplicationService 
 // Puck domain repository getters
 export const getAppRepository = createGetter('AppRepository');
 export const getPuckPageRepository = createGetter('PuckPageRepository');
+export const getTemplateRepository = createGetter('TemplateRepository');
 
 // Puck application service getters
 export const getAppApplicationService = createGetter('AppApplicationService');
 export const getPuckPageApplicationService = createGetter('PuckPageApplicationService');
+export const getTemplateApplicationService = createGetter('TemplateApplicationService');
 
 // Data Source domain repository getters
 export const getViewRepository = createGetter('ViewRepository');
@@ -258,3 +273,6 @@ export const getCreditUsageApplicationService = createGetter('CreditUsageApplica
 export const getInvoiceApplicationService = createGetter('InvoiceApplicationService');
 export const getStorageQuotaApplicationService = createGetter('StorageQuotaApplicationService');
 export const getStorageRecalculationApplicationService = createGetter('StorageRecalculationApplicationService');
+
+// Audit application service getters
+export const getAuditApplicationService = createGetter('AuditApplicationService');

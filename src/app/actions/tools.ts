@@ -18,6 +18,9 @@ import { ReferenceToolMapper } from '@/app/mappers/reference-tool-mapper';
 import { getToolSearchApplicationService } from '@/ddd/application/di/container';
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
+import { db } from '@/lib/db/client';
+import { tools, appTypes, type OAuthToolDefinitionData } from '@/lib/db/schema';
+import { eq, sql, and } from 'drizzle-orm';
 
 /**
  * Search all tools (both reference and system tools)
@@ -245,6 +248,367 @@ export async function getToolCategories(): Promise<Result<string[]>> {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get categories'
+    };
+  }
+}
+
+// =============================================================================
+// Pipedream Tool Metadata Types and Functions
+// =============================================================================
+
+export interface PipedreamToolInput {
+  type: string;
+  description: string;
+  required: boolean;
+}
+
+export interface PipedreamToolMetadata {
+  id: string;
+  app: string;
+  name: string;
+  description: string;
+  type: 'action' | 'mcp';
+  inputs: Record<string, PipedreamToolInput>;
+}
+
+export interface PipedreamToolsGrouped {
+  [appName: string]: PipedreamToolMetadata[];
+}
+
+/**
+ * Get all Pipedream (OAuth) tools grouped by app from the database
+ * AIDEV-NOTE: Queries tools table instead of reading from pipedream_metadata.json
+ */
+export async function getPipedreamTools(): Promise<Result<PipedreamToolsGrouped>> {
+  try {
+    await requireAuth();
+
+    // Query tools with type='oauth' from DB (these are Pipedream tools)
+    const oauthTools = await db.select({
+      id: tools.id,
+      displayName: tools.displayName,
+      description: tools.description,
+      appId: tools.appId,
+      config: tools.config,
+      appName: appTypes.name,
+    })
+      .from(tools)
+      .innerJoin(appTypes, eq(tools.appId, appTypes.id))
+      .where(sql`${tools.config}->>'type' = 'oauth'`);
+
+    // Group tools by app
+    const grouped: PipedreamToolsGrouped = {};
+
+    for (const row of oauthTools) {
+      const config = row.config as OAuthToolDefinitionData;
+      const appName = row.appId; // Use appId as the grouping key (e.g., "slack", "gmail")
+
+      // Convert DB row to PipedreamToolMetadata
+      const toolMetadata: PipedreamToolMetadata = {
+        id: row.id,
+        app: appName,
+        name: row.displayName,
+        description: row.description || '',
+        type: 'action', // OAuth tools are actions (not MCP)
+        inputs: config.parameters ? Object.fromEntries(
+          Object.entries(config.parameters).map(([key, param]) => [
+            key,
+            {
+              type: param.type,
+              description: param.description || '',
+              required: param.required,
+            }
+          ])
+        ) : {},
+      };
+
+      if (!grouped[appName]) {
+        grouped[appName] = [];
+      }
+      grouped[appName].push(toolMetadata);
+    }
+
+    // Sort tools within each app by name
+    for (const appName of Object.keys(grouped)) {
+      grouped[appName].sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    return {
+      success: true,
+      data: grouped
+    };
+  } catch (error: unknown) {
+    console.error('[ToolActions] Error getting Pipedream tools:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get Pipedream tools'
+    };
+  }
+}
+
+/**
+ * Search Pipedream tools with pagination - for performance with large tool sets
+ * AIDEV-NOTE: Uses search on demand instead of loading all tools upfront
+ */
+export async function searchPipedreamTools(options: {
+  query?: string;
+  appId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<Result<{ tools: PipedreamToolMetadata[]; hasMore: boolean; totalCount: number }>> {
+  try {
+    await requireAuth();
+
+    const { query = '', appId, limit = 20, offset = 0 } = options;
+
+    // Build WHERE conditions
+    const conditions = [sql`${tools.config}->>'type' = 'oauth'`];
+
+    if (appId) {
+      conditions.push(eq(tools.appId, appId));
+    }
+
+    if (query.trim()) {
+      const searchPattern = `%${query.toLowerCase()}%`;
+      conditions.push(
+        sql`(LOWER(${tools.displayName}) LIKE ${searchPattern} OR LOWER(${tools.description}) LIKE ${searchPattern} OR LOWER(${tools.appId}) LIKE ${searchPattern})`
+      );
+    }
+
+    // Get total count first
+    const countResult = await db.select({ count: sql<number>`count(*)` })
+      .from(tools)
+      .where(and(...conditions));
+    const totalCount = Number(countResult[0]?.count || 0);
+
+    // Query with pagination
+    const rows = await db.select({
+      id: tools.id,
+      displayName: tools.displayName,
+      description: tools.description,
+      appId: tools.appId,
+      config: tools.config,
+    })
+      .from(tools)
+      .where(and(...conditions))
+      .orderBy(tools.displayName)
+      .limit(limit)
+      .offset(offset);
+
+    // Convert to PipedreamToolMetadata
+    const toolsData: PipedreamToolMetadata[] = rows.map((row: typeof rows[number]) => {
+      const config = row.config as OAuthToolDefinitionData;
+      return {
+        id: row.id,
+        app: row.appId,
+        name: row.displayName,
+        description: row.description || '',
+        type: 'action' as const,
+        inputs: config.parameters ? Object.fromEntries(
+          Object.entries(config.parameters).map(([key, param]) => [
+            key,
+            {
+              type: param.type,
+              description: param.description || '',
+              required: param.required,
+            }
+          ])
+        ) : {},
+      };
+    });
+
+    return {
+      success: true,
+      data: {
+        tools: toolsData,
+        hasMore: offset + limit < totalCount,
+        totalCount,
+      }
+    };
+  } catch (error: unknown) {
+    console.error('[ToolActions] Error searching Pipedream tools:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to search Pipedream tools'
+    };
+  }
+}
+
+/**
+ * Get available Pipedream app names for filtering
+ */
+export async function getPipedreamApps(): Promise<Result<{ id: string; name: string; toolCount: number }[]>> {
+  try {
+    await requireAuth();
+
+    const apps = await db.select({
+      appId: tools.appId,
+      count: sql<number>`count(*)`,
+    })
+      .from(tools)
+      .where(sql`${tools.config}->>'type' = 'oauth'`)
+      .groupBy(tools.appId)
+      .orderBy(tools.appId);
+
+    const appList = apps.map((row: typeof apps[number]) => ({
+      id: row.appId,
+      name: row.appId.replace(/^_/, '').replace(/_/g, ' '),
+      toolCount: Number(row.count),
+    }));
+
+    return {
+      success: true,
+      data: appList,
+    };
+  } catch (error: unknown) {
+    console.error('[ToolActions] Error getting Pipedream apps:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get Pipedream apps'
+    };
+  }
+}
+
+/**
+ * Get a specific Pipedream tool by ID from the database
+ */
+export async function getPipedreamToolById(toolId: string): Promise<Result<PipedreamToolMetadata | null>> {
+  try {
+    await requireAuth();
+
+    // Query specific tool from DB
+    const rows = await db.select({
+      id: tools.id,
+      displayName: tools.displayName,
+      description: tools.description,
+      appId: tools.appId,
+      config: tools.config,
+    })
+      .from(tools)
+      .where(eq(tools.id, toolId))
+      .limit(1);
+
+    if (rows.length === 0) {
+      return {
+        success: true,
+        data: null
+      };
+    }
+
+    const row = rows[0];
+    const config = row.config as OAuthToolDefinitionData;
+
+    // Convert DB row to PipedreamToolMetadata
+    const toolMetadata: PipedreamToolMetadata = {
+      id: row.id,
+      app: row.appId,
+      name: row.displayName,
+      description: row.description || '',
+      type: 'action',
+      inputs: config.parameters ? Object.fromEntries(
+        Object.entries(config.parameters).map(([key, param]) => [
+          key,
+          {
+            type: param.type,
+            description: param.description || '',
+            required: param.required,
+          }
+        ])
+      ) : {},
+    };
+
+    return {
+      success: true,
+      data: toolMetadata
+    };
+  } catch (error: unknown) {
+    console.error('[ToolActions] Error getting Pipedream tool:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get Pipedream tool'
+    };
+  }
+}
+
+// =============================================================================
+// Trigger Tools (Event Sources) - For External Event Automations
+// =============================================================================
+
+export interface TriggerToolParameter {
+  type: string;
+  description: string;
+  required: boolean;
+}
+
+export interface TriggerToolDTO {
+  id: string;
+  displayName: string;
+  description: string;
+  appId: string;
+  parameters: Record<string, TriggerToolParameter>;
+}
+
+/**
+ * Get available triggers (event sources) for a specific app
+ * Used in TriggerConfigModal for External Event automation type
+ * AIDEV-NOTE: Filters tools where is_trigger = true AND appId matches
+ */
+export async function getTriggersByApp(appId: string): Promise<Result<TriggerToolDTO[]>> {
+  try {
+    await requireAuth();
+
+    console.log(`[ToolActions] Getting triggers for app: ${appId}`);
+
+    // Query tools that are triggers for this app
+    const triggerTools = await db.select({
+      id: tools.id,
+      displayName: tools.displayName,
+      description: tools.description,
+      appId: tools.appId,
+      config: tools.config,
+    })
+      .from(tools)
+      .where(and(
+        eq(tools.appId, appId),
+        eq(tools.isTrigger, true)
+      ));
+
+    console.log(`[ToolActions] Found ${triggerTools.length} triggers for ${appId}`);
+
+    // Convert to DTOs
+    const triggerDTOs: TriggerToolDTO[] = triggerTools.map((row: typeof triggerTools[number]) => {
+      const config = row.config as OAuthToolDefinitionData;
+
+      return {
+        id: row.id,
+        displayName: row.displayName,
+        description: row.description || '',
+        appId: row.appId,
+        parameters: config.parameters ? Object.fromEntries(
+          Object.entries(config.parameters).map(([key, param]) => [
+            key,
+            {
+              type: param.type,
+              description: param.description || '',
+              required: param.required,
+            }
+          ])
+        ) : {},
+      };
+    });
+
+    // Sort by display name
+    triggerDTOs.sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+    return {
+      success: true,
+      data: triggerDTOs
+    };
+  } catch (error: unknown) {
+    console.error('[ToolActions] Error getting triggers:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get triggers'
     };
   }
 }

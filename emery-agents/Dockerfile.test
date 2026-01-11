@@ -9,8 +9,6 @@ RUN pip install uv==0.5.30
 # Copy dependency files - uv.lock ensures reproducible builds with fixed versions
 COPY ./pyproject.toml ./uv.lock ./README.md ./
 
-# AIDEV-NOTE: uv.lock guarantees exact same package versions across environments
-# This creates a completely reproducible container for testing
 RUN uv pip install . --system
 
 # Copy source code

@@ -995,6 +995,16 @@ export class TableApplicationService {
         }
       }
 
+      // Fetch previous row data for all rows being updated (needed for UPDATE trigger events)
+      const previousRows = await Promise.all(
+        enrichedUpdates.map(update => 
+          this.dynamicTableRepository.getRow(tableId, update.rowId.value)
+        )
+      );
+      const previousRowsMap = new Map(
+        previousRows.filter(row => row !== null).map(row => [row!.id.value, row])
+      );
+
       // Bulk update using repository (single Delta Lake merge)
       const updatedRows = await this.dynamicTableRepository.updateRows(
         tableId,
@@ -1003,6 +1013,22 @@ export class TableApplicationService {
           row: u.data
         }))
       );
+
+      // Emit table trigger events for each updated row (non-blocking)
+      // AIDEV-NOTE: For bulk operations, emit event per row to allow fine-grained agent triggering
+      for (const updatedRow of updatedRows) {
+        const previousRow = previousRowsMap.get(updatedRow.id.value);
+        await this.handleTableTriggers({
+          tableId: tableId.value,
+          tableName: table.name,
+          operation: 'UPDATE',
+          organizationId: table.organizationId,
+          rowId: updatedRow.id.value,
+          rowData: updatedRow.toPlainObject(table.fields),
+          previousRowData: previousRow?.toPlainObject(table.fields),
+          timestamp: new Date()
+        });
+      }
 
       logger.summary('Bulk update completed', {
         rows: updatedRows.length,
@@ -1074,6 +1100,34 @@ export class TableApplicationService {
       return await this.dynamicTableRepository.getRows(tableId, options);
     } catch (error) {
       logger.error('Error getting rows:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get rows using pre-fetched table data (bypasses findById)
+   * Used for public view access where table metadata is already fetched via rawDb
+   *
+   * AIDEV-NOTE: This method accepts table metadata directly, bypassing RLS.
+   * The actual row retrieval goes to Delta Lake which has no RLS.
+   */
+  async getRowsWithTableData(
+    tableData: { tableId: number; s3Path: string; organizationId: number; databaseId: number },
+    fields: TableField[],
+    options: RowQueryOptions
+  ): Promise<Row[]> {
+    try {
+      return await this.dynamicTableRepository.getRowsWithParams(
+        {
+          tableId: tableData.tableId,
+          s3Path: tableData.s3Path,
+          organizationId: tableData.organizationId,
+        },
+        fields,
+        options
+      );
+    } catch (error) {
+      logger.error('Error getting rows with table data:', error);
       return [];
     }
   }
@@ -1204,35 +1258,38 @@ export class TableApplicationService {
     }
 
     try {
-      // Find all agent schedules that match this table change event
-      const matches = await this.triggerMatchingService.findMatchingSchedules(event);
+      // Find all agent automations that match this table change event
+      const matches = await this.triggerMatchingService.findMatchingAutomations(event);
 
       if (matches.length === 0) {
-        logger.debug('No matching schedules found for table change', {
+        logger.debug('No matching automations found for table change', {
           tableId: event.tableId,
           operation: event.operation
         });
         return;
       }
 
-      logger.debug(`Found ${matches.length} matching schedule(s) for table trigger`, {
+      logger.debug(`Found ${matches.length} matching automation(s) for table trigger`, {
         tableId: event.tableId,
         operation: event.operation,
         agentCount: matches.length
       });
 
-      // Create a task for each matching schedule
+      // Create a task for each matching automation
+      // AIDEV-TODO: Look up skill by match.automation.skillId to get instructions
       for (const match of matches) {
         try {
           const triggerContext: TriggerContext = {
             type: 'DATABASE_EVENT',
-            scheduleName: match.schedule.name,
+            scheduleName: match.automation.name,
             tableChange: event
           };
 
           // Build enhanced task instruction text with event context
           const eventDataPreview = JSON.stringify(event.rowData, null, 2);
-          const baseInstruction = match.schedule.taskInstructions.task || '';
+          // AIDEV-NOTE: In new automation model, instructions come from the referenced skill.
+          // For now, we create a placeholder task. Full implementation needs skill lookup.
+          const baseInstruction = `Execute skill ID ${match.automation.skillId}`;
 
           const enhancedTask = `
 DATABASE EVENT TRIGGER
@@ -1256,17 +1313,16 @@ ${baseInstruction}
           const taskData: CreateTaskData = {
             agentId: match.agent.id.value,
             organizationId: event.organizationId.value,
-            name: match.schedule.name || `Table ${event.operation} trigger`,
+            name: match.automation.name || `Table ${event.operation} trigger`,
             instructions: {
-              ...match.schedule.taskInstructions,
               task: enhancedTask,
               metadata: {
-                ...match.schedule.taskInstructions.metadata,
                 triggeredBy: 'DATABASE_EVENT',
                 tableName: event.tableName,
                 tableId: event.tableId,
                 operation: event.operation,
-                rowId: event.rowId
+                rowId: event.rowId,
+                skillId: match.automation.skillId
               }
             },
             triggerContext
@@ -1277,7 +1333,7 @@ ${baseInstruction}
           logger.summary('Created task from table trigger', {
             taskId: task.id.value,
             agentId: match.agent.id.value,
-            scheduleName: match.schedule.name,
+            automationName: match.automation.name,
             tableId: event.tableId,
             operation: event.operation
           });
@@ -1285,7 +1341,7 @@ ${baseInstruction}
           logger.error('Failed to create task for table trigger', {
             error: taskError,
             agentId: match.agent.id.value,
-            scheduleName: match.schedule.name
+            automationName: match.automation.name
           });
           // Continue creating tasks for other matches even if one fails
         }

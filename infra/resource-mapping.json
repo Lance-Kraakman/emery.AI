@@ -1,0 +1,8 @@
+{
+  "AppStack/FrontendRepo": {
+    "repositoryName": "emery/frontend"
+  },
+  "AppStack/AgentRepo": {
+    "repositoryName": "emery/agent"
+  }
+}

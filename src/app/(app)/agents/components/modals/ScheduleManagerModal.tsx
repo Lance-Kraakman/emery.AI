@@ -18,7 +18,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import type { ScheduleConfigurationDTO } from '@/app/dtos/schedule.dto';
+import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
 import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import {
   isCalendarTrigger,
@@ -37,7 +37,7 @@ interface ScheduleManagerModalProps {
 }
 
 interface ScheduleCardProps {
-  schedule: ScheduleConfigurationDTO;
+  schedule: AutomationConfigurationDTO;
   index: number;
   totalCount: number;
   onEdit: () => void;
@@ -47,7 +47,7 @@ interface ScheduleCardProps {
   isToggling: boolean;
 }
 
-function getScheduleIcon(schedule: ScheduleConfigurationDTO) {
+function getScheduleIcon(schedule: AutomationConfigurationDTO) {
   const trigger = schedule.trigger;
   switch (trigger.type) {
     case 'CALENDAR':
@@ -56,12 +56,14 @@ function getScheduleIcon(schedule: ScheduleConfigurationDTO) {
       return Database;
     case 'WEBHOOK':
       return Globe;
+    case 'PIPEDREAM_EVENT':
+      return Zap;
     default:
       return Calendar;
   }
 }
 
-function getScheduleSummary(schedule: ScheduleConfigurationDTO): string {
+function getScheduleSummary(schedule: AutomationConfigurationDTO): string {
   const trigger = schedule.trigger;
 
   if (trigger.type === 'CALENDAR') {
@@ -82,7 +84,7 @@ function getScheduleSummary(schedule: ScheduleConfigurationDTO): string {
     return `${hasSecret}${signature}`;
   }
 
-  return 'Unknown schedule type';
+  return 'Unknown automation type';
 }
 
 function ScheduleCard({
@@ -115,7 +117,7 @@ function ScheduleCard({
             <Icon className="w-5 h-5 text-muted-foreground" />
             <div>
               <CardTitle className="text-sm font-medium">
-                {scheduleName || `Schedule ${index + 1} of ${totalCount}`}
+                {scheduleName || `Automation ${index + 1} of ${totalCount}`}
               </CardTitle>
               <div className="flex gap-2 mt-1">
                 <Badge variant="secondary" className="text-xs">
@@ -170,7 +172,7 @@ function ScheduleCard({
             variant="outline"
             onClick={onToggle}
             disabled={isToggling}
-            title={isEnabled ? 'Disable schedule' : 'Enable schedule'}
+            title={isEnabled ? 'Disable automation' : 'Enable automation'}
           >
             {isToggling ? (
               <PowerOff className="w-3 h-3 animate-pulse" />
@@ -185,7 +187,7 @@ function ScheduleCard({
             variant="outline"
             onClick={onDelete}
             disabled={isDeleting || totalCount === 1}
-            title={totalCount === 1 ? 'Cannot delete last schedule' : 'Delete schedule'}
+            title={totalCount === 1 ? 'Cannot delete last automation' : 'Delete automation'}
             className="text-destructive hover:text-destructive"
           >
             {isDeleting ? (
@@ -206,7 +208,7 @@ export function ScheduleManagerModal({ isOpen, onClose, agent, onUpdate }: Sched
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
-  const schedules = agent.schedules || [];
+  const schedules = agent.automations || [];
 
   const handleDelete = async (index: number) => {
     if (schedules.length === 1) {
@@ -217,19 +219,19 @@ export function ScheduleManagerModal({ isOpen, onClose, agent, onUpdate }: Sched
     try {
       setDeletingIndex(index);
 
-      const newSchedules = schedules.filter((_, i) => i !== index);
+      const newSchedules = schedules.filter((_: any, i: number) => i !== index);
 
       const result = await updateAgentFromClient(agent.id, {
-        schedules: newSchedules
+        automations: newSchedules
       });
 
       if (!result.success) {
-        throw new Error(result.error || 'Failed to delete schedule');
+        throw new Error(result.error || 'Failed to delete automation');
       }
 
       onUpdate?.();
     } catch (error) {
-      console.error('Error deleting schedule:', error);
+      console.error('Error deleting automation:', error);
       // TODO: Add proper error handling/toast notification
     } finally {
       setDeletingIndex(null);
@@ -240,7 +242,7 @@ export function ScheduleManagerModal({ isOpen, onClose, agent, onUpdate }: Sched
     try {
       setTogglingIndex(index);
 
-      const newSchedules = schedules.map((schedule, i) => {
+      const newSchedules = schedules.map((schedule: any, i: number) => {
         if (i === index) {
           return {
             ...schedule,
@@ -251,16 +253,16 @@ export function ScheduleManagerModal({ isOpen, onClose, agent, onUpdate }: Sched
       });
 
       const result = await updateAgentFromClient(agent.id, {
-        schedules: newSchedules
+        automations: newSchedules
       });
 
       if (!result.success) {
-        throw new Error(result.error || 'Failed to toggle schedule');
+        throw new Error(result.error || 'Failed to toggle automation');
       }
 
       onUpdate?.();
     } catch (error) {
-      console.error('Error toggling schedule:', error);
+      console.error('Error toggling automation:', error);
       // TODO: Add proper error handling/toast notification
     } finally {
       setTogglingIndex(null);
@@ -290,7 +292,7 @@ export function ScheduleManagerModal({ isOpen, onClose, agent, onUpdate }: Sched
       <BaseModal
         isOpen={isOpen}
         onClose={onClose}
-        title="Schedule Management"
+        title="Automation Management"
         description="Configure multiple execution triggers for this agent"
         size="lg"
       >
@@ -299,20 +301,20 @@ export function ScheduleManagerModal({ isOpen, onClose, agent, onUpdate }: Sched
             <Card className="border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-8 text-center">
                 <AlertCircle className="w-12 h-12 text-muted-foreground mb-3" />
-                <h3 className="text-lg font-medium mb-2">No Schedules Configured</h3>
+                <h3 className="text-lg font-medium mb-2">No Automations Configured</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  This agent has no execution triggers. Add your first schedule to get started.
+                  This agent has no execution triggers. Add your first automation to get started.
                 </p>
                 <Button onClick={handleCreate}>
                   <Plus className="w-4 h-4 mr-2" />
-                  Add First Schedule
+                  Add First Automation
                 </Button>
               </CardContent>
             </Card>
           ) : (
             <>
               <div className="max-h-[400px] overflow-y-auto pr-2">
-                {schedules.map((schedule, index) => (
+                {schedules.map((schedule: AutomationConfigurationDTO, index: number) => (
                   <ScheduleCard
                     key={index}
                     schedule={schedule}
@@ -330,7 +332,7 @@ export function ScheduleManagerModal({ isOpen, onClose, agent, onUpdate }: Sched
               <div className="pt-2 border-t">
                 <Button onClick={handleCreate} variant="outline" className="w-full">
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Schedule
+                  Add Automation
                 </Button>
               </div>
             </>

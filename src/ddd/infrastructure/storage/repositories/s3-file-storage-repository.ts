@@ -11,6 +11,11 @@ import { FileUploadRequest, StoredFile, FileStorageError, FileKey, FileUrlOption
 import { IFileStorageRepository, type StorageBreakdown } from '@/ddd/domain/tables/repositories/file-storage-repository';
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
 
+// Cache for storage breakdown results to reduce expensive ListObjectsV2 calls
+// TTL: 1 hour (3600000 ms)
+const STORAGE_BREAKDOWN_CACHE_TTL_MS = 60 * 60 * 1000;
+const storageBreakdownCache = new Map<number, { data: StorageBreakdown; cachedAt: number }>();
+
 export class S3FileStorageRepository implements IFileStorageRepository {
   private readonly bucketName: string;
   private readonly s3: typeof s3Client;
@@ -18,6 +23,14 @@ export class S3FileStorageRepository implements IFileStorageRepository {
   constructor(bucketName?: string) {
     this.bucketName = bucketName || BUCKET_NAME;
     this.s3 = s3Client;
+  }
+
+  /**
+   * Invalidate storage breakdown cache for an organization.
+   * Call this after file upload/delete operations.
+   */
+  invalidateStorageBreakdownCache(organizationId: number): void {
+    storageBreakdownCache.delete(organizationId);
   }
 
   private shouldUseEncryption(): boolean {
@@ -62,6 +75,11 @@ export class S3FileStorageRepository implements IFileStorageRepository {
       const command = new PutObjectCommand(commandParams);
 
       await this.s3.send(command);
+
+      // Invalidate storage breakdown cache for this organization
+      if (request.organizationId) {
+        this.invalidateStorageBreakdownCache(request.organizationId.value);
+      }
 
       return {
         id: fileId,
@@ -142,8 +160,14 @@ export class S3FileStorageRepository implements IFileStorageRepository {
         Bucket: this.bucketName,
         Key: key,
       });
-      
+
       await this.s3.send(command);
+
+      // Invalidate storage breakdown cache for this organization
+      const orgMatch = key.match(/^org_(\d+)\//);
+      if (orgMatch) {
+        this.invalidateStorageBreakdownCache(parseInt(orgMatch[1], 10));
+      }
     } catch (error: any) {
       throw new FileStorageError(
         `Failed to delete file: ${error.message}`,
@@ -276,8 +300,17 @@ export class S3FileStorageRepository implements IFileStorageRepository {
   /**
    * Scan S3 storage for an organization and calculate actual usage breakdown
    * Used for periodic storage quota validation to detect drift from incremental counters
+   *
+   * Results are cached for 1 hour to reduce expensive ListObjectsV2 calls.
+   * Cache is invalidated on file upload/delete.
    */
   async getOrganizationStorageBreakdown(organizationId: number): Promise<StorageBreakdown> {
+    // Check cache first
+    const cached = storageBreakdownCache.get(organizationId);
+    if (cached && Date.now() - cached.cachedAt < STORAGE_BREAKDOWN_CACHE_TTL_MS) {
+      return cached.data;
+    }
+
     const prefix = `org_${organizationId}/`;
 
     const breakdown: StorageBreakdown = {
@@ -329,6 +362,9 @@ export class S3FileStorageRepository implements IFileStorageRepository {
 
         continuationToken = response.NextContinuationToken;
       } while (continuationToken);
+
+      // Cache the result
+      storageBreakdownCache.set(organizationId, { data: breakdown, cachedAt: Date.now() });
 
       return breakdown;
     } catch (error) {

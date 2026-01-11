@@ -151,6 +151,14 @@ async function runDatabaseSeeds(): Promise<void> {
   execSync(`${baseEnv} npx tsx src/drizzle/seeds/tools.ts`, { stdio: 'inherit', cwd: process.cwd() });
   console.log('✅ Tools seeding completed');
 
+  console.log('🌐 Seeding default-templates...');
+  execSync(`${baseEnv} npx tsx src/drizzle/seeds/default-templates.ts`, { stdio: 'inherit', cwd: process.cwd() });
+  console.log('✅ Templates seeding completed');
+
+  console.log('🗂️  Seeding system-skills...');
+  execSync(`${baseEnv} npx tsx src/drizzle/seeds/system-skills.ts`, { stdio: 'inherit', cwd: process.cwd() });
+  console.log('✅ System skills seeding completed');
+
   console.log('✅ All database seeding completed successfully');
 }
 

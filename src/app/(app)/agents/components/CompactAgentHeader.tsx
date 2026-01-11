@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Settings, Zap, Calendar, Link2, Plus, ChevronRight, ClipboardList, Edit2, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Settings, Zap, Calendar, Link2, Plus, ChevronRight, ClipboardList, Edit2, Trash2, MoreHorizontal } from 'lucide-react';
 import type { AgentDTO } from '@/app/dtos/agent.dto';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
@@ -41,9 +41,35 @@ export function CompactAgentHeader({
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [isCompact, setIsCompact] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const activeSchedules = agent.schedules?.filter(s => s.enabled).length || 0;
-  const totalSchedules = agent.schedules?.length || 0;
+  const activeSchedules = agent.automations?.filter((s: { enabled: boolean }) => s.enabled).length || 0;
+  const totalSchedules = agent.automations?.length || 0;
+
+  // Container-based responsive behavior
+  useEffect(() => {
+    const updateCompactMode = () => {
+      if (containerRef.current) {
+        const width = containerRef.current.offsetWidth;
+        // Switch to compact mode when container is less than 900px wide
+        // This accounts for chat panel reducing available space
+        setIsCompact(width < 900);
+      }
+    };
+
+    // Initial check
+    updateCompactMode();
+
+    // Set up ResizeObserver to watch container width changes
+    const resizeObserver = new ResizeObserver(updateCompactMode);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, []);
 
   const handleAddSkill = async () => {
     setSkillsOpen(false);
@@ -76,7 +102,7 @@ export function CompactAgentHeader({
   const handleDeleteSchedule = async (index: number, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent triggering parent click handlers
 
-    if (agent.schedules.length === 1) {
+    if (agent.automations.length === 1) {
       // Cannot delete the last schedule
       return;
     }
@@ -84,10 +110,10 @@ export function CompactAgentHeader({
     try {
       setDeletingIndex(index);
 
-      const newSchedules = agent.schedules.filter((_, i) => i !== index);
+      const newAutomations = agent.automations.filter((_: any, i: number) => i !== index);
 
       const result = await updateAgentFromClient(agent.id, {
-        schedules: newSchedules
+        automations: newAutomations
       });
 
       if (!result.success) {
@@ -104,68 +130,61 @@ export function CompactAgentHeader({
   };
 
   return (
-    <div className={`flex items-center justify-between px-6 py-3 border-b bg-card ${className}`}>
+    <div ref={containerRef} className={`flex items-center justify-between px-4 sm:px-6 py-3 border-b bg-card min-w-0 ${className}`}>
       {/* Left side - Agent info and status */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0">
         {/* Agent Icon and Name */}
-        <div className="flex items-center gap-3">
-          <AgentAvatar avatarConfig={agent.avatarConfig} agentId={agent.id} size="md" />
-          <div>
-            <h1 className="text-lg font-semibold">{agent.name}</h1>
-            <p className="text-xs text-muted-foreground">{agent.role || 'Assistant'}</p>
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <AgentAvatar avatarConfig={agent.avatarConfig} agentId={agent.id} size="md" className="shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-lg font-semibold truncate">{agent.name}</h1>
+            <p className="text-xs text-muted-foreground truncate">{agent.role || 'Assistant'}</p>
           </div>
         </div>
 
         {/* Status Badge */}
         <span
-          className={`px-2 py-1 text-xs font-medium rounded-full border ${
+          className={`px-2 py-1 text-xs font-medium rounded-full border shrink-0 ${
             STATUS_COLORS[(agent.status || 'active') as keyof typeof STATUS_COLORS]
           }`}
         >
           {(agent.status || 'active').charAt(0).toUpperCase() + (agent.status || 'active').slice(1)}
         </span>
 
-        {/* Model Badge */}
+        {/* Model Badge - Hidden on small screens */}
         {agent.defaultModel && (
-          <span className="px-2 py-1 text-xs bg-muted rounded-full">
+          <span className="hidden md:inline-flex px-2 py-1 text-xs bg-muted rounded-full">
             {agent.defaultModel}
           </span>
         )}
       </div>
 
       {/* Right side - Settings and action badges */}
-      <div className="flex items-center gap-2">
-        {/* Settings Button */}
-        <button
-          onClick={() => openModal('basic-info', { agent })}
-          className="p-2 border rounded-md hover:bg-accent transition-colors"
-          title="Agent settings"
-        >
-          <Settings className="h-4 w-4" />
-        </button>
-
-        {/* Separator */}
-        <div className="h-6 w-px bg-border" />
-
-        {/* Assign Task Button */}
+      <div className="flex items-center gap-1 min-w-0">
+        {/* Assign Task Button - Primary Action - Always Visible */}
         <button
           onClick={() => setTaskDialogOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors bg-primary text-primary-foreground hover:bg-primary/90"
+          className="flex items-center gap-1 px-2 xl:px-2.5 py-1.5 text-sm border rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
           title="Assign a new task to this agent"
         >
-          <ClipboardList className="h-3.5 w-3.5" />
-          Assign Task
+          <ClipboardList className="h-4 w-4" />
+          <span className="hidden sm:inline">Assign Task</span>
         </button>
 
-        {/* Skills Dropdown */}
+
+        {/* Skills Dropdown - Always visible, text hidden when compact */}
         <Popover open={skillsOpen} onOpenChange={setSkillsOpen}>
           <PopoverTrigger asChild>
             <button
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
-              title="View skills"
+              className="flex group relative items-center gap-1 px-2 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
+              title={`${skills.length} skills`}
             >
-              <Zap className="h-3.5 w-3.5" />
-              Skills ({skills.length})
+              <Zap className="h-4 w-4 shrink-0" />
+              {!isCompact && <span>Skills</span>}
+              <span className={`${skills.length > 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'} 
+                text-xs font-medium px-1.5 rounded-full min-w-[1.25rem] text-center`}>
+                {skills.length}
+              </span>
             </button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-80 p-0">
@@ -216,15 +235,19 @@ export function CompactAgentHeader({
           </PopoverContent>
         </Popover>
 
-        {/* Schedules Dropdown */}
+        {/* Schedules Dropdown - Always visible, text hidden when compact */}
         <Popover open={schedulesOpen} onOpenChange={setSchedulesOpen}>
           <PopoverTrigger asChild>
             <button
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
-              title="View schedules"
+              className="flex group relative items-center gap-1 px-2 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
+              title={`${activeSchedules} active, ${totalSchedules} total schedules`}
             >
-              <Calendar className="h-3.5 w-3.5" />
-              Schedules ({activeSchedules}/{totalSchedules})
+              <Calendar className="h-4 w-4 shrink-0" />
+              {!isCompact && <span>Schedules</span>}
+              <span className={`${activeSchedules > 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'} 
+                text-xs font-medium px-1.5 rounded-full min-w-[2.5rem] text-center`}>
+                {activeSchedules}/{totalSchedules}
+              </span>
             </button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-80 p-0">
@@ -236,13 +259,13 @@ export function CompactAgentHeader({
 
               {/* Schedules List */}
               <div className="max-h-[300px] overflow-y-auto">
-                {!agent.schedules || agent.schedules.length === 0 ? (
+                {!agent.automations || agent.automations.length === 0 ? (
                   <div className="px-4 py-8 text-center text-sm text-muted-foreground">
                     No schedules configured
                   </div>
                 ) : (
                   <div className="py-1">
-                    {agent.schedules.map((schedule, index) => (
+                    {agent.automations.map((schedule: any, index: number) => (
                       <div
                         key={index}
                         className="group flex items-center justify-between px-4 py-2 hover:bg-accent transition-colors"
@@ -274,15 +297,15 @@ export function CompactAgentHeader({
                           <button
                             onClick={() => handleScheduleClick(index)}
                             className="p-1.5 rounded hover:bg-accent-foreground/10 transition-colors"
-                            title="Edit schedule"
+                            title="Edit automation"
                           >
                             <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
                           </button>
                           <button
                             onClick={(e) => handleDeleteSchedule(index, e)}
-                            disabled={deletingIndex === index || agent.schedules.length === 1}
+                            disabled={deletingIndex === index || agent.automations.length === 1}
                             className="p-1.5 rounded hover:bg-destructive/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={agent.schedules.length === 1 ? "Cannot delete last schedule" : "Delete schedule"}
+                            title={agent.automations.length === 1 ? "Cannot delete last automation" : "Delete automation"}
                           >
                             <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
                           </button>
@@ -307,24 +330,51 @@ export function CompactAgentHeader({
           </PopoverContent>
         </Popover>
 
-        {/* Connections Badge - Opens Modal */}
+        {/* Connections Button - Always visible, text hidden when compact */}
         <button
           onClick={() => openModal('authorized-connections', { agent })}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
-          title="Manage connections"
+          className="flex group relative items-center gap-1 px-2 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
+          title={`${connections.length} connections`}
         >
-          <Link2 className="h-3.5 w-3.5" />
-          Connections ({connections.length})
+          <Link2 className="h-4 w-4 shrink-0" />
+          {!isCompact && <span>Connections</span>}
+          <span className={`${connections.length > 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'} 
+            text-xs font-medium px-1.5 rounded-full min-w-[1.25rem] text-center`}>
+            {connections.length}
+          </span>
         </button>
 
-        {/* Share Button */}
+        {/* Share Button - Always visible */}
         <ShareButton
           resourceType="agent"
           resourceId={agent.id}
-          variant="outline"
-          size="sm"
+          variant="ghost"
+          size="icon"
           onShare={() => setShareDialogOpen(true)}
         />
+
+        {/* Settings Dropdown - Always visible */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              className="p-2 border rounded-md hover:bg-accent transition-colors"
+              title="Agent settings"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-56">
+            <div className="flex flex-col gap-1">
+              <button
+                onClick={() => openModal('basic-info', { agent })}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors text-left"
+              >
+                <Settings className="h-4 w-4" />
+                Agent Settings
+              </button>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Task Assignment Modal */}

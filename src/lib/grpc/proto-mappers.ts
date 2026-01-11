@@ -10,8 +10,9 @@
  * - Proto messages (proto/agent_worker.proto) - Transport layer only
  */
 
-import { Agent, ScheduleConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
+import { Agent, AutomationConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
+import type { ExecutionSkill } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 
 import {
   AgentConfig as AgentConfigProto,
@@ -20,6 +21,7 @@ import {
   TaskRequest,
   TaskProgress as TaskProgressProto,
   TriggerData,
+  SkillInputValue,
   InstructionConfig as InstructionConfigProto
 } from './generated/agent_worker';
 import { Task, TaskStatus } from '@/ddd/domain/tasks/entities/task';
@@ -33,7 +35,7 @@ export interface AgentData {
   description?: string;
   persona?: string;
   tools?: ToolConfig[];
-  schedules?: ScheduleConfigurationJSON[];
+  automations?: AutomationConfigurationJSON[];
   status?: any;
   organizationId: number;
   ownerId: string;
@@ -110,6 +112,7 @@ export function mapInstructionConfigToProto(instructionConfig: {
  * Supports both direct capability execution and instruction-based auto-routing
  *
  * AIDEV-NOTE: Updated for multimodal support (2025-01)
+ * AIDEV-NOTE: Updated for skill-based task execution (2025-01)
  */
 export function createTaskRequest(params: {
   taskId: string;
@@ -123,30 +126,64 @@ export function createTaskRequest(params: {
     tools?: ToolConfig[];
     metadata?: Record<string, any>;
   };
+  // Optional skill to execute (for skill-based task execution)
+  // AIDEV-NOTE: ExecutionSkill type now supports 'agent', 'operation', 'tool', 'write'
+  skill?: ExecutionSkill;
   agent: Agent;
-  triggerData: Record<string, any>;
+  // Typed skill inputs (name → value with type info)
+  skillInputs?: Array<{ name: string; type: string; value: unknown }>;
   organizationId: string;
   ownerId: string;
   timeoutSeconds?: number;
   agentModel?: string; // Agent default model (overrides organization model)
   organizationModel?: string; // Organization default model (fallback for agent model)
 }): TaskRequest {
-  // Convert trigger data to string map format expected by proto
-  const triggerPayload: Record<string, string> = {};
-  for (const [key, value] of Object.entries(params.triggerData)) {
-    triggerPayload[key] = typeof value === 'string' ? value : JSON.stringify(value);
-  }
+  // Build typed skill inputs for TriggerData
+  const skillInputValues: SkillInputValue[] = (params.skillInputs || []).map(input => {
+    const skillInputValue: SkillInputValue = {
+      name: input.name,
+      type: input.type
+    };
+
+    // Set appropriate oneof field based on value type
+    if (typeof input.value === 'string') {
+      skillInputValue.stringValue = input.value;
+    } else if (typeof input.value === 'number') {
+      skillInputValue.numberValue = input.value;
+    } else if (typeof input.value === 'boolean') {
+      skillInputValue.boolValue = input.value;
+    } else if (input.value !== null && input.value !== undefined) {
+      // Complex types (objects, arrays) → JSON string
+      skillInputValue.jsonValue = JSON.stringify(input.value);
+    }
+
+    return skillInputValue;
+  });
 
   const triggerData: TriggerData = {
-    payload: triggerPayload
+    skillInputs: skillInputValues
   };
+
+  // Build the agent config, adding skill if provided
+  const agentConfig = mapAgentToProto(params.agent);
+
+  // If skill is provided, add it to the agent config's skills array
+  if (params.skill) {
+    agentConfig.skills = [mapSkillToProto(params.skill)];
+    console.log(`[PROTO-MAPPER] Added skill to agent config:`, {
+      skillId: params.skill.id,
+      skillName: params.skill.name,
+      executionType: params.skill.executionType,
+      hasTaskModelConfig: !!params.skill.taskModelConfig
+    });
+  }
 
   // Build the base request (using camelCase - generator handles wire format conversion)
   const request: TaskRequest = {
-    name: params.skillName || 'instruction_based_task',
+    name: params.skill?.name || params.skillName || 'instruction_based_task',
     taskId: params.taskId,
     agentId: params.agentId,
-    agentConfig: mapAgentToProto(params.agent),
+    agentConfig,
     triggerData: triggerData as any,
     organizationId: params.organizationId,
     ownerId: params.ownerId,
@@ -167,12 +204,17 @@ export function createTaskRequest(params: {
   });
 
   // Set execution mode (oneof field)
-  if (params.skillName) {
+  // Priority: skill-based > skillName > instructionConfig
+  if (params.skill) {
+    // Skill-based execution: use skill_name mode
+    request.skillName = params.skill.name;
+    console.log(`[PROTO-MAPPER] Using skill_name mode for skill: ${params.skill.name}`);
+  } else if (params.skillName) {
     request.skillName = params.skillName;
   } else if (params.instructionConfig) {
     request.instructionConfig = mapInstructionConfigToProto(params.instructionConfig);
   } else {
-    throw new Error('Either skillName or instructionConfig must be provided');
+    throw new Error('Either skill, skillName, or instructionConfig must be provided');
   }
 
   return request;
@@ -240,22 +282,358 @@ export function mapTaskProgressFromProto(progress: TaskProgressProto): {
 }
 
 /**
- * Extract trigger data from proto TriggerData back to TypeScript object
+ * Extract typed skill inputs from proto TriggerData back to TypeScript object
  */
 export function mapTriggerDataFromProto(triggerData: TriggerData): Record<string, any> {
   const result: Record<string, any> = {};
-  
-  for (const [key, value] of Object.entries(triggerData.payload || {})) {
-    try {
-      // Try to parse as JSON first
-      result[key] = JSON.parse(value);
-    } catch {
-      // If parsing fails, use as string
-      result[key] = value;
+
+  for (const input of triggerData.skillInputs || []) {
+    // Extract value from appropriate oneof field
+    if (input.stringValue !== undefined) {
+      result[input.name] = input.stringValue;
+    } else if (input.numberValue !== undefined) {
+      result[input.name] = input.numberValue;
+    } else if (input.boolValue !== undefined) {
+      result[input.name] = input.boolValue;
+    } else if (input.jsonValue !== undefined) {
+      try {
+        result[input.name] = JSON.parse(input.jsonValue);
+      } catch {
+        result[input.name] = input.jsonValue;
+      }
     }
   }
-  
+
   return result;
+}
+
+// =============================================================================
+// Multi-Table Output Mapping Types (for proto mapping)
+// =============================================================================
+
+/** Typed field source - discriminated union (skill output, skill input, or table ref) */
+type FieldSourceDTO =
+  | { type: 'skill_output'; name: string }
+  | { type: 'skill_input'; name: string }
+  | { type: 'table_ref'; order: number; field: string };
+
+/** Row ID source - determines which row to update */
+type RowIdSourceDTO =
+  | { type: 'static'; staticId: string }
+  | { type: 'skill_input'; skillInput: string }
+  | { type: 'skill_output'; skillOutput: string }
+  | { type: 'table_ref'; tableRef: { order: number; field: string } }
+  | { type: 'source_row' };
+
+/** Table mapping DTO for skill output mapping */
+interface TableMappingDTO {
+  order: number;
+  targetTableId: number;
+  rowAction: 'create' | 'update';
+  rowIdSource?: RowIdSourceDTO;
+  mappings: Array<{
+    source: FieldSourceDTO;
+    targetFieldId: number;
+    targetFieldMetadata?: {
+      fieldType: string;
+      options?: string[];
+      maxSelections?: number;
+      fieldName?: string;
+    };
+    appendMode?: boolean;
+  }>;
+  displayFieldId?: number;
+  mode?: 'single_row' | 'multi_row';
+}
+
+/** Output mapping config DTO */
+interface OutputMappingConfigDTO {
+  mode: 'single_row' | 'multi_row';
+  tableMappings: TableMappingDTO[];
+}
+
+/**
+ * Map FieldSource to proto format
+ * Returns null for invalid sources so callers can filter them out
+ */
+function mapFieldSourceToProto(source: FieldSourceDTO | undefined | null): any | null {
+  if (!source || !source.type) {
+    console.warn('[PROTO-MAPPER] FieldSource is undefined or has no type - skipping mapping');
+    return null;
+  }
+
+  if (source.type === 'skill_output') {
+    return { skillOutput: source.name };
+  } else if (source.type === 'skill_input') {
+    return { skillInput: source.name };
+  } else if (source.type === 'table_ref') {
+    return {
+      tableRef: {
+        order: source.order,
+        field: source.field
+      }
+    };
+  }
+
+  console.warn(`[PROTO-MAPPER] Unknown FieldSource type: ${(source as any).type} - skipping mapping`);
+  return null;
+}
+
+/**
+ * Map RowIdSource to proto format
+ */
+function mapRowIdSourceToProto(source: RowIdSourceDTO): any {
+  switch (source.type) {
+    case 'static':
+      return { staticId: source.staticId };
+    case 'skill_input':
+      return { skillInput: source.skillInput };
+    case 'skill_output':
+      return { skillOutput: source.skillOutput };
+    case 'table_ref':
+      return {
+        tableRef: {
+          order: source.tableRef.order,
+          field: source.tableRef.field
+        }
+      };
+    case 'source_row':
+      return { useSourceRow: true };
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Map EnrichedSkill/ExecutionSkill to protobuf SkillConfig
+ * Used by both chat processing and task execution paths
+ * AIDEV-NOTE: Updated to accept SkillExecutionType which includes 'tool' and 'write'
+ */
+export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
+  return {
+    id: skill.id,
+    name: skill.name,
+    description: skill.description || '',
+    instructions: skill.instructions || '',
+    inputs: skill.inputs.map(input => ({
+      name: input.name,
+      required: input.required,
+      type: input.type || 'text', // Default to 'text' for proto compatibility
+      inputMapping: input.inputMapping ? {
+        source: {
+          tableId: input.inputMapping.source.tableId,
+          fieldId: input.inputMapping.source.fieldId,
+          rowSource: input.inputMapping.source.rowSource ? mapRowIdSourceToProto(input.inputMapping.source.rowSource) : undefined
+        }
+      } : undefined
+    })),
+    outputs: skill.outputs.map(output => {
+      // Map skill output to proto's outputMapping
+      const outputMapping = output.outputMapping as OutputMappingConfigDTO | undefined;
+      return {
+        name: output.name,
+        type: output.type || 'text', // Default to 'text' for proto compatibility
+        outputMapping: outputMapping ? {
+          mode: outputMapping.mode || 'single_row',
+          tableMappings: outputMapping.tableMappings.map((tm: TableMappingDTO) => ({
+            order: tm.order,
+            targetTableId: tm.targetTableId,
+            rowAction: tm.rowAction || 'create',
+            rowIdSource: tm.rowIdSource ? mapRowIdSourceToProto(tm.rowIdSource) : undefined,
+            displayFieldId: tm.displayFieldId || 0,
+            mode: tm.mode || '',
+            mappings: tm.mappings
+              .map((m: any) => {
+                const source = mapFieldSourceToProto(m.source);
+                if (!source) return null; // Skip mappings with invalid sources
+                return {
+                  source,
+                  targetFieldId: m.targetFieldId,
+                  targetFieldMetadata: m.targetFieldMetadata ? {
+                    fieldType: m.targetFieldMetadata.fieldType || '',
+                    options: m.targetFieldMetadata.options || [],
+                    maxSelections: m.targetFieldMetadata.maxSelections,
+                    fieldName: m.targetFieldMetadata.fieldName || ''
+                  } : undefined,
+                  appendMode: m.appendMode || false
+                };
+              })
+              .filter((m: any): m is NonNullable<typeof m> => m !== null)
+          }))
+        } : undefined
+      };
+    }),
+    tools: skill.tools.map(tool => mapToolToProto(
+      tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
+    )),
+    model: skill.model || '',
+    content: skill.content.map((part: any) => {
+      // Handle various content formats (MessagePart format)
+      if (part.text?.text || (part.type === 'text' && part.text)) {
+        return { text: { text: part.text?.text || part.text || '' } };
+      } else if (part.imageUrl?.url || (part.type === 'image_url' && part.imageUrl)) {
+        return { imageUrl: { url: part.imageUrl?.url || part.imageUrl || '' } };
+      } else if (part.file?.url || (part.type === 'file' && part.file)) {
+        const fileData = part.file;
+        return {
+          file: {
+            url: fileData?.url || '',
+            mimeType: fileData?.mimeType || '',
+            filename: fileData?.filename || '',
+            size: fileData?.size || 0
+          }
+        };
+      }
+      return { text: { text: '' } };
+    }),
+    agentType: skill.agentType || '',
+    executionType: skill.executionType || 'agentic',
+    taskModelConfig: skill.taskModelConfig ? {
+      modelId: skill.taskModelConfig.modelId || '',
+      taskType: skill.taskModelConfig.taskType || '',
+      parameters: Object.fromEntries(
+        Object.entries(skill.taskModelConfig.parameters || {}).map(([k, v]) => [k, String(v)])
+      )
+    } : undefined,
+    // Map tool execution config for 'tool' execution type
+    toolExecutionConfig: skill.toolExecutionConfig ? {
+      toolId: skill.toolExecutionConfig.toolId,
+      inputMappings: skill.toolExecutionConfig.inputMappings.map(m => ({
+        toolParam: m.toolParam,
+        skillInputName: m.skillInputName || '',
+        staticValue: m.staticValue !== undefined ? String(m.staticValue) : ''
+      })),
+      outputTableId: skill.toolExecutionConfig.outputTableId
+    } : undefined,
+    // Map write config for 'write' execution type
+    writeConfig: skill.writeConfig ? {
+      targetTableId: skill.writeConfig.targetTableId,
+      rowAction: skill.writeConfig.rowAction,
+      fieldMappings: skill.writeConfig.fieldMappings.map(m => ({
+        skillInputName: m.skillInputName,
+        targetFieldId: m.targetFieldId
+      })),
+      updateMatch: skill.writeConfig.updateMatch ? {
+        skillInputName: skill.writeConfig.updateMatch.skillInputName,
+        targetFieldId: skill.writeConfig.updateMatch.targetFieldId
+      } : undefined
+    } : undefined,
+    // Map read config for 'read' execution type
+    readConfig: skill.readConfig ? {
+      mode: skill.readConfig.mode,
+      sourceTableId: skill.readConfig.sourceTableId,
+      rowIdSource: skill.readConfig.rowIdSource ? mapRowIdSourceToProto(skill.readConfig.rowIdSource) : undefined,
+      queryFilters: skill.readConfig.queryFilters?.map(f => ({
+        fieldId: f.fieldId,
+        operator: f.operator,
+        valueSource: mapRowIdSourceToProto(f.valueSource)
+      })) || [],
+      queryLimit: skill.readConfig.queryLimit || 100,
+      fieldMappings: skill.readConfig.fieldMappings.map(m => ({
+        sourceFieldId: m.sourceFieldId,
+        targetVariable: m.targetVariable
+      }))
+    } : undefined,
+    // Map steps for 'agent' (step-based) execution type
+    steps: skill.steps?.map(step => ({
+      name: step.name,
+      instruction: step.instruction || '',
+      skillId: step.skillId || 0,
+      tools: step.tools || [],
+      inputs: step.inputs || {},
+      outputs: step.outputs || {},
+      parallel: step.parallel || false,
+      condition: step.condition || '',
+      // Step-level definitions (same mapping as skill-level)
+      inputDefs: step.inputDefs?.map(input => ({
+        name: input.name,
+        required: input.required,
+        type: input.type || 'text',
+        inputMapping: input.inputMapping ? {
+          source: {
+            tableId: input.inputMapping.source.tableId,
+            fieldId: input.inputMapping.source.fieldId,
+            rowSource: input.inputMapping.source.rowSource ? mapRowIdSourceToProto(input.inputMapping.source.rowSource) : undefined
+          }
+        } : undefined
+      })) || [],
+      outputDefs: step.outputDefs?.map(output => ({
+        name: output.name,
+        type: output.type || 'text',
+        outputMapping: undefined  // Step-level outputs typically don't have table mappings
+      })) || [],
+      // DAG execution configuration
+      errorConfig: step.errorConfig ? {
+        continueOnError: step.errorConfig.continueOnError,
+        errorOutputVar: step.errorConfig.errorOutputVar || ''
+      } : undefined,
+      retryConfig: step.retryConfig ? {
+        maxAttempts: step.retryConfig.maxAttempts,
+        backoffMs: step.retryConfig.backoffMs,
+        backoffType: step.retryConfig.backoffType
+      } : undefined,
+      // Output routing for DAG branching
+      stepOutputs: step.stepOutputs?.map(output => ({
+        type: output.type,
+        condition: output.condition || '',
+        nextSteps: output.nextSteps || []
+      })) || [],
+      // Parallel execution
+      parallelGroup: step.parallelGroup || '',
+      // Loop/iteration support
+      loopConfig: step.loopConfig ? {
+        type: step.loopConfig.type,
+        itemsVar: step.loopConfig.itemsVar || '',
+        currentItemVar: step.loopConfig.currentItemVar || '',
+        condition: step.loopConfig.condition || '',
+        maxIterations: step.loopConfig.maxIterations || 100
+      } : undefined,
+      // Step-level execution configs (for non-agentic steps)
+      readConfig: step.readConfig ? {
+        mode: step.readConfig.mode,
+        sourceTableId: step.readConfig.sourceTableId,
+        rowIdSource: step.readConfig.rowIdSource ? mapRowIdSourceToProto(step.readConfig.rowIdSource) : undefined,
+        queryFilters: step.readConfig.queryFilters?.map(f => ({
+          fieldId: f.fieldId,
+          operator: f.operator,
+          valueSource: mapRowIdSourceToProto(f.valueSource)
+        })) || [],
+        queryLimit: step.readConfig.queryLimit || 100,
+        fieldMappings: step.readConfig.fieldMappings.map(m => ({
+          sourceFieldId: m.sourceFieldId,
+          targetVariable: m.targetVariable
+        }))
+      } : undefined,
+      writeConfig: step.writeConfig ? {
+        targetTableId: step.writeConfig.targetTableId,
+        rowAction: step.writeConfig.rowAction,
+        fieldMappings: step.writeConfig.fieldMappings.map(m => ({
+          skillInputName: m.skillInputName,
+          targetFieldId: m.targetFieldId
+        })),
+        updateMatch: step.writeConfig.updateMatch ? {
+          skillInputName: step.writeConfig.updateMatch.skillInputName,
+          targetFieldId: step.writeConfig.updateMatch.targetFieldId
+        } : undefined
+      } : undefined,
+      toolExecutionConfig: step.toolExecutionConfig ? {
+        toolId: step.toolExecutionConfig.toolId,
+        inputMappings: step.toolExecutionConfig.inputMappings.map(m => ({
+          toolParam: m.toolParam,
+          skillInputName: m.skillInputName || '',
+          staticValue: m.staticValue !== undefined ? String(m.staticValue) : ''
+        })),
+        outputTableId: step.toolExecutionConfig.outputTableId
+      } : undefined,
+      taskModelConfig: step.taskModelConfig ? {
+        modelId: step.taskModelConfig.modelId || '',
+        taskType: step.taskModelConfig.taskType || '',
+        parameters: Object.fromEntries(
+          Object.entries(step.taskModelConfig.parameters || {}).map(([k, v]) => [k, String(v)])
+        )
+      } : undefined
+    })) || []
+  };
 }
 
 // AIDEV-TODO: Add validation functions to ensure proto message completeness

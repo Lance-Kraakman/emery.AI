@@ -36,6 +36,8 @@ from .query_operations import (
     apply_pagination,
     build_query_metadata
 )
+from functools import partial
+from .filter_operations import extract_jsonb_target_ids, json_array_contains_id
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +179,10 @@ def prepare_query_rows(
     # Apply LIKE/ILIKE filters in-memory (these cannot be pushed down)
     if filters:
         df = apply_like_ilike_filters(df, filters)
+
+    # Apply JSONB contains filters in-memory (for relation/file/document fields)
+    if filters:
+        df = apply_jsonb_contains_filters(df, filters)
 
     # Apply aggregation if requested
     if aggregation:
@@ -409,6 +415,61 @@ def apply_like_ilike_filters(
                 search_term = value.replace('%', '')
                 df = df.filter(pl.col(filter_obj.field).str.contains(search_term))
     return df
+
+
+def apply_jsonb_contains_filters(
+    df: pl.DataFrame,
+    filters: List[table_service_pb2.RowFilter]
+) -> pl.DataFrame:
+    """Apply JSONB contains filters for complex field types (relation/file/document).
+
+    These filters check if a JSONB array column contains an element with matching 'id'.
+    Cannot be pushed down to Delta Lake, must be applied in-memory after load.
+
+    Complex field types store JSONB arrays:
+    - relation: [{id: number|string, value: string}]
+    - file:     [{id: string, name: string, size: number, ...}]
+    - document: [{id: string, name: string, documentMetadata: {...}, ...}]
+
+    Args:
+        df: Polars DataFrame to filter
+        filters: List of RowFilter protobuf objects
+
+    Returns:
+        Filtered DataFrame
+    """
+    if not filters:
+        return df
+
+    for filter_obj in filters:
+        if filter_obj.operator != table_service_pb2.FILTER_OP_CONTAINS:
+            continue
+
+        field_name = filter_obj.field
+        if field_name not in df.columns:
+            logger.warning(f"[apply_jsonb_contains_filters] Field '{field_name}' not in DataFrame")
+            continue
+
+        # Extract target IDs using type-safe function
+        target_ids = extract_jsonb_target_ids(filter_obj.value)
+        if not target_ids:
+            logger.warning(f"[apply_jsonb_contains_filters] No target IDs for field '{field_name}'")
+            continue
+
+        logger.info(f"[apply_jsonb_contains_filters] Filtering '{field_name}' for IDs: {target_ids}")
+
+        # Apply filter using map_elements with partial to avoid closure issues
+        # NOTE: Using functools.partial ensures target_ids is bound correctly
+        # Polars >= 0.20 uses map_elements (not deprecated apply)
+        checker = partial(json_array_contains_id, target_ids=target_ids)
+        df = df.filter(
+            pl.col(field_name).map_elements(checker, return_dtype=pl.Boolean)
+        )
+
+        logger.info(f"[apply_jsonb_contains_filters] After filter: {len(df)} rows remaining")
+
+    return df
+
 
 def apply_aggregations(
     df: pl.DataFrame,

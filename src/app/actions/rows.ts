@@ -13,29 +13,52 @@ import { TableId, UserId } from "@/ddd/domain/shared/value-objects";
 import { RowMapper, type RowDTO } from "@/app/mappers/row-mapper";
 import type { DSGRow } from "@/app/mappers/dsg-mapper";
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field";
+import { getCacheService, CACHE_TAGS } from "@/lib/cache";
+import {
+  logRowCreate,
+  logRowUpdate,
+  logRowDelete,
+  computeFieldChanges,
+  type RowAuditContext,
+  type AuditActor,
+} from "./audit-helpers";
 
 /**
- * Convert row data from field names to field IDs
+ * Convert row data to use field IDs as keys
  *
- * AIDEV-NOTE: DSG grid sends data with field names as keys: { name: "value", age: 123 }
- * But Row.fromPlainObject expects numeric field IDs: { 6: "value", 7: 123 }
- * This function performs the conversion using the table's field definitions.
+ * AIDEV-NOTE: Supports two input formats:
+ * - keyType='name': DSG grid sends { name: "value", age: 123 } -> converted to { 6: "value", 7: 123 }
+ * - keyType='id': Agent output mapping sends { "6": "value" } -> passed through directly
  *
- * @param rowData - Row data with field names as keys
+ * @param rowData - Row data with field names or IDs as keys
  * @param tableFields - Table field definitions for mapping names to IDs
+ * @param keyType - Whether input keys are field names or IDs (default: 'name')
  * @returns Row data with numeric field IDs as keys
  */
 function convertFieldNamesToIds(
   rowData: Record<string, any>,
-  tableFields: readonly TableField[]
+  tableFields: readonly TableField[],
+  keyType: 'name' | 'id' = 'name'
 ): Record<string, any> {
   const convertedData: Record<string, any> = {};
 
   for (const field of tableFields) {
     if (field.name === 'id') continue; // Skip id field - it's handled separately
     const fieldKey = field.id.value.toString();
-    if (rowData[field.name] !== undefined) {
-      convertedData[fieldKey] = rowData[field.name];
+    const sourceKey = keyType === 'id' ? fieldKey : field.name;
+
+    if (rowData[sourceKey] !== undefined) {
+      let value = rowData[sourceKey];
+
+      // Convert date strings to Date objects for date fields
+      // AIDEV-NOTE: Python output mapping sends dates as ISO strings (e.g., "1942-06-14")
+      // Delta Lake expects Date objects for timestamp columns
+      if ((field.type === 'date' || field.type === 'last-updated' || field.type === 'created-at')
+          && typeof value === 'string' && value) {
+        value = new Date(value);
+      }
+
+      convertedData[fieldKey] = value;
     }
   }
 
@@ -51,8 +74,8 @@ function convertFieldNamesToIds(
 export async function createRow(data: CreateRowCommand, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("table:manage");
-    const { tableId, data: rowData } = data;
-    
+    const { tableId, data: rowData, dataKeyType = 'name' } = data;
+
 
     if (!tableId) {
       return {
@@ -63,10 +86,10 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
 
     // Use table application service for row creation
     const tableAppService = getTableApplicationService();
-    
+
     // Get table to retrieve field information
     const table = await tableAppService.getTable(TableId.fromNumber(tableId));
-    
+
     if (!table) {
       return {
         success: false,
@@ -74,9 +97,9 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
       };
     }
 
-    // Convert field names to field IDs before creating Row entity
-    // AIDEV-NOTE: DSG sends { name: "value" }, Row.fromPlainObject expects { 6: "value" }
-    const convertedData = convertFieldNamesToIds(rowData || {}, table.fields);
+    // Convert field keys to field IDs before creating Row entity
+    // AIDEV-NOTE: DSG sends { name: "value" }, Agent sends { "1": "value" }
+    const convertedData = convertFieldNamesToIds(rowData || {}, table.fields, dataKeyType);
     const row = Row.fromPlainObject(convertedData, tableId, table.fields);
 
     // AIDEV-NOTE: Ensure we have a valid user ID
@@ -100,14 +123,42 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
       };
     }
 
+    // AUDIT: Log row creation
+    if (result.data) {
+      const rowSnapshot = result.data.toNamedObject(table.fields);
+      const createdRowId = result.data.id.value;
+
+      const auditContext: RowAuditContext = {
+        organizationId: table.organizationId.value,
+        tableId,
+        tableName: table.name,
+        actor: {
+          type: 'user',
+          id: session.user.id,
+          name: session.user.name || undefined,
+        },
+      };
+
+      logRowCreate(auditContext, { rowId: createdRowId, rowSnapshot });
+    }
+
+    // Invalidate caches for this table (view aggregations, stats, etc.)
+    const cacheService = getCacheService();
+    if (cacheService.isConnected()) {
+      await Promise.all([
+        cacheService.invalidateByTag(CACHE_TAGS.tableStats(tableId)),
+        cacheService.invalidateByTag(CACHE_TAGS.table(tableId)),
+      ]);
+    }
+
     // Optional revalidation with custom URL
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
     }
-    
+
     // Convert Domain object to DTO for serialization
     const rowDTO = result.data ? RowMapper.toDTO(result.data) : null;
-    
+
     return {
       success: true,
       data: rowDTO,
@@ -184,6 +235,34 @@ export async function createRows(data: { tableId: number; rows: Record<string, a
       };
     }
 
+    // AUDIT: Log row creations
+    if (result.data && result.data.length > 0) {
+      const auditContext: RowAuditContext = {
+        organizationId: table.organizationId.value,
+        tableId,
+        tableName: table.name,
+        actor: {
+          type: 'user',
+          id: session.user.id,
+          name: session.user.name || undefined,
+        },
+      };
+
+      for (const createdRow of result.data) {
+        const rowSnapshot = createdRow.toNamedObject(table.fields);
+        logRowCreate(auditContext, { rowId: createdRow.id.value, rowSnapshot });
+      }
+    }
+
+    // Invalidate caches for this table (view aggregations, stats, etc.)
+    const cacheService = getCacheService();
+    if (cacheService.isConnected()) {
+      await Promise.all([
+        cacheService.invalidateByTag(CACHE_TAGS.tableStats(tableId)),
+        cacheService.invalidateByTag(CACHE_TAGS.table(tableId)),
+      ]);
+    }
+
     // Optional revalidation with custom URL
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
@@ -229,10 +308,13 @@ export async function createRowAction(formData: FormData) {
 
 export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: string): Promise<Result> {
   try {
+    console.log('[updateRowData] Called with:', { tableId: data.tableId, rowId: data.rowId, data: data.data });
+
     const session = await requirePermission("table:manage");
-    const { tableId, rowId, data: rowData } = data;
+    const { tableId, rowId, data: rowData, dataKeyType = 'name' } = data;
 
     if (!tableId || !rowId) {
+      console.log('[updateRowData] Missing tableId or rowId');
       return {
         success: false,
         error: "tableId and rowId are required",
@@ -241,33 +323,68 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
 
     // Use table application service for row updates
     const tableAppService = getTableApplicationService();
-    
+
     // Get table to retrieve field information
     const table = await tableAppService.getTable(TableId.fromNumber(tableId));
-    
+
     if (!table) {
+      console.log('[updateRowData] Table not found');
       return {
         success: false,
         error: "Table not found"
       };
     }
 
-    // CRITICAL FIX: Fetch existing row data first to preserve all fields
+    console.log('[updateRowData] Table fields:', table.fields.map(f => ({ id: f.id.value, name: f.name })));
+
+    // Fetch existing row data to preserve all fields
     const existingRow = await tableAppService.getRow(
       TableId.fromNumber(tableId),
       RowId.fromString(rowId)
     );
 
-    let mergedData = { ...rowData, id: rowId };
-
-    if (existingRow) {
-      const existingData = existingRow.toPlainObject(table.fields);
-      // MERGE: Start with existing data, then overlay the new changes
-      mergedData = { ...existingData, ...rowData, id: rowId };
+    // Convert field IDs to names if needed (agent sends IDs, DSG sends names)
+    let namedRowData = rowData;
+    if (dataKeyType === 'id') {
+      namedRowData = {};
+      for (const field of table.fields) {
+        const fieldKey = field.id.value.toString();
+        if (rowData[fieldKey] !== undefined) {
+          namedRowData[field.name] = rowData[fieldKey];
+        }
+      }
+      console.log('[updateRowData] Converted ID keys to names:', namedRowData);
     }
 
-    // Convert merged data to Row entity using table field information
-    const row = Row.fromPlainObject(mergedData, tableId, table.fields);
+    // Form data comes with field NAMES as keys (e.g., { email: "test@example.com" })
+    // Use toNamedObject/fromNamedObject which both work with field names
+    let mergedData: Record<string, unknown> = { ...namedRowData, id: rowId };
+
+    if (existingRow) {
+      // toNamedObject returns field NAMES as keys
+      const existingData = existingRow.toNamedObject(table.fields);
+
+      // Debug: Find created_at field and log its value
+      const createdAtField = table.fields.find(f => f.type === 'created-at');
+      if (createdAtField) {
+        console.log('[updateRowData] DEBUG created_at:', {
+          fieldName: createdAtField.name,
+          fieldId: createdAtField.id.value,
+          existingValue: existingData[createdAtField.name],
+          existingValueType: typeof existingData[createdAtField.name],
+          inRowData: rowData[createdAtField.name],
+        });
+      }
+
+      console.log('[updateRowData] Existing data (field names):', existingData);
+      // Merge: existing + new changes (both use field names)
+      mergedData = { ...existingData, ...namedRowData, id: rowId };
+    }
+
+    console.log('[updateRowData] Merged data:', mergedData);
+
+    // fromNamedObject takes field NAMES directly - no conversion needed
+    const row = Row.fromNamedObject(mergedData, tableId, table.fields);
 
     // AIDEV-NOTE: Ensure we have a valid user ID
     if (!session.user?.id || typeof session.user.id !== 'string') {
@@ -277,12 +394,14 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       };
     }
 
+    console.log('[updateRowData] Calling tableAppService.updateRow...');
     const result = await tableAppService.updateRow({
       tableId: TableId.fromNumber(tableId),
       rowId: RowId.fromString(rowId),
       data: row,
       updatedBy: UserId.fromString(session.user.id)
     });
+    console.log('[updateRowData] Update result:', result.success, result.error);
 
     if (!result.success) {
       return {
@@ -291,14 +410,39 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       };
     }
 
+    // AUDIT: Log row update with field-level changes
+    if (result.data && existingRow) {
+      const existingData = existingRow.toNamedObject(table.fields);
+      const newData = result.data.toNamedObject(table.fields);
+      const fieldChanges = computeFieldChanges(existingData, newData);
+
+      const auditContext: RowAuditContext = {
+        organizationId: table.organizationId.value,
+        tableId,
+        tableName: table.name,
+        actor: {
+          type: 'user',
+          id: session.user.id,
+          name: session.user.name || undefined,
+        },
+      };
+
+      logRowUpdate(auditContext, {
+        rowId,
+        rowSnapshot: newData,
+        fieldChanges,
+        previousData: existingData,
+      });
+    }
+
     // Optional revalidation with custom URL
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
     }
-    
+
     // Convert Domain object to DTO for serialization
     const rowDTO = result.data ? RowMapper.toDTO(result.data) : null;
-    
+
     return {
       success: true,
       data: rowDTO,
@@ -397,6 +541,53 @@ export async function updateRowsData(
       };
     }
 
+    // AUDIT: Log bulk row updates with field-level changes
+    if (result.data && result.data.length > 0) {
+      // Create maps for efficient lookup
+      const updatedRowMap = new Map(
+        result.data.map(row => [row.id.value, row.toNamedObject(table.fields)])
+      );
+      const existingNamedMap = new Map(
+        existingRows.map(row => [row.id.value, row.toNamedObject(table.fields)])
+      );
+
+      const auditContext: RowAuditContext = {
+        organizationId: table.organizationId.value,
+        tableId,
+        tableName: table.name,
+        actor: {
+          type: 'user',
+          id: session.user.id,
+          name: session.user.name || undefined,
+        },
+      };
+
+      // Log each row update
+      for (const update of updates) {
+        const existingData = existingNamedMap.get(update.rowId);
+        const newData = updatedRowMap.get(update.rowId);
+
+        if (existingData && newData) {
+          const fieldChanges = computeFieldChanges(existingData, newData);
+          logRowUpdate(auditContext, {
+            rowId: update.rowId,
+            rowSnapshot: newData,
+            fieldChanges,
+            previousData: existingData,
+          });
+        }
+      }
+    }
+
+    // Invalidate caches for this table (view aggregations, stats, etc.)
+    const cacheService = getCacheService();
+    if (cacheService.isConnected()) {
+      await Promise.all([
+        cacheService.invalidateByTag(CACHE_TAGS.tableStats(tableId)),
+        cacheService.invalidateByTag(CACHE_TAGS.table(tableId)),
+      ]);
+    }
+
     // Optional revalidation with custom URL
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
@@ -446,7 +637,7 @@ export async function updateRowAction(formData: FormData) {
 export async function deleteRowData(tableId: number, rowId: string, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("table:manage");
-    
+
     if (!tableId || !rowId) {
       return {
         success: false,
@@ -456,7 +647,23 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
 
     // Use table application service for row deletion
     const tableAppService = getTableApplicationService();
-    
+
+    // Get table for audit logging
+    const table = await tableAppService.getTable(TableId.fromNumber(tableId));
+    if (!table) {
+      return {
+        success: false,
+        error: "Table not found"
+      };
+    }
+
+    // AUDIT: Capture existing row data BEFORE deletion
+    const existingRow = await tableAppService.getRow(
+      TableId.fromNumber(tableId),
+      RowId.fromString(rowId)
+    );
+    const rowSnapshot = existingRow?.toNamedObject(table.fields);
+
     const result = await tableAppService.deleteRow(
       TableId.fromNumber(tableId),
       RowId.fromString(rowId)
@@ -469,11 +676,36 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
       };
     }
 
+    // AUDIT: Log row deletion
+    if (rowSnapshot) {
+      const auditContext: RowAuditContext = {
+        organizationId: table.organizationId.value,
+        tableId,
+        tableName: table.name,
+        actor: {
+          type: 'user',
+          id: session.user.id,
+          name: session.user.name || undefined,
+        },
+      };
+
+      logRowDelete(auditContext, { rowId, rowSnapshot });
+    }
+
+    // Invalidate caches for this table (view aggregations, stats, etc.)
+    const cacheService = getCacheService();
+    if (cacheService.isConnected()) {
+      await Promise.all([
+        cacheService.invalidateByTag(CACHE_TAGS.tableStats(tableId)),
+        cacheService.invalidateByTag(CACHE_TAGS.table(tableId)),
+      ]);
+    }
+
     // Optional revalidation with custom URL
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
     }
-    
+
     return {
       success: true,
       data: { message: "Row deleted successfully" },

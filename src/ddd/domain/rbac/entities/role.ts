@@ -38,7 +38,7 @@ export interface UpdateRoleData {
 // System role definitions
 export const SYSTEM_ROLES = {
   ORGANIZATION_OWNER: 'Organization Owner',
-  ORGANIZATION_ADMIN: 'Organization Admin', 
+  ORGANIZATION_ADMIN: 'Organization Admin',
   TEAM_LEAD: 'Team Lead',
   MEMBER: 'Member',
   VIEWER: 'Viewer',
@@ -46,6 +46,19 @@ export const SYSTEM_ROLES = {
 } as const;
 
 export type SystemRoleType = typeof SYSTEM_ROLES[keyof typeof SYSTEM_ROLES];
+
+// System role database IDs (seeded values - must match database)
+// AIDEV-NOTE: These IDs correspond to the seeded system roles in the database
+export const SYSTEM_ROLE_IDS = {
+  ORGANIZATION_OWNER: 1,
+  ORGANIZATION_ADMIN: 2,
+  TEAM_LEAD: 3,
+  MEMBER: 4,
+  VIEWER: 5,
+  SYSTEM_SERVICE: 6
+} as const;
+
+export type SystemRoleId = typeof SYSTEM_ROLE_IDS[keyof typeof SYSTEM_ROLE_IDS];
 
 // Helper functions for role validation
 export function isSystemRole(roleName: string): boolean {

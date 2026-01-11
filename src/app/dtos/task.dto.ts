@@ -18,6 +18,7 @@ export interface CreateTaskDTO {
   teamId?: number;            // Optional - for team assignment (mutually exclusive with agentId)
   name: string;
   instructions: TaskInstructions;
+  skillId?: number;           // Optional - execute this skill instead of raw instructions
   createdBy?: string;
   organizationId: number;
 }

@@ -20,6 +20,27 @@ export interface SortState {
 }
 
 /**
+ * Serialize sort state to a stable string for query key identity
+ * Ensures query keys don't change when sortBy object reference changes
+ */
+function serializeSort(sortBy: SortState): string {
+  if (!sortBy.field) return 'none'
+  return `${sortBy.field}:${sortBy.order || 'asc'}`
+}
+
+/**
+ * Serialize filters to a stable string for query key identity
+ * Ensures query keys don't change when filters array reference changes
+ */
+function serializeFilters(filters: FilterConfig[]): string {
+  if (!filters || filters.length === 0) return 'none'
+  return filters
+    .map(f => `${f.field}:${f.operator}:${String(f.value)}`)
+    .sort() // Sort for consistent order regardless of filter addition order
+    .join('|')
+}
+
+/**
  * Query key factory for row-related queries
  *
  * Structure:
@@ -36,10 +57,10 @@ export const rowQueryKeys = {
 
   /**
    * Infinite scroll query with sort and filter dependencies
-   * Used by useInfiniteQuery for paginated data
+   * Uses serialized strings for stable identity (prevents cache misses on object recreation)
    */
   infinite: (tableId: number, sortBy: SortState, filters: FilterConfig[]) =>
-    ['rows', tableId, 'infinite', sortBy, filters] as const,
+    ['rows', tableId, 'infinite', serializeSort(sortBy), serializeFilters(filters)] as const,
 
   /**
    * Search query key with search term dependency

@@ -20,10 +20,10 @@ import type { Result } from '@/ddd/domain/shared/result';
 import { createAgentDefaults } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, OrganizationId, UserId, TeamId, AgentStatus, ApiKey, AGENT_STATUS } from '@/ddd/domain/shared/value-objects';
 import { AppName } from '@/ddd/domain/connections/value-objects';
-import { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { TriggerConfig, TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from '@/app/dtos/agent.dto';
+import type { AutomationConfiguration } from '@/ddd/domain/agents/entities/agent';
 import { AgentMapper } from '@/app/mappers/agent-mapper';
-import { ScheduleMapper } from '@/app/mappers/schedule-mapper';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 
 const logger = createDebugLogger('AgentService');
@@ -75,8 +75,8 @@ export class AgentApplicationService {
         persona: dto.persona,
         ownerId,
         organizationId,
-        // Convert ScheduleConfigurationDTO[] to ScheduleConfiguration[]
-        schedules: dto.schedules ? ScheduleMapper.fromDTOs(dto.schedules) : [],
+        // Convert AutomationConfigurationDTO[] to AutomationConfiguration[]
+        automations: dto.automations ? this.automationsFromDTOs(dto.automations) : [],
         status: dto.status ? AgentStatus.fromString(dto.status) : undefined
       };
 
@@ -89,7 +89,7 @@ export class AgentApplicationService {
         role: agentWithDefaults.role,
         description: agentWithDefaults.description,
         persona: agentWithDefaults.persona,
-        schedules: agentWithDefaults.schedules,
+        automations: agentWithDefaults.automations,
         organizationId: organizationId,
         ownerId: ownerId,
         status: agentWithDefaults.status,
@@ -98,47 +98,12 @@ export class AgentApplicationService {
 
       const savedAgent = await this.agentRepository.create(createData);
 
-      // SECURITY: Auto-create credential delegation for owner's OAuth services
-      if (this.delegationService && this.connectionService) {
-        try {
-          logger.debug('Creating automatic credential delegation', {
-            agentId: savedAgent.id.value,
-            ownerId: savedAgent.ownerId.value
-          });
-
-          // Get owner's connected OAuth services
-          const connectionsResult = await this.connectionService.getUserConnections(
-            savedAgent.ownerId
-          );
-
-          if (connectionsResult.success && connectionsResult.data) {
-            const services = connectionsResult.data.map(conn => conn.appName);
-
-            if (services.length > 0) {
-              // Create auto-approved delegation for all owner's services
-              await this.delegationService.createDelegation({
-                ownerId: savedAgent.ownerId,
-                agentId: savedAgent.id,
-                services,
-                status: 'approved' as any // Auto-approve for owner's own agent
-              });
-
-              logger.summary('Auto-created credential delegation', {
-                agentId: savedAgent.id.value,
-                serviceCount: services.length,
-                services: services.map(s => s.value)
-              });
-            } else {
-              logger.debug('No OAuth services to delegate', {
-                agentId: savedAgent.id.value
-              });
-            }
-          }
-        } catch (delegationError) {
-          // Log but don't fail agent creation if delegation fails
-          logger.error('Failed to create automatic delegation', delegationError);
-        }
-      }
+      // SECURITY: Delegations must be explicitly created by the owner
+      // No auto-delegation on agent creation - owner must configure which services to delegate
+      logger.debug('Agent created - owner must explicitly configure OAuth delegations', {
+        agentId: savedAgent.id.value,
+        ownerId: savedAgent.ownerId.value
+      });
 
       // Convert domain entity to DTO for serialization
       const agentDTO = AgentMapper.toDTO(savedAgent);
@@ -165,8 +130,8 @@ export class AgentApplicationService {
       // LOGGING: Start of update operation
       logger.debug('Updating agent', {
         agentId: dto.id,
-        hasSchedules: !!dto.schedules,
-        scheduleCount: dto.schedules?.length,
+        hasAutomations: !!dto.automations,
+        automationCount: dto.automations?.length,
         updateFields: Object.keys(dto).filter(k => dto[k as keyof UpdateAgentDTO] !== undefined)
       });
 
@@ -190,8 +155,8 @@ export class AgentApplicationService {
       if (dto.description !== undefined) updateData.description = dto.description;
       if (dto.persona !== undefined) updateData.persona = dto.persona;
       if (dto.ownerId !== undefined) updateData.ownerId = UserId.fromString(dto.ownerId);
-      // Convert ScheduleConfigurationDTO[] to ScheduleConfiguration[]
-      if (dto.schedules !== undefined) updateData.schedules = ScheduleMapper.fromDTOs(dto.schedules);
+      // Convert AutomationConfigurationDTO[] to AutomationConfiguration[]
+      if (dto.automations !== undefined) updateData.automations = this.automationsFromDTOs(dto.automations);
       if (dto.status !== undefined) updateData.status = dto.status;
       if (dto.avatarConfig !== undefined) updateData.avatarConfig = dto.avatarConfig;
       if (dto.defaultModel !== undefined) updateData.defaultModel = dto.defaultModel;
@@ -200,9 +165,9 @@ export class AgentApplicationService {
       logger.debug('Update data prepared for repository', {
         agentId: dto.id,
         updateDataKeys: Object.keys(updateData),
-        hasSchedules: !!updateData.schedules,
-        scheduleCount: updateData.schedules?.length,
-        schedules: updateData.schedules
+        hasAutomations: !!updateData.automations,
+        automationCount: updateData.automations?.length,
+        automations: updateData.automations
       });
 
       // Update agent via repository
@@ -211,7 +176,7 @@ export class AgentApplicationService {
       // LOGGING: Agent updated successfully
       logger.debug('Agent updated successfully', {
         agentId: savedAgent.id.value,
-        scheduleCount: savedAgent.schedules?.length
+        automationCount: savedAgent.automations?.length
       });
 
       // Convert domain entity to DTO for serialization
@@ -411,4 +376,21 @@ export class AgentApplicationService {
     }
   }
 
+  /**
+   * Convert AutomationConfigurationDTO[] to AutomationConfiguration[]
+   * Helper method for DTO-to-domain conversion
+   */
+  private automationsFromDTOs(dtos: import('@/app/dtos/automation.dto').AutomationConfigurationDTO[]): AutomationConfiguration[] {
+    return dtos.map(dto => ({
+      trigger: TriggerConfigFromJSON(dto.trigger),
+      skillId: dto.skillId,
+      inputMappings: dto.inputMappings?.map(m => ({
+        triggerField: m.triggerField,
+        skillInputName: m.skillInputName
+      })),
+      enabled: dto.enabled,
+      name: dto.name,
+      description: dto.description
+    }));
+  }
 }

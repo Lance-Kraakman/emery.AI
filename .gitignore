@@ -29,6 +29,9 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.docker
+.env.local.current
+.env.local.test
 
 # vercel
 .vercel
@@ -54,8 +57,11 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Python venv lib directories (not src/lib/)
+/lib/
+/lib64/
+emery-agents/lib/
+emery-agents/lib64/
 parts/
 sdist/
 var/

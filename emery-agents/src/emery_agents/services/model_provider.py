@@ -6,6 +6,7 @@ Integrates with model registry for pricing, capabilities, and access control.
 Supports model selection hierarchy: skill > agent > organization > default.
 """
 
+import asyncio
 import os
 import logging
 import base64
@@ -15,7 +16,10 @@ from dataclasses import dataclass
 
 from PIL import Image
 from smolagents.models import Model, ChatMessage, MessageRole
+from smolagents import OpenAIModel
 from huggingface_hub import InferenceClient
+from huggingface_hub.errors import HfHubHTTPError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, retry_if_not_exception_type
 
 from .model_registry import (
     get_model_metadata,
@@ -42,13 +46,20 @@ class TokenUsage:
 class SmolagentsCompatibleMessage:
     """Message wrapper that provides all attributes expected by smolagents."""
 
-    def __init__(self, content: str, role: str = "assistant", token_usage: Optional[TokenUsage] = None):
+    def __init__(
+        self,
+        content: str,
+        role: str = "assistant",
+        token_usage: Optional[TokenUsage] = None,
+        tool_calls: Optional[List] = None
+    ):
         self.content = content
         self.role = role
         self.token_usage = token_usage or TokenUsage()
-        # Add other attributes that might be expected
+        # Add attributes expected by smolagents
         self.name = None
-        self.tool_calls = None
+        self.tool_calls = tool_calls  # Pass through tool_calls from API response
+        self.raw = content  # smolagents uses raw as fallback when content is None
 
 
 class CustomInferenceModel(Model):
@@ -125,13 +136,84 @@ class CustomInferenceModel(Model):
 
         return processed
 
-    def generate(self, messages: List[Union[ChatMessage, Dict[str, Any]]], stop_sequences: Optional[List[str]] = None, **kwargs) -> Any:
+    def _format_tools_for_hf(self, tools_to_call_from: List) -> List[Dict]:
+        """
+        Convert smolagents Tool objects to HuggingFace tools format.
+
+        Args:
+            tools_to_call_from: List of smolagents Tool objects
+
+        Returns:
+            List of tools in HuggingFace/OpenAI function calling format
+        """
+        hf_tools = []
+        for tool in tools_to_call_from:
+            # Build properties from tool.inputs
+            properties = {}
+            required = []
+            for name, spec in tool.inputs.items():
+                # Normalize smolagents types to valid JSON Schema types
+                # "any", "image", "audio" are not valid JSON Schema - convert to "string"
+                raw_type = spec.get("type", "string")
+                json_type = "string" if raw_type in ("any", "image", "audio") else raw_type
+                properties[name] = {
+                    "type": json_type,
+                    "description": spec.get("description", "")
+                }
+                # smolagents uses 'nullable' or checks if required
+                if not spec.get("nullable", False):
+                    required.append(name)
+
+            hf_tools.append({
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description or f"Execute {tool.name}",
+                    "parameters": {
+                        "type": "object",
+                        "properties": properties,
+                        "required": required
+                    }
+                }
+            })
+            logger.info(f"🔧 Formatted tool for HF API: {tool.name}")
+
+        return hf_tools
+
+    @retry(
+        stop=stop_after_attempt(10),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=(
+            retry_if_exception_type(HfHubHTTPError)
+            & retry_if_not_exception_type((asyncio.CancelledError, GeneratorExit, KeyboardInterrupt))
+        ),
+        before_sleep=lambda retry_state: logger.warning(
+            f"🔄 Retrying API call (attempt {retry_state.attempt_number}) after error"
+        )
+    )
+    def _call_chat_completion(self, **kwargs):
+        """Make chat completion call with retry logic for transient errors."""
+        return self.client.chat_completion(**kwargs)
+
+    def generate(
+        self,
+        messages: List[Union[ChatMessage, Dict[str, Any]]],
+        stop_sequences: Optional[List[str]] = None,
+        tools_to_call_from: Optional[List] = None,
+        **kwargs
+    ) -> Any:
         """
         Generate response using dedicated endpoint or HF Inference API.
 
         Accepts messages in two formats:
         1. ChatMessage objects (smolagents native format with PIL Images)
         2. Dict format (legacy HuggingFace format)
+
+        Args:
+            messages: Conversation messages
+            stop_sequences: Optional stop sequences
+            tools_to_call_from: Optional list of smolagents Tool objects for native tool calling
+            **kwargs: Additional arguments (max_tokens, etc.)
         """
         try:
             # Convert messages to HuggingFace API format
@@ -157,19 +239,42 @@ class CustomInferenceModel(Model):
 
             logger.info(f"🚀 Generating with {len(chat_messages)} messages using model: {self.model_name}")
 
+            # Convert smolagents tools to HuggingFace format if provided
+            hf_tools = None
+            if tools_to_call_from:
+                hf_tools = self._format_tools_for_hf(tools_to_call_from)
+                logger.info(f"🔧 Passing {len(hf_tools)} tools to chat_completion: {[t['function']['name'] for t in hf_tools]}")
+
             # Make request to your dedicated endpoint with correct model name
-            response = self.client.chat_completion(
-                messages=chat_messages,
-                model=self.model_name,  # Send correct model name
-                stop=stop_sequences,
-                max_tokens=kwargs.get('max_tokens', 1024),
-                stream=False
-            )
+            # Build kwargs for chat_completion
+            completion_kwargs = {
+                "messages": chat_messages,
+                "model": self.model_name,
+                "stop": stop_sequences,
+                "max_tokens": kwargs.get('max_tokens', 1024),
+                "stream": False,
+            }
+
+            # Add tools and tool_choice if tools are provided
+            if hf_tools:
+                completion_kwargs["tools"] = hf_tools
+                completion_kwargs["tool_choice"] = "auto"  # Explicitly enable tool calling
+
+            response = self._call_chat_completion(**completion_kwargs)
 
             # Extract the content and usage information
             message = response.choices[0].message
             content = message.content
-            logger.info(f"✅ Generated response: {len(content)} chars")
+
+            # Extract tool_calls from response if present (native tool calling)
+            tool_calls = None
+            if hasattr(message, 'tool_calls') and message.tool_calls:
+                tool_calls = message.tool_calls
+                logger.info(f"🔧 Model returned {len(tool_calls)} tool calls: {[tc.function.name for tc in tool_calls]}")
+
+            # Log response (content may be None when tool_calls are returned)
+            content_len = len(content) if content else 0
+            logger.info(f"✅ Generated response: {content_len} chars, {len(tool_calls) if tool_calls else 0} tool calls")
 
             # Extract token usage if available and calculate cost
             token_usage = None
@@ -194,10 +299,12 @@ class CustomInferenceModel(Model):
                 logger.info("⚠️ No usage info in response")
 
             # Return smolagents-compatible message
+            # Note: content may be None when model returns tool_calls
             return SmolagentsCompatibleMessage(
-                content=content,
+                content=content or "",
                 role=getattr(message, 'role', 'assistant'),
-                token_usage=token_usage
+                token_usage=token_usage,
+                tool_calls=tool_calls
             )
 
         except Exception as e:
@@ -225,7 +332,7 @@ class SmolagentsModelProvider:
         self,
         has_images: bool,
         model_id: Optional[str] = None,
-    ) -> CustomInferenceModel:
+    ) -> Model:
         """
         Get appropriate model for message based on content type.
 
@@ -256,13 +363,15 @@ class SmolagentsModelProvider:
         self,
         model_id: Optional[str] = None,
         model_type: str = 'default',
-    ) -> CustomInferenceModel:
+        api_key: Optional[str] = None,
+    ) -> Model:
         """
         Get model instance by ID or type.
 
         Args:
             model_id: Specific model ID to use (e.g., 'ibm-granite/granite-3.3-8b-instruct')
             model_type: Fallback type if no model_id provided ('chat', 'tool_calling', 'default')
+            api_key: Optional API key for providers that need it (e.g., Gemini)
 
         Returns:
             Configured model instance ready for generation
@@ -281,6 +390,23 @@ class SmolagentsModelProvider:
             metadata = get_model_metadata(model_id)
 
         logger.info(f"🔧 Creating model: {metadata.name} ({metadata.category.value})")
+
+        # Handle Google Gemini models via OpenAI-compatible API
+        if model_id.startswith("google/"):
+            gemini_model_id = model_id.replace("google/", "")  # e.g., "gemini-2.0-flash"
+            gemini_api_key = api_key or os.environ.get("GEMINI_API_KEY")
+            if not gemini_api_key:
+                raise EnvironmentError(
+                    "GEMINI_API_KEY is required for Google Gemini models. "
+                    "Get your API key from https://aistudio.google.com/apikey"
+                )
+            logger.info(f"🔧 Using Google Gemini via OpenAI-compatible API: {gemini_model_id}")
+            return OpenAIModel(
+                model_id=gemini_model_id,
+                api_base="https://generativelanguage.googleapis.com/v1beta/openai/",
+                api_key=gemini_api_key,
+                client_kwargs={"max_retries": 2},  # Don't retry quota errors aggressively
+            )
 
         # Create model based on endpoint type
         if metadata.endpoint.type == "dedicated" and metadata.endpoint.url:
@@ -302,7 +428,7 @@ class SmolagentsModelProvider:
 
         return model
 
-    def get_model_by_type(self, model_type: str) -> CustomInferenceModel:
+    def get_model_by_type(self, model_type: str) -> Model:
         """
         Get model by type (legacy method for compatibility).
 
@@ -322,7 +448,7 @@ class SmolagentsModelProvider:
         model_id = type_mapping.get(model_type, type_mapping['default'])
         return self.get_model(model_id=model_id)
 
-    def get_default_model_for_capability(self, skill_name: Optional[str] = None) -> CustomInferenceModel:
+    def get_default_model_for_capability(self, skill_name: Optional[str] = None) -> Model:
         """
         Get default model for skill execution (legacy method for compatibility).
 

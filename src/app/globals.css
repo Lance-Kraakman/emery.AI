@@ -594,3 +594,81 @@ select,
 [data-radix-dialog-content] {
   border-radius: var(--radius-lg) !important;
 }
+
+/* Compact markdown styling for chat messages - overrides prose and custom-markdown defaults */
+.custom-markdown.prose {
+  /* Remove all prose margins for compact chat display */
+  --tw-prose-body: inherit;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.custom-markdown.prose > :first-child {
+  margin-top: 0 !important;
+}
+
+.custom-markdown.prose > :last-child {
+  margin-bottom: 0 !important;
+}
+
+.custom-markdown.prose p {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.custom-markdown.prose h1,
+.custom-markdown.prose h2,
+.custom-markdown.prose h3,
+.custom-markdown.prose h4,
+.custom-markdown.prose h5,
+.custom-markdown.prose h6 {
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.custom-markdown.prose ul,
+.custom-markdown.prose ol {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+  padding-left: 1.25rem;
+}
+
+.custom-markdown.prose li {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.custom-markdown.prose pre {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+}
+
+.custom-markdown.prose code {
+  font-size: 0.75rem;
+}
+
+.custom-markdown.prose blockquote {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-left: 0.75rem;
+}
+
+.custom-markdown.prose hr {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.custom-markdown.prose table {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.custom-markdown.prose img {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}

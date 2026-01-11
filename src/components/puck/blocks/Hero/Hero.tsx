@@ -1,20 +1,45 @@
 /* eslint-disable @next/next/no-img-element */
-import React, { ReactNode } from "react";
+import React from "react";
 import styles from "./styles.module.css";
 import { getClassNameFactory } from "@/components/puck/lib";
 import { Button } from "@/components/puck/components/Button";
 import { Section } from "../../components/Section";
 import { PuckComponent, Slot } from "@measured/puck";
 import type { LinkActionConfig } from "../../custom-fields/link-action-field";
+import type { Action } from "../../types/actions";
+import type { FourSidedSpacing } from "../../types/spacing-types";
+import { useTheme } from "../../contexts/PageContext";
+import { computeFourSidedCSS } from "../../utils/spacing";
+import { useInterpolatedText } from "../../hooks/useInterpolatedText";
 
 const getClassName = getClassNameFactory("Hero", styles);
 
+// Convert legacy LinkActionConfig to new Action array format
+function convertLegacyAction(action: LinkActionConfig): Action[] {
+  if (!action || action.actionType === 'none') {
+    return [];
+  }
+
+  switch (action.actionType) {
+    case 'page':
+      return action.pageId
+        ? [{ type: 'navigateToPage', pageId: action.pageId.toString() }]
+        : [];
+    case 'url':
+      return action.url
+        ? [{ type: 'openUrl', url: action.url, newTab: action.openInNewTab || false }]
+        : [];
+    default:
+      return [];
+  }
+}
+
 export type HeroProps = {
   quote?: { index: number; label: string };
-  title: string | ReactNode;
+  title: string;
   description: string;
   align?: string;
-  padding?: string;
+  padding?: FourSidedSpacing;
   image?: {
     content?: Slot;
     mode?: "inline" | "background" | "custom";
@@ -39,7 +64,7 @@ export const Hero: PuckComponent<HeroProps> = ({
   title,
   description,
   buttons,
-  padding = "48px",
+  padding,
   image,
   titleColor,
   subtitleColor,
@@ -50,6 +75,12 @@ export const Hero: PuckComponent<HeroProps> = ({
   subtitleFontWeight,
   puck,
 }) => {
+  const theme = useTheme();
+  const paddingStyles = padding ? computeFourSidedCSS(padding, theme, 'padding') : { paddingTop: '48px', paddingBottom: '48px' };
+  // Interpolate variables in title and description
+  const interpolatedTitle = useInterpolatedText(title);
+  const interpolatedDescription = useInterpolatedText(description);
+
   return (
     <Section
       className={getClassName({
@@ -58,8 +89,7 @@ export const Hero: PuckComponent<HeroProps> = ({
         hasImageBackground: image?.mode === "background",
       })}
       style={{
-        paddingTop: padding,
-        paddingBottom: padding,
+        ...paddingStyles,
         ...(backgroundColor && { backgroundColor }),
       }}
     >
@@ -85,7 +115,7 @@ export const Hero: PuckComponent<HeroProps> = ({
               ...(titleFontWeight && { fontWeight: titleFontWeight }),
             }}
           >
-            {title}
+            {interpolatedTitle}
           </h1>
           <p
             className={getClassName("subtitle")}
@@ -95,13 +125,13 @@ export const Hero: PuckComponent<HeroProps> = ({
               ...(subtitleFontWeight && { fontWeight: subtitleFontWeight }),
             }}
           >
-            {description}
+            {interpolatedDescription}
           </p>
           <div className={getClassName("actions")}>
             {buttons.map((button, i) => (
               <Button
                 key={i}
-                action={button.action}
+                actions={convertLegacyAction(button.action)}
                 variant={button.variant}
                 size="large"
                 isEditing={puck.isEditing}
@@ -120,7 +150,7 @@ export const Hero: PuckComponent<HeroProps> = ({
               backgroundSize: "cover",
               backgroundRepeat: "no-repeat",
               backgroundPosition: "center",
-              borderRadius: 24,
+              borderRadius: "var(--theme-border-radius, 24px)",
               height: 356,
               marginLeft: "auto",
               width: "100%",

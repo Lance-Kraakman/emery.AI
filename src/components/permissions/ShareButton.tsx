@@ -53,6 +53,7 @@ export function ShareButton({
     'user': 'users',
     'organization': 'organizations',
     'task': 'tasks',
+    'template': 'templates',
   };
 
   function getPermissionResource(resourceType: string): string {

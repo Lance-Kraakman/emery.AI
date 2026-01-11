@@ -2,11 +2,11 @@ name: Build & Deploy
 
 on:
   push:
-    branches: [main, develop]
+    branches: [develop]  # main disabled - staging not in use
     tags:
       - 'v*.*.*'
   pull_request:
-    branches: [main, develop]
+    branches: [develop]  # Only run PR builds for develop (main PRs come from develop, already tested)
 
 env:
   AWS_REGION: ap-southeast-2
@@ -26,40 +26,20 @@ jobs:
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v*.*.* ]]; then
             echo "env_name=production" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref_name }}" = "main" ]; then
-            echo "env_name=staging" >> $GITHUB_OUTPUT
+          # Staging disabled - uncomment to re-enable
+          # elif [ "${{ github.ref_name }}" = "main" ]; then
+          #   echo "env_name=staging" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref_name }}" = "develop" ]; then
             echo "env_name=dev" >> $GITHUB_OUTPUT
           else
             echo "env_name=dev" >> $GITHUB_OUTPUT
           fi
 
-  setup-repositories:
-    needs: get-environment
-    runs-on: ubuntu-latest
-    environment: ${{ needs.get-environment.outputs.env_name }}
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Create ECR repositories if they don't exist
-        run: |
-          aws ecr describe-repositories --repository-names ${{ env.FRONTEND_REPO }} || \
-          aws ecr create-repository --repository-name ${{ env.FRONTEND_REPO }} --image-scanning-configuration scanOnPush=true
-
-          aws ecr describe-repositories --repository-names ${{ env.AGENT_REPO }} || \
-          aws ecr create-repository --repository-name ${{ env.AGENT_REPO }} --image-scanning-configuration scanOnPush=true
+  # NOTE: ECR repositories are now managed by CDK (infra/infra/app_stack.py)
+  # with lifecycle policies for automatic cleanup
 
   build-frontend:
-    needs: [get-environment, setup-repositories]
+    needs: [get-environment]
     runs-on: ubuntu-latest
     environment: ${{ needs.get-environment.outputs.env_name }}
     permissions:
@@ -86,16 +66,14 @@ jobs:
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
-        env:
-          DOCKER_METADATA_SHORT: "false"
         with:
           images: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=ref,event=tag
-            type=sha,prefix={{branch}}-,enable=${{ github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/') }}
-            type=sha,prefix=tag-,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=sha,prefix={{branch}}-,format=long,enable=${{ github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/') }}
+            type=sha,prefix=tag-,format=long,enable=${{ startsWith(github.ref, 'refs/tags/') }}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push frontend image
@@ -105,6 +83,7 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=frontend-${{ github.ref_name }}
@@ -124,7 +103,7 @@ jobs:
             sh -c "echo '✅ Frontend container test passed'"
 
   build-agent:
-    needs: [get-environment, setup-repositories]
+    needs: [get-environment]
     runs-on: ubuntu-latest
     environment: ${{ needs.get-environment.outputs.env_name }}
     permissions:
@@ -151,16 +130,14 @@ jobs:
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
-        env:
-          DOCKER_METADATA_SHORT: "false"
         with:
           images: ${{ env.ECR_REGISTRY }}/${{ env.AGENT_REPO }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=ref,event=tag
-            type=sha,prefix={{branch}}-,enable=${{ github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/') }}
-            type=sha,prefix=tag-,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=sha,prefix={{branch}}-,format=long,enable=${{ github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/') }}
+            type=sha,prefix=tag-,format=long,enable=${{ startsWith(github.ref, 'refs/tags/') }}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push agent image
@@ -170,6 +147,7 @@ jobs:
           file: ./emery-agents/Dockerfile
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=agent-${{ github.ref_name }}
@@ -192,9 +170,8 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       (github.event_name == 'push' && github.ref_name == 'develop') ||
-      (github.event_name == 'push' && github.ref_name == 'main') ||
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
-    environment: ${{ github.ref_name == 'develop' && 'dev' || (startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging') }}
+    environment: ${{ github.ref_name == 'develop' && 'dev' || 'production' }}
     permissions:
       id-token: write
       contents: read
@@ -241,9 +218,10 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/v*.*.* ]]; then
             ENV_NAME="production"
             IMAGE_TAG="tag-${{ github.sha }}"
-          elif [ "${{ github.ref_name }}" = "main" ]; then
-            ENV_NAME="staging"
-            IMAGE_TAG="${{ github.ref_name }}-${{ github.sha }}"
+          # Staging disabled - uncomment to re-enable
+          # elif [ "${{ github.ref_name }}" = "main" ]; then
+          #   ENV_NAME="staging"
+          #   IMAGE_TAG="${{ github.ref_name }}-${{ github.sha }}"
           else
             ENV_NAME="dev"
             IMAGE_TAG="${{ github.ref_name }}-${{ github.sha }}"
@@ -268,3 +246,55 @@ jobs:
             -c env=${ENV_NAME} \
             -c aws_account_id=${{ env.AWS_ACCOUNT_ID }} \
             -c region=${{ env.AWS_REGION }}
+
+      - name: Deploy Production Frontend (Blue/Green)
+        if: success() && startsWith(github.ref, 'refs/tags/v')
+        env:
+          FRONTEND_IMAGE: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.deploy_config.outputs.image_tag }}
+        run: |
+          echo "🔵🟢 Starting Blue/Green Deployment"
+          echo "📦 New image: ${FRONTEND_IMAGE}"
+
+          # Get current task definition and update only the image
+          # This preserves all other settings (env vars, secrets, resources, etc.)
+          aws ecs describe-task-definition \
+            --task-definition EmeryAppProductionProductionFrontendTaskDefA8A2BE3C \
+            --query 'taskDefinition' | \
+          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' | \
+          jq --arg IMG "${FRONTEND_IMAGE}" '.containerDefinitions[0].image = $IMG' \
+          > /tmp/task-definition.json
+
+          echo "📄 Task definition image updated to:"
+          cat /tmp/task-definition.json | jq -r '.containerDefinitions[0].image'
+
+          # Create AppSpec file (TaskDefinition placeholder will be auto-filled by aws ecs deploy)
+          cat > /tmp/appspec.yaml << 'EOF'
+          version: 0.0
+          Resources:
+            - TargetService:
+                Type: AWS::ECS::Service
+                Properties:
+                  TaskDefinition: <TASK_DEFINITION>
+                  LoadBalancerInfo:
+                    ContainerName: ProductionFrontendContainer
+                    ContainerPort: 3000
+          EOF
+
+          # Deploy using aws ecs deploy - this single command:
+          # 1. Registers the new task definition
+          # 2. Updates the AppSpec with the new task def ARN
+          # 3. Creates the CodeDeploy deployment
+          echo "🚀 Creating CodeDeploy deployment..."
+          aws ecs deploy \
+            --cluster ProductionEmeryCluster \
+            --service Production-Frontend \
+            --task-definition /tmp/task-definition.json \
+            --codedeploy-appspec /tmp/appspec.yaml \
+            --codedeploy-application Production-Frontend-BlueGreen \
+            --codedeploy-deployment-group Production-Frontend-DeploymentGroup
+
+          echo ""
+          echo "✅ Blue/Green deployment created!"
+          echo "🔗 View in console: https://ap-southeast-2.console.aws.amazon.com/codesuite/codedeploy/deployments"
+          echo "🧪 Test green environment at ALB:3001 before approving"
+          echo "⏳ Deployment will wait up to 1 hour for manual approval"

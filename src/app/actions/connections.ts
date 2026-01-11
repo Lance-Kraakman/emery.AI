@@ -4,14 +4,14 @@
 // Provides same interface for frontend components but uses new DDD architecture
 
 import { requireAuth } from "./permissions";
-import { getConnectionApplicationService } from "@/ddd/application/di/container";
+import { getConnectionApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
 import { AppName, ConnectionId, createDefaultPaginationOptions } from "@/ddd/domain/connections/value-objects";
 import { ConnectionMapper, type ConnectionDTO } from "@/app/mappers/connection-mapper";
 import type { Result } from "./types";
 
 /**
- * Get user's OAuth connections (paginated) - optimized for large connection lists
+ * Get user's Connections (paginated) - optimized for large connection lists
  * Returns connections sorted by most recent first with cursor-based pagination
  *
  * @param options - Pagination options { limit, cursor }
@@ -32,7 +32,7 @@ export async function getUserOAuthConnectionsPaginated(options?: {
     const limit = options?.limit || 50;
     const cursor = options?.cursor;
 
-    console.log(`[ConnectionActions] Getting paginated OAuth connections for user ${session.user.id} (limit: ${limit}, cursor: ${cursor || 'none'})`);
+    console.log(`[ConnectionActions] Getting paginated Connections for user ${session.user.id} (limit: ${limit}, cursor: ${cursor || 'none'})`);
 
     const paginationOptions = cursor
       ? { limit, after: cursor }
@@ -61,7 +61,7 @@ export async function getUserOAuthConnectionsPaginated(options?: {
       return { success: false, error: result.error };
     }
   } catch (error: unknown) {
-    console.error('[ConnectionActions] Error getting paginated OAuth connections:', error);
+    console.error('[ConnectionActions] Error getting paginated Connections:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return {
       success: false,
@@ -73,7 +73,7 @@ export async function getUserOAuthConnectionsPaginated(options?: {
 }
 
 /**
- * Get user's OAuth connections - replaces getUserOAuthConnections from pipedream.ts
+ * Get user's Connections - replaces getUserOAuthConnections from pipedream.ts
  * Returns connections sorted by most recent first
  * @deprecated Use getUserOAuthConnectionsPaginated for better performance with large lists
  */
@@ -82,7 +82,7 @@ export async function getUserOAuthConnections(): Promise<Result<ConnectionDTO[]>
     const session = await requireAuth();
     const connectionService = getConnectionApplicationService();
     
-    console.log(`[ConnectionActions] Getting OAuth connections for user ${session.user.id}`);
+    console.log(`[ConnectionActions] Getting Connections for user ${session.user.id}`);
     
     const result = await connectionService.getUserConnections(
       UserId.fromString(session.user.id)
@@ -108,7 +108,7 @@ export async function getUserOAuthConnections(): Promise<Result<ConnectionDTO[]>
       return { success: false, error: result.error };
     }
   } catch (error: unknown) {
-    console.error('[ConnectionActions] Error getting user OAuth connections:', error);
+    console.error('[ConnectionActions] Error getting user Connections:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return { 
       success: false, 
@@ -215,18 +215,36 @@ export async function disconnectOAuthAccount(data: {
     }
     
     const result = await connectionService.disconnectConnection(connectionId);
-    
+
     if (result.success) {
       console.log(`[ConnectionActions] Successfully disconnected account ${data.accountId}`);
+
+      // AUDIT: Log connection disconnection
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(session.user.currentOrganizationId),
+        {
+          eventType: 'agent',
+          eventCategory: 'connection_crud',
+          eventAction: 'delete',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'connection',
+          resourceId: data.accountId,
+          eventData: { action: 'disconnect' },
+          success: true,
+        }
+      );
     } else {
       console.error(`[ConnectionActions] Failed to disconnect ${data.accountId}:`, result.error);
     }
-    
+
     return result;
   } catch (error) {
     console.error('[ConnectionActions] Error disconnecting OAuth account:', error);
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: 'Failed to disconnect account'
     };
   }

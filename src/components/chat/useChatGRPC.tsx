@@ -142,6 +142,9 @@ export function useChatGRPC(
   // Attachment management state
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([])
 
+  // Model selection state - can be set before first message
+  const [selectedModel, setSelectedModel] = useState<string | undefined>(contextOptions?.model)
+
   // Generate domain-specific storage key for this chat session
   const chatStorageKey = `emery-chat-${contextOptions?.domainType || chatContext?.domainType || 'general'}-${contextOptions?.domainId || chatContext?.domainId || 'default'}`
 
@@ -194,7 +197,12 @@ export function useChatGRPC(
           createTextMessage(msg.content, msg.role as 'user' | 'assistant', msg.id, msg.metadata)
         )
 
+        console.log('[DEBUG] loadChatSession - messages from server:', {
+          count: result.data.messages.length,
+          messages: result.data.messages.map(m => ({ id: m.id, role: m.role, contentLength: m.content?.length }))
+        })
         setMessages(chatMessages)
+        setSelectedModel(result.data.session.model || undefined)
         logger.summary('Loaded messages', { count: chatMessages.length, chatId })
       } else {
         logger.error('Failed to load chat session', result.error)
@@ -251,12 +259,19 @@ export function useChatGRPC(
     const filesToAttach = attachments || pendingAttachments
 
     // Create message with text and any attachments
+    // Add file parts with blob URLs for optimistic UI display
     const userMessage = filesToAttach.length > 0
       ? createMultimodalMessage(
           [
             { type: 'text', text: messageContent },
-            // Note: Actual file parts will be created after S3 upload by API route
-            // For now, we just show pending files in UI
+            ...filesToAttach.map(file => ({
+              type: 'data-file' as const,
+              data: {
+                filename: file.name,
+                mediaType: file.type,
+                url: URL.createObjectURL(file)  // Temporary blob URL for preview
+              }
+            }))
           ],
           message.role as 'user' | 'assistant'
         )
@@ -304,7 +319,8 @@ export function useChatGRPC(
       // Prepare context data for API call using proper UI types
       const chatContextOptions = {
         domainType: contextOptions?.domainType || chatContext?.domainType,
-        domainId: contextOptions?.domainId || chatContext?.domainId
+        domainId: contextOptions?.domainId || chatContext?.domainId,
+        model: selectedModel  // Include selected model for new chats
       }
 
       // AIDEV-NOTE: Extract tools from both UI selection AND message content
@@ -322,7 +338,32 @@ export function useChatGRPC(
             }
           }
         }
-        // Regular tool - use existing config
+
+        // For reference tools (tables, documents, agents, etc.), include the actual IDs
+        // These are at root level of ToolDTO, not in config
+        if (tool.type === 'reference') {
+          return {
+            name: tool.name,
+            version: tool.version || '',
+            config: {
+              ...tool.config,
+              // Include reference-specific IDs from ToolDTO root
+              ...(tool.tableId !== undefined && { table_id: tool.tableId }),
+              ...(tool.documentId !== undefined && { document_id: tool.documentId }),
+              ...(tool.fileId !== undefined && { file_id: tool.fileId }),
+              ...(tool.agentId !== undefined && { agent_id: tool.agentId }),
+              ...(tool.databaseId !== undefined && { database_id: tool.databaseId }),
+              ...(tool.organizationId !== undefined && { organization_id: tool.organizationId }),
+              ...(tool.tableName !== undefined && { table_name: tool.tableName }),
+              ...(tool.filename !== undefined && { filename: tool.filename }),
+              ...(tool.mimeType !== undefined && { mime_type: tool.mimeType }),
+              ...(tool.fieldId !== undefined && { field_id: tool.fieldId }),
+              ...(tool.rowId !== undefined && { row_id: tool.rowId }),
+            }
+          }
+        }
+
+        // Regular system tool - use existing config
         return {
           name: tool.name,
           version: tool.version,
@@ -351,6 +392,7 @@ export function useChatGRPC(
         messageId: messageId, // For cancellation tracking
         ...(chatContextOptions?.domainType ? { domainType: chatContextOptions.domainType } : {}),
         ...(chatContextOptions?.domainId ? { domainId: chatContextOptions.domainId } : {}),
+        ...(chatContextOptions?.model ? { model: chatContextOptions.model } : {}),
         tools: allTools
       }
 
@@ -470,8 +512,7 @@ export function useChatGRPC(
               } else if (isMessageCompleteEvent(eventData)) {
                 // Handle completion with execution steps metadata
                 logger.debug('Received message completion with metadata', {
-                  stepCount: eventData.metadata.executionSteps?.length || 0,
-                  ragSourcesCount: eventData.metadata.ragSources?.length || 0
+                  stepCount: eventData.metadata.executionSteps?.length || 0
                 })
 
                 // Update the assistant message with final metadata
@@ -555,10 +596,13 @@ export function useChatGRPC(
     return messageContent
   }
 
-  // Clear all messages and localStorage
+  // Clear all messages and session state
   const clearMessages = () => {
     setMessages([])
     setCurrentChatId(undefined)
+    setStreamingSteps([])
+    setCurrentStep(null)
+    setSelectedModel(undefined)
     if (typeof window !== 'undefined') {
       try {
         localStorage.removeItem(chatStorageKey)
@@ -627,9 +671,12 @@ export function useChatGRPC(
         domainId: contextOptions?.domainId || chatContext?.domainId
       })
 
-      // Clear current session
+      // Clear ALL session state for clean slate
       setMessages([])
       setCurrentChatId(undefined)
+      setStreamingSteps([])
+      setCurrentStep(null)
+      setSelectedModel(undefined)
 
       // Clear localStorage for this context
       if (typeof window !== 'undefined') {
@@ -638,6 +685,8 @@ export function useChatGRPC(
 
       // Note: New chat sessions are created automatically by stream-grpc
       // when the first message is sent with no chatId
+
+      logger.debug('New chat session cleared successfully')
 
     } catch (error) {
       logger.error('Failed to create new chat', error)
@@ -744,6 +793,9 @@ export function useChatGRPC(
     currentStep,
     streamingSteps,
     cancelMessage,
+    // Model selection for new chats
+    selectedModel,
+    setModel: setSelectedModel,
   }
 }
 

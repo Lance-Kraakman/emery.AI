@@ -1,7 +1,7 @@
 import { DefaultRootProps } from "@measured/puck";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
-import { useTheme } from "./theme-context";
+import { useTheme } from "./contexts/PageContext";
 import { title } from "process";
 
 export type RootProps = DefaultRootProps;

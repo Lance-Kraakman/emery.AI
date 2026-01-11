@@ -4,9 +4,11 @@
 // Uses table application service for field operations as part of table aggregate
 
 import { revalidatePath } from "next/cache";
-import { requirePermission, requireResourcePermission } from "./permissions";
+import { requirePermission, requireResourcePermission, getSessionSafe } from "./permissions";
+import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
-import { getTableApplicationService } from "@/ddd/application/di/container";
+import { getTableApplicationService, getViewApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
+import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import type { Result, CreateFieldData } from "./types";
 import type { FieldType, AutonumberFieldConfig } from "@/ddd/domain/tables/value-objects/table-field";
 import type { CreateFieldCommand } from "@/ddd/application/services/tables/table-application-service";
@@ -19,6 +21,7 @@ const logger = createDebugLogger('Fields');
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<Result> {
   try {
     const session = await requirePermission("database:create");
+    const currentOrg = await requireCurrentOrganization();
     const { tableId, name, type, required = false, relatedTableId, metadata } = data;
 
     if (!tableId || !name || !type) {
@@ -105,6 +108,29 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
 
     // Note: RAG reindexing is now handled automatically by database triggers
 
+    // AUDIT: Log field creation
+    if (result.data) {
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'database',
+          eventCategory: 'field_crud',
+          eventAction: 'create',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'field',
+          resourceId: String(result.data.id),
+          resourceName: result.data.name,
+          parentResourceType: 'table',
+          parentResourceId: String(tableId),
+          eventData: { type, required, relatedTableId },
+          success: true,
+        }
+      );
+    }
+
     // Revalidate the appropriate path
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
@@ -142,36 +168,95 @@ export async function createFieldAction(formData: FormData) {
   return result;
 }
 
-export async function getFields(tableId: number): Promise<FieldDTO[]> {
+/**
+ * Get fields for a table
+ *
+ * AIDEV-NOTE: Supports public access via view context with auth-first pattern.
+ * - If authenticated: use normal RLS-wrapped path with permission check
+ * - If unauthenticated with viaViewId: check if view is public, use view schema if so
+ * - If unauthenticated without viaViewId: throw auth error
+ *
+ * @param tableId - Table ID to get fields for
+ * @param options - Optional options
+ * @param options.viaViewId - View ID that provides context for public access
+ */
+export async function getFields(
+  tableId: number,
+  options?: { viaViewId?: number }
+): Promise<FieldDTO[]> {
   try {
     if (!tableId) {
       throw new Error("tableId is required");
     }
 
-    // Fields inherit permissions from their parent table
-    await requireResourcePermission("database:view", "table", tableId);
+    const session = await getSessionSafe();
 
-    const tableApplicationService = getTableApplicationService();
-    const fieldList = await tableApplicationService.getFieldsForTable(TableId.fromNumber(tableId));
-    const dtoFields = fieldList.map(FieldMapper.toDTO);
+    if (session) {
+      // Authenticated user: use normal RLS-wrapped path
+      await requireResourcePermission("database:view", "table", tableId);
 
-    // Log select fields with their options
-    const selectFields = dtoFields.filter(f => f.type === 'single-select' || f.type === 'multi-select');
-    if (selectFields.length > 0) {
-      logger.debug('Loaded select fields', {
-        tableId,
-        selectFieldCount: selectFields.length,
-        fields: selectFields.map(f => ({
-          name: f.name,
-          type: f.type,
-          optionCount: Array.isArray(f.metadata?.options) ? f.metadata.options.length : 0
-        }))
-      });
+      const tableApplicationService = getTableApplicationService();
+      const fieldList = await tableApplicationService.getFieldsForTable(TableId.fromNumber(tableId));
+      const dtoFields = fieldList.map(FieldMapper.toDTO);
+
+      // Log select fields with their options
+      const selectFields = dtoFields.filter(f => f.type === 'single-select' || f.type === 'multi-select');
+      if (selectFields.length > 0) {
+        logger.debug('Loaded select fields', {
+          tableId,
+          selectFieldCount: selectFields.length,
+          fields: selectFields.map(f => ({
+            name: f.name,
+            type: f.type,
+            optionCount: Array.isArray(f.metadata?.options) ? f.metadata.options.length : 0
+          }))
+        });
+      }
+
+      // Prepend id system field
+      const idField: FieldDTO = {
+        id: 0,
+        name: 'id',
+        type: 'number',
+        required: true,
+        metadata: {},
+        orderIndex: -1,
+        createdAt: null,
+      };
+
+      logger.summary('Loaded fields', { tableId, count: dtoFields.length + 1 });
+      return [idField, ...dtoFields];
+    } else {
+      // Unauthenticated: only allow via public view
+      if (!options?.viaViewId) {
+        throw new Error("Authentication required to access fields");
+      }
+
+      // Get schema via ViewApplicationService.getPublicViewSchema (uses rawDb, bypasses RLS)
+      const { ViewId } = await import("@/ddd/domain/views/value-objects/view-id");
+      const viewService = getViewApplicationService();
+      const schemaResult = await viewService.getPublicViewSchema(ViewId.fromNumber(options.viaViewId));
+
+      if (!schemaResult.success || !schemaResult.data) {
+        throw new Error("View not found or not public");
+      }
+
+      const dtoFields = schemaResult.data.map(FieldMapper.toDTO);
+
+      // Prepend id system field
+      const idField: FieldDTO = {
+        id: 0,
+        name: 'id',
+        type: 'number',
+        required: true,
+        metadata: {},
+        orderIndex: -1,
+        createdAt: null,
+      };
+
+      logger.summary('Loaded fields (public view)', { tableId, viewId: options.viaViewId, count: dtoFields.length + 1 });
+      return [idField, ...dtoFields];
     }
-
-    logger.summary('Loaded fields', { tableId, count: dtoFields.length });
-
-    return dtoFields;
   } catch (error) {
     logger.error("Error fetching fields", error);
     throw new Error("Failed to fetch fields");
@@ -203,7 +288,8 @@ export async function updateField(data: {
     }
 
     // Fields inherit permissions from their parent table
-    await requireResourcePermission("database:manage", "table", tableId);
+    const session = await requireResourcePermission("database:manage", "table", tableId);
+    const currentOrg = await requireCurrentOrganization();
     logger.debug('[updateField] Permission check passed');
 
     const tableApplicationService = getTableApplicationService();
@@ -245,6 +331,29 @@ export async function updateField(data: {
       });
     }
 
+    // AUDIT: Log field update
+    if (result.data) {
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(currentOrg.id),
+        {
+          eventType: 'database',
+          eventCategory: 'field_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'field',
+          resourceId: String(result.data.id),
+          resourceName: result.data.name,
+          parentResourceType: 'table',
+          parentResourceId: String(tableId),
+          eventData: { updates },
+          success: true,
+        }
+      );
+    }
+
     // Revalidate the appropriate path
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
@@ -280,7 +389,8 @@ export async function deleteField(tableId: number, fieldName: string, revalidate
     }
 
     // Fields inherit permissions from their parent table
-    await requireResourcePermission("database:manage", "table", tableId);
+    const session = await requireResourcePermission("database:manage", "table", tableId);
+    const currentOrg = await requireCurrentOrganization();
     logger.debug('[deleteField] Permission check passed');
 
     const tableApplicationService = getTableApplicationService();
@@ -297,6 +407,27 @@ export async function deleteField(tableId: number, fieldName: string, revalidate
     }
 
     logger.debug('[deleteField] tableApplicationService.deleteField succeeded');
+
+    // AUDIT: Log field deletion
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'field_crud',
+        eventAction: 'delete',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'field',
+        resourceId: fieldName, // Field ID not available after deletion
+        resourceName: fieldName,
+        parentResourceType: 'table',
+        parentResourceId: String(tableId),
+        eventData: {},
+        success: true,
+      }
+    );
 
     // Revalidate the appropriate path
     if (revalidateUrl) {
@@ -402,15 +533,19 @@ export async function reorderFields(data: {
     }
 
     // Fields inherit permissions from their parent table
-    await requireResourcePermission("database:manage", "table", tableId);
+    const session = await requireResourcePermission("database:manage", "table", tableId);
+    const currentOrg = await requireCurrentOrganization();
+
+    // Filter out system 'id' field - it's a synthetic field not stored in DB
+    const filteredFieldOrders = fieldOrders.filter(fo => fo.fieldName !== 'id');
 
     const tableApplicationService = getTableApplicationService();
 
-    logger.debug('Reordering fields', { tableId, fieldCount: fieldOrders.length });
+    logger.debug('Reordering fields', { tableId, fieldCount: filteredFieldOrders.length });
 
     const result = await tableApplicationService.reorderFields({
       tableId: TableId.fromNumber(tableId),
-      fieldOrders
+      fieldOrders: filteredFieldOrders
     });
 
     if (!result.success) {
@@ -422,6 +557,27 @@ export async function reorderFields(data: {
     }
 
     logger.summary('Fields reordered successfully', { tableId, fieldCount: fieldOrders.length });
+
+    // AUDIT: Log field reorder
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'field_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'field',
+        resourceId: String(tableId),
+        resourceName: 'field_order',
+        parentResourceType: 'table',
+        parentResourceId: String(tableId),
+        eventData: { action: 'reorder', fieldCount: fieldOrders.length },
+        success: true,
+      }
+    );
 
     // Revalidate the appropriate path
     if (revalidateUrl) {
@@ -488,5 +644,30 @@ export async function resetAutonumberCounter(
       success: false,
       error: error instanceof Error ? error.message : "Failed to reset counter",
     };
+  }
+}
+
+/**
+ * Get fields for a view by viewId
+ * Used by EditorDataLayoutProvider to fetch fields for field selector in sidebar
+ */
+export async function getFieldsForView(viewId: number): Promise<FieldDTO[]> {
+  try {
+    if (!viewId) {
+      return [];
+    }
+
+    // Import getView to avoid circular dependency
+    const { getView } = await import('./views');
+    const view = await getView(viewId);
+
+    if (!view) {
+      return [];
+    }
+
+    return await getFields(view.tableId);
+  } catch (error) {
+    logger.error('Error getting fields for view', error);
+    return [];
   }
 }

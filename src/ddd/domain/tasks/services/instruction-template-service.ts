@@ -2,10 +2,10 @@
  * Instruction Template Service
  *
  * AIDEV-NOTE: Expands template variables in task instructions with actual trigger context data.
- * Supports ${variable} syntax for referencing trigger metadata, table data, etc.
+ * Supports {{variable}} syntax for referencing trigger metadata, table data, etc.
  *
  * Example:
- * - Input: "Process order ${event.rowId} for ${row.email}"
+ * - Input: "Process order {{event.rowId}} for {{row.email}}"
  * - Output: "Process order abc-123 for user@example.com"
  */
 
@@ -15,7 +15,7 @@ export class InstructionTemplateService {
   /**
    * Expand template variables in instruction text
    *
-   * @param template - Instruction text with ${variable} placeholders
+   * @param template - Instruction text with {{variable}} placeholders
    * @param triggerContext - Context data from the trigger (calendar, database event, etc.)
    * @returns Instruction text with variables replaced with actual values
    */
@@ -29,17 +29,18 @@ export class InstructionTemplateService {
 
     const variables = this.buildVariableMap(triggerContext);
 
-    // Replace ${variable} with actual values
-    return template.replace(/\$\{([^}]+)\}/g, (match, path) => {
+    // Replace {{variable}} with actual values
+    return template.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
       const value = this.resolveVariable(path.trim(), variables);
       return value !== undefined ? String(value) : match; // Keep original if not found
     });
   }
 
   /**
-   * Build a flat variable map from trigger context
+   * Build a flat variable map from trigger context.
+   * Used internally for template expansion (no $ prefix).
    */
-  private static buildVariableMap(
+  static buildVariableMap(
     context: TriggerContext
   ): Record<string, any> {
     const vars: Record<string, any> = {
@@ -93,6 +94,29 @@ export class InstructionTemplateService {
   }
 
   /**
+   * Build variable map with $ prefix for automation input mappings.
+   *
+   * Automation inputMappings use $-prefixed variable names (e.g., $trigger.scheduledTime)
+   * to reference trigger context data. This method provides a map suitable for resolving
+   * those mapping references.
+   *
+   * @param context - TriggerContext with calendar, database event, or webhook data
+   * @returns Variable map with $ prefix on all keys (e.g., "$trigger.scheduledTime")
+   */
+  static buildVariableMapForMappings(
+    context: TriggerContext
+  ): Record<string, any> {
+    const vars = this.buildVariableMap(context);
+    const prefixedVars: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(vars)) {
+      prefixedVars[`$${key}`] = value;
+    }
+
+    return prefixedVars;
+  }
+
+  /**
    * Resolve a variable path to its value
    * Supports nested paths like "row.email" or "trigger.scheduleName"
    */
@@ -124,7 +148,7 @@ export class InstructionTemplateService {
    * Used by UI to show users what variables they can use
    */
   static getAvailableVariables(
-    triggerType: 'CALENDAR' | 'DATABASE_EVENT' | 'WEBHOOK' | 'MANUAL'
+    triggerType: 'CALENDAR' | 'DATABASE_EVENT' | 'WEBHOOK' | 'MANUAL' | 'PIPEDREAM_EVENT'
   ): Array<{ name: string; description: string }> {
     const commonVars = [
       { name: 'trigger.type', description: 'Trigger type (CALENDAR, DATABASE_EVENT, etc.)' },
@@ -157,6 +181,14 @@ export class InstructionTemplateService {
           { name: 'webhook.payload', description: 'Webhook request body' },
           { name: 'webhook.headers', description: 'Request headers' },
           { name: 'webhook.origin', description: 'Request origin' }
+        ];
+
+      case 'PIPEDREAM_EVENT':
+        return [
+          ...commonVars,
+          { name: 'event.data', description: 'Event payload from Pipedream' },
+          { name: 'event.timestamp', description: 'Event timestamp' },
+          { name: 'event.source', description: 'Source app (e.g., gmail, slack)' }
         ];
 
       case 'MANUAL':

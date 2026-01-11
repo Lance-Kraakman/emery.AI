@@ -3,10 +3,12 @@ import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
 /**
- * Middleware to protect platform routes from app-only users
+ * Middleware to protect platform routes from app-only users.
  *
  * App-only users can ONLY access /public/* routes
  * Organization users can access everything
+ *
+ * Note: Rate limiting is handled by AWS WAF at the CloudFront edge.
  */
 export async function middleware(request: NextRequest) {
   const token = await getToken({

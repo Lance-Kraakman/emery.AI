@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Loader2, Save, X, User, Pencil, Sparkles } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import { OrganizationMapper, type UserDTO } from '@/app/mappers/organization-mapper';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import { UserSelect } from '@/components/ui/UserSelect';
 import { getOrganizationMembers } from '@/app/actions/invitations';
@@ -18,6 +19,7 @@ import { AgentAvatar } from '@/components/agents/AgentAvatar';
 import type { AvatarConfigV1 } from '@/lib/avatars';
 import { AvatarCustomizationModal } from './AvatarCustomizationModal';
 import { ModelSelector } from '@/components/ai/ModelSelector';
+import { useOrganizationPlan } from '@/stores/app-state.store';
 
 interface BasicInfoModalProps {
   isOpen: boolean;
@@ -36,15 +38,9 @@ interface FormData {
   defaultModel?: string | null;
 }
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  systemRole?: string;
-}
-
 export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoModalProps) {
   const { data: session } = useSession();
+  const organizationPlan = useOrganizationPlan();
   const [formData, setFormData] = useState<FormData>({
     name: '',
     role: '',
@@ -56,7 +52,7 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
   });
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserDTO[]>([]);
   const [canManageAgents, setCanManageAgents] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [currentOwnerName, setCurrentOwnerName] = useState<string>('Unknown User');
@@ -104,7 +100,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
 
       // Load organization members
       const members = await getOrganizationMembers();
-      setUsers(members || []);
+      const mappedUsers = members ? members.map(OrganizationMapper.memberToUser) : [];
+      setUsers(mappedUsers);
 
     } catch (error) {
       console.error('Error loading users and permissions:', error);
@@ -326,8 +323,8 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
           )}
           <p className="text-xs text-muted-foreground">
             {canManageAgents
-              ? "Tools will use this user's OAuth connections. Only users with 'agents:manage' permission can change ownership."
-              : "You don't have permission to change the agent owner. Tools will use the current owner's OAuth connections."}
+              ? "Tools will use this user's connections. Only users with 'agents:manage' permission can change ownership."
+              : "You don't have permission to change the agent owner. Tools will use the current owner's connections."}
           </p>
         </div>
 
@@ -362,7 +359,7 @@ export function BasicInfoModal({ isOpen, onClose, agent, onUpdate }: BasicInfoMo
             <ModelSelector
               value={formData.defaultModel || null}
               onChange={(model) => setFormData(prev => ({ ...prev, defaultModel: model }))}
-              organizationTier="free"
+              organizationTier={organizationPlan}
               showInherit={true}
               inheritLabel="Inherit from organization"
               requiredCapabilities={['toolCalling']}

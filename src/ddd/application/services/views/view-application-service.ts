@@ -34,6 +34,7 @@ export interface CreateViewCommand {
   description?: string;
   tableId: TableId;
   organizationId: OrganizationId;
+  requiresAuth?: boolean; // Whether this view requires authentication (default: true)
   createdBy?: UserId;
   filters?: FilterConfig[];
   sorting?: SortConfig[];
@@ -55,6 +56,13 @@ export interface UpdateViewCommand {
 export interface ExecuteViewCommand {
   dataSourceId: ViewId;
   overridePagination?: PaginationConfig;
+  /** Additional runtime filters (e.g., from page variables) - merged with view's stored filters */
+  additionalFilters?: FilterConfig[];
+  /**
+   * Direct row ID filter - bypasses FilterConfig validation for the synthetic 'id' field
+   * Used when filtering by row ID (e.g., {params.user_id}) since the 'id' field has fieldId=0
+   */
+  rowIdFilter?: { operator: 'eq' | 'ne'; value: string };
 }
 
 export interface ExecuteAggregationCommand {
@@ -193,6 +201,7 @@ export class ViewApplicationService {
         description: command.description,
         tableId: command.tableId,
         organizationId: command.organizationId,
+        requiresAuth: command.requiresAuth ?? true, // Secure by default
         createdBy: command.createdBy?.value,
         filters: command.filters,
         sorting: command.sorting,
@@ -367,6 +376,37 @@ export class ViewApplicationService {
   }
 
   /**
+   * Get a public view by ID (bypasses RLS)
+   * Only returns views where requiresAuth = false
+   *
+   * AIDEV-NOTE: This method is for unauthenticated access to public views.
+   * Uses rawDb to bypass RLS, but only returns views explicitly marked as public.
+   */
+  async getPublicView(id: ViewId): Promise<Result<View>> {
+    try {
+      const view = await this.dataSourceRepository.findByIdPublic(id);
+
+      if (!view) {
+        return {
+          success: false,
+          error: "View not found or not public",
+        };
+      }
+
+      return {
+        success: true,
+        data: view,
+      };
+    } catch (error) {
+      logger.error("Error getting public view", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to get public view",
+      };
+    }
+  }
+
+  /**
    * Get all views for a table
    */
   async getViewsByTable(tableId: TableId): Promise<Result<View[]>> {
@@ -448,9 +488,25 @@ export class ViewApplicationService {
         offset: pagination.offset,
       };
 
+      // Combine view filters with additional runtime filters
+      const allFilters = [
+        ...dataSource.filters,
+        ...(command.additionalFilters || []),
+      ];
+
       // Add filters if present
-      if (dataSource.hasFilters()) {
-        queryOptions.filters = this.convertFilterConfigToRowFilter(dataSource.filters, tableFields);
+      if (allFilters.length > 0) {
+        queryOptions.filters = this.convertFilterConfigToRowFilter(allFilters, tableFields);
+      }
+
+      // Handle direct row ID filter (bypasses FilterConfig for synthetic 'id' field)
+      if (command.rowIdFilter) {
+        const idFilter: RowFilter = {
+          field: 'id',
+          operator: command.rowIdFilter.operator,
+          value: command.rowIdFilter.value,
+        };
+        queryOptions.filters = [...(queryOptions.filters || []), idFilter];
       }
 
       // Add sorting if present
@@ -1121,6 +1177,152 @@ export class ViewApplicationService {
     }
   }
 
+  /**
+   * Get the schema (field definitions) for a public view (bypasses RLS)
+   * Only returns fields if the view is public (requiresAuth = false)
+   *
+   * AIDEV-NOTE: This method is for unauthenticated access to public view schemas.
+   * Uses rawDb via repository to bypass RLS.
+   */
+  async getPublicViewSchema(id: ViewId): Promise<Result<TableField[]>> {
+    try {
+      const fields = await this.dataSourceRepository.findFieldsForPublicView(id);
+
+      if (!fields) {
+        return {
+          success: false,
+          error: "View not found or not public",
+        };
+      }
+
+      return {
+        success: true,
+        data: fields,
+      };
+    } catch (error) {
+      logger.error("Error getting public view schema", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to get public view schema",
+      };
+    }
+  }
+
+  /**
+   * Execute a PUBLIC view - fetch rows with filters, sorting, and pagination applied
+   * Uses rawDb to bypass RLS for views with requiresAuth = false
+   *
+   * AIDEV-NOTE: This method is for unauthenticated access to public views.
+   * Only works if the view has requiresAuth = false.
+   */
+  async executePublicView(
+    command: ExecuteViewCommand
+  ): Promise<Result<ViewExecutionResult>> {
+    try {
+      logger.debug("Executing public view", { id: command.dataSourceId.value });
+
+      // 1. Get public view (uses rawDb)
+      const dataSource = await this.dataSourceRepository.findByIdPublic(command.dataSourceId);
+      if (!dataSource) {
+        return {
+          success: false,
+          error: `View ${command.dataSourceId.value} not found or not public`,
+        };
+      }
+
+      // 2. Use override pagination if provided, otherwise use view pagination
+      const pagination = command.overridePagination ?? dataSource.pagination;
+
+      // 3. Get table fields via public method (uses rawDb)
+      const tableFields = await this.dataSourceRepository.findFieldsForPublicView(command.dataSourceId);
+      if (!tableFields || tableFields.length === 0) {
+        return {
+          success: false,
+          error: "Failed to fetch table fields for public view",
+        };
+      }
+
+      // 4. Build database query options with filters, sorting, and pagination
+      const queryOptions: RowQueryOptions = {
+        limit: pagination.pageSize,
+        offset: pagination.offset,
+      };
+
+      // Combine view filters with additional runtime filters
+      const allFilters = [
+        ...dataSource.filters,
+        ...(command.additionalFilters || []),
+      ];
+
+      // Add filters if present
+      if (allFilters.length > 0) {
+        queryOptions.filters = this.convertFilterConfigToRowFilter(allFilters, tableFields);
+      }
+
+      // Handle direct row ID filter
+      if (command.rowIdFilter) {
+        const idFilter: RowFilter = {
+          field: 'id',
+          operator: command.rowIdFilter.operator,
+          value: command.rowIdFilter.value,
+        };
+        queryOptions.filters = [...(queryOptions.filters || []), idFilter];
+      }
+
+      // Add sorting if present
+      if (dataSource.hasSorting()) {
+        const sortParams = this.convertSortConfigToOrderBy(dataSource.getSortedSorting(), tableFields);
+        if (sortParams) {
+          queryOptions.orderBy = sortParams.orderBy;
+          queryOptions.orderDirection = sortParams.orderDirection;
+        }
+      }
+
+      // 5. Get table metadata via public method (uses rawDb)
+      const tableData = await this.dataSourceRepository.findTableForPublicView(command.dataSourceId);
+      if (!tableData) {
+        return {
+          success: false,
+          error: "Failed to fetch table for public view",
+        };
+      }
+
+      // 6. Fetch rows using pre-fetched table data (bypasses RLS)
+      const rows = await this.tableApplicationService.getRowsWithTableData(tableData, tableFields, queryOptions);
+
+      // 7. Get total count for pagination
+      const countOptions: RowQueryOptions = {
+        limit: 0,
+        offset: 0,
+        filters: queryOptions.filters,
+      };
+      const allFilteredRows = await this.tableApplicationService.getRowsWithTableData(tableData, tableFields, countOptions);
+      const totalCount = allFilteredRows.length;
+
+      logger.debug("Public view executed successfully", {
+        id: command.dataSourceId.value,
+        rowCount: rows.length,
+        totalCount
+      });
+
+      return {
+        success: true,
+        data: {
+          rows,
+          totalCount,
+          pageSize: pagination.pageSize,
+          offset: pagination.offset,
+        },
+      };
+    } catch (error) {
+      logger.error("Error executing public view", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error executing public view",
+      };
+    }
+  }
+
   // ============================================================================
   // Query Builder Helper Methods
   // ============================================================================
@@ -1154,11 +1356,27 @@ export class ViewApplicationService {
       let dbOperator: RowFilter['operator'];
       let dbValue: any = filter.value;
 
+      // Complex field types that store JSONB arrays with 'id' as key
+      // - relation: [{id: string|number, value: string}]
+      // - file: [{id: string, name: string, size: number, ...}]
+      // - document: [{id: string, name: string, documentMetadata: {...}, ...}]
+      const isJsonbArrayField = field.type === 'relation' || field.type === 'file' || field.type === 'document';
+
       switch (filter.operator) {
         case 'equals':
-          dbOperator = 'eq';
+          // For JSONB array fields, use contains to check if array has matching ID
+          if (isJsonbArrayField) {
+            dbOperator = 'contains';
+            // Format value for JSONB contains: [{"id": value}]
+            // Always use string - Python normalizes to string for comparison
+            const id = String(filter.value ?? '');
+            dbValue = [{ id }];
+          } else {
+            dbOperator = 'eq';
+          }
           break;
         case 'not_equals':
+          // TODO: Add JSONB not_contains support for relation fields when proto is updated
           dbOperator = 'ne';
           break;
         case 'contains':
@@ -1207,6 +1425,22 @@ export class ViewApplicationService {
         case 'is_false':
           dbOperator = 'eq';
           dbValue = false;
+          break;
+        case 'in':
+          // For JSONB array fields, use contains to check if array has matching ID
+          if (isJsonbArrayField) {
+            dbOperator = 'contains';
+            // Format value for JSONB contains: [{"id": v1}, {"id": v2}, ...]
+            // Always use strings - Python normalizes to string for comparison
+            const idsRaw = Array.isArray(filter.value) ? filter.value : [filter.value];
+            dbValue = idsRaw.map(v => ({ id: String(v ?? '') }));
+          } else {
+            dbOperator = 'in';
+          }
+          break;
+        case 'not_in':
+          // TODO: Add JSONB not_contains support for relation fields when proto is updated
+          dbOperator = 'not_in';
           break;
         default:
           logger.error('Unknown filter operator, using equals', { operator: filter.operator });

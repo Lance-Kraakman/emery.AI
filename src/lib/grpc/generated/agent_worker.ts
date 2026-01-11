@@ -326,41 +326,396 @@ export interface SkillConfig {
   id: number;
   name: string;
   description: string;
-  inputs: SkillInput[];
-  outputs: SkillOutput[];
+  /** Unified input definitions (replaces SkillInput) */
+  inputs: InputDefinition[];
+  /** Unified output definitions (replaces SkillOutput) */
+  outputs: OutputDefinition[];
   instructions: string;
   tools: ToolConfig[];
   /** Optional: model override for this skill */
   model: string;
   /** Skill-level attachments (images, files, text) */
   content: MessagePart[];
+  /** Optional: "tool_calling" (default) or "code_agent" */
+  agentType: string;
+  /** 'agentic', 'agent' (step-based DAG), 'operation', 'tool', 'write', or 'read' */
+  executionType: string;
+  /** Config for operation execution (when execution_type='operation') */
+  taskModelConfig:
+    | TaskModelConfig
+    | undefined;
+  /** Config for tool execution (when execution_type='tool') */
+  toolExecutionConfig:
+    | ToolExecutionConfig
+    | undefined;
+  /** Config for write execution (when execution_type='write') */
+  writeConfig:
+    | WriteConfig
+    | undefined;
+  /** Config for read execution (when execution_type='read') */
+  readConfig:
+    | ReadConfig
+    | undefined;
+  /** Steps for step-based execution (when execution_type='agent') */
+  steps: SkillStep[];
 }
 
-/** Skill input parameter */
-export interface SkillInput {
+/** Source for reading a value from a table field */
+export interface InputFieldSource {
+  /** Which table to read from */
+  tableId: number;
+  /** Which field to read */
+  fieldId: number;
+  /** Which row (reuses existing RowIdSource) */
+  rowSource: RowIdSource | undefined;
+}
+
+/** Input mapping configuration - maps table field to skill input */
+export interface InputMappingConfig {
+  source: InputFieldSource | undefined;
+}
+
+/** Unified input definition */
+export interface InputDefinition {
   name: string;
   required: boolean;
-  /** text, image, file, audio, video, document */
+  /** text, number, boolean, json, image, file, audio, etc. */
   type: string;
-  /** File configuration (for file-type inputs) */
-  fileConfig: SkillInputFileConfig | undefined;
+  /** Optional: read from table field */
+  inputMapping: InputMappingConfig | undefined;
 }
 
-/** File configuration for skill inputs */
-export interface SkillInputFileConfig {
-  /** Allowed MIME types (e.g., ["image/*", "application/pdf"]) */
-  allowedMimeTypes: string[];
-  /** Maximum file size in bytes */
-  maxSizeBytes: number;
-  /** Allow multiple files */
-  multiple: boolean;
-}
-
-/** Skill output value */
-export interface SkillOutput {
+/** Unified output definition */
+export interface OutputDefinition {
   name: string;
-  /** text, image, file, audio, video, document */
   type: string;
+  /** Optional: write to table fields */
+  outputMapping: OutputMappingConfig | undefined;
+}
+
+/** Error handling configuration for a step */
+export interface ErrorConfig {
+  /** Continue execution even if step fails */
+  continueOnError: boolean;
+  /** Variable name to store error details (e.g., "__error__") */
+  errorOutputVar: string;
+}
+
+/** Retry configuration for error recovery */
+export interface RetryConfig {
+  /** Max retry attempts (default: 3) */
+  maxAttempts: number;
+  /** Initial backoff in milliseconds (default: 1000) */
+  backoffMs: number;
+  /** "fixed", "exponential", "linear" (default: "exponential") */
+  backoffType: string;
+}
+
+/**
+ * Step output routing - determines which steps to execute based on outcome
+ * Enables n8n-style branching: success path, error path, conditional paths
+ */
+export interface StepOutput {
+  /** "success", "error", "condition", "default" */
+  type: string;
+  /** For type="condition": expression like "{{result}} > 100" */
+  condition: string;
+  /** Step names to execute for this output */
+  nextSteps: string[];
+}
+
+/**
+ * Loop configuration for iteration support
+ * Enables for-each over arrays and while/until conditional loops
+ */
+export interface LoopConfig {
+  /** "for_each", "while", "until" */
+  type: string;
+  /** For for_each: variable containing array to iterate */
+  itemsVar: string;
+  /** Variable name to store current item (default: "item") */
+  currentItemVar: string;
+  /** For while/until: condition expression "{{count}} < 10" */
+  condition: string;
+  /** Safety limit to prevent infinite loops (default: 100) */
+  maxIterations: number;
+}
+
+/**
+ * Step definition for step-based skill execution (execution_type='agent')
+ * Each step can either have inline instructions OR reference another skill
+ */
+export interface SkillStep {
+  /** Step identifier/name */
+  name: string;
+  /** Inline instruction (if not referencing a skill) */
+  instruction: string;
+  /** OR reference to another skill by ID */
+  skillId: number;
+  /** Tools available for this step (for inline instruction) */
+  tools: string[];
+  /** Input mappings: param_name -> "{{source_var}}" or literal */
+  inputs: { [key: string]: string };
+  /** Output mappings: output_name -> target_var_name */
+  outputs: { [key: string]: string };
+  /** Can run in parallel with previous step (future) */
+  parallel: boolean;
+  /** Optional condition: "{{var}} > 0" (skip step if false) */
+  condition: string;
+  /** Step-level definitions (simpler types than skill-level) */
+  inputDefs: InputDefinition[];
+  /** What this step produces */
+  outputDefs: OutputDefinition[];
+  /** DAG execution configuration */
+  errorConfig:
+    | ErrorConfig
+    | undefined;
+  /** Retry configuration for transient failures */
+  retryConfig:
+    | RetryConfig
+    | undefined;
+  /** Output routing for DAG branching (n8n-style) */
+  stepOutputs: StepOutput[];
+  /** Parallel execution */
+  parallelGroup: string;
+  /** Loop/iteration support */
+  loopConfig:
+    | LoopConfig
+    | undefined;
+  /** Step-level execution configs (for non-agentic steps) */
+  readConfig:
+    | ReadConfig
+    | undefined;
+  /** For write steps */
+  writeConfig:
+    | WriteConfig
+    | undefined;
+  /** For tool steps */
+  toolExecutionConfig:
+    | ToolExecutionConfig
+    | undefined;
+  /** For operation steps */
+  taskModelConfig: TaskModelConfig | undefined;
+}
+
+export interface SkillStep_InputsEntry {
+  key: string;
+  value: string;
+}
+
+export interface SkillStep_OutputsEntry {
+  key: string;
+  value: string;
+}
+
+/** Configuration for operation execution (direct model invocation without LLM orchestration) */
+export interface TaskModelConfig {
+  /** HuggingFace model ID (e.g., 'black-forest-labs/FLUX.1-schnell') */
+  modelId: string;
+  /** Task type: text-to-image, speech-to-text, etc. */
+  taskType: string;
+  /** Model-specific parameters (steps, guidance_scale, etc.) */
+  parameters: { [key: string]: string };
+}
+
+export interface TaskModelConfig_ParametersEntry {
+  key: string;
+  value: string;
+}
+
+/**
+ * Configuration for direct tool execution (when execution_type='tool')
+ * Calls a Pipedream tool directly without LLM orchestration
+ */
+export interface ToolExecutionConfig {
+  /** Pipedream tool ID (e.g., 'gmail-send-email', 'slack-send-message') */
+  toolId: string;
+  /** Map skill inputs to tool parameters */
+  inputMappings: ToolInputMapping[];
+  /** Table to store outputs (schema auto-discovered from response) */
+  outputTableId?: number | undefined;
+}
+
+/** Maps skill input to tool parameter */
+export interface ToolInputMapping {
+  /** Tool parameter name */
+  toolParam: string;
+  /** Skill input to use (if set) */
+  skillInputName: string;
+  /** Static value (used if skill_input_name not set) */
+  staticValue: string;
+}
+
+/**
+ * Configuration for direct table write (when execution_type='write')
+ * Writes data directly to a table without LLM orchestration
+ */
+export interface WriteConfig {
+  /** Table to write to */
+  targetTableId: number;
+  /** 'create' or 'update' */
+  rowAction: string;
+  /** Map skill inputs to table fields */
+  fieldMappings: WriteFieldMapping[];
+  /** For update: which field to match */
+  updateMatch: UpdateMatchConfig | undefined;
+}
+
+/** Maps skill input to table field */
+export interface WriteFieldMapping {
+  /** Skill input name */
+  skillInputName: string;
+  /** Table field ID */
+  targetFieldId: number;
+}
+
+/** Configuration for matching rows during update */
+export interface UpdateMatchConfig {
+  /** Skill input with match value */
+  skillInputName: string;
+  /** Field to match against */
+  targetFieldId: number;
+}
+
+/**
+ * Configuration for direct table read (when execution_type='read')
+ * Reads data from a table without LLM orchestration
+ */
+export interface ReadConfig {
+  /** 'single_row' or 'query' */
+  mode: string;
+  /** Table to read from */
+  sourceTableId: number;
+  /** For single_row mode: which row to read */
+  rowIdSource:
+    | RowIdSource
+    | undefined;
+  /** For query mode: filter conditions */
+  queryFilters: QueryFilter[];
+  /** For query mode: max rows to return (default: 100) */
+  queryLimit: number;
+  /** Map table fields to output variables */
+  fieldMappings: ReadFieldMapping[];
+}
+
+/** Filter condition for query mode reads */
+export interface QueryFilter {
+  /** Field to filter on */
+  fieldId: number;
+  /** 'equals', 'not_equals', 'contains', 'gt', 'lt', 'gte', 'lte', 'is_empty', 'is_not_empty' */
+  operator: string;
+  /** Source for filter value (reuses RowIdSource for flexibility) */
+  valueSource: RowIdSource | undefined;
+}
+
+/** Maps table field to output variable */
+export interface ReadFieldMapping {
+  /** Table field ID to read from */
+  sourceFieldId: number;
+  /** Output variable name to store value */
+  targetVariable: string;
+}
+
+/** Target field metadata - provides LLM guidance based on database field type */
+export interface TargetFieldMetadata {
+  /** Database field type: "single-select", "multi-select", "number", "boolean", etc. */
+  fieldType: string;
+  /** For select fields: valid option values */
+  options: string[];
+  /** For multi-select: maximum allowed selections */
+  maxSelections?:
+    | number
+    | undefined;
+  /** Target field name (for display) */
+  fieldName?: string | undefined;
+}
+
+/** Reference to a field from a previous table mapping result */
+export interface TableReference {
+  /** Which table mapping (1, 2, 3...) */
+  order: number;
+  /** 'row_id' or field name from that table */
+  field: string;
+}
+
+/** Typed field source - skill output, skill input, or reference to previous table */
+export interface FieldSource {
+  /** Direct skill output name (e.g., "company_name") */
+  skillOutput?:
+    | string
+    | undefined;
+  /** Reference to previous table operation result */
+  tableRef?:
+    | TableReference
+    | undefined;
+  /** Direct skill input name (e.g., "patient_id") */
+  skillInput?: string | undefined;
+}
+
+/** Source for row ID in update mode - determines which row to update */
+export interface RowIdSource {
+  /** Hardcoded row ID */
+  staticId?:
+    | string
+    | undefined;
+  /** Name of skill input containing row ID */
+  skillInput?:
+    | string
+    | undefined;
+  /** Name of skill output containing row ID */
+  skillOutput?:
+    | string
+    | undefined;
+  /** Reference to previous table (e.g., row_id from Table #1) */
+  tableRef?:
+    | TableReference
+    | undefined;
+  /** Use the triggering row's ID (for table-triggered skills) */
+  useSourceRow?: boolean | undefined;
+}
+
+/** Field mapping within a table mapping - maps a typed source to a target field */
+export interface FieldMapping {
+  /** Where to get the value (typed) */
+  source:
+    | FieldSource
+    | undefined;
+  /** Which field to write to */
+  targetFieldId: number;
+  /** Optional: target field info for LLM guidance */
+  targetFieldMetadata:
+    | TargetFieldMetadata
+    | undefined;
+  /** When true, append to existing relation values instead of replacing */
+  appendMode: boolean;
+}
+
+/** Ordered operation for a single table */
+export interface TableMapping {
+  /** Execution order (1, 2, 3...) */
+  order: number;
+  /** Which table to write to */
+  targetTableId: number;
+  /** 'create' or 'update' */
+  rowAction: string;
+  /** For update mode - typed source for row ID */
+  rowIdSource:
+    | RowIdSource
+    | undefined;
+  /** Field mappings for this table */
+  mappings: FieldMapping[];
+  /** Field to use for relation display value */
+  displayFieldId: number;
+  /** Per-table mode: 'single_row' or 'multi_row' */
+  mode: string;
+}
+
+/** Output mapping configuration - multi-table support with typed references */
+export interface OutputMappingConfig {
+  /** Default mode: 'single_row' or 'multi_row' (used if table doesn't specify) */
+  mode: string;
+  /** Ordered table operations */
+  tableMappings: TableMapping[];
 }
 
 /** Tool configuration */
@@ -387,14 +742,35 @@ export interface ServerConfig_ConfigEntry {
   value: string;
 }
 
-/** Trigger data payload */
-export interface TriggerData {
-  payload: { [key: string]: string };
+/**
+ * Runtime skill input value with type information
+ * AIDEV-NOTE: This enables type-safe skill input passing from TypeScript to Python
+ */
+export interface SkillInputValue {
+  /** Input name (matches SkillInput.name from skill definition) */
+  name: string;
+  /** Type from SkillInput definition (text, number, boolean, etc.) */
+  type: string;
+  /** For text, email, phone, date (ISO string), single-select */
+  stringValue?:
+    | string
+    | undefined;
+  /** For number types */
+  numberValue?:
+    | number
+    | undefined;
+  /** For boolean types */
+  boolValue?:
+    | boolean
+    | undefined;
+  /** For json, multi-select (array), file refs, complex objects */
+  jsonValue?: string | undefined;
 }
 
-export interface TriggerData_PayloadEntry {
-  key: string;
-  value: string;
+/** Trigger data with typed skill inputs */
+export interface TriggerData {
+  /** Typed skill input values */
+  skillInputs: SkillInputValue[];
 }
 
 /**
@@ -462,6 +838,8 @@ export interface ProcessMessageRequest {
   messageId: string;
   /** Required: session identifier (chat_id from database) */
   sessionId: string;
+  /** User API key for internal service calls (skill_builder, etc.) */
+  userApiKey: string;
 }
 
 /** Streaming response from AI processing */
@@ -470,11 +848,7 @@ export interface ProcessMessageResponse {
   contentChunk?:
     | ContentChunk
     | undefined;
-  /** RAG sources and context */
-  ragContext?:
-    | RagContext
-    | undefined;
-  /** Processing finished marker */
+  /** Field 2 reserved (was: RagContext rag_context) */
   complete?:
     | ProcessingComplete
     | undefined;
@@ -495,7 +869,6 @@ export interface ProcessMessageResponse {
  * AIDEV-NOTE: Multi-attachment support implemented (2025-01)
  * - ImageUrlPart: Vision model support (PIL Images → base64)
  * - FilePart: Text extraction from PDFs, audio transcription, documents
- * - Simple extraction approach (no embeddings/RAG initially)
  * - Files processed async in message_mapper.py using file_processor.py
  */
 export interface MessagePart {
@@ -543,29 +916,6 @@ export interface ContentChunk {
   content: string;
   /** Sequence number for ordering */
   sequence: number;
-}
-
-/** RAG context information */
-export interface RagContext {
-  /** List of RAG sources used */
-  sources: RagSource[];
-  /** Summary of context used */
-  contextSummary: string;
-  /** Total number of sources found */
-  totalSources: number;
-}
-
-export interface RagSource {
-  /** Source document identifier */
-  documentId: string;
-  /** Source document title */
-  title: string;
-  /** Similarity score */
-  similarity: number;
-  /** Domain type (table, agent, file, etc.) */
-  domainType: string;
-  /** Relevant text excerpt */
-  excerpt: string;
 }
 
 /** Processing completion marker */
@@ -1893,6 +2243,13 @@ function createBaseSkillConfig(): SkillConfig {
     tools: [],
     model: "",
     content: [],
+    agentType: "",
+    executionType: "",
+    taskModelConfig: undefined,
+    toolExecutionConfig: undefined,
+    writeConfig: undefined,
+    readConfig: undefined,
+    steps: [],
   };
 }
 
@@ -1908,10 +2265,10 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       writer.uint32(26).string(message.description);
     }
     for (const v of message.inputs) {
-      SkillInput.encode(v!, writer.uint32(34).fork()).join();
+      InputDefinition.encode(v!, writer.uint32(34).fork()).join();
     }
     for (const v of message.outputs) {
-      SkillOutput.encode(v!, writer.uint32(42).fork()).join();
+      OutputDefinition.encode(v!, writer.uint32(42).fork()).join();
     }
     if (message.instructions !== "") {
       writer.uint32(50).string(message.instructions);
@@ -1924,6 +2281,27 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     }
     for (const v of message.content) {
       MessagePart.encode(v!, writer.uint32(74).fork()).join();
+    }
+    if (message.agentType !== "") {
+      writer.uint32(82).string(message.agentType);
+    }
+    if (message.executionType !== "") {
+      writer.uint32(90).string(message.executionType);
+    }
+    if (message.taskModelConfig !== undefined) {
+      TaskModelConfig.encode(message.taskModelConfig, writer.uint32(98).fork()).join();
+    }
+    if (message.toolExecutionConfig !== undefined) {
+      ToolExecutionConfig.encode(message.toolExecutionConfig, writer.uint32(106).fork()).join();
+    }
+    if (message.writeConfig !== undefined) {
+      WriteConfig.encode(message.writeConfig, writer.uint32(114).fork()).join();
+    }
+    if (message.readConfig !== undefined) {
+      ReadConfig.encode(message.readConfig, writer.uint32(122).fork()).join();
+    }
+    for (const v of message.steps) {
+      SkillStep.encode(v!, writer.uint32(162).fork()).join();
     }
     return writer;
   },
@@ -1964,7 +2342,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.inputs.push(SkillInput.decode(reader, reader.uint32()));
+          message.inputs.push(InputDefinition.decode(reader, reader.uint32()));
           continue;
         }
         case 5: {
@@ -1972,7 +2350,7 @@ export const SkillConfig: MessageFns<SkillConfig> = {
             break;
           }
 
-          message.outputs.push(SkillOutput.decode(reader, reader.uint32()));
+          message.outputs.push(OutputDefinition.decode(reader, reader.uint32()));
           continue;
         }
         case 6: {
@@ -2007,6 +2385,62 @@ export const SkillConfig: MessageFns<SkillConfig> = {
           message.content.push(MessagePart.decode(reader, reader.uint32()));
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.agentType = reader.string();
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.executionType = reader.string();
+          continue;
+        }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          message.taskModelConfig = TaskModelConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          message.toolExecutionConfig = ToolExecutionConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.writeConfig = WriteConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.readConfig = ReadConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 20: {
+          if (tag !== 162) {
+            break;
+          }
+
+          message.steps.push(SkillStep.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2021,12 +2455,25 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       description: isSet(object.description) ? globalThis.String(object.description) : "",
-      inputs: globalThis.Array.isArray(object?.inputs) ? object.inputs.map((e: any) => SkillInput.fromJSON(e)) : [],
-      outputs: globalThis.Array.isArray(object?.outputs) ? object.outputs.map((e: any) => SkillOutput.fromJSON(e)) : [],
+      inputs: globalThis.Array.isArray(object?.inputs)
+        ? object.inputs.map((e: any) => InputDefinition.fromJSON(e))
+        : [],
+      outputs: globalThis.Array.isArray(object?.outputs)
+        ? object.outputs.map((e: any) => OutputDefinition.fromJSON(e))
+        : [],
       instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
       tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
       model: isSet(object.model) ? globalThis.String(object.model) : "",
       content: globalThis.Array.isArray(object?.content) ? object.content.map((e: any) => MessagePart.fromJSON(e)) : [],
+      agentType: isSet(object.agentType) ? globalThis.String(object.agentType) : "",
+      executionType: isSet(object.executionType) ? globalThis.String(object.executionType) : "",
+      taskModelConfig: isSet(object.taskModelConfig) ? TaskModelConfig.fromJSON(object.taskModelConfig) : undefined,
+      toolExecutionConfig: isSet(object.toolExecutionConfig)
+        ? ToolExecutionConfig.fromJSON(object.toolExecutionConfig)
+        : undefined,
+      writeConfig: isSet(object.writeConfig) ? WriteConfig.fromJSON(object.writeConfig) : undefined,
+      readConfig: isSet(object.readConfig) ? ReadConfig.fromJSON(object.readConfig) : undefined,
+      steps: globalThis.Array.isArray(object?.steps) ? object.steps.map((e: any) => SkillStep.fromJSON(e)) : [],
     };
   },
 
@@ -2042,10 +2489,10 @@ export const SkillConfig: MessageFns<SkillConfig> = {
       obj.description = message.description;
     }
     if (message.inputs?.length) {
-      obj.inputs = message.inputs.map((e) => SkillInput.toJSON(e));
+      obj.inputs = message.inputs.map((e) => InputDefinition.toJSON(e));
     }
     if (message.outputs?.length) {
-      obj.outputs = message.outputs.map((e) => SkillOutput.toJSON(e));
+      obj.outputs = message.outputs.map((e) => OutputDefinition.toJSON(e));
     }
     if (message.instructions !== "") {
       obj.instructions = message.instructions;
@@ -2059,6 +2506,27 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     if (message.content?.length) {
       obj.content = message.content.map((e) => MessagePart.toJSON(e));
     }
+    if (message.agentType !== "") {
+      obj.agentType = message.agentType;
+    }
+    if (message.executionType !== "") {
+      obj.executionType = message.executionType;
+    }
+    if (message.taskModelConfig !== undefined) {
+      obj.taskModelConfig = TaskModelConfig.toJSON(message.taskModelConfig);
+    }
+    if (message.toolExecutionConfig !== undefined) {
+      obj.toolExecutionConfig = ToolExecutionConfig.toJSON(message.toolExecutionConfig);
+    }
+    if (message.writeConfig !== undefined) {
+      obj.writeConfig = WriteConfig.toJSON(message.writeConfig);
+    }
+    if (message.readConfig !== undefined) {
+      obj.readConfig = ReadConfig.toJSON(message.readConfig);
+    }
+    if (message.steps?.length) {
+      obj.steps = message.steps.map((e) => SkillStep.toJSON(e));
+    }
     return obj;
   },
 
@@ -2070,22 +2538,191 @@ export const SkillConfig: MessageFns<SkillConfig> = {
     message.id = object.id ?? 0;
     message.name = object.name ?? "";
     message.description = object.description ?? "";
-    message.inputs = object.inputs?.map((e) => SkillInput.fromPartial(e)) || [];
-    message.outputs = object.outputs?.map((e) => SkillOutput.fromPartial(e)) || [];
+    message.inputs = object.inputs?.map((e) => InputDefinition.fromPartial(e)) || [];
+    message.outputs = object.outputs?.map((e) => OutputDefinition.fromPartial(e)) || [];
     message.instructions = object.instructions ?? "";
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.model = object.model ?? "";
     message.content = object.content?.map((e) => MessagePart.fromPartial(e)) || [];
+    message.agentType = object.agentType ?? "";
+    message.executionType = object.executionType ?? "";
+    message.taskModelConfig = (object.taskModelConfig !== undefined && object.taskModelConfig !== null)
+      ? TaskModelConfig.fromPartial(object.taskModelConfig)
+      : undefined;
+    message.toolExecutionConfig = (object.toolExecutionConfig !== undefined && object.toolExecutionConfig !== null)
+      ? ToolExecutionConfig.fromPartial(object.toolExecutionConfig)
+      : undefined;
+    message.writeConfig = (object.writeConfig !== undefined && object.writeConfig !== null)
+      ? WriteConfig.fromPartial(object.writeConfig)
+      : undefined;
+    message.readConfig = (object.readConfig !== undefined && object.readConfig !== null)
+      ? ReadConfig.fromPartial(object.readConfig)
+      : undefined;
+    message.steps = object.steps?.map((e) => SkillStep.fromPartial(e)) || [];
     return message;
   },
 };
 
-function createBaseSkillInput(): SkillInput {
-  return { name: "", required: false, type: "", fileConfig: undefined };
+function createBaseInputFieldSource(): InputFieldSource {
+  return { tableId: 0, fieldId: 0, rowSource: undefined };
 }
 
-export const SkillInput: MessageFns<SkillInput> = {
-  encode(message: SkillInput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const InputFieldSource: MessageFns<InputFieldSource> = {
+  encode(message: InputFieldSource, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.tableId !== 0) {
+      writer.uint32(8).int32(message.tableId);
+    }
+    if (message.fieldId !== 0) {
+      writer.uint32(16).int32(message.fieldId);
+    }
+    if (message.rowSource !== undefined) {
+      RowIdSource.encode(message.rowSource, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InputFieldSource {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseInputFieldSource();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.tableId = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.fieldId = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.rowSource = RowIdSource.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InputFieldSource {
+    return {
+      tableId: isSet(object.tableId) ? globalThis.Number(object.tableId) : 0,
+      fieldId: isSet(object.fieldId) ? globalThis.Number(object.fieldId) : 0,
+      rowSource: isSet(object.rowSource) ? RowIdSource.fromJSON(object.rowSource) : undefined,
+    };
+  },
+
+  toJSON(message: InputFieldSource): unknown {
+    const obj: any = {};
+    if (message.tableId !== 0) {
+      obj.tableId = Math.round(message.tableId);
+    }
+    if (message.fieldId !== 0) {
+      obj.fieldId = Math.round(message.fieldId);
+    }
+    if (message.rowSource !== undefined) {
+      obj.rowSource = RowIdSource.toJSON(message.rowSource);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InputFieldSource>, I>>(base?: I): InputFieldSource {
+    return InputFieldSource.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InputFieldSource>, I>>(object: I): InputFieldSource {
+    const message = createBaseInputFieldSource();
+    message.tableId = object.tableId ?? 0;
+    message.fieldId = object.fieldId ?? 0;
+    message.rowSource = (object.rowSource !== undefined && object.rowSource !== null)
+      ? RowIdSource.fromPartial(object.rowSource)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseInputMappingConfig(): InputMappingConfig {
+  return { source: undefined };
+}
+
+export const InputMappingConfig: MessageFns<InputMappingConfig> = {
+  encode(message: InputMappingConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      InputFieldSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InputMappingConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseInputMappingConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.source = InputFieldSource.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InputMappingConfig {
+    return { source: isSet(object.source) ? InputFieldSource.fromJSON(object.source) : undefined };
+  },
+
+  toJSON(message: InputMappingConfig): unknown {
+    const obj: any = {};
+    if (message.source !== undefined) {
+      obj.source = InputFieldSource.toJSON(message.source);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InputMappingConfig>, I>>(base?: I): InputMappingConfig {
+    return InputMappingConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InputMappingConfig>, I>>(object: I): InputMappingConfig {
+    const message = createBaseInputMappingConfig();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? InputFieldSource.fromPartial(object.source)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseInputDefinition(): InputDefinition {
+  return { name: "", required: false, type: "", inputMapping: undefined };
+}
+
+export const InputDefinition: MessageFns<InputDefinition> = {
+  encode(message: InputDefinition, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.name !== "") {
       writer.uint32(10).string(message.name);
     }
@@ -2095,16 +2732,16 @@ export const SkillInput: MessageFns<SkillInput> = {
     if (message.type !== "") {
       writer.uint32(26).string(message.type);
     }
-    if (message.fileConfig !== undefined) {
-      SkillInputFileConfig.encode(message.fileConfig, writer.uint32(34).fork()).join();
+    if (message.inputMapping !== undefined) {
+      InputMappingConfig.encode(message.inputMapping, writer.uint32(34).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): SkillInput {
+  decode(input: BinaryReader | Uint8Array, length?: number): InputDefinition {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSkillInput();
+    const message = createBaseInputDefinition();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -2137,7 +2774,7 @@ export const SkillInput: MessageFns<SkillInput> = {
             break;
           }
 
-          message.fileConfig = SkillInputFileConfig.decode(reader, reader.uint32());
+          message.inputMapping = InputMappingConfig.decode(reader, reader.uint32());
           continue;
         }
       }
@@ -2149,16 +2786,16 @@ export const SkillInput: MessageFns<SkillInput> = {
     return message;
   },
 
-  fromJSON(object: any): SkillInput {
+  fromJSON(object: any): InputDefinition {
     return {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       required: isSet(object.required) ? globalThis.Boolean(object.required) : false,
       type: isSet(object.type) ? globalThis.String(object.type) : "",
-      fileConfig: isSet(object.fileConfig) ? SkillInputFileConfig.fromJSON(object.fileConfig) : undefined,
+      inputMapping: isSet(object.inputMapping) ? InputMappingConfig.fromJSON(object.inputMapping) : undefined,
     };
   },
 
-  toJSON(message: SkillInput): unknown {
+  toJSON(message: InputDefinition): unknown {
     const obj: any = {};
     if (message.name !== "") {
       obj.name = message.name;
@@ -2169,140 +2806,49 @@ export const SkillInput: MessageFns<SkillInput> = {
     if (message.type !== "") {
       obj.type = message.type;
     }
-    if (message.fileConfig !== undefined) {
-      obj.fileConfig = SkillInputFileConfig.toJSON(message.fileConfig);
+    if (message.inputMapping !== undefined) {
+      obj.inputMapping = InputMappingConfig.toJSON(message.inputMapping);
     }
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<SkillInput>, I>>(base?: I): SkillInput {
-    return SkillInput.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<InputDefinition>, I>>(base?: I): InputDefinition {
+    return InputDefinition.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<SkillInput>, I>>(object: I): SkillInput {
-    const message = createBaseSkillInput();
+  fromPartial<I extends Exact<DeepPartial<InputDefinition>, I>>(object: I): InputDefinition {
+    const message = createBaseInputDefinition();
     message.name = object.name ?? "";
     message.required = object.required ?? false;
     message.type = object.type ?? "";
-    message.fileConfig = (object.fileConfig !== undefined && object.fileConfig !== null)
-      ? SkillInputFileConfig.fromPartial(object.fileConfig)
+    message.inputMapping = (object.inputMapping !== undefined && object.inputMapping !== null)
+      ? InputMappingConfig.fromPartial(object.inputMapping)
       : undefined;
     return message;
   },
 };
 
-function createBaseSkillInputFileConfig(): SkillInputFileConfig {
-  return { allowedMimeTypes: [], maxSizeBytes: 0, multiple: false };
+function createBaseOutputDefinition(): OutputDefinition {
+  return { name: "", type: "", outputMapping: undefined };
 }
 
-export const SkillInputFileConfig: MessageFns<SkillInputFileConfig> = {
-  encode(message: SkillInputFileConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.allowedMimeTypes) {
-      writer.uint32(10).string(v!);
-    }
-    if (message.maxSizeBytes !== 0) {
-      writer.uint32(16).int64(message.maxSizeBytes);
-    }
-    if (message.multiple !== false) {
-      writer.uint32(24).bool(message.multiple);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): SkillInputFileConfig {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSkillInputFileConfig();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.allowedMimeTypes.push(reader.string());
-          continue;
-        }
-        case 2: {
-          if (tag !== 16) {
-            break;
-          }
-
-          message.maxSizeBytes = longToNumber(reader.int64());
-          continue;
-        }
-        case 3: {
-          if (tag !== 24) {
-            break;
-          }
-
-          message.multiple = reader.bool();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): SkillInputFileConfig {
-    return {
-      allowedMimeTypes: globalThis.Array.isArray(object?.allowedMimeTypes)
-        ? object.allowedMimeTypes.map((e: any) => globalThis.String(e))
-        : [],
-      maxSizeBytes: isSet(object.maxSizeBytes) ? globalThis.Number(object.maxSizeBytes) : 0,
-      multiple: isSet(object.multiple) ? globalThis.Boolean(object.multiple) : false,
-    };
-  },
-
-  toJSON(message: SkillInputFileConfig): unknown {
-    const obj: any = {};
-    if (message.allowedMimeTypes?.length) {
-      obj.allowedMimeTypes = message.allowedMimeTypes;
-    }
-    if (message.maxSizeBytes !== 0) {
-      obj.maxSizeBytes = Math.round(message.maxSizeBytes);
-    }
-    if (message.multiple !== false) {
-      obj.multiple = message.multiple;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<SkillInputFileConfig>, I>>(base?: I): SkillInputFileConfig {
-    return SkillInputFileConfig.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<SkillInputFileConfig>, I>>(object: I): SkillInputFileConfig {
-    const message = createBaseSkillInputFileConfig();
-    message.allowedMimeTypes = object.allowedMimeTypes?.map((e) => e) || [];
-    message.maxSizeBytes = object.maxSizeBytes ?? 0;
-    message.multiple = object.multiple ?? false;
-    return message;
-  },
-};
-
-function createBaseSkillOutput(): SkillOutput {
-  return { name: "", type: "" };
-}
-
-export const SkillOutput: MessageFns<SkillOutput> = {
-  encode(message: SkillOutput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const OutputDefinition: MessageFns<OutputDefinition> = {
+  encode(message: OutputDefinition, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.name !== "") {
       writer.uint32(10).string(message.name);
     }
     if (message.type !== "") {
       writer.uint32(18).string(message.type);
     }
+    if (message.outputMapping !== undefined) {
+      OutputMappingConfig.encode(message.outputMapping, writer.uint32(26).fork()).join();
+    }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): SkillOutput {
+  decode(input: BinaryReader | Uint8Array, length?: number): OutputDefinition {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseSkillOutput();
+    const message = createBaseOutputDefinition();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -2322,6 +2868,14 @@ export const SkillOutput: MessageFns<SkillOutput> = {
           message.type = reader.string();
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.outputMapping = OutputMappingConfig.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2331,14 +2885,15 @@ export const SkillOutput: MessageFns<SkillOutput> = {
     return message;
   },
 
-  fromJSON(object: any): SkillOutput {
+  fromJSON(object: any): OutputDefinition {
     return {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       type: isSet(object.type) ? globalThis.String(object.type) : "",
+      outputMapping: isSet(object.outputMapping) ? OutputMappingConfig.fromJSON(object.outputMapping) : undefined,
     };
   },
 
-  toJSON(message: SkillOutput): unknown {
+  toJSON(message: OutputDefinition): unknown {
     const obj: any = {};
     if (message.name !== "") {
       obj.name = message.name;
@@ -2346,16 +2901,2716 @@ export const SkillOutput: MessageFns<SkillOutput> = {
     if (message.type !== "") {
       obj.type = message.type;
     }
+    if (message.outputMapping !== undefined) {
+      obj.outputMapping = OutputMappingConfig.toJSON(message.outputMapping);
+    }
     return obj;
   },
 
-  create<I extends Exact<DeepPartial<SkillOutput>, I>>(base?: I): SkillOutput {
-    return SkillOutput.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<OutputDefinition>, I>>(base?: I): OutputDefinition {
+    return OutputDefinition.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<SkillOutput>, I>>(object: I): SkillOutput {
-    const message = createBaseSkillOutput();
+  fromPartial<I extends Exact<DeepPartial<OutputDefinition>, I>>(object: I): OutputDefinition {
+    const message = createBaseOutputDefinition();
     message.name = object.name ?? "";
     message.type = object.type ?? "";
+    message.outputMapping = (object.outputMapping !== undefined && object.outputMapping !== null)
+      ? OutputMappingConfig.fromPartial(object.outputMapping)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseErrorConfig(): ErrorConfig {
+  return { continueOnError: false, errorOutputVar: "" };
+}
+
+export const ErrorConfig: MessageFns<ErrorConfig> = {
+  encode(message: ErrorConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.continueOnError !== false) {
+      writer.uint32(8).bool(message.continueOnError);
+    }
+    if (message.errorOutputVar !== "") {
+      writer.uint32(18).string(message.errorOutputVar);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ErrorConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseErrorConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.continueOnError = reader.bool();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.errorOutputVar = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ErrorConfig {
+    return {
+      continueOnError: isSet(object.continueOnError) ? globalThis.Boolean(object.continueOnError) : false,
+      errorOutputVar: isSet(object.errorOutputVar) ? globalThis.String(object.errorOutputVar) : "",
+    };
+  },
+
+  toJSON(message: ErrorConfig): unknown {
+    const obj: any = {};
+    if (message.continueOnError !== false) {
+      obj.continueOnError = message.continueOnError;
+    }
+    if (message.errorOutputVar !== "") {
+      obj.errorOutputVar = message.errorOutputVar;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ErrorConfig>, I>>(base?: I): ErrorConfig {
+    return ErrorConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ErrorConfig>, I>>(object: I): ErrorConfig {
+    const message = createBaseErrorConfig();
+    message.continueOnError = object.continueOnError ?? false;
+    message.errorOutputVar = object.errorOutputVar ?? "";
+    return message;
+  },
+};
+
+function createBaseRetryConfig(): RetryConfig {
+  return { maxAttempts: 0, backoffMs: 0, backoffType: "" };
+}
+
+export const RetryConfig: MessageFns<RetryConfig> = {
+  encode(message: RetryConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.maxAttempts !== 0) {
+      writer.uint32(8).int32(message.maxAttempts);
+    }
+    if (message.backoffMs !== 0) {
+      writer.uint32(16).int32(message.backoffMs);
+    }
+    if (message.backoffType !== "") {
+      writer.uint32(26).string(message.backoffType);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RetryConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRetryConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.maxAttempts = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.backoffMs = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.backoffType = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RetryConfig {
+    return {
+      maxAttempts: isSet(object.maxAttempts) ? globalThis.Number(object.maxAttempts) : 0,
+      backoffMs: isSet(object.backoffMs) ? globalThis.Number(object.backoffMs) : 0,
+      backoffType: isSet(object.backoffType) ? globalThis.String(object.backoffType) : "",
+    };
+  },
+
+  toJSON(message: RetryConfig): unknown {
+    const obj: any = {};
+    if (message.maxAttempts !== 0) {
+      obj.maxAttempts = Math.round(message.maxAttempts);
+    }
+    if (message.backoffMs !== 0) {
+      obj.backoffMs = Math.round(message.backoffMs);
+    }
+    if (message.backoffType !== "") {
+      obj.backoffType = message.backoffType;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RetryConfig>, I>>(base?: I): RetryConfig {
+    return RetryConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RetryConfig>, I>>(object: I): RetryConfig {
+    const message = createBaseRetryConfig();
+    message.maxAttempts = object.maxAttempts ?? 0;
+    message.backoffMs = object.backoffMs ?? 0;
+    message.backoffType = object.backoffType ?? "";
+    return message;
+  },
+};
+
+function createBaseStepOutput(): StepOutput {
+  return { type: "", condition: "", nextSteps: [] };
+}
+
+export const StepOutput: MessageFns<StepOutput> = {
+  encode(message: StepOutput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.type !== "") {
+      writer.uint32(10).string(message.type);
+    }
+    if (message.condition !== "") {
+      writer.uint32(18).string(message.condition);
+    }
+    for (const v of message.nextSteps) {
+      writer.uint32(26).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StepOutput {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStepOutput();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.condition = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.nextSteps.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StepOutput {
+    return {
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+      condition: isSet(object.condition) ? globalThis.String(object.condition) : "",
+      nextSteps: globalThis.Array.isArray(object?.nextSteps)
+        ? object.nextSteps.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: StepOutput): unknown {
+    const obj: any = {};
+    if (message.type !== "") {
+      obj.type = message.type;
+    }
+    if (message.condition !== "") {
+      obj.condition = message.condition;
+    }
+    if (message.nextSteps?.length) {
+      obj.nextSteps = message.nextSteps;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StepOutput>, I>>(base?: I): StepOutput {
+    return StepOutput.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StepOutput>, I>>(object: I): StepOutput {
+    const message = createBaseStepOutput();
+    message.type = object.type ?? "";
+    message.condition = object.condition ?? "";
+    message.nextSteps = object.nextSteps?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseLoopConfig(): LoopConfig {
+  return { type: "", itemsVar: "", currentItemVar: "", condition: "", maxIterations: 0 };
+}
+
+export const LoopConfig: MessageFns<LoopConfig> = {
+  encode(message: LoopConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.type !== "") {
+      writer.uint32(10).string(message.type);
+    }
+    if (message.itemsVar !== "") {
+      writer.uint32(18).string(message.itemsVar);
+    }
+    if (message.currentItemVar !== "") {
+      writer.uint32(26).string(message.currentItemVar);
+    }
+    if (message.condition !== "") {
+      writer.uint32(34).string(message.condition);
+    }
+    if (message.maxIterations !== 0) {
+      writer.uint32(40).int32(message.maxIterations);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): LoopConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseLoopConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.itemsVar = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.currentItemVar = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.condition = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.maxIterations = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): LoopConfig {
+    return {
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+      itemsVar: isSet(object.itemsVar) ? globalThis.String(object.itemsVar) : "",
+      currentItemVar: isSet(object.currentItemVar) ? globalThis.String(object.currentItemVar) : "",
+      condition: isSet(object.condition) ? globalThis.String(object.condition) : "",
+      maxIterations: isSet(object.maxIterations) ? globalThis.Number(object.maxIterations) : 0,
+    };
+  },
+
+  toJSON(message: LoopConfig): unknown {
+    const obj: any = {};
+    if (message.type !== "") {
+      obj.type = message.type;
+    }
+    if (message.itemsVar !== "") {
+      obj.itemsVar = message.itemsVar;
+    }
+    if (message.currentItemVar !== "") {
+      obj.currentItemVar = message.currentItemVar;
+    }
+    if (message.condition !== "") {
+      obj.condition = message.condition;
+    }
+    if (message.maxIterations !== 0) {
+      obj.maxIterations = Math.round(message.maxIterations);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<LoopConfig>, I>>(base?: I): LoopConfig {
+    return LoopConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<LoopConfig>, I>>(object: I): LoopConfig {
+    const message = createBaseLoopConfig();
+    message.type = object.type ?? "";
+    message.itemsVar = object.itemsVar ?? "";
+    message.currentItemVar = object.currentItemVar ?? "";
+    message.condition = object.condition ?? "";
+    message.maxIterations = object.maxIterations ?? 0;
+    return message;
+  },
+};
+
+function createBaseSkillStep(): SkillStep {
+  return {
+    name: "",
+    instruction: "",
+    skillId: 0,
+    tools: [],
+    inputs: {},
+    outputs: {},
+    parallel: false,
+    condition: "",
+    inputDefs: [],
+    outputDefs: [],
+    errorConfig: undefined,
+    retryConfig: undefined,
+    stepOutputs: [],
+    parallelGroup: "",
+    loopConfig: undefined,
+    readConfig: undefined,
+    writeConfig: undefined,
+    toolExecutionConfig: undefined,
+    taskModelConfig: undefined,
+  };
+}
+
+export const SkillStep: MessageFns<SkillStep> = {
+  encode(message: SkillStep, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.instruction !== "") {
+      writer.uint32(18).string(message.instruction);
+    }
+    if (message.skillId !== 0) {
+      writer.uint32(24).int32(message.skillId);
+    }
+    for (const v of message.tools) {
+      writer.uint32(34).string(v!);
+    }
+    Object.entries(message.inputs).forEach(([key, value]) => {
+      SkillStep_InputsEntry.encode({ key: key as any, value }, writer.uint32(42).fork()).join();
+    });
+    Object.entries(message.outputs).forEach(([key, value]) => {
+      SkillStep_OutputsEntry.encode({ key: key as any, value }, writer.uint32(50).fork()).join();
+    });
+    if (message.parallel !== false) {
+      writer.uint32(56).bool(message.parallel);
+    }
+    if (message.condition !== "") {
+      writer.uint32(66).string(message.condition);
+    }
+    for (const v of message.inputDefs) {
+      InputDefinition.encode(v!, writer.uint32(74).fork()).join();
+    }
+    for (const v of message.outputDefs) {
+      OutputDefinition.encode(v!, writer.uint32(82).fork()).join();
+    }
+    if (message.errorConfig !== undefined) {
+      ErrorConfig.encode(message.errorConfig, writer.uint32(90).fork()).join();
+    }
+    if (message.retryConfig !== undefined) {
+      RetryConfig.encode(message.retryConfig, writer.uint32(98).fork()).join();
+    }
+    for (const v of message.stepOutputs) {
+      StepOutput.encode(v!, writer.uint32(106).fork()).join();
+    }
+    if (message.parallelGroup !== "") {
+      writer.uint32(114).string(message.parallelGroup);
+    }
+    if (message.loopConfig !== undefined) {
+      LoopConfig.encode(message.loopConfig, writer.uint32(122).fork()).join();
+    }
+    if (message.readConfig !== undefined) {
+      ReadConfig.encode(message.readConfig, writer.uint32(130).fork()).join();
+    }
+    if (message.writeConfig !== undefined) {
+      WriteConfig.encode(message.writeConfig, writer.uint32(138).fork()).join();
+    }
+    if (message.toolExecutionConfig !== undefined) {
+      ToolExecutionConfig.encode(message.toolExecutionConfig, writer.uint32(146).fork()).join();
+    }
+    if (message.taskModelConfig !== undefined) {
+      TaskModelConfig.encode(message.taskModelConfig, writer.uint32(154).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SkillStep {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSkillStep();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.instruction = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.skillId = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.tools.push(reader.string());
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          const entry5 = SkillStep_InputsEntry.decode(reader, reader.uint32());
+          if (entry5.value !== undefined) {
+            message.inputs[entry5.key] = entry5.value;
+          }
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          const entry6 = SkillStep_OutputsEntry.decode(reader, reader.uint32());
+          if (entry6.value !== undefined) {
+            message.outputs[entry6.key] = entry6.value;
+          }
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.parallel = reader.bool();
+          continue;
+        }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.condition = reader.string();
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.inputDefs.push(InputDefinition.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.outputDefs.push(OutputDefinition.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.errorConfig = ErrorConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          message.retryConfig = RetryConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          message.stepOutputs.push(StepOutput.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.parallelGroup = reader.string();
+          continue;
+        }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.loopConfig = LoopConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.readConfig = ReadConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 17: {
+          if (tag !== 138) {
+            break;
+          }
+
+          message.writeConfig = WriteConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.toolExecutionConfig = ToolExecutionConfig.decode(reader, reader.uint32());
+          continue;
+        }
+        case 19: {
+          if (tag !== 154) {
+            break;
+          }
+
+          message.taskModelConfig = TaskModelConfig.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SkillStep {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      instruction: isSet(object.instruction) ? globalThis.String(object.instruction) : "",
+      skillId: isSet(object.skillId) ? globalThis.Number(object.skillId) : 0,
+      tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => globalThis.String(e)) : [],
+      inputs: isObject(object.inputs)
+        ? Object.entries(object.inputs).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+          acc[key] = String(value);
+          return acc;
+        }, {})
+        : {},
+      outputs: isObject(object.outputs)
+        ? Object.entries(object.outputs).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+          acc[key] = String(value);
+          return acc;
+        }, {})
+        : {},
+      parallel: isSet(object.parallel) ? globalThis.Boolean(object.parallel) : false,
+      condition: isSet(object.condition) ? globalThis.String(object.condition) : "",
+      inputDefs: globalThis.Array.isArray(object?.inputDefs)
+        ? object.inputDefs.map((e: any) => InputDefinition.fromJSON(e))
+        : [],
+      outputDefs: globalThis.Array.isArray(object?.outputDefs)
+        ? object.outputDefs.map((e: any) => OutputDefinition.fromJSON(e))
+        : [],
+      errorConfig: isSet(object.errorConfig) ? ErrorConfig.fromJSON(object.errorConfig) : undefined,
+      retryConfig: isSet(object.retryConfig) ? RetryConfig.fromJSON(object.retryConfig) : undefined,
+      stepOutputs: globalThis.Array.isArray(object?.stepOutputs)
+        ? object.stepOutputs.map((e: any) => StepOutput.fromJSON(e))
+        : [],
+      parallelGroup: isSet(object.parallelGroup) ? globalThis.String(object.parallelGroup) : "",
+      loopConfig: isSet(object.loopConfig) ? LoopConfig.fromJSON(object.loopConfig) : undefined,
+      readConfig: isSet(object.readConfig) ? ReadConfig.fromJSON(object.readConfig) : undefined,
+      writeConfig: isSet(object.writeConfig) ? WriteConfig.fromJSON(object.writeConfig) : undefined,
+      toolExecutionConfig: isSet(object.toolExecutionConfig)
+        ? ToolExecutionConfig.fromJSON(object.toolExecutionConfig)
+        : undefined,
+      taskModelConfig: isSet(object.taskModelConfig) ? TaskModelConfig.fromJSON(object.taskModelConfig) : undefined,
+    };
+  },
+
+  toJSON(message: SkillStep): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.instruction !== "") {
+      obj.instruction = message.instruction;
+    }
+    if (message.skillId !== 0) {
+      obj.skillId = Math.round(message.skillId);
+    }
+    if (message.tools?.length) {
+      obj.tools = message.tools;
+    }
+    if (message.inputs) {
+      const entries = Object.entries(message.inputs);
+      if (entries.length > 0) {
+        obj.inputs = {};
+        entries.forEach(([k, v]) => {
+          obj.inputs[k] = v;
+        });
+      }
+    }
+    if (message.outputs) {
+      const entries = Object.entries(message.outputs);
+      if (entries.length > 0) {
+        obj.outputs = {};
+        entries.forEach(([k, v]) => {
+          obj.outputs[k] = v;
+        });
+      }
+    }
+    if (message.parallel !== false) {
+      obj.parallel = message.parallel;
+    }
+    if (message.condition !== "") {
+      obj.condition = message.condition;
+    }
+    if (message.inputDefs?.length) {
+      obj.inputDefs = message.inputDefs.map((e) => InputDefinition.toJSON(e));
+    }
+    if (message.outputDefs?.length) {
+      obj.outputDefs = message.outputDefs.map((e) => OutputDefinition.toJSON(e));
+    }
+    if (message.errorConfig !== undefined) {
+      obj.errorConfig = ErrorConfig.toJSON(message.errorConfig);
+    }
+    if (message.retryConfig !== undefined) {
+      obj.retryConfig = RetryConfig.toJSON(message.retryConfig);
+    }
+    if (message.stepOutputs?.length) {
+      obj.stepOutputs = message.stepOutputs.map((e) => StepOutput.toJSON(e));
+    }
+    if (message.parallelGroup !== "") {
+      obj.parallelGroup = message.parallelGroup;
+    }
+    if (message.loopConfig !== undefined) {
+      obj.loopConfig = LoopConfig.toJSON(message.loopConfig);
+    }
+    if (message.readConfig !== undefined) {
+      obj.readConfig = ReadConfig.toJSON(message.readConfig);
+    }
+    if (message.writeConfig !== undefined) {
+      obj.writeConfig = WriteConfig.toJSON(message.writeConfig);
+    }
+    if (message.toolExecutionConfig !== undefined) {
+      obj.toolExecutionConfig = ToolExecutionConfig.toJSON(message.toolExecutionConfig);
+    }
+    if (message.taskModelConfig !== undefined) {
+      obj.taskModelConfig = TaskModelConfig.toJSON(message.taskModelConfig);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SkillStep>, I>>(base?: I): SkillStep {
+    return SkillStep.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SkillStep>, I>>(object: I): SkillStep {
+    const message = createBaseSkillStep();
+    message.name = object.name ?? "";
+    message.instruction = object.instruction ?? "";
+    message.skillId = object.skillId ?? 0;
+    message.tools = object.tools?.map((e) => e) || [];
+    message.inputs = Object.entries(object.inputs ?? {}).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+      if (value !== undefined) {
+        acc[key] = globalThis.String(value);
+      }
+      return acc;
+    }, {});
+    message.outputs = Object.entries(object.outputs ?? {}).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+      if (value !== undefined) {
+        acc[key] = globalThis.String(value);
+      }
+      return acc;
+    }, {});
+    message.parallel = object.parallel ?? false;
+    message.condition = object.condition ?? "";
+    message.inputDefs = object.inputDefs?.map((e) => InputDefinition.fromPartial(e)) || [];
+    message.outputDefs = object.outputDefs?.map((e) => OutputDefinition.fromPartial(e)) || [];
+    message.errorConfig = (object.errorConfig !== undefined && object.errorConfig !== null)
+      ? ErrorConfig.fromPartial(object.errorConfig)
+      : undefined;
+    message.retryConfig = (object.retryConfig !== undefined && object.retryConfig !== null)
+      ? RetryConfig.fromPartial(object.retryConfig)
+      : undefined;
+    message.stepOutputs = object.stepOutputs?.map((e) => StepOutput.fromPartial(e)) || [];
+    message.parallelGroup = object.parallelGroup ?? "";
+    message.loopConfig = (object.loopConfig !== undefined && object.loopConfig !== null)
+      ? LoopConfig.fromPartial(object.loopConfig)
+      : undefined;
+    message.readConfig = (object.readConfig !== undefined && object.readConfig !== null)
+      ? ReadConfig.fromPartial(object.readConfig)
+      : undefined;
+    message.writeConfig = (object.writeConfig !== undefined && object.writeConfig !== null)
+      ? WriteConfig.fromPartial(object.writeConfig)
+      : undefined;
+    message.toolExecutionConfig = (object.toolExecutionConfig !== undefined && object.toolExecutionConfig !== null)
+      ? ToolExecutionConfig.fromPartial(object.toolExecutionConfig)
+      : undefined;
+    message.taskModelConfig = (object.taskModelConfig !== undefined && object.taskModelConfig !== null)
+      ? TaskModelConfig.fromPartial(object.taskModelConfig)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseSkillStep_InputsEntry(): SkillStep_InputsEntry {
+  return { key: "", value: "" };
+}
+
+export const SkillStep_InputsEntry: MessageFns<SkillStep_InputsEntry> = {
+  encode(message: SkillStep_InputsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SkillStep_InputsEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSkillStep_InputsEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SkillStep_InputsEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: SkillStep_InputsEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SkillStep_InputsEntry>, I>>(base?: I): SkillStep_InputsEntry {
+    return SkillStep_InputsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SkillStep_InputsEntry>, I>>(object: I): SkillStep_InputsEntry {
+    const message = createBaseSkillStep_InputsEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseSkillStep_OutputsEntry(): SkillStep_OutputsEntry {
+  return { key: "", value: "" };
+}
+
+export const SkillStep_OutputsEntry: MessageFns<SkillStep_OutputsEntry> = {
+  encode(message: SkillStep_OutputsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SkillStep_OutputsEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSkillStep_OutputsEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SkillStep_OutputsEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: SkillStep_OutputsEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SkillStep_OutputsEntry>, I>>(base?: I): SkillStep_OutputsEntry {
+    return SkillStep_OutputsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SkillStep_OutputsEntry>, I>>(object: I): SkillStep_OutputsEntry {
+    const message = createBaseSkillStep_OutputsEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseTaskModelConfig(): TaskModelConfig {
+  return { modelId: "", taskType: "", parameters: {} };
+}
+
+export const TaskModelConfig: MessageFns<TaskModelConfig> = {
+  encode(message: TaskModelConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.modelId !== "") {
+      writer.uint32(10).string(message.modelId);
+    }
+    if (message.taskType !== "") {
+      writer.uint32(18).string(message.taskType);
+    }
+    Object.entries(message.parameters).forEach(([key, value]) => {
+      TaskModelConfig_ParametersEntry.encode({ key: key as any, value }, writer.uint32(26).fork()).join();
+    });
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskModelConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTaskModelConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.modelId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.taskType = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          const entry3 = TaskModelConfig_ParametersEntry.decode(reader, reader.uint32());
+          if (entry3.value !== undefined) {
+            message.parameters[entry3.key] = entry3.value;
+          }
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TaskModelConfig {
+    return {
+      modelId: isSet(object.modelId) ? globalThis.String(object.modelId) : "",
+      taskType: isSet(object.taskType) ? globalThis.String(object.taskType) : "",
+      parameters: isObject(object.parameters)
+        ? Object.entries(object.parameters).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+          acc[key] = String(value);
+          return acc;
+        }, {})
+        : {},
+    };
+  },
+
+  toJSON(message: TaskModelConfig): unknown {
+    const obj: any = {};
+    if (message.modelId !== "") {
+      obj.modelId = message.modelId;
+    }
+    if (message.taskType !== "") {
+      obj.taskType = message.taskType;
+    }
+    if (message.parameters) {
+      const entries = Object.entries(message.parameters);
+      if (entries.length > 0) {
+        obj.parameters = {};
+        entries.forEach(([k, v]) => {
+          obj.parameters[k] = v;
+        });
+      }
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TaskModelConfig>, I>>(base?: I): TaskModelConfig {
+    return TaskModelConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TaskModelConfig>, I>>(object: I): TaskModelConfig {
+    const message = createBaseTaskModelConfig();
+    message.modelId = object.modelId ?? "";
+    message.taskType = object.taskType ?? "";
+    message.parameters = Object.entries(object.parameters ?? {}).reduce<{ [key: string]: string }>(
+      (acc, [key, value]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.String(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    return message;
+  },
+};
+
+function createBaseTaskModelConfig_ParametersEntry(): TaskModelConfig_ParametersEntry {
+  return { key: "", value: "" };
+}
+
+export const TaskModelConfig_ParametersEntry: MessageFns<TaskModelConfig_ParametersEntry> = {
+  encode(message: TaskModelConfig_ParametersEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskModelConfig_ParametersEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTaskModelConfig_ParametersEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TaskModelConfig_ParametersEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: TaskModelConfig_ParametersEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TaskModelConfig_ParametersEntry>, I>>(base?: I): TaskModelConfig_ParametersEntry {
+    return TaskModelConfig_ParametersEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TaskModelConfig_ParametersEntry>, I>>(
+    object: I,
+  ): TaskModelConfig_ParametersEntry {
+    const message = createBaseTaskModelConfig_ParametersEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseToolExecutionConfig(): ToolExecutionConfig {
+  return { toolId: "", inputMappings: [], outputTableId: undefined };
+}
+
+export const ToolExecutionConfig: MessageFns<ToolExecutionConfig> = {
+  encode(message: ToolExecutionConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.toolId !== "") {
+      writer.uint32(10).string(message.toolId);
+    }
+    for (const v of message.inputMappings) {
+      ToolInputMapping.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.outputTableId !== undefined) {
+      writer.uint32(24).int32(message.outputTableId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ToolExecutionConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseToolExecutionConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.toolId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.inputMappings.push(ToolInputMapping.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.outputTableId = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ToolExecutionConfig {
+    return {
+      toolId: isSet(object.toolId) ? globalThis.String(object.toolId) : "",
+      inputMappings: globalThis.Array.isArray(object?.inputMappings)
+        ? object.inputMappings.map((e: any) => ToolInputMapping.fromJSON(e))
+        : [],
+      outputTableId: isSet(object.outputTableId) ? globalThis.Number(object.outputTableId) : undefined,
+    };
+  },
+
+  toJSON(message: ToolExecutionConfig): unknown {
+    const obj: any = {};
+    if (message.toolId !== "") {
+      obj.toolId = message.toolId;
+    }
+    if (message.inputMappings?.length) {
+      obj.inputMappings = message.inputMappings.map((e) => ToolInputMapping.toJSON(e));
+    }
+    if (message.outputTableId !== undefined) {
+      obj.outputTableId = Math.round(message.outputTableId);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ToolExecutionConfig>, I>>(base?: I): ToolExecutionConfig {
+    return ToolExecutionConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ToolExecutionConfig>, I>>(object: I): ToolExecutionConfig {
+    const message = createBaseToolExecutionConfig();
+    message.toolId = object.toolId ?? "";
+    message.inputMappings = object.inputMappings?.map((e) => ToolInputMapping.fromPartial(e)) || [];
+    message.outputTableId = object.outputTableId ?? undefined;
+    return message;
+  },
+};
+
+function createBaseToolInputMapping(): ToolInputMapping {
+  return { toolParam: "", skillInputName: "", staticValue: "" };
+}
+
+export const ToolInputMapping: MessageFns<ToolInputMapping> = {
+  encode(message: ToolInputMapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.toolParam !== "") {
+      writer.uint32(10).string(message.toolParam);
+    }
+    if (message.skillInputName !== "") {
+      writer.uint32(18).string(message.skillInputName);
+    }
+    if (message.staticValue !== "") {
+      writer.uint32(26).string(message.staticValue);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ToolInputMapping {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseToolInputMapping();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.toolParam = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.skillInputName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.staticValue = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ToolInputMapping {
+    return {
+      toolParam: isSet(object.toolParam) ? globalThis.String(object.toolParam) : "",
+      skillInputName: isSet(object.skillInputName) ? globalThis.String(object.skillInputName) : "",
+      staticValue: isSet(object.staticValue) ? globalThis.String(object.staticValue) : "",
+    };
+  },
+
+  toJSON(message: ToolInputMapping): unknown {
+    const obj: any = {};
+    if (message.toolParam !== "") {
+      obj.toolParam = message.toolParam;
+    }
+    if (message.skillInputName !== "") {
+      obj.skillInputName = message.skillInputName;
+    }
+    if (message.staticValue !== "") {
+      obj.staticValue = message.staticValue;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ToolInputMapping>, I>>(base?: I): ToolInputMapping {
+    return ToolInputMapping.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ToolInputMapping>, I>>(object: I): ToolInputMapping {
+    const message = createBaseToolInputMapping();
+    message.toolParam = object.toolParam ?? "";
+    message.skillInputName = object.skillInputName ?? "";
+    message.staticValue = object.staticValue ?? "";
+    return message;
+  },
+};
+
+function createBaseWriteConfig(): WriteConfig {
+  return { targetTableId: 0, rowAction: "", fieldMappings: [], updateMatch: undefined };
+}
+
+export const WriteConfig: MessageFns<WriteConfig> = {
+  encode(message: WriteConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.targetTableId !== 0) {
+      writer.uint32(8).int32(message.targetTableId);
+    }
+    if (message.rowAction !== "") {
+      writer.uint32(18).string(message.rowAction);
+    }
+    for (const v of message.fieldMappings) {
+      WriteFieldMapping.encode(v!, writer.uint32(26).fork()).join();
+    }
+    if (message.updateMatch !== undefined) {
+      UpdateMatchConfig.encode(message.updateMatch, writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WriteConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseWriteConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.targetTableId = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.rowAction = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.fieldMappings.push(WriteFieldMapping.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.updateMatch = UpdateMatchConfig.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): WriteConfig {
+    return {
+      targetTableId: isSet(object.targetTableId) ? globalThis.Number(object.targetTableId) : 0,
+      rowAction: isSet(object.rowAction) ? globalThis.String(object.rowAction) : "",
+      fieldMappings: globalThis.Array.isArray(object?.fieldMappings)
+        ? object.fieldMappings.map((e: any) => WriteFieldMapping.fromJSON(e))
+        : [],
+      updateMatch: isSet(object.updateMatch) ? UpdateMatchConfig.fromJSON(object.updateMatch) : undefined,
+    };
+  },
+
+  toJSON(message: WriteConfig): unknown {
+    const obj: any = {};
+    if (message.targetTableId !== 0) {
+      obj.targetTableId = Math.round(message.targetTableId);
+    }
+    if (message.rowAction !== "") {
+      obj.rowAction = message.rowAction;
+    }
+    if (message.fieldMappings?.length) {
+      obj.fieldMappings = message.fieldMappings.map((e) => WriteFieldMapping.toJSON(e));
+    }
+    if (message.updateMatch !== undefined) {
+      obj.updateMatch = UpdateMatchConfig.toJSON(message.updateMatch);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<WriteConfig>, I>>(base?: I): WriteConfig {
+    return WriteConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<WriteConfig>, I>>(object: I): WriteConfig {
+    const message = createBaseWriteConfig();
+    message.targetTableId = object.targetTableId ?? 0;
+    message.rowAction = object.rowAction ?? "";
+    message.fieldMappings = object.fieldMappings?.map((e) => WriteFieldMapping.fromPartial(e)) || [];
+    message.updateMatch = (object.updateMatch !== undefined && object.updateMatch !== null)
+      ? UpdateMatchConfig.fromPartial(object.updateMatch)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseWriteFieldMapping(): WriteFieldMapping {
+  return { skillInputName: "", targetFieldId: 0 };
+}
+
+export const WriteFieldMapping: MessageFns<WriteFieldMapping> = {
+  encode(message: WriteFieldMapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.skillInputName !== "") {
+      writer.uint32(10).string(message.skillInputName);
+    }
+    if (message.targetFieldId !== 0) {
+      writer.uint32(16).int32(message.targetFieldId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WriteFieldMapping {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseWriteFieldMapping();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.skillInputName = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.targetFieldId = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): WriteFieldMapping {
+    return {
+      skillInputName: isSet(object.skillInputName) ? globalThis.String(object.skillInputName) : "",
+      targetFieldId: isSet(object.targetFieldId) ? globalThis.Number(object.targetFieldId) : 0,
+    };
+  },
+
+  toJSON(message: WriteFieldMapping): unknown {
+    const obj: any = {};
+    if (message.skillInputName !== "") {
+      obj.skillInputName = message.skillInputName;
+    }
+    if (message.targetFieldId !== 0) {
+      obj.targetFieldId = Math.round(message.targetFieldId);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<WriteFieldMapping>, I>>(base?: I): WriteFieldMapping {
+    return WriteFieldMapping.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<WriteFieldMapping>, I>>(object: I): WriteFieldMapping {
+    const message = createBaseWriteFieldMapping();
+    message.skillInputName = object.skillInputName ?? "";
+    message.targetFieldId = object.targetFieldId ?? 0;
+    return message;
+  },
+};
+
+function createBaseUpdateMatchConfig(): UpdateMatchConfig {
+  return { skillInputName: "", targetFieldId: 0 };
+}
+
+export const UpdateMatchConfig: MessageFns<UpdateMatchConfig> = {
+  encode(message: UpdateMatchConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.skillInputName !== "") {
+      writer.uint32(10).string(message.skillInputName);
+    }
+    if (message.targetFieldId !== 0) {
+      writer.uint32(16).int32(message.targetFieldId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateMatchConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateMatchConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.skillInputName = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.targetFieldId = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateMatchConfig {
+    return {
+      skillInputName: isSet(object.skillInputName) ? globalThis.String(object.skillInputName) : "",
+      targetFieldId: isSet(object.targetFieldId) ? globalThis.Number(object.targetFieldId) : 0,
+    };
+  },
+
+  toJSON(message: UpdateMatchConfig): unknown {
+    const obj: any = {};
+    if (message.skillInputName !== "") {
+      obj.skillInputName = message.skillInputName;
+    }
+    if (message.targetFieldId !== 0) {
+      obj.targetFieldId = Math.round(message.targetFieldId);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateMatchConfig>, I>>(base?: I): UpdateMatchConfig {
+    return UpdateMatchConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateMatchConfig>, I>>(object: I): UpdateMatchConfig {
+    const message = createBaseUpdateMatchConfig();
+    message.skillInputName = object.skillInputName ?? "";
+    message.targetFieldId = object.targetFieldId ?? 0;
+    return message;
+  },
+};
+
+function createBaseReadConfig(): ReadConfig {
+  return { mode: "", sourceTableId: 0, rowIdSource: undefined, queryFilters: [], queryLimit: 0, fieldMappings: [] };
+}
+
+export const ReadConfig: MessageFns<ReadConfig> = {
+  encode(message: ReadConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.mode !== "") {
+      writer.uint32(10).string(message.mode);
+    }
+    if (message.sourceTableId !== 0) {
+      writer.uint32(16).int32(message.sourceTableId);
+    }
+    if (message.rowIdSource !== undefined) {
+      RowIdSource.encode(message.rowIdSource, writer.uint32(26).fork()).join();
+    }
+    for (const v of message.queryFilters) {
+      QueryFilter.encode(v!, writer.uint32(34).fork()).join();
+    }
+    if (message.queryLimit !== 0) {
+      writer.uint32(40).int32(message.queryLimit);
+    }
+    for (const v of message.fieldMappings) {
+      ReadFieldMapping.encode(v!, writer.uint32(50).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ReadConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseReadConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.mode = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.sourceTableId = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.rowIdSource = RowIdSource.decode(reader, reader.uint32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.queryFilters.push(QueryFilter.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.queryLimit = reader.int32();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.fieldMappings.push(ReadFieldMapping.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ReadConfig {
+    return {
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
+      sourceTableId: isSet(object.sourceTableId) ? globalThis.Number(object.sourceTableId) : 0,
+      rowIdSource: isSet(object.rowIdSource) ? RowIdSource.fromJSON(object.rowIdSource) : undefined,
+      queryFilters: globalThis.Array.isArray(object?.queryFilters)
+        ? object.queryFilters.map((e: any) => QueryFilter.fromJSON(e))
+        : [],
+      queryLimit: isSet(object.queryLimit) ? globalThis.Number(object.queryLimit) : 0,
+      fieldMappings: globalThis.Array.isArray(object?.fieldMappings)
+        ? object.fieldMappings.map((e: any) => ReadFieldMapping.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ReadConfig): unknown {
+    const obj: any = {};
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
+    if (message.sourceTableId !== 0) {
+      obj.sourceTableId = Math.round(message.sourceTableId);
+    }
+    if (message.rowIdSource !== undefined) {
+      obj.rowIdSource = RowIdSource.toJSON(message.rowIdSource);
+    }
+    if (message.queryFilters?.length) {
+      obj.queryFilters = message.queryFilters.map((e) => QueryFilter.toJSON(e));
+    }
+    if (message.queryLimit !== 0) {
+      obj.queryLimit = Math.round(message.queryLimit);
+    }
+    if (message.fieldMappings?.length) {
+      obj.fieldMappings = message.fieldMappings.map((e) => ReadFieldMapping.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ReadConfig>, I>>(base?: I): ReadConfig {
+    return ReadConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ReadConfig>, I>>(object: I): ReadConfig {
+    const message = createBaseReadConfig();
+    message.mode = object.mode ?? "";
+    message.sourceTableId = object.sourceTableId ?? 0;
+    message.rowIdSource = (object.rowIdSource !== undefined && object.rowIdSource !== null)
+      ? RowIdSource.fromPartial(object.rowIdSource)
+      : undefined;
+    message.queryFilters = object.queryFilters?.map((e) => QueryFilter.fromPartial(e)) || [];
+    message.queryLimit = object.queryLimit ?? 0;
+    message.fieldMappings = object.fieldMappings?.map((e) => ReadFieldMapping.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseQueryFilter(): QueryFilter {
+  return { fieldId: 0, operator: "", valueSource: undefined };
+}
+
+export const QueryFilter: MessageFns<QueryFilter> = {
+  encode(message: QueryFilter, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.fieldId !== 0) {
+      writer.uint32(8).int32(message.fieldId);
+    }
+    if (message.operator !== "") {
+      writer.uint32(18).string(message.operator);
+    }
+    if (message.valueSource !== undefined) {
+      RowIdSource.encode(message.valueSource, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QueryFilter {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseQueryFilter();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.fieldId = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.operator = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.valueSource = RowIdSource.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryFilter {
+    return {
+      fieldId: isSet(object.fieldId) ? globalThis.Number(object.fieldId) : 0,
+      operator: isSet(object.operator) ? globalThis.String(object.operator) : "",
+      valueSource: isSet(object.valueSource) ? RowIdSource.fromJSON(object.valueSource) : undefined,
+    };
+  },
+
+  toJSON(message: QueryFilter): unknown {
+    const obj: any = {};
+    if (message.fieldId !== 0) {
+      obj.fieldId = Math.round(message.fieldId);
+    }
+    if (message.operator !== "") {
+      obj.operator = message.operator;
+    }
+    if (message.valueSource !== undefined) {
+      obj.valueSource = RowIdSource.toJSON(message.valueSource);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<QueryFilter>, I>>(base?: I): QueryFilter {
+    return QueryFilter.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<QueryFilter>, I>>(object: I): QueryFilter {
+    const message = createBaseQueryFilter();
+    message.fieldId = object.fieldId ?? 0;
+    message.operator = object.operator ?? "";
+    message.valueSource = (object.valueSource !== undefined && object.valueSource !== null)
+      ? RowIdSource.fromPartial(object.valueSource)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseReadFieldMapping(): ReadFieldMapping {
+  return { sourceFieldId: 0, targetVariable: "" };
+}
+
+export const ReadFieldMapping: MessageFns<ReadFieldMapping> = {
+  encode(message: ReadFieldMapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.sourceFieldId !== 0) {
+      writer.uint32(8).int32(message.sourceFieldId);
+    }
+    if (message.targetVariable !== "") {
+      writer.uint32(18).string(message.targetVariable);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ReadFieldMapping {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseReadFieldMapping();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.sourceFieldId = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.targetVariable = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ReadFieldMapping {
+    return {
+      sourceFieldId: isSet(object.sourceFieldId) ? globalThis.Number(object.sourceFieldId) : 0,
+      targetVariable: isSet(object.targetVariable) ? globalThis.String(object.targetVariable) : "",
+    };
+  },
+
+  toJSON(message: ReadFieldMapping): unknown {
+    const obj: any = {};
+    if (message.sourceFieldId !== 0) {
+      obj.sourceFieldId = Math.round(message.sourceFieldId);
+    }
+    if (message.targetVariable !== "") {
+      obj.targetVariable = message.targetVariable;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ReadFieldMapping>, I>>(base?: I): ReadFieldMapping {
+    return ReadFieldMapping.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ReadFieldMapping>, I>>(object: I): ReadFieldMapping {
+    const message = createBaseReadFieldMapping();
+    message.sourceFieldId = object.sourceFieldId ?? 0;
+    message.targetVariable = object.targetVariable ?? "";
+    return message;
+  },
+};
+
+function createBaseTargetFieldMetadata(): TargetFieldMetadata {
+  return { fieldType: "", options: [], maxSelections: undefined, fieldName: undefined };
+}
+
+export const TargetFieldMetadata: MessageFns<TargetFieldMetadata> = {
+  encode(message: TargetFieldMetadata, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.fieldType !== "") {
+      writer.uint32(10).string(message.fieldType);
+    }
+    for (const v of message.options) {
+      writer.uint32(18).string(v!);
+    }
+    if (message.maxSelections !== undefined) {
+      writer.uint32(24).int32(message.maxSelections);
+    }
+    if (message.fieldName !== undefined) {
+      writer.uint32(34).string(message.fieldName);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TargetFieldMetadata {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTargetFieldMetadata();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.fieldType = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.options.push(reader.string());
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.maxSelections = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.fieldName = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TargetFieldMetadata {
+    return {
+      fieldType: isSet(object.fieldType) ? globalThis.String(object.fieldType) : "",
+      options: globalThis.Array.isArray(object?.options) ? object.options.map((e: any) => globalThis.String(e)) : [],
+      maxSelections: isSet(object.maxSelections) ? globalThis.Number(object.maxSelections) : undefined,
+      fieldName: isSet(object.fieldName) ? globalThis.String(object.fieldName) : undefined,
+    };
+  },
+
+  toJSON(message: TargetFieldMetadata): unknown {
+    const obj: any = {};
+    if (message.fieldType !== "") {
+      obj.fieldType = message.fieldType;
+    }
+    if (message.options?.length) {
+      obj.options = message.options;
+    }
+    if (message.maxSelections !== undefined) {
+      obj.maxSelections = Math.round(message.maxSelections);
+    }
+    if (message.fieldName !== undefined) {
+      obj.fieldName = message.fieldName;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TargetFieldMetadata>, I>>(base?: I): TargetFieldMetadata {
+    return TargetFieldMetadata.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TargetFieldMetadata>, I>>(object: I): TargetFieldMetadata {
+    const message = createBaseTargetFieldMetadata();
+    message.fieldType = object.fieldType ?? "";
+    message.options = object.options?.map((e) => e) || [];
+    message.maxSelections = object.maxSelections ?? undefined;
+    message.fieldName = object.fieldName ?? undefined;
+    return message;
+  },
+};
+
+function createBaseTableReference(): TableReference {
+  return { order: 0, field: "" };
+}
+
+export const TableReference: MessageFns<TableReference> = {
+  encode(message: TableReference, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.order !== 0) {
+      writer.uint32(8).int32(message.order);
+    }
+    if (message.field !== "") {
+      writer.uint32(18).string(message.field);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TableReference {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTableReference();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.order = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.field = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TableReference {
+    return {
+      order: isSet(object.order) ? globalThis.Number(object.order) : 0,
+      field: isSet(object.field) ? globalThis.String(object.field) : "",
+    };
+  },
+
+  toJSON(message: TableReference): unknown {
+    const obj: any = {};
+    if (message.order !== 0) {
+      obj.order = Math.round(message.order);
+    }
+    if (message.field !== "") {
+      obj.field = message.field;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TableReference>, I>>(base?: I): TableReference {
+    return TableReference.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TableReference>, I>>(object: I): TableReference {
+    const message = createBaseTableReference();
+    message.order = object.order ?? 0;
+    message.field = object.field ?? "";
+    return message;
+  },
+};
+
+function createBaseFieldSource(): FieldSource {
+  return { skillOutput: undefined, tableRef: undefined, skillInput: undefined };
+}
+
+export const FieldSource: MessageFns<FieldSource> = {
+  encode(message: FieldSource, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.skillOutput !== undefined) {
+      writer.uint32(10).string(message.skillOutput);
+    }
+    if (message.tableRef !== undefined) {
+      TableReference.encode(message.tableRef, writer.uint32(18).fork()).join();
+    }
+    if (message.skillInput !== undefined) {
+      writer.uint32(26).string(message.skillInput);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FieldSource {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFieldSource();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.skillOutput = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.tableRef = TableReference.decode(reader, reader.uint32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.skillInput = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FieldSource {
+    return {
+      skillOutput: isSet(object.skillOutput) ? globalThis.String(object.skillOutput) : undefined,
+      tableRef: isSet(object.tableRef) ? TableReference.fromJSON(object.tableRef) : undefined,
+      skillInput: isSet(object.skillInput) ? globalThis.String(object.skillInput) : undefined,
+    };
+  },
+
+  toJSON(message: FieldSource): unknown {
+    const obj: any = {};
+    if (message.skillOutput !== undefined) {
+      obj.skillOutput = message.skillOutput;
+    }
+    if (message.tableRef !== undefined) {
+      obj.tableRef = TableReference.toJSON(message.tableRef);
+    }
+    if (message.skillInput !== undefined) {
+      obj.skillInput = message.skillInput;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FieldSource>, I>>(base?: I): FieldSource {
+    return FieldSource.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FieldSource>, I>>(object: I): FieldSource {
+    const message = createBaseFieldSource();
+    message.skillOutput = object.skillOutput ?? undefined;
+    message.tableRef = (object.tableRef !== undefined && object.tableRef !== null)
+      ? TableReference.fromPartial(object.tableRef)
+      : undefined;
+    message.skillInput = object.skillInput ?? undefined;
+    return message;
+  },
+};
+
+function createBaseRowIdSource(): RowIdSource {
+  return {
+    staticId: undefined,
+    skillInput: undefined,
+    skillOutput: undefined,
+    tableRef: undefined,
+    useSourceRow: undefined,
+  };
+}
+
+export const RowIdSource: MessageFns<RowIdSource> = {
+  encode(message: RowIdSource, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.staticId !== undefined) {
+      writer.uint32(10).string(message.staticId);
+    }
+    if (message.skillInput !== undefined) {
+      writer.uint32(18).string(message.skillInput);
+    }
+    if (message.skillOutput !== undefined) {
+      writer.uint32(26).string(message.skillOutput);
+    }
+    if (message.tableRef !== undefined) {
+      TableReference.encode(message.tableRef, writer.uint32(34).fork()).join();
+    }
+    if (message.useSourceRow !== undefined) {
+      writer.uint32(40).bool(message.useSourceRow);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RowIdSource {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRowIdSource();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.staticId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.skillInput = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.skillOutput = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.tableRef = TableReference.decode(reader, reader.uint32());
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.useSourceRow = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RowIdSource {
+    return {
+      staticId: isSet(object.staticId) ? globalThis.String(object.staticId) : undefined,
+      skillInput: isSet(object.skillInput) ? globalThis.String(object.skillInput) : undefined,
+      skillOutput: isSet(object.skillOutput) ? globalThis.String(object.skillOutput) : undefined,
+      tableRef: isSet(object.tableRef) ? TableReference.fromJSON(object.tableRef) : undefined,
+      useSourceRow: isSet(object.useSourceRow) ? globalThis.Boolean(object.useSourceRow) : undefined,
+    };
+  },
+
+  toJSON(message: RowIdSource): unknown {
+    const obj: any = {};
+    if (message.staticId !== undefined) {
+      obj.staticId = message.staticId;
+    }
+    if (message.skillInput !== undefined) {
+      obj.skillInput = message.skillInput;
+    }
+    if (message.skillOutput !== undefined) {
+      obj.skillOutput = message.skillOutput;
+    }
+    if (message.tableRef !== undefined) {
+      obj.tableRef = TableReference.toJSON(message.tableRef);
+    }
+    if (message.useSourceRow !== undefined) {
+      obj.useSourceRow = message.useSourceRow;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RowIdSource>, I>>(base?: I): RowIdSource {
+    return RowIdSource.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RowIdSource>, I>>(object: I): RowIdSource {
+    const message = createBaseRowIdSource();
+    message.staticId = object.staticId ?? undefined;
+    message.skillInput = object.skillInput ?? undefined;
+    message.skillOutput = object.skillOutput ?? undefined;
+    message.tableRef = (object.tableRef !== undefined && object.tableRef !== null)
+      ? TableReference.fromPartial(object.tableRef)
+      : undefined;
+    message.useSourceRow = object.useSourceRow ?? undefined;
+    return message;
+  },
+};
+
+function createBaseFieldMapping(): FieldMapping {
+  return { source: undefined, targetFieldId: 0, targetFieldMetadata: undefined, appendMode: false };
+}
+
+export const FieldMapping: MessageFns<FieldMapping> = {
+  encode(message: FieldMapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      FieldSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    if (message.targetFieldId !== 0) {
+      writer.uint32(16).int32(message.targetFieldId);
+    }
+    if (message.targetFieldMetadata !== undefined) {
+      TargetFieldMetadata.encode(message.targetFieldMetadata, writer.uint32(26).fork()).join();
+    }
+    if (message.appendMode !== false) {
+      writer.uint32(32).bool(message.appendMode);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FieldMapping {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFieldMapping();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.source = FieldSource.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.targetFieldId = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.targetFieldMetadata = TargetFieldMetadata.decode(reader, reader.uint32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.appendMode = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FieldMapping {
+    return {
+      source: isSet(object.source) ? FieldSource.fromJSON(object.source) : undefined,
+      targetFieldId: isSet(object.targetFieldId) ? globalThis.Number(object.targetFieldId) : 0,
+      targetFieldMetadata: isSet(object.targetFieldMetadata)
+        ? TargetFieldMetadata.fromJSON(object.targetFieldMetadata)
+        : undefined,
+      appendMode: isSet(object.appendMode) ? globalThis.Boolean(object.appendMode) : false,
+    };
+  },
+
+  toJSON(message: FieldMapping): unknown {
+    const obj: any = {};
+    if (message.source !== undefined) {
+      obj.source = FieldSource.toJSON(message.source);
+    }
+    if (message.targetFieldId !== 0) {
+      obj.targetFieldId = Math.round(message.targetFieldId);
+    }
+    if (message.targetFieldMetadata !== undefined) {
+      obj.targetFieldMetadata = TargetFieldMetadata.toJSON(message.targetFieldMetadata);
+    }
+    if (message.appendMode !== false) {
+      obj.appendMode = message.appendMode;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FieldMapping>, I>>(base?: I): FieldMapping {
+    return FieldMapping.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FieldMapping>, I>>(object: I): FieldMapping {
+    const message = createBaseFieldMapping();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? FieldSource.fromPartial(object.source)
+      : undefined;
+    message.targetFieldId = object.targetFieldId ?? 0;
+    message.targetFieldMetadata = (object.targetFieldMetadata !== undefined && object.targetFieldMetadata !== null)
+      ? TargetFieldMetadata.fromPartial(object.targetFieldMetadata)
+      : undefined;
+    message.appendMode = object.appendMode ?? false;
+    return message;
+  },
+};
+
+function createBaseTableMapping(): TableMapping {
+  return {
+    order: 0,
+    targetTableId: 0,
+    rowAction: "",
+    rowIdSource: undefined,
+    mappings: [],
+    displayFieldId: 0,
+    mode: "",
+  };
+}
+
+export const TableMapping: MessageFns<TableMapping> = {
+  encode(message: TableMapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.order !== 0) {
+      writer.uint32(8).int32(message.order);
+    }
+    if (message.targetTableId !== 0) {
+      writer.uint32(16).int32(message.targetTableId);
+    }
+    if (message.rowAction !== "") {
+      writer.uint32(26).string(message.rowAction);
+    }
+    if (message.rowIdSource !== undefined) {
+      RowIdSource.encode(message.rowIdSource, writer.uint32(34).fork()).join();
+    }
+    for (const v of message.mappings) {
+      FieldMapping.encode(v!, writer.uint32(42).fork()).join();
+    }
+    if (message.displayFieldId !== 0) {
+      writer.uint32(48).int32(message.displayFieldId);
+    }
+    if (message.mode !== "") {
+      writer.uint32(58).string(message.mode);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TableMapping {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTableMapping();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.order = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.targetTableId = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.rowAction = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.rowIdSource = RowIdSource.decode(reader, reader.uint32());
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.mappings.push(FieldMapping.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.displayFieldId = reader.int32();
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.mode = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TableMapping {
+    return {
+      order: isSet(object.order) ? globalThis.Number(object.order) : 0,
+      targetTableId: isSet(object.targetTableId) ? globalThis.Number(object.targetTableId) : 0,
+      rowAction: isSet(object.rowAction) ? globalThis.String(object.rowAction) : "",
+      rowIdSource: isSet(object.rowIdSource) ? RowIdSource.fromJSON(object.rowIdSource) : undefined,
+      mappings: globalThis.Array.isArray(object?.mappings)
+        ? object.mappings.map((e: any) => FieldMapping.fromJSON(e))
+        : [],
+      displayFieldId: isSet(object.displayFieldId) ? globalThis.Number(object.displayFieldId) : 0,
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
+    };
+  },
+
+  toJSON(message: TableMapping): unknown {
+    const obj: any = {};
+    if (message.order !== 0) {
+      obj.order = Math.round(message.order);
+    }
+    if (message.targetTableId !== 0) {
+      obj.targetTableId = Math.round(message.targetTableId);
+    }
+    if (message.rowAction !== "") {
+      obj.rowAction = message.rowAction;
+    }
+    if (message.rowIdSource !== undefined) {
+      obj.rowIdSource = RowIdSource.toJSON(message.rowIdSource);
+    }
+    if (message.mappings?.length) {
+      obj.mappings = message.mappings.map((e) => FieldMapping.toJSON(e));
+    }
+    if (message.displayFieldId !== 0) {
+      obj.displayFieldId = Math.round(message.displayFieldId);
+    }
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TableMapping>, I>>(base?: I): TableMapping {
+    return TableMapping.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TableMapping>, I>>(object: I): TableMapping {
+    const message = createBaseTableMapping();
+    message.order = object.order ?? 0;
+    message.targetTableId = object.targetTableId ?? 0;
+    message.rowAction = object.rowAction ?? "";
+    message.rowIdSource = (object.rowIdSource !== undefined && object.rowIdSource !== null)
+      ? RowIdSource.fromPartial(object.rowIdSource)
+      : undefined;
+    message.mappings = object.mappings?.map((e) => FieldMapping.fromPartial(e)) || [];
+    message.displayFieldId = object.displayFieldId ?? 0;
+    message.mode = object.mode ?? "";
+    return message;
+  },
+};
+
+function createBaseOutputMappingConfig(): OutputMappingConfig {
+  return { mode: "", tableMappings: [] };
+}
+
+export const OutputMappingConfig: MessageFns<OutputMappingConfig> = {
+  encode(message: OutputMappingConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.mode !== "") {
+      writer.uint32(10).string(message.mode);
+    }
+    for (const v of message.tableMappings) {
+      TableMapping.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OutputMappingConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseOutputMappingConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.mode = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.tableMappings.push(TableMapping.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): OutputMappingConfig {
+    return {
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
+      tableMappings: globalThis.Array.isArray(object?.tableMappings)
+        ? object.tableMappings.map((e: any) => TableMapping.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: OutputMappingConfig): unknown {
+    const obj: any = {};
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
+    if (message.tableMappings?.length) {
+      obj.tableMappings = message.tableMappings.map((e) => TableMapping.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<OutputMappingConfig>, I>>(base?: I): OutputMappingConfig {
+    return OutputMappingConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OutputMappingConfig>, I>>(object: I): OutputMappingConfig {
+    const message = createBaseOutputMappingConfig();
+    message.mode = object.mode ?? "";
+    message.tableMappings = object.tableMappings?.map((e) => TableMapping.fromPartial(e)) || [];
     return message;
   },
 };
@@ -2734,15 +5989,162 @@ export const ServerConfig_ConfigEntry: MessageFns<ServerConfig_ConfigEntry> = {
   },
 };
 
+function createBaseSkillInputValue(): SkillInputValue {
+  return {
+    name: "",
+    type: "",
+    stringValue: undefined,
+    numberValue: undefined,
+    boolValue: undefined,
+    jsonValue: undefined,
+  };
+}
+
+export const SkillInputValue: MessageFns<SkillInputValue> = {
+  encode(message: SkillInputValue, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.type !== "") {
+      writer.uint32(18).string(message.type);
+    }
+    if (message.stringValue !== undefined) {
+      writer.uint32(26).string(message.stringValue);
+    }
+    if (message.numberValue !== undefined) {
+      writer.uint32(33).double(message.numberValue);
+    }
+    if (message.boolValue !== undefined) {
+      writer.uint32(40).bool(message.boolValue);
+    }
+    if (message.jsonValue !== undefined) {
+      writer.uint32(50).string(message.jsonValue);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SkillInputValue {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSkillInputValue();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.stringValue = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.numberValue = reader.double();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.boolValue = reader.bool();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.jsonValue = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SkillInputValue {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+      stringValue: isSet(object.stringValue) ? globalThis.String(object.stringValue) : undefined,
+      numberValue: isSet(object.numberValue) ? globalThis.Number(object.numberValue) : undefined,
+      boolValue: isSet(object.boolValue) ? globalThis.Boolean(object.boolValue) : undefined,
+      jsonValue: isSet(object.jsonValue) ? globalThis.String(object.jsonValue) : undefined,
+    };
+  },
+
+  toJSON(message: SkillInputValue): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.type !== "") {
+      obj.type = message.type;
+    }
+    if (message.stringValue !== undefined) {
+      obj.stringValue = message.stringValue;
+    }
+    if (message.numberValue !== undefined) {
+      obj.numberValue = message.numberValue;
+    }
+    if (message.boolValue !== undefined) {
+      obj.boolValue = message.boolValue;
+    }
+    if (message.jsonValue !== undefined) {
+      obj.jsonValue = message.jsonValue;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SkillInputValue>, I>>(base?: I): SkillInputValue {
+    return SkillInputValue.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SkillInputValue>, I>>(object: I): SkillInputValue {
+    const message = createBaseSkillInputValue();
+    message.name = object.name ?? "";
+    message.type = object.type ?? "";
+    message.stringValue = object.stringValue ?? undefined;
+    message.numberValue = object.numberValue ?? undefined;
+    message.boolValue = object.boolValue ?? undefined;
+    message.jsonValue = object.jsonValue ?? undefined;
+    return message;
+  },
+};
+
 function createBaseTriggerData(): TriggerData {
-  return { payload: {} };
+  return { skillInputs: [] };
 }
 
 export const TriggerData: MessageFns<TriggerData> = {
   encode(message: TriggerData, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    Object.entries(message.payload).forEach(([key, value]) => {
-      TriggerData_PayloadEntry.encode({ key: key as any, value }, writer.uint32(10).fork()).join();
-    });
+    for (const v of message.skillInputs) {
+      SkillInputValue.encode(v!, writer.uint32(10).fork()).join();
+    }
     return writer;
   },
 
@@ -2758,10 +6160,7 @@ export const TriggerData: MessageFns<TriggerData> = {
             break;
           }
 
-          const entry1 = TriggerData_PayloadEntry.decode(reader, reader.uint32());
-          if (entry1.value !== undefined) {
-            message.payload[entry1.key] = entry1.value;
-          }
+          message.skillInputs.push(SkillInputValue.decode(reader, reader.uint32()));
           continue;
         }
       }
@@ -2775,25 +6174,16 @@ export const TriggerData: MessageFns<TriggerData> = {
 
   fromJSON(object: any): TriggerData {
     return {
-      payload: isObject(object.payload)
-        ? Object.entries(object.payload).reduce<{ [key: string]: string }>((acc, [key, value]) => {
-          acc[key] = String(value);
-          return acc;
-        }, {})
-        : {},
+      skillInputs: globalThis.Array.isArray(object?.skillInputs)
+        ? object.skillInputs.map((e: any) => SkillInputValue.fromJSON(e))
+        : [],
     };
   },
 
   toJSON(message: TriggerData): unknown {
     const obj: any = {};
-    if (message.payload) {
-      const entries = Object.entries(message.payload);
-      if (entries.length > 0) {
-        obj.payload = {};
-        entries.forEach(([k, v]) => {
-          obj.payload[k] = v;
-        });
-      }
+    if (message.skillInputs?.length) {
+      obj.skillInputs = message.skillInputs.map((e) => SkillInputValue.toJSON(e));
     }
     return obj;
   },
@@ -2803,88 +6193,7 @@ export const TriggerData: MessageFns<TriggerData> = {
   },
   fromPartial<I extends Exact<DeepPartial<TriggerData>, I>>(object: I): TriggerData {
     const message = createBaseTriggerData();
-    message.payload = Object.entries(object.payload ?? {}).reduce<{ [key: string]: string }>((acc, [key, value]) => {
-      if (value !== undefined) {
-        acc[key] = globalThis.String(value);
-      }
-      return acc;
-    }, {});
-    return message;
-  },
-};
-
-function createBaseTriggerData_PayloadEntry(): TriggerData_PayloadEntry {
-  return { key: "", value: "" };
-}
-
-export const TriggerData_PayloadEntry: MessageFns<TriggerData_PayloadEntry> = {
-  encode(message: TriggerData_PayloadEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.key !== "") {
-      writer.uint32(10).string(message.key);
-    }
-    if (message.value !== "") {
-      writer.uint32(18).string(message.value);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): TriggerData_PayloadEntry {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseTriggerData_PayloadEntry();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.key = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.value = reader.string();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): TriggerData_PayloadEntry {
-    return {
-      key: isSet(object.key) ? globalThis.String(object.key) : "",
-      value: isSet(object.value) ? globalThis.String(object.value) : "",
-    };
-  },
-
-  toJSON(message: TriggerData_PayloadEntry): unknown {
-    const obj: any = {};
-    if (message.key !== "") {
-      obj.key = message.key;
-    }
-    if (message.value !== "") {
-      obj.value = message.value;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<TriggerData_PayloadEntry>, I>>(base?: I): TriggerData_PayloadEntry {
-    return TriggerData_PayloadEntry.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<TriggerData_PayloadEntry>, I>>(object: I): TriggerData_PayloadEntry {
-    const message = createBaseTriggerData_PayloadEntry();
-    message.key = object.key ?? "";
-    message.value = object.value ?? "";
+    message.skillInputs = object.skillInputs?.map((e) => SkillInputValue.fromPartial(e)) || [];
     return message;
   },
 };
@@ -3230,6 +6539,7 @@ function createBaseProcessMessageRequest(): ProcessMessageRequest {
     model: "",
     messageId: "",
     sessionId: "",
+    userApiKey: "",
   };
 }
 
@@ -3261,6 +6571,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     }
     if (message.sessionId !== "") {
       writer.uint32(74).string(message.sessionId);
+    }
+    if (message.userApiKey !== "") {
+      writer.uint32(82).string(message.userApiKey);
     }
     return writer;
   },
@@ -3344,6 +6657,14 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
           message.sessionId = reader.string();
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.userApiKey = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3368,6 +6689,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
       model: isSet(object.model) ? globalThis.String(object.model) : "",
       messageId: isSet(object.messageId) ? globalThis.String(object.messageId) : "",
       sessionId: isSet(object.sessionId) ? globalThis.String(object.sessionId) : "",
+      userApiKey: isSet(object.userApiKey) ? globalThis.String(object.userApiKey) : "",
     };
   },
 
@@ -3400,6 +6722,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     if (message.sessionId !== "") {
       obj.sessionId = message.sessionId;
     }
+    if (message.userApiKey !== "") {
+      obj.userApiKey = message.userApiKey;
+    }
     return obj;
   },
 
@@ -3421,28 +6746,19 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     message.model = object.model ?? "";
     message.messageId = object.messageId ?? "";
     message.sessionId = object.sessionId ?? "";
+    message.userApiKey = object.userApiKey ?? "";
     return message;
   },
 };
 
 function createBaseProcessMessageResponse(): ProcessMessageResponse {
-  return {
-    contentChunk: undefined,
-    ragContext: undefined,
-    complete: undefined,
-    error: undefined,
-    stepProgress: undefined,
-    timestamp: 0,
-  };
+  return { contentChunk: undefined, complete: undefined, error: undefined, stepProgress: undefined, timestamp: 0 };
 }
 
 export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
   encode(message: ProcessMessageResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.contentChunk !== undefined) {
       ContentChunk.encode(message.contentChunk, writer.uint32(10).fork()).join();
-    }
-    if (message.ragContext !== undefined) {
-      RagContext.encode(message.ragContext, writer.uint32(18).fork()).join();
     }
     if (message.complete !== undefined) {
       ProcessingComplete.encode(message.complete, writer.uint32(26).fork()).join();
@@ -3472,14 +6788,6 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
           }
 
           message.contentChunk = ContentChunk.decode(reader, reader.uint32());
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.ragContext = RagContext.decode(reader, reader.uint32());
           continue;
         }
         case 3: {
@@ -3526,7 +6834,6 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
   fromJSON(object: any): ProcessMessageResponse {
     return {
       contentChunk: isSet(object.contentChunk) ? ContentChunk.fromJSON(object.contentChunk) : undefined,
-      ragContext: isSet(object.ragContext) ? RagContext.fromJSON(object.ragContext) : undefined,
       complete: isSet(object.complete) ? ProcessingComplete.fromJSON(object.complete) : undefined,
       error: isSet(object.error) ? ProcessingError.fromJSON(object.error) : undefined,
       stepProgress: isSet(object.stepProgress) ? StepProgress.fromJSON(object.stepProgress) : undefined,
@@ -3538,9 +6845,6 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     const obj: any = {};
     if (message.contentChunk !== undefined) {
       obj.contentChunk = ContentChunk.toJSON(message.contentChunk);
-    }
-    if (message.ragContext !== undefined) {
-      obj.ragContext = RagContext.toJSON(message.ragContext);
     }
     if (message.complete !== undefined) {
       obj.complete = ProcessingComplete.toJSON(message.complete);
@@ -3564,9 +6868,6 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     const message = createBaseProcessMessageResponse();
     message.contentChunk = (object.contentChunk !== undefined && object.contentChunk !== null)
       ? ContentChunk.fromPartial(object.contentChunk)
-      : undefined;
-    message.ragContext = (object.ragContext !== undefined && object.ragContext !== null)
-      ? RagContext.fromPartial(object.ragContext)
       : undefined;
     message.complete = (object.complete !== undefined && object.complete !== null)
       ? ProcessingComplete.fromPartial(object.complete)
@@ -4066,222 +7367,6 @@ export const ContentChunk: MessageFns<ContentChunk> = {
     const message = createBaseContentChunk();
     message.content = object.content ?? "";
     message.sequence = object.sequence ?? 0;
-    return message;
-  },
-};
-
-function createBaseRagContext(): RagContext {
-  return { sources: [], contextSummary: "", totalSources: 0 };
-}
-
-export const RagContext: MessageFns<RagContext> = {
-  encode(message: RagContext, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.sources) {
-      RagSource.encode(v!, writer.uint32(10).fork()).join();
-    }
-    if (message.contextSummary !== "") {
-      writer.uint32(18).string(message.contextSummary);
-    }
-    if (message.totalSources !== 0) {
-      writer.uint32(24).int32(message.totalSources);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): RagContext {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseRagContext();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.sources.push(RagSource.decode(reader, reader.uint32()));
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.contextSummary = reader.string();
-          continue;
-        }
-        case 3: {
-          if (tag !== 24) {
-            break;
-          }
-
-          message.totalSources = reader.int32();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): RagContext {
-    return {
-      sources: globalThis.Array.isArray(object?.sources) ? object.sources.map((e: any) => RagSource.fromJSON(e)) : [],
-      contextSummary: isSet(object.contextSummary) ? globalThis.String(object.contextSummary) : "",
-      totalSources: isSet(object.totalSources) ? globalThis.Number(object.totalSources) : 0,
-    };
-  },
-
-  toJSON(message: RagContext): unknown {
-    const obj: any = {};
-    if (message.sources?.length) {
-      obj.sources = message.sources.map((e) => RagSource.toJSON(e));
-    }
-    if (message.contextSummary !== "") {
-      obj.contextSummary = message.contextSummary;
-    }
-    if (message.totalSources !== 0) {
-      obj.totalSources = Math.round(message.totalSources);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<RagContext>, I>>(base?: I): RagContext {
-    return RagContext.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<RagContext>, I>>(object: I): RagContext {
-    const message = createBaseRagContext();
-    message.sources = object.sources?.map((e) => RagSource.fromPartial(e)) || [];
-    message.contextSummary = object.contextSummary ?? "";
-    message.totalSources = object.totalSources ?? 0;
-    return message;
-  },
-};
-
-function createBaseRagSource(): RagSource {
-  return { documentId: "", title: "", similarity: 0, domainType: "", excerpt: "" };
-}
-
-export const RagSource: MessageFns<RagSource> = {
-  encode(message: RagSource, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.documentId !== "") {
-      writer.uint32(10).string(message.documentId);
-    }
-    if (message.title !== "") {
-      writer.uint32(18).string(message.title);
-    }
-    if (message.similarity !== 0) {
-      writer.uint32(29).float(message.similarity);
-    }
-    if (message.domainType !== "") {
-      writer.uint32(34).string(message.domainType);
-    }
-    if (message.excerpt !== "") {
-      writer.uint32(42).string(message.excerpt);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): RagSource {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseRagSource();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.documentId = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.title = reader.string();
-          continue;
-        }
-        case 3: {
-          if (tag !== 29) {
-            break;
-          }
-
-          message.similarity = reader.float();
-          continue;
-        }
-        case 4: {
-          if (tag !== 34) {
-            break;
-          }
-
-          message.domainType = reader.string();
-          continue;
-        }
-        case 5: {
-          if (tag !== 42) {
-            break;
-          }
-
-          message.excerpt = reader.string();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): RagSource {
-    return {
-      documentId: isSet(object.documentId) ? globalThis.String(object.documentId) : "",
-      title: isSet(object.title) ? globalThis.String(object.title) : "",
-      similarity: isSet(object.similarity) ? globalThis.Number(object.similarity) : 0,
-      domainType: isSet(object.domainType) ? globalThis.String(object.domainType) : "",
-      excerpt: isSet(object.excerpt) ? globalThis.String(object.excerpt) : "",
-    };
-  },
-
-  toJSON(message: RagSource): unknown {
-    const obj: any = {};
-    if (message.documentId !== "") {
-      obj.documentId = message.documentId;
-    }
-    if (message.title !== "") {
-      obj.title = message.title;
-    }
-    if (message.similarity !== 0) {
-      obj.similarity = message.similarity;
-    }
-    if (message.domainType !== "") {
-      obj.domainType = message.domainType;
-    }
-    if (message.excerpt !== "") {
-      obj.excerpt = message.excerpt;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<RagSource>, I>>(base?: I): RagSource {
-    return RagSource.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<RagSource>, I>>(object: I): RagSource {
-    const message = createBaseRagSource();
-    message.documentId = object.documentId ?? "";
-    message.title = object.title ?? "";
-    message.similarity = object.similarity ?? 0;
-    message.domainType = object.domainType ?? "";
-    message.excerpt = object.excerpt ?? "";
     return message;
   },
 };

@@ -2,10 +2,10 @@
  * ChatMessage Domain Entity
  *
  * Represents individual messages within a chat session.
- * Manages message content, metadata, RAG sources, and AI processing information.
+ * Manages message content, metadata, and AI processing information.
  *
  * AIDEV-NOTE: Domain entity for chat messages - contains business rules for
- * message validation, RAG source tracking, and conversation flow management
+ * message validation and conversation flow management
  */
 
 import { ChatId, ChatMessageId } from "../../shared/value-objects";
@@ -13,12 +13,6 @@ import type { AnyAttachmentMetadata } from "../../../domain/multimodal/value-obj
 import type { ExecutionStep } from "../value-objects/execution-step";
 
 export interface ChatMessageMetadata {
-  ragSources?: Array<{
-    documentId: string;
-    title: string;
-    similarity: number;
-    domainType: string;
-  }>;
   modelUsed?: string;
   processingTime?: number;
   tokenCount?: number;
@@ -87,14 +81,6 @@ export class ChatMessageEntity {
     return this.message.messageIndex;
   }
 
-  get hasRagSources(): boolean {
-    return !!(this.message.metadata?.ragSources && this.message.metadata.ragSources.length > 0);
-  }
-
-  get ragSourceCount(): number {
-    return this.message.metadata?.ragSources?.length || 0;
-  }
-
   get modelUsed(): string | undefined {
     return this.message.metadata?.modelUsed;
   }
@@ -127,26 +113,6 @@ export class ChatMessageEntity {
   }
 
   /**
-   * Get the highest similarity RAG source if available
-   */
-  get topRagSource(): { documentId: string; title: string; similarity: number; domainType: string } | null {
-    if (!this.message.metadata?.ragSources || this.message.metadata.ragSources.length === 0) {
-      return null;
-    }
-
-    return this.message.metadata.ragSources.reduce((top, current) => 
-      current.similarity > top.similarity ? current : top
-    );
-  }
-
-  /**
-   * Get RAG sources filtered by domain type
-   */
-  getRagSourcesByType(domainType: string): Array<{ documentId: string; title: string; similarity: number; domainType: string }> {
-    return this.message.metadata?.ragSources?.filter(source => source.domainType === domainType) || [];
-  }
-
-  /**
    * Validate message data before creation/update
    */
   static validateMessageData(data: CreateChatMessageData): { valid: boolean; errors: string[] } {
@@ -172,21 +138,6 @@ export class ChatMessageEntity {
       errors.push('Valid message index is required');
     }
 
-    // Validate RAG sources if provided
-    if (data.metadata?.ragSources) {
-      for (const source of data.metadata.ragSources) {
-        if (!source.documentId || !source.title || typeof source.similarity !== 'number') {
-          errors.push('Invalid RAG source data - documentId, title, and similarity are required');
-          break;
-        }
-        
-        if (source.similarity < 0 || source.similarity > 1) {
-          errors.push('RAG source similarity must be between 0 and 1');
-          break;
-        }
-      }
-    }
-
     return {
       valid: errors.length === 0,
       errors
@@ -203,16 +154,14 @@ export class ChatMessageEntity {
   }
 
   /**
-   * Create metadata for assistant messages with RAG sources
+   * Create metadata for assistant messages
    */
   static createAssistantMessageMetadata(
-    ragSources: Array<{ documentId: string; title: string; similarity: number; domainType: string }>,
     modelUsed: string,
     processingTime: number,
     tokenCount?: number
   ): ChatMessageMetadata {
     return {
-      ragSources,
       modelUsed,
       processingTime,
       tokenCount

@@ -51,9 +51,9 @@ export interface RowFilter {
   value: any;
 }
 
-export type FilterOperator = 
+export type FilterOperator =
   | 'eq'           // equals
-  | 'ne'           // not equals  
+  | 'ne'           // not equals
   | 'gt'           // greater than
   | 'gte'          // greater than or equal
   | 'lt'           // less than
@@ -64,7 +64,8 @@ export type FilterOperator =
   | 'not_in'       // value not in array
   | 'is_null'      // IS NULL
   | 'is_not_null'  // IS NOT NULL
-  | 'contains'     // Contains operator (for relation fields)
+  | 'contains'     // JSONB contains operator (for relation fields)
+  | 'not_contains' // JSONB not contains operator (for relation fields)
   | 'contained_by' // Contained by operator
   | 'has_key';     // Has key operator
 

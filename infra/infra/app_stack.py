@@ -4,15 +4,19 @@ from aws_cdk import (
     aws_ecs as ecs,
     aws_ecs_patterns as ecs_patterns,
     aws_elasticloadbalancingv2 as elbv2,
+    aws_codedeploy as codedeploy,
     aws_logs as logs,
     aws_iam as iam,
+    aws_ecr as ecr,
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as origins,
     aws_servicediscovery as servicediscovery,
+    aws_certificatemanager as acm,
     custom_resources,
     Aws,
     Duration,
     CfnOutput,
+    RemovalPolicy,
 )
 from constructs import Construct
 from .data_stack import DataStack
@@ -75,13 +79,105 @@ class AppStack(Stack):
             print("Building agent image from source")
             return ecs.ContainerImage.from_asset("../emery-agents")
 
-    def __init__(self, scope: Construct, construct_id: str, data_stack: DataStack, env_name: str, **kwargs) -> None:
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        data_stack: DataStack,
+        env_name: str,
+        waf_acl_arn: str = None,
+        **kwargs
+    ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         prefix = env_name.capitalize()
+        self.waf_acl_arn = waf_acl_arn
 
         # Default AWS region - can be overridden by CDK context
         aws_region = 'ap-southeast-2'
+
+        # ========== ECR REPOSITORIES WITH LIFECYCLE POLICIES ==========
+        # Shared lifecycle rules for all repositories
+        ecr_lifecycle_rules = [
+            ecr.LifecycleRule(
+                description="Delete untagged images after 1 day",
+                tag_status=ecr.TagStatus.UNTAGGED,
+                max_image_age=Duration.days(1),
+            ),
+            ecr.LifecycleRule(
+                description="Keep only last 10 tagged images",
+                tag_status=ecr.TagStatus.TAGGED,
+                tag_prefix_list=["develop-", "pr-", "tag-"],
+                max_image_count=10,
+            ),
+        ]
+
+        # Frontend container repository
+        self.frontend_repo = ecr.Repository(
+            self, "FrontendRepo",
+            repository_name="emery/frontend",
+            image_scan_on_push=True,
+            lifecycle_rules=ecr_lifecycle_rules,
+            removal_policy=RemovalPolicy.RETAIN,  # Don't delete repo on stack deletion
+        )
+
+        # Agent container repository
+        self.agent_repo = ecr.Repository(
+            self, "AgentRepo",
+            repository_name="emery/agent",
+            image_scan_on_push=True,
+            lifecycle_rules=ecr_lifecycle_rules,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+
+        # ========== CUSTOM DOMAIN CONFIGURATION ==========
+        # Domain and certificate configuration per environment
+        domain_config = {
+            "production": {
+                "domain": "braintable.app",
+                "certificate_arn": "arn:aws:acm:us-east-1:034165313651:certificate/c95eb22e-f4d8-4874-b381-f7a2cdaecc1a"
+            },
+            "staging": {
+                "domain": "staging.braintable.app",
+                "certificate_arn": "arn:aws:acm:us-east-1:772302459598:certificate/3cb8f028-6cfc-404f-bd9c-315ee0f77a1d"
+            },
+            "dev": {
+                "domain": "dev.braintable.app",
+                "certificate_arn": "arn:aws:acm:us-east-1:463735866328:certificate/2d76beac-68ca-4e75-8cb2-29c4e61b195c"
+            },
+        }
+
+        custom_domain = domain_config.get(env_name, {}).get("domain")
+        certificate_arn = domain_config.get(env_name, {}).get("certificate_arn")
+
+        # ========== ENVIRONMENT-SPECIFIC RESOURCE SIZING ==========
+        # Configure resources based on environment needs
+        sizing_config = {
+            "production": {
+                "frontend_min_capacity": 2,   # HA for paying users
+                "chat_cpu": 512,              # 0.5 vCPU - LLM calls are I/O bound
+                "chat_memory": 1024,          # 1 GB sufficient for chat
+            },
+            "staging": {
+                "frontend_min_capacity": 1,
+                "chat_cpu": 512,
+                "chat_memory": 1024,
+            },
+            "dev": {
+                "frontend_min_capacity": 1,   # Single task for dev
+                "chat_cpu": 512,
+                "chat_memory": 1024,
+            }
+        }
+        sizing = sizing_config.get(env_name, sizing_config["dev"])
+
+        # Import the ACM certificate (created in us-east-1 for CloudFront)
+        certificate = None
+        if certificate_arn:
+            certificate = acm.Certificate.from_certificate_arn(
+                self, f"{prefix}Certificate",
+                certificate_arn=certificate_arn
+            )
 
         # ========== ECS CLUSTER ==========
         # Create an ECS cluster in the VPC from data stack
@@ -116,7 +212,6 @@ class AppStack(Stack):
             image=app_image,
             command=["migrate"],
             environment={
-                "RUN_SEEDS": "true",  # Enable database seeding
                 "NODE_ENV": "production",
             },
             secrets={
@@ -134,6 +229,9 @@ class AppStack(Stack):
             f"{prefix}FrontendContainer",
             image=app_image,
             port_mappings=[ecs.PortMapping(container_port=3000)],
+            environment={
+                "REDIS_URL": data_stack.redis_endpoint,  # ElastiCache for caching
+            },
             secrets={
                 "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
                 **data_stack.app_secrets_map
@@ -153,6 +251,9 @@ class AppStack(Stack):
         )
 
         # Create the Fargate service using custom task definition
+        # Production uses CODE_DEPLOY for blue/green, dev/staging use rolling deployments
+        is_production = env_name == "production"
+
         frontend_service = ecs_patterns.ApplicationLoadBalancedFargateService(
             self, f"{prefix}FrontendService",
             cluster=cluster,
@@ -160,6 +261,15 @@ class AppStack(Stack):
             task_definition=frontend_task_definition,
             desired_count=1,
             public_load_balancer=True,
+            deployment_controller=ecs.DeploymentController(
+                type=ecs.DeploymentControllerType.CODE_DEPLOY
+            ) if is_production else None,
+        )
+
+        # Increase ALB idle timeout from default 60s to 300s (5 minutes)
+        # Required for long-running chat/agent operations
+        frontend_service.load_balancer.set_attribute(
+            'idle_timeout.timeout_seconds', '300'
         )
 
         # Grant database access to frontend service
@@ -169,7 +279,14 @@ class AppStack(Stack):
             "Allow frontend service to access database"
         )
 
-        # Configure the health check for the frontend service
+        # Grant Redis access to frontend service
+        data_stack.redis_sg.add_ingress_rule(
+            peer=frontend_service.service.connections.security_groups[0],
+            connection=ec2.Port.tcp(6379),
+            description="Allow frontend service to access ElastiCache Redis"
+        )
+
+        # Configure the health check for the frontend service (Blue target group)
         frontend_service.target_group.configure_health_check(
             path="/api/health",
             timeout=Duration.seconds(10),
@@ -177,13 +294,15 @@ class AppStack(Stack):
             unhealthy_threshold_count=3,
             interval=Duration.seconds(30),
         )
-        
-        # AIDEV-NOTE: Configure deployment settings for frontend service stability
-        cfn_frontend_service = frontend_service.service.node.default_child
-        cfn_frontend_service.deployment_configuration = {
-            "minimumHealthyPercent": 50,
-            "maximumPercent": 200
-        }
+
+        # AIDEV-NOTE: Production uses blue/green (CodeDeploy), dev/staging use rolling deployments
+        if not is_production:
+            # Dev/Staging: Configure deployment settings for rolling updates
+            cfn_frontend_service = frontend_service.service.node.default_child
+            cfn_frontend_service.deployment_configuration = {
+                "minimumHealthyPercent": 50,
+                "maximumPercent": 200
+            }
         
         # AIDEV-NOTE: Add ECR permissions to task execution role for pulling images
         frontend_service.task_definition.execution_role.add_managed_policy(
@@ -206,7 +325,7 @@ class AppStack(Stack):
         # AIDEV-NOTE: Configure auto-scaling for frontend service
         # Web application that needs to scale based on user traffic
         frontend_scaling = frontend_service.service.auto_scale_task_count(
-            min_capacity=2,  # Run 2 tasks minimum for HA across AZs
+            min_capacity=sizing["frontend_min_capacity"],  # Environment-specific
             max_capacity=20  # Can scale up to 20 tasks during traffic spikes
         )
 
@@ -217,23 +336,116 @@ class AppStack(Stack):
             scale_out_cooldown=Duration.seconds(60)   # Fast scale-out for user traffic
         )
 
+        # ========== BLUE/GREEN DEPLOYMENT WITH CODEDEPLOY (Production Only) ==========
+        if is_production:
+            # CodeDeploy manages traffic shifting between blue (current) and green (new) target groups
+
+            # Create Green target group for blue/green deployments
+            green_target_group = elbv2.ApplicationTargetGroup(
+                self, f"{prefix}FrontendGreenTG",
+                vpc=data_stack.vpc,
+                port=3000,
+                protocol=elbv2.ApplicationProtocol.HTTP,
+                target_type=elbv2.TargetType.IP,
+                health_check=elbv2.HealthCheck(
+                    path="/api/health",
+                    timeout=Duration.seconds(10),
+                    healthy_threshold_count=2,
+                    unhealthy_threshold_count=3,
+                    interval=Duration.seconds(30),
+                ),
+            )
+
+            # Create test listener for green environment (port 3001)
+            # Allows testing new deployment before switching traffic
+            test_listener = frontend_service.load_balancer.add_listener(
+                f"{prefix}FrontendTestListener",
+                port=3001,
+                protocol=elbv2.ApplicationProtocol.HTTP,
+                default_target_groups=[green_target_group],
+            )
+
+            codedeploy_app = codedeploy.EcsApplication(
+                self, f"{prefix}FrontendCodeDeployApp",
+                application_name=f"{prefix}-Frontend-BlueGreen",
+            )
+
+            deployment_group = codedeploy.EcsDeploymentGroup(
+                self, f"{prefix}FrontendDeploymentGroup",
+                application=codedeploy_app,
+                deployment_group_name=f"{prefix}-Frontend-DeploymentGroup",
+                service=frontend_service.service,
+                blue_green_deployment_config=codedeploy.EcsBlueGreenDeploymentConfig(
+                    blue_target_group=frontend_service.target_group,
+                    green_target_group=green_target_group,
+                    listener=frontend_service.listener,
+                    test_listener=test_listener,
+                    deployment_approval_wait_time=Duration.hours(1),  # Manual approval timeout
+                ),
+                deployment_config=codedeploy.EcsDeploymentConfig.ALL_AT_ONCE,
+                auto_rollback=codedeploy.AutoRollbackConfig(
+                    failed_deployment=True,
+                    stopped_deployment=True,
+                ),
+            )
+
+            # Output CodeDeploy info for easy access
+            CfnOutput(
+                self, f"{prefix}CodeDeployApp",
+                value=codedeploy_app.application_name,
+                description="CodeDeploy application name for blue/green deployments"
+            )
+            CfnOutput(
+                self, f"{prefix}CodeDeployGroup",
+                value=deployment_group.deployment_group_name,
+                description="CodeDeploy deployment group name"
+            )
+            CfnOutput(
+                self, f"{prefix}TestListenerURL",
+                value=f"http://{frontend_service.load_balancer.load_balancer_dns_name}:3001",
+                description="Test listener URL for green environment (use to test before approving deployment)"
+            )
+
+        # Create the ALB origin once for reuse
+        alb_origin = origins.LoadBalancerV2Origin(
+            frontend_service.load_balancer,
+            protocol_policy=cloudfront.OriginProtocolPolicy.HTTP_ONLY
+        )
+
         # Create CloudFront distribution for static URL routing
         cloudfront_distribution = cloudfront.Distribution(
             self, f"{prefix}CloudFrontDistribution",
             default_behavior=cloudfront.BehaviorOptions(
-                origin=origins.LoadBalancerV2Origin(
-                    frontend_service.load_balancer,
-                    protocol_policy=cloudfront.OriginProtocolPolicy.HTTP_ONLY
-                ),
+                origin=alb_origin,
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
                 cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,  # Disable caching for dynamic content
                 compress=True,
                 origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER
             ),
+            # AIDEV-NOTE: Cache static assets at edge - Next.js static files are immutable (hashed filenames)
+            additional_behaviors={
+                "/_next/static/*": cloudfront.BehaviorOptions(
+                    origin=alb_origin,
+                    viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                    cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                    compress=True,
+                ),
+                "/favicon.ico": cloudfront.BehaviorOptions(
+                    origin=alb_origin,
+                    viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                    cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                    compress=True,
+                ),
+            },
+            # Custom domain configuration
+            domain_names=[custom_domain] if custom_domain else None,
+            certificate=certificate,
+            # WAF protection - rate limiting and managed security rules
+            web_acl_id=self.waf_acl_arn,
             comment=f"CloudFront distribution for {prefix} Emery application",
             enabled=True,
-            price_class=cloudfront.PriceClass.PRICE_CLASS_100  # Use only North America and Europe for cost savings
+            price_class=cloudfront.PriceClass.PRICE_CLASS_ALL  # All edge locations including APAC (Sydney)
         )
 
         # Output the CloudFront URL for easy access
@@ -242,6 +454,14 @@ class AppStack(Stack):
             value=f"https://{cloudfront_distribution.distribution_domain_name}",
             description="Static CloudFront URL for the application (never changes)"
         )
+
+        # Output custom domain URL if configured
+        if custom_domain:
+            CfnOutput(
+                self, f"{prefix}CustomDomainURL",
+                value=f"https://{custom_domain}",
+                description="Custom domain URL for the application"
+            )
 
         # Also output the direct ALB URL for comparison
         CfnOutput(
@@ -358,8 +578,8 @@ class AppStack(Stack):
             self, f"{prefix}AgentChatService",
             cluster=cluster,
             service_name=f"{prefix}-Agent-Chat",
-            cpu=1024,  # 1 vCPU for AI processing
-            memory_limit_mib=2048,  # 2 GB for chat and agent execution
+            cpu=sizing["chat_cpu"],  # Environment-specific - LLM calls are I/O bound
+            memory_limit_mib=sizing["chat_memory"],  # Environment-specific
             desired_count=1,  # Start with 1 task, scale up as needed
             task_image_options=ecs_patterns.NetworkLoadBalancedTaskImageOptions(
                 image=self._get_agent_image(),
@@ -377,7 +597,7 @@ class AppStack(Stack):
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
             public_load_balancer=False,
-            health_check_grace_period=Duration.seconds(300),
+            health_check_grace_period=Duration.seconds(600),  # Increased from 300s to allow for large image download
             cloud_map_options=ecs.CloudMapOptions(
                 name="agent-chat",
                 cloud_map_namespace=data_stack.namespace,
@@ -393,6 +613,14 @@ class AppStack(Stack):
             "Allow agent chat service to access database"
         )
 
+        # Allow NLB health checks and traffic on gRPC port - VPC CIDR only
+        # SECURITY: Restrict to VPC internal traffic only (fixes 0.0.0.0/0 exposure)
+        agent_chat_service.service.connections.allow_from(
+            ec2.Peer.ipv4(data_stack.vpc.vpc_cidr_block),
+            ec2.Port.tcp(50051),
+            "Allow internal gRPC traffic from VPC only"
+        )
+
         # Set custom command for chat service container
         cfn_chat_task_def = agent_chat_service.task_definition.node.default_child
         cfn_chat_task_def.add_property_override(
@@ -402,12 +630,12 @@ class AppStack(Stack):
 
         # Configure TCP health check for chat service
         agent_chat_service.target_group.configure_health_check(
-            port="50051",
             protocol=elbv2.Protocol.TCP,
+            port="50051",  # Port as string (CDK requirement)
             interval=Duration.seconds(30),
             timeout=Duration.seconds(10),
-            healthy_threshold_count=2,
-            unhealthy_threshold_count=2,
+            healthy_threshold_count=3,  # Increased from 2 for more lenient checks
+            unhealthy_threshold_count=3,  # Increased from 2 to avoid premature task kills
         )
 
         # Add ECR permissions for chat service
@@ -430,8 +658,8 @@ class AppStack(Stack):
         # Configure deployment settings for chat service
         cfn_chat_service = agent_chat_service.service.node.default_child
         cfn_chat_service.deployment_configuration = {
-            "minimumHealthyPercent": 0,
-            "maximumPercent": 100
+            "minimumHealthyPercent": 100,  # Keep existing task running during deployment
+            "maximumPercent": 200  # Allow new task to start before old one stops
         }
 
         # Configure auto-scaling for chat service
@@ -470,7 +698,7 @@ class AppStack(Stack):
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
             public_load_balancer=False,
-            health_check_grace_period=Duration.seconds(300),
+            health_check_grace_period=Duration.seconds(600),  # Increased from 300s to allow for large image download
             cloud_map_options=ecs.CloudMapOptions(
                 name="agent-table",
                 cloud_map_namespace=data_stack.namespace,
@@ -486,6 +714,14 @@ class AppStack(Stack):
             "Allow agent table service to access database"
         )
 
+        # Allow NLB health checks and traffic on gRPC port - VPC CIDR only
+        # SECURITY: Restrict to VPC internal traffic only (fixes 0.0.0.0/0 exposure)
+        agent_table_service.service.connections.allow_from(
+            ec2.Peer.ipv4(data_stack.vpc.vpc_cidr_block),
+            ec2.Port.tcp(50052),
+            "Allow internal gRPC traffic from VPC only"
+        )
+
         # Set custom command for table service container
         cfn_table_task_def = agent_table_service.task_definition.node.default_child
         cfn_table_task_def.add_property_override(
@@ -495,12 +731,12 @@ class AppStack(Stack):
 
         # Configure TCP health check for table service
         agent_table_service.target_group.configure_health_check(
-            port="50052",
             protocol=elbv2.Protocol.TCP,
+            port="50052",  # Port as string (CDK requirement)
             interval=Duration.seconds(30),
             timeout=Duration.seconds(10),
-            healthy_threshold_count=2,
-            unhealthy_threshold_count=2,
+            healthy_threshold_count=3,  # Increased from 2 for more lenient checks
+            unhealthy_threshold_count=3,  # Increased from 2 to avoid premature task kills
         )
 
         # Add ECR permissions for table service
@@ -523,8 +759,8 @@ class AppStack(Stack):
         # Configure deployment settings for table service
         cfn_table_service = agent_table_service.service.node.default_child
         cfn_table_service.deployment_configuration = {
-            "minimumHealthyPercent": 0,
-            "maximumPercent": 100
+            "minimumHealthyPercent": 100,  # Keep existing task running during deployment
+            "maximumPercent": 200  # Allow new task to start before old one stops
         }
 
         # Configure auto-scaling for table service
@@ -551,10 +787,11 @@ class AppStack(Stack):
                 "agent-table.emery.local:50052"
             )
 
-            # Also inject the frontend's own public URL for NextAuth (use CloudFront URL)
+            # Also inject the frontend's own public URL for NextAuth (use custom domain if available)
+            nextauth_url = f"https://{custom_domain}" if custom_domain else f"https://{cloudfront_distribution.distribution_domain_name}"
             frontend_service.task_definition.default_container.add_environment(
                 "NEXTAUTH_URL",
-                f"https://{cloudfront_distribution.distribution_domain_name}"
+                nextauth_url
             )
 
 
@@ -618,10 +855,11 @@ class AppStack(Stack):
                 "AWS_REGION",
                 aws_region
             )
-            # Add NextJS base URL for agent callbacks to API routes
+            # Add NextJS base URL for agent callbacks to API routes (use custom domain if available)
+            nextjs_base_url = f"https://{custom_domain}" if custom_domain else f"https://{cloudfront_distribution.distribution_domain_name}"
             agent_chat_service.task_definition.default_container.add_environment(
                 "NEXTJS_BASE_URL",
-                f"https://{cloudfront_distribution.distribution_domain_name}"
+                nextjs_base_url
             )
 
         # Add S3 and AWS configuration to table service

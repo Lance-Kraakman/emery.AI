@@ -17,7 +17,9 @@ services:
       # Override production NODE_ENV from integration.yml
       NODE_ENV: development
     volumes:
-      # Mount source code for live reloading (includes node_modules from host)
+      # Mount source code for live reloading
       - ../..:/app
-      # Prevent overwriting .next directory to avoid permission issues
+      # CRITICAL: Keep container's node_modules (Linux binaries, not macOS)
+      - /app/node_modules
+      # Keep container's .next directory to avoid permission/cache issues
       - /app/.next

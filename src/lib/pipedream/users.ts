@@ -56,7 +56,7 @@ export async function deletePipedreamUser(userId: string): Promise<void> {
 }
 
 /**
- * Get user's OAuth connections
+ * Get user's Connections
  */
 export async function getUserConnections(userId: string) {
   if (!pipedreamClient) {

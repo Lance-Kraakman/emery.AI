@@ -13,6 +13,7 @@ import { getVisibleFields } from '@/components/puck/lib/field-visibility-utils'
 import type { FieldDTO } from '@/app/mappers/field-mapper'
 import type { ViewDTO } from '@/app/mappers/view-mapper'
 import type { TableDTO } from '@/app/mappers/table-mapper'
+import type { DSGRow } from '@/app/mappers/dsg-mapper'
 import type { FieldValue as DomainFieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field'
 import type {
@@ -28,7 +29,12 @@ import type {
   SingleSelectCellConfiguration,
   MultiSelectValue,
   MultiSelectCellConfiguration,
+  JSONValue,
+  JSONCellConfiguration,
 } from './cell-types'
+import { TextCell } from './cells/TextCell'
+import { NumberCell } from './cells/NumberCell'
+import { DateCell } from './cells/DateCell'
 import {
   ID_COLUMN_WIDTH,
   ADD_COLUMN_BUTTON_WIDTH,
@@ -55,6 +61,7 @@ interface UseGridColumnsParams {
   organizationId: number
   tableId: number
   availableTables: TableDTO[]
+  data: DSGRow[]  // Row data array for document cell to access rowId
   onUpdateRow: (rowId: string, fieldId: number, value: DomainFieldValue) => Promise<any>
   onEditField: (field: FieldDTO) => void
   onDeleteField: (fieldName: string) => void
@@ -69,6 +76,7 @@ interface UseGridColumnsParams {
   EmbeddingCell?: CellComponent<EmbeddingValue, EmbeddingCellConfiguration>
   SingleSelectCell?: CellComponent<SingleSelectValue, SingleSelectCellConfiguration>
   MultiSelectCell?: CellComponent<MultiSelectValue, MultiSelectCellConfiguration>
+  JSONCell?: CellComponent<JSONValue, JSONCellConfiguration>
 }
 
 /**
@@ -87,6 +95,7 @@ export function useGridColumns({
   organizationId,
   tableId,
   availableTables,
+  data,
   onUpdateRow,
   onEditField,
   onDeleteField,
@@ -100,6 +109,7 @@ export function useGridColumns({
   EmbeddingCell,
   SingleSelectCell,
   MultiSelectCell,
+  JSONCell,
 }: UseGridColumnsParams) {
   console.log('[USE GRID COLUMNS] Hook called', {
     fieldsCount: fields.length,
@@ -151,28 +161,39 @@ export function useGridColumns({
         case 'text':
         case 'email':
         case 'phone':
-          // Use built-in textColumn - handles all text editing automatically
-          // Email and phone validation happens at domain layer
-          columnConfig = textColumn
+          // Custom TextCell with tooltip support
+          columnConfig = {
+            ...textColumn,
+            component: TextCell,
+            columnData: { placeholder: '' }
+          }
           break
 
         case 'number':
-          // Use built-in floatColumn - handles number parsing/formatting
-          columnConfig = floatColumn
+          // Custom NumberCell with tooltip support
+          columnConfig = {
+            ...floatColumn,
+            component: NumberCell,
+            columnData: { placeholder: '' }
+          }
           basis = MEDIUM_COLUMN_BASIS
           minWidth = MEDIUM_COLUMN_MIN_WIDTH
           break
 
         case 'boolean':
-          // Use built-in checkboxColumn - handles boolean rendering
+          // Use built-in checkboxColumn - no overflow possible
           columnConfig = checkboxColumn
           basis = SMALL_COLUMN_BASIS
           minWidth = SMALL_COLUMN_MIN_WIDTH
           break
 
         case 'date':
-          // Use built-in dateColumn - handles date formatting
-          columnConfig = dateColumn
+          // Custom DateCell with tooltip support
+          columnConfig = {
+            ...dateColumn,
+            component: DateCell,
+            columnData: { format: 'date' }
+          }
           break
 
         case 'relation':
@@ -216,7 +237,7 @@ export function useGridColumns({
               ...textColumn,  // ✅ CRITICAL: Extend base column type for proper data binding
               component: DocumentCell,
               disableKeys: true,
-              columnData: { field, organizationId, tableId, onUpdateRow }
+              columnData: { field, organizationId, tableId, onUpdateRow, data }
             }
             basis = WIDE_COLUMN_BASIS
             minWidth = WIDE_COLUMN_MIN_WIDTH
@@ -278,6 +299,25 @@ export function useGridColumns({
             }
             basis = WIDE_COLUMN_BASIS
             minWidth = MULTI_SELECT_MIN_WIDTH
+          } else {
+            columnConfig = textColumn
+          }
+          break
+
+        case 'json':
+          // Custom component for JSON data
+          if (JSONCell) {
+            columnConfig = {
+              ...textColumn,  // ✅ CRITICAL: Extend base column type for proper data binding
+              component: JSONCell,
+              disableKeys: true,
+              columnData: {
+                field,
+                onUpdateRow
+              }
+            }
+            basis = WIDE_COLUMN_BASIS
+            minWidth = WIDE_COLUMN_MIN_WIDTH
           } else {
             columnConfig = textColumn
           }
@@ -363,5 +403,5 @@ export function useGridColumns({
     columns.push(addColumnCol)
 
     return columns
-  }, [fields, fieldMappings, currentView, organizationId, tableId, onUpdateRow, onEditField, onDeleteField, onAddColumn, onFieldUpdate, availableTables, onSort, onClearSort, RelationCell, FileCell, DocumentCell, EmbeddingCell, SingleSelectCell, MultiSelectCell])
+  }, [fields, fieldMappings, currentView, organizationId, tableId, data, onUpdateRow, onEditField, onDeleteField, onAddColumn, onFieldUpdate, availableTables, onSort, onClearSort, RelationCell, FileCell, DocumentCell, EmbeddingCell, SingleSelectCell, MultiSelectCell])
 }

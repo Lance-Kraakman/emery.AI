@@ -2,14 +2,20 @@
 
 // AIDEV-NOTE: Client component for rendering public Puck pages
 // Uses Puck's Render component with app/page theme configuration
+// Calls resolveAllData to execute component resolveData functions (e.g., DataBlock filters)
 
-import { Render } from "@measured/puck"
+import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
+import { Render, resolveAllData, type Data } from "@measured/puck"
 import "@measured/puck/puck.css"
 import { config } from "@/components/puck/config"
 import type { PageDTO } from "@/app/mappers/puck-page-mapper"
 import type { AppDTO } from "@/app/mappers/puck-app-mapper"
 import { ThemeConfig } from "@/ddd/domain/puck/value-objects/theme-config"
-import { LinkContextProvider } from "@/components/puck/link-context"
+import { PageContextProvider } from "@/components/puck/contexts/PageContext"
+import { StateProvider } from "@/components/puck/contexts/StateContext"
+import { PageDialogsRenderer } from "@/components/puck/components/PageDialogsRenderer"
+import { Loading } from "@/components/ui/loading"
 
 interface PublicPageRendererProps {
   page: PageDTO
@@ -23,45 +29,74 @@ interface PublicPageRendererProps {
  * PublicPageRenderer - Renders a published Puck page
  *
  * Features:
+ * - Resolves component data (DataBlock filters, etc.) with query params
  * - Applies app-level and page-level themes
- * - Renders Puck template data
+ * - Provides QueryParamProvider for client-side variable resolution
  * - No authentication or editing capabilities
  */
 export function PublicPageRenderer({ page, app, orgSlug, appSlug, pages }: PublicPageRendererProps) {
+  const searchParams = useSearchParams()
+  const [resolvedData, setResolvedData] = useState<Data | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  // Convert URLSearchParams to Record for QueryParamContext and resolveAllData
+  const queryParamsObject: Record<string, string | string[]> = {}
+  searchParams.forEach((value, key) => {
+    const existing = queryParamsObject[key]
+    if (existing) {
+      if (Array.isArray(existing)) {
+        existing.push(value)
+      } else {
+        queryParamsObject[key] = [existing, value]
+      }
+    } else {
+      queryParamsObject[key] = value
+    }
+  })
+
+  // Resolve component data (calls resolveData on components like DataBlock)
+  // Pass isPublicPage flag and pageId so DataBlock can use public view execution
+  useEffect(() => {
+    async function resolveData() {
+      setLoading(true)
+      try {
+        const resolved = await resolveAllData(
+          page.templateData,
+          config,
+          {
+            ...queryParamsObject,
+            isPublicPage: true,
+            pageId: page.id,
+          }
+        )
+        setResolvedData(resolved)
+      } catch (error) {
+        console.error('[PublicPageRenderer] Error resolving data:', error)
+        // Fall back to unresolved data on error
+        setResolvedData(page.templateData as Data)
+      } finally {
+        setLoading(false)
+      }
+    }
+    resolveData()
+  }, [page.templateData, page.id, searchParams])
+
+  // Show loading state while resolving data
+  if (loading || !resolvedData) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center">
+        <Loading text="Loading..." />
+      </div>
+    )
+  }
+
   // Determine effective theme (page theme overrides app theme)
   const appTheme = app.themeConfig ? ThemeConfig.fromJSON(app.themeConfig) : ThemeConfig.default()
   const pageTheme = page.themeConfig ? ThemeConfig.fromJSON(page.themeConfig) : undefined
   const effectiveTheme = pageTheme ? ThemeConfig.merge(appTheme, pageTheme) : appTheme
 
-  // Apply theme as CSS variables
-  const themeStyles: Record<string, string | number> = {
-    '--color-primary': effectiveTheme.colors.primary,
-    '--color-secondary': effectiveTheme.colors.secondary,
-    '--color-background': effectiveTheme.colors.background,
-    '--color-surface': effectiveTheme.colors.surface,
-    '--color-text': effectiveTheme.colors.text,
-    '--color-text-muted': effectiveTheme.colors.textMuted,
-    '--color-border': effectiveTheme.colors.border,
-    '--color-link': effectiveTheme.colors.link,
-    '--color-success': effectiveTheme.colors.success,
-    '--color-warning': effectiveTheme.colors.warning,
-    '--color-error': effectiveTheme.colors.error,
-    '--font-family': effectiveTheme.typography.fontFamily,
-    '--font-size': effectiveTheme.typography.fontSize,
-    '--heading-font-weight': effectiveTheme.typography.headingFontWeight,
-    '--spacing-unit': effectiveTheme.spacing.unit,
-    '--spacing-scale': effectiveTheme.spacing.scale,
-    '--border-radius': effectiveTheme.borders.radius,
-    '--border-width': effectiveTheme.borders.width
-  }
-
-  // Optionally apply heading color
-  if (effectiveTheme.typography.headingColor) {
-    themeStyles['--heading-color'] = effectiveTheme.typography.headingColor
-  }
-
   return (
-    <LinkContextProvider
+    <PageContextProvider
       value={{
         orgSlug,
         appSlug,
@@ -69,17 +104,20 @@ export function PublicPageRenderer({ page, app, orgSlug, appSlug, pages }: Publi
         pages,
         isEditing: false,
         isPreview: false,
+        params: queryParamsObject,
+        theme: effectiveTheme,
       }}
     >
-      <div
-        className="min-h-screen w-full"
-        style={themeStyles}
-      >
-        <Render
-          config={config}
-          data={page.templateData}
-        />
-      </div>
-    </LinkContextProvider>
+      <StateProvider pageState={page.pageState}>
+        <PageDialogsRenderer pageDialogs={page.pageDialogs}>
+          <div className="min-h-screen w-full">
+            <Render
+              config={config}
+              data={resolvedData}
+            />
+          </div>
+        </PageDialogsRenderer>
+      </StateProvider>
+    </PageContextProvider>
   )
 }

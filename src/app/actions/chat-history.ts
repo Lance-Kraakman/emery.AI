@@ -243,6 +243,104 @@ export async function getCurrentChatSession(context: ChatContextDTO): Promise<Ch
 }
 
 /**
+ * Update a chat session's model configuration
+ */
+export async function updateChatModel(chatId: string, model: string | null): Promise<ChatActionResult<ChatSessionDTO>> {
+  console.log('[CHAT-ACTIONS] updateChatModel called:', { chatId, model })
+
+  try {
+    // Authenticate user
+    const session = await auth()
+    if (!session?.user?.id) {
+      console.log('[CHAT-ACTIONS] updateChatModel - auth failed')
+      return { success: false, error: 'Authentication required' }
+    }
+
+    const chatApplicationService = getChatApplicationService()
+
+    console.log('[CHAT-ACTIONS] updateChatModel - calling service:', {
+      chatId,
+      userId: session.user.id,
+      organizationId: session.user.currentOrganizationId,
+      model
+    })
+
+    // Use the application service's updateChat method
+    const result = await chatApplicationService.updateChat({
+      chatId,
+      userId: session.user.id,
+      organizationId: session.user.currentOrganizationId!,
+      model
+    })
+
+    console.log('[CHAT-ACTIONS] updateChatModel - result:', {
+      success: result.success,
+      error: result.error,
+      updatedModel: result.data?.model
+    })
+
+    if (!result.success) {
+      return { success: false, error: result.error || 'Failed to update chat model' }
+    }
+
+    return { success: true, data: result.data! }
+
+  } catch (error) {
+    console.error('[CHAT-ACTIONS] Error updating chat model:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update chat model'
+    }
+  }
+}
+
+/**
+ * Update a chat's title
+ */
+export async function updateChatTitle(chatId: string, title: string): Promise<ChatActionResult<ChatSessionDTO>> {
+  console.log('[CHAT-ACTIONS] updateChatTitle called:', { chatId, title })
+
+  try {
+    // Authenticate user
+    const session = await auth()
+    if (!session?.user?.id) {
+      return { success: false, error: 'Authentication required' }
+    }
+
+    // Validate title
+    const trimmedTitle = title.trim()
+    if (!trimmedTitle) {
+      return { success: false, error: 'Title cannot be empty' }
+    }
+    if (trimmedTitle.length > 200) {
+      return { success: false, error: 'Title must be 200 characters or less' }
+    }
+
+    const chatApplicationService = getChatApplicationService()
+
+    const result = await chatApplicationService.updateChat({
+      chatId,
+      userId: session.user.id,
+      organizationId: session.user.currentOrganizationId!,
+      title: trimmedTitle
+    })
+
+    if (!result.success) {
+      return { success: false, error: result.error || 'Failed to update chat title' }
+    }
+
+    return { success: true, data: result.data! }
+
+  } catch (error) {
+    console.error('[CHAT-ACTIONS] Error updating chat title:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update chat title'
+    }
+  }
+}
+
+/**
  * Delete/archive a chat session
  */
 export async function archiveChatSession(chatId: string): Promise<ChatActionResult<boolean>> {

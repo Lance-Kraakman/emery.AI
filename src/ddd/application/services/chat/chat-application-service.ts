@@ -410,6 +410,70 @@ export class ChatApplicationService {
   }
 
   /**
+   * Update a chat's settings (title, description, model, etc.)
+   */
+  async updateChat(dto: {
+    chatId: string;
+    userId: string;
+    organizationId: number;
+    title?: string;
+    description?: string;
+    model?: string | null;
+  }): Promise<Result<ChatSessionDTO>> {
+    try {
+      // Convert DTO to Value Objects
+      const chatId = ChatId.fromString(dto.chatId);
+      const userId = UserId.fromString(dto.userId);
+      const organizationId = OrganizationId.fromNumber(dto.organizationId);
+
+      // 1. Verify chat exists and user can edit
+      const chat = await this.chatRepository.findById(chatId, organizationId);
+      if (!chat) {
+        return {
+          success: false,
+          error: 'Chat not found or access denied'
+        };
+      }
+
+      if (!chat.canUserEdit(userId)) {
+        return {
+          success: false,
+          error: 'Access denied: only chat creator can edit chat'
+        };
+      }
+
+      // 2. Build update data
+      const updateData: any = {};
+      if (dto.title !== undefined) updateData.title = dto.title;
+      if (dto.description !== undefined) updateData.description = dto.description;
+      if (dto.model !== undefined) updateData.model = dto.model;
+
+      // 3. Update chat
+      const updatedChat = await this.chatRepository.update(chatId, updateData, organizationId);
+      if (!updatedChat) {
+        return {
+          success: false,
+          error: 'Failed to update chat'
+        };
+      }
+
+      logger.summary(`Updated chat: ${updatedChat.title}`);
+
+      return {
+        success: true,
+        data: ChatMapper.toSessionDTO(updatedChat)
+      };
+
+    } catch (error) {
+      logger.error('Error updating chat:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update chat'
+      };
+    }
+  }
+
+  /**
    * Archive a chat
    */
   async archiveChat(chatId: ChatId, userId: UserId, organizationId: OrganizationId): Promise<Result<void>> {

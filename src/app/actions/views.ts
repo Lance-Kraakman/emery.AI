@@ -13,10 +13,11 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { requirePermission, requireResourcePermission } from "./permissions";
+import { requirePermission, requireResourcePermission, getSessionSafe } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
-import { getViewApplicationService } from "@/ddd/application/di/container";
-import { OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
+import { getViewApplicationService, getFileApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
+import { OrganizationId, TableId, UserId, FieldId } from "@/ddd/domain/shared/value-objects";
+import type { FileFieldValue } from "@/ddd/domain/tables/value-objects/field-values";
 import { ViewId } from "@/ddd/domain/views/value-objects/view-id";
 import { FilterConfig } from "@/ddd/domain/views/value-objects/filter-config";
 import { SortConfig } from "@/ddd/domain/views/value-objects/sort-config";
@@ -26,6 +27,7 @@ import { ViewType } from "@/ddd/domain/views/value-objects/view-type";
 import { ViewConfig } from "@/ddd/domain/views/value-objects/view-config";
 import { ViewMapper, type ViewDTO } from "@/app/mappers/view-mapper";
 import type { Result, CreateViewData, UpdateViewData } from "./types";
+import { getCacheService, CACHE_KEYS, CACHE_TAGS } from "@/lib/cache";
 
 /**
  * Create a new view
@@ -40,7 +42,7 @@ export async function createView(
     const session = await requirePermission("view:create");
     const currentOrg = await requireCurrentOrganization();
 
-    const { tableId, name, description, fieldMappings, filters, sorting, viewType, viewConfig } = data;
+    const { tableId, name, description, requiresAuth, fieldMappings, filters, sorting, viewType, viewConfig } = data;
 
     if (!name) {
       return {
@@ -87,7 +89,12 @@ export async function createView(
       'lte': 'less_than_or_equal',
       'is_null': 'is_empty',
       'is_not_null': 'is_not_empty',
+      'in': 'in',
+      'not_in': 'not_in',
     };
+
+    // Operators that don't take a value
+    const noValueOperators = ['is_empty', 'is_not_empty', 'is_true', 'is_false'];
 
     const filterVOs = filters?.map((filter) => {
       const fieldId = fieldNameToIdMap.get(filter.field);
@@ -96,11 +103,13 @@ export async function createView(
       }
 
       const domainOperator = uiToDomainOperatorMap[filter.operator] || filter.operator;
+      // Clear value for no-value operators
+      const filterValue = noValueOperators.includes(domainOperator) ? undefined : filter.value;
 
       return FilterConfig.create({
         fieldId,
         operator: domainOperator as any,
-        value: filter.value,
+        value: filterValue,
       });
     });
 
@@ -138,6 +147,7 @@ export async function createView(
       organizationId: OrganizationId.fromNumber(currentOrg.id),
       name,
       description,
+      requiresAuth: requiresAuth ?? true, // Secure by default
       createdBy: UserId.fromString(session.user.id),
       filters: filterVOs,
       sorting: sortingVOs,
@@ -152,6 +162,27 @@ export async function createView(
         error: result.error || "Failed to create view",
       };
     }
+
+    // AUDIT: Log view creation
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'view_crud',
+        eventAction: 'create',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'view',
+        resourceId: String(result.data.id.value),
+        resourceName: result.data.name,
+        parentResourceType: 'table',
+        parentResourceId: String(tableId),
+        eventData: { viewType: viewType?.toString(), requiresAuth },
+        success: true,
+      }
+    );
 
     // Only revalidate if explicitly requested (prevents unwanted page reloads)
     if (revalidateUrl) {
@@ -181,7 +212,7 @@ export async function updateView(
   revalidateUrl?: string
 ): Promise<Result<ViewDTO>> {
   try {
-    const { id, name, description, filters, sorting, pagination, fieldMappings } = data;
+    const { id, name, description, requiresAuth, filters, sorting, pagination, fieldMappings } = data;
 
     if (!id) {
       return {
@@ -190,8 +221,8 @@ export async function updateView(
       };
     }
 
-    await requireResourcePermission("view:manage", "view", id);
-    await requireCurrentOrganization();
+    const session = await requireResourcePermission("view:manage", "view", id);
+    const currentOrg = await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();
 
@@ -226,6 +257,11 @@ export async function updateView(
       dataSource.updateDescription(description);
     }
 
+    // Update requiresAuth if provided
+    if (requiresAuth !== undefined) {
+      dataSource.updateRequiresAuth(requiresAuth);
+    }
+
     // Update filters if provided
     if (filters !== undefined && fieldNameToIdMap) {
       // Clear existing filters and add new ones
@@ -243,7 +279,12 @@ export async function updateView(
         'lte': 'less_than_or_equal',
         'is_null': 'is_empty',
         'is_not_null': 'is_not_empty',
+        'in': 'in',
+        'not_in': 'not_in',
       };
+
+      // Operators that don't take a value
+      const noValueOperators = ['is_empty', 'is_not_empty', 'is_true', 'is_false'];
 
       for (const filter of filters) {
         const fieldId = fieldNameToIdMap.get(filter.field);
@@ -253,12 +294,14 @@ export async function updateView(
         }
 
         const domainOperator = uiToDomainOperatorMap[filter.operator] || filter.operator;
+        // Clear value for no-value operators
+        const filterValue = noValueOperators.includes(domainOperator) ? undefined : filter.value;
 
         dataSource.addFilter(
           FilterConfig.create({
             fieldId,
             operator: domainOperator as any,
-            value: filter.value,
+            value: filterValue,
           })
         );
       }
@@ -307,6 +350,27 @@ export async function updateView(
     const dataSourceRepository = (dataSourceService as any).dataSourceRepository;
     const savedView = await dataSourceRepository.save(dataSource);
 
+    // AUDIT: Log view update
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'view_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'view',
+        resourceId: String(id),
+        resourceName: savedView.name,
+        parentResourceType: 'table',
+        parentResourceId: String(savedView.tableId.value),
+        eventData: { updatedFields: Object.keys(data).filter(k => k !== 'id') },
+        success: true,
+      }
+    );
+
     // Only revalidate if explicitly requested (prevents unwanted page reloads)
     if (revalidateUrl) {
       revalidatePath(revalidateUrl);
@@ -340,10 +404,15 @@ export async function deleteView(
       };
     }
 
-    await requireResourcePermission("view:manage", "view", id);
-    await requireCurrentOrganization();
+    const session = await requireResourcePermission("view:manage", "view", id);
+    const currentOrg = await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();
+
+    // AUDIT: Get view info BEFORE deletion
+    const viewResult = await dataSourceService.getView(ViewId.fromNumber(id));
+    const viewName = viewResult.data?.name;
+    const tableId = viewResult.data?.tableId.value;
 
     const result = await dataSourceService.deleteView(
       ViewId.fromNumber(id)
@@ -355,6 +424,27 @@ export async function deleteView(
         error: result.error || "Failed to delete view",
       };
     }
+
+    // AUDIT: Log view deletion
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'view_crud',
+        eventAction: 'delete',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'view',
+        resourceId: String(id),
+        resourceName: viewName,
+        parentResourceType: 'table',
+        parentResourceId: tableId ? String(tableId) : undefined,
+        eventData: {},
+        success: true,
+      }
+    );
 
     // Only revalidate if explicitly requested (prevents unwanted page reloads)
     if (revalidateUrl) {
@@ -375,6 +465,10 @@ export async function deleteView(
 
 /**
  * Get a view by ID
+ *
+ * AIDEV-NOTE: Supports public views via auth-first pattern.
+ * - If authenticated: use normal RLS-wrapped path with permission check
+ * - If unauthenticated: only allow public views (requiresAuth=false)
  */
 export async function getView(id: number): Promise<ViewDTO | null> {
   try {
@@ -382,20 +476,25 @@ export async function getView(id: number): Promise<ViewDTO | null> {
       return null;
     }
 
-    await requireResourcePermission("view:manage", "view", id);
-    await requireCurrentOrganization();
-
     const dataSourceService = getViewApplicationService();
+    const session = await getSessionSafe();
 
-    const result = await dataSourceService.getView(
-      ViewId.fromNumber(id)
-    );
-
-    if (!result.success || !result.data) {
-      return null;
+    if (session) {
+      // Authenticated user: use normal RLS-wrapped path
+      await requireResourcePermission("view:manage", "view", id);
+      const result = await dataSourceService.getView(ViewId.fromNumber(id));
+      if (!result.success || !result.data) {
+        return null;
+      }
+      return ViewMapper.toDTO(result.data);
+    } else {
+      // Unauthenticated: only allow public views
+      const publicResult = await dataSourceService.getPublicView(ViewId.fromNumber(id));
+      if (!publicResult.success || !publicResult.data) {
+        return null;
+      }
+      return ViewMapper.toDTO(publicResult.data);
     }
-
-    return ViewMapper.toDTO(result.data);
   } catch (error) {
     console.error("Error getting view:", error);
     return null;
@@ -472,13 +571,69 @@ export async function getViewsForOrganization(): Promise<ViewDTO[]> {
 }
 
 /**
+ * Substitutes page variable placeholders in filter values
+ *
+ * @param value - Filter value that may contain {params.varName} placeholders
+ * @param context - Context containing params from URL query parameters
+ * @returns Value with variables substituted
+ *
+ * @example
+ * substituteVariables("{params.product_id}", { product_id: "123" }) // returns "123"
+ * substituteVariables("static_value", { product_id: "123" }) // returns "static_value"
+ */
+function substituteFilterVariable(
+  value: string | number | boolean | null | undefined,
+  context?: import('@/components/puck/types/puck-context').PuckResolveContext
+): string | number | boolean | null | undefined {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  // Match {params.varName} pattern
+  const paramMatch = value.match(/^\{params\.(\w+)\}$/);
+  if (paramMatch && context) {
+    const paramName = paramMatch[1];
+    const paramValue = context[paramName];
+    if (paramValue !== undefined) {
+      // Return the param value, handling arrays by taking first element
+      if (Array.isArray(paramValue)) {
+        return paramValue[0] ?? '';
+      }
+      return paramValue;
+    }
+    // Variable not found in context - return empty string to avoid matching everything
+    return '';
+  }
+
+  // For partial substitutions (e.g., "prefix_{params.id}_suffix"), do inline replacement
+  if (value.includes('{params.') && context) {
+    return value.replace(/\{params\.(\w+)\}/g, (_, name) => {
+      const paramValue = context[name];
+      return paramValue !== undefined ? String(paramValue) : '';
+    });
+  }
+
+  return value;
+}
+
+/**
  * Execute a view and return rows as DTOs
  *
- * Used by TableBlock to fetch and render data.
- * Returns plain serializable objects (not domain entities).
+ * AIDEV-NOTE: Supports public views via auth-first pattern.
+ * - If authenticated: use normal RLS-wrapped path with permission check
+ * - If unauthenticated: only allow public views (requiresAuth=false)
+ *
+ * @param dataSourceId - The view ID to execute
+ * @param context - Optional context for dynamic filtering (query params, etc.)
+ *                  Variables like {params.product_id} are substituted from context
+ * @param pagination - Optional pagination override (pageSize and offset)
+ * @param additionalFilters - Optional runtime filters with variable substitution support
  */
 export async function executeView(
-  dataSourceId: number
+  dataSourceId: number,
+  context?: import('@/components/puck/types/puck-context').PuckResolveContext,
+  pagination?: { pageSize: number; offset: number },
+  additionalFilters?: Array<{ field: string; operator: string; value: any }>
 ): Promise<{
   rows: Array<Record<string, any>>;
   fields: Array<{ id: number; name: string; type: string }>;
@@ -491,14 +646,112 @@ export async function executeView(
       return null;
     }
 
-    await requireResourcePermission("view:view", "view", dataSourceId);
-    await requireCurrentOrganization();
-
     const dataSourceService = getViewApplicationService();
+    const session = await getSessionSafe();
 
-    // Execute the view
+    // Get view using appropriate method based on auth state
+    let view;
+    let isPublicAccess = false;
+
+    if (session) {
+      // Authenticated user: use normal RLS-wrapped path
+      await requireResourcePermission("view:view", "view", dataSourceId);
+      await requireCurrentOrganization();
+      const viewResult = await dataSourceService.getView(ViewId.fromNumber(dataSourceId));
+      if (!viewResult.success || !viewResult.data) {
+        console.error("Failed to get view:", viewResult.error);
+        return null;
+      }
+      view = viewResult.data;
+    } else {
+      // Unauthenticated: only allow public views
+      const publicResult = await dataSourceService.getPublicView(ViewId.fromNumber(dataSourceId));
+      if (!publicResult.success || !publicResult.data) {
+        console.error("Failed to get public view:", publicResult.error);
+        return null;
+      }
+      view = publicResult.data;
+      isPublicAccess = true;
+    }
+
+    // Build additional filter configs if provided
+    let runtimeFilters: FilterConfig[] | undefined;
+    let rowIdFilter: { operator: 'eq' | 'ne'; value: string } | undefined;
+
+    if (additionalFilters && additionalFilters.length > 0) {
+      // Fetch fields to convert field names to IDs
+      // Pass viaViewId for public access (allows getFields to work without auth)
+      const { getFields } = await import('./fields');
+      const fields = await getFields(view.tableId.value, isPublicAccess ? { viaViewId: dataSourceId } : undefined);
+      const fieldNameToIdMap = new Map(fields.map(f => [f.name, f.id]));
+
+      // Operator mapping (same as createView/updateView)
+      const uiToDomainOperatorMap: Record<string, string> = {
+        'eq': 'equals',
+        'ne': 'not_equals',
+        'ilike': 'contains',
+        'like': 'contains',
+        'gt': 'greater_than',
+        'gte': 'greater_than_or_equal',
+        'lt': 'less_than',
+        'lte': 'less_than_or_equal',
+        'is_null': 'is_empty',
+        'is_not_null': 'is_not_empty',
+        'in': 'in',
+        'not_in': 'not_in',
+      };
+
+      // Operators that don't take a value
+      const noValueOperators = ['is_empty', 'is_not_empty', 'is_true', 'is_false'];
+
+      runtimeFilters = [];
+      for (const filter of additionalFilters) {
+        const domainOperator = uiToDomainOperatorMap[filter.operator] || filter.operator;
+
+        // Substitute variables in the filter value first
+        const substitutedValue = substituteFilterVariable(filter.value, context);
+
+        // Skip filters where variable wasn't found (empty string) - but not for no-value operators
+        if (substitutedValue === '' && !noValueOperators.includes(domainOperator)) {
+          console.warn(`Variable in filter for field "${filter.field}" not found in context, skipping`);
+          continue;
+        }
+
+        // Handle 'id' field specially - bypass FilterConfig (which requires fieldId > 0)
+        // The synthetic 'id' field has fieldId=0, so we use rowIdFilter instead
+        if (filter.field === 'id') {
+          const op = filter.operator === 'ne' ? 'ne' : 'eq';
+          rowIdFilter = { operator: op, value: String(substitutedValue) };
+          continue;
+        }
+
+        const fieldId = fieldNameToIdMap.get(filter.field);
+        if (fieldId === undefined) {
+          console.warn(`Field "${filter.field}" not found, skipping filter`);
+          continue;
+        }
+
+        // Clear value for no-value operators
+        const filterValue = noValueOperators.includes(domainOperator) ? undefined : substitutedValue;
+
+        runtimeFilters.push(
+          FilterConfig.create({
+            fieldId,
+            operator: domainOperator as any,
+            value: filterValue,
+          })
+        );
+      }
+    }
+
+    // Execute the view with optional pagination override and runtime filters
     const result = await dataSourceService.executeView({
       dataSourceId: ViewId.fromNumber(dataSourceId),
+      overridePagination: pagination
+        ? PaginationConfig.create(pagination)
+        : undefined,
+      additionalFilters: runtimeFilters,
+      rowIdFilter,
     });
 
     if (!result.success || !result.data) {
@@ -506,29 +759,33 @@ export async function executeView(
       return null;
     }
 
-    // Get the schema
-    const dataSource = await dataSourceService.getView(
-      ViewId.fromNumber(dataSourceId)
-    );
-
-    if (!dataSource.success || !dataSource.data) {
-      console.error("Failed to get view:", dataSource.error);
-      return null;
-    }
-
-    const schemaResult = await dataSourceService.getViewSchema(
-      ViewId.fromNumber(dataSourceId)
-    );
-
-    if (!schemaResult.success || !schemaResult.data) {
-      console.error("Failed to get view schema:", schemaResult.error);
-      return null;
+    // Get the schema using appropriate method based on auth state
+    let schemaFields;
+    if (isPublicAccess) {
+      const schemaResult = await dataSourceService.getPublicViewSchema(
+        ViewId.fromNumber(dataSourceId)
+      );
+      if (!schemaResult.success || !schemaResult.data) {
+        console.error("Failed to get public view schema:", schemaResult.error);
+        return null;
+      }
+      schemaFields = schemaResult.data;
+    } else {
+      const schemaResult = await dataSourceService.getViewSchema(
+        ViewId.fromNumber(dataSourceId)
+      );
+      if (!schemaResult.success || !schemaResult.data) {
+        console.error("Failed to get view schema:", schemaResult.error);
+        return null;
+      }
+      schemaFields = schemaResult.data;
     }
 
     // Type-narrow the schema fields after null check
-    const fields = schemaResult.data;
+    const fields = schemaFields;
 
-    // Convert Row entities to plain objects with numeric field IDs as keys
+    // Convert Row entities to plain objects with field IDs as keys
+    // (useFieldValue looks up by fieldId, e.g., rowData["42"])
     const plainRows = result.data.rows.map((row) => row.toPlainObject(fields));
 
     // Convert TableField VOs to plain objects
@@ -558,12 +815,13 @@ export async function executeView(
  * Aggregations are computed at the backend (Python/Polars via gRPC), never in Node.js/browser.
  * This follows Baserow's architecture pattern for backend aggregation computation.
  *
- * TODO-CACHING: Add caching layer with configurable TTL for aggregation results.
- * Cache key should include: viewId, filters, timestamp bucket (e.g., rounded to nearest 5 minutes).
- * Invalidate cache on data changes or manual refresh.
+ * CACHING: Results are cached for 5 minutes. Cache is invalidated on:
+ * - Row mutations (via table stats tag)
+ * - View configuration changes (via view tag)
  */
 export async function executeViewAggregations(
-  viewId: number
+  viewId: number,
+  options?: { skipCache?: boolean }
 ): Promise<{
   results: Array<{
     fieldId: number;
@@ -582,6 +840,33 @@ export async function executeViewAggregations(
     await requireCurrentOrganization();
 
     const viewService = getViewApplicationService();
+    const cacheService = getCacheService();
+
+    // Get view to determine tableId for cache tagging
+    const viewResult = await viewService.getView(ViewId.fromNumber(viewId));
+    const tableId = viewResult.success && viewResult.data
+      ? viewResult.data.tableId.value
+      : 0;
+
+    const cacheConfig = CACHE_KEYS.viewAggregations(viewId, tableId);
+
+    // Check cache first (unless skipCache is true)
+    if (!options?.skipCache && cacheService.isConnected()) {
+      const cached = await cacheService.get<{
+        results: Array<{
+          fieldId: number;
+          aggregationType: string;
+          value: any;
+          label?: string;
+          formatType?: string;
+        }>;
+      }>(cacheConfig.key);
+
+      if (cached) {
+        console.log(`[Cache] Hit for view aggregations: ${viewId}`);
+        return cached;
+      }
+    }
 
     // Execute aggregations via application service
     const result = await viewService.executeAggregations({
@@ -593,9 +878,20 @@ export async function executeViewAggregations(
       return null;
     }
 
-    return {
+    const response = {
       results: result.data,
     };
+
+    // Cache the result
+    if (cacheService.isConnected()) {
+      await cacheService.set(cacheConfig.key, response, {
+        ttlSeconds: cacheConfig.ttl,
+        tags: cacheConfig.tags,
+      });
+      console.log(`[Cache] Stored view aggregations: ${viewId}`);
+    }
+
+    return response;
   } catch (error) {
     console.error("Error executing view aggregations:", error);
     return null;
@@ -607,9 +903,14 @@ export async function executeViewAggregations(
  *
  * AIDEV-NOTE: Used by ChartBlock to fetch and render chart visualizations.
  * Handles both raw mode (plot table rows directly) and aggregated mode (GROUP BY with aggregations).
+ *
+ * CACHING: Results are cached for 5 minutes. Cache is invalidated on:
+ * - Row mutations (via table stats tag)
+ * - View configuration changes (via view tag)
  */
 export async function executeChartView(
-  viewId: number
+  viewId: number,
+  options?: { skipCache?: boolean }
 ): Promise<{
   dataPoints: Array<{
     x: any;
@@ -631,6 +932,38 @@ export async function executeChartView(
     await requireCurrentOrganization();
 
     const viewService = getViewApplicationService();
+    const cacheService = getCacheService();
+
+    // Get view to determine tableId for cache tagging
+    const viewResult = await viewService.getView(ViewId.fromNumber(viewId));
+    const tableId = viewResult.success && viewResult.data
+      ? viewResult.data.tableId.value
+      : 0;
+
+    const cacheConfig = CACHE_KEYS.chartViewData(viewId, tableId);
+
+    // Check cache first (unless skipCache is true)
+    if (!options?.skipCache && cacheService.isConnected()) {
+      type ChartViewResult = {
+        dataPoints: Array<{
+          x: any;
+          y: any;
+          series?: string;
+          [key: string]: any;
+        }>;
+        xAxisLabel?: string;
+        yAxisLabels?: string[];
+        chartType: 'bar' | 'line' | 'pie' | 'area' | 'scatter';
+        dataMode: 'raw' | 'aggregated';
+      };
+
+      const cached = await cacheService.get<ChartViewResult>(cacheConfig.key);
+
+      if (cached) {
+        console.log(`[Cache] Hit for chart view: ${viewId}`);
+        return cached;
+      }
+    }
 
     // Execute chart view via application service
     const result = await viewService.executeChartView({
@@ -640,6 +973,15 @@ export async function executeChartView(
     if (!result.success || !result.data) {
       console.error("Failed to execute chart view:", result.error);
       return null;
+    }
+
+    // Cache the result
+    if (cacheService.isConnected()) {
+      await cacheService.set(cacheConfig.key, result.data, {
+        ttlSeconds: cacheConfig.ttl,
+        tags: cacheConfig.tags,
+      });
+      console.log(`[Cache] Stored chart view: ${viewId}`);
     }
 
     return result.data;
@@ -718,7 +1060,7 @@ export async function submitFormView(
     await requireResourcePermission("view:view", "view", viewId);
     // Need create permission to create a new row
     const session = await requirePermission("table:create");
-    await requireCurrentOrganization();
+    const currentOrg = await requireCurrentOrganization();
 
     if (!formData || Object.keys(formData).length === 0) {
       return {
@@ -814,6 +1156,54 @@ export async function submitFormView(
     }
 
     console.log('[submitFormView] Final convertedData:', convertedData);
+
+    // 3.5. Upload files for file/document fields and replace with FileFieldValue
+    const fileApplicationService = getFileApplicationService();
+
+    for (const field of tableFields) {
+      const fieldKey = field.id.toString();
+      const value = convertedData[fieldKey];
+
+      // Check if this is a file field with File objects
+      if ((field.type === 'file' || field.type === 'document') && value) {
+        // Handle single File or array of Files
+        const files = Array.isArray(value) ? value : [value];
+        const fileValues: FileFieldValue[] = [];
+
+        for (const file of files) {
+          if (file instanceof File) {
+            const buffer = Buffer.from(await file.arrayBuffer());
+
+            const uploadResult = await fileApplicationService.uploadFile({
+              organizationId: OrganizationId.fromNumber(currentOrg.id),
+              tableId: TableId.fromNumber(tableId),
+              fieldId: FieldId.fromNumber(field.id),
+              file: {
+                buffer,
+                filename: file.name,
+                mimeType: file.type,
+              },
+            });
+
+            if (uploadResult.success && uploadResult.data) {
+              fileValues.push(uploadResult.data);
+            } else {
+              console.error(`Failed to upload file ${file.name}:`, uploadResult.error);
+              return {
+                success: false,
+                error: `Failed to upload file: ${file.name}`,
+              };
+            }
+          } else if (typeof file === 'object' && file !== null && 's3Key' in file) {
+            // Already a FileFieldValue (shouldn't happen in form submit, but handle gracefully)
+            fileValues.push(file as FileFieldValue);
+          }
+        }
+
+        // Replace File objects with FileFieldValue array
+        convertedData[fieldKey] = fileValues;
+      }
+    }
 
     // 4. Create Row entity from converted data
     const { Row } = await import("@/ddd/domain/tables/value-objects/row");

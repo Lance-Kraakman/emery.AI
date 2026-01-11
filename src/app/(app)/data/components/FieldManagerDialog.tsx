@@ -147,6 +147,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   const [newFieldType, setNewFieldType] = useState<FieldType | "">("")
   const [newFieldRequired, setNewFieldRequired] = useState(false)
   const [newFieldRelatedTableId, setNewFieldRelatedTableId] = useState<number | undefined>()
+  const [newFieldAllowMultiple, setNewFieldAllowMultiple] = useState<boolean>(false)
   const [embeddingSize, setEmbeddingSize] = useState<number | undefined>()
   const [loading, setLoading] = useState(false)
   const [availableTables, setAvailableTables] = useState<TableDTO[]>([])
@@ -154,6 +155,11 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   // Optimistic state for field reordering
   const [optimisticFields, setOptimisticFields] = useState<FieldDTO[] | null>(null)
   const [reorderError, setReorderError] = useState<string | null>(null)
+
+  // Clear optimistic state when fields prop updates from server
+  useEffect(() => {
+    setOptimisticFields(null)
+  }, [fields])
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
@@ -189,7 +195,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
         
         if (result.success) {
           onFieldsUpdated()
-          setOptimisticFields(null) // Clear optimistic state on success
+          // Don't clear optimisticFields here - let the useEffect do it when fields prop updates
         } else {
           // Rollback on error
           setOptimisticFields(null)
@@ -226,10 +232,13 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
     try {
       setLoading(true)
 
-      // Build metadata for embedding fields
-      const metadata = newFieldType === 'embedding' && embeddingSize ? {
-        embeddingSize: embeddingSize.toString()
-      } : undefined
+      // Build metadata based on field type
+      let metadata: Record<string, any> | undefined = undefined
+      if (newFieldType === 'embedding' && embeddingSize) {
+        metadata = { embeddingSize: embeddingSize.toString() }
+      } else if (newFieldType === 'relation') {
+        metadata = { multiple: newFieldAllowMultiple }
+      }
 
       const result = await createField({
         tableId,
@@ -245,6 +254,7 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
         setNewFieldType("")
         setNewFieldRequired(false)
         setNewFieldRelatedTableId(undefined)
+        setNewFieldAllowMultiple(false)
         setEmbeddingSize(undefined)
         setIsAddingField(false)
         onFieldsUpdated()
@@ -310,12 +320,16 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
     setNewFieldType("")
     setNewFieldRequired(false)
     setNewFieldRelatedTableId(undefined)
+    setNewFieldAllowMultiple(false)
     onClose()
   }
 
   // Sort fields by orderIndex, with optimistic updates
+  // Filter out system 'id' field - it's synthetic and shouldn't be reorderable
   const sortedFields = useMemo(() => {
-    const baseFields = [...fields].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0))
+    const baseFields = [...fields]
+      .filter(f => f.name !== 'id')
+      .sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0))
     return optimisticFields || baseFields
   }, [fields, optimisticFields]);
 
@@ -457,38 +471,50 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
               </div>
 
               {newFieldType === 'relation' && (
-                <div className="space-y-2">
-                  <Label htmlFor="relatedTable">Related Table</Label>
-                  <Select
-                    value={newFieldRelatedTableId?.toString()}
-                    onValueChange={(value) => setNewFieldRelatedTableId(parseInt(value))}
-                  >
-                    <SelectTrigger id="relatedTable">
-                      <SelectValue placeholder={
-                        availableTables.length === 0
-                          ? "No tables available..."
-                          : "Select table to relate to..."
-                      } />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableTables.length === 0 ? (
-                        <div className="px-2 py-1 text-sm text-muted-foreground">
-                          No tables found. Create some tables first.
-                        </div>
-                      ) : (
-                        availableTables.map((table) => (
-                          <SelectItem key={table.id} value={table.id.toString()}>
-                            {table.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {availableTables.length === 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      Debug: No tables loaded. Check console for errors.
-                    </div>
-                  )}
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="relatedTable">Related Table</Label>
+                    <Select
+                      value={newFieldRelatedTableId?.toString()}
+                      onValueChange={(value) => setNewFieldRelatedTableId(parseInt(value))}
+                    >
+                      <SelectTrigger id="relatedTable">
+                        <SelectValue placeholder={
+                          availableTables.length === 0
+                            ? "No tables available..."
+                            : "Select table to relate to..."
+                        } />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableTables.length === 0 ? (
+                          <div className="px-2 py-1 text-sm text-muted-foreground">
+                            No tables found. Create some tables first.
+                          </div>
+                        ) : (
+                          availableTables.map((table) => (
+                            <SelectItem key={table.id} value={table.id.toString()}>
+                              {table.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {availableTables.length === 0 && (
+                      <div className="text-xs text-muted-foreground">
+                        Debug: No tables loaded. Check console for errors.
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="allowMultiple"
+                      checked={newFieldAllowMultiple}
+                      onCheckedChange={(checked) => setNewFieldAllowMultiple(checked as boolean)}
+                    />
+                    <Label htmlFor="allowMultiple" className="text-sm font-normal cursor-pointer">
+                      Allow multiple relations
+                    </Label>
+                  </div>
                 </div>
               )}
 

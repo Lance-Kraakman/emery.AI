@@ -76,9 +76,9 @@ async function runMigrations() {
 }
 
 export async function handler(event, context) {
-  console.log("## EVENT");
-  console.log(JSON.stringify(event, null, 2));
-  
+  // Note: Event logging removed for security - may contain DATABASE_URL
+  console.log("## MIGRATION HANDLER INVOKED");
+
   try {
     const result = await runMigrations();
     console.log("Migration result:", result);

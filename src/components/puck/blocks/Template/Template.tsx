@@ -9,6 +9,7 @@ const getClassName = getClassNameFactory("Template", styles);
 
 export type TemplateProps = {
   template: string;
+  selectedVariant?: string;
   children: Slot;
 };
 
@@ -16,7 +17,7 @@ export const Template: PuckComponent<TemplateProps> = ({
   children: Children,
 }) => {
   return (
-    <Section>
+    <Section raw={true}>
       <Children className={getClassName()} />
     </Section>
   );

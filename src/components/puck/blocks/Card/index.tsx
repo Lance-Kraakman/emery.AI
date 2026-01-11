@@ -7,6 +7,11 @@ import dynamic from "next/dynamic";
 import dynamicIconImports from "lucide-react/dynamicIconImports";
 import { withLayout, WithLayout } from "../../components/Layout";
 import { backgroundColorField, textColorField, fontFamilyField, fontWeightField, borderRadiusField, borderWidthField, paddingField } from "../../fields/standard-fields";
+import type { FourSidedSpacing, FourCornerRadius } from "../../types/spacing-types";
+import { useTheme } from "../../contexts/PageContext";
+import { computeFourSidedCSS, computeFourCornerRadiusCSS } from "../../utils/spacing";
+import { createVariableTextField } from "../../custom-fields";
+import { useInterpolatedText } from "../../hooks/useInterpolatedText";
 
 const getClassName = getClassNameFactory("Card", styles);
 
@@ -38,21 +43,15 @@ export type CardProps = WithLayout<{
   titleFontWeight?: string;
   textFontFamily?: string;
   textFontWeight?: string;
-  borderRadius?: string;
+  radius?: FourCornerRadius;
   borderWidth?: string;
-  paddingLevel?: string;
+  padding?: FourSidedSpacing;
 }>;
 
 const CardInner: ComponentConfig<CardProps> = {
   fields: {
-    title: {
-      type: "text",
-      contentEditable: true,
-    },
-    description: {
-      type: "textarea",
-      contentEditable: true,
-    },
+    title: createVariableTextField({ label: 'Title' }),
+    description: createVariableTextField({ label: 'Description', multiline: true }),
     icon: {
       type: "select",
       options: iconOptions,
@@ -89,9 +88,9 @@ const CardInner: ComponentConfig<CardProps> = {
       ...fontWeightField,
       label: "Text Font Weight (Optional)",
     },
-    borderRadius: borderRadiusField,
+    radius: borderRadiusField,
     borderWidth: borderWidthField,
-    paddingLevel: paddingField,
+    padding: paddingField,
   },
   defaultProps: {
     title: "Title",
@@ -105,22 +104,28 @@ const CardInner: ComponentConfig<CardProps> = {
     titleFontWeight: undefined,
     textFontFamily: undefined,
     textFontWeight: undefined,
-    borderRadius: undefined,
+    radius: undefined,
     borderWidth: undefined,
-    paddingLevel: undefined,
+    padding: undefined,
   },
-  render: ({ title, icon, description, mode, titleColor, textColor, backgroundColor, titleFontFamily, titleFontWeight, textFontFamily, textFontWeight, borderRadius, borderWidth, paddingLevel }) => {
-    // Calculate padding from level if provided
-    const padding = paddingLevel ? `calc(var(--theme-spacing-unit, 0.25rem) * ${paddingLevel})` : undefined;
+  render: function CardRender({ title, icon, description, mode, titleColor, textColor, backgroundColor, titleFontFamily, titleFontWeight, textFontFamily, textFontWeight, radius, borderWidth, padding }) {
+    const theme = useTheme();
+    // Interpolate variables in title and description
+    const interpolatedTitle = useInterpolatedText(title);
+    const interpolatedDescription = useInterpolatedText(description);
+
+    // Compute styles from FourSided/FourCorner values
+    const paddingStyles = padding ? computeFourSidedCSS(padding, theme, 'padding') : {};
+    const radiusStyles = radius ? computeFourCornerRadiusCSS(radius, theme) : {};
 
     return (
       <div
         className={getClassName({ [mode]: mode })}
         style={{
           ...(backgroundColor && { backgroundColor }),
-          ...(borderRadius && { borderRadius }),
+          ...radiusStyles,
           ...(borderWidth && { borderWidth }),
-          ...(padding && { padding }),
+          ...paddingStyles,
         }}
       >
         <div className={getClassName("inner")}>
@@ -134,7 +139,7 @@ const CardInner: ComponentConfig<CardProps> = {
               ...(titleFontWeight && { fontWeight: titleFontWeight }),
             }}
           >
-            {title}
+            {interpolatedTitle}
           </div>
           <div
             className={getClassName("description")}
@@ -144,7 +149,7 @@ const CardInner: ComponentConfig<CardProps> = {
               ...(textFontWeight && { fontWeight: textFontWeight }),
             }}
           >
-            {description}
+            {interpolatedDescription}
           </div>
         </div>
       </div>

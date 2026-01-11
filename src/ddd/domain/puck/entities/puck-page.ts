@@ -8,6 +8,8 @@ import type { PageOrder } from '../value-objects/page-order';
 import type { PuckData } from '../value-objects/puck-data';
 import { UserId } from '@/ddd/domain/shared/value-objects';
 import { ThemeConfig, type ThemeConfigProps } from '../value-objects/theme-config';
+import type { PageStateConfig } from '@/components/puck/types/state';
+import type { PageDialogsConfig } from '../value-objects/page-dialogs';
 
 export class PuckPage {
   private constructor(
@@ -22,6 +24,8 @@ export class PuckPage {
     private _isPublic: boolean,
     private _requiresAuth: boolean,
     private _allowedRoles: string[] | undefined,
+    private _pageState: PageStateConfig | undefined,
+    private _pageDialogs: PageDialogsConfig | undefined,
     private readonly _ownerId: UserId,
     private readonly _createdAt: Date,
     private _updatedAt: Date
@@ -66,6 +70,14 @@ export class PuckPage {
 
   get allowedRoles(): string[] | undefined {
     return this._allowedRoles ? [...this._allowedRoles] : undefined;
+  }
+
+  get pageState(): PageStateConfig | undefined {
+    return this._pageState ? { ...this._pageState } : undefined;
+  }
+
+  get pageDialogs(): PageDialogsConfig | undefined {
+    return this._pageDialogs ? { ...this._pageDialogs } : undefined;
   }
 
   get ownerId(): UserId {
@@ -208,6 +220,22 @@ export class PuckPage {
   }
 
   /**
+   * Update page state configuration (client-side state)
+   */
+  setPageState(config: PageStateConfig | undefined): void {
+    this._pageState = config ? { ...config } : undefined;
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Update page dialogs configuration
+   */
+  setPageDialogs(config: PageDialogsConfig | undefined): void {
+    this._pageDialogs = config ? { ...config } : undefined;
+    this._updatedAt = new Date();
+  }
+
+  /**
    * Check if a user with specific roles can access this page
    */
   canBeAccessedByRoles(userRoles: string[]): boolean {
@@ -263,6 +291,8 @@ export class PuckPage {
     isPublic: boolean;
     requiresAuth: boolean;
     allowedRoles?: string[];
+    pageState?: PageStateConfig;
+    pageDialogs?: PageDialogsConfig;
     ownerId: string;
     createdAt: Date;
     updatedAt: Date;
@@ -304,6 +334,8 @@ export class PuckPage {
       data.isPublic,
       data.requiresAuth,
       data.allowedRoles,
+      data.pageState,
+      data.pageDialogs,
       UserId.fromString(data.ownerId),
       data.createdAt,
       data.updatedAt
@@ -325,6 +357,8 @@ export class PuckPage {
     isPublic: boolean;
     requiresAuth: boolean;
     allowedRoles: string[] | undefined;
+    pageState: PageStateConfig | undefined;
+    pageDialogs: PageDialogsConfig | undefined;
     ownerId: string;
     createdAt: Date;
     updatedAt: Date;
@@ -341,6 +375,8 @@ export class PuckPage {
       isPublic: this._isPublic,
       requiresAuth: this._requiresAuth,
       allowedRoles: this._allowedRoles,
+      pageState: this._pageState,
+      pageDialogs: this._pageDialogs,
       ownerId: this._ownerId.value,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt

@@ -13,6 +13,7 @@ import {
   Shield
 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import { OrganizationMapper, type UserDTO } from '@/app/mappers/organization-mapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfigurationCard } from './ConfigurationCard';
@@ -33,18 +34,11 @@ interface AgentDetailsPanelProps {
   onUpdate?: () => void;
 }
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  systemRole?: string;
-}
-
 export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   const router = useRouter();
   const { openModal } = useModal();
   const [ownerName, setOwnerName] = useState<string>('Loading...');
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserDTO[]>([]);
   const [isScheduleManagerOpen, setIsScheduleManagerOpen] = useState(false);
   const [delegationCount, setDelegationCount] = useState<number>(0);
 
@@ -61,9 +55,10 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   const loadOwnerName = async () => {
     try {
       const members = await getOrganizationMembers();
-      setUsers(members || []);
-      const owner = members?.find(u => u.id === agent.ownerId);
-      setOwnerName(owner?.name || 'Unknown User');
+      const mappedUsers = members ? members.map(OrganizationMapper.memberToUser) : [];
+      setUsers(mappedUsers);
+      const owner = mappedUsers?.find(u => u.id === agent.ownerId);
+      setOwnerName(owner ? `${owner.name} (${OrganizationMapper.getPrimaryRoleName(owner.roles)})` : 'Unknown User');
     } catch (error) {
       console.error('Error loading owner name:', error);
       setOwnerName('Unknown User');
@@ -99,28 +94,28 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
   };
 
   const getTriggerStatus = () => {
-    if (!agent.schedules || agent.schedules.length === 0) return 'partial';
-    const firstSchedule = agent.schedules[0];
-    if (!firstSchedule) return 'partial';
+    if (!agent.automations || agent.automations.length === 0) return 'partial';
+    const firstAutomation = agent.automations[0];
+    if (!firstAutomation) return 'partial';
     return 'configured';
   };
 
 
   // Generate summaries for each configuration area
   const getTriggerSummary = () => {
-    if (!agent.schedules || agent.schedules.length === 0) {
+    if (!agent.automations || agent.automations.length === 0) {
       return 'Manual execution only';
     }
 
-    const scheduleCount = agent.schedules.length;
-    const firstSchedule = agent.schedules[0];
+    const automationCount = agent.automations.length;
+    const firstAutomation = agent.automations[0];
 
-    if (!firstSchedule) {
+    if (!firstAutomation) {
       return 'Manual execution only';
     }
 
     let summary = '';
-    const trigger = firstSchedule.trigger;
+    const trigger = firstAutomation.trigger;
 
     if (trigger.type === 'CALENDAR') {
       const timezone = trigger.timezone || 'UTC';
@@ -135,8 +130,8 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
     }
     // MANUAL type is already handled above, no else needed
 
-    if (scheduleCount > 1) {
-      summary += ` (+${scheduleCount - 1} more)`;
+    if (automationCount > 1) {
+      summary += ` (+${automationCount - 1} more)`;
     }
 
     return summary;
@@ -166,18 +161,18 @@ export function AgentDetailsPanel({ agent, onUpdate }: AgentDetailsPanelProps) {
           actionText="Edit Details"
         />
 
-        {/* Schedule Configuration */}
+        {/* Automation Configuration */}
         <ConfigurationCard
-          title="Schedule Configuration"
+          title="Automation Configuration"
           description="Manage multiple execution triggers"
-          icon={agent.schedules?.[0]?.trigger.type === 'CALENDAR' ? Calendar :
-                agent.schedules?.[0]?.trigger.type === 'DATABASE_EVENT' ? Database :
-                agent.schedules?.[0]?.trigger.type === 'WEBHOOK' ? Globe : Zap}
+          icon={agent.automations?.[0]?.trigger.type === 'CALENDAR' ? Calendar :
+                agent.automations?.[0]?.trigger.type === 'DATABASE_EVENT' ? Database :
+                agent.automations?.[0]?.trigger.type === 'WEBHOOK' ? Globe : Zap}
           status={getTriggerStatus()}
           statusText={getTriggerStatus() === 'configured' ? 'Configured' : 'Default'}
           summary={getTriggerSummary()}
           onClick={() => setIsScheduleManagerOpen(true)}
-          actionText="Manage Schedules"
+          actionText="Manage Automations"
         />
 
         {/* Authorized Connections */}

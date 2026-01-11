@@ -1,0 +1,341 @@
+/* FileField Styles */
+
+/* Size CSS Custom Properties */
+.fileField {
+  /* Default (normal) size values */
+  --ff-icon-size: 1.25rem;
+  --ff-font-size: 0.875rem;
+  --ff-meta-font-size: 0.75rem;
+  --ff-padding: 0.5rem;
+  --ff-gap: 0.5rem;
+  --ff-card-min-width: 150px;
+  --ff-card-icon-size: 2.5rem;
+  --ff-download-icon-size: 1rem;
+  --ff-compact-icon-size: 0.875rem;
+  --ff-compact-font-size: 0.8125rem;
+  --ff-compact-max-width: 120px;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--ff-gap);
+}
+
+/* Compact size */
+.fileField.compact {
+  --ff-icon-size: 1rem;
+  --ff-font-size: 0.75rem;
+  --ff-meta-font-size: 0.625rem;
+  --ff-padding: 0.375rem;
+  --ff-gap: 0.375rem;
+  --ff-card-min-width: 100px;
+  --ff-card-icon-size: 1.75rem;
+  --ff-download-icon-size: 0.875rem;
+  --ff-compact-icon-size: 0.75rem;
+  --ff-compact-font-size: 0.6875rem;
+  --ff-compact-max-width: 80px;
+}
+
+/* Large size */
+.fileField.large {
+  --ff-icon-size: 1.5rem;
+  --ff-font-size: 1rem;
+  --ff-meta-font-size: 0.875rem;
+  --ff-padding: 0.75rem;
+  --ff-gap: 0.75rem;
+  --ff-card-min-width: 200px;
+  --ff-card-icon-size: 3.5rem;
+  --ff-download-icon-size: 1.25rem;
+  --ff-compact-icon-size: 1rem;
+  --ff-compact-font-size: 0.9375rem;
+  --ff-compact-max-width: 160px;
+}
+
+/* Inline label position */
+.fileField.inline {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--ff-gap);
+}
+
+.label {
+  font-size: var(--ff-font-size);
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+
+/* When inline, don't let label grow */
+.fileField.inline .label {
+  flex-shrink: 0;
+}
+
+/* Empty state */
+.empty {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--ff-font-size);
+}
+
+/* List display */
+.fileList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ff-gap);
+}
+
+.fileListItem {
+  display: flex;
+  align-items: center;
+  gap: var(--ff-gap);
+  padding: var(--ff-padding);
+  border-radius: 0.375rem;
+  background-color: hsl(var(--muted) / 0.3);
+  position: relative;
+}
+
+.fileIcon {
+  width: var(--ff-icon-size);
+  height: var(--ff-icon-size);
+  flex-shrink: 0;
+  color: hsl(var(--muted-foreground));
+}
+
+.fileInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.fileName {
+  font-size: var(--ff-font-size);
+  color: hsl(var(--foreground));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileSize {
+  font-size: var(--ff-meta-font-size);
+  color: hsl(var(--muted-foreground));
+}
+
+.downloadLink {
+  padding: 0.25rem;
+  color: hsl(var(--muted-foreground));
+  transition: color 0.2s;
+}
+
+.downloadLink:hover {
+  color: hsl(var(--foreground));
+}
+
+.downloadIcon {
+  width: var(--ff-download-icon-size);
+  height: var(--ff-download-icon-size);
+}
+
+.moreFiles {
+  font-size: var(--ff-meta-font-size);
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+  padding-left: var(--ff-padding);
+}
+
+/* Compact display */
+.compactContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ff-gap);
+}
+
+.compactFile {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem var(--ff-padding);
+  border-radius: 0.25rem;
+  background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  text-decoration: none;
+  font-size: var(--ff-compact-font-size);
+  transition: background-color 0.2s;
+}
+
+.compactFile:hover {
+  background-color: hsl(var(--muted) / 0.8);
+}
+
+.compactIcon {
+  width: var(--ff-compact-icon-size);
+  height: var(--ff-compact-icon-size);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.compactName {
+  max-width: var(--ff-compact-max-width);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compactMore {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem var(--ff-padding);
+  font-size: var(--ff-compact-font-size);
+  color: hsl(var(--muted-foreground));
+}
+
+/* Card display */
+.cardContainer {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--ff-card-min-width), 1fr));
+  gap: var(--ff-gap);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 0.5rem;
+  border: 1px solid hsl(var(--border));
+  overflow: hidden;
+  background-color: hsl(var(--card));
+  position: relative;
+}
+
+.cardPreview {
+  aspect-ratio: 4/3;
+  overflow: hidden;
+  background-color: hsl(var(--muted) / 0.3);
+}
+
+.cardImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cardIconContainer {
+  aspect-ratio: 4/3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: hsl(var(--muted) / 0.3);
+}
+
+.cardIcon {
+  width: var(--ff-card-icon-size);
+  height: var(--ff-card-icon-size);
+  color: hsl(var(--muted-foreground));
+}
+
+.cardContent {
+  padding: var(--ff-padding);
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.cardName {
+  font-size: var(--ff-font-size);
+  color: hsl(var(--foreground));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardSize {
+  font-size: var(--ff-meta-font-size);
+  color: hsl(var(--muted-foreground));
+}
+
+.cardDownload {
+  position: absolute;
+  top: var(--ff-padding);
+  right: var(--ff-padding);
+  padding: 0.375rem;
+  border-radius: 0.25rem;
+  background-color: hsl(var(--background) / 0.9);
+  color: hsl(var(--muted-foreground));
+  opacity: 0;
+  transition: opacity 0.2s, color 0.2s;
+}
+
+.card:hover .cardDownload {
+  opacity: 1;
+}
+
+.cardDownload:hover {
+  color: hsl(var(--foreground));
+}
+
+.cardDownloadIcon {
+  width: var(--ff-download-icon-size);
+  height: var(--ff-download-icon-size);
+}
+
+.moreCard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--ff-font-size);
+  color: hsl(var(--muted-foreground));
+  min-height: 100px;
+}
+
+/* Edit button */
+.editButton {
+  position: absolute;
+  top: var(--ff-padding);
+  right: var(--ff-padding);
+  padding: 0.375rem;
+  border-radius: 0.25rem;
+  background-color: hsl(var(--background) / 0.9);
+  color: hsl(var(--muted-foreground));
+  border: 1px solid hsl(var(--border));
+  opacity: 0;
+  transition: opacity 0.2s, color 0.2s, background-color 0.2s;
+  cursor: pointer;
+}
+
+.fileListItem:hover .editButton,
+.compactFile:hover .editButton,
+.card:hover .editButton {
+  opacity: 1;
+}
+
+.editButton:hover {
+  color: hsl(var(--primary));
+  background-color: hsl(var(--primary) / 0.1);
+  border-color: hsl(var(--primary) / 0.3);
+}
+
+.editIcon {
+  width: var(--ff-download-icon-size);
+  height: var(--ff-download-icon-size);
+}
+
+/* Warning state (not in context) */
+.warning {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  background-color: hsl(var(--destructive) / 0.1);
+  border: 1px solid hsl(var(--destructive) / 0.3);
+}
+
+.warningIcon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.warningText {
+  font-size: 0.875rem;
+  color: hsl(var(--destructive));
+}

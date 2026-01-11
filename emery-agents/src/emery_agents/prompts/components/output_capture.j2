@@ -1,0 +1,45 @@
+## Output Submission Required
+
+**Call only ONE tool at a time. Wait for the observation before calling another.**
+
+⚠️ **EXTRACTION RULES:**
+- ONLY use data explicitly stated in the input
+- Use `null` if data is not found (never make up values)
+- Never use placeholders like "N/A" or "unknown"
+
+### Call `submit_result`:
+```
+submit_result(
+{% for output in outputs %}
+    {{ output.name }}=<value or null>{{ "," if not loop.last else "" }}
+{% endfor %}
+)
+```
+
+### Outputs:
+{% for output in outputs %}
+- **{{ output.name }}**{% if output.target.field_type %} ({{ output.target.field_type }}){% else %} ({{ output.type }}){% endif %}
+{%- if output.target.field_type == 'single-select' and output.target.options %}
+  → One of: {{ output.target.options | join(', ') }}, or null
+{%- elif output.target.field_type == 'multi-select' and output.target.options %}
+  → Array from: {{ output.target.options | join(', ') }}{% if output.target.max_selections %} (max {{ output.target.max_selections }}){% endif %}, or null
+{%- elif output.target.field_type == 'number' or output.type == 'number' %}
+  → Number or null
+{%- elif output.target.field_type == 'boolean' or output.type == 'boolean' %}
+  → true/false or null
+{%- elif output.target.field_type == 'date' or output.type == 'date' %}
+  → YYYY-MM-DD or null
+{%- elif output.target.field_type == 'email' or output.type == 'email' %}
+  → Email or null
+{%- elif output.target.field_type == 'phone' or output.type == 'phone' %}
+  → E.164 (+61...) or null
+{%- elif output.target.field_type == 'json' or output.type == 'json' %}
+  → JSON or null
+{%- elif output.description %}
+  → {{ output.description }}, or null
+{%- else %}
+  → or null if not in input
+{%- endif %}
+{% endfor %}
+
+After `submit_result` succeeds, call `final_answer`.

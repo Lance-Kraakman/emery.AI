@@ -254,14 +254,6 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-list-files": {
-    id: "emery-list-files",
-    app: "emery",
-    name: "List Files",
-    description: "List all files in the organization",
-    type: "action",
-    inputs: {}
-  },
 
   // Table Operations
   "emery-create-table": {
@@ -516,6 +508,55 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
     description: "List all teams in the organization",
     type: "action",
     inputs: {}
+  },
+
+  // Skill CRUD Operations
+  "emery-read-skill": {
+    id: "emery-read-skill",
+    app: "emery",
+    name: "Read Skill",
+    description: "Get skill details including name, description, instructions, inputs, outputs, tools, and model configuration",
+    type: "action",
+    inputs: {
+      skill_id: {
+        type: "string",
+        description: "Skill ID to retrieve",
+        required: true
+      }
+    }
+  },
+  "emery-update-skill": {
+    id: "emery-update-skill",
+    app: "emery",
+    name: "Update Skill",
+    description: "Update an existing skill's configuration including name, description, instructions, inputs, outputs, tools, and model",
+    type: "action",
+    inputs: {
+      skill_id: {
+        type: "string",
+        description: "Skill ID to update",
+        required: true
+      },
+      data: {
+        type: "object",
+        description: "Updated skill data. Can include: name, description, instructions, inputs (array of {name, type, required, description}), outputs (array of {name, type, description}), tools (array of tool configs), model (string or null)",
+        required: true
+      }
+    }
+  },
+  "emery-list-skills": {
+    id: "emery-list-skills",
+    app: "emery",
+    name: "List Skills",
+    description: "List all skills in the organization, optionally filtered by agent",
+    type: "action",
+    inputs: {
+      agent_id: {
+        type: "string",
+        description: "Optional agent ID to filter skills for a specific agent",
+        required: false
+      }
+    }
   },
 
   // Database CRUD Operations

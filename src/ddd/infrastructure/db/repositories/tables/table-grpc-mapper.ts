@@ -64,6 +64,7 @@ export class TableGrpcMapper {
       'is_null': ProtoFilterOperator.FILTER_OP_IS_NULL,
       'is_not_null': ProtoFilterOperator.FILTER_OP_IS_NOT_NULL,
       'contains': ProtoFilterOperator.FILTER_OP_CONTAINS,
+      'not_contains': ProtoFilterOperator.FILTER_OP_NE, // TODO: Add FILTER_OP_NOT_CONTAINS to proto
       'contained_by': ProtoFilterOperator.FILTER_OP_CONTAINED_BY,
       'has_key': ProtoFilterOperator.FILTER_OP_HAS_KEY,
     };
@@ -534,6 +535,8 @@ export class TableGrpcMapper {
         return FieldType.FIELD_TYPE_EMAIL;
       case 'phone':
         return FieldType.FIELD_TYPE_PHONE;
+      case 'json':
+        return FieldType.FIELD_TYPE_JSON;
       default:
         return FieldType.FIELD_TYPE_UNSPECIFIED;
     }
@@ -574,6 +577,8 @@ export class TableGrpcMapper {
         return 'email';
       case FieldType.FIELD_TYPE_PHONE:
         return 'phone';
+      case FieldType.FIELD_TYPE_JSON:
+        return 'json';
       default:
         return 'text';
     }

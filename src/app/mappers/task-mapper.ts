@@ -14,6 +14,7 @@ export interface TaskDTO {
   organizationId: number;             // Converted from OrganizationId value object
   name: string;
   instructions: TaskInstructions;
+  skillId: number | null;             // Optional skill to execute
   triggerContext: TriggerContext | null; // What triggered this task (schedule, manual, etc.)
   status: string;                     // Converted from TaskStatus value object
   result: any;
@@ -35,6 +36,7 @@ export function taskToDTO(task: TaskEntity): TaskDTO {
     organizationId: task.organizationId.value,
     name: task.name,
     instructions: task.instructions,
+    skillId: task.skillId,
     triggerContext: task.triggerContext,
     status: task.status.value,
     result: task.result,

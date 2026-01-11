@@ -6,9 +6,12 @@ import { SignInButton } from "@/components/auth/SignInButton";
 import { EmailSignInForm } from "@/components/auth/EmailSignInForm";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle } from "lucide-react";
-import { useLinkContext } from "@/components/puck/link-context";
+import { useLinkContext, useTheme } from "@/components/puck/contexts/PageContext";
 import { resolveLinkAction } from "@/components/puck/utils/resolve-link-action";
 import type { LinkActionConfig } from "@/components/puck/custom-fields/link-action-field";
+import type { FourCornerRadius } from "@/components/puck/types/spacing-types";
+import { computeFourCornerRadiusShorthand } from "@/components/puck/utils/spacing";
+import { useInterpolatedText } from "@/components/puck/hooks/useInterpolatedText";
 
 export interface LoginBlockProps {
   title: string;
@@ -22,7 +25,7 @@ export interface LoginBlockProps {
   buttonColor?: string;
   buttonTextColor?: string;
   borderColor?: string;
-  borderRadius?: string;
+  radius?: FourCornerRadius;
 }
 
 export function LoginBlock({
@@ -37,8 +40,15 @@ export function LoginBlock({
   buttonColor,
   buttonTextColor,
   borderColor,
-  borderRadius,
+  radius,
 }: LoginBlockProps) {
+  const theme = useTheme();
+  // Interpolate variables in title and description
+  const interpolatedTitle = useInterpolatedText(title);
+  const interpolatedDescription = useInterpolatedText(description);
+
+  // Compute borderRadius shorthand string for CSS and child components
+  const borderRadius = radius ? computeFourCornerRadiusShorthand(radius, theme) : undefined;
   const { isAuthenticated, isLoading, user, appId } = usePublicAppAuth();
   const isPreviewMode = appId === 0;
   const linkContext = useLinkContext();
@@ -116,14 +126,14 @@ export function LoginBlock({
             className="text-lg font-bold"
             style={{ color: textColor || 'var(--theme-text, #1e293b)' }}
           >
-            {title}
+            {interpolatedTitle}
           </h2>
-          {description && (
+          {interpolatedDescription && (
             <p
               className="text-sm"
               style={{ color: 'var(--theme-text-muted, #64748b)' }}
             >
-              {description}
+              {interpolatedDescription}
             </p>
           )}
         </div>

@@ -47,6 +47,7 @@ enum FieldType {
   FIELD_TYPE_CREATED_AT = 13;   // Auto-set timestamp on creation
   FIELD_TYPE_EMAIL = 14;        // Email address with validation
   FIELD_TYPE_PHONE = 15;        // Phone number in E.164 format
+  FIELD_TYPE_JSON = 16;         // Arbitrary JSON data (classification results, structured outputs)
 }
 
 // Filter operators matching the TypeScript FilterOperator type

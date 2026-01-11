@@ -4,7 +4,7 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { format, subDays, addDays, isWithinInterval } from 'date-fns';
 import { RRule } from 'rrule';
 import type { TaskDTO } from '@/app/mappers/task-mapper';
-import type { ScheduleConfigurationDTO } from '@/app/dtos/schedule.dto';
+import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
 import { Calendar, Clock, AlertCircle, CheckCircle, Loader, ChevronLeft, ChevronRight } from 'lucide-react';
 import { TaskCard } from '@/components/tasks/TaskCard';
 
@@ -30,7 +30,7 @@ interface SwimLane {
 
 interface AgentExecutionTimelineProps {
   tasks: TaskDTO[];
-  schedules?: ScheduleConfigurationDTO[];
+  schedules?: AutomationConfigurationDTO[];
   className?: string;
 }
 
@@ -215,7 +215,7 @@ export function AgentExecutionTimeline({ tasks, schedules = [], className = '' }
 
             lanes.get(laneName)!.push({
               id: `scheduled-${idx}-${occIdx}`,
-              name: schedule.name || schedule.taskInstructions.task.substring(0, 50) + '...',
+              name: schedule.name || `Skill ${schedule.skillId}`,
               start: date,
               end: endTime,
               status: 'scheduled',

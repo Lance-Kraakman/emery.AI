@@ -19,8 +19,12 @@ import { FileUseCases } from './file-application-service';
 import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/value-objects';
 import { Result } from '@/ddd/domain/shared/result';
 import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
+import { Row } from '@/ddd/domain/tables/value-objects/row';
+import { FieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
 import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
+import { getFieldDefaultValue } from '@/app/mappers/dsg-mapper';
+import { FieldMapper } from '@/app/mappers/field-mapper';
 
 export interface CreateTiptapDocumentCommand {
   organizationId: OrganizationId;
@@ -29,6 +33,7 @@ export interface CreateTiptapDocumentCommand {
   title: string;
   initialContent?: object[];
   createdBy: UserId;
+  rowId?: string; // Optional: if provided, add document to existing row; if not, create new row
 }
 
 export interface UpdateTiptapDocumentCommand {
@@ -198,6 +203,62 @@ export class DocumentApplicationService {
 
       const documentFieldValue = updatedDocumentField.toFieldValue();
 
+      // 4. Add document to row (create new or update existing)
+      const table = await this.dynamicTableService.getTable(command.tableId);
+      if (!table) {
+        return { success: false, error: 'Table not found' };
+      }
+
+      const field = table.getFieldById(command.fieldId);
+      if (!field) {
+        return { success: false, error: 'Field not found' };
+      }
+
+      const fieldIdStr = command.fieldId.value.toString();
+
+      if (command.rowId) {
+        // Update existing row - append document to field
+        const existingRow = await this.tableRepository.getRow(command.tableId, command.rowId);
+        if (!existingRow) {
+          return { success: false, error: `Row ${command.rowId} not found` };
+        }
+
+        // Get current documents in field (or empty array if none)
+        const currentDocs = (existingRow.getFieldValue(fieldIdStr)?.value || []) as DocumentFieldValue[];
+        const updatedDocs = [...currentDocs, documentFieldValue];
+
+        // Build update row with all existing field values plus updated document field
+        const rowData: Record<string, any> = { id: command.rowId };
+        for (const fv of existingRow.fieldValues) {
+          rowData[fv.fieldId] = fv.fieldId === fieldIdStr ? updatedDocs : fv.value;
+        }
+
+        const updatedRow = Row.fromPlainObject(rowData, table.id.value, table.fields as any);
+        await this.tableRepository.updateRows(command.tableId, [{ rowId: command.rowId, row: updatedRow }]);
+
+        logger.debug(`[DOCUMENT-APP-SERVICE] Added document to existing row ${command.rowId}`);
+      } else {
+        // Create new row with document + defaults for required fields
+        const rowData: Record<string, any> = {
+          [fieldIdStr]: [documentFieldValue]
+        };
+
+        // Populate defaults for required fields (except the document field)
+        for (const f of table.fields) {
+          const fIdStr = f.id.value.toString();
+          if (fIdStr === fieldIdStr) continue; // Skip document field (already set)
+          if (!f.required) continue; // Skip optional fields
+
+          const fieldDTO = FieldMapper.toDTO(f);
+          rowData[fIdStr] = getFieldDefaultValue(fieldDTO);
+        }
+
+        const newRow = Row.fromPlainObject(rowData, table.id.value, table.fields as any);
+        await this.tableRepository.insertRows(command.tableId, [newRow]);
+
+        logger.debug(`[DOCUMENT-APP-SERVICE] Created new row with document`);
+      }
+
       console.log(`[DOCUMENT-APP-SERVICE] Created TipTap document "${command.title}" with ID ${uploadResult.data.id}`);
       return { success: true, data: documentFieldValue };
 
@@ -240,7 +301,23 @@ export class DocumentApplicationService {
         return { success: false, error: 'Could not retrieve existing document' };
       }
 
+      // 2.5. Validate TipTap structure before saving
+      if (!command.content || typeof command.content !== 'object') {
+        return { success: false, error: 'Invalid content: must be an object' };
+      }
+      const content = command.content as { type?: string; content?: unknown };
+      if (content.type !== 'doc') {
+        return { success: false, error: `Invalid TipTap: root type must be "doc", got "${content.type}"` };
+      }
+      if (!Array.isArray(content.content)) {
+        return { success: false, error: `Invalid TipTap: 'content' must be an array of nodes, got ${typeof content.content}. Ensure you're sending {"type": "doc", "content": [...nodes...]}` };
+      }
+
       // 3. Create updated content with incremented version
+      // IMPORTANT: command.content is the FULL TipTap JSON from editor.getJSON()
+      // It should contain: { type: "doc", content: [...nodes with attrs...] }
+      console.log('[DOCUMENT-APP-SERVICE] updateTiptapDocument - command.content:', JSON.stringify(command.content));
+
       const updatedJson = {
         ...command.content,
         metadata: {
@@ -251,7 +328,10 @@ export class DocumentApplicationService {
         }
       };
 
+      console.log('[DOCUMENT-APP-SERVICE] updateTiptapDocument - updatedJson to save:', JSON.stringify(updatedJson));
+
       const fileBuffer = Buffer.from(JSON.stringify(updatedJson, null, 2), 'utf-8');
+      console.log('[DOCUMENT-APP-SERVICE] updateTiptapDocument - fileBuffer size:', fileBuffer.length);
 
       // 4. Update existing file using updateFile to preserve the same S3 key/ID
       const updateResult = await this.fileUseCases.updateFile({
@@ -367,6 +447,9 @@ export class DocumentApplicationService {
         hasMetadata: !!tiptapJson.metadata,
         keys: Object.keys(tiptapJson)
       });
+
+      // Log the FULL content to debug attrs being stripped
+      console.log('[DOCUMENT-APP-SERVICE] Full loaded content:', JSON.stringify(tiptapJson));
 
       // 3. Validate it's a TipTap document
       if (!tiptapJson.type || tiptapJson.type !== 'doc') {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, hasPermission } from "@/lib/auth";
 import { getFileApplicationService, getTableApplicationService, getDocumentApplicationService, getStorageQuotaApplicationService } from "@/ddd/application/di/container";
-import { OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
+import { OrganizationId, TableId, UserId, FieldId } from "@/ddd/domain/shared/value-objects";
 import type { UploadFileCommand } from "@/ddd/application/services/tables/file-application-service";
 import type { CreateTiptapDocumentCommand } from "@/ddd/application/services/tables/document-application-service";
 import { withAuthContext } from '@/lib/auth/with-context';
@@ -18,11 +18,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user has permission to manage data
-    const hasDataPermission = await hasPermission(session.user.id, "data:manage", session.user.currentOrganizationId);
+    // Check if user has permission to manage tables
+    const hasDataPermission = await hasPermission(session.user.id, "table:manage", session.user.currentOrganizationId);
     if (!hasDataPermission) {
       return NextResponse.json(
-        { error: "Permission denied: data:manage required" },
+        { error: "Permission denied: table:manage required" },
         { status: 403 }
       );
     }
@@ -31,17 +31,18 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const organizationId = parseInt(formData.get('organizationId') as string);
     const tableId = parseInt(formData.get('tableId') as string);
-    const fieldName = formData.get('fieldName') as string;
+    const fieldIdNum = parseInt(formData.get('fieldId') as string);
     
     // Document-specific form fields
     const documentTitle = formData.get('documentTitle') as string | null;
     const documentType = formData.get('documentType') as 'tiptap' | 'file' | null;
     const initialContent = formData.get('initialContent') as string | null;
+    const rowId = formData.get('rowId') as string | null;
 
     // Validate common required fields
-    if (!organizationId || !tableId || !fieldName) {
+    if (!organizationId || !tableId || !fieldIdNum || isNaN(fieldIdNum)) {
       return NextResponse.json(
-        { error: "organizationId, tableId, and fieldName are required" },
+        { error: "organizationId, tableId, and fieldId are required" },
         { status: 400 }
       );
     }
@@ -65,10 +66,10 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
-    const field = table.getField(fieldName);
+    const field = table.getFieldById(FieldId.fromNumber(fieldIdNum));
     if (!field) {
       return NextResponse.json(
-        { error: `Field '${fieldName}' not found in table` },
+        { error: `Field with ID '${fieldIdNum}' not found in table` },
         { status: 404 }
       );
     }
@@ -117,7 +118,8 @@ export async function POST(request: NextRequest) {
         fieldId: field.id,
         title: documentTitle,
         initialContent: initialContent ? JSON.parse(initialContent) : undefined,
-        createdBy: UserId.fromString(session.user.id)
+        createdBy: UserId.fromString(session.user.id),
+        rowId: rowId || undefined
       };
 
       const result = await documentApplicationService.createTiptapDocument(command);

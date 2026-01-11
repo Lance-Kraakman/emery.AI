@@ -26,7 +26,9 @@ export class CredentialDelegationApplicationService {
 
   /**
    * Create new credential delegation
-   * Auto-approves if owner is creating for their own agent
+   *
+   * SECURITY: Delegations start as PENDING by default and require explicit approval
+   * to prevent unauthorized credential access.
    */
   async createDelegation(dto: CreateDelegationDTO): Promise<Result<CredentialDelegation>> {
     try {
@@ -45,14 +47,18 @@ export class CredentialDelegationApplicationService {
         };
       }
 
+      // SECURITY: Default to PENDING status - require explicit approval
+      const status = dto.status ?? DelegationStatus.PENDING;
+      const approvedAt = status === DelegationStatus.APPROVED ? new Date() : undefined;
+
       // Create delegation entity
       const delegation: CredentialDelegation = {
         id: DelegationId.newEntity(),
         ownerId: dto.ownerId,
         agentId: dto.agentId,
         services: dto.services,
-        status: dto.status ?? DelegationStatus.APPROVED,
-        approvedAt: dto.status === DelegationStatus.APPROVED ? new Date() : undefined,
+        status,
+        approvedAt,
         expiresAt: dto.expiresAt,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -74,6 +80,64 @@ export class CredentialDelegationApplicationService {
       return {
         success: false,
         error: `Failed to create delegation: ${errorMessage}`
+      };
+    }
+  }
+
+  /**
+   * Approve a pending credential delegation
+   *
+   * SECURITY: Only the credential owner can approve delegations
+   */
+  async approveDelegation(delegationId: DelegationId): Promise<Result<CredentialDelegation>> {
+    try {
+      logger.debug('Approving delegation', { delegationId: delegationId.value });
+
+      const delegation = await this.delegationRepository.findById(delegationId);
+      if (!delegation) {
+        return {
+          success: false,
+          error: `Delegation ${delegationId.value} not found`
+        };
+      }
+
+      if (delegation.status === DelegationStatus.APPROVED) {
+        return {
+          success: false,
+          error: 'Delegation is already approved'
+        };
+      }
+
+      if (delegation.status === DelegationStatus.REVOKED) {
+        return {
+          success: false,
+          error: 'Cannot approve a revoked delegation'
+        };
+      }
+
+      // Update status to approved
+      const approved: CredentialDelegation = {
+        ...delegation,
+        status: DelegationStatus.APPROVED,
+        approvedAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      const result = await this.delegationRepository.update(approved);
+
+      logger.summary('Delegation approved', {
+        delegationId: delegationId.value,
+        agentId: delegation.agentId.value
+      });
+
+      return { success: true, data: result };
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Error approving delegation', error);
+      return {
+        success: false,
+        error: `Failed to approve delegation: ${errorMessage}`
       };
     }
   }

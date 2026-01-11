@@ -1,0 +1,261 @@
+/* TipTap Document Editor - Shared Styles */
+
+/* Main Editor Container */
+.editorContainer {
+  @apply border border-border rounded-xl bg-card flex flex-col;
+  background-color: hsl(var(--card) / 0.95);
+  overflow: hidden;
+}
+
+/* Puck Theme Mode - applies CSS variable overrides */
+.puckThemed {
+  /* Container inherits shadcn CSS vars from inline styles */
+  border-color: hsl(var(--border));
+  background-color: hsl(var(--card));
+}
+
+/* Toolbar Styling */
+.toolbar {
+  @apply border-b border-border p-3 bg-muted flex items-center;
+  background-color: hsl(var(--muted) / 0.5);
+}
+
+.puckThemed .toolbar {
+  border-color: hsl(var(--border));
+  background-color: hsl(var(--muted));
+}
+
+.toolbarButtons {
+  @apply flex flex-wrap gap-1;
+}
+
+.toolbarButton {
+  @apply transition-all duration-200 hover:scale-105;
+}
+
+.toolbarButton:hover {
+  background-color: hsl(var(--accent) / 0.1);
+}
+
+.toolbarSeparator {
+  @apply w-px h-6 bg-border mx-2;
+}
+
+.puckThemed .toolbarSeparator {
+  background-color: hsl(var(--border));
+}
+
+/* Editor Content Area */
+.editorWrapper {
+  @apply bg-background rounded-b-xl flex-1 relative;
+  background-color: hsl(var(--background) / 0.98);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.puckThemed .editorWrapper {
+  background-color: hsl(var(--background));
+}
+
+.tiptapEditor {
+  @apply relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Ensure EditorContent and wrapper elements fill the container */
+.tiptapEditor :global(.ProseMirror-body) {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.tiptapEditor :global([data-editor]) {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.tiptapEditor :global(.tiptap) {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* TipTap ProseMirror Content Styling */
+.tiptapEditor :global(.ProseMirror) {
+  @apply outline-none p-6 leading-relaxed text-sm text-foreground bg-transparent;
+  flex: 1;
+  overflow-y: auto;
+  box-sizing: border-box;
+  cursor: text;
+  min-height: 200px;
+  height: 100%;
+  width: 100%;
+}
+
+/* Typography Styles */
+.tiptapEditor :global(.ProseMirror p) {
+  @apply mb-4 text-foreground/90;
+}
+
+.tiptapEditor :global(.ProseMirror p:last-child) {
+  @apply mb-0;
+}
+
+/* Headings */
+.tiptapEditor :global(.ProseMirror h1) {
+  @apply text-3xl font-bold mb-6 mt-8 leading-tight text-foreground border-b-2 border-border pb-2;
+}
+
+.tiptapEditor :global(.ProseMirror h1:first-child) {
+  @apply mt-0;
+}
+
+.tiptapEditor :global(.ProseMirror h2) {
+  @apply text-2xl font-semibold mb-5 mt-7 leading-snug text-foreground;
+}
+
+.tiptapEditor :global(.ProseMirror h2:first-child) {
+  @apply mt-0;
+}
+
+.tiptapEditor :global(.ProseMirror h3) {
+  @apply text-xl font-semibold mb-4 mt-6 leading-normal text-foreground/95;
+}
+
+.tiptapEditor :global(.ProseMirror h3:first-child) {
+  @apply mt-0;
+}
+
+/* Text Formatting */
+.tiptapEditor :global(.ProseMirror strong) {
+  @apply font-bold text-foreground;
+}
+
+.tiptapEditor :global(.ProseMirror em) {
+  @apply italic text-muted-foreground;
+}
+
+.tiptapEditor :global(.ProseMirror u) {
+  @apply underline decoration-accent decoration-2;
+}
+
+.tiptapEditor :global(.ProseMirror s) {
+  @apply line-through decoration-destructive opacity-70;
+}
+
+/* Code Styling */
+.tiptapEditor :global(.ProseMirror code) {
+  @apply bg-muted border border-border px-1.5 py-0.5 rounded-md font-mono text-sm text-foreground;
+}
+
+/* Blockquotes */
+.tiptapEditor :global(.ProseMirror blockquote) {
+  @apply border-l-4 border-accent pl-5 italic my-6 text-muted-foreground bg-muted p-4 rounded-r-lg;
+  background-color: hsl(var(--muted) / 0.3);
+}
+
+/* Lists */
+.tiptapEditor :global(.ProseMirror ul) {
+  @apply list-disc ml-6 mb-4;
+}
+
+.tiptapEditor :global(.ProseMirror ol) {
+  @apply list-decimal ml-6 mb-4;
+}
+
+.tiptapEditor :global(.ProseMirror li) {
+  @apply mb-2 pl-1;
+}
+
+.tiptapEditor :global(.ProseMirror li p) {
+  @apply mb-2;
+}
+
+/* Code Blocks */
+.tiptapEditor :global(.ProseMirror pre) {
+  @apply bg-primary text-primary-foreground rounded-xl my-6 overflow-x-auto font-mono text-sm leading-relaxed border border-border;
+  background-color: hsl(var(--primary) / 0.95);
+}
+
+.tiptapEditor :global(.ProseMirror pre code) {
+  @apply bg-transparent border-none p-0 text-inherit;
+}
+
+/* Selection Styling */
+.tiptapEditor :global(.ProseMirror ::selection) {
+  background-color: hsl(var(--accent) / 0.2);
+}
+
+/* Focus Styling */
+.tiptapEditor :global(.ProseMirror:focus) {
+  @apply shadow-[inset_0_0_0_2px] shadow-accent/10;
+}
+
+/* Empty State - Placeholder */
+.tiptapEditor :global(.ProseMirror .is-empty::before) {
+  @apply text-muted-foreground float-left h-0 pointer-events-none;
+  content: attr(data-placeholder);
+}
+
+.tiptapEditor :global(.ProseMirror:not(.is-editor-empty) .is-empty::before) {
+  display: none;
+}
+
+/* Image Styling */
+.tiptapEditor :global(.ProseMirror img) {
+  @apply max-w-full h-auto rounded-lg my-4 border border-border;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.tiptapEditor :global(.ProseMirror img.ProseMirror-selectednode) {
+  @apply ring-2 ring-primary ring-offset-2;
+}
+
+/* File Attachment Node Styling */
+.tiptapEditor :global([data-file-attachment]) {
+  @apply my-3;
+}
+
+.tiptapEditor :global(.ProseMirror .node-fileAttachment) {
+  @apply my-3;
+}
+
+/* Drag and drop visual indicator */
+.tiptapEditor :global(.ProseMirror.ProseMirror-focused) {
+  /* Subtle indicator that the editor accepts drops */
+}
+
+.tiptapEditor :global(.ProseMirror-dragging) {
+  @apply opacity-50;
+}
+
+/* File upload loading state placeholder */
+.tiptapEditor :global(.file-upload-placeholder) {
+  @apply flex items-center gap-3 px-4 py-3 my-2 bg-muted/30 border border-dashed border-border rounded-lg animate-pulse;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .toolbarButtons {
+    @apply gap-0.5;
+  }
+
+  .tiptapEditor :global(.ProseMirror) {
+    padding: 16px;
+    font-size: 14px;
+  }
+
+  .tiptapEditor :global(.ProseMirror img) {
+    @apply my-3;
+  }
+}

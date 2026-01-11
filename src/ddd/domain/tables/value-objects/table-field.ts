@@ -25,7 +25,8 @@ export type FieldType =
   | 'last-updated'
   | 'created-at'
   | 'email'
-  | 'phone';
+  | 'phone'
+  | 'json';  // Stores arbitrary JSON data (classification results, structured outputs, etc.)
 
 export interface EmbeddingFieldMetadata {
   embeddingSize: 384 | 768 | 1536 | 3072;
@@ -280,7 +281,8 @@ export class TableField {
       'last-updated': 'TIMESTAMP WITH TIME ZONE',
       'created-at': 'TIMESTAMP WITH TIME ZONE',
       'email': 'TEXT',
-      'phone': 'TEXT'
+      'phone': 'TEXT',
+      'json': 'JSONB'  // Arbitrary JSON data (classification results, structured outputs)
     };
 
     return typeMapping[this._type];
@@ -440,9 +442,11 @@ export class TableField {
       const validValues = config.options.map(o => o.value);
       const validIds = config.options.map(o => o.id);
 
-      // Accept either option value (string) or option ID (number)
+      // Accept either option value (string) or option ID (number or string)
+      // Delta Lake stores IDs as strings, so we need to accept string IDs too
       const isValid = validValues.includes(String(value)) ||
-                      (typeof value === 'number' && validIds.includes(value));
+                      (typeof value === 'number' && validIds.includes(value)) ||
+                      validIds.map(String).includes(String(value));
 
       if (!isValid) {
         throw new Error(`${this._name} must be one of: ${validValues.join(', ')}`);
@@ -473,8 +477,11 @@ export class TableField {
       const validIds = config.options.map(o => o.id);
 
       for (const val of value) {
+        // Accept either option value (string) or option ID (number or string)
+        // Delta Lake stores IDs as strings, so we need to accept string IDs too
         const isValid = validValues.includes(String(val)) ||
-                        (typeof val === 'number' && validIds.includes(val));
+                        (typeof val === 'number' && validIds.includes(val)) ||
+                        validIds.map(String).includes(String(val));
 
         if (!isValid) {
           throw new Error(`${this._name} contains invalid option: ${val}. Valid options: ${validValues.join(', ')}`);
@@ -538,4 +545,12 @@ export class TableField {
       throw new Error('Field type is required');
     }
   }
+}
+
+/**
+ * Check if a field type stores array values (relation, file, document, multi-select)
+ * These fields store JSON arrays and may need special handling for extraction.
+ */
+export function isArrayFieldType(type: FieldType | string): boolean {
+  return ['relation', 'file', 'document', 'multi-select'].includes(type);
 }

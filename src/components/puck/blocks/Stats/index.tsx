@@ -5,8 +5,62 @@ import styles from "./styles.module.css";
 import { getClassNameFactory } from "@/components/puck/lib";
 import { Section } from "../../components/Section";
 import { backgroundColorField, textColorField, fontFamilyField, fontWeightField, borderRadiusField, paddingField } from "../../fields/standard-fields";
+import type { FourSidedSpacing, FourCornerRadius } from "../../types/spacing-types";
+import { useTheme } from "../../contexts/PageContext";
+import { computeFourSidedCSS, computeFourCornerRadiusCSS } from "../../utils/spacing";
+import { createVariableTextField } from "../../custom-fields";
+import { useInterpolatedText } from "../../hooks/useInterpolatedText";
 
 const getClassName = getClassNameFactory("Stats", styles);
+
+/** Helper component for rendering a stat item with variable interpolation */
+function StatItem({
+  title,
+  description,
+  labelColor,
+  labelFontFamily,
+  labelFontWeight,
+  valueColor,
+  valueFontFamily,
+  valueFontWeight,
+}: {
+  title: string;
+  description: string;
+  labelColor?: string;
+  labelFontFamily?: string;
+  labelFontWeight?: string;
+  valueColor?: string;
+  valueFontFamily?: string;
+  valueFontWeight?: string;
+}) {
+  const interpolatedTitle = useInterpolatedText(title);
+  const interpolatedDescription = useInterpolatedText(description);
+
+  return (
+    <div className={getClassName("item")}>
+      <div
+        className={getClassName("label")}
+        style={{
+          ...(labelColor && { color: labelColor }),
+          ...(labelFontFamily && { fontFamily: labelFontFamily }),
+          ...(labelFontWeight && { fontWeight: labelFontWeight }),
+        }}
+      >
+        {interpolatedTitle}
+      </div>
+      <div
+        className={getClassName("value")}
+        style={{
+          ...(valueColor && { color: valueColor }),
+          ...(valueFontFamily && { fontFamily: valueFontFamily }),
+          ...(valueFontWeight && { fontWeight: valueFontWeight }),
+        }}
+      >
+        {interpolatedDescription}
+      </div>
+    </div>
+  );
+}
 
 export type StatsProps = {
   items: {
@@ -20,8 +74,8 @@ export type StatsProps = {
   labelFontWeight?: string;
   valueFontFamily?: string;
   valueFontWeight?: string;
-  borderRadius?: string;
-  paddingLevel?: string;
+  radius?: FourCornerRadius;
+  padding?: FourSidedSpacing;
 };
 
 export const Stats: ComponentConfig<StatsProps> = {
@@ -34,14 +88,8 @@ export const Stats: ComponentConfig<StatsProps> = {
         description: "1,000",
       },
       arrayFields: {
-        title: {
-          type: "text",
-          contentEditable: true,
-        },
-        description: {
-          type: "text",
-          contentEditable: true,
-        },
+        title: createVariableTextField({ label: 'Title' }),
+        description: createVariableTextField({ label: 'Value' }),
       },
     },
     labelColor: {
@@ -69,8 +117,8 @@ export const Stats: ComponentConfig<StatsProps> = {
       ...fontWeightField,
       label: "Value Font Weight (Optional)",
     },
-    borderRadius: borderRadiusField,
-    paddingLevel: paddingField,
+    radius: borderRadiusField,
+    padding: paddingField,
   },
   defaultProps: {
     items: [
@@ -86,12 +134,13 @@ export const Stats: ComponentConfig<StatsProps> = {
     labelFontWeight: undefined,
     valueFontFamily: undefined,
     valueFontWeight: undefined,
-    borderRadius: undefined,
-    paddingLevel: undefined,
+    radius: undefined,
+    padding: undefined,
   },
-  render: ({ items, labelColor, valueColor, backgroundColor, labelFontFamily, labelFontWeight, valueFontFamily, valueFontWeight, borderRadius, paddingLevel }) => {
-    // Calculate padding from level if provided
-    const padding = paddingLevel ? `calc(var(--theme-spacing-unit, 0.25rem) * ${paddingLevel})` : undefined;
+  render: function StatsRender({ items, labelColor, valueColor, backgroundColor, labelFontFamily, labelFontWeight, valueFontFamily, valueFontWeight, radius, padding }) {
+    const theme = useTheme();
+    const paddingStyles = padding ? computeFourSidedCSS(padding, theme, 'padding') : {};
+    const radiusStyles = radius ? computeFourCornerRadiusCSS(radius, theme) : {};
 
     return (
       <Section className={getClassName()} maxWidth={"916px"}>
@@ -99,33 +148,22 @@ export const Stats: ComponentConfig<StatsProps> = {
           className={getClassName("items")}
           style={{
             ...(backgroundColor && { backgroundImage: 'none', backgroundColor }),
-            ...(borderRadius && { borderRadius }),
-            ...(padding && { padding }),
+            ...radiusStyles,
+            ...paddingStyles,
           }}
         >
           {items.map((item, i) => (
-            <div key={i} className={getClassName("item")}>
-              <div
-                className={getClassName("label")}
-                style={{
-                  ...(labelColor && { color: labelColor }),
-                  ...(labelFontFamily && { fontFamily: labelFontFamily }),
-                  ...(labelFontWeight && { fontWeight: labelFontWeight }),
-                }}
-              >
-                {item.title}
-              </div>
-              <div
-                className={getClassName("value")}
-                style={{
-                  ...(valueColor && { color: valueColor }),
-                  ...(valueFontFamily && { fontFamily: valueFontFamily }),
-                  ...(valueFontWeight && { fontWeight: valueFontWeight }),
-                }}
-              >
-                {item.description}
-              </div>
-            </div>
+            <StatItem
+              key={i}
+              title={item.title}
+              description={item.description}
+              labelColor={labelColor}
+              labelFontFamily={labelFontFamily}
+              labelFontWeight={labelFontWeight}
+              valueColor={valueColor}
+              valueFontFamily={valueFontFamily}
+              valueFontWeight={valueFontWeight}
+            />
           ))}
         </div>
       </Section>

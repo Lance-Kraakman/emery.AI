@@ -1,6 +1,11 @@
 import { Config, Data, Slot } from "@measured/puck";
+
+// Re-export PageStateConfig for use in DB schema
+export type { PageStateConfig } from './types/state';
 import { ButtonProps } from "./blocks/Button";
 import { CardProps } from "./blocks/Card";
+import { ContainerProps } from "./blocks/Container";
+import { DividerProps } from "./blocks/Divider";
 import { GridProps } from "./blocks/Grid";
 import { HeroProps } from "./blocks/Hero";
 import { HeadingProps } from "./blocks/Heading";
@@ -14,8 +19,24 @@ import { TableBlockProps } from "./blocks/TableBlock/TableBlock";
 import { MetricBlockProps } from "./blocks/MetricBlock/MetricBlock";
 import { ChartBlockProps } from "./blocks/ChartBlock/ChartBlock";
 import { FormBlockProps } from "./blocks/FormBlock/FormBlock";
+import { DataBlockProps } from "./blocks/DataBlock/DataBlock";
+import { LinkBlockProps } from "./blocks/LinkBlock/LinkBlock";
+import { TextFieldProps } from "./blocks/TextField/TextField";
+import { NumberFieldProps } from "./blocks/NumberField/NumberField";
+import { BooleanFieldProps } from "./blocks/BooleanField/BooleanField";
+import { ImageFieldProps } from "./blocks/ImageField/ImageField";
+import { DateFieldProps } from "./blocks/DateField/DateField";
+import { SelectFieldProps } from "./blocks/SelectField/SelectField";
+import { FileFieldProps } from "./blocks/FileField/types";
+import { DocumentFieldProps } from "./blocks/DocumentField/types";
+import { RelationFieldProps } from "./blocks/RelationField/RelationField";
+import { LinkFieldProps } from "./blocks/LinkField/LinkField";
 import type { LoginBlockProps } from "./blocks/LoginBlock";
 import type { SignOutBlockProps } from "./blocks/SignOutBlock";
+import type { EditorBlockProps } from "./blocks/EditorBlock/types";
+import type { MarkdownBlockProps } from "./blocks/MarkdownBlock";
+import type { ConditionalBlockProps } from "./blocks/ConditionalBlock";
+import type { DialogBlockProps } from "./blocks/DialogBlock";
 
 import { RootProps } from "./root";
 
@@ -45,6 +66,8 @@ export type FooterBlockProps = {
 export type Components = {
   Button: ButtonProps;
   Card: CardProps;
+  Container: ContainerProps;
+  Divider: DividerProps;
   Grid: GridProps;
   Hero: HeroProps;
   Heading: HeadingProps;
@@ -56,12 +79,28 @@ export type Components = {
   Space: SpaceProps;
   HeaderBlock: HeaderBlockProps;
   FooterBlock: FooterBlockProps;
+  DataBlock: DataBlockProps;
+  ConditionalBlock: ConditionalBlockProps;
+  DialogBlock: DialogBlockProps;
   TableBlock: TableBlockProps;
   MetricBlock: MetricBlockProps;
   ChartBlock: ChartBlockProps;
   FormBlock: FormBlockProps;
+  LinkBlock: LinkBlockProps;
+  TextField: TextFieldProps;
+  NumberField: NumberFieldProps;
+  BooleanField: BooleanFieldProps;
+  ImageField: ImageFieldProps;
+  DateField: DateFieldProps;
+  SelectField: SelectFieldProps;
+  FileField: FileFieldProps;
+  DocumentField: DocumentFieldProps;
+  RelationField: RelationFieldProps;
+  LinkField: LinkFieldProps;
   LoginBlock: LoginBlockProps;
   SignOutBlock: SignOutBlockProps;
+  EditorBlock: EditorBlockProps;
+  MarkdownBlock: MarkdownBlockProps;
 };
 
 export type UserConfig = Config<{

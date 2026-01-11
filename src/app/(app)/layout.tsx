@@ -3,16 +3,16 @@ import { Toaster } from 'sonner'
 import AnimatedBackground from '@/app/components/AnimatedBackground'
 import { EmeryProviders } from '@/components/EmeryProviders'
 import { auth } from '@/lib/auth'
-import { getApps } from '@/app/actions/puck-apps'
-import { getPages } from '@/app/actions/puck-pages'
 import { getAgents } from '@/app/actions/agents'
-import { getTeams } from '@/app/actions/teams'
+// import { getTeams } from '@/app/actions/teams' // Teams coming soon
 import { getSkillsByOrganization } from '@/app/actions/skills'
 import { getDatabases } from '@/app/actions/databases'
 import { getTables } from '@/app/actions/tables'
+import { getAppApplicationService } from '@/ddd/application/di/container'
+import { OrganizationId } from '@/ddd/domain/shared/value-objects'
 
 // AIDEV-NOTE: Server-side sidebar data fetching moved to layout
-// Eliminates client-side waterfalls and loading states
+// Uses optimized 2-query approach for apps+pages instead of N+1
 
 interface SidebarApp {
   id: number
@@ -31,6 +31,7 @@ interface SidebarSkill {
   name: string
   agentId: number | null
   agentName?: string
+  isSystem: boolean
 }
 
 interface SidebarDatabase {
@@ -63,29 +64,20 @@ export default async function AppLayout({
   // Only fetch if user has an organization
   if (session?.user?.currentOrganizationId) {
     try {
-      const [appsResult, agentsResult, teamsResult, skillsResult, databasesResult, tablesResult] = await Promise.all([
-        getApps(),
+      const startTime = Date.now()
+      const orgId = OrganizationId.fromNumber(session.user.currentOrganizationId)
+
+      // Fetch all sidebar data in parallel (no N+1 - apps+pages use optimized 2-query approach)
+      // Teams fetch skipped - feature coming soon
+      const [appsWithPages, agentsResult, skillsResult, databasesResult, tablesResult] = await Promise.all([
+        getAppApplicationService().getAppsWithPagesForOrganization(orgId),
         getAgents(),
-        getTeams(),
         getSkillsByOrganization(session.user.currentOrganizationId),
         getDatabases(),
         getTables()
       ])
 
-      // Extract data from Result types
-      const apps = appsResult.success && appsResult.data ? appsResult.data : []
-
-      // Fetch pages for each app
-      const appsWithPages = await Promise.all(
-        apps.map(async (app) => {
-          const pagesResult = await getPages(app.id)
-          const pages = pagesResult.success && pagesResult.data ? pagesResult.data : []
-          return {
-            ...app,
-            pages
-          }
-        })
-      )
+      console.log(`[PERF] Sidebar data fetch: ${Date.now() - startTime}ms`)
 
       // Group tables by database
       const tablesByDatabase = (tablesResult || []).reduce((acc, table) => {
@@ -112,10 +104,7 @@ export default async function AppLayout({
           id: agent.id,
           name: agent.name
         })),
-        teams: (teamsResult || []).map(team => ({
-          id: team.id,
-          name: team.name
-        })),
+        teams: [], // Teams coming soon
         skills: (skillsResult?.success && skillsResult?.data ? skillsResult.data : []).map(skill => {
           // Find agent name if this is an agent-specific skill
           const agent = skill.agentId ? (agentsResult || []).find(a => a.id === skill.agentId) : null
@@ -123,7 +112,8 @@ export default async function AppLayout({
             id: skill.id,
             name: skill.name,
             agentId: skill.agentId,
-            agentName: agent?.name
+            agentName: agent?.name,
+            isSystem: skill.isSystem
           }
         }),
         databases: (databasesResult || []).map(database => ({

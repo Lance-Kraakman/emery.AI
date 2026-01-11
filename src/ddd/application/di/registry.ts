@@ -25,6 +25,8 @@ import type { IConnectionRepository } from '@/ddd/domain/connections/repositorie
 import type { IDelegationRepository } from '@/ddd/domain/delegations/repositories/delegation-repository';
 import type { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
 import type { IToolConfigurationService } from '@/ddd/domain/tools/services/tool-configuration-service';
+import type { IAuditRepository, IRowHistoryRepository } from '@/ddd/domain/audit/interfaces/audit-repository';
+import type { AuditApplicationService } from '@/ddd/application/services/audit/audit-application-service';
 
 import type { AgentTaskApplicationService } from '@/ddd/application/services/agents/agent-task-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
@@ -141,4 +143,11 @@ export interface RepositoryRegistry {
   // App application services (Puck is implementation detail)
   AppApplicationService: AppApplicationService;
   PuckPageApplicationService: PuckPageApplicationService;
+
+  // Audit domain repositories
+  IAuditRepository: IAuditRepository;
+  IRowHistoryRepository: IRowHistoryRepository;
+
+  // Audit application services
+  AuditApplicationService: AuditApplicationService;
 }

@@ -1,12 +1,12 @@
 "use client"
 
 import React, { useEffect, useMemo, useCallback, useRef } from "react"
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { useStore } from '@tanstack/react-store'
 import { toast } from 'sonner'
 import debounce from 'lodash/debounce'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Settings, Plus, Search, TableIcon as Table, Database } from "lucide-react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
@@ -37,57 +37,36 @@ const logger = createDebugLogger('DataViewsClient')
  * convert them back after retrieval from cache
  */
 function convertDateStringsInRows(rows: DSGRow[], fields: FieldDTO[]): DSGRow[] {
-  console.log('[convertRows] Input:', rows.length, 'rows');
-
   const dateFields = fields.filter(f =>
     f.type === 'date' || f.type === 'last-updated' || f.type === 'created-at'
   );
 
-  console.log('[DATE CONVERSION] Starting', {
-    rowCount: rows.length,
-    fieldCount: fields.length,
-    dateFieldCount: dateFields.length,
-    dateFields: dateFields.map(f => ({ name: f.name, type: f.type }))
-  });
+  if (dateFields.length === 0) return rows;
 
-  return rows.map((row, rowIndex) => {
+  return rows.map((row) => {
     const convertedRow = { ...row };
 
-    // Convert string values back to Date objects
     for (const field of dateFields) {
       const value = convertedRow[field.name];
-
-      console.log(`[DATE CONVERSION] Row ${rowIndex}, field "${field.name}":`, {
-        value,
-        valueType: typeof value,
-        isDate: value instanceof Date,
-        isString: typeof value === 'string',
-        isNumber: typeof value === 'number',
-        isEmpty: value === '',
-        willConvert: (typeof value === 'string' && value !== '') || typeof value === 'number'
-      });
 
       if (typeof value === 'string') {
         // Convert empty strings to null for date fields (dateColumn expects null, not "")
         if (value === '') {
           convertedRow[field.name] = null;
-          console.log(`[DATE CONVERSION] ✅ Converted empty string to null for "${field.name}"`);
         } else {
           // Convert non-empty strings to Date objects
           try {
             convertedRow[field.name] = new Date(value);
-            console.log(`[DATE CONVERSION] ✅ Converted "${field.name}" from string to Date`, new Date(value));
-          } catch (e) {
-            console.error(`[DATE CONVERSION] ❌ Failed to convert "${field.name}":`, e);
+          } catch {
+            // Keep original if parse fails
           }
         }
       } else if (typeof value === 'number') {
         // Handle number timestamps (milliseconds since epoch from gRPC)
         try {
           convertedRow[field.name] = new Date(value);
-          console.log(`[DATE CONVERSION] ✅ Converted "${field.name}" from number timestamp to Date`, new Date(value));
-        } catch (e) {
-          console.error(`[DATE CONVERSION] ❌ Failed to convert number timestamp "${field.name}":`, e);
+        } catch {
+          // Keep original if parse fails
         }
       }
     }
@@ -114,7 +93,6 @@ function convertDateStringsInRow(row: DSGRow, fields: FieldDTO[]): DSGRow {
     if (dateFieldNames.has(key) && typeof value === 'string' && value) {
       try {
         converted[key] = new Date(value);
-        console.log('[convertRow]', key, ':', value, '→', converted[key]);
       } catch {
         // Keep original if parse fails
       }
@@ -128,8 +106,23 @@ interface DataViewsClientSimplifiedProps {
 }
 
 export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplifiedProps = {}) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnTo = searchParams.get('returnTo')
   const queryClient = useQueryClient()
   const { data, isLoading: dataLoading, error: dataError } = useEmery()
+
+  // Handle back navigation based on returnTo param
+  const handleBack = () => {
+    if (returnTo?.startsWith('org-chart')) {
+      // Parse selected node from returnTo (format: org-chart&selected=database-5)
+      const selectedMatch = returnTo.match(/selected=([^&]+)/)
+      const selected = selectedMatch ? selectedMatch[1] : null
+      router.push(selected ? `/organization?selected=${selected}` : '/organization')
+    } else {
+      router.back()
+    }
+  }
 
   // Find the initial table across all databases
   const findTableById = (id: number): TableDTO | undefined => {
@@ -190,26 +183,12 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
   // TanStack Query for selected view (if any)
   const viewQuery = useQuery({
     queryKey: ['view', selectedViewId],
-    queryFn: () => {
-      console.log('[VIEW QUERY] Fetching view:', selectedViewId)
-      return selectedViewId ? getView(selectedViewId) : Promise.resolve(null)
-    },
+    queryFn: () => selectedViewId ? getView(selectedViewId) : Promise.resolve(null),
     enabled: !!selectedViewId,
     staleTime: 5 * 60 * 1000, // 5 minutes - views change less frequently than data
   })
 
   const currentView = viewQuery.data
-
-  // Debug logging for view state
-  useEffect(() => {
-    console.log('[VIEW STATE]', {
-      selectedViewId,
-      currentView: currentView?.id,
-      currentViewName: currentView?.name,
-      isLoading: viewQuery.isLoading,
-      availableViews: availableViews.length
-    })
-  }, [selectedViewId, currentView, viewQuery.isLoading, availableViews.length])
 
   // TanStack Infinite Query for rows (supports pagination)
   const infiniteRowsQuery = useInfiniteQuery({
@@ -253,35 +232,12 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
 
   // Apply view configuration when view changes (must be after fields are loaded)
   useEffect(() => {
-    console.log('[APPLY VIEW CONFIG] Effect triggered', {
-      hasFieldsSuccess: fieldsQuery.isSuccess,
-      fieldsLength: fields.length,
-      hasCurrentView: !!currentView,
-      currentViewId: currentView?.id,
-      currentViewData: currentView
-    })
-
     // Wait for fields to be loaded before applying view configuration
     if (!fieldsQuery.isSuccess || fields.length === 0) {
-      console.log('[APPLY VIEW CONFIG] Skipping - fields not ready')
       return
     }
 
     if (currentView) {
-      console.log('[APPLY VIEW CONFIG] Applying view configuration', {
-        viewId: currentView.id,
-        viewName: currentView.name,
-        filters: currentView.filters?.length || 0,
-        sorting: currentView.sorting?.length || 0,
-        fieldMappings: currentView.fieldMappings?.length || 0
-      })
-      logger.debug('Applying view configuration', {
-        viewId: currentView.id,
-        viewName: currentView.name,
-        filters: currentView.filters?.length || 0,
-        sorting: currentView.sorting?.length || 0
-      })
-
       // Apply view's filters
       if (currentView.filters && currentView.filters.length > 0) {
         // Convert view filters to FilterConfig format (map fieldId to field name)
@@ -321,39 +277,22 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
   // Use search results when searching, otherwise use paginated rows
   // Convert date strings to Date objects after queries resolve
   const rows: DSGRow[] = useMemo(() => {
-    console.log('[ROWS USEMEMO] Running', {
-      hasFieldsData: !!fieldsQuery.data,
-      fieldsLength: fieldsQuery.data?.length || 0,
-      searchTerm,
-      hasSearchData: !!searchQuery.data,
-      hasInfiniteData: !!infiniteRowsQuery.data
-    });
-
     // Get raw rows first
     let rawRows: DSGRow[] = []
 
     if (searchTerm && searchQuery.data?.rows) {
       rawRows = searchQuery.data.rows
-      console.log('[ROWS USEMEMO] Using search results:', rawRows.length, 'rows');
     } else if (infiniteRowsQuery.data?.pages) {
       rawRows = infiniteRowsQuery.data.pages.flatMap((page: { rows: DSGRow[], hasMore: boolean, total: number }) => page.rows)
-      console.log('[ROWS USEMEMO] Using infinite query results:', rawRows.length, 'rows');
     }
-
-    console.log('[ROWS USEMEMO] Raw rows sample (first row):', rawRows[0]);
 
     // Only convert dates if we have field metadata
     if (!fieldsQuery.data || fieldsQuery.data.length === 0) {
-      console.log('[ROWS USEMEMO] ⚠️ No fields data - skipping date conversion, returning raw rows');
       return rawRows;
     }
 
     // Convert date strings to Date objects for dateColumn compatibility
-    const converted = convertDateStringsInRows(rawRows, fieldsQuery.data);
-
-    console.log('[ROWS USEMEMO] ✅ Conversion complete. Converted rows sample (first row):', converted[0]);
-
-    return converted;
+    return convertDateStringsInRows(rawRows, fieldsQuery.data);
   }, [searchTerm, searchQuery.data, infiniteRowsQuery.data, fieldsQuery.data, fieldsQuery.isSuccess])
 
   // Get total count - from search results or from first page of infinite query
@@ -371,20 +310,27 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
   const loading = isInitialLoading || isSearching
   const error = fieldsQuery.error || infiniteRowsQuery.error || searchQuery.error
 
-  // Scroll handler for infinite scroll - throttled for performance
+  // Use ref for stable access to infiniteRowsQuery state (prevents scroll handler recreation)
+  const infiniteQueryRef = useRef(infiniteRowsQuery)
+  useEffect(() => {
+    infiniteQueryRef.current = infiniteRowsQuery
+  }, [infiniteRowsQuery])
+
+  // Scroll handler for infinite scroll - stable callback using ref
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const target = e.target as HTMLDivElement
     const { scrollHeight, scrollTop, clientHeight } = target
+    const query = infiniteQueryRef.current
 
     // Trigger load when within threshold of bottom
     if (
       scrollHeight - scrollTop - clientHeight < GRID_CONFIG.SCROLL_THRESHOLD &&
-      !infiniteRowsQuery.isFetching &&
-      infiniteRowsQuery.hasNextPage
+      !query.isFetching &&
+      query.hasNextPage
     ) {
-      infiniteRowsQuery.fetchNextPage()
+      query.fetchNextPage()
     }
-  }, [infiniteRowsQuery])
+  }, []) // Empty deps - uses ref for stable access
 
   // Throttle scroll handler to max 100ms (10 times per second)
   const handleScrollThrottled = useMemo(() => {
@@ -508,22 +454,77 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
 
       return createRows({ tableId: selectedTableId, rows: processedRows })
     },
-    onSuccess: (data, variables) => {
+    onMutate: async (rowsData) => {
+      // Cancel any outgoing refetches to prevent race conditions
+      await queryClient.cancelQueries({ queryKey: rowQueryKeys.all(selectedTableId!) })
+
+      // Snapshot current data for rollback
+      const queryKey = rowQueryKeys.infinite(selectedTableId!, sortBy, activeFilters ?? [])
+      const previousData = queryClient.getQueryData(queryKey)
+
+      // Create temporary rows with temp IDs (will be replaced by server response)
+      const tempRows = rowsData.map((data, i) => ({
+        id: `temp-${Date.now()}-${i}`,
+        ...data
+      }))
+
+      // Optimistically add rows to the last page
+      queryClient.setQueryData(queryKey, (old: any) => {
+        if (!old?.pages) return old
+        const lastPageIndex = old.pages.length - 1
+        return {
+          ...old,
+          pages: old.pages.map((page: any, idx: number) =>
+            idx === lastPageIndex
+              ? { ...page, rows: [...page.rows, ...tempRows] }
+              : page
+          )
+        }
+      })
+
+      return { previousData, tempRows }
+    },
+    onSuccess: (data, variables, context) => {
+      // Replace temp rows with server-returned rows (with real IDs)
+      if (data?.success && data?.data && selectedTableId) {
+        const queryKey = rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
+        const serverRows = data.data as DSGRow[]
+        const tempIds = context?.tempRows?.map((r: DSGRow) => r.id) || []
+
+        queryClient.setQueryData(queryKey, (old: any) => {
+          if (!old?.pages) return old
+
+          return {
+            ...old,
+            pages: old.pages.map((page: any) => ({
+              ...page,
+              rows: page.rows.map((row: DSGRow) => {
+                const tempIndex = tempIds.indexOf(row.id)
+                if (tempIndex !== -1 && serverRows[tempIndex]) {
+                  return convertDateStringsInRow(serverRows[tempIndex], fields)
+                }
+                return row
+              })
+            }))
+          }
+        })
+      }
+
       const rowCount = variables.length
       toast.success(`Added ${rowCount} ${rowCount === 1 ? 'row' : 'rows'}`)
     },
-    onSettled: () => {
-      // Invalidate all row queries to refetch with new rows
-      if (selectedTableId) {
-        queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
+    onError: (err, variables, context) => {
+      // Rollback to previous data on error
+      if (context?.previousData && selectedTableId) {
+        const queryKey = rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
+        queryClient.setQueryData(queryKey, context.previousData)
       }
-    },
-    onError: (err) => {
       logger.error("Failed to add rows:", err)
       toast.error("Failed to add row", {
         description: err instanceof Error ? err.message : "An error occurred while adding the row"
       })
     },
+    // No onSettled invalidation - optimistic updates handle everything
   })
 
   const deleteRowMutation = useMutation({
@@ -531,21 +532,43 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
       if (!selectedTableId) throw new Error('No table selected')
       return deleteRowData(selectedTableId, rowId)
     },
+    onMutate: async (rowId) => {
+      // Cancel any outgoing refetches to prevent race conditions
+      await queryClient.cancelQueries({ queryKey: rowQueryKeys.all(selectedTableId!) })
+
+      // Snapshot current data for rollback
+      const queryKey = rowQueryKeys.infinite(selectedTableId!, sortBy, activeFilters ?? [])
+      const previousData = queryClient.getQueryData(queryKey)
+
+      // Optimistically remove the row from cache
+      queryClient.setQueryData(queryKey, (old: any) => {
+        if (!old?.pages) return old
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            rows: page.rows.filter((row: DSGRow) => row.id !== rowId)
+          }))
+        }
+      })
+
+      return { previousData }
+    },
     onSuccess: () => {
       toast.success("Row deleted")
     },
-    onSettled: () => {
-      // Invalidate all row queries to refetch without deleted row
-      if (selectedTableId) {
-        queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
+    onError: (err, rowId, context) => {
+      // Rollback to previous data on error
+      if (context?.previousData && selectedTableId) {
+        const queryKey = rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
+        queryClient.setQueryData(queryKey, context.previousData)
       }
-    },
-    onError: (err) => {
       logger.error("Failed to delete row:", err)
       toast.error("Failed to delete row", {
         description: err instanceof Error ? err.message : "An error occurred while deleting the row"
       })
     },
+    // No onSettled invalidation - optimistic updates handle everything
   })
 
   const handleAddRows = async (rowsData: Record<string, any>[]): Promise<void> => {
@@ -655,10 +678,7 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
             tableName={selectedTable.name}
             currentView={currentView || undefined}
             availableViews={availableViews}
-            onSelectView={(viewId) => {
-              console.log('[ONSELECT VIEW] View selected:', viewId)
-              dataActions.setSelectedView(viewId)
-            }}
+            onSelectView={(viewId) => dataActions.setSelectedView(viewId)}
             searchTerm={searchTerm}
             onSearchChange={(value) => dataActions.setSearchTerm(value)}
             onManageFields={() => dataActions.setFieldManagerOpen(true)}
@@ -676,6 +696,8 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
             sortState={sortBy}
             onSort={handleSort}
             onClearSort={handleClearSort}
+            returnTo={returnTo}
+            onBack={handleBack}
           />
         )}
       </div>

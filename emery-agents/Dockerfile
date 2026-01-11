@@ -17,6 +17,7 @@ COPY ./pyproject.toml ./uv.lock ./README.md ./
 # This ensures package versions are properly resolved
 RUN uv pip install . --system
 
+
 # Add metadata labels
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL emery.uv-lock-hash="${UV_LOCK_HASH}"

@@ -31,9 +31,13 @@ export function StepProgressIndicator({
   }
 
   const config = getStepConfig(currentStep.type)
-  const message = currentStep.name && currentStep.type === 'ACTION'
-    ? `Using ${currentStep.name}...`
-    : config.loadingMessage
+  // Customize message based on step type
+  let message: string = config.loadingMessage
+  if (currentStep.type === 'ACTION' && currentStep.name) {
+    message = `Using ${currentStep.name}...`
+  } else if (currentStep.type === 'CODE_EXECUTION') {
+    message = 'Executing code...'
+  }
 
   return (
     <div className="transition-all duration-300">
