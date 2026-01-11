@@ -280,10 +280,11 @@ class AppStack(Stack):
         )
 
         # Grant Redis access to frontend service
-        data_stack.redis_sg.add_ingress_rule(
-            peer=frontend_service.service.connections.security_groups[0],
-            connection=ec2.Port.tcp(6379),
-            description="Allow frontend service to access ElastiCache Redis"
+        # Use allow_to instead of add_ingress_rule to avoid cross-stack cyclic dependency
+        frontend_service.service.connections.allow_to(
+            ec2.Connections(security_groups=[data_stack.redis_sg]),
+            ec2.Port.tcp(6379),
+            "Allow frontend service to access ElastiCache Redis"
         )
 
         # Configure the health check for the frontend service (Blue target group)
