@@ -56,15 +56,25 @@ case "${1:-all}" in
     skills)
         pnpm exec promptfoo eval --config scenarios/skills/basic-execution.yaml
         ;;
+    stress)
+        echo "Running stress tests..."
+        echo "Monitor: CloudWatch ECS CPU/Memory, RDS connections, ALB errors"
+        echo ""
+        pnpm exec promptfoo eval --config scenarios/stress/db-pool-exhaustion.yaml
+        pnpm exec promptfoo eval --config scenarios/stress/grpc-table-saturation.yaml
+        pnpm exec promptfoo eval --config scenarios/stress/mixed-workload.yaml
+        pnpm exec promptfoo eval --config scenarios/stress/sustained-load.yaml
+        ;;
     all)
         pnpm exec promptfoo eval --config promptfooconfig.yaml
         ;;
     *)
-        echo "Usage: $0 [setup|crud|adversarial|skills|all]"
+        echo "Usage: $0 [setup|crud|adversarial|skills|stress|all]"
         echo "  setup       - Create test table and find agent ID"
         echo "  crud        - Run CRUD operation tests"
         echo "  adversarial - Run security/injection tests"
         echo "  skills      - Run agent skill tests"
+        echo "  stress      - Run infrastructure stress tests"
         echo "  all         - Run all tests (default)"
         exit 1
         ;;

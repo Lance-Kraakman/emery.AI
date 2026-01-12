@@ -1,0 +1,296 @@
+# AIDEV-NOTE: Mixed Workload Stress Test
+# Simulates realistic traffic pattern:
+# - 40% reads (get_rows, list_tables, list_fields)
+# - 30% writes (create_row)
+# - 20% updates (update_row)
+# - 10% deletes (delete_row)
+#
+# Run: ./run-evals.sh stress
+
+description: "Test mixed CRUD workload (realistic traffic pattern)"
+
+providers:
+  - file://../../providers/emery-crud.ts
+
+prompts:
+  - "Execute CRUD operation: {{operation}}"
+
+tests:
+  # Setup: Create rows we can update/delete
+  - description: "Setup: create updateable row 1"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Mixed Test Row 1"
+        status: "pending"
+    assert:
+      - type: is-json
+
+  - description: "Setup: create updateable row 2"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Mixed Test Row 2"
+        status: "pending"
+    assert:
+      - type: is-json
+
+  # Mixed workload - Round 1 (10 operations)
+  # 40% reads
+  - description: "Round 1: read (get_rows)"
+    vars:
+      operation: "get_rows"
+      limit: 20
+    assert:
+      - type: is-json
+
+  - description: "Round 1: read (list_tables)"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+
+  - description: "Round 1: read (list_fields)"
+    vars:
+      operation: "list_fields"
+    assert:
+      - type: is-json
+
+  - description: "Round 1: read (get_table)"
+    vars:
+      operation: "get_table"
+    assert:
+      - type: is-json
+
+  # 30% writes
+  - description: "Round 1: write (create_row 1)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Mixed Write 1"
+        round: 1
+    assert:
+      - type: is-json
+
+  - description: "Round 1: write (create_row 2)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Mixed Write 2"
+        round: 1
+    assert:
+      - type: is-json
+
+  - description: "Round 1: write (create_row 3)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Mixed Write 3"
+        round: 1
+    assert:
+      - type: is-json
+
+  # 20% updates (these may fail if row doesn't exist - acceptable)
+  - description: "Round 1: update (may fail gracefully)"
+    vars:
+      operation: "update_row"
+      rowId: "1"
+      data:
+        status: "updated_round_1"
+    assert:
+      - type: is-json
+
+  - description: "Round 1: update 2 (may fail gracefully)"
+    vars:
+      operation: "update_row"
+      rowId: "2"
+      data:
+        status: "updated_round_1"
+    assert:
+      - type: is-json
+
+  # 10% deletes (may fail - acceptable)
+  - description: "Round 1: delete (may fail gracefully)"
+    vars:
+      operation: "delete_row"
+      rowId: "999999"
+    assert:
+      - type: is-json
+
+  # Mixed workload - Round 2 (10 operations)
+  - description: "Round 2: read (get_rows)"
+    vars:
+      operation: "get_rows"
+      limit: 30
+    assert:
+      - type: is-json
+
+  - description: "Round 2: read (list_tables)"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+
+  - description: "Round 2: read (list_fields)"
+    vars:
+      operation: "list_fields"
+    assert:
+      - type: is-json
+
+  - description: "Round 2: read (get_table)"
+    vars:
+      operation: "get_table"
+    assert:
+      - type: is-json
+
+  - description: "Round 2: write (create_row 1)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Mixed Write R2-1"
+        round: 2
+    assert:
+      - type: is-json
+
+  - description: "Round 2: write (create_row 2)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Mixed Write R2-2"
+        round: 2
+    assert:
+      - type: is-json
+
+  - description: "Round 2: write (create_row 3)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Mixed Write R2-3"
+        round: 2
+    assert:
+      - type: is-json
+
+  - description: "Round 2: update"
+    vars:
+      operation: "update_row"
+      rowId: "3"
+      data:
+        status: "updated_round_2"
+    assert:
+      - type: is-json
+
+  - description: "Round 2: update 2"
+    vars:
+      operation: "update_row"
+      rowId: "4"
+      data:
+        status: "updated_round_2"
+    assert:
+      - type: is-json
+
+  - description: "Round 2: delete"
+    vars:
+      operation: "delete_row"
+      rowId: "888888"
+    assert:
+      - type: is-json
+
+  # Round 3 - increased intensity
+  - description: "Round 3: read (get_rows large)"
+    vars:
+      operation: "get_rows"
+      limit: 100
+    assert:
+      - type: is-json
+
+  - description: "Round 3: read (list_tables)"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+
+  - description: "Round 3: read (list_fields)"
+    vars:
+      operation: "list_fields"
+    assert:
+      - type: is-json
+
+  - description: "Round 3: read (get_table)"
+    vars:
+      operation: "get_table"
+    assert:
+      - type: is-json
+
+  - description: "Round 3: write 1"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Mixed Write R3-1"
+        round: 3
+    assert:
+      - type: is-json
+
+  - description: "Round 3: write 2"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Mixed Write R3-2"
+        round: 3
+    assert:
+      - type: is-json
+
+  - description: "Round 3: write 3"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Mixed Write R3-3"
+        round: 3
+    assert:
+      - type: is-json
+
+  - description: "Round 3: update"
+    vars:
+      operation: "update_row"
+      rowId: "5"
+      data:
+        status: "updated_round_3"
+    assert:
+      - type: is-json
+
+  - description: "Round 3: update 2"
+    vars:
+      operation: "update_row"
+      rowId: "6"
+      data:
+        status: "updated_round_3"
+    assert:
+      - type: is-json
+
+  - description: "Round 3: delete"
+    vars:
+      operation: "delete_row"
+      rowId: "777777"
+    assert:
+      - type: is-json
+
+  # Final verification
+  - description: "Final: verify reads still work"
+    vars:
+      operation: "get_rows"
+      limit: 50
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.success === true || data.data?.rows !== undefined;
+
+  - description: "Final: verify tables accessible"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.success === true || Array.isArray(data.data);
