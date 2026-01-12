@@ -25,7 +25,7 @@ from smolagents.memory import PlanningStep
 from smolagents.monitoring import LogLevel
 
 from .stateful_managed_agent import StatefulManagedAgent
-from ..prompts import build_agent_instructions
+from ..prompts import build_agent_instructions, render_template
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +116,16 @@ def create_schema_builder_agent(
         verbosity_level=LogLevel.OFF,
     )
 
+    # Override the initial_plan template with schema-specific detailed format
+    # This replaces the generic plan.j2 which causes vague plans and hallucinated tools
+    # The schema_builder_plan.j2 enforces:
+    # - Field-by-field specifications with types and options
+    # - Context gathering before planning
+    # - Valid tool names (no "emery-*" hallucinations)
+    agent.prompt_templates["planning"]["initial_plan"] = render_template(
+        "planning/schema_builder_plan.j2"
+    )
+
     # Set attributes for ManagedAgent identification
     # These are used by smolagents to route requests appropriately
     agent.name = "schema_builder"
@@ -126,6 +136,7 @@ def create_schema_builder_agent(
     )
 
     logger.info(f"✨ Created Schema Builder agent (HITL CodeAgent) with planning_interval=5")
+    logger.info(f"   Using custom planning template: planning/schema_builder_plan.j2")
     logger.info(f"   Tools: {[t.name for t in tools]}")
     logger.info(f"   Max steps: {max_steps}")
 
