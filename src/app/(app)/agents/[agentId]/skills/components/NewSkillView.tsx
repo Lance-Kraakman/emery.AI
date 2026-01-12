@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Save } from 'lucide-react';
+import { Save, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -121,32 +121,25 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
   }
 
   return (
-    <div className="relative h-full w-full">
-      {/* Full-height Editor */}
-      <SkillEditor
-        value={formData}
-        onChange={setFormData}
-        agentId={agent.id}
-        organizationTier={organizationTier}
-      />
+    <div className="h-full relative">
+      {/* Floating Header - centered in canvas area (between side panels) */}
+      <div className="absolute top-2 left-56 right-[21.5rem] z-20 flex justify-center">
+        <div className="flex items-center gap-2 px-4 py-2 bg-background/50 backdrop-blur-sm border rounded-full shadow-sm">
+        <Bot className="h-4 w-4 text-muted-foreground shrink-0" />
 
-      {/* Floating Name Panel - positioned after NodePalette (w-48 + margin) */}
-      <div className="absolute top-2 left-56 z-10 flex items-center gap-2 bg-background/50 backdrop-blur-sm border rounded-lg shadow-sm px-3 py-2">
         <Input
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           placeholder="Skill name..."
-          className="h-8 w-48 text-sm bg-transparent border-0 focus-visible:ring-1"
+          className="h-8 w-[180px] text-sm bg-transparent border-0 focus-visible:ring-1"
         />
+
         {templateName && (
-          <Badge variant="secondary" className="text-xs whitespace-nowrap">
+          <Badge variant="secondary" className="text-xs whitespace-nowrap shrink-0">
             From: {templateName}
           </Badge>
         )}
-      </div>
 
-      {/* Floating Top-Right Panel - Model & Save (above the config panel) */}
-      <div className="absolute top-2 right-[22rem] z-10 flex items-center gap-2 bg-background/50 backdrop-blur-sm border rounded-lg shadow-sm px-3 py-2">
         <ModelSelector
           value={formData.model}
           onChange={(model) => setFormData({ ...formData, model })}
@@ -155,18 +148,29 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
           inheritLabel="Inherit"
           inheritFromModel={agent.defaultModel || 'IBM Granite 3.3 8B'}
           requiredCapabilities={['toolCalling']}
-          className="w-[160px] h-8"
+          className="w-[180px] h-8"
         />
+
         <Button
           onClick={handleSave}
           disabled={isSaving}
           size="sm"
-          className="gap-1.5 h-8"
+          className="gap-1.5 h-8 shrink-0"
         >
           <Save className="h-3.5 w-3.5" />
           {isSaving ? 'Creating...' : 'Create'}
         </Button>
       </div>
+      </div>
+
+      {/* Full-height Editor */}
+      <SkillEditor
+        value={formData}
+        onChange={setFormData}
+        agentId={agent.id}
+        organizationTier={organizationTier}
+        hasFloatingHeader={true}
+      />
     </div>
   );
 }

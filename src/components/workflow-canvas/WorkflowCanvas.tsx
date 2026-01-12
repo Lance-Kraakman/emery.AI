@@ -108,6 +108,8 @@ export interface WorkflowCanvasProps {
   disabled?: boolean;
   showConfigPanel?: boolean;
   className?: string;
+  /** Offset panels down when there's a floating header above */
+  hasFloatingHeader?: boolean;
 
   // Expose internal state to parent (for external config panels)
   onNodeSelect?: (id: string | null) => void;
@@ -126,6 +128,7 @@ function WorkflowCanvasInner({
   availableSkills = [],
   disabled = false,
   showConfigPanel = true,
+  hasFloatingHeader = false,
   className,
   onNodeSelect,
   onNodesExpose,
@@ -541,7 +544,7 @@ function WorkflowCanvasInner({
         <Background gap={16} />
 
         {/* Node Palette */}
-        <Panel position="top-left" className="m-2">
+        <Panel position="top-left" className={cn('m-2', hasFloatingHeader && 'mt-[52px]')}>
           <NodePalette disabled={disabled} />
         </Panel>
 
