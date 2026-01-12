@@ -147,11 +147,16 @@ class ToolRegistry:
             "emery-delete-table": ("table_crud", "delete_table"),
             "emery-list-tables": ("table_crud", "list_tables"),
 
-            # Row operations (also use table_crud)
-            "emery-create-row": ("table_crud", "create_row"),
-            "emery-get-rows": ("table_crud", "get_rows"),
-            "emery-update-row": ("table_crud", "update_row"),
-            "emery-delete-row": ("table_crud", "delete_row"),
+            # Row operations (use row_crud)
+            "emery-create-row": ("row_crud", "create_row"),
+            "emery-get-rows": ("row_crud", "get_rows"),
+            "emery-update-row": ("row_crud", "update_row"),
+            "emery-delete-row": ("row_crud", "delete_row"),
+
+            # Field/column operations (use field_crud)
+            "emery-create-field": ("field_crud", "create_field"),
+            "emery-list-fields": ("field_crud", "list_fields"),
+            "emery-delete-field": ("field_crud", "delete_field"),
 
             # Team operations
             "emery-create-team": ("team_crud", "create"),

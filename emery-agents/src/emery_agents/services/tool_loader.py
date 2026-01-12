@@ -144,11 +144,16 @@ class UnifiedToolLoader:
             "emery-delete-table": self._load_table_crud_tool,
             "emery-list-tables": self._load_table_crud_tool,
 
-            # Row operations (also use table_crud)
-            "emery-create-row": self._load_table_crud_tool,
-            "emery-get-rows": self._load_table_crud_tool,
-            "emery-update-row": self._load_table_crud_tool,
-            "emery-delete-row": self._load_table_crud_tool,
+            # Row operations (use row_crud)
+            "emery-create-row": self._load_row_crud_tool,
+            "emery-get-rows": self._load_row_crud_tool,
+            "emery-update-row": self._load_row_crud_tool,
+            "emery-delete-row": self._load_row_crud_tool,
+
+            # Field/column operations (use field_crud)
+            "emery-create-field": self._load_field_crud_tool,
+            "emery-list-fields": self._load_field_crud_tool,
+            "emery-delete-field": self._load_field_crud_tool,
 
             # Team operations
             "emery-create-team": self._load_team_crud_tool,
@@ -277,6 +282,7 @@ class UnifiedToolLoader:
         tool_id = unified_tool["id"]
 
         # Map tool IDs to their implementations
+        # AIDEV-NOTE: table/row/field operations split into separate tools
         emery_tool_mapping = {
             "file_reader": self._load_file_reader_tool,
             "calculator": self._load_calculator_tool,
@@ -286,6 +292,8 @@ class UnifiedToolLoader:
             "document_crud": self._load_document_crud_tool,
             "file_crud": self._load_file_crud_tool,
             "table_crud": self._load_table_crud_tool,
+            "row_crud": self._load_row_crud_tool,
+            "field_crud": self._load_field_crud_tool,
             "team_crud": self._load_team_crud_tool,
             "database_crud": self._load_database_crud_tool,
             "emery_database": self._load_emery_database_tool,
@@ -341,8 +349,18 @@ class UnifiedToolLoader:
 
     def _load_table_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load Table CRUD tool."""
-        from ..tools.crud_tools import load_table_crud
+        from ..tools.table_tools import load_table_crud
         return load_table_crud(tool_config, api_key, organization_id)
+
+    def _load_row_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
+        """Load Row CRUD tool."""
+        from ..tools.row_tools import load_row_crud
+        return load_row_crud(tool_config, api_key, organization_id)
+
+    def _load_field_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
+        """Load Field CRUD tool."""
+        from ..tools.field_tools import load_field_crud
+        return load_field_crud(tool_config, api_key, organization_id)
 
     def _load_team_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load Team CRUD tool."""

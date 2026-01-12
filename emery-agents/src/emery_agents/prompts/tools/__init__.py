@@ -61,8 +61,11 @@ CATEGORY_MAP = {
 }
 
 # Emery internal tool templates
+# AIDEV-NOTE: table/row/field operations split into separate tools and templates
 EMERY_TOOL_MAP = {
     "table_crud": "tools/emery/table_crud.j2",
+    "row_crud": "tools/emery/row_crud.j2",
+    "field_crud": "tools/emery/field_crud.j2",
     "skill_crud": "tools/emery/skill_crud.j2",
     "agent_crud": "tools/emery/agent_crud.j2",
     "file_crud": "tools/emery/file_crud.j2",

@@ -786,218 +786,6 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
     return FileCrudTool()
 
 
-def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
-    """
-    Load comprehensive Table CRUD tool with table and row operations.
-
-    AIDEV-NOTE: Supports 9 operations total:
-    - Table operations (5): create_table, read_table, update_table, delete_table, list_tables
-    - Row operations (4): create_row, get_rows, update_row, delete_row
-
-    For reference tools (e.g., emery-read-table from @ mentions), config.config may contain
-    pre-configured table_id from the frontend ToolDTO.
-
-    AIDEV-NOTE: Auth is captured in closure variables (_auth_token, _org_id) - NOT exposed in inputs.
-    This prevents the LLM from seeing auth params and trying to provide placeholder values.
-    """
-    # Capture auth in closure - NOT exposed to LLM via inputs schema
-    _auth_token = api_key or ""
-    _org_id = str(organization_id) if organization_id else ""
-
-    # Extract pre-configured table_id from config if present (for reference tools)
-    # Frontend passes this as table_id when user selects a specific table from @ dropdown
-    _preconfigured_table_id = config.config.get("table_id") if config.config else None
-
-    class TableCrudTool(BaseCrudTool):
-        """Comprehensive CRUD operations for Emery tables and rows."""
-
-        name = "table_crud"
-        description = "Comprehensive table and row management. Table operations: create_table (create new table), read_table (get table details), update_table (modify metadata), delete_table (remove table), list_tables (list all tables). Row operations: create_row (add row), get_rows (query with pagination), update_row (modify row), delete_row (remove row)."
-        inputs = {
-            "method": {"type": "string", "description": "Operation: create_table, read_table, update_table, delete_table, list_tables, create_row, get_rows, update_row, delete_row"},
-            "table_id": {"type": "string", "description": "Table ID (required for most operations)", "nullable": True},
-            "row_id": {"type": "string", "description": "Row ID (required for update_row, delete_row)", "nullable": True},
-            "data": {"type": "object", "description": "Data payload. For create_table: {name, databaseId, description}. For create_row/update_row: field values {field_1: value1, field_2: value2}. For update_table: {name, description}", "nullable": True},
-            "limit": {"type": "integer", "description": "Max rows to return for get_rows (default: 100)", "nullable": True},
-            "offset": {"type": "integer", "description": "Pagination offset for get_rows (default: 0)", "nullable": True},
-            "order_by": {"type": "string", "description": "Field to sort by for get_rows", "nullable": True},
-            "order_direction": {"type": "string", "description": "Sort direction: ASC or DESC", "nullable": True},
-            "filters": {"type": "object", "description": "Filter criteria for queries", "nullable": True}
-        }
-        output_type = "object"
-
-        def __init__(self):
-            super().__init__("table", "crud")
-
-        def forward(self, method: str, table_id: Optional[str] = None, row_id: Optional[str] = None,
-                   data: Optional[Dict] = None, limit: Optional[int] = None,
-                   offset: Optional[int] = None, order_by: Optional[str] = None,
-                   order_direction: Optional[str] = None, filters: Optional[Dict] = None) -> Dict[str, Any]:
-            """Execute table or row CRUD operation."""
-
-            # Pre-configured table_id takes priority over LLM-provided (for reference tools)
-            # This ensures @table:DatabaseName/TableName uses the numeric ID from frontend config
-            effective_table_id = _preconfigured_table_id or table_id
-
-            # ============================================================
-            # TABLE OPERATIONS
-            # ============================================================
-
-            if method == "create_table":
-                if not data:
-                    return {"success": False, "error": "Table data is required for create_table. Provide {name, databaseId, description}"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint="tables",
-                    method="POST",
-                    data=data,
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "read_table":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for read_table operation"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint=f"tables/{effective_table_id}",
-                    method="GET",
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "update_table":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for update_table operation"}
-                if not data:
-                    return {"success": False, "error": "Table data is required for update_table. Provide {name, description, metadata}"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint=f"tables/{effective_table_id}",
-                    method="PUT",
-                    data=data,
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "delete_table":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for delete_table operation"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint=f"tables/{effective_table_id}",
-                    method="DELETE",
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "list_tables":
-                endpoint = "tables"
-                if filters:
-                    query_params = []
-                    for key, value in filters.items():
-                        query_params.append(f"{key}={value}")
-                    if query_params:
-                        endpoint += "?" + "&".join(query_params)
-
-                return self._make_api_request_with_deadline(
-                    endpoint=endpoint,
-                    method="GET",
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            # ============================================================
-            # ROW OPERATIONS
-            # ============================================================
-
-            elif method == "create_row":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for create_row operation"}
-                if not data:
-                    return {"success": False, "error": "Row data is required for create_row. Provide field values {field_1: value1, field_2: value2}"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint="rows",
-                    method="POST",
-                    data={"tableId": int(effective_table_id), "data": data},
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "get_rows":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for get_rows operation"}
-
-                # Build query parameters
-                query_params = [f"tableId={effective_table_id}"]
-
-                # Add pagination parameters
-                if limit is not None:
-                    query_params.append(f"limit={limit}")
-                else:
-                    query_params.append("limit=100")  # Default to 100
-
-                if offset is not None:
-                    query_params.append(f"offset={offset}")
-                else:
-                    query_params.append("offset=0")  # Default to 0
-
-                # Add sorting parameters
-                if order_by:
-                    query_params.append(f"orderBy={order_by}")
-                if order_direction:
-                    query_params.append(f"orderDirection={order_direction}")
-
-                endpoint = "rows?" + "&".join(query_params)
-
-                return self._make_api_request_with_deadline(
-                    endpoint=endpoint,
-                    method="GET",
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "update_row":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for update_row operation"}
-                if not row_id:
-                    return {"success": False, "error": "Row ID is required for update_row operation"}
-                if not data:
-                    return {"success": False, "error": "Row data is required for update_row. Provide updated field values"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint="rows",
-                    method="PUT",
-                    data={"tableId": int(effective_table_id), "rowId": row_id, "data": data},
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "delete_row":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for delete_row operation"}
-                if not row_id:
-                    return {"success": False, "error": "Row ID is required for delete_row operation"}
-
-                endpoint = f"rows?tableId={effective_table_id}&rowId={row_id}"
-
-                return self._make_api_request_with_deadline(
-                    endpoint=endpoint,
-                    method="DELETE",
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            else:
-                return {
-                    "success": False,
-                    "error": f"Unknown method: {method}. Supported: create_table, read_table, update_table, delete_table, list_tables, create_row, get_rows, update_row, delete_row"
-                }
-
-    return TableCrudTool()
-
-
 def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
     """Load Team CRUD tool with method-specific routing."""
 
@@ -1315,14 +1103,21 @@ Only include fields you want to change (partial updates allowed).""",
     return SkillCrudTool()
 
 
+# Import split tools from new modules
+from .table_tools import load_table_crud
+from .row_tools import load_row_crud
+from .field_tools import load_field_crud
+
 # Registry of CRUD tools
 # AIDEV-NOTE: Tool names match category names directly (agents, tables, etc.)
-# This eliminates need for complex category mapping in seeding
+# Table/row/field operations have been split into separate modules for maintainability.
 CRUD_TOOLS = {
     "agents": load_agent_crud,
     "documents": load_document_crud,
     "files": load_file_crud,
-    "tables": load_table_crud,
+    "tables": load_table_crud,   # Table operations (from table_tools.py)
+    "rows": load_row_crud,       # Row operations (from row_tools.py)
+    "fields": load_field_crud,   # Field/column operations (from field_tools.py)
     "teams": load_team_crud,
     "databases": load_database_crud,
     "skills": load_skill_crud,
