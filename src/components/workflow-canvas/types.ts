@@ -28,10 +28,10 @@ import type {
 export type { WorkflowNodeType };
 
 /**
- * Extended canvas node types (includes annotation nodes)
- * Sticky notes are canvas-only and don't become SkillSteps
+ * Extended canvas node types (includes annotation and virtual nodes)
+ * Sticky notes and skill I/O nodes are canvas-only and don't become SkillSteps
  */
-export type CanvasNodeType = WorkflowNodeType | 'sticky';
+export type CanvasNodeType = WorkflowNodeType | 'sticky' | 'skillInput' | 'skillOutput';
 
 /**
  * Base data shared by all node types.
@@ -149,6 +149,28 @@ export interface StickyNodeData {
 }
 
 /**
+ * Skill Input node - Virtual node showing skill inputs (not a workflow step)
+ * Positioned at the left side of the canvas to show data flow into the skill
+ */
+export interface SkillInputNodeData {
+  [key: string]: unknown;
+  inputs: InputDefinition[];
+  /** Marks as non-executable virtual node */
+  isVirtual: true;
+}
+
+/**
+ * Skill Output node - Virtual node showing skill outputs (not a workflow step)
+ * Positioned at the right side of the canvas to show data flow out of the skill
+ */
+export interface SkillOutputNodeData {
+  [key: string]: unknown;
+  outputs: OutputDefinition[];
+  /** Marks as non-executable virtual node */
+  isVirtual: true;
+}
+
+/**
  * Union type for all workflow node data (excludes sticky notes)
  */
 export type WorkflowNodeData =
@@ -162,9 +184,9 @@ export type WorkflowNodeData =
   | ReadNodeData;
 
 /**
- * Union type for all canvas node data (includes sticky notes)
+ * Union type for all canvas node data (includes sticky notes and virtual I/O nodes)
  */
-export type CanvasNodeData = WorkflowNodeData | StickyNodeData;
+export type CanvasNodeData = WorkflowNodeData | StickyNodeData | SkillInputNodeData | SkillOutputNodeData;
 
 /**
  * Workflow node with typed data (includes sticky notes)
@@ -202,6 +224,7 @@ export interface WorkflowCanvasProps {
   steps: SkillStep[];
   onChange: (steps: SkillStep[]) => void;
   skillInputs: InputDefinition[];
+  skillOutputs: OutputDefinition[];
   availableSkills?: AvailableSkill[];
   disabled?: boolean;
 }

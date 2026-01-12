@@ -26,7 +26,14 @@ import type {
   WriteNodeData,
   ReadNodeData,
   StickyNodeData,
+  SkillInputNodeData,
+  SkillOutputNodeData,
 } from '../types';
+import type { InputDefinition, OutputDefinition } from '@/ddd/domain/skills/entities/skill';
+
+// Virtual node IDs for skill I/O nodes
+export const SKILL_INPUT_NODE_ID = '__skill_input__';
+export const SKILL_OUTPUT_NODE_ID = '__skill_output__';
 
 /**
  * Type guard to check if node data is workflow data (not a sticky note)
@@ -162,10 +169,14 @@ function getDefaultPosition(index: number): XYPosition {
  * Convert SkillStep[] to React Flow nodes and edges
  * @param steps - Workflow steps (execution graph)
  * @param canvasMetadata - Optional canvas annotations (sticky notes)
+ * @param skillInputs - Skill-level input definitions (for virtual SkillInputNode)
+ * @param skillOutputs - Skill-level output definitions (for virtual SkillOutputNode)
  */
 export function stepsToFlow(
   steps: SkillStep[],
-  canvasMetadata?: CanvasMetadata
+  canvasMetadata?: CanvasMetadata,
+  skillInputs?: InputDefinition[],
+  skillOutputs?: OutputDefinition[]
 ): {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
@@ -230,6 +241,54 @@ export function stepsToFlow(
           : { width: 200, height: 120 },
       } as WorkflowNode);
     });
+  }
+
+  // Add virtual Skill I/O nodes if inputs/outputs are provided
+  // Positioned vertically: Inputs at top, Outputs at bottom
+  if (skillInputs || skillOutputs) {
+    // Calculate positions based on workflow nodes
+    const workflowNodes = nodes.filter(n => n.type !== 'sticky');
+    const minY = workflowNodes.length > 0
+      ? Math.min(...workflowNodes.map(n => n.position.y))
+      : 150;
+    const maxY = workflowNodes.length > 0
+      ? Math.max(...workflowNodes.map(n => n.position.y))
+      : 150;
+    const avgX = workflowNodes.length > 0
+      ? workflowNodes.reduce((sum, n) => sum + n.position.x, 0) / workflowNodes.length
+      : 300;
+
+    // Add SkillInputNode at the TOP (horizontally centered)
+    if (skillInputs && skillInputs.length > 0) {
+      nodes.push({
+        id: SKILL_INPUT_NODE_ID,
+        type: 'skillInput',
+        position: { x: avgX - 100, y: minY - 120 },
+        data: {
+          inputs: skillInputs,
+          isVirtual: true,
+        } as SkillInputNodeData,
+        draggable: true,
+        selectable: true,
+        deletable: false,  // Cannot delete virtual nodes
+      } as WorkflowNode);
+    }
+
+    // Add SkillOutputNode at the BOTTOM (horizontally centered)
+    if (skillOutputs && skillOutputs.length > 0) {
+      nodes.push({
+        id: SKILL_OUTPUT_NODE_ID,
+        type: 'skillOutput',
+        position: { x: avgX - 100, y: maxY + 180 },
+        data: {
+          outputs: skillOutputs,
+          isVirtual: true,
+        } as SkillOutputNodeData,
+        draggable: true,
+        selectable: true,
+        deletable: false,  // Cannot delete virtual nodes
+      } as WorkflowNode);
+    }
   }
 
   return { nodes, edges };
@@ -365,16 +424,23 @@ export interface FlowToStepsResult {
 }
 
 /**
+ * Check if a node is a virtual I/O node (not saved as a step)
+ */
+function isVirtualNode(node: WorkflowNode): boolean {
+  return node.type === 'skillInput' || node.type === 'skillOutput';
+}
+
+/**
  * Convert React Flow nodes and edges back to SkillStep[] and CanvasMetadata
- * Separates execution steps from canvas annotations (sticky notes)
+ * Separates execution steps from canvas annotations (sticky notes, virtual I/O nodes)
  */
 export function flowToSteps(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[]
 ): FlowToStepsResult {
-  // Separate sticky notes from workflow nodes
+  // Separate sticky notes and virtual nodes from workflow nodes
   const stickyNodes = nodes.filter(n => n.type === 'sticky');
-  const workflowNodes = nodes.filter(n => n.type !== 'sticky');
+  const workflowNodes = nodes.filter(n => n.type !== 'sticky' && !isVirtualNode(n));
 
   // Build id→name map for converting edge targets back to names
   // (stepOutputs.nextSteps uses names for readability)

@@ -378,6 +378,18 @@ export interface OutputMappingConfig {
 }
 
 /**
+ * Output Source - where the skill output value comes from
+ * Maps a skill-level output to a node-level output
+ */
+export interface OutputSource {
+  type: 'node_output';
+  /** Node ID or name that produces this output */
+  nodeId: string;
+  /** Output name from the node's outputDefs */
+  outputName: string;
+}
+
+/**
  * Unified Output Definition
  * Used for both skill-level outputs and step-level output definitions
  */
@@ -385,6 +397,8 @@ export interface OutputDefinition {
   name: string;
   type?: SkillParameterType;
   description?: string;  // Description of what this output contains (shown in LLM instructions)
+  /** Source: where this output's value comes from (skill-level only) */
+  source?: OutputSource;
   outputMapping?: OutputMappingConfig;  // Optional: write to table fields
 }
 

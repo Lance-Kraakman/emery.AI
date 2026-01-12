@@ -166,6 +166,13 @@ class SkillExecutorService:
             logger.info(f"🔧 Loaded {len(skill_tools)} tools for skill {skill_config.name}")
 
         # 2. Add OutputTool if capturing outputs
+        #
+        # TODO: Support node→skill output separation
+        # Currently OutputTool uses skill_config.outputs directly.
+        # Future enhancement: Use step.output_defs for OutputTool, then map
+        # captured node outputs → skill outputs based on output.source config.
+        # See: OutputSource type in skill.ts (nodeId, outputName)
+        #
         output_tool = None
         if capture_outputs and skill_config.outputs:
             # Extract target field metadata from output mappings for rich LLM guidance

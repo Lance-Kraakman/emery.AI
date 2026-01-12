@@ -15,6 +15,8 @@ import {
   Wrench,
   Zap,
   Link2,
+  ArrowRightToLine,
+  ArrowLeftFromLine,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -70,6 +72,16 @@ export const nodeTheme = {
     bg: 'bg-purple-100 dark:bg-purple-900',
     text: 'text-purple-600 dark:text-purple-400',
     icon: Link2,
+  },
+  skillInput: {
+    bg: 'bg-blue-100 dark:bg-blue-900',
+    text: 'text-blue-600 dark:text-blue-400',
+    icon: ArrowRightToLine,
+  },
+  skillOutput: {
+    bg: 'bg-emerald-100 dark:bg-emerald-900',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    icon: ArrowLeftFromLine,
   },
 } as const;
 

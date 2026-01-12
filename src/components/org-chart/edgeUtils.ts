@@ -94,6 +94,8 @@ export function normalizeEdgeConnection(
 
 /**
  * Create an edge object for skill connections.
+ *
+ * @param tableId - Optional table ID for table-level targeting (uses table-{id} handle)
  */
 export function createSkillEdge(
   id: string,
@@ -101,16 +103,17 @@ export function createSkillEdge(
   targetType: 'skill' | 'database',
   targetId: number,
   edgeType: EdgeType,
-  label: string
+  label: string,
+  tableId?: number
 ): OrgChartEdge {
   return {
     id,
     source: makeNodeId('skill', skillId),
     target: makeNodeId(targetType, targetId),
     sourceHandle: 'right-source',
-    targetHandle: 'left-target',
+    targetHandle: tableId ? `table-${tableId}` : 'left-target',
     type: 'reference',
-    data: { edgeType, label },
+    data: { edgeType, label, tableId },
   };
 }
 
@@ -125,6 +128,16 @@ export interface SkillWithSteps {
     skillId?: number;
     readConfig?: { sourceTableId?: number };
     writeConfig?: { targetTableId?: number };
+  }>;
+  /** Skill-level input mappings (reads FROM tables) */
+  inputs?: Array<{
+    name: string;
+    inputMapping?: { source?: { tableId?: number } };
+  }>;
+  /** Skill-level output mappings (writes TO tables) */
+  outputs?: Array<{
+    name: string;
+    outputMapping?: { tableMappings?: Array<{ targetTableId: number }> };
   }>;
 }
 
@@ -175,25 +188,89 @@ export function extractSkillEdges(
 
       // Skill reads from a table
       if (step.readConfig?.sourceTableId) {
-        const dbId = tableToDatabase.get(step.readConfig.sourceTableId);
+        const tableId = step.readConfig.sourceTableId;
+        const dbId = tableToDatabase.get(tableId);
         if (dbId) {
           addEdge(
-            `read:${skill.id}-${dbId}`,
-            createSkillEdge(`skill-${skill.id}-reads-db-${dbId}`, skill.id, 'database', dbId, 'skill_table', 'reads')
+            `read:${skill.id}-${tableId}`,
+            createSkillEdge(
+              `skill-${skill.id}-reads-table-${tableId}`,
+              skill.id,
+              'database',
+              dbId,
+              'skill_table',
+              'reads',
+              tableId
+            )
           );
         }
       }
 
       // Skill writes to a table
       if (step.writeConfig?.targetTableId) {
-        const dbId = tableToDatabase.get(step.writeConfig.targetTableId);
+        const tableId = step.writeConfig.targetTableId;
+        const dbId = tableToDatabase.get(tableId);
         if (dbId) {
           addEdge(
-            `write:${skill.id}-${dbId}`,
-            createSkillEdge(`skill-${skill.id}-writes-db-${dbId}`, skill.id, 'database', dbId, 'skill_table', 'writes')
+            `write:${skill.id}-${tableId}`,
+            createSkillEdge(
+              `skill-${skill.id}-writes-table-${tableId}`,
+              skill.id,
+              'database',
+              dbId,
+              'skill_table',
+              'writes',
+              tableId
+            )
           );
         }
       }
+    });
+
+    // Skill-level INPUT mappings (reads FROM tables)
+    // These are more important than step-level readConfig
+    skill.inputs?.forEach((input) => {
+      const tableId = input.inputMapping?.source?.tableId;
+      if (tableId) {
+        const dbId = tableToDatabase.get(tableId);
+        if (dbId) {
+          addEdge(
+            `input:${skill.id}-${tableId}`,
+            createSkillEdge(
+              `skill-${skill.id}-input-${tableId}`,
+              skill.id,
+              'database',
+              dbId,
+              'skill_table',
+              'reads',
+              tableId
+            )
+          );
+        }
+      }
+    });
+
+    // Skill-level OUTPUT mappings (writes TO tables)
+    // These are more important than step-level writeConfig
+    skill.outputs?.forEach((output) => {
+      output.outputMapping?.tableMappings?.forEach((tableMapping) => {
+        const tableId = tableMapping.targetTableId;
+        const dbId = tableToDatabase.get(tableId);
+        if (dbId) {
+          addEdge(
+            `output:${skill.id}-${tableId}`,
+            createSkillEdge(
+              `skill-${skill.id}-output-${tableId}`,
+              skill.id,
+              'database',
+              dbId,
+              'skill_table',
+              'writes',
+              tableId
+            )
+          );
+        }
+      });
     });
   });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { WorkflowCanvas } from '@/components/workflow-canvas';
 import { X, Settings2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -64,9 +64,17 @@ export function SkillEditor({
   const renameNodeRef = useRef<((id: string, newName: string) => void) | null>(null);
   const deleteNodeRef = useRef<((id: string) => void) | null>(null);
 
+  // Ref to always have current value without triggering callback recreation
+  // This fixes the autosave bug where handleCanvasChange recreation caused
+  // an infinite loop that kept clearing the 2-second save timer
+  const valueRef = useRef(value);
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
   const handleCanvasChange = useCallback((result: FlowToStepsResult) => {
-    onChange({ ...value, steps: result.steps, canvasMetadata: result.canvasMetadata });
-  }, [onChange, value]);
+    onChange({ ...valueRef.current, steps: result.steps, canvasMetadata: result.canvasMetadata });
+  }, [onChange]);
 
   const handleNodeSelect = useCallback((id: string | null) => {
     setSelectedNodeId(id);
@@ -125,7 +133,15 @@ export function SkillEditor({
     operation: 'Operation',
     tool: 'Tool',
     write: 'Write',
+    skillInput: 'Skill Inputs',
+    skillOutput: 'Skill Outputs',
   };
+
+  // Check if selected node is a virtual I/O node
+  const isIONode = selectedNode?.type === 'skillInput' || selectedNode?.type === 'skillOutput';
+
+  // For I/O nodes, show RootSkillConfig (treat as if no regular node selected)
+  const showRootConfig = !selectedNode || isIONode;
 
   return (
     <div className="relative h-full w-full">
@@ -135,6 +151,7 @@ export function SkillEditor({
         canvasMetadata={value.canvasMetadata}
         onChange={handleCanvasChange}
         skillInputs={value.inputs}
+        skillOutputs={value.outputs}
         availableSkills={availableSkills}
         disabled={isReadOnly}
         showConfigPanel={false}
@@ -160,12 +177,13 @@ export function SkillEditor({
           <div className="flex items-center gap-2">
             <Settings2 className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">
-              {selectedNode
-                ? nodeTypeLabels[selectedNode.type] || 'Node'
-                : 'Skill Config'}
+              {showRootConfig
+                ? 'Skill Config'
+                : nodeTypeLabels[selectedNode!.type] || 'Node'}
             </span>
           </div>
-          {selectedNode && (
+          {/* Only show delete/close buttons for regular workflow nodes (not I/O nodes) */}
+          {selectedNode && !isIONode && (
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
@@ -190,9 +208,16 @@ export function SkillEditor({
 
         {/* Panel Content */}
         <div className="flex-1 overflow-y-auto p-3">
-          {selectedNode ? (
+          {showRootConfig ? (
+            <RootSkillConfig
+              value={value}
+              onChange={onChange}
+              isReadOnly={isReadOnly}
+              nodes={nodes}
+            />
+          ) : (
             <NodeConfigContent
-              node={selectedNode}
+              node={selectedNode!}
               onUpdateNode={handleUpdateNode}
               onRenameNode={handleRenameNode}
               skillInputs={value.inputs}
@@ -201,12 +226,6 @@ export function SkillEditor({
               organizationTier={organizationTier}
               skillId={skillId}
               disabled={isReadOnly}
-            />
-          ) : (
-            <RootSkillConfig
-              value={value}
-              onChange={onChange}
-              isReadOnly={isReadOnly}
             />
           )}
         </div>
