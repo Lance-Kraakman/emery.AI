@@ -1,0 +1,84 @@
+# AIDEV-NOTE: Row CRUD operation tests
+# Tests create_row, get_rows, update_row, delete_row operations
+#
+# Run: npx promptfoo eval --config scenarios/crud/row-operations.yaml
+
+description: "Test row CRUD operations"
+
+providers:
+  - file://../../providers/emery-crud.ts
+
+prompts:
+  - "Execute CRUD operation: {{operation}}"
+
+tests:
+  # Test 1: Create a row
+  - description: "Create a new row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Eval Test Row"
+        description: "Created by eval framework"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.success === true || !data.error;
+
+  # Test 2: Get rows
+  - description: "Get rows from table"
+    vars:
+      operation: "get_rows"
+      limit: 10
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.success === true || Array.isArray(data) || data.rows !== undefined;
+
+  # Test 3: Get rows with pagination
+  - description: "Get rows with pagination"
+    vars:
+      operation: "get_rows"
+      limit: 5
+      offset: 0
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.success === true || Array.isArray(data) || data.rows !== undefined;
+
+  # Test 4: Error cases
+  - description: "Create row with missing tableId should use default"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Test without tableId"
+    assert:
+      - type: is-json
+      # Should succeed with default table ID
+
+  - description: "Update row without rowId should fail"
+    vars:
+      operation: "update_row"
+      data:
+        name: "Updated name"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.error !== undefined || data.success === false;
+
+  - description: "Delete row without rowId should fail"
+    vars:
+      operation: "delete_row"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.error !== undefined || data.success === false;

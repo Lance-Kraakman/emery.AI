@@ -1,0 +1,54 @@
+# AIDEV-NOTE: Emery Agent Evaluation Framework
+# Run: npx promptfoo eval --config promptfooconfig.yaml
+# View: npx promptfoo view
+#
+# Environment variables required:
+#   EMERY_BASE_URL - API base URL (e.g., http://localhost:3002)
+#   EMERY_API_KEY  - User API key (user_xxx format)
+#   TEST_AGENT_ID  - Agent ID for skill/task tests
+#   TEST_TABLE_ID  - Table ID for CRUD tests
+
+description: "Emery Agent Evaluation Suite"
+
+# Run individual scenario files:
+#   npx promptfoo eval --config scenarios/crud/field-operations.yaml
+#   npx promptfoo eval --config scenarios/crud/row-operations.yaml
+#   npx promptfoo eval --config scenarios/crud/table-operations.yaml
+#   npx promptfoo eval --config scenarios/skills/basic-execution.yaml
+#   npx promptfoo eval --config scenarios/adversarial/injection-attempts.yaml
+
+# Default provider for this config
+providers:
+  - file://providers/emery-crud.ts
+
+prompts:
+  - "Execute CRUD operation: {{operation}}"
+
+# Default test settings
+defaultTest:
+  options:
+    timeout: 30000  # 30 second timeout per test
+
+# Run basic sanity test
+tests:
+  - description: "Sanity check - list tables"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+
+  - description: "Sanity check - list fields"
+    vars:
+      operation: "list_fields"
+      tableId: "{{TEST_TABLE_ID}}"
+    assert:
+      - type: is-json
+
+# Environment variable defaults
+env:
+  EMERY_BASE_URL: "http://localhost:3002"
+  TEST_AGENT_ID: "1"
+  TEST_TABLE_ID: "1"
+
+# Output configuration
+outputPath: output/results.json

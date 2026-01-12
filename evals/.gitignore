@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Output files
+output/
+*.json.tmp
+
+# Promptfoo cache
+.promptfoo/
+.cache/
+
+# Environment files
+.env
+.env.local

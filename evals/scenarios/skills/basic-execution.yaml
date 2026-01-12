@@ -1,0 +1,67 @@
+# AIDEV-NOTE: Basic skill/agent execution tests
+# Tests that agent execution works correctly
+#
+# Run: npx promptfoo eval --config scenarios/skills/basic-execution.yaml
+
+description: "Test basic agent execution"
+
+providers:
+  - file://../../providers/emery-skill.ts
+
+prompts:
+  - "{{instruction}}"
+
+tests:
+  # Test 1: Simple instruction execution
+  - description: "Execute simple instruction"
+    vars:
+      agentId: "{{TEST_AGENT_ID}}"
+      instruction: "Return the text 'Hello, World!'"
+    assert:
+      - type: is-json
+        # Should return a response (success or error)
+
+  # Test 2: Instruction with structured output request
+  - description: "Execute instruction requesting JSON output"
+    vars:
+      agentId: "{{TEST_AGENT_ID}}"
+      instruction: "Return a JSON object with keys 'name' and 'version'"
+    assert:
+      - type: is-json
+
+  # Test 3: Mathematical calculation
+  - description: "Execute math calculation"
+    vars:
+      agentId: "{{TEST_AGENT_ID}}"
+      instruction: "What is 2 + 2? Return just the number."
+    assert:
+      - type: is-json
+
+  # Test 4: Error handling - empty instruction
+  - description: "Empty instruction should still be handled"
+    vars:
+      agentId: "{{TEST_AGENT_ID}}"
+      instruction: ""
+    assert:
+      - type: is-json
+      # May succeed with empty response or fail gracefully
+
+  # Test 5: Long instruction handling
+  - description: "Handle longer instructions"
+    vars:
+      agentId: "{{TEST_AGENT_ID}}"
+      instruction: |
+        This is a longer instruction with multiple parts.
+        First, acknowledge that you received this message.
+        Second, summarize what you were asked to do.
+        Third, provide a brief response.
+    assert:
+      - type: is-json
+
+  # Test 6: Instruction with special characters
+  - description: "Handle special characters in instruction"
+    vars:
+      agentId: "{{TEST_AGENT_ID}}"
+      instruction: "Process this: $100 & 50% off! <special> 'quotes' \"double\""
+    assert:
+      - type: is-json

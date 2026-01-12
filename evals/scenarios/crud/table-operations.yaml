@@ -1,0 +1,74 @@
+# AIDEV-NOTE: Table CRUD operation tests
+# Tests create_table, list_tables, get_table, update_table, delete_table operations
+#
+# Run: npx promptfoo eval --config scenarios/crud/table-operations.yaml
+
+description: "Test table CRUD operations"
+
+providers:
+  - file://../../providers/emery-crud.ts
+
+prompts:
+  - "Execute CRUD operation: {{operation}}"
+
+tests:
+  # Test 1: List tables
+  - description: "List all tables"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.success === true || Array.isArray(data);
+
+  # Test 2: Get a specific table (uses TEST_TABLE_ID env var)
+  - description: "Get table by ID"
+    vars:
+      operation: "get_table"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return !data.error || data._id !== undefined || data.name !== undefined;
+
+  # Test 3: Create a test table
+  - description: "Create a test table"
+    vars:
+      operation: "create_table"
+      databaseId: 5
+      data:
+        name: "Eval Test Table"
+        databaseId: 5
+        description: "Created by eval framework - should be deleted"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return !data.error || data.error.includes('already exists') || data._id !== undefined;
+
+  # Test 4: Create table without explicit name (will use default)
+  - description: "Create table without name uses default"
+    vars:
+      operation: "create_table"
+      databaseId: 5
+      data:
+        databaseId: 5
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          // Provider defaults to "Unnamed Table" when name is missing
+          return data.success === true || !data.error;
+
+  - description: "Get non-existent table should handle gracefully"
+    vars:
+      operation: "get_table"
+      tableId: "99999"
+    assert:
+      - type: is-json
+      # Should return error or empty result

@@ -1,0 +1,19 @@
+{
+  "name": "emery-evals",
+  "version": "1.0.0",
+  "description": "Agent evaluation framework for Emery platform",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "eval": "promptfoo eval --config promptfooconfig.yaml",
+    "eval:crud": "promptfoo eval --config scenarios/crud/field-operations.yaml",
+    "eval:adversarial": "promptfoo eval --config scenarios/adversarial/injection-attempts.yaml",
+    "view": "promptfoo view"
+  },
+  "devDependencies": {
+    "promptfoo": "^0.120.11",
+    "tsx": "^4.21.0",
+    "typescript": "^5.0.0"
+  }
+}
