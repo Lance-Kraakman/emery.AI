@@ -128,6 +128,7 @@ export function UnifiedChatInput<T = ToolDTO>({
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Auto-resize textarea only in chat mode
   const chatInputState = useChatInputState(inputRef, inputValue, {
@@ -449,17 +450,18 @@ export function UnifiedChatInput<T = ToolDTO>({
   };
 
   // Close dropdown when clicking outside
+  // AIDEV-NOTE: Uses dropdownRef instead of querying [data-tool-dropdown] because
+  // in "content" renderMode inside Popover, the data attribute isn't present
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (!showDropdown) return;
 
       const target = event.target as Node;
       const input = inputRef.current;
-      const dropdown = document.querySelector('[data-tool-dropdown]');
 
       // Don't close if clicking on input or dropdown elements
       if (input && input.contains(target)) return;
-      if (dropdown && dropdown.contains(target)) return;
+      if (dropdownRef.current && dropdownRef.current.contains(target)) return;
 
       setShowDropdown(false);
     };
@@ -573,6 +575,7 @@ export function UnifiedChatInput<T = ToolDTO>({
           </PopoverAnchor>
 
           <PopoverContent
+            ref={dropdownRef}
             className={dropdownType === 'tools' ? "w-[440px] p-0 z-[100] max-h-[500px] flex flex-col overflow-hidden" : "w-[300px] p-2 z-[100]"}
             align="start"
             side="bottom"

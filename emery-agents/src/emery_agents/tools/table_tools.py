@@ -27,7 +27,7 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
     _org_id = str(organization_id) if organization_id else ""
 
     # Extract pre-configured table_id from config if present (for reference tools)
-    _preconfigured_table_id = config.config.get("table_id") if config.config else None
+    _preconfigured_table_id = config.config.get("table_id") if config and config.config else None
 
     class TableCrudTool(BaseCrudTool):
         """CRUD operations for Emery tables."""
