@@ -46,12 +46,14 @@ Before proposing ANY schema, you MUST:
 
 **Step 1: Gather Context (MANDATORY)**
 ```python
-# Always do this first!
-tool_executor(tool_name="database_crud", tool_input={"method": "list", "auth_token": "...", "organization_id": "..."})
+# Always do this first! Auth is handled automatically.
+tool_executor(tool_name="database_crud", tool_input={"method": "list"})
 tool_executor(tool_name="table_crud", tool_input={"method": "list_tables"})
 # If updating existing table:
 tool_executor(tool_name="field_crud", tool_input={"method": "list_fields", "table_id": "..."})
 ```
+
+**IMPORTANT:** You MUST complete all 3 context-gathering steps and see the results BEFORE proposing any plan. Do NOT skip this!
 
 **Step 2: Analyze Requirements**
 - Identify logical sections/groupings

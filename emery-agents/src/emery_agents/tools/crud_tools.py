@@ -883,41 +883,46 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
 
 
 def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
-    """Load Database CRUD tool with method-specific routing."""
+    """
+    Load Database CRUD tool with method-specific routing.
+
+    AIDEV-NOTE: Auth is captured in closure variables (_auth_token, _org_id) - NOT exposed in inputs.
+    This matches the pattern used by field_crud, table_crud, row_crud.
+    """
+    # Capture auth in closure - NOT exposed to LLM via inputs schema
+    _auth_token = api_key or ""
+    _org_id = str(organization_id) if organization_id else ""
 
     class DatabaseCrudTool(BaseCrudTool):
         """CRUD operations for Emery databases."""
 
         name = "database_crud"
-        description = "Create, read, update, delete, and list databases in your organization. Supports database configuration and connection management."
+        description = "Database management: list (get all databases), read (get database details), create_database, update_database, delete_database."
         inputs = {
-            "method": {"type": "string", "description": "CRUD operation: create, read, update, delete, list"},
+            "method": {"type": "string", "description": "Operation: list, read, create, update, delete"},
             "database_id": {"type": "string", "description": "Database ID for read, update, delete operations", "nullable": True},
-            "data": {"type": "object", "description": "Database data for create and update operations", "nullable": True},
-            "filters": {"type": "object", "description": "Filter criteria for list operation", "nullable": True},
-            "auth_token": {"type": "string", "description": "Internal API authentication token"},
-            "organization_id": {"type": "string", "description": "Organization ID for RLS context"}
+            "data": {"type": "object", "description": "Database data for create/update: {name, description}", "nullable": True},
+            "filters": {"type": "object", "description": "Filter criteria for list operation", "nullable": True}
         }
         output_type = "object"
 
         def __init__(self):
             super().__init__("database", "crud")
 
-        def forward(self, method: str, auth_token: str, organization_id: str,
-                   database_id: Optional[str] = None, data: Optional[Dict] = None,
-                   filters: Optional[Dict] = None) -> Dict[str, Any]:
+        def forward(self, method: str, database_id: Optional[str] = None,
+                   data: Optional[Dict] = None, filters: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute database CRUD operation."""
 
             if method == "create":
                 if not data:
-                    return {"success": False, "error": "Database data is required for create operation"}
+                    return {"success": False, "error": "Database data is required for create operation. Provide {name, description}"}
 
                 return self._make_api_request_with_deadline(
                     endpoint="databases",
                     method="POST",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "read":
@@ -927,8 +932,8 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 return self._make_api_request_with_deadline(
                     endpoint=f"databases/{database_id}",
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "update":
@@ -941,8 +946,8 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                     endpoint=f"databases/{database_id}",
                     method="PUT",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "delete":
@@ -952,8 +957,8 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 return self._make_api_request_with_deadline(
                     endpoint=f"databases/{database_id}",
                     method="DELETE",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "list":
@@ -968,12 +973,12 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             else:
-                return {"success": False, "error": f"Unknown method: {method}. Supported: create, read, update, delete, list"}
+                return {"success": False, "error": f"Unknown method: {method}. Supported: list, read, create, update, delete"}
 
     return DatabaseCrudTool()
 
