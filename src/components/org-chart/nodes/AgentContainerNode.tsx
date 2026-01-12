@@ -42,7 +42,7 @@ function PlaceholderSlot({
       )}
       style={{
         width: orgChartNodeSizes.nodeWidth,
-        height: orgChartNodeSizes.nodeHeight,
+        height: 28,
       }}
     >
       <Plus
@@ -179,15 +179,17 @@ export const AgentContainerNode = memo(function AgentContainerNode({
               )}
             </div>
 
-            {/* Section Divider */}
-            <div
-              className="absolute border-t border-dashed border-muted-foreground/20"
-              style={{
-                left: orgChartNodeSizes.containerPadding,
-                right: orgChartNodeSizes.containerPadding,
-                top: sectionLayout.skillsEndY - orgChartNodeSizes.sectionGap / 2,
-              }}
-            />
+            {/* Section Divider - only show when both sections have items */}
+            {skillCount > 0 && databaseCount > 0 && (
+              <div
+                className="absolute border-t border-dashed border-muted-foreground/20"
+                style={{
+                  left: orgChartNodeSizes.containerPadding,
+                  right: orgChartNodeSizes.containerPadding,
+                  top: sectionLayout.skillsEndY - orgChartNodeSizes.sectionGap / 2,
+                }}
+              />
+            )}
 
             {/* Databases Section */}
             <div

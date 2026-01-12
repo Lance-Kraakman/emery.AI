@@ -172,16 +172,16 @@ export function OrgChartEditorClient({
 
       switch (entityType) {
         case 'agent':
-          router.push(`/agents/${entityId}`);
+          router.push(`/agents/${entityId}?returnTo=${encodeURIComponent(returnTo)}`);
           break;
         case 'skill':
           // Find the agent ID for this skill to build the correct URL
           const skill = skills.find((s) => s.id === entityId);
           if (skill?.agentId) {
-            router.push(`/agents/${skill.agentId}/skills/${entityId}`);
+            router.push(`/agents/${skill.agentId}/skills/${entityId}?returnTo=${encodeURIComponent(returnTo)}`);
           } else {
             // Org-level skill
-            router.push(`/skills/${entityId}`);
+            router.push(`/skills/${entityId}?returnTo=${encodeURIComponent(returnTo)}`);
           }
           break;
         case 'database':
