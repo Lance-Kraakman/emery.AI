@@ -99,12 +99,19 @@ def create_schema_builder_agent(
     # Use StatefulManagedAgent (CodeAgent-based) to preserve memory between calls
     # This is critical for HITL - regular agents reset memory on each __call__
     # StatefulManagedAgent.__init__ sets planning templates automatically
+    #
+    # AIDEV-NOTE: planning_interval=5 gives agent time to gather context:
+    # - Step 1: list_databases (find existing)
+    # - Step 2: list_tables (see what exists in target database)
+    # - Step 3: list_fields (if updating existing table)
+    # - Step 4: analyze requirements
+    # - Step 5: THEN create plan with full context
     agent = StatefulManagedAgent(
         tools=tools,
         model=model,
         max_steps=max_steps,
         instructions=instructions,  # Custom instructions from Jinja2 template
-        planning_interval=2,  # Plan after 2 steps (gathers context first)
+        planning_interval=5,  # Plan after 5 steps (gathers full context first)
         step_callbacks={PlanningStep: planning_callback},
         verbosity_level=LogLevel.OFF,
     )
@@ -118,7 +125,7 @@ def create_schema_builder_agent(
         "waits for approval, then batch creates. Use for complex schema design."
     )
 
-    logger.info(f"✨ Created Schema Builder agent (HITL CodeAgent) with planning_interval=2")
+    logger.info(f"✨ Created Schema Builder agent (HITL CodeAgent) with planning_interval=5")
     logger.info(f"   Tools: {[t.name for t in tools]}")
     logger.info(f"   Max steps: {max_steps}")
 

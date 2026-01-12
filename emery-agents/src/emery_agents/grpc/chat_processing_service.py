@@ -1197,20 +1197,22 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         - step_callbacks: Interrupt after planning for user approval
         - reset=False: Memory preserved between messages for resumption
         """
-        from emery_agents.tools.crud_tools import load_field_crud, load_table_crud
+        from emery_agents.tools.crud_tools import load_field_crud, load_table_crud, load_database_crud
 
-        # Load CRUD tools for table/field operations
+        # Load CRUD tools for table/field/database operations
+        # database_crud needed for list_databases to find existing databases
         field_crud_tool = load_field_crud(None, api_key, org_id)
         table_crud_tool = load_table_crud(None, api_key, org_id)
+        database_crud_tool = load_database_crud(None, api_key, org_id)
 
         # Get model for the agent and sub-agent
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
 
         # Create tool_executor that wraps the CRUD tools
         tool_executor = create_tool_executor(
-            tools=[field_crud_tool, table_crud_tool],
+            tools=[field_crud_tool, table_crud_tool, database_crud_tool],
             model=model,
-            max_steps=5  # More steps for batch field creation
+            max_steps=8  # More steps for database listing + batch field creation
         )
 
         # Use factory function with native planning support (HITL)
