@@ -1,8 +1,8 @@
-# AWS Security Incident Cost Claim
+# AWS Security Incident Report
 
 **Account ID:** 463735866328
 **Incident Period:** December 13, 2025 - January 8, 2026
-**Date Submitted:** January 12, 2026
+**Report Date:** January 12, 2026
 
 ---
 
@@ -10,7 +10,7 @@
 
 Our application was compromised via a critical Remote Code Execution vulnerability in Next.js (GHSA-9qr9-h5gf-34mp, CVSS 10.0). Attackers accessed AWS credentials and launched unauthorized resources.
 
-**Total Claim: ~$800 USD**
+**Estimated Fraudulent Charges: ~$800 USD**
 
 ---
 
@@ -49,16 +49,23 @@ Created User: sysadmin-1727
 Access Key Used: AKIAWX6GPYPMDUEVHTNL (compromised DEV_USER key)
 ```
 
-**Additional malicious users created:**
-- Predator-Admin-634
-- Predator-Admin-827
-- Predator-Admin-758
-- Predator-Admin-585
-- Predator-Admin-205
-- VIK, VIK1
-- AwsAdmin
-- admins
-- louisteloega
+### Full IAM User Creation Timeline (CloudTrail):
+
+```
+Date       | Source IP        | Created User
+-----------|------------------|------------------
+2025-12-13 | 208.94.37.156    | AwsAdmin
+2025-12-14 | 109.199.106.240  | VIK, VIK1
+2025-12-23 | 104.28.251.244   | louisteloega
+2025-12-28 | 27.121.112.40    | Predator-Admin-205, Predator-Admin-585
+2025-12-29 | 27.121.112.40    | Predator-Admin-758
+2025-12-30 | 27.121.112.40    | Predator-Admin-827, Predator-Admin-634
+2025-12-31 | 103.87.68.61     | admins
+2026-01-03 | 167.71.160.210   | sysadmin-1727
+2026-01-08 | 27.121.112.40    | Predator-Admin-729
+```
+
+All users created with AdministratorAccess policy attached.
 
 ---
 
@@ -101,7 +108,46 @@ Total                                      | $500.91
 
 ---
 
-## EVIDENCE 4: ECS Auto-Scaling Activity Log
+## EVIDENCE 4: CloudWatch Container Logs - Malware Execution Attempts
+
+Attacker injected code via RCE attempted to run Windows malware on our Linux containers:
+
+### Raw CloudWatch Logs (ECS Frontend):
+
+```
+/bin/sh: 1: C:userspublicdownloadssvchost.exe: not found
+/bin/sh: 1: powershell.exe: not found
+/bin/sh: 1: C:userspublicdownloadssvchost.exe: not found
+sh: 1: wget: not found
+/bin/sh: 1: wd1: not found
+Killed
+Killed
+Killed
+⨯ [Error: x] { digest: '2402493998' }
+⨯ [Error: x] { digest: '2402493998' }
+```
+
+### Crypto Miner Commands Executed:
+
+```
+cat /tmp/.XIN-unix/config.json
+cat /var/tmp/.unix/config.json
+```
+
+These are known XMRig crypto miner configuration file locations.
+
+### Analysis:
+- Attacker injected code attempting to run `C:\users\public\downloads\svchost.exe` (Windows malware)
+- Attempted to run `powershell.exe` (Windows PowerShell)
+- Tried to download payloads with `wget`
+- Attempted to read crypto miner config from `/tmp/.XIN-unix/config.json`
+- Failed because containers run Linux, but code kept retrying in infinite loop
+- Multiple `Killed` messages from OOM/CPU throttling
+- This loop caused constant 77% CPU and triggered auto-scaling to 20 tasks
+
+---
+
+## EVIDENCE 5: ECS Auto-Scaling Activity Log
 
 Malicious code injected via RCE caused CPU spike, triggering runaway auto-scaling:
 
@@ -135,7 +181,7 @@ Timestamp (UTC)           | Action
 
 ---
 
-## Cost Claim Summary
+## Fraudulent Charges Summary
 
 | Item | Amount | Evidence |
 |------|--------|----------|
