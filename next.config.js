@@ -67,16 +67,26 @@ const nextConfig = {
   },
 
   // AIDEV-NOTE: Enable RSC streaming (disable proxy buffering for ALB/CloudFront)
+  // AIDEV-NOTE: Security headers applied globally. Individual API routes can override
+  // these by setting their own headers in the route handler response.
   async headers() {
     return [
       {
         source: '/:path*',
         headers: [
-          { key: 'X-Accel-Buffering', value: 'no' }
+          { key: 'X-Accel-Buffering', value: 'no' },
+          // Security headers (OWASP recommended)
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          { key: 'X-Powered-By', value: '' },  // Force remove (Next.js 15 ignores poweredByHeader)
         ],
       },
     ]
   },
+  // Remove X-Powered-By header
+  poweredByHeader: false,
 }
 
 module.exports = nextConfig

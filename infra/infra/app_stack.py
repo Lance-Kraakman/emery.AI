@@ -327,7 +327,7 @@ class AppStack(Stack):
         # Web application that needs to scale based on user traffic
         frontend_scaling = frontend_service.service.auto_scale_task_count(
             min_capacity=sizing["frontend_min_capacity"],  # Environment-specific
-            max_capacity=20  # Can scale up to 20 tasks during traffic spikes
+            max_capacity=10  # Can scale up to 10 tasks during traffic spikes
         )
 
         frontend_scaling.scale_on_cpu_utilization(

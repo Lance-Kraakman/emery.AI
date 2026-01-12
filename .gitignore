@@ -78,3 +78,5 @@ dmypy.json
 
 # Temporary patch files
 *.patch
+# Security scan reports
+security/reports/
