@@ -1,6 +1,7 @@
 import type { ChatHandler, Message } from '@llamaindex/chat-ui'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import type { ExecutionStep } from '@/ddd/domain/chat/value-objects/execution-step'
+import type { PlanStepData } from '@/lib/chat/types/sse-events'
 
 /**
  * ChatMessage with ID and metadata support for execution steps
@@ -20,6 +21,34 @@ export interface CurrentStepProgress {
   name: string
   index: number
   content?: string
+}
+
+/**
+ * Pending plan approval state
+ */
+export interface PendingPlanApproval {
+  planId: string
+  goal: string
+  steps: PlanStepData[]
+  estimatedActions?: number
+  contextTables?: string[]
+}
+
+/**
+ * Plan execution status
+ */
+export type PlanExecutionStatus = 'draft' | 'awaiting_approval' | 'approved' | 'executing' | 'completed' | 'failed' | 'cancelled'
+
+/**
+ * Active plan execution state
+ */
+export interface ActivePlanExecution {
+  planId: string
+  status: PlanExecutionStatus
+  currentStepIndex?: number
+  completedSteps: number[]
+  failedSteps: number[]
+  error?: string
 }
 
 /**
@@ -69,4 +98,10 @@ export interface ExtendedChatHandler extends ChatHandler {
   // Model selection (for new chats - locked after first message)
   selectedModel?: string
   setModel?: (model: string | undefined) => void
+
+  // Plan approval workflow
+  pendingPlanApproval: PendingPlanApproval | null
+  activePlanExecution: ActivePlanExecution | null
+  approvePlan?: () => Promise<void>
+  rejectPlan?: () => Promise<void>
 }

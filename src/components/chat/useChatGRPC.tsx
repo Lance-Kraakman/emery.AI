@@ -16,7 +16,14 @@ import type { ExecutionStep } from '@/ddd/domain/chat/value-objects/execution-st
 import type { ExtendedChatHandler, ChatMessage, CurrentStepProgress } from './types/extended-chat-handler'
 import { createTextMessage, createMultimodalMessage, getMessageContent } from '@/lib/chat/message-helpers'
 import { createExecutionStep, addStepDeduped } from '@/lib/chat/step-collection'
-import { isStepProgressEvent, isContentEvent, isMessageCompleteEvent } from '@/lib/chat/types/sse-events'
+import {
+  isStepProgressEvent,
+  isContentEvent,
+  isMessageCompleteEvent,
+  isPlanApprovalRequestEvent,
+  isPlanStatusUpdateEvent
+} from '@/lib/chat/types/sse-events'
+import type { PendingPlanApproval, ActivePlanExecution, PlanExecutionStatus } from './types/extended-chat-handler'
 
 const logger = createDebugLogger('ChatGRPC')
 
@@ -144,6 +151,10 @@ export function useChatGRPC(
 
   // Model selection state - can be set before first message
   const [selectedModel, setSelectedModel] = useState<string | undefined>(contextOptions?.model)
+
+  // Plan approval workflow state
+  const [pendingPlanApproval, setPendingPlanApproval] = useState<PendingPlanApproval | null>(null)
+  const [activePlanExecution, setActivePlanExecution] = useState<ActivePlanExecution | null>(null)
 
   // Generate domain-specific storage key for this chat session
   const chatStorageKey = `emery-chat-${contextOptions?.domainType || chatContext?.domainType || 'general'}-${contextOptions?.domainId || chatContext?.domainId || 'default'}`
@@ -530,6 +541,73 @@ export function useChatGRPC(
                 // Clear streaming steps now that metadata is persisted
                 setStreamingSteps([])
 
+              } else if (isPlanApprovalRequestEvent(eventData)) {
+                // Plan approval request - agent needs user confirmation before execution
+                logger.debug('Plan approval requested', {
+                  planId: eventData.planId,
+                  stepCount: eventData.steps.length
+                })
+
+                setPendingPlanApproval({
+                  planId: eventData.planId,
+                  goal: eventData.goal,
+                  steps: eventData.steps,
+                  estimatedActions: eventData.estimatedActions,
+                  contextTables: eventData.contextTables
+                })
+
+                // Initialize active plan execution in draft state
+                setActivePlanExecution({
+                  planId: eventData.planId,
+                  status: 'awaiting_approval',
+                  completedSteps: [],
+                  failedSteps: []
+                })
+
+              } else if (isPlanStatusUpdateEvent(eventData)) {
+                // Plan execution status update
+                logger.debug('Plan status update', {
+                  planId: eventData.planId,
+                  status: eventData.status,
+                  currentStep: eventData.currentStepIndex
+                })
+
+                setActivePlanExecution(prev => {
+                  if (!prev || prev.planId !== eventData.planId) {
+                    // Create new execution state if doesn't exist
+                    return {
+                      planId: eventData.planId,
+                      status: eventData.status,
+                      currentStepIndex: eventData.currentStepIndex,
+                      completedSteps: eventData.completedSteps || [],
+                      failedSteps: eventData.failedSteps || [],
+                      error: eventData.error
+                    }
+                  }
+
+                  return {
+                    ...prev,
+                    status: eventData.status,
+                    currentStepIndex: eventData.currentStepIndex ?? prev.currentStepIndex,
+                    completedSteps: eventData.completedSteps || prev.completedSteps,
+                    failedSteps: eventData.failedSteps || prev.failedSteps,
+                    error: eventData.error
+                  }
+                })
+
+                // Clear pending approval when plan starts executing or is cancelled
+                if (['executing', 'cancelled', 'failed'].includes(eventData.status)) {
+                  setPendingPlanApproval(null)
+                }
+
+                // Clear execution state when plan completes
+                if (['completed', 'failed', 'cancelled'].includes(eventData.status)) {
+                  // Keep the state for a moment to show final status, then clear
+                  setTimeout(() => {
+                    setActivePlanExecution(null)
+                  }, 3000)
+                }
+
               } else if (eventData.type === 'error') {
                 // Handle error event with user-friendly message + hint
                 // Log technical details to console ONLY
@@ -720,6 +798,54 @@ export function useChatGRPC(
     }
   }
 
+  // Plan approval functions
+  const approvePlan = async () => {
+    if (!pendingPlanApproval) {
+      logger.debug('No pending plan to approve')
+      return
+    }
+
+    logger.debug('Approving plan', { planId: pendingPlanApproval.planId })
+
+    // Update execution status to approved
+    setActivePlanExecution(prev => prev ? { ...prev, status: 'approved' } : null)
+
+    // Send approval message to continue execution
+    await append({
+      role: 'user',
+      content: 'Yes, proceed with the plan'
+    } as any)
+
+    // Clear pending approval (execution will start)
+    setPendingPlanApproval(null)
+  }
+
+  const rejectPlan = async () => {
+    if (!pendingPlanApproval) {
+      logger.debug('No pending plan to reject')
+      return
+    }
+
+    logger.debug('Rejecting plan', { planId: pendingPlanApproval.planId })
+
+    // Update execution status to cancelled
+    setActivePlanExecution(prev => prev ? { ...prev, status: 'cancelled' } : null)
+
+    // Send rejection message
+    await append({
+      role: 'user',
+      content: 'No, cancel this plan'
+    } as any)
+
+    // Clear pending approval
+    setPendingPlanApproval(null)
+
+    // Clear execution state after a moment
+    setTimeout(() => {
+      setActivePlanExecution(null)
+    }, 1500)
+  }
+
   // Tool management functions
   const addTool = async (tool: ToolDTO) => {
     // No validation needed - domain objects are self-validating
@@ -796,6 +922,11 @@ export function useChatGRPC(
     // Model selection for new chats
     selectedModel,
     setModel: setSelectedModel,
+    // Plan approval workflow
+    pendingPlanApproval,
+    activePlanExecution,
+    approvePlan,
+    rejectPlan,
   }
 }
 

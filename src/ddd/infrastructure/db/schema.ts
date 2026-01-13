@@ -973,6 +973,7 @@ export const credentialDelegations = pgTable("credential_delegations", {
   }),
   // RLS: Only owners can update/delete their delegations
   pgPolicy("delegations_manage_permission", {
+
     as: "permissive",
     for: "all",
     to: "public",
@@ -2123,6 +2124,9 @@ export const contextMappings = pgTable("context_mappings", {
   }),
 
   // RLS: View permission - users with agent/skill access can view mappings
+  // Agent-level mappings check agent permission
+  // Skill-level mappings check skill permission
+  // Skill step mappings check parent skill permission
   pgPolicy("context_mappings_view_permission", {
     as: "permissive",
     for: "select",
@@ -2130,7 +2134,6 @@ export const contextMappings = pgTable("context_mappings", {
     using: sql`
       organization_id = current_setting('app.current_organization_id')::integer
       AND (
-        -- Agent-level mappings: check agent permission
         (target_type = 'agent' AND EXISTS (
           SELECT 1 FROM agents a
           WHERE a.id = target_id::integer
@@ -2147,7 +2150,6 @@ export const contextMappings = pgTable("context_mappings", {
           )
         ))
         OR
-        -- Skill-level mappings: check skill permission
         (target_type = 'skill' AND EXISTS (
           SELECT 1 FROM skills s
           WHERE s.id = target_id::integer
@@ -2164,7 +2166,6 @@ export const contextMappings = pgTable("context_mappings", {
           )
         ))
         OR
-        -- Skill step mappings: check parent skill permission
         (target_type = 'skill_step' AND EXISTS (
           SELECT 1 FROM skills s
           WHERE s.organization_id = organization_id
