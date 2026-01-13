@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Any, AsyncIterator, Dict, Callable
 from enum import Enum
 
-from ..models.plan import Plan, PlanStep, PlanStatus, create_plan
+from ..models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, create_plan
 from ..models.task_ledger import TaskLedger, create_ledger_from_plan
 from ..models.context_mapping import ResolvedContext
 from ..tools.tool_modes import ToolMode, filter_tools_for_mode
@@ -98,6 +98,16 @@ class ReplanTriggeredEvent:
     """Event emitted when replanning is triggered."""
     plan_id: str
     reason: str
+    replan_number: int
+
+
+@dataclass
+class PlanUpdatedEvent:
+    """Event emitted when the plan has been dynamically updated."""
+    plan_id: str
+    reason: str
+    added_steps: int
+    removed_steps: int
     replan_number: int
 
 
@@ -293,130 +303,179 @@ class ExecutionCoordinator:
         self._evaluation_count = 0
         steps_since_eval = 0
 
-        # Execute each step
+        # Execute steps with replan support
+        # The outer while loop allows restarting after a replan
         success = True
-        for step in self._current_plan.steps:
-            # Update ledger - step started
-            if self._ledger:
-                self._ledger.start_step(step.step_id)
+        should_restart = False
 
-            yield StepStartedEvent(
-                plan_id=plan_id,
-                step_id=step.step_id,
-                step_description=step.description,
-            )
+        while True:
+            # Get pending steps (after replan, this will return new steps)
+            pending_steps = self._current_plan.get_pending_steps()
 
-            try:
-                # Mark step as in progress
-                self._current_plan = await self.plan_service.update_step_status(
-                    self._current_plan,
-                    step.step_id,
-                    "in_progress",
-                )
+            if not pending_steps:
+                # No more steps to execute
+                break
 
-                # Execute the step
-                result = await self._execute_step(step, tools)
-
-                # Mark step as completed
-                self._current_plan = await self.plan_service.update_step_status(
-                    self._current_plan,
-                    step.step_id,
-                    "completed",
-                    result=result,
-                )
-
-                # Update ledger - step completed
+            for step in pending_steps:
+                # Update ledger - step started
                 if self._ledger:
-                    self._ledger.complete_step(step.step_id, result)
+                    self._ledger.start_step(step.step_id)
 
-                yield StepCompletedEvent(
+                yield StepStartedEvent(
                     plan_id=plan_id,
                     step_id=step.step_id,
-                    result=result,
+                    step_description=step.description,
                 )
 
-                # Evaluate progress periodically
-                steps_since_eval += 1
-                if self.evaluator_factory and steps_since_eval >= self.evaluate_after_steps:
-                    evaluation = await self._evaluate_progress()
-                    steps_since_eval = 0
-                    self._evaluation_count += 1
-
-                    # Record evaluation in ledger
-                    if self._ledger:
-                        self._ledger.record_evaluation(evaluation.__dict__)
-
-                    yield EvaluationCompletedEvent(
-                        plan_id=plan_id,
-                        evaluation=evaluation,
-                        evaluation_number=self._evaluation_count,
+                try:
+                    # Mark step as in progress
+                    self._current_plan = await self.plan_service.update_step_status(
+                        self._current_plan,
+                        step.step_id,
+                        "in_progress",
                     )
 
-                    # Handle evaluation result
-                    if evaluation.goal_achieved:
-                        logger.info("Goal achieved, stopping execution early")
-                        yield GoalAchievedEvent(
-                            plan_id=plan_id,
-                            reason=evaluation.reason,
-                        )
-                        break
+                    # Execute the step
+                    result = await self._execute_step(step, tools)
 
-                    if evaluation.blocking_issues:
-                        logger.warning(f"Blocking issues detected: {evaluation.reason}")
-                        yield ExecutionBlockedEvent(
-                            plan_id=plan_id,
-                            reason=evaluation.reason,
-                        )
-                        success = False
-                        break
+                    # Mark step as completed
+                    self._current_plan = await self.plan_service.update_step_status(
+                        self._current_plan,
+                        step.step_id,
+                        "completed",
+                        result=result,
+                    )
 
-                    if evaluation.needs_replan:
-                        if self._replan_count >= self.max_replans:
-                            logger.warning(f"Max replans ({self.max_replans}) exceeded")
+                    # Update ledger - step completed
+                    if self._ledger:
+                        self._ledger.complete_step(step.step_id, result)
+
+                    yield StepCompletedEvent(
+                        plan_id=plan_id,
+                        step_id=step.step_id,
+                        result=result,
+                    )
+
+                    # Evaluate progress periodically
+                    steps_since_eval += 1
+                    if self.evaluator_factory and steps_since_eval >= self.evaluate_after_steps:
+                        evaluation = await self._evaluate_progress()
+                        steps_since_eval = 0
+                        self._evaluation_count += 1
+
+                        # Record evaluation in ledger
+                        if self._ledger:
+                            self._ledger.record_evaluation(evaluation.__dict__)
+
+                        yield EvaluationCompletedEvent(
+                            plan_id=plan_id,
+                            evaluation=evaluation,
+                            evaluation_number=self._evaluation_count,
+                        )
+
+                        # Handle evaluation result
+                        if evaluation.goal_achieved:
+                            logger.info("Goal achieved, stopping execution early")
+                            yield GoalAchievedEvent(
+                                plan_id=plan_id,
+                                reason=evaluation.reason,
+                            )
+                            break
+
+                        if evaluation.blocking_issues:
+                            logger.warning(f"Blocking issues detected: {evaluation.reason}")
                             yield ExecutionBlockedEvent(
                                 plan_id=plan_id,
-                                reason=f"Max replans ({self.max_replans}) exceeded: {evaluation.reason}",
+                                reason=evaluation.reason,
                             )
                             success = False
                             break
 
-                        self._replan_count += 1
-                        yield ReplanTriggeredEvent(
-                            plan_id=plan_id,
-                            reason=evaluation.reason,
-                            replan_number=self._replan_count,
-                        )
-                        # Note: Actual replanning implementation deferred to future phase
-                        logger.info(f"Replan triggered ({self._replan_count}): {evaluation.reason}")
+                        if evaluation.needs_replan:
+                            if self._replan_count >= self.max_replans:
+                                logger.warning(f"Max replans ({self.max_replans}) exceeded")
+                                yield ExecutionBlockedEvent(
+                                    plan_id=plan_id,
+                                    reason=f"Max replans ({self.max_replans}) exceeded: {evaluation.reason}",
+                                )
+                                success = False
+                                break
 
-                    if not evaluation.should_continue:
-                        logger.info("Evaluator indicated stop - ending execution")
-                        break
+                            self._replan_count += 1
+                            yield ReplanTriggeredEvent(
+                                plan_id=plan_id,
+                                reason=evaluation.reason,
+                                replan_number=self._replan_count,
+                            )
 
-            except Exception as e:
-                error_msg = str(e)
-                logger.error(f"Step {step.step_id} failed: {error_msg}")
+                            # Perform dynamic replanning
+                            old_pending_count = len(self._current_plan.get_pending_steps())
+                            self._current_plan = await self._handle_replan(
+                                current_plan=self._current_plan,
+                                failed_step=step if step.status == PlanStepStatus.FAILED.value else None,
+                                reason=evaluation.reason,
+                                tools=tools,
+                            )
+                            new_pending_count = len(self._current_plan.get_pending_steps())
 
-                # Mark step as failed
-                self._current_plan = await self.plan_service.update_step_status(
-                    self._current_plan,
-                    step.step_id,
-                    "failed",
-                    error=error_msg,
-                )
+                            yield PlanUpdatedEvent(
+                                plan_id=plan_id,
+                                reason=evaluation.reason,
+                                added_steps=new_pending_count,
+                                removed_steps=old_pending_count - new_pending_count if old_pending_count > new_pending_count else 0,
+                                replan_number=self._replan_count,
+                            )
 
-                # Update ledger - step failed
-                if self._ledger:
-                    self._ledger.fail_step(step.step_id, error_msg)
+                            # Update ledger with replan info
+                            if self._ledger:
+                                self._ledger.record_event({
+                                    "type": "replan",
+                                    "reason": evaluation.reason,
+                                    "replan_number": self._replan_count,
+                                    "new_step_count": new_pending_count,
+                                })
 
-                yield StepFailedEvent(
-                    plan_id=plan_id,
-                    step_id=step.step_id,
-                    error=error_msg,
-                )
+                            logger.info(f"Replan complete ({self._replan_count}): {evaluation.reason}")
 
-                success = False
-                break  # Stop execution on failure
+                            # Set flag to restart step iteration with updated plan
+                            should_restart = True
+                            break
+
+                        if not evaluation.should_continue:
+                            logger.info("Evaluator indicated stop - ending execution")
+                            break
+
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.error(f"Step {step.step_id} failed: {error_msg}")
+
+                    # Mark step as failed
+                    self._current_plan = await self.plan_service.update_step_status(
+                        self._current_plan,
+                        step.step_id,
+                        "failed",
+                        error=error_msg,
+                    )
+
+                    # Update ledger - step failed
+                    if self._ledger:
+                        self._ledger.fail_step(step.step_id, error_msg)
+
+                    yield StepFailedEvent(
+                        plan_id=plan_id,
+                        step_id=step.step_id,
+                        error=error_msg,
+                    )
+
+                    success = False
+                    break  # Stop execution on failure
+
+            # After for loop: check if we should restart (replan) or exit
+            if should_restart:
+                should_restart = False  # Reset flag
+                continue  # Restart with new pending steps
+            else:
+                break  # Exit the while loop
 
         # Mark plan as completed or failed
         if success:
@@ -575,6 +634,126 @@ Evaluate the current execution state and respond with JSON only.
         # with the step parameters
         logger.info(f"Would execute tool {step.tool_call} with params: {step.parameters}")
         return f"Executed {step.tool_call}"
+
+    async def _handle_replan(
+        self,
+        current_plan: Plan,
+        failed_step: Optional[PlanStep],
+        reason: str,
+        tools: List[Any],
+    ) -> Plan:
+        """
+        Handle replanning when evaluator indicates plan needs adjustment.
+
+        Generates recovery steps to address the issue and merges them into the plan.
+        Failed/problematic steps are marked as skipped and new steps are inserted.
+
+        Args:
+            current_plan: The current plan being executed
+            failed_step: The step that triggered replanning (if any)
+            reason: Why replanning was triggered
+            tools: Available tools for recovery planning
+
+        Returns:
+            Updated plan with recovery steps
+        """
+        logger.info(f"Handling replan for plan {current_plan.id}: {reason}")
+
+        # Get completed and pending steps
+        completed_steps = [s for s in current_plan.steps if s.status == PlanStepStatus.COMPLETED.value]
+        pending_steps = [s for s in current_plan.steps if s.status == PlanStepStatus.PENDING.value]
+
+        # Build recovery context
+        completed_summary = "\n".join([
+            f"- {s.description} (result: {s.result or 'completed'})"
+            for s in completed_steps
+        ]) or "No steps completed yet"
+
+        pending_summary = "\n".join([
+            f"- {s.description}"
+            for s in pending_steps
+        ]) or "No pending steps"
+
+        failed_info = ""
+        if failed_step:
+            failed_info = f"""
+The following step triggered replanning:
+- Step: {failed_step.description}
+- Error: {failed_step.error or 'N/A'}
+- Result: {failed_step.result or 'N/A'}
+"""
+
+        # Generate recovery instructions
+        recovery_prompt = f"""
+The plan needs adjustment. Please generate recovery steps.
+
+Original Goal: {current_plan.goal}
+
+{failed_info}
+
+Reason for replanning: {reason}
+
+Completed Steps:
+{completed_summary}
+
+Remaining Pending Steps:
+{pending_summary}
+
+Available Tools: {[getattr(t, 'name', str(t)) for t in tools]}
+
+Generate new steps to recover and achieve the original goal.
+Consider what has already been done and what still needs to happen.
+"""
+
+        # Use plan service to generate recovery steps
+        recovery_plan = await self.plan_service.generate_plan(
+            basic_instructions=recovery_prompt,
+            context_tables=None,  # Use existing context
+            available_tools=[getattr(t, 'name', str(t)) for t in tools],
+            goal=f"Recovery: {current_plan.goal}",
+        )
+
+        # Build new step list:
+        # 1. Keep completed steps as-is
+        # 2. Mark failed step as skipped (if any)
+        # 3. Remove old pending steps
+        # 4. Add new recovery steps
+        new_steps = list(completed_steps)
+
+        if failed_step:
+            skipped_step = PlanStep(
+                step_id=failed_step.step_id,
+                description=failed_step.description,
+                tool_call=failed_step.tool_call,
+                parameters=failed_step.parameters,
+                context_tables=failed_step.context_tables,
+                status=PlanStepStatus.SKIPPED.value,
+                result=failed_step.result,
+                error=f"Skipped during replan: {reason}",
+            )
+            new_steps.append(skipped_step)
+
+        # Add recovery steps
+        new_steps.extend(recovery_plan.steps)
+
+        # Create updated plan with incremented version
+        updated_plan = Plan(
+            id=current_plan.id,
+            goal=current_plan.goal,
+            basic_instructions=current_plan.basic_instructions,
+            steps=new_steps,
+            status=PlanStatus.EXECUTING.value,
+            generated_at=current_plan.generated_at,
+            approved_at=current_plan.approved_at,
+            version=current_plan.version + 1,
+        )
+
+        logger.info(
+            f"Replan complete: removed {len(pending_steps)} pending steps, "
+            f"added {len(recovery_plan.steps)} recovery steps (v{updated_plan.version})"
+        )
+
+        return updated_plan
 
     async def run_with_approval(
         self,
