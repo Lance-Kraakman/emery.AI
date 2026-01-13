@@ -107,10 +107,13 @@ class ProtoMapper:
         if proto.HasField("resolved_context"):
             resolved_context = ResolvedContext.from_proto(proto.resolved_context)
 
+        # Handle optional agent_config message
+        agent_config = proto.agent_config if proto.HasField("agent_config") else None
+
         return TaskRequest(
             task_id=proto.task_id,
             agent_id=proto.agent_id,
-            agent_config=proto.agent_config,
+            agent_config=agent_config,
             trigger_data=trigger_data,
             organization_id=proto.organization_id,
             owner_id=proto.owner_id,

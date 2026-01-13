@@ -1385,17 +1385,8 @@ class AgentExecutor:
         # Create mapping context
         ctx = MappingContext(api_key=api_key, organization_id=organization_id)
 
-        # Convert TaskResult to SkillOutputValue list (same pattern as skill_tool.py)
-        skill_outputs: List[SkillOutputValue] = []
-        if result.is_structured and isinstance(result.data, dict):
-            for name, value in result.data.items():
-                skill_outputs.append(SkillOutputValue(name=name, value=value))
-        elif result.is_structured and isinstance(result.data, list):
-            skill_outputs.append(SkillOutputValue(name="result", value=result.data))
-        elif result.is_text:
-            skill_outputs.append(SkillOutputValue(name="text", value=str(result.data)))
-        else:
-            skill_outputs.append(SkillOutputValue(name="value", value=result.data))
+        # Convert TaskResult to SkillOutputValue list using centralized method
+        skill_outputs = result.to_skill_outputs()
 
         # Use first output's mapping config (UI stores all table mappings on outputs[0])
         first_output = outputs_with_mappings[0]

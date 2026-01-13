@@ -117,6 +117,23 @@ class ContextMapping:
         """Check if table should be synced when execution completes."""
         return self.sync_mode == ContextMappingSyncMode.ON_SAVE
 
+    def to_proto(self):
+        """
+        Convert to gRPC ContextMappingProto message.
+
+        Returns:
+            ContextMappingProto for sending back to TypeScript
+        """
+        from emery_agents.grpc.generated import agent_worker_pb2
+        return agent_worker_pb2.ContextMappingProto(
+            table_id=self.table_id,
+            table_name=self.table_name,
+            access_mode=self.access_mode.value,
+            sync_mode=self.sync_mode.value,
+            target_type=self.target_type.value,
+            target_id=self.target_id,
+        )
+
 
 @dataclass
 class ResolvedContext:
@@ -187,3 +204,18 @@ class ResolvedContext:
             if m.table_name.lower() == table_name.lower():
                 return m
         return None
+
+    def to_proto(self):
+        """
+        Convert to gRPC ResolvedContextProto message.
+
+        Returns:
+            ResolvedContextProto for sending back to TypeScript
+        """
+        from emery_agents.grpc.generated import agent_worker_pb2
+        return agent_worker_pb2.ResolvedContextProto(
+            mappings=[m.to_proto() for m in self.mappings],
+            agent_mappings=[m.to_proto() for m in self.agent_mappings],
+            skill_mappings=[m.to_proto() for m in self.skill_mappings],
+            step_mappings=[m.to_proto() for m in self.step_mappings],
+        )
