@@ -25,6 +25,7 @@ import { registerConnectionServices, type ConnectionServices } from './modules/c
 import { registerDelegationServices, type DelegationServices } from './modules/delegation-registration';
 import { registerPuckServices, type PuckServices } from './modules/puck-registration';
 import { registerAuditServices, type AuditServices } from './modules/audit-registration';
+import { registerContextServices, type ContextServices } from './modules/context-registration';
 
 export class DIContainer {
   private static instance: DIContainer;
@@ -182,6 +183,11 @@ export class DIContainer {
     });
     this.registerServices('audit', auditServices);
 
+    // Phase 11: Register context services (Context Sync infrastructure)
+    // Depends on: database (for context mapping storage)
+    const contextServices = registerContextServices({ db });
+    this.registerServices('context', contextServices);
+
     this.isInitialized = true;
     console.log('✅ DIContainer initialized with all domain services');
   }
@@ -191,7 +197,7 @@ export class DIContainer {
    */
   private registerServices(
     domain: string,
-    services: CoreServices | BillingServices | AgentServices | SkillServices | DatabaseServices | ViewServices | ChatServices | ToolsServices | ConnectionServices | DelegationServices | PuckServices | AuditServices
+    services: CoreServices | BillingServices | AgentServices | SkillServices | DatabaseServices | ViewServices | ChatServices | ToolsServices | ConnectionServices | DelegationServices | PuckServices | AuditServices | ContextServices
   ): void {
     // Map service names to container keys
     const serviceKeyMappings: Record<string, string> = {
@@ -273,7 +279,11 @@ export class DIContainer {
       // Audit domain
       'auditRepository': 'IAuditRepository',
       'rowHistoryRepository': 'IRowHistoryRepository',
-      'auditApplicationService': 'AuditApplicationService'
+      'auditApplicationService': 'AuditApplicationService',
+
+      // Context domain
+      'contextMappingRepository': 'IContextMappingRepository',
+      'contextMappingApplicationService': 'ContextMappingApplicationService'
     };
 
     // Register all services from the module
@@ -418,5 +428,9 @@ export {
   getViewApplicationService,
 
   // Audit services
-  getAuditApplicationService
+  getAuditApplicationService,
+
+  // Context services
+  getContextMappingRepository,
+  getContextMappingApplicationService
 } from './getters';

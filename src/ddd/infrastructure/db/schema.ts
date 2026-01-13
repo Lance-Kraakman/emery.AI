@@ -2058,3 +2058,207 @@ export const taskToolCalls = pgTable("task_tool_calls", {
     using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
   }),
 ]);
+
+// ============================================================================
+// CONTEXT SYNC TABLES
+// ============================================================================
+
+/**
+ * Context Mappings - Defines what tables are attached to agents/skills/steps
+ * Enables bidirectional sync between agent workspace (parquet) and dynamic tables
+ *
+ * Hierarchy: agent → skill → skill_step (later levels can override)
+ * System tables (Plans, Agent Memory, etc.) are auto-created and attached
+ */
+export const contextMappings = pgTable("context_mappings", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+
+  // Target (what this context is attached to)
+  targetType: text("target_type").notNull(), // "agent", "skill", "skill_step"
+  targetId: text("target_id").notNull(), // ID as string (supports UUID for steps)
+
+  // Table being mapped
+  tableId: bigint("table_id", { mode: "number" }).notNull().references(() => tables.id, { onDelete: 'cascade' }),
+  tableName: text("table_name").notNull(), // Denormalized for quick access
+
+  // Access control
+  accessMode: text("access_mode").notNull().default("read"), // "read", "write", "readwrite"
+  syncMode: text("sync_mode").notNull().default("on_access"), // "on_access", "on_save", "realtime"
+
+  // System tables flag (Plans, Agent Memory, Execution Logs)
+  isSystem: boolean("is_system").notNull().default(false),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: uuid("created_by").references(() => users.id),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  // Index for target lookups (agent → skill → step hierarchy)
+  index("context_mappings_target_idx").on(table.targetType, table.targetId),
+  // Index for table lookups (find all contexts using a table)
+  index("context_mappings_table_idx").on(table.tableId),
+  // Index for organization queries
+  index("context_mappings_org_idx").on(table.organizationId),
+  // Unique constraint: one mapping per target-table pair
+  unique("context_mappings_target_table_unique").on(table.targetType, table.targetId, table.tableId),
+
+  // RLS: Tenant isolation
+  pgPolicy("context_mappings_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  }),
+
+  // RLS: View permission - users with agent/skill access can view mappings
+  pgPolicy("context_mappings_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        -- Agent-level mappings: check agent permission
+        (target_type = 'agent' AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = target_id::integer
+          AND a.organization_id = organization_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:view',
+              a.organization_id,
+              'agent',
+              a.id
+            )
+          )
+        ))
+        OR
+        -- Skill-level mappings: check skill permission
+        (target_type = 'skill' AND EXISTS (
+          SELECT 1 FROM skills s
+          WHERE s.id = target_id::integer
+          AND s.organization_id = organization_id
+          AND (
+            s.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'skills:view',
+              s.organization_id,
+              'skill',
+              s.id
+            )
+          )
+        ))
+        OR
+        -- Skill step mappings: check parent skill permission
+        (target_type = 'skill_step' AND EXISTS (
+          SELECT 1 FROM skills s
+          WHERE s.organization_id = organization_id
+          AND s.steps::jsonb @> ('[{"id":"' || target_id || '"}]')::jsonb
+          AND (
+            s.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'skills:view',
+              s.organization_id,
+              'skill',
+              s.id
+            )
+          )
+        ))
+      )
+    `,
+  }),
+
+  // RLS: Manage permission - users with agent/skill manage access can modify mappings
+  pgPolicy("context_mappings_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        (target_type = 'agent' AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = target_id::integer
+          AND a.organization_id = organization_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:manage',
+              a.organization_id,
+              'agent',
+              a.id
+            )
+          )
+        ))
+        OR
+        (target_type = 'skill' AND EXISTS (
+          SELECT 1 FROM skills s
+          WHERE s.id = target_id::integer
+          AND s.organization_id = organization_id
+          AND (
+            s.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'skills:manage',
+              s.organization_id,
+              'skill',
+              s.id
+            )
+          )
+        ))
+        OR
+        (target_type = 'skill_step' AND EXISTS (
+          SELECT 1 FROM skills s
+          WHERE s.organization_id = organization_id
+          AND s.steps::jsonb @> ('[{"id":"' || target_id || '"}]')::jsonb
+          AND (
+            s.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'skills:manage',
+              s.organization_id,
+              'skill',
+              s.id
+            )
+          )
+        ))
+      )
+    `,
+  }),
+]);
+
+/**
+ * Context Sync State - Tracks sync state between local workspace and dynamic tables
+ * Used for optimistic sync, conflict detection, and error recovery
+ */
+export const contextSyncState = pgTable("context_sync_state", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull(), // Agent session identifier
+  mappingId: integer("mapping_id").notNull().references(() => contextMappings.id, { onDelete: 'cascade' }),
+
+  // Sync tracking
+  lastSyncedAt: timestamp("last_synced_at"),
+  lastSyncedVersion: integer("last_synced_version"), // For optimistic sync (row version)
+  direction: text("direction").notNull(), // "to_local", "to_remote"
+  status: text("status").notNull().default("pending"), // "pending", "syncing", "synced", "error"
+  error: text("error"),
+
+  // Metadata
+  rowCount: integer("row_count"), // Number of rows synced
+  bytesTransferred: bigint("bytes_transferred", { mode: "number" }), // Size of data transferred
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  // Index for session lookups
+  index("context_sync_state_session_idx").on(table.sessionId),
+  // Index for mapping lookups
+  index("context_sync_state_mapping_idx").on(table.mappingId),
+  // Unique constraint: one sync state per session-mapping pair
+  unique("context_sync_state_session_mapping_unique").on(table.sessionId, table.mappingId),
+]);
