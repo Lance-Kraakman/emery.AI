@@ -20,6 +20,7 @@
 | **Workspace Abstraction** | ⚠️ PARTIAL | `SessionManager` manages agent memory per session | No file-based workspace, no plan directory structure |
 | **FileStorage Service** | ❌ MISSING | File attachments via proto (`FileAttachment`) | No persistent file storage abstraction |
 | **ExecutionContext** | ✅ IMPLEMENTED | `ExecutionContext` dataclass in `agent_executor.py` | Complete |
+| **Context Infrastructure** | ✅ IMPLEMENTED | `ContextMapping`, `ContextResolver`, `ContextSyncService` | Complete |
 
 ### What Exists
 ```python
@@ -37,6 +38,17 @@ class ExecutionContext:
     images: List[Image.Image]
     attachments: List[FileAttachment]
     skill_inputs: Dict[str, Any]
+
+# models/context_mapping.py - Context table infrastructure
+class ContextMapping:
+    target_type: ContextMappingTargetType  # agent, skill, skill_step
+    access_mode: ContextMappingAccessMode  # read, write, readwrite
+    sync_mode: ContextMappingSyncMode      # on_access, on_save, realtime
+
+# services/context_resolver.py - Hierarchy resolution
+class ContextResolver:
+    async def resolve_context(org_id, agent_id, skill_id, step_id) -> ResolvedContext
+    # Merges mappings: agent → skill → step (later overrides earlier)
 ```
 
 ### What's Missing
@@ -57,222 +69,189 @@ class FileStorage:
 
 ---
 
-## Phase 1: Plan Persistence
+## Phase 1: Plan Persistence ✅ COMPLETE
 
 | Component | Status | Current Implementation | Gap |
 |-----------|--------|------------------------|-----|
-| **Plan Data Structure** | ⚠️ PARTIAL | `Step` in `step_executor.py` for DAG steps | No `Plan` object for multi-step planning |
-| **Plan Persistence** | ❌ MISSING | Plans live in memory only | No file-based persistence |
-| **Plan Versioning** | ❌ MISSING | None | Need v1, v2, ... versioning |
+| **Plan Data Structure** | ✅ IMPLEMENTED | `Plan`, `PlanStep` in `models/plan.py` | Complete |
+| **Plan Persistence** | ✅ IMPLEMENTED | `agents.plan` JSONB field + `PlanService` | Complete |
+| **Plan Versioning** | ⚠️ PARTIAL | `version` field in Plan, no file-based | DB-level versioning only |
 | **Session Resume** | ⚠️ PARTIAL | `SessionManager.restore_agent_from_history()` | Restores chat memory, not plans |
 
-### What Exists
+### What Exists (NEW)
 ```python
-# services/step_executor.py - Step structure (for DAG execution)
+# models/plan.py - Plan data structures
 @dataclass
-class Step:
-    id: str
-    name: str
-    instruction: str
-    skill_id: Optional[int]
-    tools: List[str]
-    inputs: Dict[str, InputDefinition]
-    outputs: Dict[str, OutputDefinition]
-    condition: Optional[str]
-    error_config: Optional[ErrorConfig]
-    retry_config: Optional[RetryConfig]
-    loop_config: Optional[LoopConfig]
-    step_outputs: List[StepOutput]  # Routing rules
-    parallel_group: Optional[str]
+class PlanStep:
+    step_id: str
+    description: str
+    tool_call: Optional[str]
+    parameters: Optional[Dict[str, Any]]
+    context_tables: List[str]
+    status: str  # pending, in_progress, completed, failed
+    result: Optional[str]
+    error: Optional[str]
 
-# services/session_manager.py - Session restoration
-def restore_agent_from_history(agent, conversation_history):
-    # Converts DB messages → smolagents memory steps
-    # TaskStep for user messages, ActionStep for assistant
-```
-
-### What's Missing
-```python
-# NEED: Plan object (distinct from Step)
 @dataclass
 class Plan:
     id: str
     goal: str
+    basic_instructions: str
     steps: List[PlanStep]
+    status: str  # draft, approved, executing, completed, failed
     version: int
-    status: str  # draft, pending_approval, approved, executing, completed
-    created_at: datetime
+    generated_at: Optional[datetime]
     approved_at: Optional[datetime]
 
-    def to_markdown(self) -> str: ...
+    def to_dict(self) -> Dict[str, Any]: ...
+    @classmethod
+    def from_dict(cls, data) -> "Plan": ...
 
-# NEED: PlanRepository for persistence
-class PlanRepository:
-    def save(plan: Plan) -> Path
-    def load(plan_id, version=None) -> Plan
-    def list_plans() -> List[str]
+# services/plan_service.py - Plan CRUD operations
+class PlanService:
+    async def generate_plan(instructions, context_tables, tools, goal) -> Plan
+    async def approve_plan(plan: Plan) -> Plan
+    async def update_step_status(plan, step_id, status, result?, error?) -> Plan
+
+# Schema: agents.plan JSONB field for storage
+# src/ddd/infrastructure/db/schema.ts
+plan: jsonb("plan").$type<AgentPlan>()
+planGeneratedAt: timestamp("plan_generated_at")
+planApprovedAt: timestamp("plan_approved_at")
 ```
 
 ---
 
-## Phase 2A: Two-Phase Execution
+## Phase 2A: Two-Phase Execution ✅ COMPLETE
 
 | Component | Status | Current Implementation | Gap |
 |-----------|--------|------------------------|-----|
 | **Execution Modes** | ✅ IMPLEMENTED | 6 modes: agentic, agent, operation, tool, write, read | Complete |
 | **Mode-Based Routing** | ✅ IMPLEMENTED | `SkillExecutorService` routes by `execution_type` | Complete |
-| **Planning vs Execution Tools** | ❌ MISSING | All tools available in all modes | Need read-only tool set for planning |
-| **Mode Transitions** | ❌ MISSING | No explicit planning → execution flow | Need approval gate between phases |
+| **Planning vs Execution Tools** | ✅ IMPLEMENTED | `ToolMode`, `filter_tools_for_mode()` | Complete |
+| **Mode Transitions** | ✅ IMPLEMENTED | `ExecutionCoordinator` with approval gate | Complete |
 
-### What Exists
+### What Exists (NEW)
 ```python
-# services/skill_executor.py - Execution type routing
-async def execute_skill(skill_config, runtime_inputs, ...):
-    if self._is_tool_skill(skill_config):
-        return self._execute_tool(...)
-    elif self._is_write_skill(skill_config):
-        return self._execute_write(...)
-    elif self._is_read_skill(skill_config):
-        return self._execute_read(...)
-    elif self._is_operation_skill(skill_config):
-        return self._execute_operation(...)
-    elif self._is_agent_skill(skill_config):
-        return self._execute_steps(...)  # DAG execution
-    else:
-        return self._execute_agent(...)  # Agentic (LLM)
-```
-
-### What's Missing
-```python
-# NEED: Tool access modes
+# tools/tool_modes.py - Tool classification
 class ToolMode(Enum):
     PLANNING = "planning"      # Read-only tools
     EXECUTION = "execution"    # All tools
 
-READ_ONLY_TOOLS = {"database_crud:list", "database_crud:read", ...}
-MUTATION_TOOLS = {"database_crud:create", "tool_executor", ...}
+READ_ONLY_TOOLS = {"row_crud:list", "row_crud:read", "web_search", ...}
+MUTATION_ONLY_TOOLS = {"row_crud:create", "row_crud:update", "tool_executor", ...}
 
-def filter_tools_by_mode(tools, mode: ToolMode) -> List[Tool]: ...
+def filter_tools_for_mode(tools: List[Tool], mode: ToolMode) -> List[Tool]: ...
+def is_read_only_tool(tool: Tool) -> bool: ...
 
-# NEED: ExecutionCoordinator for phase transitions
+# services/execution_coordinator.py - Phase orchestration
 class ExecutionCoordinator:
-    async def run(task, tools):
-        # Phase 1: Planning (read-only)
-        plan = await planner.run(task, mode=PLANNING)
+    async def create_plan(goal, instructions, tools, context_tables) -> AsyncIterator[Event]
+        # Phase 1: Planning (read-only tools)
+        # Yields: PlanCreatedEvent
 
-        # Phase 2: Approval (HITL)
-        approved = await await_approval(plan)
+    async def approve_plan(plan_id: str) -> Plan
+        # Phase 2: Approval gate
 
-        # Phase 3: Execution (full access)
-        return await executor.run(plan, mode=EXECUTION)
+    async def execute_plan(plan_id: str, tools: List) -> AsyncIterator[Event]
+        # Phase 3: Execution (full tools)
+        # Yields: StepStartedEvent, StepCompletedEvent, ExecutionCompletedEvent
+
+# prompts/base/mode_planning.j2 - Planning mode instructions
+# prompts/base/mode_execution.j2 - Execution mode instructions
 ```
 
 ---
 
-## Phase 2B: Context Offloading
+## Phase 2B: Context Offloading ✅ COMPLETE
 
 | Component | Status | Current Implementation | Gap |
 |-----------|--------|------------------------|-----|
-| **Result Storage** | ⚠️ PARTIAL | `step_context` dict in StepExecutor | In-memory only |
-| **Result Summarization** | ❌ MISSING | None | Need auto-summarization for large results |
-| **Context Threshold** | ❌ MISSING | None | Need token/size limits for offloading |
-| **File References** | ❌ MISSING | None | Need "stored at: /path" references |
+| **Result Storage** | ✅ IMPLEMENTED | `ResultStorageService` in-memory cache | Complete |
+| **Result Summarization** | ✅ IMPLEMENTED | `_generate_summary()` for large results | Complete |
+| **Context Threshold** | ✅ IMPLEMENTED | CHAR_THRESHOLD=2000, RECORD_THRESHOLD=50 | Complete |
+| **File References** | ⚠️ PARTIAL | In-memory IDs, no file paths | Future: /tmp fallback |
 
-### What Exists
+### What Exists (NEW)
 ```python
-# services/step_executor.py - Step context (in-memory)
-step_context: Dict[str, Any] = {}  # Accumulates across steps
-
-# _flatten_json helper for nested results
-def _flatten_json(data, parent_key=''):
-    # {"data": {"id": 1}} → {"data_id": 1}
-```
-
-### What's Missing
-```python
-# NEED: ResultStorage with offloading
-class ResultStorage:
-    THRESHOLD_CHARS = 2000
+# services/result_storage.py - Context offloading
+class ResultStorageService:
+    CHAR_THRESHOLD = 2000      # Offload if > 2000 chars
+    RECORD_THRESHOLD = 50      # Offload if > 50 list items
 
     def should_offload(result: str) -> bool
-    def offload(result, context) -> StoredResult
-    def retrieve(result_id) -> str
+    async def store(result: str, metadata?) -> StoredResult
+    async def retrieve(result_id: str) -> str
+    def cleanup() -> None
 
 @dataclass
 class StoredResult:
     id: str
     summary: str
-    path: str
-    size: int
     record_count: Optional[int]
-
-    def to_context_string(self) -> str:
-        return f"{self.summary}\nFull data: {self.path}"
+    char_count: int
 ```
 
 ---
 
-## Phase 3: Task Ledger
+## Phase 3: Task Ledger ✅ COMPLETE (Runtime)
 
 | Component | Status | Current Implementation | Gap |
 |-----------|--------|------------------------|-----|
 | **Task Entity** | ✅ IMPLEMENTED | `Task` in `entities/task.py` | Complete |
 | **Task Lifecycle** | ✅ IMPLEMENTED | start(), complete(), fail(), cancel() | Complete |
-| **Step Tracking** | ✅ IMPLEMENTED | `StepProgress` in step_executor.py | Complete |
+| **Step Tracking** | ✅ IMPLEMENTED | `TaskLedger`, `StepState` in `models/task_ledger.py` | Complete |
 | **Dependency Tracking** | ✅ IMPLEMENTED | `step_outputs` routing, parallel_group | Complete |
-| **Ledger Persistence** | ⚠️ PARTIAL | Task saved to DB, steps in-memory | Step progress not persisted |
+| **Ledger Persistence** | ⚠️ PARTIAL | In-memory runtime, optional JSON export | No DB persistence (by design) |
 
-### What Exists
+### What Exists (NEW)
 ```python
-# entities/task.py - Full task lifecycle
-class Task:
-    id: TaskId
-    _status: str  # pending, in_progress, completed, failed, cancelled
-    _result: Optional[str]
-    _error: Optional[str]
-    _started_at, _completed_at: Optional[datetime]
-
-    def start(self): ...
-    def complete(self, result): ...
-    def fail(self, error): ...
-    def cancel(self, reason): ...
-
-# services/step_executor.py - Step execution tracking
+# models/task_ledger.py - Runtime execution tracking
 @dataclass
-class StepProgress:
+class StepState:
     step_id: str
     step_name: str
     status: str  # pending, in_progress, completed, failed, skipped
     result: Optional[str]
     error: Optional[str]
-    retries: int
-```
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
 
-### What's Missing
-```python
-# NEED: TaskLedger with dependency graph
 @dataclass
 class TaskLedger:
-    id: str
+    task_id: str
     goal: str
-    tasks: Dict[str, Task]  # With dependencies
+    steps: Dict[str, StepState]
+    events: List[LedgerEvent]
 
-    def add_task(task: Task): ...
-    def next_ready_tasks() -> List[Task]
-    def is_complete() -> bool
-    def is_blocked() -> bool
-    def to_markdown() -> str
-    def to_json() -> str
+    # Step lifecycle
+    def add_step(step_id, step_name): ...
+    def start_step(step_id): ...
+    def complete_step(step_id, result?): ...
+    def fail_step(step_id, error): ...
 
-# NEED: Ledger persistence
-class LedgerRepository:
-    def save(ledger) -> Path  # JSON + markdown
-    def load(ledger_id) -> TaskLedger
+    # Query methods for evaluator
+    @property
+    def completed_steps -> int
+    @property
+    def is_complete -> bool
+    @property
+    def has_failures -> bool
+    def get_step_results() -> Dict[str, str]
+
+    # Serialization for evaluator
+    def to_dict() -> Dict[str, Any]
+    def to_json_summary() -> str
+
+# Wired into ExecutionCoordinator
+# - Ledger created when plan created
+# - Updated on step start/complete/fail
+# - Passed to evaluator for assessment
 ```
 
 ---
 
-## Phase 4A: Magentic Orchestration
+## Phase 4A: Magentic Orchestration ✅ COMPLETE
 
 | Component | Status | Current Implementation | Gap |
 |-----------|--------|------------------------|-----|
@@ -280,55 +259,60 @@ class LedgerRepository:
 | **Specialist Agents** | ✅ IMPLEMENTED | skill_builder, schema_builder, document_builder, table_builder | Complete |
 | **Agent Delegation** | ✅ IMPLEMENTED | `StatefulManagedAgent`, `InterruptAwareAgent` | Complete |
 | **HITL Interrupts** | ✅ IMPLEMENTED | `HITLMixin` with approval detection | Complete |
-| **Evaluation Loop** | ❌ MISSING | None | Need manager evaluation after each step |
-| **Dynamic Replanning** | ❌ MISSING | None | Need replan on failure |
+| **Evaluation Loop** | ✅ IMPLEMENTED | `_evaluate_progress()` in ExecutionCoordinator | Complete |
+| **Dynamic Replanning** | ⚠️ PARTIAL | `ReplanTriggeredEvent` emitted, actual replan TODO | Event only |
 
-### What Exists
+### What Exists (NEW)
 ```python
-# agents/chat_planner_agent.py - Manager with specialists
-def create_chat_planner_agent(tools, model, ...):
-    managed_agents = [
-        create_skill_builder_agent(...),
-        create_document_builder_agent(...),
-        # ...
-    ]
-    return InterruptAwareToolCallingAgent(
-        tools=tools,
-        managed_agents=managed_agents,
-        ...
-    )
+# agents/evaluator_agent.py - Progress evaluation
+def create_evaluator_agent(model: str) -> ToolCallingAgent:
+    """Creates agent for evaluating task progress."""
+    # No tools - evaluation only
+    # Returns JSON: goal_achieved, blocking_issues, should_continue, needs_replan
 
-# agents/_hitl_mixin.py - Interrupt handling
-class HITLMixin:
-    _interrupted_agent_name: Optional[str]
+def create_evaluator_factory(model: str) -> Callable:
+    """Factory for ExecutionCoordinator."""
 
-    def _is_approval_response(task: str) -> bool:
-        # Detects "yes", "proceed", "approve", etc.
+# services/execution_coordinator.py - Evaluation integration
+@dataclass
+class EvaluationResult:
+    goal_achieved: bool
+    blocking_issues: bool
+    should_continue: bool
+    needs_replan: bool
+    reason: str
 
-    def _handle_hitl_resume(task, stream=False):
-        # Routes approval to interrupted agent
-```
+class ExecutionCoordinator:
+    def __init__(
+        evaluator_factory: Optional[Callable] = None,
+        evaluate_after_steps: int = 1,
+        max_replans: int = 3,
+    ): ...
 
-### What's Missing
-```python
-# NEED: MagenticOrchestrator with evaluation loop
-class MagenticOrchestrator:
-    async def run(goal: str, tools: List[Tool]) -> str:
-        ledger = await create_initial_ledger(goal)
+    async def execute_plan(plan_id, tools) -> AsyncIterator[Event]:
+        for step in plan.steps:
+            # Execute step...
 
-        while not ledger.is_complete():
-            if ledger.is_blocked():
-                await handle_blocked(ledger)  # Replan
+            # Evaluate periodically
+            if steps_since_eval >= evaluate_after_steps:
+                evaluation = await self._evaluate_progress()
 
-            for task in ledger.next_ready_tasks():
-                await execute_task(ledger, task)
+                if evaluation.goal_achieved:
+                    yield GoalAchievedEvent(...)
+                    break
 
-            # Evaluation: should we continue?
-            should_continue = await evaluate_progress(ledger, goal)
-            if not should_continue:
-                break
+                if evaluation.needs_replan:
+                    yield ReplanTriggeredEvent(...)
 
-        return synthesize_results(ledger)
+    async def _evaluate_progress() -> EvaluationResult: ...
+
+# New events
+- EvaluationCompletedEvent
+- GoalAchievedEvent
+- ReplanTriggeredEvent
+- ExecutionBlockedEvent
+
+# prompts/base/mode_evaluation.j2 - Evaluation prompt template
 ```
 
 ---
@@ -342,19 +326,6 @@ class MagenticOrchestrator:
 | **Managed Agent Discovery** | ✅ IMPLEMENTED | `managed_agents` list passed to templates | Complete |
 | **Meta/Full Split** | ❌ MISSING | All templates fully loaded | Need lightweight metadata layer |
 | **Lazy Loading** | ❌ MISSING | None | Need on-demand template loading |
-
-### What Exists
-```python
-# prompts/__init__.py - Template composition
-def build_agent_instructions(
-    tools: List[Tool],
-    agent_type: str,  # "chat_planner", "skill_builder", etc.
-    context_type: str,  # "autonomous" or "interactive"
-    managed_agents: List[str],
-    session_attachments: List[FileAttachment],
-) -> str:
-    # Composes: base rules + agent-specific + tool docs + managed agents
-```
 
 ### What's Missing
 ```python
@@ -380,43 +351,31 @@ class SkillRegistry:
 | **DAG Scheduler** | ⚠️ PARTIAL | Step routing via `step_outputs` | Need dependency-based scheduling |
 | **Result Aggregation** | ❌ MISSING | None | Need synthesis of parallel results |
 
-### What Exists
-```python
-# services/step_executor.py - Parallel execution
-async def execute_steps(...):
-    # Group steps by parallel_group
-    parallel_batch = [s for s in ready if s.parallel_group == current_group]
-
-    # Execute in parallel
-    results = await asyncio.gather(*[
-        self._execute_step(step, ...)
-        for step in parallel_batch
-    ])
-```
-
 ---
 
 ## Summary Matrix
 
 | Phase | Component | Status | Priority |
 |-------|-----------|--------|----------|
-| **0** | Workspace | ⚠️ PARTIAL | P0 |
-| **0** | FileStorage | ❌ MISSING | P0 |
+| **0** | Workspace | ⚠️ PARTIAL | P2 |
+| **0** | FileStorage | ❌ MISSING | P2 |
 | **0** | ExecutionContext | ✅ COMPLETE | - |
-| **1** | Plan Structure | ⚠️ PARTIAL | P1 |
-| **1** | Plan Persistence | ❌ MISSING | P1 |
+| **0** | Context Infrastructure | ✅ COMPLETE | - |
+| **1** | Plan Structure | ✅ COMPLETE | - |
+| **1** | Plan Persistence | ✅ COMPLETE | - |
 | **1** | Session Resume | ⚠️ PARTIAL | P2 |
 | **2A** | Execution Modes | ✅ COMPLETE | - |
-| **2A** | Tool Filtering | ❌ MISSING | P1 |
-| **2A** | Mode Transitions | ❌ MISSING | P1 |
-| **2B** | Result Storage | ⚠️ PARTIAL | P2 |
-| **2B** | Summarization | ❌ MISSING | P2 |
+| **2A** | Tool Filtering | ✅ COMPLETE | - |
+| **2A** | Mode Transitions | ✅ COMPLETE | - |
+| **2B** | Result Storage | ✅ COMPLETE | - |
+| **2B** | Summarization | ✅ COMPLETE | - |
 | **3** | Task Entity | ✅ COMPLETE | - |
 | **3** | Step Tracking | ✅ COMPLETE | - |
-| **3** | Ledger Persistence | ⚠️ PARTIAL | P2 |
+| **3** | Ledger (Runtime) | ✅ COMPLETE | - |
 | **4A** | Manager/Specialist | ✅ COMPLETE | - |
 | **4A** | HITL Interrupts | ✅ COMPLETE | - |
-| **4A** | Evaluation Loop | ❌ MISSING | P1 |
+| **4A** | Evaluation Loop | ✅ COMPLETE | - |
+| **4A** | Dynamic Replanning | ⚠️ PARTIAL | P1 |
 | **4B** | Template Composition | ✅ COMPLETE | - |
 | **4B** | Meta/Full Split | ❌ MISSING | P3 |
 | **5** | Parallel Execution | ✅ COMPLETE | - |
@@ -432,23 +391,53 @@ async def execute_steps(...):
 | `services/agent_executor.py` | 0, 2A | ExecutionContext, task routing |
 | `services/skill_executor.py` | 2A | Execution type routing (6 modes) |
 | `services/step_executor.py` | 3, 5 | DAG execution, parallel steps |
-| `entities/task.py` | 3 | Task lifecycle management |
+| `services/execution_coordinator.py` | 1, 2A, 3, 4A | **NEW** Plan → approval → execute flow |
+| `services/plan_service.py` | 1 | **NEW** Plan CRUD operations |
+| `services/result_storage.py` | 2B | **NEW** Context offloading |
+| `models/plan.py` | 1 | **NEW** Plan, PlanStep dataclasses |
+| `models/task_ledger.py` | 3 | **NEW** TaskLedger runtime tracking |
+| `models/context_mapping.py` | 0 | Context table infrastructure |
+| `tools/tool_modes.py` | 2A | **NEW** Tool classification |
+| `agents/evaluator_agent.py` | 4A | **NEW** Progress evaluation |
 | `agents/_hitl_mixin.py` | 4A | HITL interrupts and approval |
 | `agents/chat_planner_agent.py` | 4A | Manager/specialist pattern |
 | `prompts/__init__.py` | 4B | Template composition |
+| `prompts/base/mode_planning.j2` | 2A | **NEW** Planning mode prompt |
+| `prompts/base/mode_execution.j2` | 2A | **NEW** Execution mode prompt |
+| `prompts/base/mode_evaluation.j2` | 4A | **NEW** Evaluation prompt |
 
 ---
 
-## Recommended Build Order
+## Remaining Work
 
-Based on what exists vs what's missing:
+### High Priority (P1)
+1. **Dynamic Replanning** - Implement actual plan modification when `needs_replan=true`
+2. **Wire ExecutionCoordinator into AgentExecutor** - Currently standalone
+
+### Medium Priority (P2)
+1. **Workspace Abstraction** - File-based workspace for plan persistence
+2. **Session Resume with Plans** - Restore plans alongside chat memory
+3. **Context Mapping Wiring** - Pass resolved context to agents during execution
+
+### Low Priority (P3)
+1. **Meta/Full Template Split** - Reduce baseline token usage
+2. **Result Aggregation** - Synthesize parallel execution results
+3. **Lazy Loading** - On-demand template loading
+
+---
+
+## Recommended Next Steps
 
 ```
-1. Phase 0 (FileStorage)     → Foundation for persistence
-2. Phase 1 (PlanRepository)  → Enable plan persistence
-3. Phase 2A (Tool Filtering) → Enable planning mode
-4. Phase 4A (Eval Loop)      → Complete Magentic pattern
-5. Phase 2B (Offloading)     → Optimize context usage
-6. Phase 4B (Lazy Loading)   → Optimize token usage
-7. Phase 3 (Ledger Persist)  → Full auditability
+1. Wire ExecutionCoordinator into AgentExecutor
+   - Add as execution path option
+   - Test with real agent tasks
+
+2. Implement Dynamic Replanning
+   - Create recovery plan on failure
+   - Re-route remaining steps
+
+3. Integrate Context Mappings
+   - Pass resolved tables to agents
+   - Respect read/write permissions
 ```

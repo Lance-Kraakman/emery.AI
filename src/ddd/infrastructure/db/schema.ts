@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
 import type { AutomationConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
+import type { AgentPlan, StepPlan } from '@/ddd/domain/agents/types/plan';
 import type { PuckDataStructure } from '@/ddd/domain/puck/value-objects/puck-data';
 import type { PageStateConfig } from '@/components/puck/types/state';
 import type { PageDialogsConfig } from '@/ddd/domain/puck/value-objects/page-dialogs';
@@ -835,6 +836,12 @@ export const agents = pgTable("agents", {
     color?: string;
   }>(),
 
+  // Plan file - generated detailed execution plan for orchestration
+  // Contains step-by-step tool calls generated from basic instructions
+  plan: jsonb("plan").$type<AgentPlan>(),
+  planGeneratedAt: timestamp("plan_generated_at"),
+  planApprovedAt: timestamp("plan_approved_at"),
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   // RBAC-based policy for viewing agents (resource-aware)
@@ -1046,6 +1053,7 @@ export const skills = pgTable("skills", {
   // Steps configuration (when executionType is 'agent')
   // Each step can be an inline instruction or a reference to another skill
   steps: jsonb("steps").$type<Array<{
+    id?: string;                            // Unique step ID (UUID) for targeting context mappings and plans
     name: string;                           // Step identifier/name
     instruction?: string;                   // Inline instruction (if not skill_id)
     skillId?: number;                       // Reference to another skill by ID
@@ -1054,6 +1062,10 @@ export const skills = pgTable("skills", {
     outputs?: Record<string, string>;       // Output mappings: output_name -> target_var
     parallel?: boolean;                     // Can run in parallel (future)
     condition?: string;                     // Optional condition (future)
+    // Plan file for agentic steps - generated detailed execution instructions
+    // Only used when step has LLM decision-making (not just a direct tool call)
+    plan?: StepPlan;
+    planGeneratedAt?: string;               // ISO timestamp when plan was generated
   }>>(),
 
   // Canvas metadata - visual annotations (sticky notes) that don't affect execution

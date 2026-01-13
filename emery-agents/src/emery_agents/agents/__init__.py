@@ -17,6 +17,10 @@ from .skill_builder_agent import (
 from .document_builder_agent import (
     create_document_builder_agent,
 )
+from .evaluator_agent import (
+    create_evaluator_agent,
+    create_evaluator_factory,
+)
 from .stateful_managed_agent import StatefulManagedAgent
 from .interrupt_aware_agent import InterruptAwareToolCallingAgent, InterruptAwareCodeAgent
 
@@ -24,6 +28,8 @@ __all__ = [
     "create_skill_builder_agent",
     "create_planning_callback",
     "create_document_builder_agent",
+    "create_evaluator_agent",
+    "create_evaluator_factory",
     "StatefulManagedAgent",
     "InterruptAwareToolCallingAgent",
     "InterruptAwareCodeAgent",
