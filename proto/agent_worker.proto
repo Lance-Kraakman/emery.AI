@@ -168,11 +168,20 @@ message InputDefinition {
   InputMappingConfig input_mapping = 4;  // Optional: read from table field
 }
 
+// Output source - where skill output value comes from (node output mapping)
+message OutputSource {
+  string type = 1;           // "node_output"
+  string node_id = 2;        // Step/node name that produces this output
+  string output_name = 3;    // Output name from node's output_defs
+}
+
 // Unified output definition
 message OutputDefinition {
   string name = 1;
   string type = 2;
   OutputMappingConfig output_mapping = 3;  // Optional: write to table fields
+  string description = 4;                   // Description for LLM guidance
+  OutputSource source = 5;                  // Where skill output value comes from
 }
 
 // =============================================================================

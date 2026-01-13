@@ -385,12 +385,28 @@ export interface InputDefinition {
   inputMapping: InputMappingConfig | undefined;
 }
 
+/** Output source - where skill output value comes from (node output mapping) */
+export interface OutputSource {
+  /** "node_output" */
+  type: string;
+  /** Step/node name that produces this output */
+  nodeId: string;
+  /** Output name from node's output_defs */
+  outputName: string;
+}
+
 /** Unified output definition */
 export interface OutputDefinition {
   name: string;
   type: string;
   /** Optional: write to table fields */
-  outputMapping: OutputMappingConfig | undefined;
+  outputMapping:
+    | OutputMappingConfig
+    | undefined;
+  /** Description for LLM guidance */
+  description: string;
+  /** Where skill output value comes from */
+  source: OutputSource | undefined;
 }
 
 /** Error handling configuration for a step */
@@ -2827,8 +2843,100 @@ export const InputDefinition: MessageFns<InputDefinition> = {
   },
 };
 
+function createBaseOutputSource(): OutputSource {
+  return { type: "", nodeId: "", outputName: "" };
+}
+
+export const OutputSource: MessageFns<OutputSource> = {
+  encode(message: OutputSource, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.type !== "") {
+      writer.uint32(10).string(message.type);
+    }
+    if (message.nodeId !== "") {
+      writer.uint32(18).string(message.nodeId);
+    }
+    if (message.outputName !== "") {
+      writer.uint32(26).string(message.outputName);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OutputSource {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseOutputSource();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.nodeId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.outputName = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): OutputSource {
+    return {
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+      nodeId: isSet(object.nodeId) ? globalThis.String(object.nodeId) : "",
+      outputName: isSet(object.outputName) ? globalThis.String(object.outputName) : "",
+    };
+  },
+
+  toJSON(message: OutputSource): unknown {
+    const obj: any = {};
+    if (message.type !== "") {
+      obj.type = message.type;
+    }
+    if (message.nodeId !== "") {
+      obj.nodeId = message.nodeId;
+    }
+    if (message.outputName !== "") {
+      obj.outputName = message.outputName;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<OutputSource>, I>>(base?: I): OutputSource {
+    return OutputSource.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OutputSource>, I>>(object: I): OutputSource {
+    const message = createBaseOutputSource();
+    message.type = object.type ?? "";
+    message.nodeId = object.nodeId ?? "";
+    message.outputName = object.outputName ?? "";
+    return message;
+  },
+};
+
 function createBaseOutputDefinition(): OutputDefinition {
-  return { name: "", type: "", outputMapping: undefined };
+  return { name: "", type: "", outputMapping: undefined, description: "", source: undefined };
 }
 
 export const OutputDefinition: MessageFns<OutputDefinition> = {
@@ -2841,6 +2949,12 @@ export const OutputDefinition: MessageFns<OutputDefinition> = {
     }
     if (message.outputMapping !== undefined) {
       OutputMappingConfig.encode(message.outputMapping, writer.uint32(26).fork()).join();
+    }
+    if (message.description !== "") {
+      writer.uint32(34).string(message.description);
+    }
+    if (message.source !== undefined) {
+      OutputSource.encode(message.source, writer.uint32(42).fork()).join();
     }
     return writer;
   },
@@ -2876,6 +2990,22 @@ export const OutputDefinition: MessageFns<OutputDefinition> = {
           message.outputMapping = OutputMappingConfig.decode(reader, reader.uint32());
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.description = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.source = OutputSource.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2890,6 +3020,8 @@ export const OutputDefinition: MessageFns<OutputDefinition> = {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       type: isSet(object.type) ? globalThis.String(object.type) : "",
       outputMapping: isSet(object.outputMapping) ? OutputMappingConfig.fromJSON(object.outputMapping) : undefined,
+      description: isSet(object.description) ? globalThis.String(object.description) : "",
+      source: isSet(object.source) ? OutputSource.fromJSON(object.source) : undefined,
     };
   },
 
@@ -2904,6 +3036,12 @@ export const OutputDefinition: MessageFns<OutputDefinition> = {
     if (message.outputMapping !== undefined) {
       obj.outputMapping = OutputMappingConfig.toJSON(message.outputMapping);
     }
+    if (message.description !== "") {
+      obj.description = message.description;
+    }
+    if (message.source !== undefined) {
+      obj.source = OutputSource.toJSON(message.source);
+    }
     return obj;
   },
 
@@ -2916,6 +3054,10 @@ export const OutputDefinition: MessageFns<OutputDefinition> = {
     message.type = object.type ?? "";
     message.outputMapping = (object.outputMapping !== undefined && object.outputMapping !== null)
       ? OutputMappingConfig.fromPartial(object.outputMapping)
+      : undefined;
+    message.description = object.description ?? "";
+    message.source = (object.source !== undefined && object.source !== null)
+      ? OutputSource.fromPartial(object.source)
       : undefined;
     return message;
   },

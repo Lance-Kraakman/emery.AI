@@ -244,15 +244,29 @@ class InputDefinition(_message.Message):
     input_mapping: InputMappingConfig
     def __init__(self, name: _Optional[str] = ..., required: bool = ..., type: _Optional[str] = ..., input_mapping: _Optional[_Union[InputMappingConfig, _Mapping]] = ...) -> None: ...
 
+class OutputSource(_message.Message):
+    __slots__ = ("type", "node_id", "output_name")
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    NODE_ID_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_NAME_FIELD_NUMBER: _ClassVar[int]
+    type: str
+    node_id: str
+    output_name: str
+    def __init__(self, type: _Optional[str] = ..., node_id: _Optional[str] = ..., output_name: _Optional[str] = ...) -> None: ...
+
 class OutputDefinition(_message.Message):
-    __slots__ = ("name", "type", "output_mapping")
+    __slots__ = ("name", "type", "output_mapping", "description", "source")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_MAPPING_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_FIELD_NUMBER: _ClassVar[int]
     name: str
     type: str
     output_mapping: OutputMappingConfig
-    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., output_mapping: _Optional[_Union[OutputMappingConfig, _Mapping]] = ...) -> None: ...
+    description: str
+    source: OutputSource
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., output_mapping: _Optional[_Union[OutputMappingConfig, _Mapping]] = ..., description: _Optional[str] = ..., source: _Optional[_Union[OutputSource, _Mapping]] = ...) -> None: ...
 
 class ErrorConfig(_message.Message):
     __slots__ = ("continue_on_error", "error_output_var")

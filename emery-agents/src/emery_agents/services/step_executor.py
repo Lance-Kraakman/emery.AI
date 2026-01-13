@@ -18,6 +18,8 @@ from tenacity import (
 )
 
 from ..grpc.generated import agent_worker_pb2
+from ..prompts import render_output_instructions
+from ..tools.output_tool import OutputTool
 from ..types import SkillExecutionResult
 from ..utils.error_classifier import classify_error
 from .agent_factory import AgentFactory, AgentConfig
@@ -1109,11 +1111,27 @@ class StepExecutorService:
             except Exception as e:
                 logger.warning(f"Failed to load some step tools: {e}")
 
+        # Add OutputTool if step has output_defs
+        output_tool = None
+        if step.output_defs:
+            proto_outputs = [{'name': d.name, 'type': d.type} for d in step.output_defs]
+            output_tool = OutputTool(skill_outputs=proto_outputs)
+            step_tools.append(output_tool)
+            logger.info(f"📤 Added OutputTool for {len(step.output_defs)} step outputs")
+
         task_parts = [instruction]
         if step_inputs:
             task_parts.append("\n\nInputs:")
             for key, value in step_inputs.items():
                 task_parts.append(f"- {key}: {value}")
+
+        # Add output instructions if OutputTool was added
+        if output_tool:
+            output_instructions = render_output_instructions(
+                [{'name': d.name, 'type': d.type} for d in step.output_defs]
+            )
+            if output_instructions:
+                task_parts.append(f"\n\n{output_instructions}")
 
         task = "\n".join(task_parts)
 
@@ -1128,7 +1146,15 @@ class StepExecutorService:
         )
 
         sub_agent = self.agent_factory.create_agent(agent_config)
-        return sub_agent.run(task=task, stream=False, reset=True)
+        result = sub_agent.run(task=task, stream=False, reset=True)
+
+        # Return captured outputs if OutputTool was used
+        if output_tool and output_tool.was_called():
+            captured = output_tool.get_captured_values()
+            logger.info(f"📤 Step {step.name} captured outputs: {list(captured.keys())}")
+            return captured
+
+        return result
 
     async def _execute_read_step(
         self,

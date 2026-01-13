@@ -46,7 +46,7 @@ export function RootSkillConfig({
       .flatMap((node) => {
         const data = node.data as { name: string; outputDefs: Array<{ name: string; type?: string }> };
         return data.outputDefs.map((output) => ({
-          nodeId: node.id,
+          nodeId: data.name,  // Use step name (not node.id) - matches backend step_context keys
           nodeName: data.name,
           outputName: output.name,
           outputType: output.type,

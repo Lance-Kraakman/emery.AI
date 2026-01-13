@@ -433,6 +433,12 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
       return {
         name: output.name,
         type: output.type || 'text', // Default to 'text' for proto compatibility
+        description: output.description || '',
+        source: output.source ? {
+          type: output.source.type,
+          nodeId: output.source.nodeId,
+          outputName: output.source.outputName
+        } : undefined,
         outputMapping: outputMapping ? {
           mode: outputMapping.mode || 'single_row',
           tableMappings: outputMapping.tableMappings.map((tm: TableMappingDTO) => ({
@@ -560,6 +566,8 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
       outputDefs: step.outputDefs?.map(output => ({
         name: output.name,
         type: output.type || 'text',
+        description: output.description || '',
+        source: undefined,  // Step-level outputs don't use source (that's for skill outputs)
         outputMapping: undefined  // Step-level outputs typically don't have table mappings
       })) || [],
       // DAG execution configuration

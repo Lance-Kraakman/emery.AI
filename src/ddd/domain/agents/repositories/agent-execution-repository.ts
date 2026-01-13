@@ -20,7 +20,7 @@ export interface ExecutionSkill {
   description: string;
   instructions: string;
   inputs: Array<{ name: string; required: boolean; type?: string; inputMapping?: any }>;
-  outputs: Array<{ name: string; type?: string; description?: string; outputMapping?: any }>;
+  outputs: Array<{ name: string; type?: string; description?: string; source?: { type: string; nodeId: string; outputName: string }; outputMapping?: any }>;
   tools: Array<{ name: string; version?: string; config?: Record<string, any> }>;
   content: Array<any>; // MessagePart[] - flexible to avoid import
   model: string | null;
