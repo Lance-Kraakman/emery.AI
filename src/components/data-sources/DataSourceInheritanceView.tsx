@@ -4,14 +4,14 @@ import { Database, ChevronRight, ArrowDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ContextMappingDTO } from '@/app/actions/context-mappings'
 
-interface ContextInheritanceViewProps {
+interface DataSourceInheritanceViewProps {
   agentMappings: ContextMappingDTO[]
   skillMappings?: ContextMappingDTO[]
   stepMappings?: ContextMappingDTO[]
   currentLevel: 'agent' | 'skill' | 'skill_step'
 }
 
-function MappingBadge({ mapping }: { mapping: ContextMappingDTO }) {
+function DataSourceBadge({ mapping }: { mapping: ContextMappingDTO }) {
   return (
     <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-xs">
       <Database className="h-3 w-3 text-gray-400" />
@@ -21,12 +21,12 @@ function MappingBadge({ mapping }: { mapping: ContextMappingDTO }) {
   )
 }
 
-export function ContextInheritanceView({
+export function DataSourceInheritanceView({
   agentMappings,
   skillMappings = [],
   stepMappings = [],
   currentLevel
-}: ContextInheritanceViewProps) {
+}: DataSourceInheritanceViewProps) {
   const levels = [
     { key: 'agent', label: 'Agent', mappings: agentMappings },
     { key: 'skill', label: 'Skill', mappings: skillMappings },
@@ -43,7 +43,7 @@ export function ContextInheritanceView({
   return (
     <div className="space-y-3">
       <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-        Context Inheritance
+        Data Source Inheritance
       </div>
 
       <div className="relative">
@@ -95,11 +95,11 @@ export function ContextInheritanceView({
                 {level.mappings.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
                     {level.mappings.map((mapping) => (
-                      <MappingBadge key={mapping.id} mapping={mapping} />
+                      <DataSourceBadge key={mapping.id} mapping={mapping} />
                     ))}
                   </div>
                 ) : (
-                  <span className="text-xs text-gray-400">No tables attached</span>
+                  <span className="text-xs text-gray-400">No data sources attached</span>
                 )}
               </div>
             </div>

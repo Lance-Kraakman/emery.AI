@@ -12,21 +12,24 @@ import {
 import { getTables } from '@/app/actions/tables'
 import type { TableDTO } from '@/app/mappers/table-mapper'
 
-interface ContextTablePickerProps {
+interface DataSourcePickerProps {
   selectedTableIds: number[]
   onChange: (tableIds: number[]) => void
+  /** Called when a table is selected (added), providing full table info */
+  onTableSelect?: (table: { id: number; name: string; description?: string }) => void
   excludeTableIds?: number[]
   disabled?: boolean
   placeholder?: string
 }
 
-export function ContextTablePicker({
+export function DataSourcePicker({
   selectedTableIds,
   onChange,
+  onTableSelect,
   excludeTableIds = [],
   disabled = false,
   placeholder = 'Select tables...'
-}: ContextTablePickerProps) {
+}: DataSourcePickerProps) {
   const [open, setOpen] = useState(false)
   const [tables, setTables] = useState<TableDTO[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -54,6 +57,13 @@ export function ContextTablePicker({
       onChange(selectedTableIds.filter(id => id !== tableId))
     } else {
       onChange([...selectedTableIds, tableId])
+      // Call onTableSelect when adding a new table
+      if (onTableSelect) {
+        const table = tables.find(t => t.id === tableId)
+        if (table) {
+          onTableSelect({ id: table.id, name: table.name, description: table.description ?? undefined })
+        }
+      }
     }
   }
 

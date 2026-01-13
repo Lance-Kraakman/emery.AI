@@ -9,19 +9,19 @@ import { SyncModeSelector } from './SyncModeSelector'
 import type { ContextMappingDTO } from '@/app/actions/context-mappings'
 import type { ContextMappingAccessMode, ContextMappingSyncMode } from '@/ddd/domain/context/entities/context-mapping'
 
-interface ContextMappingListProps {
+interface DataSourceListProps {
   mappings: ContextMappingDTO[]
   onUpdate: (id: number, data: { accessMode?: ContextMappingAccessMode; syncMode?: ContextMappingSyncMode }) => Promise<void>
   onRemove: (id: number) => Promise<void>
   isLoading?: boolean
 }
 
-export function ContextMappingList({
+export function DataSourceList({
   mappings,
   onUpdate,
   onRemove,
   isLoading = false
-}: ContextMappingListProps) {
+}: DataSourceListProps) {
   const [updatingId, setUpdatingId] = useState<number | null>(null)
   const [removingId, setRemovingId] = useState<number | null>(null)
 
@@ -50,8 +50,8 @@ export function ContextMappingList({
     return (
       <div className="text-center py-8 text-sm text-gray-500">
         <Database className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-        <p>No context tables attached</p>
-        <p className="text-xs mt-1">Add tables to provide data context for this agent</p>
+        <p>No data sources attached</p>
+        <p className="text-xs mt-1">Add tables to provide data for this agent</p>
       </div>
     )
   }
