@@ -75,10 +75,13 @@ export class DIContainer {
     this.registerServices('core', coreServices);
 
     // Phase 2: Register agent services
-    // Depends on: team repository
+    // Depends on: team repository, organization repository
+    // Uses lazy getter for SkillEnrichmentService (registered in Phase 3)
     const agentServices = registerAgentServices({
       db,
-      teamRepository: coreServices.teamRepository
+      teamRepository: coreServices.teamRepository,
+      organizationRepository: coreServices.organizationRepository,
+      getSkillEnrichmentService: () => this.get('SkillEnrichmentService')
     });
     this.registerServices('agent', agentServices);
 

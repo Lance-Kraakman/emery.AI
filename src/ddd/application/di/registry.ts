@@ -31,6 +31,7 @@ import type { AuditApplicationService } from '@/ddd/application/services/audit/a
 import type { AgentTaskApplicationService } from '@/ddd/application/services/agents/agent-task-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
 import type { SkillApplicationService } from '@/ddd/application/services/skills/skill-application-service';
+import type { SkillEnrichmentService } from '@/ddd/application/services/skills/skill-enrichment-service';
 import type { TeamApplicationService } from '@/ddd/application/services/teams/team-application-service';
 import type { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
 import type { UserRoleApplicationService } from '@/ddd/application/services/user-organizations/user-role-application-service';
@@ -116,6 +117,7 @@ export interface RepositoryRegistry {
 
   // Capability application services
   SkillApplicationService: SkillApplicationService;
+  SkillEnrichmentService: SkillEnrichmentService;
 
   // Database application services
   DatabaseApplicationService: DatabaseApplicationService;

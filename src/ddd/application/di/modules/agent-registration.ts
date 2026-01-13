@@ -7,6 +7,9 @@
  * - Agent execution repository (gRPC)
  * - Agent application services
  * - Trigger matching service (scheduling domain)
+ *
+ * AIDEV-NOTE: AgentTaskApplicationService uses lazy getter for SkillEnrichmentService
+ * because skill services are registered after agent services.
  */
 
 import type { ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
@@ -14,7 +17,9 @@ import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-re
 import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
 import type { IAgentExecutionRepository } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
+import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { ITriggerMatchingService } from '@/ddd/domain/scheduling/services/trigger-matching-service';
+import type { SkillEnrichmentService } from '@/ddd/application/services/skills/skill-enrichment-service';
 
 import { DrizzleAgentRepository } from '@/ddd/infrastructure/db/repositories/agents/drizzle-agent-repository';
 import { DrizzleTaskRepository } from '@/ddd/infrastructure/db/repositories/tasks/drizzle-task-repository';
@@ -36,10 +41,13 @@ export interface AgentServices {
 export interface AgentDependencies {
   db: ContextAwareDbClient;
   teamRepository: ITeamRepository;
+  organizationRepository: IOrganizationRepository;
+  /** Lazy getter for SkillEnrichmentService (registered after agent services) */
+  getSkillEnrichmentService: () => SkillEnrichmentService;
 }
 
 export function registerAgentServices(deps: AgentDependencies): AgentServices {
-  const { db, teamRepository } = deps;
+  const { db, teamRepository, organizationRepository, getSkillEnrichmentService } = deps;
 
   // Register repositories
   const agentRepository = new DrizzleAgentRepository(db);
@@ -53,7 +61,9 @@ export function registerAgentServices(deps: AgentDependencies): AgentServices {
   const agentTaskApplicationService = new AgentTaskApplicationService(
     agentRepository,
     taskRepository,
-    agentExecutionRepository
+    agentExecutionRepository,
+    organizationRepository,
+    getSkillEnrichmentService
   );
 
   const agentApplicationService = new AgentApplicationService(
