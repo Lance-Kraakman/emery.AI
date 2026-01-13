@@ -192,11 +192,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         try:
             # Tool loader for converting ToolConfig to smolagents tools
             try:
-                self.tool_registry = UnifiedToolLoader()
+                self.tool_loader = UnifiedToolLoader()
                 logger.info("✅ UnifiedToolLoader initialized successfully")
             except ImportError as tool_error:
                 logger.warning(f"⚠️ ToolRegistryRepository not available: {tool_error}")
-                self.tool_registry = None
+                self.tool_loader = None
 
             # Model provider and AgentFactory (shared utilities)
             self.model_provider = SmolagentsModelProvider()
@@ -205,7 +205,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             # SkillExecutorService for shared skill execution logic
             self.skill_executor_service = SkillExecutorService(
-                tool_loader=self.tool_registry,
+                tool_loader=self.tool_loader,
                 agent_factory=self.agent_factory
             )
             logger.info("✅ SkillExecutorService initialized successfully")
@@ -217,7 +217,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         except ImportError as e:
             logger.error(f"❌ Failed to import core services: {e}")
-            self.tool_registry = None
+            self.tool_loader = None
             self.model_provider = None
             self.agent_factory = None
 
@@ -954,7 +954,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         Returns:
             List of loaded tool instances (including SkillTools)
         """
-        if not self.tool_registry:
+        if not self.tool_loader:
             logger.error("❌ Tool registry not available - tools cannot be loaded")
             return []
 
@@ -981,7 +981,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 logger.info(f"🔧 Created inference client for operation skills")
 
         # Use consolidated load_tools_from_configs method
-        return self.tool_registry.load_tools_from_configs(
+        return self.tool_loader.load_tools_from_configs(
             tool_configs=tools,
             api_key=api_key,  # Pass API key for SkillTool output mappings
             api_key_mode="user",  # Chat system uses user API key mode
