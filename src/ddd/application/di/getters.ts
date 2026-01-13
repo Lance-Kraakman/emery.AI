@@ -31,6 +31,7 @@ import type { DatabaseApplicationService } from '@/ddd/application/services/data
 import type { UserRoleApplicationService } from '@/ddd/application/services/user-organizations/user-role-application-service';
 import type { InvitationApplicationService } from '@/ddd/application/services/invitations/invitation-application-service';
 import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
+import type { RowApplicationService } from '@/ddd/application/services/tables/row-application-service';
 import type { FileUseCases } from '@/ddd/application/services/tables/file-application-service';
 import type { DocumentApplicationService } from '@/ddd/application/services/tables/document-application-service';
 import type { ChatApplicationService } from '@/ddd/application/services/chat/chat-application-service';
@@ -95,6 +96,7 @@ type ServiceMap = {
   UserRoleApplicationService: UserRoleApplicationService;
   InvitationApplicationService: InvitationApplicationService;
   TableApplicationService: TableApplicationService;
+  RowApplicationService: RowApplicationService;
   FileApplicationService: FileUseCases;
   DocumentApplicationService: DocumentApplicationService;
   ChatApplicationService: ChatApplicationService;
@@ -208,6 +210,7 @@ export const getSkillEnrichmentService = createGetter('SkillEnrichmentService');
 // Database application service getters
 export const getDatabaseApplicationService = createGetter('DatabaseApplicationService');
 export const getTableApplicationService = createGetter('TableApplicationService');
+export const getRowApplicationService = createGetter('RowApplicationService');
 export const getFileApplicationService = createGetter('FileApplicationService');
 export const getDocumentApplicationService = createGetter('DocumentApplicationService');
 

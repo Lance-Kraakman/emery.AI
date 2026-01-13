@@ -3,7 +3,7 @@
 // Migration wrapper that uses our existing database client parser
 import { execSync } from 'child_process';
 import postgres from 'postgres';
-import { parseConnectionString } from '../lib/db/client-parser';
+import { parseConnectionString } from '@/ddd/infrastructure/db/client-parser';
   // Import and run seeds in order
 import { seedPermissions, seedSystemRoles } from '../drizzle/seeds/rbac.js';
 import { seedSystemUsers } from '../drizzle/seeds/system-users.js';

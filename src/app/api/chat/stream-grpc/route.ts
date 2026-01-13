@@ -39,12 +39,12 @@ import { processStepProgress, processContentChunk, processCompletion, encodeSSEE
 import { generateChatTitleFromMessage } from '@/lib/utils/chat-title';
 
 // Import gRPC client
-import { getChatProcessingClient, type StreamingChatResponse, type ChatProcessingOptions } from '@/lib/grpc/chat-processing-client';
-import type { HistoryMessage } from '@/lib/grpc/generated/agent_worker';
+import { getChatProcessingClient, type StreamingChatResponse, type ChatProcessingOptions } from '@/ddd/infrastructure/grpc/chat-processing-client';
+import type { HistoryMessage } from '@/ddd/infrastructure/grpc/generated/agent_worker';
 import type { MessagePart } from '@llamaindex/chat-ui';
 import { s3ChatAttachmentService } from '@/ddd/infrastructure/multimodal/s3-chat-attachment-service';
 import type { AnyAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
-import { messageWithAttachmentsToProtoParts } from '@/lib/grpc/mappers/message-part-mapper';
+import { messageWithAttachmentsToProtoParts } from '@/ddd/infrastructure/grpc/mappers/message-part-mapper';
 
 export async function POST(req: NextRequest) {
   try {

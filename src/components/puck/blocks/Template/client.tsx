@@ -15,7 +15,7 @@ import {
   deleteVariant,
   type TemplateDTO,
 } from "@/app/actions/puck-templates";
-import type { TemplateVariant } from "@/lib/db/schema";
+import type { TemplateVariant } from "@/ddd/infrastructure/db/schema";
 import { ShareDialog } from "@/components/permissions/ShareDialog";
 import {
   Dialog,

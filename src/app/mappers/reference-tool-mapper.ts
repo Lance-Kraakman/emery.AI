@@ -11,7 +11,7 @@
 import type { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool'
 import type { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
 import type { ToolDTO } from './tool-mapper'
-import type { ToolDefinitionData } from '@/lib/db/schema'
+import type { ToolDefinitionData } from '@/ddd/infrastructure/db/schema'
 
 /**
  * Reference Tool DTO for frontend consumption

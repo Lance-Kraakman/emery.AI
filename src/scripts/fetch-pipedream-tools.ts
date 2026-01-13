@@ -7,7 +7,7 @@
  * 
  * Run with: pnpm tsx scripts/fetch-pipedream-tools.ts
  */
-import { pipedreamClient } from '@/lib/pipedream/client';
+import { pipedreamClient } from '@/ddd/infrastructure/external/pipedream/client';
 import fs from 'fs';
 import path from 'path';
 import { EMERY_BACKEND_TOOLS } from './emery-backend-tools';

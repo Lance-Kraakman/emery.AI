@@ -3,8 +3,8 @@
 // AIDEV-NOTE: Seeds system templates into the database
 // These are global templates available to all users (isSystem = true, organizationId = null)
 
-import { db } from '../../lib/db/client';
-import { templates } from '../../lib/db/schema';
+import { db } from '@/ddd/infrastructure/db/client';
+import { templates } from '@/ddd/infrastructure/db/schema';
 import { eq, and } from 'drizzle-orm';
 
 // Template data - same structure as the old SYSTEM_TEMPLATES

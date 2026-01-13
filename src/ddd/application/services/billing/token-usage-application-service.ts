@@ -12,7 +12,7 @@ import { calculateTokenCost, calculateCreditsUsed } from '@/lib/ai/model-registr
 import type { Result } from '@/ddd/domain/shared/result';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
-import { PRICE_PER_CREDIT_USD, getTierConfig, type SubscriptionTier } from '@/lib/stripe/config';
+import { PRICE_PER_CREDIT_USD, getTierConfig, type SubscriptionTier } from '@/ddd/infrastructure/external/stripe/config';
 
 const logger = createDebugLogger('TokenUsageService');
 

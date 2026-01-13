@@ -1,7 +1,7 @@
 import { SkillId } from '../value-objects/skill-id';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
-import { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
 
 /**
  * Skill Execution Types (legacy - being replaced by unified canvas)

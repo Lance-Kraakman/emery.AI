@@ -12,9 +12,9 @@ import fs from 'fs';
 import path from 'path';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { tools, appTypes, type SystemToolDefinitionData, type OAuthToolDefinitionData } from '@/lib/db/schema';
+import { tools, appTypes, type SystemToolDefinitionData, type OAuthToolDefinitionData } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
-import { parseConnectionString } from '@/lib/db/client-parser';
+import { parseConnectionString } from '@/ddd/infrastructure/db/client-parser';
 
 // Database connection
 const rawConnectionString = process.env.DATABASE_URL;

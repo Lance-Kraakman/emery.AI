@@ -20,9 +20,9 @@ import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 import { testClient } from '../shared/integration-helpers';
 import { createTestOrganization, createTestAgent, createTestTeam, createTestUser, initializeTestDI } from '../shared/test-setup';
 import type { TestContext } from '../shared/test-setup';
-import { agents, teams, tasks, teamMemberships, users } from '@/lib/db/schema';
+import { agents, teams, tasks, teamMemberships, users } from '@/ddd/infrastructure/db/schema';
 import { eq, or } from 'drizzle-orm';
-import { contextManager } from '@/lib/db/context-manager';
+import { contextManager } from '@/ddd/infrastructure/db/context-manager';
 
 // Test timeout for permission tests
 const TEST_TIMEOUT = 30000;

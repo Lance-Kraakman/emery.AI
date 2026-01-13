@@ -46,6 +46,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const agentApplicationService = getAgentApplicationService();
 
     // Build DTO - Application Service handles Value Object conversion
+    // Don't provide a default trigger - let agents be created without automations
     const dto: CreateAgentDTO = {
       name,
       role,
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       persona,
       ownerId: userId,
       organizationId: parseInt(organizationId),
-      automations: trigger ? [trigger] : [{ trigger: { type: 'MANUAL', enabled: true }, skillId: 0, enabled: true }]
+      automations: trigger ? [trigger] : []
     };
 
     const result = await agentApplicationService.createAgent(dto);

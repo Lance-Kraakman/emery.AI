@@ -5,7 +5,7 @@
  * Inspect the raw API response to understand pagination
  */
 
-import { pipedreamClient } from '@/lib/pipedream/client';
+import { pipedreamClient } from '@/ddd/infrastructure/external/pipedream/client';
 
 async function debugPipedreamAPI() {
   if (!pipedreamClient) {

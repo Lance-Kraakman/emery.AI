@@ -11,8 +11,8 @@
  */
 
 import crypto from 'crypto';
-import { db } from '@/lib/db/client';
-import { users } from '@/lib/db/schema';
+import { db } from '@/ddd/infrastructure/db/client';
+import { users } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 
 export interface UserApiKeyInfo {

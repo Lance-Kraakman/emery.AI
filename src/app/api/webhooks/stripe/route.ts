@@ -1,11 +1,11 @@
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { stripe } from '@/lib/stripe/client';
-import { db } from '@/lib/db/client';
-import { organizations, invoices } from '@/lib/db/schema';
+import { stripe } from '@/ddd/infrastructure/external/stripe/client';
+import { db } from '@/ddd/infrastructure/db/client';
+import { organizations, invoices } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
-import { getTierFromStripePriceId, getTierConfig, PRICE_PER_CREDIT_USD } from '@/lib/stripe/config';
+import { getTierFromStripePriceId, getTierConfig, PRICE_PER_CREDIT_USD } from '@/ddd/infrastructure/external/stripe/config';
 import { getInvoiceApplicationService } from '@/ddd/application/di/getters';
 
 /**

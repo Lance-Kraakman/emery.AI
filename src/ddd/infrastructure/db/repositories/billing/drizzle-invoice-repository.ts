@@ -13,7 +13,7 @@ import type {
 import type { Invoice, CreateInvoiceData, InvoiceStatus } from '@/ddd/domain/billing/entities/invoice';
 import { InvoiceId } from '@/ddd/domain/billing/value-objects/invoice-id';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
-import { invoices } from '@/lib/db/schema';
+import { invoices } from '@/ddd/infrastructure/db/schema';
 
 export class DrizzleInvoiceRepository implements IInvoiceRepository {
   constructor(private readonly db: PostgresJsDatabase<Record<string, unknown>>) {}

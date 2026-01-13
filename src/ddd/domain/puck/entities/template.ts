@@ -5,12 +5,12 @@ import type { TemplateId } from '../value-objects/template-id';
 import type { AppId } from '../value-objects/app-id';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { PuckDataStructure } from '../value-objects/puck-data';
-import type { TemplateVariant } from '@/lib/db/schema';
+import type { TemplateVariant } from '@/ddd/infrastructure/db/schema';
 
 export type TemplateData = PuckDataStructure['content'];
 
 // Re-export types for convenience
-export type { TemplateVariant } from '@/lib/db/schema';
+export type { TemplateVariant } from '@/ddd/infrastructure/db/schema';
 
 export class Template {
   private constructor(

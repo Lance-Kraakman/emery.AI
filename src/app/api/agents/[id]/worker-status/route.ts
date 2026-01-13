@@ -14,8 +14,8 @@ export async function GET(
   try {
     // Dynamic imports to prevent build-time database connections
     const { getUserIdFromRequest } = await import('@/lib/auth');
-    const { db } = await import('@/lib/db/client');
-    const { agents } = await import('@/lib/db/schema');
+    const { db } = await import('@/ddd/infrastructure/db/client');
+    const { agents } = await import('@/ddd/infrastructure/db/schema');
     const { eq } = await import('drizzle-orm');
     const { getAgentTaskApplicationService } = await import('@/ddd/application/di/container');
     

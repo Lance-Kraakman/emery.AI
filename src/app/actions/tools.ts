@@ -18,8 +18,8 @@ import { ReferenceToolMapper } from '@/app/mappers/reference-tool-mapper';
 import { getToolSearchApplicationService } from '@/ddd/application/di/container';
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
-import { db } from '@/lib/db/client';
-import { tools, appTypes, type OAuthToolDefinitionData } from '@/lib/db/schema';
+import { db } from '@/ddd/infrastructure/db/client';
+import { tools, appTypes, type OAuthToolDefinitionData } from '@/ddd/infrastructure/db/schema';
 import { eq, sql, and } from 'drizzle-orm';
 
 /**

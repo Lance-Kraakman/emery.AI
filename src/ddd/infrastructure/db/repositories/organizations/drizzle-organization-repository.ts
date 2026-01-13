@@ -4,8 +4,8 @@ import type { InferSelectModel } from 'drizzle-orm';
 import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
-import type { DbClient } from '@/lib/db/client';
-import { organizations, users, userOrganizations, roles, userRoles } from '@/lib/db/schema';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
+import { organizations, users, userOrganizations, roles, userRoles } from '@/ddd/infrastructure/db/schema';
 import { OrganizationId, UserId, OrganizationName, EmailAddress } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 

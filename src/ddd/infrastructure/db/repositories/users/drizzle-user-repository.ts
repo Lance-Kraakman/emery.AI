@@ -5,7 +5,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 
-import { users, userOrganizations, organizations } from '@/lib/db/schema';
+import { users, userOrganizations, organizations } from '@/ddd/infrastructure/db/schema';
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import type { 
@@ -18,7 +18,7 @@ import type {
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
 import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
-import type { DbClient } from '@/lib/db/client';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
 
 type UserRow = InferSelectModel<typeof users>;
 

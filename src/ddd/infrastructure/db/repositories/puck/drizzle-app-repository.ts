@@ -2,8 +2,8 @@
 // Handles data access for App entities using PostgreSQL
 // Uses Puck schema but that's just an implementation detail
 
-import type { DbClient } from '@/lib/db/client';
-import { apps, pages } from '@/lib/db/schema';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
+import { apps, pages } from '@/ddd/infrastructure/db/schema';
 import { eq, and, asc } from 'drizzle-orm';
 import type { IAppRepository, SidebarAppDTO } from '@/ddd/domain/puck/repositories/app-repository';
 import { App } from '@/ddd/domain/puck/entities/app';

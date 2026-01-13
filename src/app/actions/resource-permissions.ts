@@ -6,8 +6,8 @@ import type { Result } from './types';
 import { getRBACRepository } from '@/ddd/application/di/getters';
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { Permission } from '@/ddd/domain/shared/value-objects/permission';
-import { db } from '@/lib/db/client';
-import { users, teams, roles, userRoles, rolePermissions, permissions } from '@/lib/db/schema';
+import { db } from '@/ddd/infrastructure/db/client';
+import { users, teams, roles, userRoles, rolePermissions, permissions } from '@/ddd/infrastructure/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 
 /**

@@ -8,8 +8,8 @@
 import { NextRequest } from 'next/server';
 import { auth, getUserIdFromRequest } from '@/lib/auth';
 import { validateUserApiKey, extractApiKeyFromHeader, UserApiKeyInfo } from './user-api-keys';
-import { db } from '@/lib/db/client';
-import { users } from '@/lib/db/schema';
+import { db } from '@/ddd/infrastructure/db/client';
+import { users } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAgentRepository, getUserRepository } from '@/ddd/application/di/container';
 import { ApiKey } from '@/ddd/domain/shared/value-objects';

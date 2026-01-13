@@ -1209,10 +1209,10 @@ export async function submitFormView(
     const { Row } = await import("@/ddd/domain/tables/value-objects/row");
     const row = Row.fromPlainObject(convertedData, tableId, tableFields);
 
-    // 5. Create row via table application service
-    const tableAppService = (await import("@/ddd/application/di/container")).getTableApplicationService();
+    // 5. Create row via row application service
+    const rowAppService = (await import("@/ddd/application/di/container")).getRowApplicationService();
 
-    const createResult = await tableAppService.createRow({
+    const createResult = await rowAppService.createRow({
       tableId: TableId.fromNumber(tableId),
       data: row,
       createdBy: UserId.fromString(session.user.id),

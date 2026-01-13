@@ -5,10 +5,10 @@ import type { ITeamRepository, CreateTeamData, UpdateTeamData } from '@/ddd/doma
 import { Team } from '@/ddd/domain/teams/entities/team';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { OrganizationId, TeamId, AgentId } from '@/ddd/domain/shared/value-objects';
-import { teams } from '@/lib/db/schema';
+import { teams } from '@/ddd/infrastructure/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import type { DbClient } from '@/lib/db/client';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
 
 type TeamRow = InferSelectModel<typeof teams>;
 

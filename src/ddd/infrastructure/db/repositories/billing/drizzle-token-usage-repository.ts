@@ -9,7 +9,7 @@ import type { ITokenUsageRepository, UsageQueryFilters, UsageStatistics } from '
 import type { TokenUsage, CreateTokenUsageData, EntityType } from '@/ddd/domain/billing/entities/token-usage';
 import { TokenUsageId } from '@/ddd/domain/billing/value-objects/token-usage-id';
 import { OrganizationId, UserId, AgentId } from '@/ddd/domain/shared/value-objects';
-import { tokenUsageLogs, organizations } from '@/lib/db/schema';
+import { tokenUsageLogs, organizations } from '@/ddd/infrastructure/db/schema';
 
 export class DrizzleTokenUsageRepository implements ITokenUsageRepository {
   constructor(private readonly db: PostgresJsDatabase<Record<string, unknown>>) {}

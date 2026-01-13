@@ -11,7 +11,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { eq, like, and, desc, asc, or, ilike } from 'drizzle-orm';
-import { parseConnectionString } from '@/lib/db/client-parser';
+import { parseConnectionString } from '@/ddd/infrastructure/db/client-parser';
 import type {
   IToolRegistryService,
   ToolDiscoveryOptions,
@@ -21,7 +21,7 @@ import type {
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { ToolMetadata, ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata';
 import { Tool } from '@/ddd/domain/tools/entities/tool';
-import { tools, appTypes, type ToolDefinitionData } from '@/lib/db/schema';
+import { tools, appTypes, type ToolDefinitionData } from '@/ddd/infrastructure/db/schema';
 import { toolResolverService } from '@/ddd/domain/tools/services/tool-resolver-service';
 
 export class DatabaseToolRegistry implements IToolRegistryService {

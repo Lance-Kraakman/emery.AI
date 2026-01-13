@@ -9,7 +9,7 @@
  * - Storage Recalculation
  */
 
-import type { ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
+import type { ContextAwareDbClient } from '@/ddd/infrastructure/db/simple-context-proxy';
 import type { ITokenUsageRepository } from '@/ddd/domain/billing/repositories/token-usage-repository';
 import type { IInvoiceRepository } from '@/ddd/domain/billing/repositories/invoice-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';

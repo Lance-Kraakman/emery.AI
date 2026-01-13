@@ -4,7 +4,7 @@
 // Replaces over-engineered search system with direct path insertion
 
 import { requirePermission } from "./permissions";
-import { getTableApplicationService } from "@/ddd/application/di/container";
+import { getTableApplicationService, getRowApplicationService } from "@/ddd/application/di/container";
 import { TableId } from "@/ddd/domain/shared/value-objects";
 import { RowMapper, type DocumentFieldValue, type FileFieldValue } from "@/app/mappers/row-mapper";
 
@@ -120,6 +120,7 @@ async function getTableReferences(
   }
 
   const tableAppService = getTableApplicationService();
+  const rowAppService = getRowApplicationService();
   const references: SimpleReference[] = [];
 
   // Get all tables from all databases with additional safety check
@@ -135,7 +136,7 @@ async function getTableReferences(
     try {
       // Get field definitions
       const fields = await tableAppService.getFieldsForTable(TableId.fromNumber(table.id));
-      const relevantFields = fields.filter(field => 
+      const relevantFields = fields.filter(field =>
         (categories.includes('doc') && field.type === 'document') ||
         (categories.includes('file') && field.type === 'file')
       );
@@ -143,7 +144,7 @@ async function getTableReferences(
       if (relevantFields.length === 0) continue;
 
       // Get rows with data
-      const rowsData = await tableAppService.getRows(
+      const rowsData = await rowAppService.getRows(
         TableId.fromNumber(table.id),
         { limit: 10, offset: 0 } // Limit per table for performance
       );

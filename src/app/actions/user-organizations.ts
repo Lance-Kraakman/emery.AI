@@ -10,7 +10,7 @@ import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
 import { SystemRoleType, SYSTEM_ROLES, SYSTEM_ROLE_IDS } from "@/ddd/domain/rbac/entities/role";
-import { contextManager } from '@/lib/db/context-manager';
+import { contextManager } from '@/ddd/infrastructure/db/context-manager';
 import { OrganizationMapper, type OrganizationDTO } from "@/app/mappers/organization-mapper";
 
 // Helper to map Role entities to simplified format for OrganizationDTO.userRoles

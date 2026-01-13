@@ -13,7 +13,7 @@ import type { InputDefinition, OutputDefinition, ToolConfigDTO } from '@/app/map
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
-import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import type { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
 import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, ReadConfig, SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
 
 /**

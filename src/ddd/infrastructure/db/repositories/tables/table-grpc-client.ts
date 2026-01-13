@@ -36,7 +36,7 @@ import {
   FieldResponse,
   DeleteFieldResponse,
   GetFieldsResponse,
-} from '@/lib/grpc/generated/table_service';
+} from '@/ddd/infrastructure/grpc/generated/table_service';
 
 export interface GrpcClientConfig {
   address: string;

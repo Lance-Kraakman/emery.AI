@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { AgentId } from '@/ddd/domain/shared/value-objects';
 import { getAgentRepository, getAgentTaskApplicationService } from '@/ddd/application/di/container';
-import { withSystemContext } from '@/lib/db/system-context';
+import { withSystemContext } from '@/ddd/infrastructure/db/system-context';
 import { WebhookTriggerConfig, TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 // AIDEV-NOTE: Webhook API endpoint for triggering agent tasks via external HTTP calls

@@ -2,14 +2,11 @@
  * Table Application Service
  *
  * Orchestrates dynamic table operations with business logic and validation.
- * Handles table creation, updates, deletion, and access control.
+ * Handles table/field CRUD operations.
  *
- * AIDEV-NOTE: Refactored for SRP. This service now focuses on table/field operations.
- * Row operations are delegated to RowApplicationService.
- * Trigger handling is delegated to TableEventCoordinatorService.
- *
- * Backward compatibility: This service still exposes row methods by delegating
- * to RowApplicationService, so existing callers don't need to change.
+ * AIDEV-NOTE: Refactored for SRP. This service focuses on table/field operations only.
+ * Row operations: Use RowApplicationService
+ * Trigger handling: Use TableEventCoordinatorService
  */
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
@@ -22,14 +19,7 @@ import { OrganizationId, DatabaseId, UserId, TableId } from '@/ddd/domain/shared
 import { TableMetadata } from '@/ddd/domain/tables/value-objects/table-metadata';
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import { type FileFieldValue, isFileArray } from '@/ddd/domain/tables/value-objects/field-values';
-import { Row, RowId } from '@/ddd/domain/tables/value-objects/row';
-import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persistence';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
-import type { ITriggerMatchingService } from '@/ddd/domain/scheduling/services/trigger-matching-service';
-import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
-import type { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
-import { RowApplicationService } from './row-application-service';
-import { TableEventCoordinatorService } from './table-event-coordinator-service';
 
 const logger = createDebugLogger('TableService');
 
@@ -104,41 +94,13 @@ export interface ReorderFieldsCommand {
 // Use unified Result interface from domain shared types
 export type TableApplicationServiceResult<T = any> = Result<T>;
 
-// Re-export command types from RowApplicationService for backward compatibility
-export type {
-  CreateRowCommand,
-  CreateRowsCommand,
-  UpdateRowCommand,
-  BulkCreateRowsCommand,
-  BulkUpdateRowsCommand,
-  SearchTableRowsCommand
-} from './row-application-service';
-
 export class TableApplicationService {
-  private readonly rowService: RowApplicationService;
-  private readonly eventCoordinator: TableEventCoordinatorService;
-
   constructor(
     private readonly dynamicTableService: DynamicTableService,
     private readonly databaseRepository: IDatabaseRepository,
     private readonly organizationRepository: IOrganizationRepository,
-    private readonly dynamicTableRepository: IDynamicTableRepository,
-    triggerMatchingService?: ITriggerMatchingService,
-    taskRepository?: ITaskRepository,
-    skillRepository?: ISkillRepository
-  ) {
-    // AIDEV-NOTE: Initialize internal services for SRP delegation
-    this.eventCoordinator = new TableEventCoordinatorService(
-      triggerMatchingService,
-      taskRepository,
-      skillRepository
-    );
-    this.rowService = new RowApplicationService(
-      dynamicTableService,
-      dynamicTableRepository,
-      this.eventCoordinator
-    );
-  }
+    private readonly dynamicTableRepository: IDynamicTableRepository
+  ) {}
 
   /**
    * Create a new dynamic table
@@ -710,96 +672,6 @@ export class TableApplicationService {
     }
   }
 
-  // ========================================
-  // Row Operations - Delegated to RowApplicationService
-  // AIDEV-NOTE: These methods delegate to rowService for SRP compliance
-  // while maintaining backward compatibility for existing callers.
-  // ========================================
-
-  /**
-   * Create a new row in a table
-   * @deprecated Use RowApplicationService directly for new code
-   */
-  async createRow(command: import('./row-application-service').CreateRowCommand): Promise<TableApplicationServiceResult<Row>> {
-    return this.rowService.createRow(command);
-  }
-
-  /**
-   * Create multiple rows in a table (batch operation)
-   * @deprecated Use RowApplicationService directly for new code
-   */
-  async createRows(command: import('./row-application-service').CreateRowsCommand): Promise<TableApplicationServiceResult<Row[]>> {
-    return this.rowService.createRows(command);
-  }
-
-  /**
-   * Update an existing row in a table
-   * @deprecated Use RowApplicationService directly for new code
-   */
-  async updateRow(command: import('./row-application-service').UpdateRowCommand): Promise<TableApplicationServiceResult<Row>> {
-    return this.rowService.updateRow(command);
-  }
-
-  /**
-   * Update multiple rows in a table (bulk update)
-   * @deprecated Use RowApplicationService directly for new code
-   */
-  async updateRows(command: import('./row-application-service').BulkUpdateRowsCommand): Promise<TableApplicationServiceResult<Row[]>> {
-    return this.rowService.updateRows(command);
-  }
-
-  /**
-   * Delete a row from a table
-   * @deprecated Use RowApplicationService directly for new code
-   */
-  async deleteRow(tableId: TableId, rowId: RowId): Promise<TableApplicationServiceResult<void>> {
-    return this.rowService.deleteRow(tableId, rowId);
-  }
-
-  /**
-   * Get a single row from a table
-   * @deprecated Use RowApplicationService directly for new code
-   */
-  async getRow(tableId: TableId, rowId: RowId): Promise<Row | null> {
-    return this.rowService.getRow(tableId, rowId);
-  }
-
-  /**
-   * Get rows from a table with pagination
-   * @deprecated Use RowApplicationService directly for new code
-   */
-  async getRows(tableId: TableId, options: RowQueryOptions): Promise<Row[]> {
-    return this.rowService.getRows(tableId, options);
-  }
-
-  /**
-   * Get rows using pre-fetched table data (bypasses findById)
-   * @deprecated Use RowApplicationService directly for new code
-   */
-  async getRowsWithTableData(
-    tableData: { tableId: number; s3Path: string; organizationId: number; databaseId: number },
-    fields: TableField[],
-    options: RowQueryOptions
-  ): Promise<Row[]> {
-    return this.rowService.getRowsWithTableData(tableData, fields, options);
-  }
-
-  /**
-   * Bulk create multiple rows in a table
-   * @deprecated Use RowApplicationService directly for new code
-   */
-  async bulkCreateRows(command: import('./row-application-service').BulkCreateRowsCommand): Promise<TableApplicationServiceResult<Row[]>> {
-    return this.rowService.bulkCreateRows(command);
-  }
-
-  /**
-   * Check if a table has any rows
-   * @deprecated Use RowApplicationService directly for new code
-   */
-  async tableHasRows(tableId: TableId): Promise<boolean> {
-    return this.rowService.tableHasRows(tableId);
-  }
-
   /**
    * Get table statistics efficiently using Delta Lake metadata
    */
@@ -814,13 +686,5 @@ export class TableApplicationService {
       logger.error('Error getting table stats:', error);
       throw error;
     }
-  }
-
-  /**
-   * Search for rows in a table based on a query string
-   * @deprecated Use RowApplicationService directly for new code
-   */
-  async searchTableRows(command: import('./row-application-service').SearchTableRowsCommand): Promise<TableApplicationServiceResult<Row[]>> {
-    return this.rowService.searchTableRows(command);
   }
 }

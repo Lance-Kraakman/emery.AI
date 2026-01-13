@@ -11,9 +11,9 @@ import fs from 'fs';
 import path from 'path';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { appTypes } from '@/lib/db/schema';
+import { appTypes } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
-import { parseConnectionString } from '@/lib/db/client-parser';
+import { parseConnectionString } from '@/ddd/infrastructure/db/client-parser';
 
 // Database connection
 const rawConnectionString = process.env.DATABASE_URL;
@@ -262,7 +262,7 @@ async function discoverAdditionalApps(): Promise<string[]> {
     console.log('  🔍 Attempting dynamic app discovery via Pipedream API...');
 
     // Dynamic import to avoid dependency if not available
-    const { pipedreamClient } = await import('@/lib/pipedream/client');
+    const { pipedreamClient } = await import('@/ddd/infrastructure/external/pipedream/client');
 
     if (!pipedreamClient) {
       console.log('  ℹ️  Pipedream client not configured, skipping dynamic discovery');

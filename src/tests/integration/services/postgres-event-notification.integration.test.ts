@@ -17,9 +17,9 @@ import { getAgentApplicationService, getAgentTaskApplicationService } from '@/dd
 import { testClient } from '../shared/integration-helpers';
 import type { TestContext } from '../shared/test-setup';
 import { initializeTestDI } from '../shared/test-setup';
-import { contextAwareDb } from '@/lib/db/simple-context-proxy';
-import { rawClient } from '@/lib/db/client';
-import { contextManager } from '@/lib/db/context-manager';
+import { contextAwareDb } from '@/ddd/infrastructure/db/simple-context-proxy';
+import { rawClient } from '@/ddd/infrastructure/db/client';
+import { contextManager } from '@/ddd/infrastructure/db/context-manager';
 import { AgentId } from '@/ddd/domain/shared/value-objects';
 
 describe('PostgreSQL Event Notification Integration Tests', () => {

@@ -5,7 +5,7 @@ import { Skill, CreateSkillProps, UpdateSkillProps } from '@/ddd/domain/skills/e
 import { SkillId } from '@/ddd/domain/skills/value-objects/skill-id';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
-import { skills } from '@/lib/db/schema';
+import { skills } from '@/ddd/infrastructure/db/schema';
 
 /**
  * Drizzle ORM implementation of SkillRepository

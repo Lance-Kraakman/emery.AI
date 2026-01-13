@@ -5,7 +5,7 @@ import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-i
 import { SkillEntity, type Skill, type InputDefinition, type OutputDefinition, type ToolConfig, type SkillExecutionType, type TaskModelConfig, type SkillStep, type ToolExecutionConfig, type WriteConfig, type ReadConfig, type CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
-import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import type { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
 
 const logger = createDebugLogger('SkillService');
 

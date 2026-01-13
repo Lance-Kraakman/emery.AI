@@ -11,9 +11,9 @@
  */
 
 import { auth } from '@/lib/auth';
-import { stripe } from '@/lib/stripe/client';
-import { db } from '@/lib/db/client';
-import { organizations } from '@/lib/db/schema';
+import { stripe } from '@/ddd/infrastructure/external/stripe/client';
+import { db } from '@/ddd/infrastructure/db/client';
+import { organizations } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 import {
   getTierConfig,
@@ -22,7 +22,7 @@ import {
   PRICE_PER_CREDIT_USD,
   type SubscriptionTier,
   type BillingInterval,
-} from '@/lib/stripe/config';
+} from '@/ddd/infrastructure/external/stripe/config';
 import { requireResourcePermission } from './permissions';
 import { withAuthContext } from '@/lib/auth/with-context';
 

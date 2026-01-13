@@ -19,6 +19,7 @@ import { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool';
 import { Tool } from '@/ddd/domain/tools/entities/tool';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
+import type { RowApplicationService } from '@/ddd/application/services/tables/row-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
 import type { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
 import type { SkillApplicationService } from '@/ddd/application/services/skills/skill-application-service';
@@ -64,6 +65,7 @@ export interface SearchToolsResult {
 export class ToolSearchApplicationService {
   constructor(
     private readonly tableApplicationService: TableApplicationService,
+    private readonly rowApplicationService: RowApplicationService,
     private readonly agentApplicationService: AgentApplicationService,
     private readonly databaseApplicationService: DatabaseApplicationService,
     private readonly skillApplicationService: SkillApplicationService,
@@ -550,7 +552,7 @@ export class ToolSearchApplicationService {
           };
 
           logger.debug(`Getting rows for table "${table.name}" with options:`, queryOptions);
-          const rows = await this.tableApplicationService.getRows(table.id, queryOptions);
+          const rows = await this.rowApplicationService.getRows(table.id, queryOptions);
           logger.debug(`Table "${table.name}" returned ${rows ? rows.length : 0} rows`);
 
           if (rows && rows.length > 0) {

@@ -17,7 +17,7 @@ export interface TemplateVariant {
   isDefault?: boolean;
 }
 import type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
-import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import type { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
 import type { SkillParameterType, OutputDefinition, ToolExecutionConfig, WriteConfig, ReadConfig, InputMappingConfig } from '@/ddd/domain/skills/entities/skill';
 
 // AIDEV-NOTE: Authenticated user role for RLS policies

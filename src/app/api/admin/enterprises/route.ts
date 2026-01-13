@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { stripe } from '@/lib/stripe/client';
-import { db } from '@/lib/db/client';
-import { organizations } from '@/lib/db/schema';
+import { stripe } from '@/ddd/infrastructure/external/stripe/client';
+import { db } from '@/ddd/infrastructure/db/client';
+import { organizations } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 
 /**

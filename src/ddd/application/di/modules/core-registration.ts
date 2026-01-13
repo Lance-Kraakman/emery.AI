@@ -9,7 +9,7 @@
  * - RBAC (Role-Based Access Control)
  */
 
-import type { ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
+import type { ContextAwareDbClient } from '@/ddd/infrastructure/db/simple-context-proxy';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';

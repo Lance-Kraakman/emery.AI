@@ -12,7 +12,7 @@
 import { Tool } from '@/ddd/domain/tools/entities/tool'
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config'
 import { ToolMetadata, ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata'
-import type { ToolDefinitionData } from '@/lib/db/schema'
+import type { ToolDefinitionData } from '@/ddd/infrastructure/db/schema'
 
 // Export domain types for UI use
 export { ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata'

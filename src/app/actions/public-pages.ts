@@ -3,8 +3,8 @@
 // AIDEV-NOTE: Server Actions for public Puck pages (no authentication required)
 // Handles fetching published pages for public viewing
 
-import { db } from "@/lib/db/client"
-import { apps, pages, organizations, userRoles, roles } from "@/lib/db/schema"
+import { db } from "@/ddd/infrastructure/db/client"
+import { apps, pages, organizations, userRoles, roles } from "@/ddd/infrastructure/db/schema"
 import { eq, and, inArray } from "drizzle-orm"
 import { ActionError, type Result } from "@/lib/puck/errors"
 import { PuckPageMapper, type PageDTO } from "@/app/mappers/puck-page-mapper"
