@@ -27,7 +27,7 @@
 # services/agent_executor.py (lines 17-81)
 @dataclass
 class ExecutionContext:
-    mode: ExecutionMode  # SKILL / INSTRUCTION / CAPABILITY
+    mode: ExecutionMode  # INTERACTIVE / AUTONOMOUS (simplified from SKILL/INSTRUCTION)
     task: str
     available_tools: List[str]
     agent_id: int
@@ -317,6 +317,81 @@ class ExecutionCoordinator:
 
 ---
 
+## Phase 4C: Coordinator Wiring & Execution Modes ✅ COMPLETE (NEW)
+
+| Component | Status | Current Implementation | Gap |
+|-----------|--------|------------------------|-----|
+| **ExecutionMode Simplification** | ✅ IMPLEMENTED | `INTERACTIVE` / `AUTONOMOUS` (replaced SKILL/INSTRUCTION) | Complete |
+| **Coordinator in AgentExecutor** | ✅ IMPLEMENTED | `use_coordinator` flag, `_execute_with_coordinator()` | Complete |
+| **Context gRPC Integration** | ✅ IMPLEMENTED | `ContextMappingProto`, `ResolvedContextProto` in proto | Complete |
+| **TypeScript Mappers** | ✅ IMPLEMENTED | `mapResolvedContextToProto()` in proto-mappers.ts | Complete |
+
+### What Exists (NEW)
+```python
+# types.py - Simplified execution modes
+class ExecutionMode(Enum):
+    INTERACTIVE = "interactive"  # Chat mode - HITL, approval gates
+    AUTONOMOUS = "autonomous"    # Skill execution - no HITL, just run
+
+# entities/execution_context.py - New properties
+@dataclass
+class ExecutionContext:
+    use_coordinator: bool = False  # Enable two-phase execution
+    resolved_context: Optional[ResolvedContext] = None  # Context table mappings
+
+    @property
+    def is_autonomous(self) -> bool: ...  # Replaces is_skill_mode
+    @property
+    def is_interactive(self) -> bool: ...  # Replaces is_instruction_mode
+
+# services/agent_executor.py - Coordinator integration
+async def execute_task(self, context: ExecutionContext):
+    if context.use_coordinator:
+        async for progress in self._execute_with_coordinator(context, start_time):
+            yield progress
+        return
+    # ... existing execution paths
+
+async def _execute_with_coordinator(self, context, start_time) -> AsyncIterator[Dict]:
+    """Two-phase execution with planning → approval → execution."""
+    coordinator = ExecutionCoordinator(evaluator_factory=evaluator_factory, ...)
+    async for event in coordinator.create_plan(goal, instructions, tools):
+        yield self._coordinator_event_to_progress(event)
+    await coordinator.approve_plan(plan_id)  # Auto-approve for now
+    async for event in coordinator.execute_plan(plan_id, tools):
+        yield self._coordinator_event_to_progress(event)
+
+# proto/agent_worker.proto - Context mapping messages
+message ContextMappingProto {
+  int32 table_id = 1;
+  string table_name = 2;
+  string access_mode = 3;  // "read", "write", "readwrite"
+  string sync_mode = 4;    // "on_access", "on_save", "realtime"
+  string target_type = 5;  // "agent", "skill", "skill_step"
+  string target_id = 6;
+}
+
+message ResolvedContextProto {
+  repeated ContextMappingProto mappings = 1;
+  repeated ContextMappingProto agent_mappings = 2;
+  repeated ContextMappingProto skill_mappings = 3;
+  repeated ContextMappingProto step_mappings = 4;
+}
+
+message TaskRequest {
+  // ... existing fields ...
+  ResolvedContextProto resolved_context = 14;
+}
+
+# models/context_mapping.py - from_proto methods
+@classmethod
+def from_proto(cls, proto) -> "ContextMapping": ...
+@classmethod
+def from_proto(cls, proto) -> "ResolvedContext": ...
+```
+
+---
+
 ## Phase 4B: Progressive Disclosure
 
 | Component | Status | Current Implementation | Gap |
@@ -376,6 +451,9 @@ class SkillRegistry:
 | **4A** | HITL Interrupts | ✅ COMPLETE | - |
 | **4A** | Evaluation Loop | ✅ COMPLETE | - |
 | **4A** | Dynamic Replanning | ⚠️ PARTIAL | P1 |
+| **4C** | ExecutionMode Simplification | ✅ COMPLETE | - |
+| **4C** | Coordinator Wiring | ✅ COMPLETE | - |
+| **4C** | Context gRPC Integration | ✅ COMPLETE | - |
 | **4B** | Template Composition | ✅ COMPLETE | - |
 | **4B** | Meta/Full Split | ❌ MISSING | P3 |
 | **5** | Parallel Execution | ✅ COMPLETE | - |
@@ -405,6 +483,9 @@ class SkillRegistry:
 | `prompts/base/mode_planning.j2` | 2A | **NEW** Planning mode prompt |
 | `prompts/base/mode_execution.j2` | 2A | **NEW** Execution mode prompt |
 | `prompts/base/mode_evaluation.j2` | 4A | **NEW** Evaluation prompt |
+| `types.py` | 4C | **UPDATED** ExecutionMode (INTERACTIVE/AUTONOMOUS) |
+| `proto/agent_worker.proto` | 4C | **UPDATED** ContextMappingProto, ResolvedContextProto |
+| `src/ddd/infrastructure/grpc/proto-mappers.ts` | 4C | **UPDATED** Context mapping TypeScript mappers |
 
 ---
 
@@ -412,32 +493,34 @@ class SkillRegistry:
 
 ### High Priority (P1)
 1. **Dynamic Replanning** - Implement actual plan modification when `needs_replan=true`
-2. **Wire ExecutionCoordinator into AgentExecutor** - Currently standalone
+2. ~~Wire ExecutionCoordinator into AgentExecutor~~ ✅ DONE
+3. **TypeScript Context Resolution** - Call `resolveContextForExecution()` before gRPC calls
 
 ### Medium Priority (P2)
 1. **Workspace Abstraction** - File-based workspace for plan persistence
 2. **Session Resume with Plans** - Restore plans alongside chat memory
-3. **Context Mapping Wiring** - Pass resolved context to agents during execution
+3. ~~Context Mapping gRPC~~ ✅ DONE - Proto messages and mappers complete
 
 ### Low Priority (P3)
 1. **Meta/Full Template Split** - Reduce baseline token usage
 2. **Result Aggregation** - Synthesize parallel execution results
 3. **Lazy Loading** - On-demand template loading
+4. **UI Components** - Context tables panel, plan approval UI
 
 ---
 
 ## Recommended Next Steps
 
 ```
-1. Wire ExecutionCoordinator into AgentExecutor
-   - Add as execution path option
-   - Test with real agent tasks
+1. TypeScript Context Resolution Integration
+   - Call contextMappingAppService.resolveContextForExecution() before gRPC
+   - Pass resolved context in TaskRequest
 
-2. Implement Dynamic Replanning
+2. Implement Dynamic Replanning (P3)
    - Create recovery plan on failure
    - Re-route remaining steps
 
-3. Integrate Context Mappings
-   - Pass resolved tables to agents
-   - Respect read/write permissions
+3. Integration Tests
+   - Test coordinator flow end-to-end
+   - Test context resolution across gRPC boundary
 ```
