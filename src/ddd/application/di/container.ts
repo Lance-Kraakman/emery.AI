@@ -92,12 +92,13 @@ export class DIContainer {
     this.registerServices('skill', skillServices);
 
     // Phase 4: Register database services (tables, files, documents)
-    // Depends on: organization repository, trigger matching service, task repository
+    // Depends on: organization repository, trigger matching service, task repository, skill repository
     const databaseServices = registerDatabaseServices({
       db,
       organizationRepository: coreServices.organizationRepository,
       triggerMatchingService: agentServices.triggerMatchingService,
-      taskRepository: agentServices.taskRepository
+      taskRepository: agentServices.taskRepository,
+      skillRepository: skillServices.skillRepository
     });
     this.registerServices('database', databaseServices);
 

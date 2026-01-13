@@ -18,6 +18,7 @@ import type { IFileStorageRepository } from '@/ddd/domain/tables/repositories/fi
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { ITriggerMatchingService } from '@/ddd/domain/scheduling/services/trigger-matching-service';
 import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
+import type { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
 
 import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/databases/drizzle-database-repository';
 import { DynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/dynamic-table-repository';
@@ -47,10 +48,11 @@ export interface DatabaseDependencies {
   organizationRepository: IOrganizationRepository;
   triggerMatchingService?: ITriggerMatchingService;
   taskRepository?: ITaskRepository;
+  skillRepository?: ISkillRepository;
 }
 
 export function registerDatabaseServices(deps: DatabaseDependencies): DatabaseServices {
-  const { db, organizationRepository, triggerMatchingService, taskRepository } = deps;
+  const { db, organizationRepository, triggerMatchingService, taskRepository, skillRepository } = deps;
 
   // Register repositories
   const databaseRepository = new DrizzleDatabaseRepository(db);
@@ -82,7 +84,8 @@ export function registerDatabaseServices(deps: DatabaseDependencies): DatabaseSe
     organizationRepository,
     dynamicTableRepository,
     triggerMatchingService,
-    taskRepository
+    taskRepository,
+    skillRepository
   );
 
   const fileApplicationService = new FileUseCases(

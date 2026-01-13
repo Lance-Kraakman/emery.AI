@@ -185,8 +185,9 @@ export function stepsToFlow(
   const nodes: WorkflowNode[] = [];
   const edges: WorkflowEdge[] = [];
 
-  // Build name→id map for resolving edge targets
-  // (stepOutputs.nextSteps contains names, not IDs)
+  // Build maps for resolving edge targets
+  // Supports both new format (IDs) and old format (names) for backward compatibility
+  const idSet = new Set(steps.map(s => s.id));
   const nameToId = new Map(steps.map(s => [s.name, s.id]));
 
   steps.forEach((step, index) => {
@@ -203,8 +204,14 @@ export function stepsToFlow(
     // Create edges from stepOutputs
     if (step.stepOutputs) {
       step.stepOutputs.forEach((output, outputIndex) => {
-        output.nextSteps.forEach((targetName) => {
-          const targetId = nameToId.get(targetName);
+        output.nextSteps.forEach((targetIdOrName) => {
+          // Support both new format (IDs) and old format (names)
+          // New format: nextSteps contains step IDs (UUIDs)
+          // Old format: nextSteps contains step names (for backward compatibility)
+          const targetId = idSet.has(targetIdOrName)
+            ? targetIdOrName                      // New format: already an ID
+            : nameToId.get(targetIdOrName);       // Old format: lookup ID by name
+
           if (!targetId) return; // Skip if target not found
 
           edges.push({
@@ -386,12 +393,12 @@ function nodeDataToStep(node: WorkflowNode): Partial<SkillStep> {
 /**
  * Group edges by type to create stepOutputs
  * @param edges - outgoing edges from a node
- * @param idToName - map to convert node IDs to names for stepOutputs.nextSteps
+ *
+ * AIDEV-NOTE: Changed from name-based to ID-based routing.
+ * nextSteps now stores step IDs (UUIDs) instead of names for stability.
+ * Names can be renamed by users; IDs are immutable.
  */
-function groupEdgesByType(
-  edges: WorkflowEdge[],
-  idToName: Map<string, string>
-): StepOutput[] {
+function groupEdgesByType(edges: WorkflowEdge[]): StepOutput[] {
   const outputMap = new Map<string, StepOutput>();
 
   edges.forEach((edge) => {
@@ -409,9 +416,8 @@ function groupEdgesByType(
       });
     }
 
-    // Convert ID to name for nextSteps (uses names for readability)
-    const targetName = idToName.get(edge.target) || edge.target;
-    outputMap.get(key)!.nextSteps.push(targetName);
+    // Use IDs directly for stability (names can be renamed, IDs are immutable)
+    outputMap.get(key)!.nextSteps.push(edge.target);
   });
 
   return Array.from(outputMap.values());
@@ -444,15 +450,11 @@ export function flowToSteps(
   const stickyNodes = nodes.filter(n => n.type === 'sticky');
   const workflowNodes = nodes.filter(n => n.type !== 'sticky' && !isVirtualNode(n));
 
-  // Build id→name map for converting edge targets back to names
-  // (stepOutputs.nextSteps uses names for readability)
-  // Note: workflow nodes always have name, sticky nodes are filtered out
-  const idToName = new Map(workflowNodes.map(n => [n.id, (n.data as WorkflowNodeData).name]));
-
   const steps = workflowNodes.map((node) => {
     const data = node.data as WorkflowNodeData;
     const outgoingEdges = edges.filter((e) => e.source === node.id);
-    const stepOutputs = groupEdgesByType(outgoingEdges, idToName);
+    // AIDEV-NOTE: stepOutputs.nextSteps now uses IDs (not names) for stability
+    const stepOutputs = groupEdgesByType(outgoingEdges);
 
     return {
       id: node.id,           // Stable ID
@@ -464,11 +466,11 @@ export function flowToSteps(
     } as SkillStep;
   });
 
-  // Validate step name uniqueness (DAG routing uses names)
+  // Validate step name uniqueness (for display purposes, routing uses IDs)
   const names = new Set<string>();
   for (const step of steps) {
     if (names.has(step.name)) {
-      console.warn(`[flow-converters] Duplicate step name: "${step.name}". DAG routing may be affected. Consider renaming steps to be unique.`);
+      console.warn(`[flow-converters] Duplicate step name: "${step.name}". Consider renaming for clarity.`);
     }
     names.add(step.name);
   }

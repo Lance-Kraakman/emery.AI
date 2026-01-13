@@ -403,23 +403,27 @@ class StepExecutorService:
         """
         # Convert proto steps to internal Step objects
         internal_steps = [Step.from_proto(s) for s in steps]
-        step_by_name: Dict[str, Step] = {s.name: s for s in internal_steps}
+        # AIDEV-NOTE: Changed from name-based to ID-based routing for stability.
+        # Names can be renamed by users; IDs are immutable UUIDs.
+        step_by_id: Dict[str, Step] = {s.id: s for s in internal_steps}
+        # Keep name→id map for backward compatibility (old data may have names in next_steps)
+        name_to_id: Dict[str, str] = {s.name: s.id for s in internal_steps}
 
-        # Initialize execution state
+        # Initialize execution state (uses IDs for tracking)
         step_context: Dict[str, Any] = dict(initial_inputs)
         execution_stack = _execution_stack if _execution_stack is not None else set()
-        executed_steps: Set[str] = set()
+        executed_steps: Set[str] = set()  # Set of step IDs
         total_steps = len(internal_steps)
 
         logger.info(f"🚀 Starting DAG execution with {total_steps} steps")
 
-        # Start with the first step
-        pending_steps: List[str] = [internal_steps[0].name] if internal_steps else []
+        # Start with the first step (use ID for tracking)
+        pending_steps: List[str] = [internal_steps[0].id] if internal_steps else []  # List of step IDs
         step_counter = 0
 
         while pending_steps:
             # Get batch of steps to execute (parallel group or single)
-            batch = self._get_parallel_batch(pending_steps, step_by_name, executed_steps)
+            batch = self._get_parallel_batch(pending_steps, step_by_id, executed_steps)
 
             if not batch:
                 continue
@@ -439,7 +443,8 @@ class StepExecutorService:
                     organization_id=organization_id,
                     internal_steps=internal_steps,
                     pending_steps=pending_steps,
-                    executed_steps=executed_steps
+                    executed_steps=executed_steps,
+                    name_to_id=name_to_id
                 ):
                     yield progress
                 step_counter += len(batch)
@@ -448,7 +453,7 @@ class StepExecutorService:
                 step = batch[0]
                 step_name = step.name
                 step_counter += 1
-                executed_steps.add(step_name)
+                executed_steps.add(step.id)  # Track by ID for stability
 
                 # Skip disabled steps
                 if step.is_disabled:
@@ -463,7 +468,7 @@ class StepExecutorService:
                     )
                     self._queue_next_steps(
                         step, internal_steps, pending_steps, executed_steps,
-                        "success", step_context
+                        "success", step_context, name_to_id
                     )
                     continue
 
@@ -490,7 +495,7 @@ class StepExecutorService:
                         )
                         self._queue_next_steps(
                             step, internal_steps, pending_steps, executed_steps,
-                            "success", step_context
+                            "success", step_context, name_to_id
                         )
                         continue
 
@@ -578,26 +583,26 @@ class StepExecutorService:
                 # Queue next steps based on outputs
                 self._queue_next_steps(
                     step, internal_steps, pending_steps, executed_steps,
-                    execution_status, step_context
+                    execution_status, step_context, name_to_id
                 )
 
         logger.info(f"🏁 DAG execution complete: {step_counter} steps executed")
 
     def _get_parallel_batch(
         self,
-        pending_steps: List[str],
-        step_by_name: Dict[str, Step],
-        executed_steps: Set[str]
+        pending_steps: List[str],  # List of step IDs
+        step_by_id: Dict[str, Step],
+        executed_steps: Set[str]  # Set of step IDs
     ) -> List[Step]:
         """Get batch of steps to execute - either parallel group or single step."""
         while pending_steps:
-            step_name = pending_steps.pop(0)
+            step_id = pending_steps.pop(0)
 
-            # Skip if already executed
-            if step_name in executed_steps:
+            # Skip if already executed (tracking by ID)
+            if step_id in executed_steps:
                 continue
 
-            step = step_by_name.get(step_name)
+            step = step_by_id.get(step_id)
             if not step:
                 continue
 
@@ -606,14 +611,14 @@ class StepExecutorService:
                 batch = [step]
                 remaining = []
 
-                for other_name in pending_steps:
-                    if other_name in executed_steps:
+                for other_id in pending_steps:
+                    if other_id in executed_steps:
                         continue
-                    other_step = step_by_name.get(other_name)
+                    other_step = step_by_id.get(other_id)
                     if other_step and other_step.parallel_group == step.parallel_group:
                         batch.append(other_step)
                     else:
-                        remaining.append(other_name)
+                        remaining.append(other_id)
 
                 # Update pending_steps to remove batched items
                 pending_steps.clear()
@@ -637,13 +642,14 @@ class StepExecutorService:
         api_key: Optional[str],
         organization_id: Optional[int],
         internal_steps: List[Step],
-        pending_steps: List[str],
-        executed_steps: Set[str]
+        pending_steps: List[str],  # List of step IDs
+        executed_steps: Set[str],  # Set of step IDs
+        name_to_id: Optional[Dict[str, str]] = None  # For backward compatibility
     ) -> AsyncIterator[StepProgress]:
         """Execute a batch of steps in parallel using asyncio.gather."""
-        # Mark all as executed
+        # Mark all as executed (by ID)
         for step in batch:
-            executed_steps.add(step.name)
+            executed_steps.add(step.id)
 
         # Filter out disabled steps and yield skipped progress
         active_batch = []
@@ -661,7 +667,7 @@ class StepExecutorService:
                 )
                 self._queue_next_steps(
                     step, internal_steps, pending_steps, executed_steps,
-                    "success", step_context
+                    "success", step_context, name_to_id
                 )
                 skipped_count += 1
             else:
@@ -724,7 +730,7 @@ class StepExecutorService:
 
                 self._queue_next_steps(
                     step, internal_steps, pending_steps, executed_steps,
-                    "success", step_context
+                    "success", step_context, name_to_id
                 )
             else:
                 # Error
@@ -759,7 +765,7 @@ class StepExecutorService:
                     )
                     self._queue_next_steps(
                         step, internal_steps, pending_steps, executed_steps,
-                        "error", step_context
+                        "error", step_context, name_to_id
                     )
                 else:
                     yield StepProgress(
@@ -777,35 +783,49 @@ class StepExecutorService:
         self,
         current_step: Step,
         all_steps: List[Step],
-        pending_steps: List[str],
-        executed_steps: Set[str],
+        pending_steps: List[str],  # List of step IDs
+        executed_steps: Set[str],  # Set of step IDs
         execution_status: Literal["success", "error"],
-        context: Dict[str, Any]
+        context: Dict[str, Any],
+        name_to_id: Optional[Dict[str, str]] = None  # For backward compatibility
     ) -> None:
-        """Determine and queue next steps based on outputs or sequential order."""
-        next_step_names: List[str] = []
+        """Determine and queue next steps based on outputs or sequential order.
+
+        AIDEV-NOTE: Changed from name-based to ID-based routing.
+        next_steps from step_outputs now contain IDs, not names.
+        name_to_id map is used for backward compatibility with old data.
+        """
+        # next_step_ids could be IDs (new format) or names (old format)
+        next_step_ids_or_names: List[str] = []
+        id_set = {s.id for s in all_steps}
 
         if current_step.step_outputs:
             # Use output-based routing
-            next_step_names = self._get_next_steps_from_outputs(
+            next_step_ids_or_names = self._get_next_steps_from_outputs(
                 current_step, execution_status, context
             )
         else:
-            # Sequential: find the next step in the array
+            # Sequential: find the next step in the array (by ID)
             try:
                 current_idx = next(
-                    i for i, s in enumerate(all_steps) if s.name == current_step.name
+                    i for i, s in enumerate(all_steps) if s.id == current_step.id
                 )
                 if current_idx + 1 < len(all_steps):
-                    next_step_names = [all_steps[current_idx + 1].name]
+                    next_step_ids_or_names = [all_steps[current_idx + 1].id]
             except StopIteration:
                 pass
 
         # Add to pending (avoid duplicates and already executed)
-        for name in next_step_names:
-            if name not in executed_steps and name not in pending_steps:
-                pending_steps.append(name)
-                logger.debug(f"📍 Queued next step: {name}")
+        # Handle both new format (IDs) and old format (names) for backward compatibility
+        for id_or_name in next_step_ids_or_names:
+            # Convert name to ID if needed (backward compatibility)
+            step_id = id_or_name if id_or_name in id_set else (
+                name_to_id.get(id_or_name) if name_to_id else None
+            )
+
+            if step_id and step_id not in executed_steps and step_id not in pending_steps:
+                pending_steps.append(step_id)
+                logger.debug(f"📍 Queued next step: {step_id}")
 
     def _get_next_steps_from_outputs(
         self,

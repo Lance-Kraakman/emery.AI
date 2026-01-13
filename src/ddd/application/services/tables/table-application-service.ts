@@ -27,6 +27,8 @@ import type { DatabaseOperation } from '@/ddd/domain/scheduling/value-objects/tr
 import type { ITaskRepository, CreateTaskData } from '@/ddd/domain/tasks/repositories/task-repository';
 import { type TriggerContext } from '@/ddd/domain/tasks/entities/task';
 import { TaskId } from '@/ddd/domain/tasks/value-objects/task-id';
+import type { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
+import { SkillId } from '@/ddd/domain/skills/value-objects/skill-id';
 import { AutoFieldProcessor } from './auto-field-processor';
 
 const logger = createDebugLogger('TableService');
@@ -150,7 +152,8 @@ export class TableApplicationService {
     private readonly organizationRepository: IOrganizationRepository,
     private readonly dynamicTableRepository: IDynamicTableRepository,
     private readonly triggerMatchingService?: ITriggerMatchingService,
-    private readonly taskRepository?: ITaskRepository
+    private readonly taskRepository?: ITaskRepository,
+    private readonly skillRepository?: ISkillRepository
   ) {
     // AIDEV-NOTE: Initialize AutoFieldProcessor for handling auto-generated fields
     // (created-at, last-updated, autonumber)
@@ -1276,7 +1279,6 @@ export class TableApplicationService {
       });
 
       // Create a task for each matching automation
-      // AIDEV-TODO: Look up skill by match.automation.skillId to get instructions
       for (const match of matches) {
         try {
           const triggerContext: TriggerContext = {
@@ -1285,11 +1287,51 @@ export class TableApplicationService {
             tableChange: event
           };
 
+          // Look up the skill to get instructions
+          let skillInstructions = `Execute automation: ${match.automation.name}`;
+          if (match.automation.skillId && this.skillRepository) {
+            const skill = await this.skillRepository.findById(
+              SkillId.fromNumber(match.automation.skillId)
+            );
+            if (skill) {
+              skillInstructions = skill.instructions;
+            }
+          }
+
+          // Resolve skill inputs from automation inputMappings
+          // Supports variables: $row.*, $previousRow.*, $event.*
+          const skillInputs: Record<string, any> = {};
+          if (match.automation.inputMappings) {
+            for (const mapping of match.automation.inputMappings) {
+              let value: any = mapping.triggerField;
+
+              // Resolve trigger variables
+              if (typeof value === 'string') {
+                if (value.startsWith('$row.')) {
+                  const fieldName = value.slice(5);
+                  value = event.rowData?.[fieldName];
+                } else if (value.startsWith('$previousRow.')) {
+                  const fieldName = value.slice(13);
+                  value = event.previousRowData?.[fieldName];
+                } else if (value.startsWith('$event.')) {
+                  const fieldName = value.slice(7);
+                  switch (fieldName) {
+                    case 'operation': value = event.operation; break;
+                    case 'tableId': value = event.tableId; break;
+                    case 'tableName': value = event.tableName; break;
+                    case 'rowId': value = event.rowId; break;
+                    case 'timestamp': value = event.timestamp.toISOString(); break;
+                    default: value = undefined;
+                  }
+                }
+              }
+
+              skillInputs[mapping.skillInputName] = value;
+            }
+          }
+
           // Build enhanced task instruction text with event context
           const eventDataPreview = JSON.stringify(event.rowData, null, 2);
-          // AIDEV-NOTE: In new automation model, instructions come from the referenced skill.
-          // For now, we create a placeholder task. Full implementation needs skill lookup.
-          const baseInstruction = `Execute skill ID ${match.automation.skillId}`;
 
           const enhancedTask = `
 DATABASE EVENT TRIGGER
@@ -1300,14 +1342,12 @@ Timestamp: ${event.timestamp.toISOString()}
 
 Row Data:
 ${eventDataPreview}
-
 ${event.previousRowData ? `
 Previous Data:
 ${JSON.stringify(event.previousRowData, null, 2)}
 ` : ''}
-
 INSTRUCTIONS:
-${baseInstruction}
+${skillInstructions}
           `.trim();
 
           const taskData: CreateTaskData = {
@@ -1322,7 +1362,9 @@ ${baseInstruction}
                 tableId: event.tableId,
                 operation: event.operation,
                 rowId: event.rowId,
-                skillId: match.automation.skillId
+                skillId: match.automation.skillId,
+                // Include resolved skill inputs for execution
+                skillInputs: Object.keys(skillInputs).length > 0 ? skillInputs : undefined
               }
             },
             triggerContext
@@ -1335,7 +1377,9 @@ ${baseInstruction}
             agentId: match.agent.id.value,
             automationName: match.automation.name,
             tableId: event.tableId,
-            operation: event.operation
+            operation: event.operation,
+            skillId: match.automation.skillId,
+            inputCount: Object.keys(skillInputs).length
           });
         } catch (taskError) {
           logger.error('Failed to create task for table trigger', {
