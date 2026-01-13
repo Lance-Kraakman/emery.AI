@@ -462,7 +462,9 @@ export interface LoopConfig {
  * Each step can either have inline instructions OR reference another skill
  */
 export interface SkillStep {
-  /** Step identifier/name */
+  /** Stable UUID for references (used for step_context keys) */
+  id: string;
+  /** Step display name (user-editable) */
   name: string;
   /** Inline instruction (if not referencing a skill) */
   instruction: string;
@@ -3451,6 +3453,7 @@ export const LoopConfig: MessageFns<LoopConfig> = {
 
 function createBaseSkillStep(): SkillStep {
   return {
+    id: "",
     name: "",
     instruction: "",
     skillId: 0,
@@ -3475,6 +3478,9 @@ function createBaseSkillStep(): SkillStep {
 
 export const SkillStep: MessageFns<SkillStep> = {
   encode(message: SkillStep, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(162).string(message.id);
+    }
     if (message.name !== "") {
       writer.uint32(10).string(message.name);
     }
@@ -3542,6 +3548,14 @@ export const SkillStep: MessageFns<SkillStep> = {
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
+        case 20: {
+          if (tag !== 162) {
+            break;
+          }
+
+          message.id = reader.string();
+          continue;
+        }
         case 1: {
           if (tag !== 10) {
             break;
@@ -3711,6 +3725,7 @@ export const SkillStep: MessageFns<SkillStep> = {
 
   fromJSON(object: any): SkillStep {
     return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       instruction: isSet(object.instruction) ? globalThis.String(object.instruction) : "",
       skillId: isSet(object.skillId) ? globalThis.Number(object.skillId) : 0,
@@ -3753,6 +3768,9 @@ export const SkillStep: MessageFns<SkillStep> = {
 
   toJSON(message: SkillStep): unknown {
     const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
     if (message.name !== "") {
       obj.name = message.name;
     }
@@ -3830,6 +3848,7 @@ export const SkillStep: MessageFns<SkillStep> = {
   },
   fromPartial<I extends Exact<DeepPartial<SkillStep>, I>>(object: I): SkillStep {
     const message = createBaseSkillStep();
+    message.id = object.id ?? "";
     message.name = object.name ?? "";
     message.instruction = object.instruction ?? "";
     message.skillId = object.skillId ?? 0;

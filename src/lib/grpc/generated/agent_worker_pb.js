@@ -6660,6 +6660,7 @@ proto.emery.agents.SkillStep.prototype.toObject = function(opt_includeInstance) 
  */
 proto.emery.agents.SkillStep.toObject = function(includeInstance, msg) {
   var f, obj = {
+    id: jspb.Message.getFieldWithDefault(msg, 20, ""),
     name: jspb.Message.getFieldWithDefault(msg, 1, ""),
     instruction: jspb.Message.getFieldWithDefault(msg, 2, ""),
     skillId: jspb.Message.getFieldWithDefault(msg, 3, 0),
@@ -6718,6 +6719,10 @@ proto.emery.agents.SkillStep.deserializeBinaryFromReader = function(msg, reader)
     }
     var field = reader.getFieldNumber();
     switch (field) {
+    case 20:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setId(value);
+      break;
     case 1:
       var value = /** @type {string} */ (reader.readString());
       msg.setName(value);
@@ -6837,6 +6842,13 @@ proto.emery.agents.SkillStep.prototype.serializeBinary = function() {
  */
 proto.emery.agents.SkillStep.serializeBinaryToWriter = function(message, writer) {
   var f = undefined;
+  f = message.getId();
+  if (f.length > 0) {
+    writer.writeString(
+      20,
+      f
+    );
+  }
   f = message.getName();
   if (f.length > 0) {
     writer.writeString(
@@ -6974,6 +6986,24 @@ proto.emery.agents.SkillStep.serializeBinaryToWriter = function(message, writer)
       proto.emery.agents.TaskModelConfig.serializeBinaryToWriter
     );
   }
+};
+
+
+/**
+ * optional string id = 20;
+ * @return {string}
+ */
+proto.emery.agents.SkillStep.prototype.getId = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 20, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.agents.SkillStep} returns this
+ */
+proto.emery.agents.SkillStep.prototype.setId = function(value) {
+  return jspb.Message.setProto3StringField(this, 20, value);
 };
 
 

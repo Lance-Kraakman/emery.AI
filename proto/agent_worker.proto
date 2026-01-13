@@ -222,7 +222,8 @@ message LoopConfig {
 // Step definition for step-based skill execution (execution_type='agent')
 // Each step can either have inline instructions OR reference another skill
 message SkillStep {
-  string name = 1;                     // Step identifier/name
+  string id = 20;                      // Stable UUID for references (used for step_context keys)
+  string name = 1;                     // Step display name (user-editable)
   string instruction = 2;              // Inline instruction (if not referencing a skill)
   int32 skill_id = 3;                  // OR reference to another skill by ID
   repeated string tools = 4;           // Tools available for this step (for inline instruction)

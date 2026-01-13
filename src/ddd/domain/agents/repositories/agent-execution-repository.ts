@@ -55,6 +55,7 @@ export interface ExecutionSkill {
   };
   // Optional steps for 'agent' (step-based) execution type
   steps?: Array<{
+    id: string;  // UUID for step_context keying (matches node.id from frontend)
     name: string;
     instruction?: string;
     skillId?: number;

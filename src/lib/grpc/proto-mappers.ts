@@ -542,6 +542,7 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
     } : undefined,
     // Map steps for 'agent' (step-based) execution type
     steps: skill.steps?.map(step => ({
+      id: step.id,  // UUID for step_context keying
       name: step.name,
       instruction: step.instruction || '',
       skillId: step.skillId || 0,

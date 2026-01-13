@@ -83,7 +83,8 @@ class StepProgress:
     """Progress update for a single step in a step-based workflow."""
     step: int
     total: int
-    name: str
+    id: str  # Step UUID for context keying
+    name: str  # Display name
     status: Literal["pending", "running", "completed", "failed", "skipped"]
     result: Optional[str] = None
     error: Optional[str] = None
@@ -188,7 +189,8 @@ class OutputDef:
 @dataclass
 class Step:
     """Internal representation of a workflow step."""
-    name: str
+    id: str  # Stable UUID for references (used for step_context keys)
+    name: str  # Display name (user-editable)
     instruction: str = ""
     skill_id: int = 0
     tools: List[str] = field(default_factory=list)
@@ -296,6 +298,7 @@ class Step:
             )
 
         return cls(
+            id=proto.id,
             name=proto.name,
             instruction=proto.instruction or "",
             skill_id=proto.skill_id,
@@ -448,6 +451,7 @@ class StepExecutorService:
                 yield StepProgress(
                     step=step_counter,
                     total=total_steps,
+                    id=step.id,
                     name=step_name,
                     status="running"
                 )
@@ -459,6 +463,7 @@ class StepExecutorService:
                         yield StepProgress(
                             step=step_counter,
                             total=total_steps,
+                            id=step.id,
                             name=step_name,
                             status="skipped",
                             result="Condition not met"
@@ -493,6 +498,7 @@ class StepExecutorService:
                     yield StepProgress(
                         step=step_counter,
                         total=total_steps,
+                        id=step.id,
                         name=step_name,
                         status="completed",
                         result=result_str,
@@ -530,6 +536,7 @@ class StepExecutorService:
                         yield StepProgress(
                             step=step_counter,
                             total=total_steps,
+                            id=step.id,
                             name=step_name,
                             status="failed",
                             error=error_msg,
@@ -540,6 +547,7 @@ class StepExecutorService:
                         yield StepProgress(
                             step=step_counter,
                             total=total_steps,
+                            id=step.id,
                             name=step_name,
                             status="failed",
                             error=error_msg,
@@ -622,6 +630,7 @@ class StepExecutorService:
             yield StepProgress(
                 step=step_counter + i + 1,
                 total=total_steps,
+                id=step.id,
                 name=step.name,
                 status="running"
             )
@@ -660,6 +669,7 @@ class StepExecutorService:
                 yield StepProgress(
                     step=step_num,
                     total=total_steps,
+                    id=step.id,
                     name=step.name,
                     status="completed",
                     result=result_str,
@@ -694,6 +704,7 @@ class StepExecutorService:
                     yield StepProgress(
                         step=step_num,
                         total=total_steps,
+                        id=step.id,
                         name=step.name,
                         status="failed",
                         error=error_msg,
@@ -708,6 +719,7 @@ class StepExecutorService:
                     yield StepProgress(
                         step=step_num,
                         total=total_steps,
+                        id=step.id,
                         name=step.name,
                         status="failed",
                         error=error_msg,
@@ -1615,7 +1627,7 @@ def execute_steps_sync(
     captured = {}
     for progress in results:
         if progress.status == "completed" and progress.result:
-            captured[progress.name] = progress.result
+            captured[progress.id] = progress.result  # Key by ID for output source mapping
 
     return SkillExecutionResult(
         result=final_result or "Steps completed",
