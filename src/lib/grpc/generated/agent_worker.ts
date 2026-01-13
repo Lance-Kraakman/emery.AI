@@ -513,7 +513,11 @@ export interface SkillStep {
     | ToolExecutionConfig
     | undefined;
   /** For operation steps */
-  taskModelConfig: TaskModelConfig | undefined;
+  taskModelConfig:
+    | TaskModelConfig
+    | undefined;
+  /** UI state */
+  isDisabled: boolean;
 }
 
 export interface SkillStep_InputsEntry {
@@ -3473,6 +3477,7 @@ function createBaseSkillStep(): SkillStep {
     writeConfig: undefined,
     toolExecutionConfig: undefined,
     taskModelConfig: undefined,
+    isDisabled: false,
   };
 }
 
@@ -3537,6 +3542,9 @@ export const SkillStep: MessageFns<SkillStep> = {
     }
     if (message.taskModelConfig !== undefined) {
       TaskModelConfig.encode(message.taskModelConfig, writer.uint32(154).fork()).join();
+    }
+    if (message.isDisabled !== false) {
+      writer.uint32(168).bool(message.isDisabled);
     }
     return writer;
   },
@@ -3714,6 +3722,14 @@ export const SkillStep: MessageFns<SkillStep> = {
           message.taskModelConfig = TaskModelConfig.decode(reader, reader.uint32());
           continue;
         }
+        case 21: {
+          if (tag !== 168) {
+            break;
+          }
+
+          message.isDisabled = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3763,6 +3779,7 @@ export const SkillStep: MessageFns<SkillStep> = {
         ? ToolExecutionConfig.fromJSON(object.toolExecutionConfig)
         : undefined,
       taskModelConfig: isSet(object.taskModelConfig) ? TaskModelConfig.fromJSON(object.taskModelConfig) : undefined,
+      isDisabled: isSet(object.isDisabled) ? globalThis.Boolean(object.isDisabled) : false,
     };
   },
 
@@ -3840,6 +3857,9 @@ export const SkillStep: MessageFns<SkillStep> = {
     if (message.taskModelConfig !== undefined) {
       obj.taskModelConfig = TaskModelConfig.toJSON(message.taskModelConfig);
     }
+    if (message.isDisabled !== false) {
+      obj.isDisabled = message.isDisabled;
+    }
     return obj;
   },
 
@@ -3892,6 +3912,7 @@ export const SkillStep: MessageFns<SkillStep> = {
     message.taskModelConfig = (object.taskModelConfig !== undefined && object.taskModelConfig !== null)
       ? TaskModelConfig.fromPartial(object.taskModelConfig)
       : undefined;
+    message.isDisabled = object.isDisabled ?? false;
     return message;
   },
 };

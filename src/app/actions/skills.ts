@@ -14,7 +14,7 @@ import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
-import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
+import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, ReadConfig, SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
 
 /**
  * Server Actions for Skill Management
@@ -49,7 +49,9 @@ export async function createSkill(command: {
   taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
   toolExecutionConfig?: ToolExecutionConfig;
   writeConfig?: WriteConfig;
+  readConfig?: ReadConfig;
   steps?: SkillStep[];
+  canvasMetadata?: CanvasMetadata;
 }): Promise<Result<SkillDTO>> {
   try {
     const session = await getServerSession(authOptions);
@@ -276,6 +278,7 @@ export async function updateSkill(
     taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> } | null;
     toolExecutionConfig?: ToolExecutionConfig | null;
     writeConfig?: WriteConfig | null;
+    readConfig?: ReadConfig | null; // Config for 'read' execution
     steps?: SkillStep[] | null; // Steps for 'agent' (step-based) execution
     canvasMetadata?: CanvasMetadata | null; // Canvas annotations (sticky notes)
     content?: MessagePart[]; // Skill-level attachments

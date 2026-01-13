@@ -209,6 +209,8 @@ class Step:
     write_config: Optional[WriteConfig] = None
     tool_execution_config: Optional[ToolExecutionConfig] = None
     task_model_config: Optional[TaskModelConfig] = None
+    # UI state
+    is_disabled: bool = False
 
     @classmethod
     def from_proto(cls, proto: 'agent_worker_pb2.SkillStep') -> 'Step':
@@ -316,7 +318,8 @@ class Step:
             read_config=read_config,
             write_config=write_config,
             tool_execution_config=tool_execution_config,
-            task_model_config=task_model_config
+            task_model_config=task_model_config,
+            is_disabled=proto.is_disabled
         )
 
 
@@ -446,6 +449,23 @@ class StepExecutorService:
                 step_name = step.name
                 step_counter += 1
                 executed_steps.add(step_name)
+
+                # Skip disabled steps
+                if step.is_disabled:
+                    logger.info(f"⏭️ Step {step_name}: disabled, skipping")
+                    yield StepProgress(
+                        step=step_counter,
+                        total=total_steps,
+                        id=step.id,
+                        name=step_name,
+                        status="skipped",
+                        result="Step is disabled"
+                    )
+                    self._queue_next_steps(
+                        step, internal_steps, pending_steps, executed_steps,
+                        "success", step_context
+                    )
+                    continue
 
                 # Yield running status
                 yield StepProgress(
@@ -625,10 +645,36 @@ class StepExecutorService:
         for step in batch:
             executed_steps.add(step.name)
 
-        # Yield running status for all
+        # Filter out disabled steps and yield skipped progress
+        active_batch = []
+        skipped_count = 0
         for i, step in enumerate(batch):
+            if step.is_disabled:
+                logger.info(f"⏭️ Step {step.name}: disabled, skipping (parallel)")
+                yield StepProgress(
+                    step=step_counter + i + 1,
+                    total=total_steps,
+                    id=step.id,
+                    name=step.name,
+                    status="skipped",
+                    result="Step is disabled"
+                )
+                self._queue_next_steps(
+                    step, internal_steps, pending_steps, executed_steps,
+                    "success", step_context
+                )
+                skipped_count += 1
+            else:
+                active_batch.append(step)
+
+        # If all steps were disabled, nothing more to do
+        if not active_batch:
+            return
+
+        # Yield running status for active steps
+        for i, step in enumerate(active_batch):
             yield StepProgress(
-                step=step_counter + i + 1,
+                step=step_counter + skipped_count + i + 1,
                 total=total_steps,
                 id=step.id,
                 name=step.name,
@@ -653,12 +699,12 @@ class StepExecutorService:
                 return step, None, 0, e
 
         # Execute all in parallel
-        tasks = [execute_one(step) for step in batch]
+        tasks = [execute_one(step) for step in active_batch]
         results = await asyncio.gather(*tasks)
 
         # Process results
         for i, (step, result, retries, error) in enumerate(results):
-            step_num = step_counter + i + 1
+            step_num = step_counter + skipped_count + i + 1
 
             if error is None:
                 # Success

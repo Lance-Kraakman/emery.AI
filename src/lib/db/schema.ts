@@ -18,7 +18,7 @@ export interface TemplateVariant {
 }
 import type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
-import type { SkillParameterType, OutputDefinition, ToolExecutionConfig, WriteConfig, InputMappingConfig } from '@/ddd/domain/skills/entities/skill';
+import type { SkillParameterType, OutputDefinition, ToolExecutionConfig, WriteConfig, ReadConfig, InputMappingConfig } from '@/ddd/domain/skills/entities/skill';
 
 // AIDEV-NOTE: Authenticated user role for RLS policies
 export const authenticatedRole = pgRole('authenticated', {
@@ -1038,6 +1038,10 @@ export const skills = pgTable("skills", {
   // Write execution configuration (when executionType is 'write')
   // Direct table write with field mappings
   writeConfig: jsonb("write_config").$type<WriteConfig>(),
+
+  // Read execution configuration (when executionType is 'read')
+  // Direct table read with field mappings to output variables
+  readConfig: jsonb("read_config").$type<ReadConfig>(),
 
   // Steps configuration (when executionType is 'agent')
   // Each step can be an inline instruction or a reference to another skill

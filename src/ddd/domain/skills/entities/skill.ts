@@ -65,6 +65,7 @@ export interface RetryConfig {
 export interface StepOutput {
   type: 'success' | 'error' | 'condition' | 'default';  // Output type
   condition?: string;                    // For type="condition": expression like "{{result}} > 100"
+  label?: string;                        // Display label for condition edges (full text, not truncated)
   nextSteps: string[];                   // Step names to execute for this output
 }
 
@@ -144,7 +145,8 @@ export interface SkillStep {
   stepOutputs?: StepOutput[];             // Output paths: success, error, conditional branches
   parallelGroup?: string;                 // Steps with same group ID execute concurrently
 
-  // Canvas position (UI only, persisted for convenience)
+  // UI state (persisted for convenience)
+  isDisabled?: boolean;                   // Step can be disabled without deletion
   _position?: { x: number; y: number };
 }
 

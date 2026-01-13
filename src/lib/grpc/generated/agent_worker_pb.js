@@ -6682,7 +6682,8 @@ proto.emery.agents.SkillStep.toObject = function(includeInstance, msg) {
     readConfig: (f = msg.getReadConfig()) && proto.emery.agents.ReadConfig.toObject(includeInstance, f),
     writeConfig: (f = msg.getWriteConfig()) && proto.emery.agents.WriteConfig.toObject(includeInstance, f),
     toolExecutionConfig: (f = msg.getToolExecutionConfig()) && proto.emery.agents.ToolExecutionConfig.toObject(includeInstance, f),
-    taskModelConfig: (f = msg.getTaskModelConfig()) && proto.emery.agents.TaskModelConfig.toObject(includeInstance, f)
+    taskModelConfig: (f = msg.getTaskModelConfig()) && proto.emery.agents.TaskModelConfig.toObject(includeInstance, f),
+    isDisabled: jspb.Message.getBooleanFieldWithDefault(msg, 21, false)
   };
 
   if (includeInstance) {
@@ -6812,6 +6813,10 @@ proto.emery.agents.SkillStep.deserializeBinaryFromReader = function(msg, reader)
       var value = new proto.emery.agents.TaskModelConfig;
       reader.readMessage(value,proto.emery.agents.TaskModelConfig.deserializeBinaryFromReader);
       msg.setTaskModelConfig(value);
+      break;
+    case 21:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setIsDisabled(value);
       break;
     default:
       reader.skipField();
@@ -6984,6 +6989,13 @@ proto.emery.agents.SkillStep.serializeBinaryToWriter = function(message, writer)
       19,
       f,
       proto.emery.agents.TaskModelConfig.serializeBinaryToWriter
+    );
+  }
+  f = message.getIsDisabled();
+  if (f) {
+    writer.writeBool(
+      21,
+      f
     );
   }
 };
@@ -7566,6 +7578,24 @@ proto.emery.agents.SkillStep.prototype.clearTaskModelConfig = function() {
  */
 proto.emery.agents.SkillStep.prototype.hasTaskModelConfig = function() {
   return jspb.Message.getField(this, 19) != null;
+};
+
+
+/**
+ * optional bool is_disabled = 21;
+ * @return {boolean}
+ */
+proto.emery.agents.SkillStep.prototype.getIsDisabled = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 21, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.emery.agents.SkillStep} returns this
+ */
+proto.emery.agents.SkillStep.prototype.setIsDisabled = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 21, value);
 };
 
 

@@ -640,7 +640,9 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
         parameters: Object.fromEntries(
           Object.entries(step.taskModelConfig.parameters || {}).map(([k, v]) => [k, String(v)])
         )
-      } : undefined
+      } : undefined,
+      // UI state
+      isDisabled: step.isDisabled || false
     })) || []
   };
 }

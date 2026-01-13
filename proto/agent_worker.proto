@@ -248,6 +248,8 @@ message SkillStep {
   WriteConfig write_config = 17;       // For write steps
   ToolExecutionConfig tool_execution_config = 18; // For tool steps
   TaskModelConfig task_model_config = 19; // For operation steps
+  // UI state
+  bool is_disabled = 21;               // Step can be disabled without deletion
 }
 
 // Configuration for operation execution (direct model invocation without LLM orchestration)

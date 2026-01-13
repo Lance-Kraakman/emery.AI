@@ -98,7 +98,8 @@ function stepToNodeData(step: SkillStep): WorkflowNodeData {
         ?.filter(o => o.type === 'condition')
         .map(o => ({
           expression: o.condition || '',
-          label: o.condition?.slice(0, 20),
+          // Preserve full label if available, fall back to truncated condition
+          label: o.label || o.condition?.slice(0, 20),
         })) || [];
       return {
         ...baseData,
@@ -403,6 +404,7 @@ function groupEdgesByType(
       outputMap.set(key, {
         type: edgeType,
         condition: edge.data?.condition,
+        label: edge.data?.label,  // Preserve full label for condition edges
         nextSteps: [],
       });
     }
@@ -461,6 +463,15 @@ export function flowToSteps(
       _position: node.position,
     } as SkillStep;
   });
+
+  // Validate step name uniqueness (DAG routing uses names)
+  const names = new Set<string>();
+  for (const step of steps) {
+    if (names.has(step.name)) {
+      console.warn(`[flow-converters] Duplicate step name: "${step.name}". DAG routing may be affected. Consider renaming steps to be unique.`);
+    }
+    names.add(step.name);
+  }
 
   // Extract sticky notes to canvas metadata
   const canvasMetadata: CanvasMetadata = {

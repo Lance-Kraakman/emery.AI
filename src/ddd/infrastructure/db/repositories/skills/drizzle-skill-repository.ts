@@ -100,6 +100,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
         taskModelConfig: props.taskModelConfig || null,
         toolExecutionConfig: props.toolExecutionConfig || null,
         writeConfig: props.writeConfig || null,
+        readConfig: props.readConfig || null,
         steps: props.steps || null,
         canvasMetadata: props.canvasMetadata || null,
         createdAt: now,
@@ -157,6 +158,9 @@ export class DrizzleSkillRepository implements ISkillRepository {
     }
     if (updates.writeConfig !== undefined) {
       updateData.writeConfig = updates.writeConfig;
+    }
+    if (updates.readConfig !== undefined) {
+      updateData.readConfig = updates.readConfig;
     }
     if (updates.steps !== undefined) {
       updateData.steps = updates.steps;
@@ -251,6 +255,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
       taskModelConfig: record.taskModelConfig || undefined,
       toolExecutionConfig: record.toolExecutionConfig || undefined,
       writeConfig: record.writeConfig || undefined,
+      readConfig: record.readConfig || undefined,
       steps: record.steps || undefined,
       canvasMetadata: record.canvasMetadata || undefined,
       isSystem: record.isSystem ?? false,

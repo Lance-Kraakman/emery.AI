@@ -111,6 +111,8 @@ export interface ExecutionSkill {
       queryLimit?: number;
       fieldMappings: ReadFieldMapping[];
     };
+    // UI state
+    isDisabled?: boolean;  // Step can be disabled without deletion
   }>;
 }
 
