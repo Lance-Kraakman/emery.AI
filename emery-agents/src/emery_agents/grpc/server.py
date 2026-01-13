@@ -13,8 +13,13 @@ from ..services.agent_executor import AgentExecutor
 from ..services.tool_loader import UnifiedToolLoader
 import concurrent.futures
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Suppress verbose loggers that dump large JSON payloads
+logging.getLogger("openai._base_client").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer):
     """gRPC service implementation for AgentWorker."""
