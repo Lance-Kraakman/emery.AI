@@ -7,7 +7,7 @@ Represents a table attached to an agent/skill/step for Context Sync.
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
 
 class ContextMappingTargetType(str, Enum):
@@ -125,10 +125,10 @@ class ResolvedContext:
 
     Contains merged mappings respecting hierarchy: agent -> skill -> step
     """
-    mappings: list  # List[ContextMapping]
-    agent_mappings: list  # Original agent-level mappings
-    skill_mappings: list  # Original skill-level mappings
-    step_mappings: list  # Original step-level mappings
+    mappings: List["ContextMapping"]
+    agent_mappings: List["ContextMapping"]
+    skill_mappings: List["ContextMapping"]
+    step_mappings: List["ContextMapping"]
 
     @classmethod
     def from_proto(cls, proto) -> "ResolvedContext":
@@ -166,11 +166,11 @@ class ResolvedContext:
             step_mappings=[],
         )
 
-    def get_read_tables(self) -> list:
+    def get_read_tables(self) -> List["ContextMapping"]:
         """Get all tables with read access."""
         return [m for m in self.mappings if m.can_read()]
 
-    def get_write_tables(self) -> list:
+    def get_write_tables(self) -> List["ContextMapping"]:
         """Get all tables with write access."""
         return [m for m in self.mappings if m.can_write()]
 

@@ -33,7 +33,7 @@ class PlanStatus(str, Enum):
     FAILED = "failed"
 
 
-@dataclass
+@dataclass(frozen=True)
 class PlanStep:
     """
     Individual step within a plan.
@@ -116,7 +116,7 @@ class PlanStep:
         )
 
 
-@dataclass
+@dataclass(frozen=True)
 class Plan:
     """
     Agent Plan - orchestration logic for how an agent executes.
@@ -264,7 +264,7 @@ class Plan:
         return any(s.status == PlanStepStatus.FAILED.value for s in self.steps)
 
 
-@dataclass
+@dataclass(frozen=True)
 class StepPlan(Plan):
     """
     Skill Step Plan - detailed execution plan for agentic steps.

@@ -588,13 +588,13 @@ Evaluate the current execution state and respond with JSON only.
         except Exception as e:
             logger.warning(f"Failed to parse evaluation: {e}")
 
-        # Default: continue execution
+        # Default: STOP execution on parse error (safer than blindly continuing)
         return EvaluationResult(
             goal_achieved=False,
-            blocking_issues=False,
-            should_continue=True,
+            blocking_issues=True,  # Mark as blocked since we can't evaluate
+            should_continue=False,  # Stop - don't continue blindly
             needs_replan=False,
-            reason="Parse error - defaulting to continue",
+            reason="Evaluation parse error - stopping execution for safety",
         )
 
     async def _execute_step(

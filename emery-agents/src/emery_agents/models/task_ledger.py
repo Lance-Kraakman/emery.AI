@@ -13,6 +13,8 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from enum import Enum
 
+from emery_agents.models.plan import PlanStepStatus
+
 
 class LedgerEventType(Enum):
     """Types of events recorded in the ledger."""
@@ -53,7 +55,7 @@ class StepState:
     """Current state of a step in the ledger."""
     step_id: str
     step_name: str
-    status: str  # pending, in_progress, completed, failed, skipped
+    status: str  # Uses PlanStepStatus.value for consistency
     result: Optional[str] = None
     error: Optional[str] = None
     started_at: Optional[datetime] = None
@@ -99,7 +101,7 @@ class TaskLedger:
         self.steps[step_id] = StepState(
             step_id=step_id,
             step_name=step_name,
-            status="pending",
+            status=PlanStepStatus.PENDING.value,
         )
         self.total_steps += 1
 
@@ -108,7 +110,7 @@ class TaskLedger:
         if step_id not in self.steps:
             raise ValueError(f"Step {step_id} not found in ledger")
 
-        self.steps[step_id].status = "in_progress"
+        self.steps[step_id].status = PlanStepStatus.IN_PROGRESS.value
         self.steps[step_id].started_at = datetime.utcnow()
 
         self._record_event(
@@ -123,7 +125,7 @@ class TaskLedger:
             raise ValueError(f"Step {step_id} not found in ledger")
 
         step = self.steps[step_id]
-        step.status = "completed"
+        step.status = PlanStepStatus.COMPLETED.value
         step.result = result
         step.completed_at = datetime.utcnow()
 
@@ -140,7 +142,7 @@ class TaskLedger:
             raise ValueError(f"Step {step_id} not found in ledger")
 
         step = self.steps[step_id]
-        step.status = "failed"
+        step.status = PlanStepStatus.FAILED.value
         step.error = error
         step.completed_at = datetime.utcnow()
 
@@ -157,7 +159,7 @@ class TaskLedger:
             raise ValueError(f"Step {step_id} not found in ledger")
 
         step = self.steps[step_id]
-        step.status = "skipped"
+        step.status = PlanStepStatus.SKIPPED.value
         step.completed_at = datetime.utcnow()
 
         self._record_event(
@@ -215,40 +217,44 @@ class TaskLedger:
     @property
     def completed_steps(self) -> int:
         """Count of completed steps."""
-        return sum(1 for s in self.steps.values() if s.status == "completed")
+        return sum(1 for s in self.steps.values() if s.status == PlanStepStatus.COMPLETED.value)
 
     @property
     def failed_steps(self) -> int:
         """Count of failed steps."""
-        return sum(1 for s in self.steps.values() if s.status == "failed")
+        return sum(1 for s in self.steps.values() if s.status == PlanStepStatus.FAILED.value)
 
     @property
     def pending_steps(self) -> int:
         """Count of pending steps."""
-        return sum(1 for s in self.steps.values() if s.status == "pending")
+        return sum(1 for s in self.steps.values() if s.status == PlanStepStatus.PENDING.value)
 
     @property
     def is_complete(self) -> bool:
         """Check if all steps are done (completed, failed, or skipped)."""
-        return all(
-            s.status in ("completed", "failed", "skipped")
-            for s in self.steps.values()
+        terminal_statuses = (
+            PlanStepStatus.COMPLETED.value,
+            PlanStepStatus.FAILED.value,
+            PlanStepStatus.SKIPPED.value,
         )
+        return all(s.status in terminal_statuses for s in self.steps.values())
 
     @property
     def has_failures(self) -> bool:
         """Check if any steps failed."""
-        return any(s.status == "failed" for s in self.steps.values())
+        return any(s.status == PlanStepStatus.FAILED.value for s in self.steps.values())
 
     @property
     def progress_percentage(self) -> float:
         """Calculate progress as percentage."""
         if self.total_steps == 0:
             return 0.0
-        done = sum(
-            1 for s in self.steps.values()
-            if s.status in ("completed", "failed", "skipped")
+        terminal_statuses = (
+            PlanStepStatus.COMPLETED.value,
+            PlanStepStatus.FAILED.value,
+            PlanStepStatus.SKIPPED.value,
         )
+        done = sum(1 for s in self.steps.values() if s.status in terminal_statuses)
         return (done / self.total_steps) * 100
 
     def get_step_results(self) -> Dict[str, Optional[str]]:
@@ -256,7 +262,7 @@ class TaskLedger:
         return {
             step_id: step.result
             for step_id, step in self.steps.items()
-            if step.status == "completed" and step.result
+            if step.status == PlanStepStatus.COMPLETED.value and step.result
         }
 
     def get_recent_events(self, limit: int = 10) -> List[LedgerEvent]:

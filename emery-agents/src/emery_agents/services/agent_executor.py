@@ -1410,6 +1410,8 @@ class AgentExecutor:
             logger.info(f"✅ Task output mapping complete: {len(results)} tables updated")
         except Exception as e:
             logger.error(f"❌ Failed to apply task output mapping: {e}")
+            # Re-raise to propagate failure - callers should know mapping failed
+            raise
 
     async def _upload_binary_to_s3(
         self,
@@ -1510,3 +1512,5 @@ class AgentExecutor:
             logger.info(f"✅ Agent output mapping complete: {len(results)} tables updated")
         except Exception as e:
             logger.error(f"❌ Failed to apply agent output mapping: {e}")
+            # Re-raise to propagate failure - callers should know mapping failed
+            raise
