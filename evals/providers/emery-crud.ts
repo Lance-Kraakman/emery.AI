@@ -53,6 +53,15 @@ async function makeRequest<T>(
   return response.json() as Promise<T>;
 }
 
+// Database operations
+async function listDatabases(): Promise<unknown> {
+  return makeRequest<unknown>('/api/databases', 'GET');
+}
+
+async function getDatabase(databaseId: string): Promise<unknown> {
+  return makeRequest<unknown>(`/api/databases/${databaseId}`, 'GET');
+}
+
 // Table operations
 async function createTable(data: {
   name: string;
@@ -177,6 +186,16 @@ class EmeryCrudProvider {
       let result: unknown;
 
       switch (operation) {
+        // Database operations
+        case 'list_databases':
+          result = await listDatabases();
+          break;
+        case 'get_database': {
+          const databaseId = (vars.databaseId as string) || '1';
+          result = await getDatabase(databaseId);
+          break;
+        }
+
         // Table operations
         case 'create_table': {
           const data = vars.data as Record<string, unknown> | undefined;

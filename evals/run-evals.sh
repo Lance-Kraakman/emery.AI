@@ -45,11 +45,42 @@ export NODE_OPTIONS="--import tsx"
 
 # Run evals
 case "${1:-all}" in
+    # Layer 1: CRUD operations
     crud)
+        pnpm exec promptfoo eval --config scenarios/crud/database-operations.yaml
         pnpm exec promptfoo eval --config scenarios/crud/field-operations.yaml
         pnpm exec promptfoo eval --config scenarios/crud/row-operations.yaml
         pnpm exec promptfoo eval --config scenarios/crud/table-operations.yaml
         ;;
+    crud:database)
+        pnpm exec promptfoo eval --config scenarios/crud/database-operations.yaml
+        ;;
+
+    # Layer 2: Tool executor
+    tool-executor)
+        pnpm exec promptfoo eval --config scenarios/tool-executor/basic-operations.yaml
+        ;;
+
+    # Layer 3: Agent single-turn tests
+    agents:skill)
+        pnpm exec promptfoo eval --config scenarios/agents/skill-builder.yaml
+        ;;
+    agents:schema)
+        pnpm exec promptfoo eval --config scenarios/agents/schema-builder-simple.yaml
+        ;;
+
+    # Layer 4: HITL workflow tests
+    agents:hitl)
+        pnpm exec promptfoo eval --config scenarios/agents/schema-builder-hitl.yaml
+        ;;
+
+    # Combined agent tests
+    agents)
+        pnpm exec promptfoo eval --config scenarios/agents/skill-builder.yaml
+        pnpm exec promptfoo eval --config scenarios/agents/schema-builder-simple.yaml
+        pnpm exec promptfoo eval --config scenarios/agents/schema-builder-hitl.yaml
+        ;;
+
     adversarial|security)
         pnpm exec promptfoo eval --config scenarios/adversarial/injection-attempts.yaml
         ;;
@@ -100,11 +131,24 @@ case "${1:-all}" in
     *)
         echo "Usage: $0 [command]"
         echo ""
-        echo "Commands:"
-        echo "  setup          - Create test table and find agent ID"
-        echo "  crud           - Run CRUD operation tests"
-        echo "  adversarial    - Run security/injection tests"
-        echo "  skills         - Run agent skill tests"
+        echo "Layer 1 - CRUD Operations:"
+        echo "  crud           - Run all CRUD tests"
+        echo "  crud:database  - Database operations only"
+        echo ""
+        echo "Layer 2 - Tool Executor:"
+        echo "  tool-executor  - Natural language → CRUD translation"
+        echo ""
+        echo "Layer 3 - Agent Single-Turn:"
+        echo "  agents:skill   - Skill builder tests"
+        echo "  agents:schema  - Schema builder simple tests"
+        echo ""
+        echo "Layer 4 - HITL Workflows:"
+        echo "  agents:hitl    - Full HITL workflow tests"
+        echo ""
+        echo "Combined:"
+        echo "  agents         - All agent tests (Layer 3 + 4)"
+        echo "  adversarial    - Security/injection tests"
+        echo "  skills         - Basic skill execution"
         echo "  all            - Run all tests (default)"
         echo ""
         echo "Stress Tests:"
@@ -114,16 +158,14 @@ case "${1:-all}" in
         echo "  stress:mixed   - Mixed workload (realistic traffic)"
         echo "  stress:sustained - Sustained load (ECS scaling)"
         echo ""
-        echo "Stress Configuration:"
-        echo "  STRESS_PROFILE=light|medium|heavy|sustained"
-        echo "  STRESS_CONCURRENCY=10  (parallel requests)"
-        echo "  STRESS_REPEAT=1        (times to repeat each suite)"
-        echo "  STRESS_DELAY=2         (seconds between suites)"
+        echo "Setup:"
+        echo "  setup          - Create test fixtures"
         echo ""
-        echo "Examples:"
-        echo "  ./run-evals.sh stress                    # Run all with defaults"
-        echo "  STRESS_PROFILE=heavy ./run-evals.sh stress  # Heavy load profile"
-        echo "  STRESS_CONCURRENCY=20 ./run-evals.sh stress:db  # Just DB test, 20 parallel"
+        echo "Environment Variables:"
+        echo "  EMERY_API_KEY=user_xxx       (required)"
+        echo "  TEST_DATABASE_ID=1           (for database tests)"
+        echo "  SCHEMA_BUILDER_AGENT_ID=2    (for schema builder)"
+        echo "  SKILL_BUILDER_AGENT_ID=3     (for skill builder)"
         exit 1
         ;;
 esac

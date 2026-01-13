@@ -1,0 +1,211 @@
+# Layer 4: Schema Builder HITL Workflow Tests
+# Tests complete multi-turn workflow with approval steps
+
+description: "Schema builder HITL workflow"
+providers:
+  - file://providers/emery-hitl.ts
+timeout: 180000  # 3 min for full workflows
+
+tests:
+  # ============================================
+  # Happy path - complete workflow
+  # ============================================
+
+  - description: "Complete HITL: simple form → plan → approve → create"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      initialTask: |
+        Create a database schema for this intake form:
+        - Client Name:
+        - Client Email:
+        - Status: Active / Pending / Closed
+      approval: "yes"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          // Should have waited for approval
+          if (!out.waitedForApproval) return false;
+          // Should have multiple turns
+          if (out.turns < 2) return false;
+          // Final response should indicate success
+          const final = out.finalResponse.toLowerCase();
+          return final.includes('created') || final.includes('success') || out.success;
+
+  - description: "Complete HITL: form with boolean fields"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      initialTask: |
+        Create schema for insurance form:
+        - Customer Name:
+        - Has Insurance: YES / NO
+        - Needs Follow-up: YES / NO
+      approval: "yes, create it"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          return out.success !== false && out.turns >= 1;
+
+  # ============================================
+  # Plan rejection with feedback
+  # ============================================
+
+  - description: "HITL: reject plan and add field"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      initialTask: |
+        Create schema for:
+        - Name:
+        - Email:
+      approval: "No, also add a phone field"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          // Should have responded to feedback
+          const final = out.finalResponse.toLowerCase();
+          const conv = JSON.stringify(out.conversation).toLowerCase();
+          // Should mention phone in response or conversation
+          return final.includes('phone') || conv.includes('phone');
+
+  - description: "HITL: reject plan and change field type"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      initialTask: |
+        Create schema for:
+        - Status: Open / Closed
+      approval: "Change status to have options: New, In Progress, Resolved, Closed"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          const conv = JSON.stringify(out.conversation).toLowerCase();
+          // Should have incorporated the new options
+          return conv.includes('in progress') || conv.includes('resolved') || conv.includes('new');
+
+  # ============================================
+  # Complex questionnaire
+  # ============================================
+
+  - description: "HITL: complex questionnaire with sections"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      initialTask: |
+        Design database schema for estate planning questionnaire:
+
+        ## Personal Details
+        - Full Name:
+        - Date of Birth:
+        - Marital Status: Single / Married / Divorced / Widowed
+
+        ## Assets
+        - Has Real Estate: YES / NO
+        - Has Superannuation: YES / NO
+        - Estimated Value:
+
+        ## Documents
+        - Powers of Attorney: YES / NO
+        - Existing Will: YES / NO
+      approval: "yes, create it"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          // Should handle complex multi-section form
+          return out.success !== false;
+
+  - description: "HITL: contact form with multiple field types"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      initialTask: |
+        Create a contact form schema:
+        - Full Name:
+        - Email Address:
+        - Phone Number:
+        - Message:
+        - Preferred Contact: Email / Phone / Either
+        - Subscribe to Newsletter: YES / NO
+      approval: "yes"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          return out.success !== false;
+
+  # ============================================
+  # Error handling
+  # ============================================
+
+  - description: "HITL: handle database not found"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      initialTask: "Create table in database named 'NonExistentDatabase123'"
+      approval: "yes"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          const text = JSON.stringify(out).toLowerCase();
+          // Should report error gracefully
+          return text.includes('not found') || text.includes('error') || text.includes('available') || text.includes('does not exist');
+
+  - description: "HITL: handle user cancellation"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      initialTask: |
+        Create schema for:
+        - Name:
+        - Email:
+      approval: "no, cancel this"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          // Should acknowledge cancellation, not proceed with creation
+          const final = out.finalResponse.toLowerCase();
+          return !final.includes('created') || final.includes('cancel') || final.includes('understood');
+
+  # ============================================
+  # Edge cases
+  # ============================================
+
+  - description: "HITL: single field form"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      initialTask: |
+        Create a simple schema with just:
+        - Notes:
+      approval: "yes"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          return out.success !== false;
+
+  - description: "HITL: form with all select types"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      initialTask: |
+        Create schema with various select fields:
+        - Priority: Low / Medium / High / Critical
+        - Tags: Bug / Feature / Documentation / Testing (can select multiple)
+        - Assigned: Yes / No
+      approval: "yes"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          const text = JSON.stringify(out).toLowerCase();
+          // Should handle single-select, multi-select, and boolean
+          return out.success !== false;

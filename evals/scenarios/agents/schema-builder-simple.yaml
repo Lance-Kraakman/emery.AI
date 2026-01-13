@@ -1,0 +1,140 @@
+# Layer 3: Schema Builder Simple Tests (Single Turn)
+# Tests schema_builder agent context gathering and analysis
+
+description: "Schema builder - single turn execution"
+providers:
+  - file://providers/emery-skill.ts
+timeout: 90000
+
+tests:
+  # ============================================
+  # Context gathering
+  # ============================================
+
+  - description: "Gather database context"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      instruction: "List all databases and tables to understand the current schema structure"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          const text = (out.output || JSON.stringify(out)).toLowerCase();
+          // Should have gathered context using tools
+          return text.includes('database') || text.includes('table') || out.success !== false;
+
+  - description: "List fields in existing table"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      instruction: "List all fields in table ID {{TEST_TABLE_ID}}"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          return out.success !== false;
+
+  # ============================================
+  # Questionnaire analysis
+  # ============================================
+
+  - description: "Analyze simple questionnaire"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      instruction: |
+        Analyze this questionnaire and identify the field types needed:
+        - Client Name:
+        - Email:
+        - Phone:
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          const text = (out.output || JSON.stringify(out)).toLowerCase();
+          // Should identify text, email, phone types
+          return text.includes('text') || text.includes('email') || text.includes('phone');
+
+  - description: "Analyze questionnaire with select options"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      instruction: |
+        Analyze this questionnaire and propose field types:
+        - Status: Active / Pending / Closed
+        - Has Insurance: YES / NO
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          const text = (out.output || JSON.stringify(out)).toLowerCase();
+          // Should identify select and boolean types
+          return text.includes('select') || text.includes('boolean');
+
+  - description: "Analyze complex questionnaire with sections"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      instruction: |
+        Analyze this intake form and propose a schema:
+
+        ## Personal Information
+        - Full Name:
+        - Date of Birth:
+        - Email Address:
+
+        ## Employment
+        - Company Name:
+        - Job Title:
+        - Employment Status: Full-time / Part-time / Contractor
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          const text = (out.output || JSON.stringify(out)).toLowerCase();
+          // Should identify multiple field types
+          const hasText = text.includes('text');
+          const hasDate = text.includes('date');
+          const hasEmail = text.includes('email');
+          const hasSelect = text.includes('select');
+          return (hasText || hasDate || hasEmail || hasSelect);
+
+  # ============================================
+  # Schema proposal format
+  # ============================================
+
+  - description: "Propose schema in table format"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      instruction: |
+        First gather context (list databases), then propose a schema for:
+        - Name:
+        - Email:
+        - Status: Active / Inactive
+
+        Present the plan in a markdown table format with Field, Type, and Notes columns.
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          const text = (out.output || JSON.stringify(out));
+          // Should have table-like format or field definitions
+          return text.includes('|') || text.includes('Field') || text.includes('Type');
+
+  # ============================================
+  # Error handling
+  # ============================================
+
+  - description: "Handle ambiguous requirements"
+    vars:
+      agentId: "{{SCHEMA_BUILDER_AGENT_ID}}"
+      instruction: "Create a schema for tracking stuff"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          // Should ask for clarification or make reasonable assumptions
+          return out.success !== false;

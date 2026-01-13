@@ -1,0 +1,43 @@
+# Layer 1: Database CRUD Operations
+# Tests database_crud tool operations via direct API
+
+description: "Database CRUD operations"
+providers:
+  - file://providers/emery-crud.ts
+
+tests:
+  # List databases
+  - description: "List all databases"
+    vars:
+      operation: list_databases
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.success === true || Array.isArray(data.data) || Array.isArray(data);
+
+  # Get database by ID
+  - description: "Get database by ID"
+    vars:
+      operation: get_database
+      databaseId: "{{TEST_DATABASE_ID}}"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.success !== false;
+
+  # Error case - non-existent database
+  - description: "Get non-existent database returns error gracefully"
+    vars:
+      operation: get_database
+      databaseId: "999999"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          // Should either return error or empty - not crash
+          return data.success === false || data.error || !data.data;

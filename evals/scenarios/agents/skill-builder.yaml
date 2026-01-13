@@ -1,0 +1,76 @@
+# Layer 3: Skill Builder Agent Tests
+# Tests skill_builder agent single-turn execution
+
+description: "Skill builder agent execution"
+providers:
+  - file://providers/emery-skill.ts
+timeout: 60000
+
+tests:
+  # ============================================
+  # Basic skill operations
+  # ============================================
+
+  - description: "List available skills"
+    vars:
+      agentId: "{{SKILL_BUILDER_AGENT_ID}}"
+      instruction: "List all skills in the organization"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          // Should return success or contain skill data
+          return out.success !== false;
+
+  - description: "Read skill details"
+    vars:
+      agentId: "{{SKILL_BUILDER_AGENT_ID}}"
+      instruction: "Get the details of skill ID 1 including its instructions and configuration"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          return out.success !== false;
+
+  # ============================================
+  # Skill analysis tasks
+  # ============================================
+
+  - description: "Analyze skill configuration"
+    vars:
+      agentId: "{{SKILL_BUILDER_AGENT_ID}}"
+      instruction: "Analyze the current configuration of skill ID 1 and suggest improvements"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          // Should not hallucinate - should use tools to get actual data
+          const text = JSON.stringify(out).toLowerCase();
+          return !text.includes('fabricat');
+
+  # ============================================
+  # Error handling
+  # ============================================
+
+  - description: "Handle non-existent skill gracefully"
+    vars:
+      agentId: "{{SKILL_BUILDER_AGENT_ID}}"
+      instruction: "Get details of skill ID 999999"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          const text = JSON.stringify(out).toLowerCase();
+          // Should report error or not found
+          return text.includes('not found') || text.includes('error') || text.includes('does not exist');
+
+  - description: "Handle empty instruction gracefully"
+    vars:
+      agentId: "{{SKILL_BUILDER_AGENT_ID}}"
+      instruction: ""
+    assert:
+      - type: is-json

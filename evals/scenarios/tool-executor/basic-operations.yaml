@@ -1,0 +1,165 @@
+# Layer 2: Tool Executor Natural Language Tests
+# Tests that natural language tasks translate correctly to CRUD operations
+
+description: "Tool executor natural language translation"
+providers:
+  - file://providers/emery-tool-executor.ts
+timeout: 60000
+
+tests:
+  # ============================================
+  # Database operations via natural language
+  # ============================================
+
+  - description: "List databases via natural language"
+    vars:
+      tool: database_crud
+      task: "list all databases"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          // Should succeed or contain data
+          return out.success !== false || out.output?.includes('database') || out.data;
+
+  # ============================================
+  # Table operations via natural language
+  # ============================================
+
+  - description: "List tables via natural language"
+    vars:
+      tool: table_crud
+      task: "list all tables"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          return out.success !== false || out.output?.includes('table');
+
+  - description: "Create table with natural language"
+    vars:
+      tool: table_crud
+      task: "create table named 'eval_tool_test_table' in database ID 1"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          const text = JSON.stringify(out).toLowerCase();
+          // Should succeed or mention success/created
+          return out.success === true || text.includes('success') || text.includes('created');
+
+  # ============================================
+  # Field operations via natural language
+  # ============================================
+
+  - description: "List fields via natural language"
+    vars:
+      tool: field_crud
+      task: "list all fields in table ID {{TEST_TABLE_ID}}"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          return out.success !== false || Array.isArray(out.data);
+
+  - description: "Create text field with natural language"
+    vars:
+      tool: field_crud
+      task: "create field named 'eval_tool_test_name' of type 'text' in table ID {{TEST_TABLE_ID}}"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          const text = JSON.stringify(out).toLowerCase();
+          return !text.includes('error') || text.includes('already exists');
+
+  - description: "Create single-select with options"
+    vars:
+      tool: field_crud
+      task: "create field named 'eval_tool_test_status' of type 'single-select' with options 'Active', 'Pending', 'Closed' in table ID {{TEST_TABLE_ID}}"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          const text = JSON.stringify(out).toLowerCase();
+          // Accept success or "already exists" for idempotent tests
+          return !text.includes('error') || text.includes('already exists');
+
+  - description: "Create boolean field"
+    vars:
+      tool: field_crud
+      task: "create field named 'eval_tool_test_active' of type 'boolean' in table ID {{TEST_TABLE_ID}}"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          const text = JSON.stringify(out).toLowerCase();
+          return !text.includes('error') || text.includes('already exists');
+
+  # ============================================
+  # Error cases
+  # ============================================
+
+  - description: "Invalid tool name returns error"
+    vars:
+      tool: invalid_tool_name
+      task: "do something"
+    assert:
+      - type: javascript
+        value: |
+          const text = output.toLowerCase();
+          return text.includes('error') || text.includes('invalid') || text.includes('unknown');
+
+  - description: "Malformed task - missing required info"
+    vars:
+      tool: field_crud
+      task: "create field"
+    assert:
+      - type: javascript
+        value: |
+          const text = output.toLowerCase();
+          // Should indicate missing info or error
+          return text.includes('error') || text.includes('required') || text.includes('missing');
+
+  - description: "Non-existent table ID"
+    vars:
+      tool: field_crud
+      task: "list fields in table ID 999999"
+    assert:
+      - type: javascript
+        value: |
+          const text = output.toLowerCase();
+          // Should handle gracefully - error or empty
+          return text.includes('error') || text.includes('not found') || text.includes('[]');
+
+  # ============================================
+  # Cleanup
+  # ============================================
+
+  - description: "Delete test field (cleanup)"
+    vars:
+      tool: field_crud
+      task: "delete field named 'eval_tool_test_name' from table ID {{TEST_TABLE_ID}}"
+    assert:
+      - type: is-json
+
+  - description: "Delete test status field (cleanup)"
+    vars:
+      tool: field_crud
+      task: "delete field named 'eval_tool_test_status' from table ID {{TEST_TABLE_ID}}"
+    assert:
+      - type: is-json
+
+  - description: "Delete test boolean field (cleanup)"
+    vars:
+      tool: field_crud
+      task: "delete field named 'eval_tool_test_active' from table ID {{TEST_TABLE_ID}}"
+    assert:
+      - type: is-json
