@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Check, Sparkles } from 'lucide-react';
 import { getTierColor, formatCurrency } from '@/lib/billing/utils';
-import { getTierConfig, type TierName } from '@/lib/stripe/config';
+import { getTierConfig, type TierName } from '@/ddd/infrastructure/external/stripe/config';
 
 export interface TierCardProps {
   tier: TierName;

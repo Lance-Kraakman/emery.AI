@@ -10,7 +10,7 @@ import type { CreateUserData } from '@/ddd/domain/users/entities/user';
 import type { CreateOrganizationData } from '@/ddd/domain/organizations/entities/organization';
 import { testClient } from './integration-helpers';
 import { SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
-import { userRoles, roles } from '@/lib/db/schema';
+import { userRoles, roles } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 
 export interface TestContext {

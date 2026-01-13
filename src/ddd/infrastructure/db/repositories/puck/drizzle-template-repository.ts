@@ -1,8 +1,8 @@
 // AIDEV-NOTE: Drizzle implementation of ITemplateRepository
 // Handles data access for Template entities using PostgreSQL
 
-import type { DbClient } from '@/lib/db/client';
-import { templates } from '@/lib/db/schema';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
+import { templates } from '@/ddd/infrastructure/db/schema';
 import { eq, and, or, isNull } from 'drizzle-orm';
 import type { ITemplateRepository } from '@/ddd/domain/puck/repositories/template-repository';
 import { Template } from '@/ddd/domain/puck/entities/template';

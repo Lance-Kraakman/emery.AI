@@ -4,8 +4,8 @@
 // System skills are created for each organization (isSystem = true, agentId = null)
 // They cannot be deleted by users but can be duplicated to create custom versions
 
-import { db } from '../../lib/db/client';
-import { skills, organizations } from '../../lib/db/schema';
+import { db } from '@/ddd/infrastructure/db/client';
+import { skills, organizations } from '@/ddd/infrastructure/db/schema';
 import { eq, and, isNull, sql } from 'drizzle-orm';
 
 // System skill definitions

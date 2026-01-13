@@ -23,7 +23,7 @@ import { Badge } from '@/components/ui/badge';
 import { ExternalLink, AlertCircle, CreditCard, TrendingUp, Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { createCheckoutSession, createPortalSession, setSpendingLimit } from '@/app/actions/billing';
-import type { TierName } from '@/lib/stripe/config';
+import type { TierName } from '@/ddd/infrastructure/external/stripe/config';
 import type { StorageUsage } from '@/components/billing/StorageUsageCard';
 import type { CreditUsage } from '@/components/billing/CreditUsageCard';
 import type { BillingOverview } from '@/components/billing/BillingOverviewCard';

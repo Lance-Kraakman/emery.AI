@@ -15,7 +15,7 @@ import type { TableField } from '@/ddd/domain/tables/value-objects/table-field';
 import { GrpcTableClient } from '@/ddd/infrastructure/db/repositories/tables/table-grpc-client';
 import { TableGrpcMapper } from '@/ddd/infrastructure/db/repositories/tables/table-grpc-mapper';
 import { RowSerializer } from './row-serializer';
-import { CreateTableRequest, DeleteTableRequest, UpdateTableRequest } from '@/lib/grpc/generated/table_service';
+import { CreateTableRequest, DeleteTableRequest, UpdateTableRequest } from '@/ddd/infrastructure/grpc/generated/table_service';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 
 const logger = createDebugLogger('DataLake');

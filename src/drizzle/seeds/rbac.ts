@@ -3,8 +3,8 @@
 // AIDEV-NOTE: Seeds RBAC system with permissions and system roles
 // Run this after database migration to set up the basic permission system
 
-import { db } from '../../lib/db/client';
-import { permissions, roles, rolePermissions } from '../../lib/db/schema';
+import { db } from '@/ddd/infrastructure/db/client';
+import { permissions, roles, rolePermissions } from '@/ddd/infrastructure/db/schema';
 import { Permission } from '../../ddd/domain/shared/value-objects/permission';
 import { SYSTEM_ROLES } from '../../ddd/domain/rbac/entities/role';
 import { eq, and, sql } from 'drizzle-orm';

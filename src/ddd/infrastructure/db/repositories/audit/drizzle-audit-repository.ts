@@ -2,8 +2,8 @@
  * Drizzle Audit Repository
  */
 
-import type { DbClient } from '@/lib/db/client';
-import { auditEvents } from '@/lib/db/schema';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
+import { auditEvents } from '@/ddd/infrastructure/db/schema';
 import { eq, and, lt, isNull, desc, gte, lte, inArray } from 'drizzle-orm';
 import type { IAuditRepository } from '@/ddd/domain/audit/interfaces/audit-repository';
 import type { AuditEvent, AuditQueryFilters } from '@/ddd/domain/audit/types';

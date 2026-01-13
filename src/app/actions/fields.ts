@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission, requireResourcePermission, getSessionSafe } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
-import { getTableApplicationService, getViewApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
+import { getTableApplicationService, getRowApplicationService, getViewApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import type { Result, CreateFieldData } from "./types";
 import type { FieldType, AutonumberFieldConfig } from "@/ddd/domain/tables/value-objects/table-field";
@@ -74,7 +74,8 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
     if (type === 'autonumber' && result.data) {
       try {
         // Get count of existing rows to set appropriate starting value
-        const rows = await tableApplicationService.getRows(
+        const rowApplicationService = getRowApplicationService();
+        const rows = await rowApplicationService.getRows(
           TableId.fromNumber(tableId),
           {
             limit: 1000, // Get reasonable sample

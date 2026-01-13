@@ -20,7 +20,7 @@ export interface ExecutionSkill {
   description: string;
   instructions: string;
   inputs: Array<{ name: string; required: boolean; type?: string; inputMapping?: any }>;
-  outputs: Array<{ name: string; type?: string; description?: string; outputMapping?: any }>;
+  outputs: Array<{ name: string; type?: string; description?: string; source?: { type: string; nodeId: string; outputName: string }; outputMapping?: any }>;
   tools: Array<{ name: string; version?: string; config?: Record<string, any> }>;
   content: Array<any>; // MessagePart[] - flexible to avoid import
   model: string | null;
@@ -55,6 +55,7 @@ export interface ExecutionSkill {
   };
   // Optional steps for 'agent' (step-based) execution type
   steps?: Array<{
+    id: string;  // UUID for step_context keying (matches node.id from frontend)
     name: string;
     instruction?: string;
     skillId?: number;
@@ -110,6 +111,8 @@ export interface ExecutionSkill {
       queryLimit?: number;
       fieldMappings: ReadFieldMapping[];
     };
+    // UI state
+    isDisabled?: boolean;  // Step can be disabled without deletion
   }>;
 }
 

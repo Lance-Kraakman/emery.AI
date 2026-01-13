@@ -352,6 +352,9 @@ class BaseCrudTool(Tool):
 
 def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
     """Load Agent CRUD tool with method-specific routing."""
+    # Capture auth in closure - NOT exposed to LLM via inputs schema
+    _auth_token = api_key or ""
+    _org_id = str(organization_id) if organization_id else ""
 
     class AgentCrudTool(BaseCrudTool):
         """CRUD operations for Emery agents."""
@@ -362,18 +365,15 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
             "method": {"type": "string", "description": "CRUD operation: create, read, update, delete, list"},
             "agent_id": {"type": "string", "description": "Agent ID for read, update, delete operations", "nullable": True},
             "data": {"type": "object", "description": "Agent data for create and update operations", "nullable": True},
-            "filters": {"type": "object", "description": "Filter criteria for list operation", "nullable": True},
-            "auth_token": {"type": "string", "description": "Internal API authentication token"},
-            "organization_id": {"type": "string", "description": "Organization ID for RLS context"}
+            "filters": {"type": "object", "description": "Filter criteria for list operation", "nullable": True}
         }
         output_type = "object"
 
         def __init__(self):
             super().__init__("agent", "crud")
 
-        def forward(self, method: str, auth_token: str, organization_id: str,
-                   agent_id: Optional[str] = None, data: Optional[Dict] = None,
-                   filters: Optional[Dict] = None) -> Dict[str, Any]:
+        def forward(self, method: str, agent_id: Optional[str] = None,
+                   data: Optional[Dict] = None, filters: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute agent CRUD operation."""
 
             if method == "create":
@@ -384,8 +384,8 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                     endpoint="agents",
                     method="POST",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "read":
@@ -395,8 +395,8 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 return self._make_api_request_with_deadline(
                     endpoint=f"agents/{agent_id}",
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "update":
@@ -409,8 +409,8 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                     endpoint=f"agents/{agent_id}",
                     method="PUT",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "delete":
@@ -420,8 +420,8 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 return self._make_api_request_with_deadline(
                     endpoint=f"agents/{agent_id}",
                     method="DELETE",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "list":
@@ -437,8 +437,8 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             else:
@@ -693,6 +693,9 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
     AIDEV-NOTE: Files are stored as field values in table rows, not as standalone entities.
     Context params (tableId, rowId, fieldId) are required to locate the file.
     """
+    # Capture auth in closure - NOT exposed to LLM via inputs schema
+    _auth_token = api_key or ""
+    _org_id = str(organization_id) if organization_id else ""
 
     class FileCrudTool(BaseCrudTool):
         """CRUD operations for Emery files."""
@@ -705,19 +708,16 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
             "table_id": {"type": "string", "description": "Table ID containing the file field (required for read/update/delete)", "nullable": True},
             "row_id": {"type": "string", "description": "Row ID containing the file (required for read/update/delete)", "nullable": True},
             "field_id": {"type": "string", "description": "Field ID of the file column (required for read/update/delete)", "nullable": True},
-            "data": {"type": "object", "description": "File data for create and update operations", "nullable": True},
-            "auth_token": {"type": "string", "description": "Internal API authentication token"},
-            "organization_id": {"type": "string", "description": "Organization ID for RLS context"}
+            "data": {"type": "object", "description": "File data for create and update operations", "nullable": True}
         }
         output_type = "object"
 
         def __init__(self):
             super().__init__("file", "crud")
 
-        def forward(self, method: str, auth_token: str, organization_id: str,
-                   file_id: Optional[str] = None, table_id: Optional[str] = None,
-                   row_id: Optional[str] = None, field_id: Optional[str] = None,
-                   data: Optional[Dict] = None) -> Dict[str, Any]:
+        def forward(self, method: str, file_id: Optional[str] = None,
+                   table_id: Optional[str] = None, row_id: Optional[str] = None,
+                   field_id: Optional[str] = None, data: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute file CRUD operation."""
 
             if method == "create":
@@ -728,8 +728,8 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                     endpoint="files/upload",
                     method="POST",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "read":
@@ -743,8 +743,8 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                 return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "update":
@@ -761,8 +761,8 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                     endpoint=endpoint,
                     method="PUT",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "delete":
@@ -776,8 +776,8 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                 return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="DELETE",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             else:
@@ -786,220 +786,11 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
     return FileCrudTool()
 
 
-def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
-    """
-    Load comprehensive Table CRUD tool with table and row operations.
-
-    AIDEV-NOTE: Supports 9 operations total:
-    - Table operations (5): create_table, read_table, update_table, delete_table, list_tables
-    - Row operations (4): create_row, get_rows, update_row, delete_row
-
-    For reference tools (e.g., emery-read-table from @ mentions), config.config may contain
-    pre-configured table_id from the frontend ToolDTO.
-
-    AIDEV-NOTE: Auth is captured in closure variables (_auth_token, _org_id) - NOT exposed in inputs.
-    This prevents the LLM from seeing auth params and trying to provide placeholder values.
-    """
+def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
+    """Load Team CRUD tool with method-specific routing."""
     # Capture auth in closure - NOT exposed to LLM via inputs schema
     _auth_token = api_key or ""
     _org_id = str(organization_id) if organization_id else ""
-
-    # Extract pre-configured table_id from config if present (for reference tools)
-    # Frontend passes this as table_id when user selects a specific table from @ dropdown
-    _preconfigured_table_id = config.config.get("table_id") if config.config else None
-
-    class TableCrudTool(BaseCrudTool):
-        """Comprehensive CRUD operations for Emery tables and rows."""
-
-        name = "table_crud"
-        description = "Comprehensive table and row management. Table operations: create_table (create new table), read_table (get table details), update_table (modify metadata), delete_table (remove table), list_tables (list all tables). Row operations: create_row (add row), get_rows (query with pagination), update_row (modify row), delete_row (remove row)."
-        inputs = {
-            "method": {"type": "string", "description": "Operation: create_table, read_table, update_table, delete_table, list_tables, create_row, get_rows, update_row, delete_row"},
-            "table_id": {"type": "string", "description": "Table ID (required for most operations)", "nullable": True},
-            "row_id": {"type": "string", "description": "Row ID (required for update_row, delete_row)", "nullable": True},
-            "data": {"type": "object", "description": "Data payload. For create_table: {name, databaseId, description}. For create_row/update_row: field values {field_1: value1, field_2: value2}. For update_table: {name, description}", "nullable": True},
-            "limit": {"type": "integer", "description": "Max rows to return for get_rows (default: 100)", "nullable": True},
-            "offset": {"type": "integer", "description": "Pagination offset for get_rows (default: 0)", "nullable": True},
-            "order_by": {"type": "string", "description": "Field to sort by for get_rows", "nullable": True},
-            "order_direction": {"type": "string", "description": "Sort direction: ASC or DESC", "nullable": True},
-            "filters": {"type": "object", "description": "Filter criteria for queries", "nullable": True}
-        }
-        output_type = "object"
-
-        def __init__(self):
-            super().__init__("table", "crud")
-
-        def forward(self, method: str, table_id: Optional[str] = None, row_id: Optional[str] = None,
-                   data: Optional[Dict] = None, limit: Optional[int] = None,
-                   offset: Optional[int] = None, order_by: Optional[str] = None,
-                   order_direction: Optional[str] = None, filters: Optional[Dict] = None) -> Dict[str, Any]:
-            """Execute table or row CRUD operation."""
-
-            # Pre-configured table_id takes priority over LLM-provided (for reference tools)
-            # This ensures @table:DatabaseName/TableName uses the numeric ID from frontend config
-            effective_table_id = _preconfigured_table_id or table_id
-
-            # ============================================================
-            # TABLE OPERATIONS
-            # ============================================================
-
-            if method == "create_table":
-                if not data:
-                    return {"success": False, "error": "Table data is required for create_table. Provide {name, databaseId, description}"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint="tables",
-                    method="POST",
-                    data=data,
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "read_table":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for read_table operation"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint=f"tables/{effective_table_id}",
-                    method="GET",
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "update_table":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for update_table operation"}
-                if not data:
-                    return {"success": False, "error": "Table data is required for update_table. Provide {name, description, metadata}"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint=f"tables/{effective_table_id}",
-                    method="PUT",
-                    data=data,
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "delete_table":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for delete_table operation"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint=f"tables/{effective_table_id}",
-                    method="DELETE",
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "list_tables":
-                endpoint = "tables"
-                if filters:
-                    query_params = []
-                    for key, value in filters.items():
-                        query_params.append(f"{key}={value}")
-                    if query_params:
-                        endpoint += "?" + "&".join(query_params)
-
-                return self._make_api_request_with_deadline(
-                    endpoint=endpoint,
-                    method="GET",
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            # ============================================================
-            # ROW OPERATIONS
-            # ============================================================
-
-            elif method == "create_row":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for create_row operation"}
-                if not data:
-                    return {"success": False, "error": "Row data is required for create_row. Provide field values {field_1: value1, field_2: value2}"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint="rows",
-                    method="POST",
-                    data={"tableId": int(effective_table_id), "data": data},
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "get_rows":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for get_rows operation"}
-
-                # Build query parameters
-                query_params = [f"tableId={effective_table_id}"]
-
-                # Add pagination parameters
-                if limit is not None:
-                    query_params.append(f"limit={limit}")
-                else:
-                    query_params.append("limit=100")  # Default to 100
-
-                if offset is not None:
-                    query_params.append(f"offset={offset}")
-                else:
-                    query_params.append("offset=0")  # Default to 0
-
-                # Add sorting parameters
-                if order_by:
-                    query_params.append(f"orderBy={order_by}")
-                if order_direction:
-                    query_params.append(f"orderDirection={order_direction}")
-
-                endpoint = "rows?" + "&".join(query_params)
-
-                return self._make_api_request_with_deadline(
-                    endpoint=endpoint,
-                    method="GET",
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "update_row":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for update_row operation"}
-                if not row_id:
-                    return {"success": False, "error": "Row ID is required for update_row operation"}
-                if not data:
-                    return {"success": False, "error": "Row data is required for update_row. Provide updated field values"}
-
-                return self._make_api_request_with_deadline(
-                    endpoint="rows",
-                    method="PUT",
-                    data={"tableId": int(effective_table_id), "rowId": row_id, "data": data},
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            elif method == "delete_row":
-                if not effective_table_id:
-                    return {"success": False, "error": "Table ID is required for delete_row operation"}
-                if not row_id:
-                    return {"success": False, "error": "Row ID is required for delete_row operation"}
-
-                endpoint = f"rows?tableId={effective_table_id}&rowId={row_id}"
-
-                return self._make_api_request_with_deadline(
-                    endpoint=endpoint,
-                    method="DELETE",
-                    auth_token=_auth_token,
-                    organization_id=_org_id
-                )
-
-            else:
-                return {
-                    "success": False,
-                    "error": f"Unknown method: {method}. Supported: create_table, read_table, update_table, delete_table, list_tables, create_row, get_rows, update_row, delete_row"
-                }
-
-    return TableCrudTool()
-
-
-def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
-    """Load Team CRUD tool with method-specific routing."""
 
     class TeamCrudTool(BaseCrudTool):
         """CRUD operations for Emery teams."""
@@ -1010,18 +801,15 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
             "method": {"type": "string", "description": "CRUD operation: create, read, update, delete, list"},
             "team_id": {"type": "string", "description": "Team ID for read, update, delete operations", "nullable": True},
             "data": {"type": "object", "description": "Team data for create and update operations", "nullable": True},
-            "filters": {"type": "object", "description": "Filter criteria for list operation", "nullable": True},
-            "auth_token": {"type": "string", "description": "Internal API authentication token"},
-            "organization_id": {"type": "string", "description": "Organization ID for RLS context"}
+            "filters": {"type": "object", "description": "Filter criteria for list operation", "nullable": True}
         }
         output_type = "object"
 
         def __init__(self):
             super().__init__("team", "crud")
 
-        def forward(self, method: str, auth_token: str, organization_id: str,
-                   team_id: Optional[str] = None, data: Optional[Dict] = None,
-                   filters: Optional[Dict] = None) -> Dict[str, Any]:
+        def forward(self, method: str, team_id: Optional[str] = None,
+                   data: Optional[Dict] = None, filters: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute team CRUD operation."""
 
             if method == "create":
@@ -1032,8 +820,8 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                     endpoint="teams",
                     method="POST",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "read":
@@ -1043,8 +831,8 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                 return self._make_api_request_with_deadline(
                     endpoint=f"teams/{team_id}",
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "update":
@@ -1057,8 +845,8 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                     endpoint=f"teams/{team_id}",
                     method="PUT",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "delete":
@@ -1068,8 +856,8 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                 return self._make_api_request_with_deadline(
                     endpoint=f"teams/{team_id}",
                     method="DELETE",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "list":
@@ -1084,8 +872,8 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                 return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             else:
@@ -1095,41 +883,46 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
 
 
 def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organization_id: Optional[int] = None) -> Tool:
-    """Load Database CRUD tool with method-specific routing."""
+    """
+    Load Database CRUD tool with method-specific routing.
+
+    AIDEV-NOTE: Auth is captured in closure variables (_auth_token, _org_id) - NOT exposed in inputs.
+    This matches the pattern used by field_crud, table_crud, row_crud.
+    """
+    # Capture auth in closure - NOT exposed to LLM via inputs schema
+    _auth_token = api_key or ""
+    _org_id = str(organization_id) if organization_id else ""
 
     class DatabaseCrudTool(BaseCrudTool):
         """CRUD operations for Emery databases."""
 
         name = "database_crud"
-        description = "Create, read, update, delete, and list databases in your organization. Supports database configuration and connection management."
+        description = "Database management: list (get all databases), read (get database details), create_database, update_database, delete_database."
         inputs = {
-            "method": {"type": "string", "description": "CRUD operation: create, read, update, delete, list"},
+            "method": {"type": "string", "description": "Operation: list, read, create, update, delete"},
             "database_id": {"type": "string", "description": "Database ID for read, update, delete operations", "nullable": True},
-            "data": {"type": "object", "description": "Database data for create and update operations", "nullable": True},
-            "filters": {"type": "object", "description": "Filter criteria for list operation", "nullable": True},
-            "auth_token": {"type": "string", "description": "Internal API authentication token"},
-            "organization_id": {"type": "string", "description": "Organization ID for RLS context"}
+            "data": {"type": "object", "description": "Database data for create/update: {name, description}", "nullable": True},
+            "filters": {"type": "object", "description": "Filter criteria for list operation", "nullable": True}
         }
         output_type = "object"
 
         def __init__(self):
             super().__init__("database", "crud")
 
-        def forward(self, method: str, auth_token: str, organization_id: str,
-                   database_id: Optional[str] = None, data: Optional[Dict] = None,
-                   filters: Optional[Dict] = None) -> Dict[str, Any]:
+        def forward(self, method: str, database_id: Optional[str] = None,
+                   data: Optional[Dict] = None, filters: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute database CRUD operation."""
 
             if method == "create":
                 if not data:
-                    return {"success": False, "error": "Database data is required for create operation"}
+                    return {"success": False, "error": "Database data is required for create operation. Provide {name, description}"}
 
                 return self._make_api_request_with_deadline(
                     endpoint="databases",
                     method="POST",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "read":
@@ -1139,8 +932,8 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 return self._make_api_request_with_deadline(
                     endpoint=f"databases/{database_id}",
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "update":
@@ -1153,8 +946,8 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                     endpoint=f"databases/{database_id}",
                     method="PUT",
                     data=data,
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "delete":
@@ -1164,8 +957,8 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 return self._make_api_request_with_deadline(
                     endpoint=f"databases/{database_id}",
                     method="DELETE",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             elif method == "list":
@@ -1180,12 +973,12 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 return self._make_api_request_with_deadline(
                     endpoint=endpoint,
                     method="GET",
-                    auth_token=auth_token,
-                    organization_id=organization_id
+                    auth_token=_auth_token,
+                    organization_id=_org_id
                 )
 
             else:
-                return {"success": False, "error": f"Unknown method: {method}. Supported: create, read, update, delete, list"}
+                return {"success": False, "error": f"Unknown method: {method}. Supported: list, read, create, update, delete"}
 
     return DatabaseCrudTool()
 
@@ -1315,14 +1108,21 @@ Only include fields you want to change (partial updates allowed).""",
     return SkillCrudTool()
 
 
+# Import split tools from new modules
+from .table_tools import load_table_crud
+from .row_tools import load_row_crud
+from .field_tools import load_field_crud
+
 # Registry of CRUD tools
 # AIDEV-NOTE: Tool names match category names directly (agents, tables, etc.)
-# This eliminates need for complex category mapping in seeding
+# Table/row/field operations have been split into separate modules for maintainability.
 CRUD_TOOLS = {
     "agents": load_agent_crud,
     "documents": load_document_crud,
     "files": load_file_crud,
-    "tables": load_table_crud,
+    "tables": load_table_crud,   # Table operations (from table_tools.py)
+    "rows": load_row_crud,       # Row operations (from row_tools.py)
+    "fields": load_field_crud,   # Field/column operations (from field_tools.py)
     "teams": load_team_crud,
     "databases": load_database_crud,
     "skills": load_skill_crud,

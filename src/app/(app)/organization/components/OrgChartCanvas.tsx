@@ -575,7 +575,7 @@ export function OrgChartCanvas({
         nodeTypes={orgChartNodeTypes}
         edgeTypes={orgChartEdgeTypes}
         defaultEdgeOptions={{
-          type: 'reference',
+          type: 'smoothstep',
           animated: false,
         }}
         // Use saved viewport if available, otherwise fit view

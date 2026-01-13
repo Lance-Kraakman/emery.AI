@@ -244,15 +244,29 @@ class InputDefinition(_message.Message):
     input_mapping: InputMappingConfig
     def __init__(self, name: _Optional[str] = ..., required: bool = ..., type: _Optional[str] = ..., input_mapping: _Optional[_Union[InputMappingConfig, _Mapping]] = ...) -> None: ...
 
+class OutputSource(_message.Message):
+    __slots__ = ("type", "node_id", "output_name")
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    NODE_ID_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_NAME_FIELD_NUMBER: _ClassVar[int]
+    type: str
+    node_id: str
+    output_name: str
+    def __init__(self, type: _Optional[str] = ..., node_id: _Optional[str] = ..., output_name: _Optional[str] = ...) -> None: ...
+
 class OutputDefinition(_message.Message):
-    __slots__ = ("name", "type", "output_mapping")
+    __slots__ = ("name", "type", "output_mapping", "description", "source")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_MAPPING_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_FIELD_NUMBER: _ClassVar[int]
     name: str
     type: str
     output_mapping: OutputMappingConfig
-    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., output_mapping: _Optional[_Union[OutputMappingConfig, _Mapping]] = ...) -> None: ...
+    description: str
+    source: OutputSource
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., output_mapping: _Optional[_Union[OutputMappingConfig, _Mapping]] = ..., description: _Optional[str] = ..., source: _Optional[_Union[OutputSource, _Mapping]] = ...) -> None: ...
 
 class ErrorConfig(_message.Message):
     __slots__ = ("continue_on_error", "error_output_var")
@@ -297,7 +311,7 @@ class LoopConfig(_message.Message):
     def __init__(self, type: _Optional[str] = ..., items_var: _Optional[str] = ..., current_item_var: _Optional[str] = ..., condition: _Optional[str] = ..., max_iterations: _Optional[int] = ...) -> None: ...
 
 class SkillStep(_message.Message):
-    __slots__ = ("name", "instruction", "skill_id", "tools", "inputs", "outputs", "parallel", "condition", "input_defs", "output_defs", "error_config", "retry_config", "step_outputs", "parallel_group", "loop_config", "read_config", "write_config", "tool_execution_config", "task_model_config")
+    __slots__ = ("id", "name", "instruction", "skill_id", "tools", "inputs", "outputs", "parallel", "condition", "input_defs", "output_defs", "error_config", "retry_config", "step_outputs", "parallel_group", "loop_config", "read_config", "write_config", "tool_execution_config", "task_model_config", "is_disabled")
     class InputsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -312,6 +326,7 @@ class SkillStep(_message.Message):
         key: str
         value: str
         def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     INSTRUCTION_FIELD_NUMBER: _ClassVar[int]
     SKILL_ID_FIELD_NUMBER: _ClassVar[int]
@@ -331,6 +346,8 @@ class SkillStep(_message.Message):
     WRITE_CONFIG_FIELD_NUMBER: _ClassVar[int]
     TOOL_EXECUTION_CONFIG_FIELD_NUMBER: _ClassVar[int]
     TASK_MODEL_CONFIG_FIELD_NUMBER: _ClassVar[int]
+    IS_DISABLED_FIELD_NUMBER: _ClassVar[int]
+    id: str
     name: str
     instruction: str
     skill_id: int
@@ -350,7 +367,8 @@ class SkillStep(_message.Message):
     write_config: WriteConfig
     tool_execution_config: ToolExecutionConfig
     task_model_config: TaskModelConfig
-    def __init__(self, name: _Optional[str] = ..., instruction: _Optional[str] = ..., skill_id: _Optional[int] = ..., tools: _Optional[_Iterable[str]] = ..., inputs: _Optional[_Mapping[str, str]] = ..., outputs: _Optional[_Mapping[str, str]] = ..., parallel: bool = ..., condition: _Optional[str] = ..., input_defs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., output_defs: _Optional[_Iterable[_Union[OutputDefinition, _Mapping]]] = ..., error_config: _Optional[_Union[ErrorConfig, _Mapping]] = ..., retry_config: _Optional[_Union[RetryConfig, _Mapping]] = ..., step_outputs: _Optional[_Iterable[_Union[StepOutput, _Mapping]]] = ..., parallel_group: _Optional[str] = ..., loop_config: _Optional[_Union[LoopConfig, _Mapping]] = ..., read_config: _Optional[_Union[ReadConfig, _Mapping]] = ..., write_config: _Optional[_Union[WriteConfig, _Mapping]] = ..., tool_execution_config: _Optional[_Union[ToolExecutionConfig, _Mapping]] = ..., task_model_config: _Optional[_Union[TaskModelConfig, _Mapping]] = ...) -> None: ...
+    is_disabled: bool
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., instruction: _Optional[str] = ..., skill_id: _Optional[int] = ..., tools: _Optional[_Iterable[str]] = ..., inputs: _Optional[_Mapping[str, str]] = ..., outputs: _Optional[_Mapping[str, str]] = ..., parallel: bool = ..., condition: _Optional[str] = ..., input_defs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., output_defs: _Optional[_Iterable[_Union[OutputDefinition, _Mapping]]] = ..., error_config: _Optional[_Union[ErrorConfig, _Mapping]] = ..., retry_config: _Optional[_Union[RetryConfig, _Mapping]] = ..., step_outputs: _Optional[_Iterable[_Union[StepOutput, _Mapping]]] = ..., parallel_group: _Optional[str] = ..., loop_config: _Optional[_Union[LoopConfig, _Mapping]] = ..., read_config: _Optional[_Union[ReadConfig, _Mapping]] = ..., write_config: _Optional[_Union[WriteConfig, _Mapping]] = ..., tool_execution_config: _Optional[_Union[ToolExecutionConfig, _Mapping]] = ..., task_model_config: _Optional[_Union[TaskModelConfig, _Mapping]] = ..., is_disabled: bool = ...) -> None: ...
 
 class TaskModelConfig(_message.Message):
     __slots__ = ("model_id", "task_type", "parameters")

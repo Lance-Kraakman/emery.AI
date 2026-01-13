@@ -8,7 +8,7 @@
  * Critical security component for OAuth credential delegation control.
  */
 
-import type { DbClient } from '@/lib/db/client';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
 import type { IDelegationRepository } from '@/ddd/domain/delegations/repositories/delegation-repository';
 import { DrizzleDelegationRepository } from '@/ddd/infrastructure/db/repositories/delegations/drizzle-delegation-repository';
 import { CredentialDelegationApplicationService } from '@/ddd/application/services/delegations/credential-delegation-application-service';

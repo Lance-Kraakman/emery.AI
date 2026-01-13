@@ -433,6 +433,12 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
       return {
         name: output.name,
         type: output.type || 'text', // Default to 'text' for proto compatibility
+        description: output.description || '',
+        source: output.source ? {
+          type: output.source.type,
+          nodeId: output.source.nodeId,
+          outputName: output.source.outputName
+        } : undefined,
         outputMapping: outputMapping ? {
           mode: outputMapping.mode || 'single_row',
           tableMappings: outputMapping.tableMappings.map((tm: TableMappingDTO) => ({
@@ -536,6 +542,7 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
     } : undefined,
     // Map steps for 'agent' (step-based) execution type
     steps: skill.steps?.map(step => ({
+      id: step.id,  // UUID for step_context keying
       name: step.name,
       instruction: step.instruction || '',
       skillId: step.skillId || 0,
@@ -560,6 +567,8 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
       outputDefs: step.outputDefs?.map(output => ({
         name: output.name,
         type: output.type || 'text',
+        description: output.description || '',
+        source: undefined,  // Step-level outputs don't use source (that's for skill outputs)
         outputMapping: undefined  // Step-level outputs typically don't have table mappings
       })) || [],
       // DAG execution configuration
@@ -631,7 +640,9 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
         parameters: Object.fromEntries(
           Object.entries(step.taskModelConfig.parameters || {}).map(([k, v]) => [k, String(v)])
         )
-      } : undefined
+      } : undefined,
+      // UI state
+      isDisabled: step.isDisabled || false
     })) || []
   };
 }

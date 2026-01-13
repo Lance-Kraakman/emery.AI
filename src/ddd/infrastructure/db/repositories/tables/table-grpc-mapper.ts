@@ -40,7 +40,10 @@ import {
   QueryRowsRequest as IQueryRowsRequest,
   GetTableStatsRequest as IGetTableStatsRequest,
   AddFieldRequest,
-} from '@/lib/grpc/generated/table_service';
+  UpdateFieldRequest,
+  DeleteFieldRequest,
+  GetFieldsRequest,
+} from '@/ddd/infrastructure/grpc/generated/table_service';
 
 /**
  * Maps field types between domain and protobuf
@@ -620,9 +623,6 @@ export class TableGrpcMapper {
     organizationId: OrganizationId,
     s3Path: string
   ): any {
-    // Import the request type dynamically to avoid circular dependencies
-    const { UpdateFieldRequest } = require('@/lib/grpc/generated/table_service');
-    
     const request = {
       tableId: tableId.value.toString(),
       fieldId: updatedField.id.value,  // Required field ID for lookup
@@ -650,9 +650,6 @@ export class TableGrpcMapper {
     organizationId: OrganizationId,
     s3Path: string
   ): any {
-    // Import the request type dynamically to avoid circular dependencies
-    const { DeleteFieldRequest } = require('@/lib/grpc/generated/table_service');
-    
     const request = {
       tableId: tableId.value.toString(),
       fieldId: fieldId,  // Required int32 field ID
@@ -672,9 +669,6 @@ export class TableGrpcMapper {
     organizationId: OrganizationId,
     s3Path?: string  // Optional for compatibility
   ): any {
-    // Import the request type dynamically to avoid circular dependencies
-    const { GetFieldsRequest } = require('@/lib/grpc/generated/table_service');
-    
     const request = {
       tableId: tableId.value.toString(),
       organizationId: organizationId.value.toString()

@@ -4,7 +4,7 @@
 // Provides document field data for chat mention system
 
 import { requirePermission } from "./permissions";
-import { getTableApplicationService } from "@/ddd/application/di/container";
+import { getTableApplicationService, getRowApplicationService } from "@/ddd/application/di/container";
 import { TableId } from "@/ddd/domain/shared/value-objects";
 import { RowMapper, type RowDTO, type DocumentFieldValue } from "@/app/mappers/row-mapper";
 
@@ -35,24 +35,25 @@ export async function getDocumentMentionsForTable(
       throw new Error("tableId is required");
     }
 
-    // Get table service
+    // Get table and row services
     const tableAppService = getTableApplicationService();
-    
+    const rowAppService = getRowApplicationService();
+
     // First, get field definitions to find document fields
     const fields = await tableAppService.getFieldsForTable(TableId.fromNumber(tableId));
     console.log(`[DEBUG] Table ${tableId}: Found ${fields.length} total fields`);
     console.log(`[DEBUG] Field types:`, fields.map(f => ({ name: f.name, type: f.type })));
-    
+
     const documentFields = fields.filter(field => field.type === 'document');
     console.log(`[DEBUG] Table ${tableId}: Found ${documentFields.length} document fields`);
-    
+
     if (documentFields.length === 0) {
       console.log(`[DEBUG] Table ${tableId}: No document fields found, returning empty array`);
       return []; // No document fields in this table
     }
 
     // Get recent rows that might contain document data
-    const rowsData = await tableAppService.getRows(
+    const rowsData = await rowAppService.getRows(
       TableId.fromNumber(tableId), 
       { limit, offset: 0 }
     );

@@ -6,11 +6,15 @@
  *
  * AIDEV-NOTE: Application service using repository pattern for execution -
  * treats agent execution as a repository operation with pluggable implementations
+ *
+ * AIDEV-NOTE: Dependencies are injected via constructor to avoid direct container access.
+ * SkillEnrichmentService uses lazy getter pattern because it's registered after agent services.
  */
 
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
 import type { IAgentExecutionRepository, AgentExecutionRequest } from '@/ddd/domain/agents/repositories/agent-execution-repository';
+import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { Task } from '@/ddd/domain/tasks/entities/task';
 import { isActiveAgent } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, OrganizationId, TaskId, UserId, TaskStatus, TeamId } from '@/ddd/domain/shared/value-objects';
@@ -18,10 +22,8 @@ import type { CreateTaskDTO, ExecuteTaskDTO, TaskExecutionResultDTO, TaskDTO } f
 import { taskToDTO } from '@/app/mappers/task-mapper';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
-import { getOrganizationRepository } from '@/ddd/application/di/container';
-import { getSkillEnrichmentService } from '@/ddd/application/di/getters';
 import { InstructionTemplateService } from '@/ddd/domain/tasks/services/instruction-template-service';
-import type { EnrichedSkill } from '@/ddd/application/services/skills/skill-enrichment-service';
+import type { EnrichedSkill, SkillEnrichmentService } from '@/ddd/application/services/skills/skill-enrichment-service';
 
 const logger = createDebugLogger('AgentTaskService');
 
@@ -29,7 +31,9 @@ export class AgentTaskApplicationService {
   constructor(
     private readonly agentRepository: IAgentRepository,
     private readonly taskRepository: ITaskRepository,
-    private readonly executionRepository: IAgentExecutionRepository
+    private readonly executionRepository: IAgentExecutionRepository,
+    private readonly organizationRepository: IOrganizationRepository,
+    private readonly getSkillEnrichmentService: () => SkillEnrichmentService
   ) {}
 
   /**
@@ -172,8 +176,7 @@ export class AgentTaskApplicationService {
       }
 
       // 3. Load organization model for model selection hierarchy
-      const orgRepository = getOrganizationRepository();
-      const organization = await orgRepository.findById(agent.organizationId);
+      const organization = await this.organizationRepository.findById(agent.organizationId);
       const organizationModel = organization?.defaultModel || undefined;
       const agentModel = agent.defaultModel || undefined;
 
@@ -189,7 +192,7 @@ export class AgentTaskApplicationService {
       // 5. Load skill if task references one
       let enrichedSkill: EnrichedSkill | null = null;
       if (task.skillId) {
-        const skillEnrichmentService = getSkillEnrichmentService();
+        const skillEnrichmentService = this.getSkillEnrichmentService();
         enrichedSkill = await skillEnrichmentService.enrichSkill(task.skillId);
         if (enrichedSkill) {
           logger.summary(`Loaded skill for task execution: ${enrichedSkill.name} (${enrichedSkill.executionType})`);

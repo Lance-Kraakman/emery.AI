@@ -6,7 +6,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission, requireResourcePermission } from "./permissions";
 import { withAuthContext } from '@/lib/auth/with-context';
-import { getTableApplicationService } from "@/ddd/application/di/container";
+import { getTableApplicationService, getRowApplicationService } from "@/ddd/application/di/container";
 import type { Result, CreateRowCommand, UpdateRowCommand } from "./types";
 import { Row, RowId } from "@/ddd/domain/tables/value-objects/row";
 import { TableId, UserId } from "@/ddd/domain/shared/value-objects";
@@ -84,8 +84,9 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
       };
     }
 
-    // Use table application service for row creation
+    // Use application services for row and table operations
     const tableAppService = getTableApplicationService();
+    const rowAppService = getRowApplicationService();
 
     // Get table to retrieve field information
     const table = await tableAppService.getTable(TableId.fromNumber(tableId));
@@ -109,8 +110,8 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
         error: "Invalid user session - user ID not found"
       };
     }
-    
-    const result = await tableAppService.createRow({
+
+    const result = await rowAppService.createRow({
       tableId: TableId.fromNumber(tableId),
       data: row,
       createdBy: UserId.fromString(session.user.id)
@@ -194,8 +195,9 @@ export async function createRows(data: { tableId: number; rows: Record<string, a
       };
     }
 
-    // Use table application service for row creation
+    // Use application services for row and table operations
     const tableAppService = getTableApplicationService();
+    const rowAppService = getRowApplicationService();
 
     // Get table to retrieve field information
     const table = await tableAppService.getTable(TableId.fromNumber(tableId));
@@ -209,7 +211,7 @@ export async function createRows(data: { tableId: number; rows: Record<string, a
 
     // Convert all plain data to Row entities
     // AIDEV-NOTE: DSG sends { name: "value" }, Row.fromPlainObject expects { 6: "value" }
-    const rows = rowsData.map(rowData => {
+    const rows = rowsData.map((rowData: Record<string, unknown>) => {
       const convertedData = convertFieldNamesToIds(rowData, table.fields);
       return Row.fromPlainObject(convertedData, tableId, table.fields);
     });
@@ -222,7 +224,7 @@ export async function createRows(data: { tableId: number; rows: Record<string, a
       };
     }
 
-    const result = await tableAppService.createRows({
+    const result = await rowAppService.createRows({
       tableId: TableId.fromNumber(tableId),
       rows: rows,
       createdBy: UserId.fromString(session.user.id)
@@ -321,8 +323,9 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       };
     }
 
-    // Use table application service for row updates
+    // Use application services for row and table operations
     const tableAppService = getTableApplicationService();
+    const rowAppService = getRowApplicationService();
 
     // Get table to retrieve field information
     const table = await tableAppService.getTable(TableId.fromNumber(tableId));
@@ -338,7 +341,7 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
     console.log('[updateRowData] Table fields:', table.fields.map(f => ({ id: f.id.value, name: f.name })));
 
     // Fetch existing row data to preserve all fields
-    const existingRow = await tableAppService.getRow(
+    const existingRow = await rowAppService.getRow(
       TableId.fromNumber(tableId),
       RowId.fromString(rowId)
     );
@@ -394,8 +397,8 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       };
     }
 
-    console.log('[updateRowData] Calling tableAppService.updateRow...');
-    const result = await tableAppService.updateRow({
+    console.log('[updateRowData] Calling rowAppService.updateRow...');
+    const result = await rowAppService.updateRow({
       tableId: TableId.fromNumber(tableId),
       rowId: RowId.fromString(rowId),
       data: row,
@@ -475,8 +478,9 @@ export async function updateRowsData(
       };
     }
 
-    // Use table application service
+    // Use application services for row and table operations
     const tableAppService = getTableApplicationService();
+    const rowAppService = getRowApplicationService();
 
     // Get table to retrieve field information
     const table = await tableAppService.getTable(TableId.fromNumber(tableId));
@@ -490,7 +494,7 @@ export async function updateRowsData(
 
     // OPTIMIZED: Fetch all existing rows in ONE query using 'in' filter
     const rowIds = updates.map(u => u.rowId);
-    const existingRows = await tableAppService.getRows(
+    const existingRows = await rowAppService.getRows(
       TableId.fromNumber(tableId),
       {
         filters: [{ field: 'id', operator: 'in' as const, value: rowIds }]
@@ -499,7 +503,7 @@ export async function updateRowsData(
 
     // Create a map for quick lookup
     const existingRowMap = new Map(
-      existingRows.map(row => [row.id.value, row.toPlainObject(table.fields)])
+      existingRows.map((row: Row) => [row.id.value, row.toPlainObject(table.fields)])
     );
 
     // AIDEV-NOTE: Ensure we have a valid user ID
@@ -528,7 +532,7 @@ export async function updateRowsData(
     });
 
     // Bulk update using application service
-    const result = await tableAppService.updateRows({
+    const result = await rowAppService.updateRows({
       tableId: TableId.fromNumber(tableId),
       updates: mergedUpdates,
       updatedBy: UserId.fromString(session.user.id)
@@ -545,10 +549,10 @@ export async function updateRowsData(
     if (result.data && result.data.length > 0) {
       // Create maps for efficient lookup
       const updatedRowMap = new Map(
-        result.data.map(row => [row.id.value, row.toNamedObject(table.fields)])
+        result.data.map((row: Row) => [row.id.value, row.toNamedObject(table.fields)])
       );
       const existingNamedMap = new Map(
-        existingRows.map(row => [row.id.value, row.toNamedObject(table.fields)])
+        existingRows.map((row: Row) => [row.id.value, row.toNamedObject(table.fields)])
       );
 
       const auditContext: RowAuditContext = {
@@ -568,12 +572,12 @@ export async function updateRowsData(
         const newData = updatedRowMap.get(update.rowId);
 
         if (existingData && newData) {
-          const fieldChanges = computeFieldChanges(existingData, newData);
+          const fieldChanges = computeFieldChanges(existingData as Record<string, unknown>, newData as Record<string, unknown>);
           logRowUpdate(auditContext, {
             rowId: update.rowId,
-            rowSnapshot: newData,
+            rowSnapshot: newData as Record<string, unknown>,
             fieldChanges,
-            previousData: existingData,
+            previousData: existingData as Record<string, unknown>,
           });
         }
       }
@@ -594,7 +598,7 @@ export async function updateRowsData(
     }
 
     // Convert Domain objects to DSG format for grid display
-    const dsgRows = result.data?.map(row => ({
+    const dsgRows = result.data?.map((row: Row) => ({
       id: row.id.value,
       ...row.toNamedObject(table.fields)
     })) || [];
@@ -645,8 +649,9 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
       };
     }
 
-    // Use table application service for row deletion
+    // Use application services for row and table operations
     const tableAppService = getTableApplicationService();
+    const rowAppService = getRowApplicationService();
 
     // Get table for audit logging
     const table = await tableAppService.getTable(TableId.fromNumber(tableId));
@@ -658,13 +663,13 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
     }
 
     // AUDIT: Capture existing row data BEFORE deletion
-    const existingRow = await tableAppService.getRow(
+    const existingRow = await rowAppService.getRow(
       TableId.fromNumber(tableId),
       RowId.fromString(rowId)
     );
     const rowSnapshot = existingRow?.toNamedObject(table.fields);
 
-    const result = await tableAppService.deleteRow(
+    const result = await rowAppService.deleteRow(
       TableId.fromNumber(tableId),
       RowId.fromString(rowId)
     );
@@ -743,6 +748,7 @@ export async function getRowsDSG(
     }
 
     const tableAppService = getTableApplicationService();
+    const rowAppService = getRowApplicationService();
 
     // Get table to access field definitions
     const table = await tableAppService.getTable(TableId.fromNumber(tableId));
@@ -756,7 +762,7 @@ export async function getRowsDSG(
 
     // Request limit + 1 rows to detect if more pages exist
     // Standard pagination pattern to avoid false positives at multiples of page size
-    const rowsData = await tableAppService.getRows(
+    const rowsData = await rowAppService.getRows(
       TableId.fromNumber(tableId),
       {
         limit: limit + 1,
@@ -771,7 +777,7 @@ export async function getRowsDSG(
     // AIDEV-NOTE: CRITICAL - Convert from numeric field IDs to field names for DSG
     // FieldValue now stores fieldId (e.g., "1", "10"), so we map to field names for DSG
     // DSG expects {id: "123", test: "value", name: "value"} (field names)
-    const allDsgData = rowsData.map(row => {
+    const allDsgData = rowsData.map((row: Row) => {
       const dsgRow: Record<string, any> = { id: row.id.value };
 
       // Map fieldValues: fieldId → field name for DSG format
@@ -838,6 +844,7 @@ export async function searchRowsDSG(
     }
 
     const tableAppService = getTableApplicationService();
+    const rowAppService = getRowApplicationService();
 
     // Get table to access organizationId
     const table = await tableAppService.getTable(TableId.fromNumber(tableId));
@@ -846,7 +853,7 @@ export async function searchRowsDSG(
     }
 
     // Use searchTableRows method which searches all text fields
-    const result = await tableAppService.searchTableRows({
+    const result = await rowAppService.searchTableRows({
       tableId: TableId.fromNumber(tableId),
       query: query.trim(),
       limit,
@@ -859,7 +866,7 @@ export async function searchRowsDSG(
 
     // Transform rows to DSG format
     // AIDEV-NOTE: CRITICAL - Convert from numeric field IDs to field names for DSG
-    const dsgData = result.data.map(row => {
+    const dsgData = result.data.map((row: Row) => {
       const dsgRow: Record<string, any> = { id: row.id.value };
 
       // Map fieldValues: fieldId → field name for DSG format
@@ -920,6 +927,7 @@ export async function getSampleRow(tableId: number): Promise<Result<{
       await requireResourcePermission("table:view", "table", tableId);
 
       const tableApplicationService = getTableApplicationService();
+      const rowApplicationService = getRowApplicationService();
 
       // Get table with field definitions
       const table = await tableApplicationService.getTable(TableId.fromNumber(tableId));
@@ -928,7 +936,7 @@ export async function getSampleRow(tableId: number): Promise<Result<{
       }
 
       // Try to get one sample row
-      const rows = await tableApplicationService.getRows(TableId.fromNumber(tableId), {
+      const rows = await rowApplicationService.getRows(TableId.fromNumber(tableId), {
         limit: 1,
         offset: 0
       });

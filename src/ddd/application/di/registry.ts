@@ -31,11 +31,14 @@ import type { AuditApplicationService } from '@/ddd/application/services/audit/a
 import type { AgentTaskApplicationService } from '@/ddd/application/services/agents/agent-task-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
 import type { SkillApplicationService } from '@/ddd/application/services/skills/skill-application-service';
+import type { SkillEnrichmentService } from '@/ddd/application/services/skills/skill-enrichment-service';
 import type { TeamApplicationService } from '@/ddd/application/services/teams/team-application-service';
 import type { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
 import type { UserRoleApplicationService } from '@/ddd/application/services/user-organizations/user-role-application-service';
 import type { InvitationApplicationService } from '@/ddd/application/services/invitations/invitation-application-service';
 import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
+import type { RowApplicationService } from '@/ddd/application/services/tables/row-application-service';
+import type { TableEventCoordinatorService } from '@/ddd/application/services/tables/table-event-coordinator-service';
 import type { FileUseCases } from '@/ddd/application/services/tables/file-application-service';
 import type { DocumentApplicationService } from '@/ddd/application/services/tables/document-application-service';
 import type { ViewApplicationService } from '@/ddd/application/services/views/view-application-service';
@@ -116,10 +119,13 @@ export interface RepositoryRegistry {
 
   // Capability application services
   SkillApplicationService: SkillApplicationService;
+  SkillEnrichmentService: SkillEnrichmentService;
 
   // Database application services
   DatabaseApplicationService: DatabaseApplicationService;
   TableApplicationService: TableApplicationService;
+  RowApplicationService: RowApplicationService;
+  TableEventCoordinatorService: TableEventCoordinatorService;
   FileApplicationService: FileUseCases;
   DocumentApplicationService: DocumentApplicationService;
 

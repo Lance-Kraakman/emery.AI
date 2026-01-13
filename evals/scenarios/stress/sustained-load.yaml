@@ -1,0 +1,465 @@
+# AIDEV-NOTE: Sustained Load Test for ECS Scaling
+# Long-running test to trigger ECS auto-scaling (CPU > 70%)
+#
+# Purpose:
+# - Generate sustained CPU load to trigger scale-out
+# - Verify no dropped requests during scaling
+# - Test recovery after load subsides
+#
+# Monitor during test:
+# - CloudWatch: ECS CPU/Memory
+# - RDS connections
+# - ALB error rates
+#
+# Run: ./run-evals.sh stress
+
+description: "Sustained load test for ECS scaling verification"
+
+providers:
+  - file://../../providers/emery-crud.ts
+
+prompts:
+  - "Execute CRUD operation: {{operation}}"
+
+tests:
+  # Warm-up phase (10 ops)
+  - description: "Warmup: list_tables 1"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+
+  - description: "Warmup: get_rows 1"
+    vars:
+      operation: "get_rows"
+      limit: 50
+    assert:
+      - type: is-json
+
+  - description: "Warmup: create_row 1"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Test Row"
+        phase: "warmup"
+    assert:
+      - type: is-json
+
+  - description: "Warmup: list_fields"
+    vars:
+      operation: "list_fields"
+    assert:
+      - type: is-json
+
+  - description: "Warmup: get_table"
+    vars:
+      operation: "get_table"
+    assert:
+      - type: is-json
+
+  # Sustained phase - 50 operations to generate load
+  # Mix of reads and writes to stress both DB and gRPC
+  - description: "Sustained 1: get_rows"
+    vars:
+      operation: "get_rows"
+      limit: 100
+    assert:
+      - type: is-json
+
+  - description: "Sustained 2: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 1"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 3: list_tables"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 4: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 2"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 5: get_rows"
+    vars:
+      operation: "get_rows"
+      limit: 100
+    assert:
+      - type: is-json
+
+  - description: "Sustained 6: list_fields"
+    vars:
+      operation: "list_fields"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 7: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 3"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 8: get_table"
+    vars:
+      operation: "get_table"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 9: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 4"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 10: list_tables"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 11: get_rows"
+    vars:
+      operation: "get_rows"
+      limit: 100
+    assert:
+      - type: is-json
+
+  - description: "Sustained 12: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 5"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 13: list_fields"
+    vars:
+      operation: "list_fields"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 14: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 6"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 15: get_rows"
+    vars:
+      operation: "get_rows"
+      limit: 100
+    assert:
+      - type: is-json
+
+  - description: "Sustained 16: list_tables"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 17: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 7"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 18: get_table"
+    vars:
+      operation: "get_table"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 19: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 8"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 20: list_fields"
+    vars:
+      operation: "list_fields"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 21: get_rows"
+    vars:
+      operation: "get_rows"
+      limit: 100
+    assert:
+      - type: is-json
+
+  - description: "Sustained 22: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 9"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 23: list_tables"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 24: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 10"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 25: get_rows"
+    vars:
+      operation: "get_rows"
+      limit: 100
+    assert:
+      - type: is-json
+
+  - description: "Sustained 26: list_fields"
+    vars:
+      operation: "list_fields"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 27: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 11"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 28: get_table"
+    vars:
+      operation: "get_table"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 29: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 12"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 30: list_tables"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 31: get_rows"
+    vars:
+      operation: "get_rows"
+      limit: 100
+    assert:
+      - type: is-json
+
+  - description: "Sustained 32: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 13"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 33: list_fields"
+    vars:
+      operation: "list_fields"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 34: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 14"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 35: get_rows"
+    vars:
+      operation: "get_rows"
+      limit: 100
+    assert:
+      - type: is-json
+
+  - description: "Sustained 36: list_tables"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 37: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 15"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 38: get_table"
+    vars:
+      operation: "get_table"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 39: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 16"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 40: list_fields"
+    vars:
+      operation: "list_fields"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 41: get_rows"
+    vars:
+      operation: "get_rows"
+      limit: 100
+    assert:
+      - type: is-json
+
+  - description: "Sustained 42: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 17"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 43: list_tables"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 44: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 18"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 45: get_rows"
+    vars:
+      operation: "get_rows"
+      limit: 100
+    assert:
+      - type: is-json
+
+  - description: "Sustained 46: list_fields"
+    vars:
+      operation: "list_fields"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 47: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 19"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 48: get_table"
+    vars:
+      operation: "get_table"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 49: create_row"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Sustained Row 20"
+        phase: "sustained"
+    assert:
+      - type: is-json
+
+  - description: "Sustained 50: list_tables"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+
+  # Recovery verification
+  - description: "Recovery 1: verify reads work"
+    vars:
+      operation: "get_rows"
+      limit: 50
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.success === true || data.data?.rows !== undefined;
+
+  - description: "Recovery 2: verify tables accessible"
+    vars:
+      operation: "list_tables"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.success === true || Array.isArray(data.data);
+
+  - description: "Recovery 3: verify writes work"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Recovery Test Row"
+        phase: "recovery"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.success === true || !data.error;

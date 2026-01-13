@@ -15,7 +15,7 @@ import type {
   FieldSource,
   RowIdSource,
 } from '@/ddd/domain/skills/entities/skill';
-import type { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import type { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 
 // Re-export unified types from domain

@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
-import { getTableApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
+import { getTableApplicationService, getRowApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import { OrganizationId, TableId, DatabaseId, UserId } from "@/ddd/domain/shared/value-objects";
 import type { Result, CreateTableData } from "./types";
 import type { CreateTableCommand, UpdateTableCommand } from "@/ddd/application/services/tables/table-application-service";
@@ -405,10 +405,10 @@ export async function searchTableRows(tableId: number, query: string, limit: num
     await requireResourcePermission("database:view", "table", tableId);
     const currentOrg = await requireCurrentOrganization();
 
-    // Use TableApplicationService for search
-    const tableApplicationService = getTableApplicationService();
-    
-    const result = await tableApplicationService.searchTableRows({
+    // Use RowApplicationService for search
+    const rowApplicationService = getRowApplicationService();
+
+    const result = await rowApplicationService.searchTableRows({
       tableId: TableId.fromNumber(tableId),
       query,
       limit,
@@ -422,8 +422,11 @@ export async function searchTableRows(tableId: number, query: string, limit: num
       };
     }
 
+    // Import Row type for typing
+    const { Row } = await import("@/ddd/domain/tables/value-objects/row");
+
     // Convert Row entities to relation format for UI
-    const relations = result.data.map(row => ({
+    const relations = result.data.map((row: InstanceType<typeof Row>) => ({
       id: row.id.value,
       value: resolveDisplayValue(row)
     }));

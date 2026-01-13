@@ -1,7 +1,7 @@
 import { SkillId } from '../value-objects/skill-id';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
-import { MessagePart } from '@/lib/grpc/generated/agent_worker';
+import { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
 
 /**
  * Skill Execution Types (legacy - being replaced by unified canvas)
@@ -65,6 +65,7 @@ export interface RetryConfig {
 export interface StepOutput {
   type: 'success' | 'error' | 'condition' | 'default';  // Output type
   condition?: string;                    // For type="condition": expression like "{{result}} > 100"
+  label?: string;                        // Display label for condition edges (full text, not truncated)
   nextSteps: string[];                   // Step names to execute for this output
 }
 
@@ -144,7 +145,8 @@ export interface SkillStep {
   stepOutputs?: StepOutput[];             // Output paths: success, error, conditional branches
   parallelGroup?: string;                 // Steps with same group ID execute concurrently
 
-  // Canvas position (UI only, persisted for convenience)
+  // UI state (persisted for convenience)
+  isDisabled?: boolean;                   // Step can be disabled without deletion
   _position?: { x: number; y: number };
 }
 
@@ -378,6 +380,18 @@ export interface OutputMappingConfig {
 }
 
 /**
+ * Output Source - where the skill output value comes from
+ * Maps a skill-level output to a node-level output
+ */
+export interface OutputSource {
+  type: 'node_output';
+  /** Node ID or name that produces this output */
+  nodeId: string;
+  /** Output name from the node's outputDefs */
+  outputName: string;
+}
+
+/**
  * Unified Output Definition
  * Used for both skill-level outputs and step-level output definitions
  */
@@ -385,6 +399,8 @@ export interface OutputDefinition {
   name: string;
   type?: SkillParameterType;
   description?: string;  // Description of what this output contains (shown in LLM instructions)
+  /** Source: where this output's value comes from (skill-level only) */
+  source?: OutputSource;
   outputMapping?: OutputMappingConfig;  // Optional: write to table fields
 }
 

@@ -1,14 +1,10 @@
 'use client';
 
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { WorkflowCanvas } from '@/components/workflow-canvas';
 import { X, Settings2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { ShareButton } from '@/components/permissions/ShareButton';
-import { ModelSelector } from '@/components/ai/ModelSelector';
-import { SaveStatusIndicator, type SaveStatus } from '@/components/ui/save-status-indicator';
 import type { InputDefinition, OutputDefinition } from '@/app/mappers/skill-mapper';
 import type { SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
 import type { FlowToStepsResult } from '@/components/workflow-canvas/utils/flow-converters';
@@ -32,23 +28,6 @@ export interface SkillFormData {
   model?: string | null;
 }
 
-/**
- * Header controls for floating panels (passed from EditSkillView)
- */
-export interface SkillEditorHeaderControls {
-  name: string;
-  onNameChange: (name: string) => void;
-  saveStatus: SaveStatus;
-  model?: string | null;
-  onModelChange: (model: string | null) => void;
-  agentDefaultModel: string;
-  isDeleting: boolean;
-  onDelete: () => void;
-  skillId: number;
-  onShareClick: () => void;
-  organizationTier: 'free' | 'pro' | 'max' | 'enterprise';
-}
-
 interface SkillEditorProps {
   value: SkillFormData;
   onChange: (value: SkillFormData) => void;
@@ -59,8 +38,8 @@ interface SkillEditorProps {
   availableModels?: string[];
   availableSkills?: { id: number; name: string }[];
   isReadOnly?: boolean;
-  /** Header controls for floating panels (passed from EditSkillView) */
-  headerControls?: SkillEditorHeaderControls;
+  /** Offset for floating panels when header is above (default: false) */
+  hasFloatingHeader?: boolean;
 }
 
 /**
@@ -76,7 +55,7 @@ export function SkillEditor({
   organizationTier = 'free',
   availableSkills = [],
   isReadOnly = false,
-  headerControls,
+  hasFloatingHeader = false,
 }: SkillEditorProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [nodes, setNodes] = useState<WorkflowNode[]>([]);
@@ -85,9 +64,17 @@ export function SkillEditor({
   const renameNodeRef = useRef<((id: string, newName: string) => void) | null>(null);
   const deleteNodeRef = useRef<((id: string) => void) | null>(null);
 
+  // Ref to always have current value without triggering callback recreation
+  // This fixes the autosave bug where handleCanvasChange recreation caused
+  // an infinite loop that kept clearing the 2-second save timer
+  const valueRef = useRef(value);
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
   const handleCanvasChange = useCallback((result: FlowToStepsResult) => {
-    onChange({ ...value, steps: result.steps, canvasMetadata: result.canvasMetadata });
-  }, [onChange, value]);
+    onChange({ ...valueRef.current, steps: result.steps, canvasMetadata: result.canvasMetadata });
+  }, [onChange]);
 
   const handleNodeSelect = useCallback((id: string | null) => {
     setSelectedNodeId(id);
@@ -146,7 +133,15 @@ export function SkillEditor({
     operation: 'Operation',
     tool: 'Tool',
     write: 'Write',
+    skillInput: 'Skill Inputs',
+    skillOutput: 'Skill Outputs',
   };
+
+  // Check if selected node is a virtual I/O node
+  const isIONode = selectedNode?.type === 'skillInput' || selectedNode?.type === 'skillOutput';
+
+  // For I/O nodes, show RootSkillConfig (treat as if no regular node selected)
+  const showRootConfig = !selectedNode || isIONode;
 
   return (
     <div className="relative h-full w-full">
@@ -156,9 +151,11 @@ export function SkillEditor({
         canvasMetadata={value.canvasMetadata}
         onChange={handleCanvasChange}
         skillInputs={value.inputs}
+        skillOutputs={value.outputs}
         availableSkills={availableSkills}
         disabled={isReadOnly}
         showConfigPanel={false}
+        hasFloatingHeader={hasFloatingHeader}
         onNodeSelect={handleNodeSelect}
         onNodesExpose={handleNodesChange}
         onEdgesExpose={handleEdgesChange}
@@ -167,24 +164,12 @@ export function SkillEditor({
         onDeleteNodeExpose={handleDeleteNodeRef}
       />
 
-      {/* Floating Name Panel - positioned after NodePalette (w-48 + margin) */}
-      {headerControls && (
-        <div className="absolute top-2 left-56 z-10 flex items-center gap-2 bg-background/50 backdrop-blur-sm border rounded-lg shadow-sm px-3 py-2">
-          <Input
-            value={headerControls.name}
-            onChange={(e) => headerControls.onNameChange(e.target.value)}
-            placeholder="Skill name..."
-            className="h-8 w-48 text-sm bg-transparent border-0 focus-visible:ring-1"
-          />
-          <SaveStatusIndicator status={headerControls.saveStatus} />
-        </div>
-      )}
-
       {/* Floating Config Panel (Right) */}
       <div
         className={cn(
-          'absolute top-2 right-2 z-10 w-80 max-h-[calc(100%-1rem)] bg-background/50 backdrop-blur-sm border rounded-lg shadow-lg overflow-hidden flex flex-col',
-          'transition-all duration-200'
+          'absolute right-2 z-10 w-80 bg-background/50 backdrop-blur-sm border rounded-lg shadow-lg overflow-hidden flex flex-col',
+          'transition-all duration-200',
+          hasFloatingHeader ? 'top-[52px] max-h-[calc(100%-60px)]' : 'top-2 max-h-[calc(100%-1rem)]'
         )}
       >
         {/* Panel Header */}
@@ -192,12 +177,13 @@ export function SkillEditor({
           <div className="flex items-center gap-2">
             <Settings2 className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">
-              {selectedNode
-                ? nodeTypeLabels[selectedNode.type] || 'Node'
-                : 'Skill Config'}
+              {showRootConfig
+                ? 'Skill Config'
+                : nodeTypeLabels[selectedNode!.type] || 'Node'}
             </span>
           </div>
-          {selectedNode ? (
+          {/* Only show delete/close buttons for regular workflow nodes (not I/O nodes) */}
+          {selectedNode && !isIONode && (
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
@@ -217,34 +203,21 @@ export function SkillEditor({
                 <X className="h-3.5 w-3.5" />
               </Button>
             </div>
-          ) : headerControls ? (
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={headerControls.onDelete}
-                disabled={headerControls.isDeleting}
-                title="Delete skill"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-              <ShareButton
-                resourceType="skill"
-                resourceId={headerControls.skillId}
-                onShare={headerControls.onShareClick}
-                variant="ghost"
-                size="sm"
-              />
-            </div>
-          ) : null}
+          )}
         </div>
 
         {/* Panel Content */}
         <div className="flex-1 overflow-y-auto p-3">
-          {selectedNode ? (
+          {showRootConfig ? (
+            <RootSkillConfig
+              value={value}
+              onChange={onChange}
+              isReadOnly={isReadOnly}
+              nodes={nodes}
+            />
+          ) : (
             <NodeConfigContent
-              node={selectedNode}
+              node={selectedNode!}
               onUpdateNode={handleUpdateNode}
               onRenameNode={handleRenameNode}
               skillInputs={value.inputs}
@@ -254,30 +227,6 @@ export function SkillEditor({
               skillId={skillId}
               disabled={isReadOnly}
             />
-          ) : (
-            <>
-              {/* Model selector when no node selected */}
-              {headerControls && (
-                <div className="mb-4">
-                  <label className="text-xs text-muted-foreground mb-1.5 block">Model</label>
-                  <ModelSelector
-                    value={headerControls.model}
-                    onChange={headerControls.onModelChange}
-                    organizationTier={headerControls.organizationTier}
-                    showInherit={true}
-                    inheritLabel="Inherit"
-                    inheritFromModel={headerControls.agentDefaultModel}
-                    requiredCapabilities={['toolCalling']}
-                    className="w-full h-8"
-                  />
-                </div>
-              )}
-              <RootSkillConfig
-                value={value}
-                onChange={onChange}
-                isReadOnly={isReadOnly}
-              />
-            </>
           )}
         </div>
       </div>

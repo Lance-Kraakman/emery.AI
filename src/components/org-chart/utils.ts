@@ -160,6 +160,7 @@ export function buildOrgChartFromData(
           data: {
             edgeType: savedEdge.edgeType,
             label: savedEdge.label,
+            tableId: savedEdge.tableId,
           },
         });
       }
@@ -234,6 +235,7 @@ export function extractMetadataFromNodes(
             targetHandle: edge.targetHandle,
             edgeType: edgeData.edgeType,
             label: edgeData.label,
+            tableId: edgeData.tableId,
           });
         }
       }

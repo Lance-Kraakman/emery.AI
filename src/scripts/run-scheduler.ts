@@ -11,9 +11,9 @@ import {
   getStorageRecalculationApplicationService,
   initializeDI
 } from "@/ddd/application/di/container";
-import { createNotificationClient, rawClient } from "@/lib/db/client";
-import { contextAwareDb } from "@/lib/db/simple-context-proxy";
-import { withSystemContext } from "@/lib/db/system-context";
+import { createNotificationClient, rawClient } from "@/ddd/infrastructure/db/client";
+import { contextAwareDb } from "@/ddd/infrastructure/db/simple-context-proxy";
+import { withSystemContext } from "@/ddd/infrastructure/db/system-context";
 import { TaskId } from "@/ddd/domain/tasks/value-objects/task-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import type { TaskEvent } from "@/ddd/domain/scheduling";

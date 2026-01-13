@@ -31,7 +31,7 @@ import {
 } from '@/ddd/domain/invitations/entities/invitation';
 import type { CreateUserData, CreateUserOrganizationData } from '@/ddd/domain/users/entities/user';
 import { sendInvitationEmail } from '@/lib/email';
-import { getTierConfig } from '@/lib/stripe/config';
+import { getTierConfig } from '@/ddd/infrastructure/external/stripe/config';
 
 export interface SendInvitationCommand {
   organizationId: number;

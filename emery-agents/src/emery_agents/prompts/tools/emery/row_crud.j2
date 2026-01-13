@@ -1,0 +1,60 @@
+## Row Operations
+
+### Available Operations
+- `create_row`: Add row `{table_id, data: {field_name: value}}`
+- `get_rows`: Query rows `{table_id, limit, offset, order_by, filters}`
+- `update_row`: Update row `{table_id, row_id, data}`
+- `delete_row`: Delete row `{table_id, row_id}`
+
+### Field Value Formats
+
+| Type | Format | Example |
+|------|--------|---------|
+| Text | String | `"Hello world"` |
+| Number | Numeric | `42` or `3.14` |
+| Date | ISO 8601 | `"2024-01-15"` or `"2024-01-15T10:30:00Z"` |
+| Boolean | true/false | `true` |
+| Single Select | String (must match option) | `"Active"` |
+| Multi Select | Array of strings | `["Option A", "Option B"]` |
+| File | Object | `{"url": "...", "name": "file.pdf", "type": "application/pdf"}` |
+| Relation | Array of objects | `[{"id": "row-uuid", "value": "Display Text"}]` |
+
+### Query Filters
+
+```python
+row_crud(method="get_rows", table_id="42", limit=10,
+         filters=[{"field": "status", "operator": "equals", "value": "active"}])
+```
+
+**Operators:** `equals`, `not_equals`, `contains`, `greater_than`, `less_than`, `is_empty`, `is_not_empty`
+
+### Sorting
+
+```python
+row_crud(method="get_rows", table_id="42", order_by="created_at", order_direction="DESC")
+```
+
+### Example: Query and Update Rows
+
+```python
+# 1. Query existing rows
+row_crud(method="get_rows", table_id="42", limit=10)
+
+# 2. Create a new row
+row_crud(method="create_row", table_id="42", data={"name": "John", "status": "Active"})
+
+# 3. Update a row
+row_crud(method="update_row", table_id="42", row_id="row-uuid-abc",
+         data={"status": "Completed", "score": 95})
+
+# 4. Delete a row
+row_crud(method="delete_row", table_id="42", row_id="row-uuid-abc")
+```
+
+### Important Notes
+
+- Row IDs are UUID strings, not numbers
+- Field names must match table schema exactly (case-sensitive)
+- Single/Multi Select values must match defined options
+- Dates should always be ISO 8601 format
+- Auto-fields (autonumber, created-at, last-updated) are read-only

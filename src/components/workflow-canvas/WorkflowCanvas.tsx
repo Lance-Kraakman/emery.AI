@@ -49,7 +49,7 @@ import type {
   WorkflowNodeData,
   AvailableSkill,
 } from './types';
-import type { SkillStep, InputDefinition, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
+import type { SkillStep, InputDefinition, OutputDefinition, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
 import type { FlowToStepsResult } from './utils/flow-converters';
 import { useWorkflowCanvas } from './hooks/useWorkflowCanvas';
 import { NodePalette } from './NodePalette';
@@ -68,6 +68,8 @@ import { ToolNode } from './nodes/ToolNode';
 import { WriteNode } from './nodes/WriteNode';
 import { ReadNode } from './nodes/ReadNode';
 import { StickyNode } from './nodes/StickyNode';
+import { SkillInputNode } from './nodes/SkillInputNode';
+import { SkillOutputNode } from './nodes/SkillOutputNode';
 
 // Edge components
 import { DeletableEdge } from './edges/DeletableEdge';
@@ -83,6 +85,8 @@ const nodeTypes = {
   write: WriteNode,
   read: ReadNode,
   sticky: StickyNode,
+  skillInput: SkillInputNode,
+  skillOutput: SkillOutputNode,
 };
 
 // Register edge types
@@ -101,6 +105,7 @@ export interface WorkflowCanvasProps {
   steps: SkillStep[];
   onChange: (result: FlowToStepsResult) => void;
   skillInputs: InputDefinition[];
+  skillOutputs: OutputDefinition[];
 
   // Optional props
   canvasMetadata?: CanvasMetadata;
@@ -108,6 +113,8 @@ export interface WorkflowCanvasProps {
   disabled?: boolean;
   showConfigPanel?: boolean;
   className?: string;
+  /** Offset panels down when there's a floating header above */
+  hasFloatingHeader?: boolean;
 
   // Expose internal state to parent (for external config panels)
   onNodeSelect?: (id: string | null) => void;
@@ -122,10 +129,12 @@ function WorkflowCanvasInner({
   steps,
   onChange,
   skillInputs,
+  skillOutputs,
   canvasMetadata,
   availableSkills = [],
   disabled = false,
   showConfigPanel = true,
+  hasFloatingHeader = false,
   className,
   onNodeSelect,
   onNodesExpose,
@@ -174,7 +183,7 @@ function WorkflowCanvasInner({
     toggleDisabled,
     addStickyNote,
     updateMousePosition,
-  } = useWorkflowCanvas({ steps, canvasMetadata, onChange });
+  } = useWorkflowCanvas({ steps, canvasMetadata, onChange, skillInputs, skillOutputs });
 
   // Expose nodes to parent when they change
   React.useEffect(() => {
@@ -515,6 +524,16 @@ function WorkflowCanvasInner({
       )}
       onMouseMove={onMouseMove}
     >
+      {/* Node Palette - positioned outside ReactFlow for consistent alignment with SkillEditor config panel */}
+      <div
+        className={cn(
+          'absolute left-2 z-10',
+          hasFloatingHeader ? 'top-[52px]' : 'top-2'
+        )}
+      >
+        <NodePalette disabled={disabled} />
+      </div>
+
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -539,11 +558,6 @@ function WorkflowCanvasInner({
       >
         <Controls />
         <Background gap={16} />
-
-        {/* Node Palette */}
-        <Panel position="top-left" className="m-2">
-          <NodePalette disabled={disabled} />
-        </Panel>
 
         {/* Node Configuration Panel - only in uncontrolled mode or when explicitly enabled */}
         {showConfigPanel && (

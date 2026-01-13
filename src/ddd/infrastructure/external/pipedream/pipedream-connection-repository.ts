@@ -5,7 +5,7 @@ import { IConnectionRepository } from '@/ddd/domain/connections/repositories/con
 import { Connection, ConnectionStatus } from '@/ddd/domain/connections/entities/connection';
 import { ConnectionId, AppName, ConnectionPaginationOptions, PaginatedResult } from '@/ddd/domain/connections/value-objects';
 import { UserId } from '@/ddd/domain/shared/value-objects';
-import { pipedreamClient, getExternalUserId } from '@/lib/pipedream/client';
+import { pipedreamClient, getExternalUserId } from '@/ddd/infrastructure/external/pipedream/client';
 import { PipedreamConnectionMapper } from './connection-mapper';
 
 export class PipedreamConnectionRepository implements IConnectionRepository {

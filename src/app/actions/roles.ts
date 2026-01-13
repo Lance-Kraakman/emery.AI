@@ -13,8 +13,8 @@ export type {
 } from './types';
 
 import { revalidatePath } from "next/cache";
-import { db } from '@/lib/db/client';
-import { roles, permissions, rolePermissions, userRoles } from '@/lib/db/schema';
+import { db } from '@/ddd/infrastructure/db/client';
+import { roles, permissions, rolePermissions, userRoles } from '@/ddd/infrastructure/db/schema';
 import { eq, and, or, isNull, sql, ne } from 'drizzle-orm';
 import type { 
   CustomRole, 

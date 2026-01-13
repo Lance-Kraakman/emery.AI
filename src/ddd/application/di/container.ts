@@ -8,8 +8,8 @@
  * Each domain has its own registration module in ./modules/ directory.
  */
 
-import { db as rawDb, type DbClient } from '@/lib/db/client';
-import { contextAwareDb, type ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
+import { db as rawDb, type DbClient } from '@/ddd/infrastructure/db/client';
+import { contextAwareDb, type ContextAwareDbClient } from '@/ddd/infrastructure/db/simple-context-proxy';
 import type { RepositoryRegistry } from './registry';
 
 // Import registration modules
@@ -75,10 +75,13 @@ export class DIContainer {
     this.registerServices('core', coreServices);
 
     // Phase 2: Register agent services
-    // Depends on: team repository
+    // Depends on: team repository, organization repository
+    // Uses lazy getter for SkillEnrichmentService (registered in Phase 3)
     const agentServices = registerAgentServices({
       db,
-      teamRepository: coreServices.teamRepository
+      teamRepository: coreServices.teamRepository,
+      organizationRepository: coreServices.organizationRepository,
+      getSkillEnrichmentService: () => this.get('SkillEnrichmentService')
     });
     this.registerServices('agent', agentServices);
 
@@ -92,12 +95,13 @@ export class DIContainer {
     this.registerServices('skill', skillServices);
 
     // Phase 4: Register database services (tables, files, documents)
-    // Depends on: organization repository, trigger matching service, task repository
+    // Depends on: organization repository, trigger matching service, task repository, skill repository
     const databaseServices = registerDatabaseServices({
       db,
       organizationRepository: coreServices.organizationRepository,
       triggerMatchingService: agentServices.triggerMatchingService,
-      taskRepository: agentServices.taskRepository
+      taskRepository: agentServices.taskRepository,
+      skillRepository: skillServices.skillRepository
     });
     this.registerServices('database', databaseServices);
 
@@ -111,12 +115,13 @@ export class DIContainer {
     this.registerServices('billing', billingServices);
 
     // Phase 4.5: Register view services (Puck integration)
-    // Depends on: table application service
+    // Depends on: table application service, row application service
     // AIDEV-NOTE: rawDb is passed for public view queries (bypasses RLS for requiresAuth=false views)
     const viewServices = registerViewServices({
       db,
       rawDb,
-      tableApplicationService: databaseServices.tableApplicationService
+      tableApplicationService: databaseServices.tableApplicationService,
+      rowApplicationService: databaseServices.rowApplicationService
     });
     this.registerServices('view', viewServices);
 
@@ -130,10 +135,11 @@ export class DIContainer {
     this.registerServices('chat', chatServices);
 
     // Phase 6: Register tools services
-    // Depends on: agent repository, table/agent/database/skill application services
+    // Depends on: agent repository, table/row/agent/database/skill application services
     const toolsServices = registerToolsServices({
       agentRepository: agentServices.agentRepository,
       tableApplicationService: databaseServices.tableApplicationService,
+      rowApplicationService: databaseServices.rowApplicationService,
       agentApplicationService: agentServices.agentApplicationService,
       databaseApplicationService: databaseServices.databaseApplicationService,
       skillApplicationService: skillServices.skillApplicationService
@@ -227,6 +233,8 @@ export class DIContainer {
       'dynamicTableService': 'DynamicTableService',
       'databaseApplicationService': 'DatabaseApplicationService',
       'tableApplicationService': 'TableApplicationService',
+      'rowApplicationService': 'RowApplicationService',
+      'tableEventCoordinatorService': 'TableEventCoordinatorService',
       'fileApplicationService': 'FileApplicationService',
       'documentApplicationService': 'DocumentApplicationService',
 
@@ -316,7 +324,7 @@ export class DIContainer {
 }
 
 // Export context manager for API routes and tests
-export { contextManager } from '@/lib/db/context-manager';
+export { contextManager } from '@/ddd/infrastructure/db/context-manager';
 
 // Helper to initialize container from existing clients
 export function initializeDI(db: DbClient | ContextAwareDbClient): void {
@@ -380,6 +388,7 @@ export {
   // Database application services
   getDatabaseApplicationService,
   getTableApplicationService,
+  getRowApplicationService,
   getFileApplicationService,
   getDocumentApplicationService,
 

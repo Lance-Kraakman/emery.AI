@@ -8,9 +8,9 @@
  * specifically on task scheduling and execution coordination.
  */
 
-import type { DbClient } from '@/lib/db/client';
-import { contextAwareDb, type ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
-import { rawClient } from '@/lib/db/client';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
+import { contextAwareDb, type ContextAwareDbClient } from '@/ddd/infrastructure/db/simple-context-proxy';
+import { rawClient } from '@/ddd/infrastructure/db/client';
 import type postgres from 'postgres';
 
 // Task domain imports

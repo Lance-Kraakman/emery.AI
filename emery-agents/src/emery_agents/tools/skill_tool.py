@@ -903,15 +903,28 @@ class SkillTool(Tool):
         return resolved
 
     def _resolve_row_id(self, row_source, context: Dict[str, Any]) -> Optional[str]:
-        """Resolve row ID from RowIdSource configuration."""
+        """Resolve row ID from RowIdSource configuration.
+
+        Row ID resolution priority:
+        1. Explicit __row_id__ in context (from chat row picker)
+        2. source_row_id from parent execution context (from automation triggers)
+        3. Static/skill_input/skill_output sources as configured
+        """
         from ..services.agent_executor import AgentExecutor
 
         # Check which field is set in the oneof
         if row_source.use_source_row:
-            # Use triggering row from parent execution context
+            # First check for explicit row ID from chat context
+            # This allows chat row picker to provide the row ID
+            if '__row_id__' in context:
+                return str(context['__row_id__'])
+
+            # Fall back to triggering row from parent execution context (automation triggers)
             parent_ctx = AgentExecutor.get_current_context()
             if parent_ctx and hasattr(parent_ctx, 'source_row_id') and parent_ctx.source_row_id:
                 return str(parent_ctx.source_row_id)
+
+            logger.warning("use_source_row specified but no row ID available in context")
             return None
         elif row_source.static_id:
             return row_source.static_id

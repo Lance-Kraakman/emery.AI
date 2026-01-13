@@ -5,19 +5,22 @@
  * - Database repository
  * - Dynamic table repository
  * - File storage repository
- * - Table application service
+ * - Table application service (table/field CRUD)
+ * - Row application service (row CRUD)
+ * - Table event coordinator service (trigger handling)
  * - File application service
  * - Document application service
  * - Database application service
  */
 
-import type { ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
+import type { ContextAwareDbClient } from '@/ddd/infrastructure/db/simple-context-proxy';
 import type { IDatabaseRepository } from '@/ddd/domain/databases/repositories/database-repository';
 import type { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import type { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { ITriggerMatchingService } from '@/ddd/domain/scheduling/services/trigger-matching-service';
 import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repository';
+import type { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
 
 import { DrizzleDatabaseRepository } from '@/ddd/infrastructure/db/repositories/databases/drizzle-database-repository';
 import { DynamicTableRepository } from '@/ddd/infrastructure/db/repositories/tables/dynamic-table-repository';
@@ -28,6 +31,8 @@ import { DynamicTableDataLake } from '@/ddd/infrastructure/db/repositories/table
 import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
 import { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
+import { RowApplicationService } from '@/ddd/application/services/tables/row-application-service';
+import { TableEventCoordinatorService } from '@/ddd/application/services/tables/table-event-coordinator-service';
 import { FileUseCases } from '@/ddd/application/services/tables/file-application-service';
 import { DocumentApplicationService } from '@/ddd/application/services/tables/document-application-service';
 
@@ -38,6 +43,8 @@ export interface DatabaseServices {
   dynamicTableService: DynamicTableService;
   databaseApplicationService: DatabaseApplicationService;
   tableApplicationService: TableApplicationService;
+  rowApplicationService: RowApplicationService;
+  tableEventCoordinatorService: TableEventCoordinatorService;
   fileApplicationService: FileUseCases;
   documentApplicationService: DocumentApplicationService;
 }
@@ -47,10 +54,11 @@ export interface DatabaseDependencies {
   organizationRepository: IOrganizationRepository;
   triggerMatchingService?: ITriggerMatchingService;
   taskRepository?: ITaskRepository;
+  skillRepository?: ISkillRepository;
 }
 
 export function registerDatabaseServices(deps: DatabaseDependencies): DatabaseServices {
-  const { db, organizationRepository, triggerMatchingService, taskRepository } = deps;
+  const { db, organizationRepository, triggerMatchingService, taskRepository, skillRepository } = deps;
 
   // Register repositories
   const databaseRepository = new DrizzleDatabaseRepository(db);
@@ -76,13 +84,26 @@ export function registerDatabaseServices(deps: DatabaseDependencies): DatabaseSe
     databaseRepository
   );
 
+  // Table/field CRUD service
   const tableApplicationService = new TableApplicationService(
     dynamicTableService,
     databaseRepository,
     organizationRepository,
-    dynamicTableRepository,
+    dynamicTableRepository
+  );
+
+  // Event coordinator for trigger handling
+  const tableEventCoordinatorService = new TableEventCoordinatorService(
     triggerMatchingService,
-    taskRepository
+    taskRepository,
+    skillRepository
+  );
+
+  // Row CRUD service (depends on event coordinator for triggers)
+  const rowApplicationService = new RowApplicationService(
+    dynamicTableService,
+    dynamicTableRepository,
+    tableEventCoordinatorService
   );
 
   const fileApplicationService = new FileUseCases(
@@ -104,6 +125,8 @@ export function registerDatabaseServices(deps: DatabaseDependencies): DatabaseSe
     dynamicTableService,
     databaseApplicationService,
     tableApplicationService,
+    rowApplicationService,
+    tableEventCoordinatorService,
     fileApplicationService,
     documentApplicationService
   };

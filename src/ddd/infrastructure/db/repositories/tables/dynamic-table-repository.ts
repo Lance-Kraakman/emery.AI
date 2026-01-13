@@ -9,11 +9,11 @@
  * AIDEV-NOTE: Hybrid repository implementation using both Drizzle and S3,
  * focused on data access only. Business logic handled by DynamicTableService.
  */
-import type { DbClient } from '@/lib/db/client';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 
 const logger = createDebugLogger('TableRepo');
-import { tables, fields } from '@/lib/db/schema';
+import { tables, fields } from '@/ddd/infrastructure/db/schema';
 import { eq, and } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 import { s3Client, BUCKET_NAME, ensureBucketExists } from '@/lib/s3/client';

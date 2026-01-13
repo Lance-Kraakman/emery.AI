@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { getChatProcessingClient } from '@/lib/grpc/chat-processing-client';
+import { getChatProcessingClient } from '@/ddd/infrastructure/grpc/chat-processing-client';
 import { authOptions } from '@/lib/auth';
 
 /**

@@ -8,7 +8,7 @@ import type { IOrganizationRepository } from '@/ddd/domain/organizations/reposit
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
-import { getTierConfig } from '@/lib/stripe/config';
+import { getTierConfig } from '@/ddd/infrastructure/external/stripe/config';
 
 const logger = createDebugLogger('StorageQuotaService');
 

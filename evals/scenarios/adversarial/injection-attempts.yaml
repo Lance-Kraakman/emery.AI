@@ -1,0 +1,150 @@
+# AIDEV-NOTE: Adversarial/security tests
+# Tests that the system handles malicious inputs safely
+#
+# Run: npx promptfoo eval --config scenarios/adversarial/injection-attempts.yaml
+
+description: "Test system resilience to injection attacks and edge cases"
+
+providers:
+  - file://../../providers/emery-crud.ts
+
+prompts:
+  - "Execute CRUD operation: {{operation}}"
+
+tests:
+  # SQL Injection attempts via field names
+  - description: "SQL injection in field name (DROP TABLE)"
+    vars:
+      operation: "create_field"
+      tableId: "{{TEST_TABLE_ID}}"
+      field_name: "'; DROP TABLE users; --"
+      field_type: "text"
+    assert:
+      - type: is-json
+      - type: not-contains
+        value: "DROP TABLE"
+      - type: javascript
+        value: |
+          // Should either fail gracefully or sanitize the input
+          return output.error !== undefined ||
+                 output.success === false ||
+                 (output.name && !output.name.includes('DROP'));
+
+  - description: "SQL injection in field name (SELECT)"
+    vars:
+      operation: "create_field"
+      tableId: "{{TEST_TABLE_ID}}"
+      field_name: "' OR '1'='1"
+      field_type: "text"
+    assert:
+      - type: is-json
+
+  - description: "SQL injection in table ID"
+    vars:
+      operation: "get_table"
+      tableId: "1; DROP TABLE tables; --"
+    assert:
+      - type: is-json
+      - type: not-contains
+        value: "DROP TABLE"
+
+  # XSS attempts via field names
+  - description: "XSS in field name (script tag)"
+    vars:
+      operation: "create_field"
+      tableId: "{{TEST_TABLE_ID}}"
+      field_name: "<script>alert('xss')</script>"
+      field_type: "text"
+    assert:
+      - type: is-json
+
+  - description: "XSS in row data"
+    vars:
+      operation: "create_row"
+      tableId: "{{TEST_TABLE_ID}}"
+      data:
+        name: "<img src=x onerror=alert('xss')>"
+        description: "<script>document.cookie</script>"
+    assert:
+      - type: is-json
+      # Data should be stored safely without executing
+
+  # Path traversal attempts
+  - description: "Path traversal in table ID"
+    vars:
+      operation: "get_table"
+      tableId: "../../../etc/passwd"
+    assert:
+      - type: is-json
+      - type: not-contains
+        value: "root:"
+
+  # Large input handling
+  - description: "Very long field name"
+    vars:
+      operation: "create_field"
+      tableId: "{{TEST_TABLE_ID}}"
+      field_name: "a]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
+      field_type: "text"
+    assert:
+      - type: is-json
+      # Should either truncate or reject gracefully
+
+  - description: "Unicode edge cases in field name"
+    vars:
+      operation: "create_field"
+      tableId: "{{TEST_TABLE_ID}}"
+      field_name: "field_\u0000\u200b\ufeff"
+      field_type: "text"
+    assert:
+      - type: is-json
+
+  # Invalid type attacks
+  - description: "Field type as object injection"
+    vars:
+      operation: "create_field"
+      tableId: "{{TEST_TABLE_ID}}"
+      field_name: "test_field"
+      field_type: "constructor"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: "output.error !== undefined || output.success === false"
+
+  - description: "Field type as prototype pollution"
+    vars:
+      operation: "create_field"
+      tableId: "{{TEST_TABLE_ID}}"
+      field_name: "__proto__"
+      field_type: "text"
+    assert:
+      - type: is-json
+
+  # Empty and null handling
+  - description: "Empty field name"
+    vars:
+      operation: "create_field"
+      tableId: "{{TEST_TABLE_ID}}"
+      field_name: ""
+      field_type: "text"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: "output.error !== undefined || output.success === false"
+
+  - description: "Null bytes in field name"
+    vars:
+      operation: "create_field"
+      tableId: "{{TEST_TABLE_ID}}"
+      field_name: "field\x00name"
+      field_type: "text"
+    assert:
+      - type: is-json
+
+  # Cleanup any fields that may have been created
+  - description: "Cleanup: Delete injection test fields"
+    vars:
+      operation: "list_fields"
+      tableId: "{{TEST_TABLE_ID}}"
+    assert:
+      - type: is-json

@@ -2,7 +2,7 @@
  * Audit Domain Registration Module
  */
 
-import type { DbClient } from '@/lib/db/client';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { IAuditRepository, IRowHistoryRepository } from '@/ddd/domain/audit/interfaces/audit-repository';
 import { DrizzleAuditRepository } from '@/ddd/infrastructure/db/repositories/audit/drizzle-audit-repository';

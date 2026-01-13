@@ -21,6 +21,37 @@ from .tool_loader import UnifiedToolLoader
 logger = logging.getLogger(__name__)
 
 
+def map_node_outputs_to_skill_outputs(
+    all_node_outputs: Dict[str, Dict[str, Any]],
+    skill_outputs: List[Any]
+) -> Dict[str, Any]:
+    """Map captured node outputs to skill outputs via source config.
+
+    Args:
+        all_node_outputs: Dict mapping node_id/step_name to its captured outputs
+        skill_outputs: Skill-level output definitions with source config
+
+    Returns:
+        Dict mapping skill output name to value
+    """
+    result = {}
+
+    for output in skill_outputs:
+        source = getattr(output, 'source', None)
+        if source and getattr(source, 'type', None) == 'node_output':
+            node_id = source.node_id
+            output_name = source.output_name
+            node_outputs = all_node_outputs.get(node_id, {})
+            result[output.name] = node_outputs.get(output_name)
+            logger.debug(f"Mapped {node_id}.{output_name} -> {output.name}")
+        else:
+            # No source config - output won't be mapped
+            # User must resave skill to add source mappings
+            result[output.name] = None
+
+    return result
+
+
 class SkillExecutorService:
     """Executes skills via agent (LLM orchestration) or operation (direct inference)."""
 
@@ -166,6 +197,13 @@ class SkillExecutorService:
             logger.info(f"🔧 Loaded {len(skill_tools)} tools for skill {skill_config.name}")
 
         # 2. Add OutputTool if capturing outputs
+        #
+        # TODO: Support node→skill output separation
+        # Currently OutputTool uses skill_config.outputs directly.
+        # Future enhancement: Use step.output_defs for OutputTool, then map
+        # captured node outputs → skill outputs based on output.source config.
+        # See: OutputSource type in skill.ts (nodeId, outputName)
+        #
         output_tool = None
         if capture_outputs and skill_config.outputs:
             # Extract target field metadata from output mappings for rich LLM guidance
@@ -717,6 +755,19 @@ class SkillExecutorService:
         )
 
         logger.info(f"✅ Step-based execution complete: {skill_config.name}")
+
+        # Map node outputs to skill outputs via source config
+        if skill_config.outputs and result.captured_outputs:
+            skill_outputs = map_node_outputs_to_skill_outputs(
+                all_node_outputs=result.captured_outputs,
+                skill_outputs=list(skill_config.outputs)
+            )
+            logger.info(f"📤 Mapped node outputs to skill outputs: {list(skill_outputs.keys())}")
+            return SkillExecutionResult(
+                result=result.result,
+                captured_outputs=skill_outputs
+            )
+
         return result
 
     def _process_skill_attachments(

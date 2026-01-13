@@ -9,7 +9,7 @@ import {
   EmailAddress, 
   OrganizationId 
 } from '@/ddd/domain/shared/value-objects';
-import { db, rawClient } from '@/lib/db/client';
+import { db, rawClient } from '@/ddd/infrastructure/db/client';
 import { sql } from 'drizzle-orm';
 
 // AIDEV-NOTE: Seed data functions using domain repositories and services

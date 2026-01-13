@@ -36,6 +36,16 @@ interface OrgChartPageClientProps {
       readConfig?: { sourceTableId?: number };
       writeConfig?: { targetTableId?: number };
     }>;
+    /** Skill-level input mappings (reads FROM tables) */
+    inputs?: Array<{
+      name: string;
+      inputMapping?: { source?: { tableId?: number } };
+    }>;
+    /** Skill-level output mappings (writes TO tables) */
+    outputs?: Array<{
+      name: string;
+      outputMapping?: { tableMappings?: Array<{ targetTableId: number }> };
+    }>;
   }>;
   /** Saved canvas metadata */
   canvasMetadata?: OrgChartCanvasMetadata | null;

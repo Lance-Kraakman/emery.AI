@@ -7,8 +7,8 @@
  * the leading slash, making them consistent with org/app slugs.
  */
 
-import { db } from '../src/lib/db/client';
-import { pages } from '../src/lib/db/schema';
+import { db } from '../src/ddd/infrastructure/db/client';
+import { pages } from '../src/ddd/infrastructure/db/schema';
 import { sql } from 'drizzle-orm';
 
 async function fixPageSlugs() {

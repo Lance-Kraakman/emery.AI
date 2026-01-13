@@ -20,6 +20,8 @@ from emery_agents.agents.interrupt_aware_agent import InterruptAwareToolCallingA
 from emery_agents.agents.chat_planner_agent import create_chat_planner_agent
 from emery_agents.agents.skill_builder_agent import create_skill_builder_agent
 from emery_agents.agents.document_builder_agent import create_document_builder_agent
+from emery_agents.agents.table_builder_agent import create_table_builder_agent
+from emery_agents.agents.schema_builder_agent import create_schema_builder_agent
 from emery_agents.clients import HuggingFaceInferenceClient
 from emery_agents.tools.crud_tools import load_skill_crud, load_document_crud
 from emery_agents.tools.skill_tool import SkillTool
@@ -190,11 +192,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         try:
             # Tool loader for converting ToolConfig to smolagents tools
             try:
-                self.tool_registry = UnifiedToolLoader()
+                self.tool_loader = UnifiedToolLoader()
                 logger.info("✅ UnifiedToolLoader initialized successfully")
             except ImportError as tool_error:
                 logger.warning(f"⚠️ ToolRegistryRepository not available: {tool_error}")
-                self.tool_registry = None
+                self.tool_loader = None
 
             # Model provider and AgentFactory (shared utilities)
             self.model_provider = SmolagentsModelProvider()
@@ -203,7 +205,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             # SkillExecutorService for shared skill execution logic
             self.skill_executor_service = SkillExecutorService(
-                tool_loader=self.tool_registry,
+                tool_loader=self.tool_loader,
                 agent_factory=self.agent_factory
             )
             logger.info("✅ SkillExecutorService initialized successfully")
@@ -215,7 +217,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         except ImportError as e:
             logger.error(f"❌ Failed to import core services: {e}")
-            self.tool_registry = None
+            self.tool_loader = None
             self.model_provider = None
             self.agent_factory = None
 
@@ -615,6 +617,16 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     org_id=org_id,
                     org_model=org_model
                 )
+                table_builder_agent = self._create_table_builder_agent(
+                    api_key=effective_api_key or "",
+                    org_id=org_id,
+                    org_model=org_model
+                )
+                schema_builder_agent = self._create_schema_builder_agent(
+                    api_key=effective_api_key or "",
+                    org_id=org_id,
+                    org_model=org_model
+                )
 
                 # Create ToolCallingAgent with managed agents
                 # AIDEV-NOTE: InterruptAwareToolCallingAgent sets interrupt_switch=True
@@ -624,7 +636,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     smolagents_tools,
                     org_model=org_model,
                     has_images=has_images,
-                    managed_agents=[skill_builder_agent, document_builder_agent],
+                    managed_agents=[skill_builder_agent, document_builder_agent, table_builder_agent, schema_builder_agent],
                     session_attachments=file_attachments  # Current message files for initial agent context
                 )
 
@@ -942,7 +954,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         Returns:
             List of loaded tool instances (including SkillTools)
         """
-        if not self.tool_registry:
+        if not self.tool_loader:
             logger.error("❌ Tool registry not available - tools cannot be loaded")
             return []
 
@@ -969,7 +981,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 logger.info(f"🔧 Created inference client for operation skills")
 
         # Use consolidated load_tools_from_configs method
-        return self.tool_registry.load_tools_from_configs(
+        return self.tool_loader.load_tools_from_configs(
             tool_configs=tools,
             api_key=api_key,  # Pass API key for SkillTool output mappings
             api_key_mode="user",  # Chat system uses user API key mode
@@ -1123,6 +1135,95 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         logger.info("✨ Created Document Builder agent with ToolExecutor sub-agent")
         return document_builder
+
+    def _create_table_builder_agent(
+        self,
+        api_key: str,
+        org_id: Optional[int],
+        org_model: Optional[str] = None
+    ) -> ToolCallingAgent:
+        """
+        Create a Table Builder agent for single table operations (autonomous).
+
+        This agent executes directly without HITL approval - designed for
+        quick schema changes like adding/deleting fields.
+
+        AIDEV-NOTE: Unlike skill_builder/document_builder which use HITL workflow,
+        table_builder is autonomous because single field operations are low-risk.
+        """
+        from emery_agents.tools.crud_tools import load_field_crud, load_table_crud
+
+        # Load CRUD tools for table/field operations
+        field_crud_tool = load_field_crud(None, api_key, org_id)
+        table_crud_tool = load_table_crud(None, api_key, org_id)
+
+        # Get model for the agent and sub-agent
+        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+
+        # Create tool_executor that wraps the CRUD tools
+        tool_executor = create_tool_executor(
+            tools=[field_crud_tool, table_crud_tool],
+            model=model,
+            max_steps=3
+        )
+
+        # Use factory function - autonomous agent (no HITL)
+        table_builder = create_table_builder_agent(
+            tools=[tool_executor],
+            model=model,
+            max_steps=6  # Smaller for single operations
+        )
+
+        logger.info("✨ Created Table Builder agent (autonomous) with ToolExecutor sub-agent")
+        return table_builder
+
+    def _create_schema_builder_agent(
+        self,
+        api_key: str,
+        org_id: Optional[int],
+        org_model: Optional[str] = None
+    ) -> ToolCallingAgent:
+        """
+        Create a Schema Builder agent for complex schema design (HITL).
+
+        This agent uses HITL workflow for designing schemas from requirements:
+        - Analyzes unstructured data (questionnaires, forms, specs)
+        - Proposes table structure with all fields
+        - Waits for user approval
+        - Batch creates fields on approval
+
+        AIDEV-NOTE: Uses native planning_interval + step_callbacks for human-in-the-loop:
+        - planning_interval=2: Plan after 2 actions (gathers context first)
+        - step_callbacks: Interrupt after planning for user approval
+        - reset=False: Memory preserved between messages for resumption
+        """
+        from emery_agents.tools.crud_tools import load_field_crud, load_table_crud, load_database_crud
+
+        # Load CRUD tools for table/field/database operations
+        # database_crud needed for list_databases to find existing databases
+        field_crud_tool = load_field_crud(None, api_key, org_id)
+        table_crud_tool = load_table_crud(None, api_key, org_id)
+        database_crud_tool = load_database_crud(None, api_key, org_id)
+
+        # Get model for the agent and sub-agent
+        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+
+        # Create tool_executor that wraps the CRUD tools
+        tool_executor = create_tool_executor(
+            tools=[field_crud_tool, table_crud_tool, database_crud_tool],
+            model=model,
+            max_steps=8  # More steps for database listing + batch field creation
+        )
+
+        # Use factory function with native planning support (HITL)
+        schema_builder = create_schema_builder_agent(
+            tools=[tool_executor],
+            model=model,
+            max_steps=15  # More steps for analyzing and batch creating
+        )
+
+        logger.info("✨ Created Schema Builder agent (HITL) with ToolExecutor sub-agent")
+        return schema_builder
 
     def _extract_user_api_key_from_tools(self, tools: List['agent_worker_pb2.ToolConfig']) -> Optional[str]:
         """

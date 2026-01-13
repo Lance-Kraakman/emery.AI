@@ -1,73 +1,40 @@
-## Table & Row Operations
+## Table Operations
 
 ### Available Operations
-
-**Table operations:**
-- `list_tables`: List all tables, optionally filter by `database_id`
+- `create_table`: Create new table `{name, databaseId, description}`
 - `read_table`: Get table schema and metadata by `table_id`
-- `create_table`: Create new table `{name, database_id, description}`
-- `update_table`: Update table `{table_id, name, description}`
-- `delete_table`: Delete table (WARNING: deletes all rows!)
+- `update_table`: Update table `{name, description}`
+- `delete_table`: Delete table (WARNING: deletes all rows and data!)
+- `list_tables`: List all tables, optionally filter by `database_id`
 
-**Row operations:**
-- `get_rows`: Query rows `{table_id, limit, offset, order_by, filters}`
-- `create_row`: Add row `{table_id, data: {field_name: value, ...}}`
-- `update_row`: Update row `{table_id, row_id, data: {...}}`
-- `delete_row`: Delete row `{table_id, row_id}`
+### Example
 
-### Field Types and Formats
+```python
+# Create a new table
+table_crud(method="create_table", data={
+    "name": "Contacts",
+    "databaseId": 5,
+    "description": "Customer contact information"
+})
 
-When creating/updating rows, use correct value formats:
+# Read table schema (to see fields/columns)
+table_crud(method="read_table", table_id="42")
 
-| Field Type | Format | Example |
-|------------|--------|---------|
-| Text | String | `"Hello world"` |
-| Number | Numeric | `42` or `3.14` |
-| Date | ISO 8601 | `"2024-01-15"` or `"2024-01-15T10:30:00Z"` |
-| Boolean | true/false | `true` |
-| Single Select | String (must match option) | `"Option A"` |
-| Multi Select | Array of strings | `["Option A", "Option B"]` |
-| File | Object | `{"url": "...", "name": "file.pdf", "type": "application/pdf"}` |
-| Link | URL string | `"https://example.com"` |
+# List all tables in a database
+table_crud(method="list_tables", filters={"databaseId": 5})
 
-### Query Parameters
+# Update table metadata
+table_crud(method="update_table", table_id="42", data={
+    "name": "Customer Contacts",
+    "description": "Updated description"
+})
 
-**Filtering rows:**
-```json
-{
-  "filters": [
-    {"field": "status", "operator": "equals", "value": "active"},
-    {"field": "score", "operator": "greater_than", "value": 50}
-  ]
-}
-```
-
-**Operators:** `equals`, `not_equals`, `contains`, `greater_than`, `less_than`, `is_empty`, `is_not_empty`
-
-**Sorting:**
-```json
-{
-  "order_by": {"field": "created_at", "direction": "desc"}
-}
-```
-
-### Example: Query and Update Rows
-
-```
-1. Get table schema:
-   table_crud(method="read_table", table_id=42)
-
-2. Query existing rows:
-   table_crud(method="get_rows", table_id=42, limit=10)
-
-3. Update a row:
-   table_crud(method="update_row", table_id=42, row_id="row_abc",
-              data={"status": "completed", "score": 95})
+# Delete a table (careful - this removes all data!)
+table_crud(method="delete_table", table_id="42")
 ```
 
 ### Important Notes
 
-- Row IDs are UUID strings, not numbers
-- Field names must match table schema exactly (case-sensitive)
-- Single/Multi Select values must match defined options
-- Dates should always be ISO 8601 format
+- Use `read_table` to see the table schema including all field names and types
+- Table IDs are numeric
+- Deleting a table permanently removes all rows and field definitions

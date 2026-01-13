@@ -1,8 +1,8 @@
 // AIDEV-NOTE: Drizzle implementation of IPuckPageRepository
 // Handles data access for PuckPage entities using PostgreSQL
 
-import type { DbClient } from '@/lib/db/client';
-import { pages } from '@/lib/db/schema';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
+import { pages } from '@/ddd/infrastructure/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
 import { PuckPage } from '@/ddd/domain/puck/entities/puck-page';

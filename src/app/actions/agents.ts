@@ -586,7 +586,7 @@ export async function deployPipedreamSource(
       });
 
       // Import dynamically to avoid issues with server-only code
-      const { deploySource } = await import('@/lib/pipedream/sources');
+      const { deploySource } = await import('@/ddd/infrastructure/external/pipedream/sources');
 
       // Build webhook URL for this agent
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';

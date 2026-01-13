@@ -6,9 +6,9 @@ import type {
   WorkerHealth
 } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
-import { workerRegistry } from '@/lib/grpc/client';
-import type { TaskProgress } from '@/lib/grpc/client';
-import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/lib/grpc/proto-mappers';
+import { workerRegistry } from '@/ddd/infrastructure/grpc/client';
+import type { TaskProgress } from '@/ddd/infrastructure/grpc/client';
+import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/ddd/infrastructure/grpc/proto-mappers';
 import { getAgentDisplayName, type Agent } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, UserId, OrganizationId, TaskStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';

@@ -3,8 +3,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
-import { db } from '@/lib/db/client';
-import { agents } from '@/lib/db/schema';
+import { db } from '@/ddd/infrastructure/db/client';
+import { agents } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';

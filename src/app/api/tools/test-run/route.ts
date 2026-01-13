@@ -15,8 +15,8 @@ import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getTableApplicationService } from '@/ddd/application/di/container';
 import { TableId } from '@/ddd/domain/shared/value-objects';
 import { flattenJsonWithTypes } from '@/lib/utils/flatten-json';
-import { db } from '@/lib/db/client';
-import { tools } from '@/lib/db/schema';
+import { db } from '@/ddd/infrastructure/db/client';
+import { tools } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 

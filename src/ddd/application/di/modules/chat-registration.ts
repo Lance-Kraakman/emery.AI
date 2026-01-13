@@ -7,7 +7,7 @@
  * - Chat application service
  */
 
-import type { ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
+import type { ContextAwareDbClient } from '@/ddd/infrastructure/db/simple-context-proxy';
 import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
 import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';

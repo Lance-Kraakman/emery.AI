@@ -264,6 +264,8 @@ export interface PersistedOrgChartEdge {
   targetHandle?: string | null;
   edgeType: OrgChartEdgeType;
   label?: string;
+  /** Table ID for table-level connections */
+  tableId?: number;
 }
 
 /**

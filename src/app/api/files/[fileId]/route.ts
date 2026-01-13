@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
-import { getFileApplicationService, getTableApplicationService } from '@/ddd/application/di/container';
+import { getFileApplicationService, getTableApplicationService, getRowApplicationService } from '@/ddd/application/di/container';
 import { TableId, FieldId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { RowId, Row } from '@/ddd/domain/tables/value-objects/row';
 import type { FileFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
@@ -66,8 +66,8 @@ export async function GET(
     const organizationId = OrganizationId.fromNumber(user.organizationId);
 
     // Get the row to find the file in its field value
-    const tableService = getTableApplicationService();
-    const row = await tableService.getRow(tableId, rowId);
+    const rowService = getRowApplicationService();
+    const row = await rowService.getRow(tableId, rowId);
 
     if (!row) {
       return {
@@ -256,6 +256,7 @@ export async function PUT(
 
     // Get the table to access its fields
     const tableService = getTableApplicationService();
+    const rowService = getRowApplicationService();
     const table = await tableService.getTable(tableId);
 
     if (!table) {
@@ -267,7 +268,7 @@ export async function PUT(
     }
 
     // Get the row to find and update the file
-    const row = await tableService.getRow(tableId, rowId);
+    const row = await rowService.getRow(tableId, rowId);
 
     if (!row) {
       return {
@@ -321,7 +322,7 @@ export async function PUT(
     const updatedRow = Row.fromPlainObject(mergedData, tableIdNum, table.fields);
 
     // Update the row with the modified files array
-    const updateResult = await tableService.updateRow({
+    const updateResult = await rowService.updateRow({
       tableId,
       rowId,
       data: updatedRow,

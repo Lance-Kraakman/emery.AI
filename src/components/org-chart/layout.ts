@@ -131,6 +131,9 @@ export function calculateAgentDimensions(
 /**
  * Calculate section layout info for an agent container.
  */
+/** Compact height for empty placeholder dropzones */
+const COMPACT_PLACEHOLDER_HEIGHT = 28;
+
 export function getAgentSectionLayout(
   skillCount: number,
   databaseCount: number
@@ -143,14 +146,20 @@ export function getAgentSectionLayout(
 } {
   const contentStartY = orgChartNodeSizes.containerHeaderHeight + orgChartNodeSizes.containerPadding;
 
+  // Use compact height for empty placeholder, full height for actual items
+  const skillRowHeight = skillCount === 0 ? COMPACT_PLACEHOLDER_HEIGHT : orgChartNodeSizes.nodeHeight;
   const skillRows = Math.ceil(Math.max(skillCount, 1) / 2);
-  const skillSectionHeight = skillRows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+  const skillSectionHeight = skillRows * (skillRowHeight + orgChartNodeSizes.childNodeGap);
   const skillsStartY = contentStartY;
   const skillsEndY = contentStartY + skillSectionHeight;
 
-  const databaseStartY = skillsEndY + (skillCount > 0 ? orgChartNodeSizes.sectionGap : 0);
+  // Reduced gap when sections are empty
+  const sectionGap = (skillCount > 0 || databaseCount > 0) ? orgChartNodeSizes.sectionGap : 8;
+  const databaseStartY = skillsEndY + sectionGap;
+
+  const databaseRowHeight = databaseCount === 0 ? COMPACT_PLACEHOLDER_HEIGHT : orgChartNodeSizes.nodeHeight;
   const databaseRows = Math.ceil(Math.max(databaseCount, 1) / 2);
-  const databaseSectionHeight = databaseRows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+  const databaseSectionHeight = databaseRows * (databaseRowHeight + orgChartNodeSizes.childNodeGap);
   const databasesEndY = databaseStartY + databaseSectionHeight;
 
   return {

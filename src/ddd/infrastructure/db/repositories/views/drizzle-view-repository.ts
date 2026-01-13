@@ -5,8 +5,8 @@
  * Follows DDD repository pattern - maps between domain entities and database records.
  */
 
-import type { DbClient } from "@/lib/db/client";
-import { views, fields, tables } from "@/lib/db/schema";
+import type { DbClient } from "@/ddd/infrastructure/db/client";
+import { views, fields, tables } from "@/ddd/infrastructure/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import type { ViewRepository } from "@/ddd/domain/views/repositories/view-repository";
 import { View } from "@/ddd/domain/views/entities/view";

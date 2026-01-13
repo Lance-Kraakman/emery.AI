@@ -13,7 +13,7 @@ import {
   type Connection,
   type XYPosition,
 } from '@xyflow/react';
-import type { SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
+import type { SkillStep, CanvasMetadata, InputDefinition, OutputDefinition } from '@/ddd/domain/skills/entities/skill';
 import type {
   WorkflowNode,
   WorkflowEdge,
@@ -33,6 +33,8 @@ interface UseWorkflowCanvasProps {
   steps: SkillStep[];
   canvasMetadata?: CanvasMetadata;
   onChange: (result: FlowToStepsResult) => void;
+  skillInputs?: InputDefinition[];
+  skillOutputs?: OutputDefinition[];
 }
 
 // History state for undo/redo
@@ -45,6 +47,8 @@ export function useWorkflowCanvas({
   steps,
   canvasMetadata,
   onChange,
+  skillInputs,
+  skillOutputs,
 }: UseWorkflowCanvasProps): UseWorkflowCanvasReturn {
   // React Flow state
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNode>([]);
@@ -81,7 +85,7 @@ export function useWorkflowCanvas({
 
     if (stepsChanged || isInitialLoad) {
       isSyncingFromParent.current = true;
-      const { nodes: newNodes, edges: newEdges } = stepsToFlow(steps, canvasMetadata);
+      const { nodes: newNodes, edges: newEdges } = stepsToFlow(steps, canvasMetadata, skillInputs, skillOutputs);
       setNodes(newNodes);
       setEdges(newEdges);
       lastStepsRef.current = steps;
@@ -91,7 +95,7 @@ export function useWorkflowCanvas({
         isSyncingFromParent.current = false;
       });
     }
-  }, [steps, canvasMetadata, nodes.length, setNodes, setEdges]);
+  }, [steps, canvasMetadata, skillInputs, skillOutputs, nodes.length, setNodes, setEdges]);
 
   // ==========================================================================
   // Sync: Canvas nodes/edges → Parent steps (on internal changes)

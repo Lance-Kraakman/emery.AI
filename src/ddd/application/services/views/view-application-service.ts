@@ -8,6 +8,7 @@
 
 import type { ViewRepository } from "@/ddd/domain/views/repositories/view-repository";
 import type { TableApplicationService } from "@/ddd/application/services/tables/table-application-service";
+import type { RowApplicationService } from "@/ddd/application/services/tables/row-application-service";
 import { View } from "@/ddd/domain/views/entities/view";
 import { ViewId } from "@/ddd/domain/views/value-objects/view-id";
 import { FilterConfig } from "@/ddd/domain/views/value-objects/filter-config";
@@ -119,7 +120,8 @@ export interface FormViewExecutionResult {
 export class ViewApplicationService {
   constructor(
     private readonly dataSourceRepository: ViewRepository,
-    private readonly tableApplicationService: TableApplicationService
+    private readonly tableApplicationService: TableApplicationService,
+    private readonly rowApplicationService: RowApplicationService
   ) {}
 
   /**
@@ -519,7 +521,7 @@ export class ViewApplicationService {
       }
 
       // 5. Fetch rows from database with all operations applied
-      const rows = await this.tableApplicationService.getRows(dataSource.tableId, queryOptions);
+      const rows = await this.rowApplicationService.getRows(dataSource.tableId, queryOptions);
 
       // 6. Get total count for pagination (with same filters applied)
       // AIDEV-NOTE: This requires a separate count query with filters but no limit/offset
@@ -528,7 +530,7 @@ export class ViewApplicationService {
         offset: 0,
         filters: queryOptions.filters, // Same filters as data query
       };
-      const allFilteredRows = await this.tableApplicationService.getRows(dataSource.tableId, countOptions);
+      const allFilteredRows = await this.rowApplicationService.getRows(dataSource.tableId, countOptions);
       const totalCount = allFilteredRows.length;
 
       logger.debug("View executed successfully", {
@@ -645,7 +647,7 @@ export class ViewApplicationService {
       // 7. Execute query with aggregations via table service
       // AIDEV-NOTE: This calls DynamicTableDataLake → TableGrpcMapper → Python QueryRows
       // Python applies filters THEN aggregations for correct SQL semantics
-      const result = await this.tableApplicationService.getRows(view.tableId, {
+      const result = await this.rowApplicationService.getRows(view.tableId, {
         limit: 0, // No limit for aggregations
         offset: 0,
         aggregations: aggregationParams,
@@ -864,7 +866,7 @@ export class ViewApplicationService {
     }
 
     // Fetch rows from database with all operations applied
-    const filteredRows = await this.tableApplicationService.getRows(view.tableId, queryOptions);
+    const filteredRows = await this.rowApplicationService.getRows(view.tableId, queryOptions);
 
     // Get field names for X and Y axes
     const xAxisField = tableFields.find(f => f.id.value === chartConfig.xAxisFieldId);
@@ -960,7 +962,7 @@ export class ViewApplicationService {
     }
 
     // Execute aggregated query with GROUP BY at database level
-    const aggregatedRows = await this.tableApplicationService.getRows(view.tableId, queryOptions);
+    const aggregatedRows = await this.rowApplicationService.getRows(view.tableId, queryOptions);
 
     // Convert aggregated rows to chart data points
     const dataPoints: ChartDataPoint[] = aggregatedRows.map(row => {
@@ -1288,7 +1290,7 @@ export class ViewApplicationService {
       }
 
       // 6. Fetch rows using pre-fetched table data (bypasses RLS)
-      const rows = await this.tableApplicationService.getRowsWithTableData(tableData, tableFields, queryOptions);
+      const rows = await this.rowApplicationService.getRowsWithTableData(tableData, tableFields, queryOptions);
 
       // 7. Get total count for pagination
       const countOptions: RowQueryOptions = {
@@ -1296,7 +1298,7 @@ export class ViewApplicationService {
         offset: 0,
         filters: queryOptions.filters,
       };
-      const allFilteredRows = await this.tableApplicationService.getRowsWithTableData(tableData, tableFields, countOptions);
+      const allFilteredRows = await this.rowApplicationService.getRowsWithTableData(tableData, tableFields, countOptions);
       const totalCount = allFilteredRows.length;
 
       logger.debug("Public view executed successfully", {

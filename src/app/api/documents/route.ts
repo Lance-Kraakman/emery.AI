@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute } from '@/lib/api/base';
-import { getTableApplicationService, getDocumentApplicationService } from '@/ddd/application/di/container';
+import { getTableApplicationService, getRowApplicationService, getDocumentApplicationService } from '@/ddd/application/di/container';
 import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/value-objects';
 import { DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 
@@ -37,6 +37,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     }
 
     const tableService = getTableApplicationService();
+    const rowService = getRowApplicationService();
     const documentService = getDocumentApplicationService();
 
     try {
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest): Promise<Response> {
         if (documentFields.length === 0) continue;
 
         // 3. Get all rows for this table
-        const rows = await tableService.getRows(table.id, { limit: 1000, offset: 0 });
+        const rows = await rowService.getRows(table.id, { limit: 1000, offset: 0 });
 
         if (!rows || rows.length === 0) continue;
 

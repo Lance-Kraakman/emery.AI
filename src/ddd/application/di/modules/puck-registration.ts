@@ -8,7 +8,7 @@
  * - Puck page application service
  */
 
-import type { ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
+import type { ContextAwareDbClient } from '@/ddd/infrastructure/db/simple-context-proxy';
 import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-repository';
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
 import type { ITemplateRepository } from '@/ddd/domain/puck/repositories/template-repository';

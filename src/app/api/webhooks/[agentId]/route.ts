@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { AgentId } from '@/ddd/domain/shared/value-objects';
 import { getAgentRepository, getAgentTaskApplicationService } from '@/ddd/application/di/container';
-import { withSystemContext } from '@/lib/db/system-context';
+import { withSystemContext } from '@/ddd/infrastructure/db/system-context';
 import { WebhookTriggerConfig, TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 
 // AIDEV-NOTE: Webhook API endpoint for triggering agent tasks via external HTTP calls
@@ -69,16 +69,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     
     // Find matching webhook automation
     let webhookConfig: WebhookTriggerConfig | null = null;
+    let matchingAutomation: typeof agent.automations[0] | null = null;
 
     for (const automation of agent.automations) {
       const trigger = TriggerConfigFromJSON(automation.trigger);
       if (trigger instanceof WebhookTriggerConfig && trigger.isEnabled()) {
         webhookConfig = trigger;
+        matchingAutomation = automation;
         break; // Use first matching enabled webhook automation
       }
     }
 
-    if (!webhookConfig) {
+    if (!webhookConfig || !matchingAutomation) {
       return NextResponse.json(
         { error: 'Agent does not have an enabled webhook schedule configured' },
         { status: 400 }
@@ -146,9 +148,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
     
+    // Resolve skill inputs from automation inputMappings
+    const skillInputs: Record<string, any> = {};
+    if (matchingAutomation.inputMappings) {
+      for (const mapping of matchingAutomation.inputMappings) {
+        // Map webhook payload fields to skill input names
+        skillInputs[mapping.skillInputName] = payload.data?.[mapping.triggerField];
+      }
+    }
+
+    // Build trigger context for template variables
+    const triggerContext = {
+      event: {
+        type: 'webhook',
+        timestamp: new Date().toISOString(),
+        payload: payload.data,
+      }
+    };
+
     // Create and execute task
     const agentTaskService = getAgentTaskApplicationService();
-    
+
     await withSystemContext(agent.organizationId, async () => {
       try {
         // Service accepts primitives and returns Result<TaskDTO>
@@ -158,7 +178,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           name: 'Webhook Trigger',
           instructions: {
             task: payload.message || 'Webhook triggered task',
-            metadata: payload.data
+            metadata: {
+              ...payload.data,
+              skillInputs: Object.keys(skillInputs).length > 0 ? skillInputs : undefined,
+              triggerContext,
+            }
           }
         });
 

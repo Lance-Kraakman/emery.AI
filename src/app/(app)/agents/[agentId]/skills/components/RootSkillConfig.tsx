@@ -1,18 +1,22 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { InputDefinitionsSection } from './editor/InputDefinitionsSection';
 import { OutputDefinitionsSection } from './editor/OutputDefinitionsSection';
+import { OutputSourceSection } from './editor/OutputSourceSection';
 import { InputMappingSection } from './editor/InputMappingSection';
 import { OutputMappingSection } from './editor/OutputMappingSection';
 import type { SkillFormData } from './SkillEditor';
+import type { WorkflowNode } from '@/components/workflow-canvas/types';
 
 interface RootSkillConfigProps {
   value: SkillFormData;
   onChange: (value: SkillFormData) => void;
   isReadOnly?: boolean;
+  /** Workflow nodes for building available output sources */
+  nodes?: WorkflowNode[];
 }
 
 /**
@@ -23,10 +27,32 @@ export function RootSkillConfig({
   value,
   onChange,
   isReadOnly = false,
+  nodes = [],
 }: RootSkillConfigProps) {
   const handleChange = (updates: Partial<SkillFormData>) => {
     onChange({ ...value, ...updates });
   };
+
+  // Build available node outputs from workflow nodes
+  // Only include agentic nodes that have outputDefs
+  const availableNodeOutputs = useMemo(() => {
+    return nodes
+      .filter((node) => {
+        // Only agentic nodes with outputDefs
+        if (node.type !== 'agentic') return false;
+        const data = node.data as { outputDefs?: Array<{ name: string; type?: string }> };
+        return data.outputDefs && data.outputDefs.length > 0;
+      })
+      .flatMap((node) => {
+        const data = node.data as { name: string; outputDefs: Array<{ name: string; type?: string }> };
+        return data.outputDefs.map((output) => ({
+          nodeId: node.id,  // UUID - matches backend step_context keys (keyed by step.id)
+          nodeName: data.name,
+          outputName: output.name,
+          outputType: output.type,
+        }));
+      });
+  }, [nodes]);
 
   return (
     <div className="space-y-6">
@@ -87,6 +113,16 @@ export function RootSkillConfig({
           Define what data this skill returns
         </p>
       </div>
+
+      {/* Output Source Mapping - where each output value comes from */}
+      {value.outputs.length > 0 && availableNodeOutputs.length > 0 && (
+        <OutputSourceSection
+          outputs={value.outputs}
+          onOutputsChange={(outputs) => handleChange({ outputs })}
+          availableNodeOutputs={availableNodeOutputs}
+          isReadOnly={isReadOnly}
+        />
+      )}
 
       {/* Output Mapping Section - write to tables (only show if outputs exist) */}
       {value.outputs.length > 0 && (

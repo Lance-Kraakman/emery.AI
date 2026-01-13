@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { Result } from "./types";
 import { OrganizationName, UserId } from "@/ddd/domain/shared/value-objects";
-import { stripe } from "@/lib/stripe/client";
+import { stripe } from "@/ddd/infrastructure/external/stripe/client";
 
 export async function createOrganization(formData: FormData): Promise<Result> {
   const session = await auth();

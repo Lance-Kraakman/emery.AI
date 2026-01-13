@@ -8,13 +8,13 @@
  * for table-connected chats with proper organizational isolation
  */
 
-import { chats } from '@/lib/db/schema';
+import { chats } from '@/ddd/infrastructure/db/schema';
 import { eq, and, desc, asc, ilike, isNull, isNotNull, sql } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
 import { Chat, type CreateChatData, type UpdateChatData } from '@/ddd/domain/chat/entities/chat';
 import type { ChatId, OrganizationId, TableId, UserId } from '@/ddd/domain/shared/value-objects';
-import type { DbClient } from '@/lib/db/client';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
 
 type ChatRow = InferSelectModel<typeof chats>;
 

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
-import { workerRegistry } from '@/lib/grpc/client';
+import { workerRegistry } from '@/ddd/infrastructure/grpc/client';
 
 /**
  * Debug endpoint for worker service discovery

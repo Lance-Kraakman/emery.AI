@@ -6,8 +6,8 @@
 
 import { eq, and, lt, lte, desc, asc, sql, or, isNull } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import type { DbClient } from '@/lib/db/client';
-import { tasks } from '@/lib/db/schema';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
+import { tasks } from '@/ddd/infrastructure/db/schema';
 import type { ITaskRepository, CreateTaskData, UpdateTaskData } from '@/ddd/domain/tasks/repositories/task-repository';
 import { Task } from '@/ddd/domain/tasks/entities/task';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';

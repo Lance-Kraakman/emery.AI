@@ -3,16 +3,16 @@ import GitHubProvider from "next-auth/providers/github"
 import GoogleProvider from "next-auth/providers/google"
 import EmailProvider from "next-auth/providers/email"
 import { DrizzleAdapter } from "@auth/drizzle-adapter"
-import { db } from "./db/client"
+import { db } from "@/ddd/infrastructure/db/client"
 import { sendVerificationRequestEmail } from "./email"
-import { users, accounts, sessions, verificationTokens, organizations, userOrganizations } from "./db/schema"
+import { users, accounts, sessions, verificationTokens, organizations, userOrganizations } from "@/ddd/infrastructure/db/schema"
 import { eq } from "drizzle-orm"
 import { getServerSession } from "next-auth"
 import { getSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react"
 import { Permission, type PermissionCheck } from '@/ddd/domain/shared/value-objects/permission'
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects'
 import { getRBACRepository } from "@/ddd/application/di/container"
-import { apps } from "./db/schema"
+import { apps } from "@/ddd/infrastructure/db/schema"
 
 // AIDEV-NOTE: Helper function to extract app context from public URL
 // Determines which app user is signing into from the callbackUrl

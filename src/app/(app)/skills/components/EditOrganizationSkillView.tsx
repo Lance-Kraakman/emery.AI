@@ -65,21 +65,22 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
   };
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Minimal Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b shrink-0">
-        <Globe className="h-4 w-4 text-muted-foreground" />
+    <div className="h-full relative">
+      {/* Floating Header - centered in canvas area (between side panels) */}
+      <div className="absolute top-2 left-56 right-[21.5rem] z-20 flex justify-center">
+        <div className="flex items-center gap-2 px-4 py-2 bg-background/50 backdrop-blur-sm border rounded-full shadow-sm">
+        <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
 
         <Input
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           placeholder="Skill name..."
-          className="h-8 w-64 text-sm"
+          className="h-8 w-[180px] text-sm bg-transparent border-0 focus-visible:ring-1"
           disabled={isSystem}
         />
 
         {isSystem && (
-          <Badge variant="secondary" className="gap-1 text-xs">
+          <Badge variant="secondary" className="gap-1 text-xs shrink-0">
             <Lock className="h-3 w-3" />
             System
           </Badge>
@@ -99,8 +100,6 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
           disabled={isSystem}
         />
 
-        <div className="flex-1" />
-
         {isSystem ? (
           <>
             <Button
@@ -108,7 +107,7 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
               size="sm"
               onClick={handleDuplicate}
               disabled={isDuplicating}
-              className="gap-1.5 h-8"
+              className="gap-1.5 h-8 shrink-0"
             >
               <Copy className="h-3.5 w-3.5" />
               {isDuplicating ? 'Duplicating...' : 'Duplicate'}
@@ -128,7 +127,7 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
               size="sm"
               onClick={handleDelete}
               disabled={isDeleting}
-              className="gap-1.5 h-8"
+              className="gap-1.5 h-8 shrink-0"
             >
               <Trash2 className="h-3.5 w-3.5" />
               {isDeleting ? 'Deleting...' : 'Delete'}
@@ -143,19 +142,19 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
           </>
         )}
       </div>
+      </div>
 
       {/* Full-height Editor */}
-      <div className="flex-1 min-h-0">
-        <SkillEditor
-          value={formData}
-          onChange={setFormData}
-          agentId={null}
-          skillId={skill.id}
-          isReadOnly={isSystem}
-          organizationTier={organizationTier}
-          availableSkills={availableSkills}
-        />
-      </div>
+      <SkillEditor
+        value={formData}
+        onChange={setFormData}
+        agentId={null}
+        skillId={skill.id}
+        isReadOnly={isSystem}
+        organizationTier={organizationTier}
+        availableSkills={availableSkills}
+        hasFloatingHeader={true}
+      />
 
       {/* Share Dialog */}
       <ShareDialog

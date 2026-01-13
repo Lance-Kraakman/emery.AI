@@ -168,11 +168,20 @@ message InputDefinition {
   InputMappingConfig input_mapping = 4;  // Optional: read from table field
 }
 
+// Output source - where skill output value comes from (node output mapping)
+message OutputSource {
+  string type = 1;           // "node_output"
+  string node_id = 2;        // Step/node name that produces this output
+  string output_name = 3;    // Output name from node's output_defs
+}
+
 // Unified output definition
 message OutputDefinition {
   string name = 1;
   string type = 2;
   OutputMappingConfig output_mapping = 3;  // Optional: write to table fields
+  string description = 4;                   // Description for LLM guidance
+  OutputSource source = 5;                  // Where skill output value comes from
 }
 
 // =============================================================================
@@ -213,7 +222,8 @@ message LoopConfig {
 // Step definition for step-based skill execution (execution_type='agent')
 // Each step can either have inline instructions OR reference another skill
 message SkillStep {
-  string name = 1;                     // Step identifier/name
+  string id = 20;                      // Stable UUID for references (used for step_context keys)
+  string name = 1;                     // Step display name (user-editable)
   string instruction = 2;              // Inline instruction (if not referencing a skill)
   int32 skill_id = 3;                  // OR reference to another skill by ID
   repeated string tools = 4;           // Tools available for this step (for inline instruction)
@@ -238,6 +248,8 @@ message SkillStep {
   WriteConfig write_config = 17;       // For write steps
   ToolExecutionConfig tool_execution_config = 18; // For tool steps
   TaskModelConfig task_model_config = 19; // For operation steps
+  // UI state
+  bool is_disabled = 21;               // Step can be disabled without deletion
 }
 
 // Configuration for operation execution (direct model invocation without LLM orchestration)

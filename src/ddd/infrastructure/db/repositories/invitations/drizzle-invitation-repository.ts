@@ -1,10 +1,10 @@
 // AIDEV-NOTE: Drizzle implementation of invitation repository
 // Handles database operations for user invitations with token management and validation
 
-import type { DbClient } from '@/lib/db/client';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
 import { eq, and, lt, gte, desc, sql, inArray } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import { invitations, users, organizations, userOrganizations, roles } from '@/lib/db/schema';
+import { invitations, users, organizations, userOrganizations, roles } from '@/ddd/infrastructure/db/schema';
 
 type InvitationRow = InferSelectModel<typeof invitations>;
 type InvitationWithRole = {

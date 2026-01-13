@@ -6,13 +6,13 @@ import { createDebugLogger } from '@/lib/utils/debug-logger';
 
 const logger = createDebugLogger('RBAC');
 import type { InferSelectModel } from 'drizzle-orm';
-import type { DbClient } from '@/lib/db/client';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
 import { 
   permissions, 
   roles, 
   rolePermissions, 
   userRoles 
-} from '@/lib/db/schema';
+} from '@/ddd/infrastructure/db/schema';
 import { Permission, ACTIONS, RESOURCES } from '@/ddd/domain/shared/value-objects/permission';
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { 

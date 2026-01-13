@@ -1,0 +1,321 @@
+# AIDEV-NOTE: gRPC Table Service Saturation Test
+# Tests gRPC/Delta Lake/S3 write throughput and RESOURCE_EXHAUSTED handling
+#
+# gRPC limits: 1000 max concurrent streams, 4MB message limit
+# Expected: Graceful backpressure, no crashes
+#
+# Run: ./run-evals.sh stress
+
+description: "Test gRPC table service under write load (Delta Lake/S3)"
+
+providers:
+  - file://../../providers/emery-crud.ts
+
+prompts:
+  - "Execute CRUD operation: {{operation}}"
+
+tests:
+  # Phase 1: Baseline writes
+  - description: "Baseline: single row create"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Stress Test Row 1"
+        stress_test: true
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.success === true || !data.error;
+
+  # Phase 2: Burst writes (10 rapid creates)
+  - description: "Burst write (1/10)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Burst Row 1"
+        burst_test: true
+    assert:
+      - type: is-json
+
+  - description: "Burst write (2/10)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Burst Row 2"
+        burst_test: true
+    assert:
+      - type: is-json
+
+  - description: "Burst write (3/10)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Burst Row 3"
+        burst_test: true
+    assert:
+      - type: is-json
+
+  - description: "Burst write (4/10)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Burst Row 4"
+        burst_test: true
+    assert:
+      - type: is-json
+
+  - description: "Burst write (5/10)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Burst Row 5"
+        burst_test: true
+    assert:
+      - type: is-json
+
+  - description: "Burst write (6/10)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Burst Row 6"
+        burst_test: true
+    assert:
+      - type: is-json
+
+  - description: "Burst write (7/10)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Burst Row 7"
+        burst_test: true
+    assert:
+      - type: is-json
+
+  - description: "Burst write (8/10)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Burst Row 8"
+        burst_test: true
+    assert:
+      - type: is-json
+
+  - description: "Burst write (9/10)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Burst Row 9"
+        burst_test: true
+    assert:
+      - type: is-json
+
+  - description: "Burst write (10/10)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Burst Row 10"
+        burst_test: true
+    assert:
+      - type: is-json
+
+  # Phase 3: Heavy writes (20 more - testing RESOURCE_EXHAUSTED)
+  - description: "Heavy write (1/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 1"
+        heavy_test: true
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          // Accept success OR graceful RESOURCE_EXHAUSTED
+          return data.success === true ||
+                 !data.error ||
+                 (data.error && data.error.includes('RESOURCE_EXHAUSTED'));
+
+  - description: "Heavy write (2/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 2"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (3/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 3"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (4/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 4"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (5/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 5"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (6/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 6"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (7/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 7"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (8/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 8"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (9/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 9"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (10/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 10"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (11/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 11"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (12/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 12"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (13/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 13"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (14/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 14"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (15/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 15"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (16/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 16"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (17/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 17"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (18/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 18"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (19/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 19"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  - description: "Heavy write (20/20)"
+    vars:
+      operation: "create_row"
+      data:
+        name: "Heavy Row 20"
+        heavy_test: true
+    assert:
+      - type: is-json
+
+  # Phase 4: Read after writes (verify data integrity)
+  - description: "Verify: get_rows after burst writes"
+    vars:
+      operation: "get_rows"
+      limit: 50
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.success === true || data.data?.rows !== undefined;

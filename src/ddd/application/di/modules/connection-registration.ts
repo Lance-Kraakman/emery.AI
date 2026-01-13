@@ -18,7 +18,7 @@ import type { CredentialDelegationApplicationService } from '@/ddd/application/s
 import { PipedreamConnectionRepository } from '@/ddd/infrastructure/external/pipedream/pipedream-connection-repository';
 import { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
 import { OAuthProxyApplicationService } from '@/ddd/application/services/connections/oauth-proxy-application-service';
-import { pipedreamClient } from '@/lib/pipedream/client';
+import { pipedreamClient } from '@/ddd/infrastructure/external/pipedream/client';
 
 export interface ConnectionServices {
   connectionRepository: IConnectionRepository | null;

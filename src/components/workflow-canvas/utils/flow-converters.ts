@@ -26,7 +26,14 @@ import type {
   WriteNodeData,
   ReadNodeData,
   StickyNodeData,
+  SkillInputNodeData,
+  SkillOutputNodeData,
 } from '../types';
+import type { InputDefinition, OutputDefinition } from '@/ddd/domain/skills/entities/skill';
+
+// Virtual node IDs for skill I/O nodes
+export const SKILL_INPUT_NODE_ID = '__skill_input__';
+export const SKILL_OUTPUT_NODE_ID = '__skill_output__';
 
 /**
  * Type guard to check if node data is workflow data (not a sticky note)
@@ -91,7 +98,8 @@ function stepToNodeData(step: SkillStep): WorkflowNodeData {
         ?.filter(o => o.type === 'condition')
         .map(o => ({
           expression: o.condition || '',
-          label: o.condition?.slice(0, 20),
+          // Preserve full label if available, fall back to truncated condition
+          label: o.label || o.condition?.slice(0, 20),
         })) || [];
       return {
         ...baseData,
@@ -162,10 +170,14 @@ function getDefaultPosition(index: number): XYPosition {
  * Convert SkillStep[] to React Flow nodes and edges
  * @param steps - Workflow steps (execution graph)
  * @param canvasMetadata - Optional canvas annotations (sticky notes)
+ * @param skillInputs - Skill-level input definitions (for virtual SkillInputNode)
+ * @param skillOutputs - Skill-level output definitions (for virtual SkillOutputNode)
  */
 export function stepsToFlow(
   steps: SkillStep[],
-  canvasMetadata?: CanvasMetadata
+  canvasMetadata?: CanvasMetadata,
+  skillInputs?: InputDefinition[],
+  skillOutputs?: OutputDefinition[]
 ): {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
@@ -173,8 +185,9 @@ export function stepsToFlow(
   const nodes: WorkflowNode[] = [];
   const edges: WorkflowEdge[] = [];
 
-  // Build name→id map for resolving edge targets
-  // (stepOutputs.nextSteps contains names, not IDs)
+  // Build maps for resolving edge targets
+  // Supports both new format (IDs) and old format (names) for backward compatibility
+  const idSet = new Set(steps.map(s => s.id));
   const nameToId = new Map(steps.map(s => [s.name, s.id]));
 
   steps.forEach((step, index) => {
@@ -191,8 +204,14 @@ export function stepsToFlow(
     // Create edges from stepOutputs
     if (step.stepOutputs) {
       step.stepOutputs.forEach((output, outputIndex) => {
-        output.nextSteps.forEach((targetName) => {
-          const targetId = nameToId.get(targetName);
+        output.nextSteps.forEach((targetIdOrName) => {
+          // Support both new format (IDs) and old format (names)
+          // New format: nextSteps contains step IDs (UUIDs)
+          // Old format: nextSteps contains step names (for backward compatibility)
+          const targetId = idSet.has(targetIdOrName)
+            ? targetIdOrName                      // New format: already an ID
+            : nameToId.get(targetIdOrName);       // Old format: lookup ID by name
+
           if (!targetId) return; // Skip if target not found
 
           edges.push({
@@ -230,6 +249,54 @@ export function stepsToFlow(
           : { width: 200, height: 120 },
       } as WorkflowNode);
     });
+  }
+
+  // Add virtual Skill I/O nodes if inputs/outputs are provided
+  // Positioned vertically: Inputs at top, Outputs at bottom
+  if (skillInputs || skillOutputs) {
+    // Calculate positions based on workflow nodes
+    const workflowNodes = nodes.filter(n => n.type !== 'sticky');
+    const minY = workflowNodes.length > 0
+      ? Math.min(...workflowNodes.map(n => n.position.y))
+      : 150;
+    const maxY = workflowNodes.length > 0
+      ? Math.max(...workflowNodes.map(n => n.position.y))
+      : 150;
+    const avgX = workflowNodes.length > 0
+      ? workflowNodes.reduce((sum, n) => sum + n.position.x, 0) / workflowNodes.length
+      : 300;
+
+    // Add SkillInputNode at the TOP (horizontally centered)
+    if (skillInputs && skillInputs.length > 0) {
+      nodes.push({
+        id: SKILL_INPUT_NODE_ID,
+        type: 'skillInput',
+        position: { x: avgX - 100, y: minY - 120 },
+        data: {
+          inputs: skillInputs,
+          isVirtual: true,
+        } as SkillInputNodeData,
+        draggable: true,
+        selectable: true,
+        deletable: false,  // Cannot delete virtual nodes
+      } as WorkflowNode);
+    }
+
+    // Add SkillOutputNode at the BOTTOM (horizontally centered)
+    if (skillOutputs && skillOutputs.length > 0) {
+      nodes.push({
+        id: SKILL_OUTPUT_NODE_ID,
+        type: 'skillOutput',
+        position: { x: avgX - 100, y: maxY + 180 },
+        data: {
+          outputs: skillOutputs,
+          isVirtual: true,
+        } as SkillOutputNodeData,
+        draggable: true,
+        selectable: true,
+        deletable: false,  // Cannot delete virtual nodes
+      } as WorkflowNode);
+    }
   }
 
   return { nodes, edges };
@@ -326,12 +393,12 @@ function nodeDataToStep(node: WorkflowNode): Partial<SkillStep> {
 /**
  * Group edges by type to create stepOutputs
  * @param edges - outgoing edges from a node
- * @param idToName - map to convert node IDs to names for stepOutputs.nextSteps
+ *
+ * AIDEV-NOTE: Changed from name-based to ID-based routing.
+ * nextSteps now stores step IDs (UUIDs) instead of names for stability.
+ * Names can be renamed by users; IDs are immutable.
  */
-function groupEdgesByType(
-  edges: WorkflowEdge[],
-  idToName: Map<string, string>
-): StepOutput[] {
+function groupEdgesByType(edges: WorkflowEdge[]): StepOutput[] {
   const outputMap = new Map<string, StepOutput>();
 
   edges.forEach((edge) => {
@@ -344,13 +411,13 @@ function groupEdgesByType(
       outputMap.set(key, {
         type: edgeType,
         condition: edge.data?.condition,
+        label: edge.data?.label,  // Preserve full label for condition edges
         nextSteps: [],
       });
     }
 
-    // Convert ID to name for nextSteps (uses names for readability)
-    const targetName = idToName.get(edge.target) || edge.target;
-    outputMap.get(key)!.nextSteps.push(targetName);
+    // Use IDs directly for stability (names can be renamed, IDs are immutable)
+    outputMap.get(key)!.nextSteps.push(edge.target);
   });
 
   return Array.from(outputMap.values());
@@ -365,26 +432,29 @@ export interface FlowToStepsResult {
 }
 
 /**
+ * Check if a node is a virtual I/O node (not saved as a step)
+ */
+function isVirtualNode(node: WorkflowNode): boolean {
+  return node.type === 'skillInput' || node.type === 'skillOutput';
+}
+
+/**
  * Convert React Flow nodes and edges back to SkillStep[] and CanvasMetadata
- * Separates execution steps from canvas annotations (sticky notes)
+ * Separates execution steps from canvas annotations (sticky notes, virtual I/O nodes)
  */
 export function flowToSteps(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[]
 ): FlowToStepsResult {
-  // Separate sticky notes from workflow nodes
+  // Separate sticky notes and virtual nodes from workflow nodes
   const stickyNodes = nodes.filter(n => n.type === 'sticky');
-  const workflowNodes = nodes.filter(n => n.type !== 'sticky');
-
-  // Build id→name map for converting edge targets back to names
-  // (stepOutputs.nextSteps uses names for readability)
-  // Note: workflow nodes always have name, sticky nodes are filtered out
-  const idToName = new Map(workflowNodes.map(n => [n.id, (n.data as WorkflowNodeData).name]));
+  const workflowNodes = nodes.filter(n => n.type !== 'sticky' && !isVirtualNode(n));
 
   const steps = workflowNodes.map((node) => {
     const data = node.data as WorkflowNodeData;
     const outgoingEdges = edges.filter((e) => e.source === node.id);
-    const stepOutputs = groupEdgesByType(outgoingEdges, idToName);
+    // AIDEV-NOTE: stepOutputs.nextSteps now uses IDs (not names) for stability
+    const stepOutputs = groupEdgesByType(outgoingEdges);
 
     return {
       id: node.id,           // Stable ID
@@ -395,6 +465,15 @@ export function flowToSteps(
       _position: node.position,
     } as SkillStep;
   });
+
+  // Validate step name uniqueness (for display purposes, routing uses IDs)
+  const names = new Set<string>();
+  for (const step of steps) {
+    if (names.has(step.name)) {
+      console.warn(`[flow-converters] Duplicate step name: "${step.name}". Consider renaming for clarity.`);
+    }
+    names.add(step.name);
+  }
 
   // Extract sticky notes to canvas metadata
   const canvasMetadata: CanvasMetadata = {

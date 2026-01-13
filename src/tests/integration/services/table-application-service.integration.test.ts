@@ -1,11 +1,13 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { 
+import {
   getTableApplicationService,
+  getRowApplicationService,
   getDatabaseApplicationService
 } from '@/ddd/application/di/container';
 import { testClient } from '../shared/integration-helpers';
 import { OrganizationId, UserId, DatabaseId, TableId } from '@/ddd/domain/shared/value-objects';
 import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
+import type { RowApplicationService } from '@/ddd/application/services/tables/row-application-service';
 import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
 import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { TestCase } from '../../shared/types';
@@ -242,13 +244,15 @@ interface FindRowsOutput {
 
 describe('TableApplicationService Integration Tests', () => {
   let tableAppService: TableApplicationService;
+  let rowAppService: RowApplicationService;
   let testContext: TestContext;
 
   beforeAll(() => {
     // Initialize DI container with test database clients
     initializeTestDI();
-    
+
     tableAppService = getTableApplicationService();
+    rowAppService = getRowApplicationService();
   });
 
   afterAll(async () => {
@@ -286,7 +290,7 @@ describe('TableApplicationService Integration Tests', () => {
           const rowEntity = Row.fromPlainObject(testCase.input.rowData, table.id.value, table.fields);
 
           // Test application service creation
-          const createResult = await tableAppService.createRow({
+          const createResult = await rowAppService.createRow({
             tableId: table.id,
             data: rowEntity,
             createdBy: testContext.ownerUserId
@@ -340,7 +344,7 @@ describe('TableApplicationService Integration Tests', () => {
       
       const testRowEntity = Row.fromPlainObject(testRowData, table.id.value, table.fields);
       
-      const createResult = await tableAppService.createRow({
+      const createResult = await rowAppService.createRow({
         tableId: table.id,
         data: testRowEntity,
         createdBy: testContext.ownerUserId
@@ -359,7 +363,7 @@ describe('TableApplicationService Integration Tests', () => {
       for (const testCase of testCases) {
         console.log(`🧪 Running test: ${testCase.name}`);
         
-        const result = await tableAppService.getRow(retrievalTestTable.id, RowId.fromString(testCase.input.rowId));
+        const result = await rowAppService.getRow(retrievalTestTable.id, RowId.fromString(testCase.input.rowId));
         
         if (testCase.expected.rowExists) {
           expect(result).not.toBeNull();
@@ -400,7 +404,7 @@ describe('TableApplicationService Integration Tests', () => {
       
       const initialRowEntity = Row.fromPlainObject(initialRowData, table.id.value, table.fields);
       
-      const createResult = await tableAppService.createRow({
+      const createResult = await rowAppService.createRow({
         tableId: table.id,
         data: initialRowEntity,
         createdBy: testContext.ownerUserId
@@ -420,7 +424,7 @@ describe('TableApplicationService Integration Tests', () => {
         let result: any;
         try {
           // Get existing row data to merge with update data
-          const existingRow = await tableAppService.getRow(updateTestTable.id, RowId.fromString(testCase.input.rowId));
+          const existingRow = await rowAppService.getRow(updateTestTable.id, RowId.fromString(testCase.input.rowId));
           if (!existingRow) {
             throw new Error(`Row ${testCase.input.rowId} not found for update`);
           }
@@ -440,7 +444,7 @@ describe('TableApplicationService Integration Tests', () => {
             updateTestTable.fields
           );
           
-          const updateResult = await tableAppService.updateRow({
+          const updateResult = await rowAppService.updateRow({
             tableId: updateTestTable.id,
             rowId: RowId.fromString(testCase.input.rowId),
             data: updateRowEntity,
@@ -461,7 +465,7 @@ describe('TableApplicationService Integration Tests', () => {
           expect(result.data).toBeDefined();
           
           // Verify the update actually applied
-          const updatedRow = await tableAppService.getRow(updateTestTable.id, RowId.fromString(testCase.input.rowId));
+          const updatedRow = await rowAppService.getRow(updateTestTable.id, RowId.fromString(testCase.input.rowId));
           expect(updatedRow).not.toBeNull();
           
           // Check specific updated fields
@@ -500,7 +504,7 @@ describe('TableApplicationService Integration Tests', () => {
 
       for (const rowData of testRows) {
         const rowEntity = Row.fromPlainObject(rowData, table.id.value, table.fields);
-        const createResult = await tableAppService.createRow({
+        const createResult = await rowAppService.createRow({
           tableId: table.id,
           data: rowEntity,
           createdBy: testContext.ownerUserId
@@ -518,7 +522,7 @@ describe('TableApplicationService Integration Tests', () => {
         
         let result: any;
         try {
-          const deleteResult = await tableAppService.deleteRow(deleteTestTable.id, RowId.fromString(testCase.input.rowId));
+          const deleteResult = await rowAppService.deleteRow(deleteTestTable.id, RowId.fromString(testCase.input.rowId));
           if (!deleteResult.success) throw new Error(deleteResult.error);
           result = { success: true };
         } catch (error: any) {
@@ -532,7 +536,7 @@ describe('TableApplicationService Integration Tests', () => {
 
         if (testCase.expected.success) {
           // Verify row was actually deleted
-          const deletedRow = await tableAppService.getRow(deleteTestTable.id, RowId.fromString(testCase.input.rowId));
+          const deletedRow = await rowAppService.getRow(deleteTestTable.id, RowId.fromString(testCase.input.rowId));
           expect(deletedRow).toBeNull();
         } else {
           expect(result.error).toBeDefined();
@@ -568,7 +572,7 @@ describe('TableApplicationService Integration Tests', () => {
 
       for (const rowData of testRows) {
         const rowEntity = Row.fromPlainObject(rowData, table.id.value, table.fields);
-        const createResult = await tableAppService.createRow({
+        const createResult = await rowAppService.createRow({
           tableId: table.id,
           data: rowEntity,
           createdBy: testContext.ownerUserId
@@ -583,7 +587,7 @@ describe('TableApplicationService Integration Tests', () => {
       for (const testCase of testCases) {
         console.log(`🧪 Running test: ${testCase.name}`);
         
-        const result = await tableAppService.getRows(
+        const result = await rowAppService.getRows(
           collectionTestTable.id,
           testCase.input.options || { limit: 1000, offset: 0 }
         );
@@ -597,9 +601,9 @@ describe('TableApplicationService Integration Tests', () => {
 
         if (testCase.expected.hasRows) {
           expect(result.length).toBeGreaterThan(0);
-          
+
           // Verify each row has proper structure
-          result.forEach(row => {
+          result.forEach((row: Row) => {
             expect(row.id.value).toBeDefined();
             expect(row).toBeDefined();
             const nameField = row.getFieldValue('Name')?.value;
@@ -617,12 +621,12 @@ describe('TableApplicationService Integration Tests', () => {
       ]);
 
       // Initially empty
-      const hasRowsInitially = await tableAppService.tableHasRows(table.id);
+      const hasRowsInitially = await rowAppService.tableHasRows(table.id);
       expect(hasRowsInitially).toBe(false);
 
       // Add a row
       const testRowEntity = Row.fromPlainObject({ 'Name': 'Test Row' }, table.id.value, table.fields);
-      const createResult = await tableAppService.createRow({
+      const createResult = await rowAppService.createRow({
         tableId: table.id,
         data: testRowEntity,
         createdBy: testContext.ownerUserId
@@ -630,7 +634,7 @@ describe('TableApplicationService Integration Tests', () => {
       expect(createResult.success).toBe(true);
 
       // Now should have rows
-      const hasRowsAfterAdd = await tableAppService.tableHasRows(table.id);
+      const hasRowsAfterAdd = await rowAppService.tableHasRows(table.id);
       expect(hasRowsAfterAdd).toBe(true);
     });
   });

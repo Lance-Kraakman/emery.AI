@@ -4,7 +4,7 @@
 // Provides file field data for chat mention system
 
 import { requirePermission } from "./permissions";
-import { getTableApplicationService } from "@/ddd/application/di/container";
+import { getTableApplicationService, getRowApplicationService } from "@/ddd/application/di/container";
 import { TableId } from "@/ddd/domain/shared/value-objects";
 import { RowMapper, type RowDTO, type FileFieldValue } from "@/app/mappers/row-mapper";
 
@@ -35,19 +35,20 @@ export async function getFileMentionsForTable(
       throw new Error("tableId is required");
     }
 
-    // Get table service
+    // Get table and row services
     const tableAppService = getTableApplicationService();
-    
+    const rowAppService = getRowApplicationService();
+
     // First, get field definitions to find file fields
     const fields = await tableAppService.getFieldsForTable(TableId.fromNumber(tableId));
     const fileFields = fields.filter(field => field.type === 'file');
-    
+
     if (fileFields.length === 0) {
       return []; // No file fields in this table
     }
 
     // Get recent rows that might contain file data
-    const rowsData = await tableAppService.getRows(
+    const rowsData = await rowAppService.getRows(
       TableId.fromNumber(tableId), 
       { limit, offset: 0 }
     );

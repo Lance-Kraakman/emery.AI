@@ -17,6 +17,7 @@ import { ToolConfigurationApplicationService } from '@/ddd/application/services/
 import { ToolSearchApplicationService } from '@/ddd/application/services/tools/tool-search-application-service';
 
 import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
+import type { RowApplicationService } from '@/ddd/application/services/tables/row-application-service';
 import type { AgentApplicationService } from '@/ddd/application/services/agents/agent-application-service';
 import type { DatabaseApplicationService } from '@/ddd/application/services/database/database-application-service';
 import type { SkillApplicationService } from '@/ddd/application/services/skills/skill-application-service';
@@ -31,6 +32,7 @@ export interface ToolsServices {
 export interface ToolsDependencies {
   agentRepository: IAgentRepository;
   tableApplicationService: TableApplicationService;
+  rowApplicationService: RowApplicationService;
   agentApplicationService: AgentApplicationService;
   databaseApplicationService: DatabaseApplicationService;
   skillApplicationService: SkillApplicationService;
@@ -40,6 +42,7 @@ export function registerToolsServices(deps: ToolsDependencies): ToolsServices {
   const {
     agentRepository,
     tableApplicationService,
+    rowApplicationService,
     agentApplicationService,
     databaseApplicationService,
     skillApplicationService
@@ -62,6 +65,7 @@ export function registerToolsServices(deps: ToolsDependencies): ToolsServices {
 
   const toolSearchApplicationService = new ToolSearchApplicationService(
     tableApplicationService,
+    rowApplicationService,
     agentApplicationService,
     databaseApplicationService,
     skillApplicationService,

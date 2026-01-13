@@ -9,7 +9,7 @@
  * - Skill enrichment service (for unified skill loading across execution paths)
  */
 
-import type { ContextAwareDbClient } from '@/lib/db/simple-context-proxy';
+import type { ContextAwareDbClient } from '@/ddd/infrastructure/db/simple-context-proxy';
 import type { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
 
 import { DrizzleSkillRepository } from '@/ddd/infrastructure/db/repositories/skills/drizzle-skill-repository';

@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { CreditCard, Calendar, DollarSign, ExternalLink, Settings } from 'lucide-react';
 import { formatCurrency, formatBillingDate, getTierDisplayName, getTierVariant } from '@/lib/billing/utils';
-import type { TierName } from '@/lib/stripe/config';
+import type { TierName } from '@/ddd/infrastructure/external/stripe/config';
 
 export interface BillingOverview {
   tier: TierName;

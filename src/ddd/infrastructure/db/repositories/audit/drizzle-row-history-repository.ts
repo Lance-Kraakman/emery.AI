@@ -2,8 +2,8 @@
  * Drizzle Row History Repository
  */
 
-import type { DbClient } from '@/lib/db/client';
-import { rowHistory } from '@/lib/db/schema';
+import type { DbClient } from '@/ddd/infrastructure/db/client';
+import { rowHistory } from '@/ddd/infrastructure/db/schema';
 import { eq, and, desc, lt, max } from 'drizzle-orm';
 import type { IRowHistoryRepository } from '@/ddd/domain/audit/interfaces/audit-repository';
 import type { RowHistoryEntry } from '@/ddd/domain/audit/types';
