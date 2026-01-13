@@ -872,7 +872,7 @@ class AgentExecutor:
             goal=goal,
             instructions=instructions,
             tools=tools,
-            context_tables=None,  # TODO: Add context tables support
+            context_tables=context.resolved_context,
         ):
             progress = self._coordinator_event_to_progress(event, skill_name, start_time)
             yield progress

@@ -15,6 +15,7 @@ from enum import Enum
 
 from ..models.plan import Plan, PlanStep, PlanStatus, create_plan
 from ..models.task_ledger import TaskLedger, create_ledger_from_plan
+from ..models.context_mapping import ResolvedContext
 from ..tools.tool_modes import ToolMode, filter_tools_for_mode
 from .plan_service import PlanService
 
@@ -175,7 +176,7 @@ class ExecutionCoordinator:
         goal: str,
         instructions: str,
         tools: List[Any],
-        context_tables: Optional[List[str]] = None,
+        context_tables: Optional[ResolvedContext] = None,
     ) -> AsyncIterator[Any]:
         """
         Phase 1: Create a plan using read-only tools.
@@ -187,7 +188,7 @@ class ExecutionCoordinator:
             goal: High-level goal to achieve
             instructions: Detailed instructions for planning
             tools: Available tools (will be filtered to read-only)
-            context_tables: Tables available for context
+            context_tables: Resolved context mappings for available tables
 
         Yields:
             PlanCreatedEvent when plan is ready for approval
@@ -580,7 +581,7 @@ Evaluate the current execution state and respond with JSON only.
         goal: str,
         instructions: str,
         tools: List[Any],
-        context_tables: Optional[List[str]] = None,
+        context_tables: Optional[ResolvedContext] = None,
         auto_approve: bool = False,
     ) -> AsyncIterator[Any]:
         """
@@ -590,7 +591,7 @@ Evaluate the current execution state and respond with JSON only.
             goal: High-level goal to achieve
             instructions: Detailed instructions
             tools: Available tools
-            context_tables: Tables available for context
+            context_tables: Resolved context mappings for available tables
             auto_approve: If True, automatically approve the plan (for testing)
 
         Yields:

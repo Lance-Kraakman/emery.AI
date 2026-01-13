@@ -16,6 +16,7 @@ from emery_agents.models.plan import (
     create_plan,
     create_step,
 )
+from emery_agents.models.context_mapping import ResolvedContext
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ class PlanService:
     async def generate_plan(
         self,
         basic_instructions: str,
-        context_tables: Optional[List[str]] = None,
+        context_tables: Optional[ResolvedContext] = None,
         available_tools: Optional[List[str]] = None,
         goal: Optional[str] = None,
     ) -> Plan:
@@ -54,14 +55,14 @@ class PlanService:
 
         Args:
             basic_instructions: Human-readable instructions to convert to plan
-            context_tables: Tables available for the plan to access
+            context_tables: Resolved context mappings (tables available for the plan)
             available_tools: Tools that can be used in plan steps
             goal: Optional explicit goal (defaults to first line of instructions)
 
         Returns:
             Plan object with generated steps
         """
-        context_tables = context_tables or []
+        # context_tables is available for future use when planning with context
         available_tools = available_tools or []
 
         # Extract goal from instructions if not provided
