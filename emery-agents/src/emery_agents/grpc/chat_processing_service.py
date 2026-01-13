@@ -726,7 +726,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # When LLM specifies a filename → searches session_attachments by name
             session_attachments = self.session_manager.get_attachments(session_id) if session_id else []
             context = ExecutionContext(
-                mode=ExecutionMode.INSTRUCTION,
+                mode=ExecutionMode.INTERACTIVE,  # Chat = interactive (with HITL)
                 task=current_task,
                 available_tools=[],
                 images=[],  # Images already passed via smolagents images param

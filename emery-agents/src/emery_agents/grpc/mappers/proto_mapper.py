@@ -12,6 +12,7 @@ from ..generated import agent_worker_pb2
 from ...entities.task import TaskRequest, TriggerData, SkillInputValue
 from ...entities.agent import AgentConfig
 from ...types import TaskStatus, WorkerStatus, InstructionConfig
+from ...models.context_mapping import ResolvedContext
 
 
 # Type definitions for structured return values
@@ -101,6 +102,11 @@ class ProtoMapper:
                 model=proto.instruction_config.model or None
             )
 
+        # Parse resolved context if present
+        resolved_context = None
+        if proto.HasField("resolved_context"):
+            resolved_context = ResolvedContext.from_proto(proto.resolved_context)
+
         return TaskRequest(
             task_id=proto.task_id,
             agent_id=proto.agent_id,
@@ -113,7 +119,8 @@ class ProtoMapper:
             skill_name=skill_name,
             instruction_config=instruction_config,
             organization_model=proto.organization_model or None,
-            agent_model=proto.agent_model or None
+            agent_model=proto.agent_model or None,
+            resolved_context=resolved_context,
         )
 
     def task_progress_to_proto(self, progress: TaskProgressDict) -> agent_worker_pb2.TaskProgress:

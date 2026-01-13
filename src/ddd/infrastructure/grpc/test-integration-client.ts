@@ -119,6 +119,7 @@ export class AgentWorkerTestClient {
           // Add trigger data fields as needed
         } as TriggerData,
         inputContent: [], // Runtime input attachments (empty for test client)
+        resolvedContext: undefined, // Context table mappings (not used in test client)
 
         // Set execution mode
         ...(request.instructions

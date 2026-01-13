@@ -218,6 +218,8 @@ export interface TaskRequest {
   organizationModel: string;
   /** Runtime input attachments for skill execution */
   inputContent: MessagePart[];
+  /** Context table mappings for this execution */
+  resolvedContext: ResolvedContextProto | undefined;
 }
 
 /**
@@ -1027,6 +1029,40 @@ export interface ChatContext {
   domainId: number;
 }
 
+/**
+ * Context table mapping for agent execution
+ * Defines which tables are accessible and with what permissions
+ */
+export interface ContextMappingProto {
+  /** Table ID */
+  tableId: number;
+  /** Table name (for display/logging) */
+  tableName: string;
+  /** "read", "write", or "readwrite" */
+  accessMode: string;
+  /** "on_access", "on_save", or "realtime" */
+  syncMode: string;
+  /** "agent", "skill", or "skill_step" */
+  targetType: string;
+  /** Target entity ID */
+  targetId: string;
+}
+
+/**
+ * Resolved context mappings for execution
+ * Contains merged mappings with hierarchy priority applied (step > skill > agent)
+ */
+export interface ResolvedContextProto {
+  /** All mappings (merged) */
+  mappings: ContextMappingProto[];
+  /** Agent-level mappings */
+  agentMappings: ContextMappingProto[];
+  /** Skill-level mappings */
+  skillMappings: ContextMappingProto[];
+  /** Step-level mappings */
+  stepMappings: ContextMappingProto[];
+}
+
 function createBaseTaskRequest(): TaskRequest {
   return {
     taskId: "",
@@ -1042,6 +1078,7 @@ function createBaseTaskRequest(): TaskRequest {
     agentModel: "",
     organizationModel: "",
     inputContent: [],
+    resolvedContext: undefined,
   };
 }
 
@@ -1085,6 +1122,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     }
     for (const v of message.inputContent) {
       MessagePart.encode(v!, writer.uint32(106).fork()).join();
+    }
+    if (message.resolvedContext !== undefined) {
+      ResolvedContextProto.encode(message.resolvedContext, writer.uint32(114).fork()).join();
     }
     return writer;
   },
@@ -1200,6 +1240,14 @@ export const TaskRequest: MessageFns<TaskRequest> = {
           message.inputContent.push(MessagePart.decode(reader, reader.uint32()));
           continue;
         }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.resolvedContext = ResolvedContextProto.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1228,6 +1276,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
       inputContent: globalThis.Array.isArray(object?.inputContent)
         ? object.inputContent.map((e: any) => MessagePart.fromJSON(e))
         : [],
+      resolvedContext: isSet(object.resolvedContext)
+        ? ResolvedContextProto.fromJSON(object.resolvedContext)
+        : undefined,
     };
   },
 
@@ -1272,6 +1323,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     if (message.inputContent?.length) {
       obj.inputContent = message.inputContent.map((e) => MessagePart.toJSON(e));
     }
+    if (message.resolvedContext !== undefined) {
+      obj.resolvedContext = ResolvedContextProto.toJSON(message.resolvedContext);
+    }
     return obj;
   },
 
@@ -1299,6 +1353,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     message.agentModel = object.agentModel ?? "";
     message.organizationModel = object.organizationModel ?? "";
     message.inputContent = object.inputContent?.map((e) => MessagePart.fromPartial(e)) || [];
+    message.resolvedContext = (object.resolvedContext !== undefined && object.resolvedContext !== null)
+      ? ResolvedContextProto.fromPartial(object.resolvedContext)
+      : undefined;
     return message;
   },
 };
@@ -8503,6 +8560,262 @@ export const ChatContext: MessageFns<ChatContext> = {
     const message = createBaseChatContext();
     message.domainType = object.domainType ?? "";
     message.domainId = object.domainId ?? 0;
+    return message;
+  },
+};
+
+function createBaseContextMappingProto(): ContextMappingProto {
+  return { tableId: 0, tableName: "", accessMode: "", syncMode: "", targetType: "", targetId: "" };
+}
+
+export const ContextMappingProto: MessageFns<ContextMappingProto> = {
+  encode(message: ContextMappingProto, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.tableId !== 0) {
+      writer.uint32(8).int32(message.tableId);
+    }
+    if (message.tableName !== "") {
+      writer.uint32(18).string(message.tableName);
+    }
+    if (message.accessMode !== "") {
+      writer.uint32(26).string(message.accessMode);
+    }
+    if (message.syncMode !== "") {
+      writer.uint32(34).string(message.syncMode);
+    }
+    if (message.targetType !== "") {
+      writer.uint32(42).string(message.targetType);
+    }
+    if (message.targetId !== "") {
+      writer.uint32(50).string(message.targetId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ContextMappingProto {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseContextMappingProto();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.tableId = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.tableName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.accessMode = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.syncMode = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.targetType = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.targetId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ContextMappingProto {
+    return {
+      tableId: isSet(object.tableId) ? globalThis.Number(object.tableId) : 0,
+      tableName: isSet(object.tableName) ? globalThis.String(object.tableName) : "",
+      accessMode: isSet(object.accessMode) ? globalThis.String(object.accessMode) : "",
+      syncMode: isSet(object.syncMode) ? globalThis.String(object.syncMode) : "",
+      targetType: isSet(object.targetType) ? globalThis.String(object.targetType) : "",
+      targetId: isSet(object.targetId) ? globalThis.String(object.targetId) : "",
+    };
+  },
+
+  toJSON(message: ContextMappingProto): unknown {
+    const obj: any = {};
+    if (message.tableId !== 0) {
+      obj.tableId = Math.round(message.tableId);
+    }
+    if (message.tableName !== "") {
+      obj.tableName = message.tableName;
+    }
+    if (message.accessMode !== "") {
+      obj.accessMode = message.accessMode;
+    }
+    if (message.syncMode !== "") {
+      obj.syncMode = message.syncMode;
+    }
+    if (message.targetType !== "") {
+      obj.targetType = message.targetType;
+    }
+    if (message.targetId !== "") {
+      obj.targetId = message.targetId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ContextMappingProto>, I>>(base?: I): ContextMappingProto {
+    return ContextMappingProto.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ContextMappingProto>, I>>(object: I): ContextMappingProto {
+    const message = createBaseContextMappingProto();
+    message.tableId = object.tableId ?? 0;
+    message.tableName = object.tableName ?? "";
+    message.accessMode = object.accessMode ?? "";
+    message.syncMode = object.syncMode ?? "";
+    message.targetType = object.targetType ?? "";
+    message.targetId = object.targetId ?? "";
+    return message;
+  },
+};
+
+function createBaseResolvedContextProto(): ResolvedContextProto {
+  return { mappings: [], agentMappings: [], skillMappings: [], stepMappings: [] };
+}
+
+export const ResolvedContextProto: MessageFns<ResolvedContextProto> = {
+  encode(message: ResolvedContextProto, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.mappings) {
+      ContextMappingProto.encode(v!, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.agentMappings) {
+      ContextMappingProto.encode(v!, writer.uint32(18).fork()).join();
+    }
+    for (const v of message.skillMappings) {
+      ContextMappingProto.encode(v!, writer.uint32(26).fork()).join();
+    }
+    for (const v of message.stepMappings) {
+      ContextMappingProto.encode(v!, writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResolvedContextProto {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseResolvedContextProto();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.mappings.push(ContextMappingProto.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.agentMappings.push(ContextMappingProto.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.skillMappings.push(ContextMappingProto.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.stepMappings.push(ContextMappingProto.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ResolvedContextProto {
+    return {
+      mappings: globalThis.Array.isArray(object?.mappings)
+        ? object.mappings.map((e: any) => ContextMappingProto.fromJSON(e))
+        : [],
+      agentMappings: globalThis.Array.isArray(object?.agentMappings)
+        ? object.agentMappings.map((e: any) => ContextMappingProto.fromJSON(e))
+        : [],
+      skillMappings: globalThis.Array.isArray(object?.skillMappings)
+        ? object.skillMappings.map((e: any) => ContextMappingProto.fromJSON(e))
+        : [],
+      stepMappings: globalThis.Array.isArray(object?.stepMappings)
+        ? object.stepMappings.map((e: any) => ContextMappingProto.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ResolvedContextProto): unknown {
+    const obj: any = {};
+    if (message.mappings?.length) {
+      obj.mappings = message.mappings.map((e) => ContextMappingProto.toJSON(e));
+    }
+    if (message.agentMappings?.length) {
+      obj.agentMappings = message.agentMappings.map((e) => ContextMappingProto.toJSON(e));
+    }
+    if (message.skillMappings?.length) {
+      obj.skillMappings = message.skillMappings.map((e) => ContextMappingProto.toJSON(e));
+    }
+    if (message.stepMappings?.length) {
+      obj.stepMappings = message.stepMappings.map((e) => ContextMappingProto.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ResolvedContextProto>, I>>(base?: I): ResolvedContextProto {
+    return ResolvedContextProto.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ResolvedContextProto>, I>>(object: I): ResolvedContextProto {
+    const message = createBaseResolvedContextProto();
+    message.mappings = object.mappings?.map((e) => ContextMappingProto.fromPartial(e)) || [];
+    message.agentMappings = object.agentMappings?.map((e) => ContextMappingProto.fromPartial(e)) || [];
+    message.skillMappings = object.skillMappings?.map((e) => ContextMappingProto.fromPartial(e)) || [];
+    message.stepMappings = object.stepMappings?.map((e) => ContextMappingProto.fromPartial(e)) || [];
     return message;
   },
 };

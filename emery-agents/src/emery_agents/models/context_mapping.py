@@ -51,17 +51,48 @@ class ContextMapping:
 
     @classmethod
     def from_proto(cls, proto) -> "ContextMapping":
-        """Create from gRPC proto message."""
+        """
+        Create from gRPC ContextMappingProto message.
+
+        Proto fields:
+        - table_id: int32
+        - table_name: string
+        - access_mode: string ("read", "write", "readwrite")
+        - sync_mode: string ("on_access", "on_save", "realtime")
+        - target_type: string ("agent", "skill", "skill_step")
+        - target_id: string
+        """
+        # Parse access_mode with fallback
+        access_str = getattr(proto, 'access_mode', 'read') or 'read'
+        try:
+            access_mode = ContextMappingAccessMode(access_str)
+        except ValueError:
+            access_mode = ContextMappingAccessMode.READ
+
+        # Parse sync_mode with fallback
+        sync_str = getattr(proto, 'sync_mode', 'on_access') or 'on_access'
+        try:
+            sync_mode = ContextMappingSyncMode(sync_str)
+        except ValueError:
+            sync_mode = ContextMappingSyncMode.ON_ACCESS
+
+        # Parse target_type with fallback
+        target_str = getattr(proto, 'target_type', 'agent') or 'agent'
+        try:
+            target_type = ContextMappingTargetType(target_str)
+        except ValueError:
+            target_type = ContextMappingTargetType.AGENT
+
         return cls(
-            id=proto.id,
-            organization_id=getattr(proto, 'organization_id', 0),
-            target_type=ContextMappingTargetType(getattr(proto, 'target_type', 'agent')),
-            target_id=getattr(proto, 'target_id', ''),
+            id=0,  # ID not sent over proto (DB-only field)
+            organization_id=0,  # Not sent over proto (RLS handles this)
+            target_type=target_type,
+            target_id=getattr(proto, 'target_id', '') or '',
             table_id=proto.table_id,
-            table_name=proto.table_name,
-            access_mode=ContextMappingAccessMode(proto.access_mode),
-            sync_mode=ContextMappingSyncMode(proto.sync_mode),
-            is_system=proto.is_system,
+            table_name=proto.table_name or '',
+            access_mode=access_mode,
+            sync_mode=sync_mode,
+            is_system=False,  # Not sent over proto
         )
 
     def can_read(self) -> bool:
@@ -98,6 +129,42 @@ class ResolvedContext:
     agent_mappings: list  # Original agent-level mappings
     skill_mappings: list  # Original skill-level mappings
     step_mappings: list  # Original step-level mappings
+
+    @classmethod
+    def from_proto(cls, proto) -> "ResolvedContext":
+        """
+        Create from gRPC ResolvedContextProto message.
+
+        Proto fields:
+        - mappings: repeated ContextMappingProto (merged mappings)
+        - agent_mappings: repeated ContextMappingProto
+        - skill_mappings: repeated ContextMappingProto
+        - step_mappings: repeated ContextMappingProto
+        """
+        if proto is None:
+            return cls(
+                mappings=[],
+                agent_mappings=[],
+                skill_mappings=[],
+                step_mappings=[],
+            )
+
+        return cls(
+            mappings=[ContextMapping.from_proto(m) for m in proto.mappings],
+            agent_mappings=[ContextMapping.from_proto(m) for m in proto.agent_mappings],
+            skill_mappings=[ContextMapping.from_proto(m) for m in proto.skill_mappings],
+            step_mappings=[ContextMapping.from_proto(m) for m in proto.step_mappings],
+        )
+
+    @classmethod
+    def empty(cls) -> "ResolvedContext":
+        """Create an empty resolved context."""
+        return cls(
+            mappings=[],
+            agent_mappings=[],
+            skill_mappings=[],
+            step_mappings=[],
+        )
 
     def get_read_tables(self) -> list:
         """Get all tables with read access."""

@@ -52,10 +52,14 @@ CapabilityId = int
 
 
 class ExecutionMode(Enum):
-    """Execution mode for agent tasks."""
-    SKILL = "skill"
-    INSTRUCTION = "instruction"
-    CAPABILITY = "capability"  # Legacy
+    """
+    Execution mode for agent tasks.
+
+    INTERACTIVE: Chat mode with human-in-the-loop - can pause for approval gates
+    AUTONOMOUS: Skill execution - runs without HITL, used for automations/triggers
+    """
+    INTERACTIVE = "interactive"
+    AUTONOMOUS = "autonomous"
 
 
 class ModelType(Enum):

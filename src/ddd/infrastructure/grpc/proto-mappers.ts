@@ -22,7 +22,9 @@ import {
   TaskProgress as TaskProgressProto,
   TriggerData,
   SkillInputValue,
-  InstructionConfig as InstructionConfigProto
+  InstructionConfig as InstructionConfigProto,
+  ContextMappingProto,
+  ResolvedContextProto
 } from './generated/agent_worker';
 import { Task, TaskStatus } from '@/ddd/domain/tasks/entities/task';
 
@@ -114,6 +116,54 @@ export function mapInstructionConfigToProto(instructionConfig: {
  * AIDEV-NOTE: Updated for multimodal support (2025-01)
  * AIDEV-NOTE: Updated for skill-based task execution (2025-01)
  */
+/**
+ * Context mapping data for gRPC transport
+ */
+export interface ContextMappingData {
+  tableId: number;
+  tableName: string;
+  accessMode: 'read' | 'write' | 'readwrite';
+  syncMode: 'on_access' | 'on_save' | 'realtime';
+  targetType: 'agent' | 'skill' | 'skill_step';
+  targetId: string;
+}
+
+/**
+ * Resolved context data for gRPC transport
+ */
+export interface ResolvedContextData {
+  mappings: ContextMappingData[];
+  agentMappings?: ContextMappingData[];
+  skillMappings?: ContextMappingData[];
+  stepMappings?: ContextMappingData[];
+}
+
+/**
+ * Map context mapping to proto format
+ */
+function mapContextMappingToProto(mapping: ContextMappingData): ContextMappingProto {
+  return {
+    tableId: mapping.tableId,
+    tableName: mapping.tableName,
+    accessMode: mapping.accessMode,
+    syncMode: mapping.syncMode,
+    targetType: mapping.targetType,
+    targetId: mapping.targetId,
+  };
+}
+
+/**
+ * Map resolved context to proto format
+ */
+function mapResolvedContextToProto(context: ResolvedContextData): ResolvedContextProto {
+  return {
+    mappings: context.mappings.map(mapContextMappingToProto),
+    agentMappings: (context.agentMappings || []).map(mapContextMappingToProto),
+    skillMappings: (context.skillMappings || []).map(mapContextMappingToProto),
+    stepMappings: (context.stepMappings || []).map(mapContextMappingToProto),
+  };
+}
+
 export function createTaskRequest(params: {
   taskId: string;
   agentId: number;
@@ -137,6 +187,8 @@ export function createTaskRequest(params: {
   timeoutSeconds?: number;
   agentModel?: string; // Agent default model (overrides organization model)
   organizationModel?: string; // Organization default model (fallback for agent model)
+  // Context table mappings for this execution
+  resolvedContext?: ResolvedContextData;
 }): TaskRequest {
   // Build typed skill inputs for TriggerData
   const skillInputValues: SkillInputValue[] = (params.skillInputs || []).map(input => {
@@ -190,7 +242,8 @@ export function createTaskRequest(params: {
     timeoutSeconds: params.timeoutSeconds || 300,
     agentModel: params.agentModel || '', // Agent default model (overrides org model in hierarchy) - empty string if not set
     organizationModel: params.organizationModel || '', // Organization default model for fallback - empty string if not set
-    inputContent: [] // Runtime input attachments (empty for now, can be extended later)
+    inputContent: [], // Runtime input attachments (empty for now, can be extended later)
+    resolvedContext: params.resolvedContext ? mapResolvedContextToProto(params.resolvedContext) : undefined
   };
 
   // Debug logging for model selection
