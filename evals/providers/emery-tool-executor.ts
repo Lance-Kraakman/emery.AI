@@ -27,6 +27,26 @@ interface ProviderResponse {
 const BASE_URL = process.env.EMERY_BASE_URL || 'http://localhost:3002';
 const API_KEY = process.env.EMERY_API_KEY || '';
 const DEFAULT_AGENT_ID = process.env.TEST_AGENT_ID || '1';
+const DEFAULT_TABLE_ID = process.env.TEST_TABLE_ID || '1';
+
+/**
+ * Resolves a variable value, handling unsubstituted template placeholders
+ */
+function resolveVar(value: string | undefined, envKey: string, defaultValue: string): string {
+  if (!value || value.includes('{{')) {
+    const envValue = process.env[envKey];
+    return envValue || defaultValue;
+  }
+  return value;
+}
+
+/**
+ * Replace template placeholders in task string with actual values
+ */
+function resolveTaskVars(task: string): string {
+  // Replace {{TEST_TABLE_ID}} with actual value
+  return task.replace(/\{\{TEST_TABLE_ID\}\}/g, DEFAULT_TABLE_ID);
+}
 
 /**
  * Execute tool_executor via agent
@@ -76,41 +96,53 @@ Return only the tool result, no additional commentary.`;
 }
 
 /**
- * Main provider function called by promptfoo
+ * Promptfoo ApiProvider class for tool executor operations
  */
-export default async function toolExecutorProvider(
-  prompt: string,
-  context: ProviderContext
-): Promise<ProviderResponse> {
-  const { vars } = context;
-  const { tool, task, agentId, timeout } = vars;
-
-  if (!tool || !task) {
-    return {
-      output: JSON.stringify({
-        success: false,
-        error: 'Both "tool" and "task" variables are required',
-      }),
-      error: 'Missing required variables',
-    };
+class ToolExecutorProvider {
+  id(): string {
+    return 'emery-tool-executor';
   }
 
-  try {
-    const result = await executeToolExecutor(
-      agentId || DEFAULT_AGENT_ID,
-      tool,
-      task,
-      timeout || 60000
-    );
+  async callApi(prompt: string, context?: { vars?: Record<string, unknown> }): Promise<ProviderResponse> {
+    const vars = context?.vars || {};
+    const tool = vars.tool as string;
+    const agentId = vars.agentId as string | undefined;
+    const timeout = vars.timeout as number | undefined;
+    // Resolve task, replacing any template placeholders
+    const task = vars.task ? resolveTaskVars(vars.task as string) : '';
 
-    return {
-      output: JSON.stringify(result),
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return {
-      output: JSON.stringify({ success: false, error: errorMessage }),
-      error: errorMessage,
-    };
+    if (!tool || !task) {
+      return {
+        output: JSON.stringify({
+          success: false,
+          error: 'Both "tool" and "task" variables are required',
+        }),
+        error: 'Missing required variables',
+      };
+    }
+
+    // Resolve agent ID
+    const resolvedAgentId = resolveVar(agentId, 'TEST_AGENT_ID', DEFAULT_AGENT_ID);
+
+    try {
+      const result = await executeToolExecutor(
+        resolvedAgentId,
+        tool,
+        task,
+        timeout || 60000
+      );
+
+      return {
+        output: JSON.stringify(result),
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        output: JSON.stringify({ success: false, error: errorMessage }),
+        error: errorMessage,
+      };
+    }
   }
 }
+
+export default ToolExecutorProvider;

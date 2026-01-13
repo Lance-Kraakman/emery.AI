@@ -3,7 +3,12 @@
 
 description: "Schema builder - single turn execution"
 providers:
-  - file://providers/emery-skill.ts
+  - file://../../providers/emery-skill.ts
+
+# Promptfoo requires a prompt - use instruction var
+prompts:
+  - "{{instruction}}"
+
 timeout: 90000
 
 tests:

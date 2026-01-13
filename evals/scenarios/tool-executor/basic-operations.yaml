@@ -3,7 +3,12 @@
 
 description: "Tool executor natural language translation"
 providers:
-  - file://providers/emery-tool-executor.ts
+  - file://../../providers/emery-tool-executor.ts
+
+# Promptfoo requires a prompt
+prompts:
+  - "Execute tool {{tool}} with task: {{task}}"
+
 timeout: 60000
 
 tests:

@@ -3,7 +3,12 @@
 
 description: "Schema builder HITL workflow"
 providers:
-  - file://providers/emery-hitl.ts
+  - file://../../providers/emery-hitl.ts
+
+# Promptfoo requires a prompt - use initialTask var
+prompts:
+  - "{{initialTask}}"
+
 timeout: 180000  # 3 min for full workflows
 
 tests:

@@ -42,6 +42,33 @@ interface ProviderResponse {
 
 const BASE_URL = process.env.EMERY_BASE_URL || 'http://localhost:3002';
 const API_KEY = process.env.EMERY_API_KEY || '';
+const DEFAULT_AGENT_ID = process.env.TEST_AGENT_ID || '1';
+const DEFAULT_SCHEMA_BUILDER_AGENT_ID = process.env.SCHEMA_BUILDER_AGENT_ID || '1';
+
+/**
+ * Resolves a variable value, handling unsubstituted template placeholders
+ */
+function resolveVar(value: string | undefined, envKey: string, defaultValue: string): string {
+  if (!value || value.includes('{{')) {
+    const envValue = process.env[envKey];
+    return envValue || defaultValue;
+  }
+  return value;
+}
+
+/**
+ * Resolves agent ID, checking for specific agent type placeholders
+ */
+function resolveAgentId(value: string | undefined): string {
+  if (!value || value.includes('{{')) {
+    // Check for specific agent types
+    if (value?.includes('SCHEMA_BUILDER')) {
+      return resolveVar(value, 'SCHEMA_BUILDER_AGENT_ID', DEFAULT_SCHEMA_BUILDER_AGENT_ID);
+    }
+    return resolveVar(value, 'TEST_AGENT_ID', DEFAULT_AGENT_ID);
+  }
+  return value;
+}
 
 // Indicators that agent is waiting for user approval
 const APPROVAL_INDICATORS = [
@@ -194,49 +221,56 @@ async function runHITLWorkflow(
 }
 
 /**
- * Main provider function called by promptfoo
+ * Promptfoo ApiProvider class for HITL workflow testing
  */
-export default async function hitlProvider(
-  prompt: string,
-  context: ProviderContext
-): Promise<ProviderResponse> {
-  const { vars } = context;
-  const { agentId, initialTask, approval, maxTurns, timeout } = vars;
-
-  if (!agentId || !initialTask) {
-    return {
-      output: JSON.stringify({
-        success: false,
-        error: 'agentId and initialTask are required',
-      }),
-      error: 'Missing required variables',
-    };
+class HITLProvider {
+  id(): string {
+    return 'emery-hitl';
   }
 
-  try {
-    const result = await runHITLWorkflow(
-      agentId,
-      initialTask,
-      approval || 'yes',
-      maxTurns || 3,
-      timeout || 120000
-    );
+  async callApi(prompt: string, context?: { vars?: Record<string, unknown> }): Promise<ProviderResponse> {
+    const vars = (context?.vars || {}) as ProviderContext['vars'];
+    const { initialTask, approval, maxTurns, timeout } = vars;
+    // Resolve agent ID, handling template placeholders
+    const resolvedAgentId = resolveAgentId(vars.agentId);
 
-    return {
-      output: JSON.stringify(result),
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return {
-      output: JSON.stringify({
-        success: false,
+    if (!resolvedAgentId || !initialTask) {
+      return {
+        output: JSON.stringify({
+          success: false,
+          error: 'agentId and initialTask are required',
+        }),
+        error: 'Missing required variables',
+      };
+    }
+
+    try {
+      const result = await runHITLWorkflow(
+        resolvedAgentId,
+        initialTask,
+        approval || 'yes',
+        maxTurns || 3,
+        timeout || 120000
+      );
+
+      return {
+        output: JSON.stringify(result),
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        output: JSON.stringify({
+          success: false,
+          error: errorMessage,
+          turns: 0,
+          finalResponse: '',
+          waitedForApproval: false,
+          conversation: [],
+        }),
         error: errorMessage,
-        turns: 0,
-        finalResponse: '',
-        waitedForApproval: false,
-        conversation: [],
-      }),
-      error: errorMessage,
-    };
+      };
+    }
   }
 }
+
+export default HITLProvider;

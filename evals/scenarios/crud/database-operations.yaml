@@ -3,7 +3,15 @@
 
 description: "Database CRUD operations"
 providers:
-  - file://providers/emery-crud.ts
+  - file://../../providers/emery-crud.ts
+
+# Promptfoo requires a prompt, but we're testing CRUD directly via vars
+prompts:
+  - "Execute CRUD operation: {{operation}}"
+
+# Environment variable defaults
+env:
+  TEST_DATABASE_ID: "1"
 
 tests:
   # List databases
@@ -21,7 +29,7 @@ tests:
   - description: "Get database by ID"
     vars:
       operation: get_database
-      databaseId: "{{TEST_DATABASE_ID}}"
+      databaseId: "1"
     assert:
       - type: is-json
       - type: javascript

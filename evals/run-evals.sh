@@ -17,7 +17,10 @@ fi
 # Defaults
 : "${EMERY_BASE_URL:=http://localhost:3002}"
 : "${TEST_TABLE_ID:=1}"
+: "${TEST_DATABASE_ID:=1}"
 : "${TEST_AGENT_ID:=1}"
+: "${SCHEMA_BUILDER_AGENT_ID:=1}"
+: "${SKILL_BUILDER_AGENT_ID:=1}"
 
 # Check API key
 if [ -z "$EMERY_API_KEY" ]; then
@@ -38,7 +41,7 @@ fi
 [ ! -d node_modules ] && pnpm install
 
 # Export for promptfoo
-export EMERY_BASE_URL EMERY_API_KEY TEST_TABLE_ID TEST_AGENT_ID
+export EMERY_BASE_URL EMERY_API_KEY TEST_TABLE_ID TEST_DATABASE_ID TEST_AGENT_ID SCHEMA_BUILDER_AGENT_ID SKILL_BUILDER_AGENT_ID
 
 # Enable tsx for TypeScript provider files
 export NODE_OPTIONS="--import tsx"
