@@ -244,41 +244,86 @@ export class ChatProcessingClient {
         onStreamingResponse(streamingResponse);
       });
 
+      // Track stream completion to handle race condition where error arrives after end
+      let streamCompleted = false;
+
       call.on('end', () => {
+        streamCompleted = true;
         console.log(`[CHAT-GRPC-CLIENT] Message processing stream ended successfully`);
         resolve();
       });
 
       call.on('error', (error: grpc.ServiceError) => {
-        console.error(`[CHAT-GRPC-CLIENT] Message processing failed:`, error);
-        
-        if (error.code === grpc.status.UNAVAILABLE) {
-          console.error(`[CHAT-GRPC-CLIENT] ChatProcessingService at ${this.address} is unavailable. Please ensure the gRPC server is running.`);
+        // If stream already completed successfully, ignore late-arriving errors
+        if (streamCompleted) {
+          console.warn(`[CHAT-GRPC-CLIENT] Error received after stream completed, ignoring:`, {
+            code: error.code,
+            codeName: grpc.status[error.code] || 'UNKNOWN',
+            details: error.details
+          });
+          return;
         }
-        
+
+        // Detailed error logging for debugging
+        console.error(`[CHAT-GRPC-CLIENT] gRPC Error:`, {
+          code: error.code,
+          codeName: grpc.status[error.code] || 'UNKNOWN',
+          message: error.message,
+          details: error.details
+        });
+
+        // Map gRPC error codes to user-friendly messages
+        const getErrorMessage = (code: grpc.status): string => {
+          switch (code) {
+            case grpc.status.UNAVAILABLE:
+              return 'AI service is temporarily unavailable.';
+            case grpc.status.DEADLINE_EXCEEDED:
+              return 'Request timed out. The operation may have completed - please check.';
+            case grpc.status.CANCELLED:
+              return 'Request was cancelled.';
+            case grpc.status.RESOURCE_EXHAUSTED:
+              return 'Service is busy. Please try again in a moment.';
+            case grpc.status.INTERNAL:
+              return 'An internal error occurred. The operation may have completed.';
+            case grpc.status.UNKNOWN:
+              return 'Connection interrupted. The operation may have completed.';
+            default:
+              return `Connection issue (code: ${grpc.status[code] || code}). The operation may have completed.`;
+          }
+        };
+
+        const getHint = (code: grpc.status): string => {
+          switch (code) {
+            case grpc.status.UNAVAILABLE:
+              return 'Please try again in a moment. If the issue persists, contact support.';
+            case grpc.status.DEADLINE_EXCEEDED:
+              return 'The request took too long. Check if the operation completed before retrying.';
+            case grpc.status.CANCELLED:
+              return 'The request was cancelled. You can try again if needed.';
+            default:
+              return 'If you see results above, the operation likely completed despite this message.';
+          }
+        };
+
         // Send error through callback before rejecting
-        // AIDEV-NOTE: This is a gRPC connection error (worker unavailable), classified as FATAL
         onStreamingResponse({
           type: 'error',
           error: {
             errorCode: 'GRPC_ERROR',
-            errorMessage: error.code === grpc.status.UNAVAILABLE
-              ? 'AI service is temporarily unavailable.'
-              : 'An unexpected error occurred.',
+            errorMessage: getErrorMessage(error.code),
             errorDetails: {
               'grpc_code': error.code.toString(),
+              'grpc_code_name': grpc.status[error.code] || 'UNKNOWN',
               'grpc_details': error.details || 'No additional details'
             },
-            hint: error.code === grpc.status.UNAVAILABLE
-              ? 'Please try again in a moment. If the issue persists, contact support.'
-              : 'Please try again or contact support if the problem continues.',
-            canRetry: true,
+            hint: getHint(error.code),
+            canRetry: error.code !== grpc.status.CANCELLED,
             autoRetry: false,
             sessionReset: error.code === grpc.status.UNAVAILABLE  // Fatal if service unavailable
           },
           timestamp: Date.now()
         });
-        
+
         reject(error);
       });
     });
