@@ -13,6 +13,9 @@ export interface ExecutionStepMetadata {
   arguments?: string
   observations?: string
   error?: string
+  skill_name?: string  // Name of executing skill/managed agent
+  skill_status?: string  // "executing" | "completed" | "failed"
+  skill_message?: string  // Detailed message about skill execution (can be multi-line)
 }
 
 /**
