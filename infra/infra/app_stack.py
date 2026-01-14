@@ -96,38 +96,17 @@ class AppStack(Stack):
         # Default AWS region - can be overridden by CDK context
         aws_region = 'ap-southeast-2'
 
-        # ========== ECR REPOSITORIES WITH LIFECYCLE POLICIES ==========
-        # Shared lifecycle rules for all repositories
-        ecr_lifecycle_rules = [
-            ecr.LifecycleRule(
-                description="Delete untagged images after 1 day",
-                tag_status=ecr.TagStatus.UNTAGGED,
-                max_image_age=Duration.days(1),
-            ),
-            ecr.LifecycleRule(
-                description="Keep only last 10 tagged images",
-                tag_status=ecr.TagStatus.TAGGED,
-                tag_prefix_list=["develop-", "pr-", "tag-"],
-                max_image_count=10,
-            ),
-        ]
-
-        # Frontend container repository
-        self.frontend_repo = ecr.Repository(
+        # ========== ECR REPOSITORIES ==========
+        # Import existing ECR repositories (created outside CDK or orphaned from previous deployments)
+        # Lifecycle rules are managed separately via AWS CLI (see infra/scripts/apply-ecr-lifecycle.sh)
+        self.frontend_repo = ecr.Repository.from_repository_name(
             self, "FrontendRepo",
-            repository_name="emery/frontend",
-            image_scan_on_push=True,
-            lifecycle_rules=ecr_lifecycle_rules,
-            removal_policy=RemovalPolicy.RETAIN,  # Don't delete repo on stack deletion
+            repository_name="emery/frontend"
         )
 
-        # Agent container repository
-        self.agent_repo = ecr.Repository(
+        self.agent_repo = ecr.Repository.from_repository_name(
             self, "AgentRepo",
-            repository_name="emery/agent",
-            image_scan_on_push=True,
-            lifecycle_rules=ecr_lifecycle_rules,
-            removal_policy=RemovalPolicy.RETAIN,
+            repository_name="emery/agent"
         )
 
         # ========== CUSTOM DOMAIN CONFIGURATION ==========
