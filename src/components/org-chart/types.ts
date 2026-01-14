@@ -120,12 +120,14 @@ export type OrgChartNode = Node<OrgChartNodeData, OrgChartNodeType>;
  * - automation_skill: Automation triggers skill
  * - skill_ref: Skill references another skill
  * - skill_table: Skill reads/writes table
+ * - data_source: Agent has context access to table
  */
 export type OrgChartEdgeType =
   | 'containment'
   | 'automation_skill'
   | 'skill_ref'
-  | 'skill_table';
+  | 'skill_table'
+  | 'data_source';
 
 /**
  * Edge data

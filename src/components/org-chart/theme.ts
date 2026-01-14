@@ -150,6 +150,11 @@ export const orgChartEdgeStyles = {
     strokeWidth: 2,
     strokeDasharray: '6 3',
   },
+  data_source: {
+    stroke: '#10b981', // emerald-500
+    strokeWidth: 2,
+    strokeDasharray: '3 3',
+  },
 } as const;
 
 /**

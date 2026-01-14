@@ -45,6 +45,11 @@ const edgeTypeConfig: Record<
     description: 'Parent-child relationship',
     color: 'text-slate-500 bg-slate-100 dark:bg-slate-900/30',
   },
+  data_source: {
+    label: 'Data Source',
+    description: 'Agent/skill has context access to this table',
+    color: 'text-emerald-500 bg-emerald-100 dark:bg-emerald-900/30',
+  },
 };
 
 function NodeIcon({ type }: { type: string }) {

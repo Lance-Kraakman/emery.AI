@@ -7,7 +7,7 @@
  * Shows hierarchical org structure with agents as containers.
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -40,6 +40,7 @@ import {
   normalizeEdgeConnection,
 } from '@/components/org-chart/utils';
 import { DeleteConfirmationDialog, buildDeleteImpactItems } from '@/components/org-chart/dialogs';
+import { extractDataSourceEdges, type DataSourceMapping } from '@/components/org-chart/edgeUtils';
 import { EntityPalette } from './EntityPalette';
 import { SearchDialog } from './SearchDialog';
 import { StickyNoteProvider } from '@/components/shared/StickyNoteContext';
@@ -68,7 +69,10 @@ interface OrgChartCanvasProps {
     slug: string;
     agentId?: number | null;
     tableCount?: number;
+    tables?: Array<{ id: number; name: string }>;
   }>;
+  /** Data source mappings for agents and skills */
+  dataSources?: DataSourceMapping[];
   /** Saved canvas metadata */
   canvasMetadata?: OrgChartCanvasMetadata;
   /** Whether the canvas is read-only */
@@ -96,6 +100,7 @@ export function OrgChartCanvas({
   agents,
   skills,
   databases,
+  dataSources = [],
   canvasMetadata,
   disabled = false,
   onSelect,
@@ -142,6 +147,20 @@ export function OrgChartCanvas({
     canvasMetadata,
     // onSelect is handled in handleSelectionChange where we have access to edges
   });
+
+  // Merge skill edges with data source edges
+  const allEdges = useMemo(() => {
+    if (dataSources.length === 0) return edges;
+
+    // Extract data source edges from mappings
+    const dataSourceEdges = extractDataSourceEdges(dataSources, databases);
+
+    // Merge with existing edges, avoiding duplicates by ID
+    const edgeIds = new Set(edges.map((e) => e.id));
+    const newEdges = dataSourceEdges.filter((e) => !edgeIds.has(e.id));
+
+    return [...edges, ...newEdges];
+  }, [edges, dataSources, databases]);
 
   // Handler for sticky note updates
   const handleUpdateStickyNote = useCallback(
@@ -332,9 +351,9 @@ export function OrgChartCanvas({
           const match = node.id.match(/^([a-z_]+)-(\d+)$/);
           const entityId = match ? parseInt(match[2], 10) : undefined;
 
-          // For skills, include connected edges with tableId
-          const connectedEdges = node.type === 'skill'
-            ? edges.filter((e) => e.source === node.id).map((e) => ({
+          // For skills/agents, include connected edges with tableId
+          const connectedEdges = (node.type === 'skill' || node.type === 'agent')
+            ? allEdges.filter((e) => e.source === node.id).map((e) => ({
                 id: e.id,
                 target: e.target,
                 edgeType: ((e.data as any)?.edgeType as string) || 'skill_table',
@@ -346,7 +365,7 @@ export function OrgChartCanvas({
         }
       }
     },
-    [setSelectedNodeId, onSelect, edges]
+    [setSelectedNodeId, onSelect, allEdges]
   );
 
   // Handle keyboard shortcuts
@@ -563,7 +582,7 @@ export function OrgChartCanvas({
       <StickyNoteProvider updateNote={handleUpdateStickyNote}>
         <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={allEdges}
         onNodesChange={disabled ? undefined : onNodesChange}
         onEdgesChange={disabled ? undefined : onEdgesChange}
         onConnect={disabled ? undefined : handleConnect}

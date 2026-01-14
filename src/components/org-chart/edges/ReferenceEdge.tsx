@@ -53,6 +53,12 @@ function getEdgeStyle(edgeType?: OrgChartEdgeType): React.CSSProperties {
         stroke: '#06b6d4', // cyan-500
         strokeDasharray: '2,2',
       };
+    case 'data_source':
+      // Agent has context access to table - emerald dashed
+      return {
+        stroke: '#10b981', // emerald-500
+        strokeDasharray: '3,3',
+      };
     case 'containment':
       // Containment relationship - subtle gray
       return {
@@ -77,6 +83,8 @@ function getEdgeLabel(edgeType?: OrgChartEdgeType): string | null {
       return 'triggers';
     case 'skill_table':
       return 'uses';
+    case 'data_source':
+      return 'context';
     default:
       return null;
   }
