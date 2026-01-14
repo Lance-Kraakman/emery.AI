@@ -63,6 +63,9 @@ class StepMetadata(TypedDict, total=False):
     arguments: str
     observations: str
     error: str
+    skill_name: str  # Name of executing skill/managed agent
+    skill_status: str  # "executing" | "completed" | "failed"
+    skill_message: str  # Detailed message about skill execution (can be multi-line)
 
 class StepProgressDict(TypedDict):
     """Typed structure for step progress events."""
@@ -726,7 +729,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # When LLM specifies a filename → searches session_attachments by name
             session_attachments = self.session_manager.get_attachments(session_id) if session_id else []
             context = ExecutionContext(
-                mode=ExecutionMode.INSTRUCTION,
+                mode=ExecutionMode.INTERACTIVE,  # Chat = interactive (with HITL)
                 task=current_task,
                 available_tools=[],
                 images=[],  # Images already passed via smolagents images param
@@ -1451,6 +1454,21 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         if content:
             metadata_dict["observations"] = content
 
+        # Add skill metadata for managed agents and skill-related tools
+        # This enables UI to show skill execution progress
+        MANAGED_AGENTS = {"skill_builder", "document_builder", "table_builder", "schema_builder"}
+        SKILL_TOOLS = {"tool_executor"}
+
+        if tool_name in MANAGED_AGENTS or tool_name in SKILL_TOOLS or tool_name.startswith("skill-"):
+            metadata_dict["skill_name"] = tool_name
+            # Determine status based on observations (completed if we have output)
+            metadata_dict["skill_status"] = "completed" if content else "executing"
+
+            # Build descriptive message from tool arguments and observations
+            skill_message = self._build_skill_message(tool_name, tool_args, content)
+            if skill_message:
+                metadata_dict["skill_message"] = skill_message
+
         return StepProgressDict(
             type="step_progress",
             step_type=step_type,
@@ -1459,6 +1477,75 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             metadata=metadata_dict,
             step_index=index
         )
+
+    def _build_skill_message(self, tool_name: str, tool_args: str, observations: str) -> str:
+        """
+        Build a descriptive message for skill execution.
+
+        Extracts meaningful information from tool arguments and observations
+        to provide user-friendly progress messages.
+        """
+        import json as json_module
+
+        messages = []
+
+        # Try to parse tool_args as JSON for structured extraction
+        try:
+            args = json_module.loads(tool_args) if tool_args and tool_args != "{}" else {}
+        except json_module.JSONDecodeError:
+            args = {}
+
+        # Build message based on tool type
+        if tool_name == "tool_executor":
+            # Extract task description from tool_executor args
+            task = args.get("task", "")
+            tool = args.get("tool", "")
+            if task:
+                messages.append(f"Running: {task[:100]}{'...' if len(task) > 100 else ''}")
+            if tool:
+                messages.append(f"Using tool: {tool}")
+
+        elif tool_name == "schema_builder":
+            # Schema builder working on database schema
+            task = args.get("task", args.get("request", ""))
+            if task:
+                messages.append(f"Schema task: {task[:100]}{'...' if len(task) > 100 else ''}")
+
+        elif tool_name == "table_builder":
+            task = args.get("task", "")
+            if task:
+                messages.append(f"Table task: {task[:100]}{'...' if len(task) > 100 else ''}")
+
+        elif tool_name == "skill_builder":
+            task = args.get("task", "")
+            if task:
+                messages.append(f"Building skill: {task[:100]}{'...' if len(task) > 100 else ''}")
+
+        elif tool_name == "document_builder":
+            task = args.get("task", "")
+            if task:
+                messages.append(f"Document task: {task[:100]}{'...' if len(task) > 100 else ''}")
+
+        elif tool_name.startswith("skill-"):
+            # Generic skill call
+            skill_id = tool_name.replace("skill-", "")
+            messages.append(f"Executing skill: {skill_id}")
+
+        # Add observation summary if available
+        if observations:
+            # Check for success/failure indicators
+            obs_lower = observations.lower()
+            if "success" in obs_lower or "created" in obs_lower:
+                # Extract key success info
+                lines = observations.split('\n')
+                for line in lines[:3]:  # First 3 lines
+                    if line.strip():
+                        messages.append(f"✓ {line.strip()[:80]}")
+                        break
+            elif "error" in obs_lower or "failed" in obs_lower:
+                messages.append(f"✗ {observations[:100]}{'...' if len(observations) > 100 else ''}")
+
+        return "\n".join(messages) if messages else ""
 
     def _extract_final_step(self, index: int) -> StepProgressDict:
         """

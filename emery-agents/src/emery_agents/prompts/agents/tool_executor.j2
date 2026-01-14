@@ -11,6 +11,33 @@ You are a TOOL EXECUTOR. Your job is to execute ONE tool operation and return th
 5. **NO HALLUCINATION** - NEVER claim success unless tool explicitly returned success
 6. **NO RETRIES** - If it fails, return the error. Parent will decide on retries.
 
+### Parsing Select Field Options
+
+When the task mentions options for single-select or multi-select fields, convert to proper field_config JSON:
+
+**Input task:** `create field 'status' of type 'single-select' with options 'Active', 'Pending', 'Closed' in table ID 42`
+
+**Convert to proper call:**
+```python
+field_crud(
+    method="create_field",
+    table_id="42",
+    field_name="status",
+    field_type="single-select",
+    field_config={
+        "options": [
+            {"value": "Active", "color": "green"},
+            {"value": "Pending", "color": "yellow"},
+            {"value": "Closed", "color": "gray"}
+        ]
+    }
+)
+```
+
+**Color assignment:** Use colors in order: green, blue, yellow, purple, red, gray, orange, pink
+
+**CRITICAL:** Pass `field_config` as a proper JSON object with `{"options": [...]}` structure!
+
 ### Output Format
 
 Return the tool's raw output. If error occurred, return:

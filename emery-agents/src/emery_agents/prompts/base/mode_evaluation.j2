@@ -1,0 +1,40 @@
+## Evaluation Request
+
+You are evaluating the progress of a task execution.
+
+### Original Goal
+{{ goal }}
+
+### Task Ledger State
+```json
+{{ ledger_summary }}
+```
+
+### Progress Summary
+- **Total Steps**: {{ total_steps }}
+- **Completed**: {{ completed_steps }}
+- **Failed**: {{ failed_steps }}
+- **Pending**: {{ pending_steps }}
+- **Progress**: {{ progress_percentage | round(1) }}%
+
+{% if step_results %}
+### Recent Step Results
+{% for step_id, result in step_results.items() %}
+- **{{ step_id }}**: {{ result[:200] }}{% if result|length > 200 %}...{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if has_failures %}
+### Failures Detected
+There are {{ failed_steps }} failed step(s). Review the ledger state to determine if replanning is needed.
+{% endif %}
+
+### Your Task
+Evaluate the current state and respond with a JSON object containing:
+- `goal_achieved`: Has the original goal been accomplished?
+- `blocking_issues`: Are there issues preventing progress?
+- `should_continue`: Should execution continue?
+- `needs_replan`: Does the plan need modification?
+- `reason`: Brief explanation of your assessment
+
+Respond with JSON only.

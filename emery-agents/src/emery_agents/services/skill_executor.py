@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union, overload
 
 from PIL import Image
 
@@ -104,6 +104,32 @@ class SkillExecutorService:
             if output.HasField('output_mapping') and len(output.output_mapping.table_mappings) > 0:
                 return True
         return False
+
+    @overload
+    def execute_skill(
+        self,
+        skill_config: 'agent_worker_pb2.SkillConfig',
+        runtime_inputs: Dict[str, Any],
+        org_model: Optional[str] = None,
+        capture_outputs: Literal[False] = False,
+        attachments: Optional[List[Any]] = None,
+        return_message_parts: bool = False,
+        api_key: Optional[str] = None,
+        organization_id: Optional[int] = None
+    ) -> str: ...
+
+    @overload
+    def execute_skill(
+        self,
+        skill_config: 'agent_worker_pb2.SkillConfig',
+        runtime_inputs: Dict[str, Any],
+        org_model: Optional[str] = None,
+        capture_outputs: Literal[True] = ...,
+        attachments: Optional[List[Any]] = None,
+        return_message_parts: bool = False,
+        api_key: Optional[str] = None,
+        organization_id: Optional[int] = None
+    ) -> SkillExecutionResult: ...
 
     def execute_skill(
         self,
@@ -856,17 +882,8 @@ class SkillExecutorService:
 
         ctx = MappingContext(api_key=api_key, organization_id=str(organization_id))
 
-        # Convert TaskResult to SkillOutputValue list (same pattern as skill_tool.py)
-        skill_outputs: List[SkillOutputValue] = []
-        if result.is_structured and isinstance(result.data, dict):
-            for name, value in result.data.items():
-                skill_outputs.append(SkillOutputValue(name=name, value=value))
-        elif result.is_structured and isinstance(result.data, list):
-            skill_outputs.append(SkillOutputValue(name="result", value=result.data))
-        elif result.is_text:
-            skill_outputs.append(SkillOutputValue(name="text", value=str(result.data)))
-        else:
-            skill_outputs.append(SkillOutputValue(name="value", value=result.data))
+        # Convert TaskResult to SkillOutputValue list using centralized method
+        skill_outputs = result.to_skill_outputs()
 
         # Use first output's mapping config (UI stores all table mappings on outputs[0])
         first_output = outputs_with_mappings[0]

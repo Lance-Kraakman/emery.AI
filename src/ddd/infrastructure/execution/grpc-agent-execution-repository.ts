@@ -8,12 +8,13 @@ import type {
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import { workerRegistry } from '@/ddd/infrastructure/grpc/client';
 import type { TaskProgress } from '@/ddd/infrastructure/grpc/client';
-import { createTaskRequest, mapTaskProgressFromProto, type AgentData } from '@/ddd/infrastructure/grpc/proto-mappers';
+import { createTaskRequest, mapTaskProgressFromProto, type AgentData, type ResolvedContextData, type ContextMappingData } from '@/ddd/infrastructure/grpc/proto-mappers';
 import { getAgentDisplayName, type Agent } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, UserId, OrganizationId, TaskStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
-import { getTokenUsageRepository, getOrganizationRepository } from '@/ddd/application/di/getters';
+import { getTokenUsageRepository, getOrganizationRepository, getContextMappingApplicationService } from '@/ddd/application/di/getters';
+import type { ContextMapping } from '@/ddd/domain/context/entities/context-mapping';
 
 export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
   // Track active executions for status queries
@@ -70,6 +71,37 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         }
       }
 
+      // 5b. Resolve context table mappings for this execution
+      // AIDEV-NOTE: Context tables define which dynamic tables are available to the agent
+      // with specific access permissions (read/write/readwrite)
+      let resolvedContext: ResolvedContextData | undefined;
+      try {
+        const contextMappingService = getContextMappingApplicationService();
+        const orgId = typeof targetOrganizationId === 'number'
+          ? targetOrganizationId
+          : targetOrganizationId.value;
+
+        const resolved = await contextMappingService.resolveContextForExecution(
+          orgId,
+          agentId,
+          skill?.id // skill ID if executing a skill
+          // stepId would be added here for step-level context
+        );
+
+        // Convert domain ContextMapping to ContextMappingData for proto
+        resolvedContext = {
+          mappings: resolved.mappings.map(this.mapContextMappingToData),
+          agentMappings: [], // Will be populated if needed
+          skillMappings: [], // Will be populated if needed
+          stepMappings: []   // Will be populated if needed
+        };
+
+        console.log(`[GRPC-EXECUTION-REPO] Resolved ${resolved.mappings.length} context table mappings for agent ${agentId}`);
+      } catch (error) {
+        console.warn(`[GRPC-EXECUTION-REPO] Failed to resolve context mappings, continuing without:`, error);
+        // Context tables are optional - continue execution without them
+      }
+
       // 6. Create proto task request
       // Use skill-based execution if skill is provided, otherwise instruction-based
       const taskRequest = createTaskRequest({
@@ -94,7 +126,8 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         ownerId: agent.ownerId.value,
         timeoutSeconds: timeoutSeconds || 300,
         agentModel: agentModel || undefined, // Pass agent model for hierarchy
-        organizationModel: organizationModel || undefined // Pass organization model for hierarchy
+        organizationModel: organizationModel || undefined, // Pass organization model for hierarchy
+        resolvedContext // Context table mappings for this execution
       });
 
 
@@ -346,5 +379,19 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
   private enrichAgentTools(agent: Agent): Agent {
     // Skills are in separate table now, not embedded in Agent entity
     return agent;
+  }
+
+  /**
+   * Convert domain ContextMapping to ContextMappingData for proto transport
+   */
+  private mapContextMappingToData(mapping: ContextMapping): ContextMappingData {
+    return {
+      tableId: mapping.tableId.value,
+      tableName: mapping.tableName,
+      accessMode: mapping.accessMode as 'read' | 'write' | 'readwrite',
+      syncMode: mapping.syncMode as 'on_access' | 'on_save' | 'realtime',
+      targetType: mapping.targetType as 'agent' | 'skill' | 'skill_step',
+      targetId: mapping.targetId
+    };
   }
 }

@@ -7,7 +7,10 @@ Implementations handle specific providers (HuggingFace, Replicate, etc.).
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from emery_agents.entities.skill_io import SkillOutputValue
 from enum import Enum
 
 
@@ -49,6 +52,41 @@ class TaskResult:
     def is_structured(self) -> bool:
         """Check if result is structured data (json/embedding)."""
         return self.type in (TaskResultType.JSON, TaskResultType.EMBEDDING)
+
+    def to_skill_outputs(self) -> List["SkillOutputValue"]:
+        """
+        Convert TaskResult to SkillOutputValue list for output mapping.
+
+        This centralizes the transformation logic that was previously duplicated
+        in agent_executor.py and skill_executor.py.
+
+        Returns:
+            List of SkillOutputValue for output mapping service
+        """
+        from emery_agents.entities.skill_io import SkillOutputValue
+
+        outputs: List[SkillOutputValue] = []
+
+        if self.is_structured and isinstance(self.data, dict):
+            # Dict result: each key becomes an output
+            for name, value in self.data.items():
+                outputs.append(SkillOutputValue(name=name, value=value))
+        elif self.is_structured and isinstance(self.data, list):
+            # List result: preserve array items with indexed names
+            for i, item in enumerate(self.data):
+                if isinstance(item, dict):
+                    # If item is a dict, flatten with index suffix
+                    for name, value in item.items():
+                        outputs.append(SkillOutputValue(name=f"{name}_{i}", value=value))
+                else:
+                    # Primitive items get indexed name
+                    outputs.append(SkillOutputValue(name=f"item_{i}", value=item))
+        elif self.is_text:
+            outputs.append(SkillOutputValue(name="text", value=str(self.data)))
+        else:
+            outputs.append(SkillOutputValue(name="value", value=self.data))
+
+        return outputs
 
 
 class BaseInferenceClient(ABC):

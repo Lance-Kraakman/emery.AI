@@ -12,6 +12,7 @@ import {
   ApiKey
 } from '@/ddd/domain/shared/value-objects';
 import type { AvatarConfig } from '@/lib/avatars';
+import type { AgentPlan } from '@/ddd/domain/agents/types/plan';
 
 // Domain-specific configuration types for Agent
 
@@ -101,6 +102,10 @@ export interface Agent {
   webhookToken?: string | null;               // For webhook authentication (Pipedream, etc.)
   defaultModel?: string | null;               // AI model override for this agent
   avatarConfig?: AvatarConfig | null;         // Avatar configuration with icon + color (versioned JSON)
+  // Plan file - generated detailed execution plan for orchestration
+  plan?: AgentPlan | null;
+  planGeneratedAt?: Date | null;
+  planApprovedAt?: Date | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -121,6 +126,9 @@ export interface AgentPersistenceRecord {
   webhookToken?: string | null;
   defaultModel?: string | null;
   avatarConfig?: AvatarConfig | null;
+  plan?: AgentPlan | null;
+  planGeneratedAt?: Date | null;
+  planApprovedAt?: Date | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -153,6 +161,9 @@ export class AgentFactory {
       webhookToken: record.webhookToken || null,
       defaultModel: record.defaultModel || null,
       avatarConfig: record.avatarConfig || null,
+      plan: record.plan || null,
+      planGeneratedAt: record.planGeneratedAt || null,
+      planApprovedAt: record.planApprovedAt || null,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     };
@@ -184,6 +195,9 @@ export class AgentFactory {
       webhookToken: agent.webhookToken || null,
       defaultModel: agent.defaultModel || null,
       avatarConfig: agent.avatarConfig || null,
+      plan: agent.plan || null,
+      planGeneratedAt: agent.planGeneratedAt || null,
+      planApprovedAt: agent.planApprovedAt || null,
       createdAt: agent.createdAt,
       updatedAt: agent.updatedAt
     };

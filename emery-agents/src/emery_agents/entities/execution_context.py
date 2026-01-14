@@ -8,6 +8,7 @@ Uses direct types (int, str) instead of wrapper classes.
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 from ..types import AgentId, OrganizationId, ExecutionMode
+from ..models.context_mapping import ResolvedContext
 
 # Import from generated protobuf
 from ..grpc.generated.agent_worker_pb2 import SkillConfig, ImageAttachment, FileAttachment
@@ -73,15 +74,23 @@ class ExecutionContext:
     # Row ID that triggered this execution (for table automations with input_mapping)
     source_row_id: Optional[int] = None
 
-    @property
-    def is_skill_mode(self) -> bool:
-        """Check if execution is skill-based."""
-        return self.mode == ExecutionMode.SKILL
+    # Use ExecutionCoordinator for two-phase execution (planning → approval → execution)
+    # When True, enables HITL approval gates and evaluation loop
+    use_coordinator: bool = False
+
+    # Resolved context table mappings for this execution
+    # Contains merged mappings with hierarchy priority: step > skill > agent
+    resolved_context: Optional[ResolvedContext] = None
 
     @property
-    def is_instruction_mode(self) -> bool:
-        """Check if execution is instruction-based."""
-        return self.mode == ExecutionMode.INSTRUCTION
+    def is_autonomous(self) -> bool:
+        """Check if execution is autonomous (skill-based, no HITL)."""
+        return self.mode == ExecutionMode.AUTONOMOUS
+
+    @property
+    def is_interactive(self) -> bool:
+        """Check if execution is interactive (chat-based, with HITL)."""
+        return self.mode == ExecutionMode.INTERACTIVE
 
     def with_tools(self, tools: List[str]) -> 'ExecutionContext':
         """Create new context with different tools."""
@@ -104,5 +113,7 @@ class ExecutionContext:
             api_key=self.api_key,
             environment=self.environment.copy(),
             skill_inputs=self.skill_inputs.copy(),
-            source_row_id=self.source_row_id
+            source_row_id=self.source_row_id,
+            use_coordinator=self.use_coordinator,
+            resolved_context=self.resolved_context,
         )

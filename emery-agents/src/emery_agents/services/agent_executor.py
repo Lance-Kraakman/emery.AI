@@ -35,6 +35,21 @@ from ..entities.output_mapping import (
 from ..entities.skill_io import SkillOutputValue
 from ..prompts import render_output_instructions
 from .output_mapping_service import OutputMappingService, MappingContext
+from .execution_coordinator import (
+    ExecutionCoordinator,
+    ExecutionCoordinatorFactory,
+    PlanCreatedEvent,
+    PlanApprovedEvent,
+    StepStartedEvent,
+    StepCompletedEvent,
+    StepFailedEvent,
+    ExecutionCompletedEvent,
+    EvaluationCompletedEvent,
+    GoalAchievedEvent,
+    ReplanTriggeredEvent,
+    ExecutionBlockedEvent,
+)
+from ..agents.evaluator_agent import create_evaluator_factory
 
 logger = logging.getLogger(__name__)
 
@@ -278,7 +293,7 @@ class AgentExecutor:
                 logger.info(f"📥 Skill inputs from trigger_data: {list(skill_inputs.keys())}")
 
         return ExecutionContext(
-            mode=ExecutionMode.SKILL,
+            mode=ExecutionMode.AUTONOMOUS,  # Skill execution = autonomous (no HITL)
             task=skill.instructions,  # Changed from 'instructions'
             available_tools=tool_names,
             # TaskRequest is dataclass - agent_id and organization_id are required fields
@@ -293,7 +308,8 @@ class AgentExecutor:
             attachments=attachments,
             api_key=api_key,  # For output mappings
             environment={},
-            skill_inputs=skill_inputs  # Runtime values for skill inputs
+            skill_inputs=skill_inputs,  # Runtime values for skill inputs
+            resolved_context=request.resolved_context,  # Context table mappings
         )
 
     def _create_instruction_context(self, request: TaskRequest) -> ExecutionContext:
@@ -325,7 +341,7 @@ class AgentExecutor:
         attachments = list(instruction_config.attachments) if instruction_config.attachments else []
 
         return ExecutionContext(
-            mode=ExecutionMode.INSTRUCTION,
+            mode=ExecutionMode.INTERACTIVE,  # Instruction-based = interactive (with HITL)
             task=instruction_config.task,  # Changed from 'instructions'
             available_tools=tool_names,
             images=images,
@@ -336,7 +352,8 @@ class AgentExecutor:
             skill_name=None,
             agent_model=agent_model or instruction_model,  # Prefer instruction model for direct execution
             org_model=org_model,
-            environment={}
+            environment={},
+            resolved_context=request.resolved_context,  # Context table mappings
         )
 
     def _find_skill_by_name(self, skills: List[SkillConfig], skill_name: str) -> Optional[SkillConfig]:
@@ -380,8 +397,14 @@ class AgentExecutor:
                 "progress_percent": 10.0
             }
 
+            # Use ExecutionCoordinator for two-phase execution if enabled
+            if context.use_coordinator:
+                async for progress in self._execute_with_coordinator(context, start_time):
+                    yield progress
+                return
+
             # Handle instruction-based execution (direct tool execution)
-            if context.is_instruction_mode:
+            if context.is_interactive:
                 yield {
                     "status": "in_progress",
                     "output": json.dumps({"message": "Using direct tool execution"}),
@@ -425,7 +448,7 @@ class AgentExecutor:
                 return
 
             # Handle skill-based execution
-            if context.is_skill_mode:
+            if context.is_autonomous:
                 if not context.skill:
                     error_msg = f"Skill-based execution requires context.skill to be set. Got skill_name='{context.skill_name}' but no skill object."
                     logger.error(error_msg)
@@ -781,6 +804,295 @@ class AgentExecutor:
             "progress_percent": 100.0
         }
 
+    async def _execute_with_coordinator(
+        self,
+        context: ExecutionContext,
+        start_time: float
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Execute task using ExecutionCoordinator for two-phase execution.
+
+        This enables:
+        - Planning phase with read-only tools
+        - HITL approval gate before execution
+        - Execution phase with full tools
+        - Evaluation loop for goal detection and replanning
+
+        Args:
+            context: ExecutionContext with task details
+            start_time: Task start time for duration calculation
+
+        Yields:
+            Dict with status, output, progress updates
+        """
+        skill = context.skill
+        skill_name = skill.name if skill else "coordinator"
+
+        logger.info(f"🎯 Using ExecutionCoordinator for two-phase execution: {skill_name}")
+
+        # Load all tools
+        tools = []
+        if skill and skill.tools:
+            try:
+                tools = self.tool_loader.load_tools(list(skill.tools))
+                logger.info(f"Loaded {len(tools)} tools for coordinator")
+            except Exception as e:
+                logger.warning(f"Failed to load some tools: {e}")
+
+        # Create evaluator factory with org model
+        model = context.org_model or "anthropic/claude-sonnet-4-20250514"
+        evaluator_factory = create_evaluator_factory(model)
+
+        # Create coordinator
+        coordinator = ExecutionCoordinator(
+            evaluator_factory=evaluator_factory,
+            evaluate_after_steps=1,
+            max_replans=3,
+        )
+
+        yield {
+            "status": "in_progress",
+            "output": json.dumps({
+                "skill": skill_name,
+                "execution_type": "coordinator",
+                "message": "Starting two-phase execution (planning → approval → execution)"
+            }),
+            "error_message": "",
+            "timestamp_ms": int(time.time() * 1000),
+            "progress_percent": 15.0
+        }
+
+        # Determine goal and instructions
+        goal = context.task[:200] if context.task else "Execute task"
+        instructions = context.task
+
+        # Phase 1: Create plan
+        plan_id = None
+        async for event in coordinator.create_plan(
+            goal=goal,
+            instructions=instructions,
+            tools=tools,
+            context_tables=context.resolved_context,
+        ):
+            progress = self._coordinator_event_to_progress(event, skill_name, start_time)
+            yield progress
+
+            if isinstance(event, PlanCreatedEvent):
+                plan_id = event.plan_id
+
+        if not plan_id:
+            yield {
+                "status": "failed",
+                "output": json.dumps({"error": "Plan creation failed"}),
+                "error_message": "Plan creation failed",
+                "timestamp_ms": int(time.time() * 1000),
+                "progress_percent": 0.0
+            }
+            return
+
+        # Phase 2: Auto-approve for now (HITL approval would be external)
+        # In production, this would wait for external approval signal
+        try:
+            await coordinator.approve_plan(plan_id)
+            yield {
+                "status": "in_progress",
+                "output": json.dumps({
+                    "skill": skill_name,
+                    "plan_id": plan_id,
+                    "message": "Plan approved, starting execution"
+                }),
+                "error_message": "",
+                "timestamp_ms": int(time.time() * 1000),
+                "progress_percent": 40.0
+            }
+        except ValueError as e:
+            yield {
+                "status": "failed",
+                "output": json.dumps({"error": str(e)}),
+                "error_message": str(e),
+                "timestamp_ms": int(time.time() * 1000),
+                "progress_percent": 0.0
+            }
+            return
+
+        # Phase 3: Execute plan
+        async for event in coordinator.execute_plan(plan_id, tools):
+            progress = self._coordinator_event_to_progress(event, skill_name, start_time)
+            yield progress
+
+    def _coordinator_event_to_progress(
+        self,
+        event: Any,
+        skill_name: str,
+        start_time: float
+    ) -> Dict[str, Any]:
+        """
+        Convert ExecutionCoordinator events to progress dicts.
+
+        Args:
+            event: Event from ExecutionCoordinator
+            skill_name: Name of skill being executed
+            start_time: Task start time
+
+        Returns:
+            Progress dict compatible with gRPC TaskProgress
+        """
+        timestamp_ms = int(time.time() * 1000)
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        if isinstance(event, PlanCreatedEvent):
+            step_count = len(event.plan.steps) if event.plan else 0
+            return {
+                "status": "in_progress",
+                "output": json.dumps({
+                    "skill": skill_name,
+                    "plan_id": event.plan_id,
+                    "step_count": step_count,
+                    "message": f"Plan created with {step_count} steps, awaiting approval",
+                    "plan_steps": [
+                        {"id": s.step_id, "description": s.description}
+                        for s in (event.plan.steps if event.plan else [])
+                    ],
+                }),
+                "error_message": "",
+                "timestamp_ms": timestamp_ms,
+                "progress_percent": 25.0
+            }
+
+        elif isinstance(event, StepStartedEvent):
+            return {
+                "status": "in_progress",
+                "output": json.dumps({
+                    "skill": skill_name,
+                    "step_id": event.step_id,
+                    "message": f"Starting: {event.step_description}"
+                }),
+                "error_message": "",
+                "timestamp_ms": timestamp_ms,
+                "progress_percent": 50.0
+            }
+
+        elif isinstance(event, StepCompletedEvent):
+            return {
+                "status": "in_progress",
+                "output": json.dumps({
+                    "skill": skill_name,
+                    "step_id": event.step_id,
+                    "result": event.result,
+                    "message": f"Completed step: {event.step_id}"
+                }),
+                "error_message": "",
+                "timestamp_ms": timestamp_ms,
+                "progress_percent": 70.0
+            }
+
+        elif isinstance(event, StepFailedEvent):
+            return {
+                "status": "in_progress",
+                "output": json.dumps({
+                    "skill": skill_name,
+                    "step_id": event.step_id,
+                    "error": event.error,
+                    "message": f"Step failed: {event.step_id}"
+                }),
+                "error_message": event.error,
+                "timestamp_ms": timestamp_ms,
+                "progress_percent": 50.0
+            }
+
+        elif isinstance(event, EvaluationCompletedEvent):
+            eval_result = event.evaluation
+            return {
+                "status": "in_progress",
+                "output": json.dumps({
+                    "skill": skill_name,
+                    "evaluation_number": event.evaluation_number,
+                    "goal_achieved": eval_result.goal_achieved,
+                    "needs_replan": eval_result.needs_replan,
+                    "reason": eval_result.reason,
+                    "message": f"Evaluation #{event.evaluation_number}: {eval_result.reason}"
+                }),
+                "error_message": "",
+                "timestamp_ms": timestamp_ms,
+                "progress_percent": 75.0
+            }
+
+        elif isinstance(event, GoalAchievedEvent):
+            return {
+                "status": "completed",
+                "output": json.dumps({
+                    "skill": skill_name,
+                    "plan_id": event.plan_id,
+                    "goal_achieved": True,
+                    "reason": event.reason,
+                    "message": f"Goal achieved: {event.reason}",
+                    "duration_ms": duration_ms
+                }),
+                "error_message": "",
+                "timestamp_ms": timestamp_ms,
+                "progress_percent": 100.0
+            }
+
+        elif isinstance(event, ReplanTriggeredEvent):
+            return {
+                "status": "in_progress",
+                "output": json.dumps({
+                    "skill": skill_name,
+                    "plan_id": event.plan_id,
+                    "replan_number": event.replan_number,
+                    "reason": event.reason,
+                    "message": f"Replanning #{event.replan_number}: {event.reason}"
+                }),
+                "error_message": "",
+                "timestamp_ms": timestamp_ms,
+                "progress_percent": 60.0
+            }
+
+        elif isinstance(event, ExecutionBlockedEvent):
+            return {
+                "status": "failed",
+                "output": json.dumps({
+                    "skill": skill_name,
+                    "plan_id": event.plan_id,
+                    "blocked": True,
+                    "reason": event.reason,
+                    "message": f"Execution blocked: {event.reason}",
+                    "duration_ms": duration_ms
+                }),
+                "error_message": event.reason,
+                "timestamp_ms": timestamp_ms,
+                "progress_percent": 0.0
+            }
+
+        elif isinstance(event, ExecutionCompletedEvent):
+            return {
+                "status": "completed" if event.success else "failed",
+                "output": json.dumps({
+                    "skill": skill_name,
+                    "plan_id": event.plan_id,
+                    "success": event.success,
+                    "message": "Execution completed successfully" if event.success else "Execution failed",
+                    "duration_ms": duration_ms
+                }),
+                "error_message": "" if event.success else "Execution failed",
+                "timestamp_ms": timestamp_ms,
+                "progress_percent": 100.0 if event.success else 0.0
+            }
+
+        else:
+            # Unknown event type
+            return {
+                "status": "in_progress",
+                "output": json.dumps({
+                    "skill": skill_name,
+                    "event_type": type(event).__name__,
+                    "message": f"Event: {type(event).__name__}"
+                }),
+                "error_message": "",
+                "timestamp_ms": timestamp_ms,
+                "progress_percent": 50.0
+            }
+
     async def _create_direct_execution_agent(
         self,
         context: ExecutionContext
@@ -1073,17 +1385,8 @@ class AgentExecutor:
         # Create mapping context
         ctx = MappingContext(api_key=api_key, organization_id=organization_id)
 
-        # Convert TaskResult to SkillOutputValue list (same pattern as skill_tool.py)
-        skill_outputs: List[SkillOutputValue] = []
-        if result.is_structured and isinstance(result.data, dict):
-            for name, value in result.data.items():
-                skill_outputs.append(SkillOutputValue(name=name, value=value))
-        elif result.is_structured and isinstance(result.data, list):
-            skill_outputs.append(SkillOutputValue(name="result", value=result.data))
-        elif result.is_text:
-            skill_outputs.append(SkillOutputValue(name="text", value=str(result.data)))
-        else:
-            skill_outputs.append(SkillOutputValue(name="value", value=result.data))
+        # Convert TaskResult to SkillOutputValue list using centralized method
+        skill_outputs = result.to_skill_outputs()
 
         # Use first output's mapping config (UI stores all table mappings on outputs[0])
         first_output = outputs_with_mappings[0]
@@ -1098,6 +1401,8 @@ class AgentExecutor:
             logger.info(f"✅ Task output mapping complete: {len(results)} tables updated")
         except Exception as e:
             logger.error(f"❌ Failed to apply task output mapping: {e}")
+            # Re-raise to propagate failure - callers should know mapping failed
+            raise
 
     async def _upload_binary_to_s3(
         self,
@@ -1198,3 +1503,5 @@ class AgentExecutor:
             logger.info(f"✅ Agent output mapping complete: {len(results)} tables updated")
         except Exception as e:
             logger.error(f"❌ Failed to apply agent output mapping: {e}")
+            # Re-raise to propagate failure - callers should know mapping failed
+            raise

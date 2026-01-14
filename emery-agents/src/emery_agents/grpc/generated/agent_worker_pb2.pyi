@@ -47,7 +47,7 @@ STEP_REASONING: StepType
 STEP_FINAL: StepType
 
 class TaskRequest(_message.Message):
-    __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name", "agent_model", "organization_model", "input_content")
+    __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name", "agent_model", "organization_model", "input_content", "resolved_context")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     AGENT_ID_FIELD_NUMBER: _ClassVar[int]
     SKILL_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -61,6 +61,7 @@ class TaskRequest(_message.Message):
     AGENT_MODEL_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_MODEL_FIELD_NUMBER: _ClassVar[int]
     INPUT_CONTENT_FIELD_NUMBER: _ClassVar[int]
+    RESOLVED_CONTEXT_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     agent_id: int
     skill_name: str
@@ -74,7 +75,8 @@ class TaskRequest(_message.Message):
     agent_model: str
     organization_model: str
     input_content: _containers.RepeatedCompositeFieldContainer[MessagePart]
-    def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ..., agent_model: _Optional[str] = ..., organization_model: _Optional[str] = ..., input_content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ...) -> None: ...
+    resolved_context: ResolvedContextProto
+    def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ..., agent_model: _Optional[str] = ..., organization_model: _Optional[str] = ..., input_content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., resolved_context: _Optional[_Union[ResolvedContextProto, _Mapping]] = ...) -> None: ...
 
 class TaskProgress(_message.Message):
     __slots__ = ("task_id", "status", "output_json", "error_message", "timestamp_ms", "progress_percent", "token_usage")
@@ -825,3 +827,31 @@ class ChatContext(_message.Message):
     domain_type: str
     domain_id: int
     def __init__(self, domain_type: _Optional[str] = ..., domain_id: _Optional[int] = ...) -> None: ...
+
+class ContextMappingProto(_message.Message):
+    __slots__ = ("table_id", "table_name", "access_mode", "sync_mode", "target_type", "target_id")
+    TABLE_ID_FIELD_NUMBER: _ClassVar[int]
+    TABLE_NAME_FIELD_NUMBER: _ClassVar[int]
+    ACCESS_MODE_FIELD_NUMBER: _ClassVar[int]
+    SYNC_MODE_FIELD_NUMBER: _ClassVar[int]
+    TARGET_TYPE_FIELD_NUMBER: _ClassVar[int]
+    TARGET_ID_FIELD_NUMBER: _ClassVar[int]
+    table_id: int
+    table_name: str
+    access_mode: str
+    sync_mode: str
+    target_type: str
+    target_id: str
+    def __init__(self, table_id: _Optional[int] = ..., table_name: _Optional[str] = ..., access_mode: _Optional[str] = ..., sync_mode: _Optional[str] = ..., target_type: _Optional[str] = ..., target_id: _Optional[str] = ...) -> None: ...
+
+class ResolvedContextProto(_message.Message):
+    __slots__ = ("mappings", "agent_mappings", "skill_mappings", "step_mappings")
+    MAPPINGS_FIELD_NUMBER: _ClassVar[int]
+    AGENT_MAPPINGS_FIELD_NUMBER: _ClassVar[int]
+    SKILL_MAPPINGS_FIELD_NUMBER: _ClassVar[int]
+    STEP_MAPPINGS_FIELD_NUMBER: _ClassVar[int]
+    mappings: _containers.RepeatedCompositeFieldContainer[ContextMappingProto]
+    agent_mappings: _containers.RepeatedCompositeFieldContainer[ContextMappingProto]
+    skill_mappings: _containers.RepeatedCompositeFieldContainer[ContextMappingProto]
+    step_mappings: _containers.RepeatedCompositeFieldContainer[ContextMappingProto]
+    def __init__(self, mappings: _Optional[_Iterable[_Union[ContextMappingProto, _Mapping]]] = ..., agent_mappings: _Optional[_Iterable[_Union[ContextMappingProto, _Mapping]]] = ..., skill_mappings: _Optional[_Iterable[_Union[ContextMappingProto, _Mapping]]] = ..., step_mappings: _Optional[_Iterable[_Union[ContextMappingProto, _Mapping]]] = ...) -> None: ...

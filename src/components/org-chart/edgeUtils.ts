@@ -11,7 +11,7 @@ import { makeNodeId } from './nodeId';
 // Types
 // =============================================================================
 
-export type EdgeType = 'skill_ref' | 'skill_table';
+export type EdgeType = 'skill_ref' | 'skill_table' | 'data_source';
 export type HandleSide = 'left' | 'right';
 
 export interface NormalizedConnection {
@@ -272,6 +272,83 @@ export function extractSkillEdges(
         }
       });
     });
+  });
+
+  return edges;
+}
+
+// =============================================================================
+// Data Source Edge Extraction
+// =============================================================================
+
+/**
+ * Data source mapping from context_mappings table
+ */
+export interface DataSourceMapping {
+  id: number;
+  targetType: 'agent' | 'skill' | 'skill_step';
+  targetId: string;
+  tableId: number;
+  tableName: string;
+  accessMode: 'read' | 'write' | 'readwrite';
+}
+
+/**
+ * Create an edge for data source connections.
+ * Source is agent or skill, target is database with specific table handle.
+ */
+export function createDataSourceEdge(
+  sourceType: 'agent' | 'skill',
+  sourceId: number,
+  databaseId: number,
+  tableId: number,
+  accessMode: string
+): OrgChartEdge {
+  return {
+    id: `${sourceType}-${sourceId}-datasource-${tableId}`,
+    source: makeNodeId(sourceType, sourceId),
+    target: makeNodeId('database', databaseId),
+    sourceHandle: 'right-source',
+    targetHandle: `table-${tableId}`,
+    type: 'reference',
+    data: {
+      edgeType: 'data_source',
+      label: accessMode,
+      tableId,
+    },
+  };
+}
+
+/**
+ * Extract edges from data source mappings (context_mappings).
+ * Creates green dashed edges from agents/skills to database tables.
+ */
+export function extractDataSourceEdges(
+  dataSources: DataSourceMapping[],
+  databases: DatabaseWithTables[]
+): OrgChartEdge[] {
+  const edges: OrgChartEdge[] = [];
+  const tableToDatabase = buildTableToDatabaseMap(databases);
+  const seen = new Set<string>();
+
+  dataSources.forEach((ds) => {
+    // Only handle agent and skill level mappings (not skill_step for now)
+    if (ds.targetType !== 'agent' && ds.targetType !== 'skill') {
+      return;
+    }
+
+    const dbId = tableToDatabase.get(ds.tableId);
+    if (!dbId) return;
+
+    const sourceType = ds.targetType as 'agent' | 'skill';
+    const sourceId = parseInt(ds.targetId, 10);
+    if (isNaN(sourceId)) return;
+
+    const key = `datasource:${sourceType}-${sourceId}-${ds.tableId}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      edges.push(createDataSourceEdge(sourceType, sourceId, dbId, ds.tableId, ds.accessMode));
+    }
   });
 
   return edges;

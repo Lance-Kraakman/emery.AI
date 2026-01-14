@@ -24,11 +24,13 @@ import { useOrgChartSession } from '@/components/org-chart/hooks';
 import { createAgent, deleteAgent } from '@/app/actions/agents';
 import { createSkill, deleteSkill } from '@/app/actions/skills';
 import { createDatabase, deleteDatabase } from '@/app/actions/databases';
+import { getContextMappings, type ContextMappingDTO } from '@/app/actions/context-mappings';
 import { TriggerConfigModal } from '@/app/(app)/agents/components/modals/TriggerConfigModal';
 import { CreateTableDialog } from '@/app/(app)/data/components/CreateTableDialog';
 import { useEmeryAgent } from '@/contexts/EmeryStoreProvider';
 import type { OrgChartNodeType, OrgChartCanvasMetadata } from '@/components/org-chart/types';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
+import type { DataSourceMapping } from '@/components/org-chart/edgeUtils';
 
 interface OrgChartEditorClientProps {
   /** Initial agents */
@@ -140,6 +142,58 @@ export function OrgChartEditorClient({
   const [selectedEdges, setSelectedEdges] = useState<
     Array<{ id: string; target: string; edgeType: string; tableId?: number }>
   >([]);
+
+  // Data sources for all agents (context mappings)
+  const [dataSources, setDataSources] = useState<DataSourceMapping[]>([]);
+
+  // Load data sources for all agents
+  useEffect(() => {
+    const loadDataSources = async () => {
+      const allMappings: DataSourceMapping[] = [];
+
+      // Load data sources for each agent
+      for (const agent of agents) {
+        try {
+          const mappings = await getContextMappings('agent', String(agent.id));
+          allMappings.push(
+            ...mappings.map((m) => ({
+              id: m.id,
+              targetType: m.targetType,
+              targetId: m.targetId,
+              tableId: m.tableId,
+              tableName: m.tableName,
+              accessMode: m.accessMode,
+            }))
+          );
+        } catch (error) {
+          console.error(`Failed to load data sources for agent ${agent.id}:`, error);
+        }
+      }
+
+      // Also load skill-level data sources
+      for (const skill of skills) {
+        try {
+          const mappings = await getContextMappings('skill', String(skill.id));
+          allMappings.push(
+            ...mappings.map((m) => ({
+              id: m.id,
+              targetType: m.targetType,
+              targetId: m.targetId,
+              tableId: m.tableId,
+              tableName: m.tableName,
+              accessMode: m.accessMode,
+            }))
+          );
+        } catch (error) {
+          console.error(`Failed to load data sources for skill ${skill.id}:`, error);
+        }
+      }
+
+      setDataSources(allMappings);
+    };
+
+    loadDataSources();
+  }, [agents, skills]);
 
   // Handle selection from canvas - includes connected edges for skills
   const handleSelect = useCallback(
@@ -467,6 +521,13 @@ export function OrgChartEditorClient({
         .map((e) => parseInt(e.target.replace('skill-', ''), 10));
       const connectedSkillsList = skills.filter((s) => connectedSkillIds.includes(s.id));
 
+      // Get agent-level data sources for inheritance display
+      const agentDataSources = selectedSkill.agentId
+        ? dataSources.filter(
+            (ds) => ds.targetType === 'agent' && ds.targetId === String(selectedSkill.agentId)
+          )
+        : [];
+
       return (
         <SkillConfigPanel
           skill={selectedSkill}
@@ -475,6 +536,7 @@ export function OrgChartEditorClient({
           edges={selectedEdges}
           databases={connectedDatabases}
           connectedSkills={connectedSkillsList}
+          agentDataSources={agentDataSources}
         />
       );
     }
@@ -509,6 +571,7 @@ export function OrgChartEditorClient({
           agents={agents}
           skills={skills}
           databases={databases}
+          dataSources={dataSources}
           canvasMetadata={canvasMetadata}
           onSelect={handleSelect}
           onOpenEntity={handleOpenEntity}

@@ -8,9 +8,9 @@
  * Modal rendering is lifted to parent (OrgChartEditorClient) for proper overlay.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, ExternalLink, Settings, Plus, Check, X, Loader2 } from 'lucide-react';
+import { Bot, ExternalLink, Settings, Plus, Check, X, Loader2, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,16 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import { AutomationListItem } from '@/components/agents/shared';
+import { DataSourcePicker, DataSourceList } from '@/components/data-sources';
+import {
+  getContextMappings,
+  attachContextTable,
+  updateContextMapping,
+  detachContextTable,
+  type ContextMappingDTO,
+} from '@/app/actions/context-mappings';
 import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
+import type { ContextMappingAccessMode, ContextMappingSyncMode } from '@/ddd/domain/context/entities/context-mapping';
 
 interface AgentConfigPanelProps {
   agent: {
@@ -60,6 +69,26 @@ export function AgentConfigPanel({
 
   // Automation toggle state
   const [togglingAutomation, setTogglingAutomation] = useState<number | null>(null);
+
+  // Data sources state
+  const [dataSources, setDataSources] = useState<ContextMappingDTO[]>([]);
+  const [isLoadingDataSources, setIsLoadingDataSources] = useState(true);
+
+  // Load data sources
+  useEffect(() => {
+    const loadDataSources = async () => {
+      try {
+        setIsLoadingDataSources(true);
+        const mappings = await getContextMappings('agent', String(agent.id));
+        setDataSources(mappings);
+      } catch (error) {
+        console.error('Failed to load data sources:', error);
+      } finally {
+        setIsLoadingDataSources(false);
+      }
+    };
+    loadDataSources();
+  }, [agent.id]);
 
   // Handle save name
   const handleSaveName = useCallback(async () => {
@@ -165,6 +194,40 @@ export function AgentConfigPanel({
       onOpenAgent();
     }
   }, [onOpenTriggerModal, onOpenAgent]);
+
+  // Handle update data source
+  const handleUpdateDataSource = useCallback(
+    async (id: number, data: { accessMode?: ContextMappingAccessMode; syncMode?: ContextMappingSyncMode }) => {
+      try {
+        const result = await updateContextMapping(id, data);
+        if (result.success && result.data) {
+          setDataSources((prev) =>
+            prev.map((ds) => (ds.id === id ? result.data! : ds))
+          );
+        } else {
+          toast.error(result.error || 'Failed to update data source');
+        }
+      } catch (error) {
+        toast.error('Failed to update data source');
+      }
+    },
+    []
+  );
+
+  // Handle remove data source
+  const handleRemoveDataSource = useCallback(async (id: number) => {
+    try {
+      const result = await detachContextTable(id);
+      if (result.success) {
+        setDataSources((prev) => prev.filter((ds) => ds.id !== id));
+        toast.success('Data source removed');
+      } else {
+        toast.error(result.error || 'Failed to remove data source');
+      }
+    } catch (error) {
+      toast.error('Failed to remove data source');
+    }
+  }, []);
 
   // Cancel editing
   const handleCancelName = () => {
@@ -323,6 +386,68 @@ export function AgentConfigPanel({
           <div className="text-xs text-muted-foreground">
             {databaseCount === 1 ? 'Database' : 'Databases'}
           </div>
+        </div>
+      </div>
+
+      {/* Data Sources section */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Data Sources
+          </label>
+          <span className="text-xs text-muted-foreground">
+            {dataSources.length} {dataSources.length === 1 ? 'table' : 'tables'}
+          </span>
+        </div>
+
+        {isLoadingDataSources ? (
+          <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Loading...
+          </div>
+        ) : dataSources.length === 0 ? (
+          <div className="text-center py-4 text-sm text-muted-foreground bg-muted/30 rounded-lg">
+            <Database className="h-6 w-6 mx-auto mb-1 text-muted-foreground/50" />
+            No data sources attached
+          </div>
+        ) : (
+          <DataSourceList
+            mappings={dataSources}
+            onUpdate={handleUpdateDataSource}
+            onRemove={handleRemoveDataSource}
+          />
+        )}
+
+        {/* Add data source picker */}
+        <div className="mt-2">
+          <DataSourcePicker
+            selectedTableIds={dataSources.map((ds) => ds.tableId)}
+            onChange={() => {/* Handled by onTableSelect */}}
+            onTableSelect={async (table) => {
+              try {
+                const result = await attachContextTable({
+                  targetType: 'agent',
+                  targetId: String(agent.id),
+                  tableId: table.id,
+                  tableName: table.name,
+                  accessMode: 'read',
+                  syncMode: 'on_access',
+                });
+
+                if (result.success && result.data) {
+                  setDataSources((prev) => [...prev, result.data!]);
+                  toast.success(`Added ${table.name} as data source`);
+                } else {
+                  toast.error(result.error || `Failed to add ${table.name}`);
+                }
+              } catch (error) {
+                toast.error(`Failed to add ${table.name}`);
+              }
+            }}
+            excludeTableIds={dataSources.map((ds) => ds.tableId)}
+            placeholder="Add table..."
+            disabled={isLoadingDataSources}
+          />
         </div>
       </div>
 

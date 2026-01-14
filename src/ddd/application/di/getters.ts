@@ -59,6 +59,8 @@ import type { InvoiceApplicationService } from '@/ddd/application/services/billi
 import type { StorageQuotaApplicationService } from '@/ddd/application/services/billing/storage-quota-application-service';
 import type { StorageRecalculationApplicationService } from '@/ddd/application/services/billing/storage-recalculation-application-service';
 import type { AuditApplicationService } from '@/ddd/application/services/audit/audit-application-service';
+import type { IContextMappingRepository } from '@/ddd/domain/context/repositories/context-mapping-repository';
+import type { ContextMappingApplicationService } from '@/ddd/application/services/context/context-mapping-application-service';
 
 import { DIContainer } from './container';
 
@@ -133,6 +135,10 @@ type ServiceMap = {
 
   // Audit Services
   AuditApplicationService: AuditApplicationService;
+
+  // Context Services
+  ContextMappingRepository: IContextMappingRepository;
+  ContextMappingApplicationService: ContextMappingApplicationService;
 };
 
 /**
@@ -154,6 +160,7 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
     'TokenUsageRepository': 'ITokenUsageRepository',
     'InvoiceRepository': 'IInvoiceRepository',
     'IToolRegistryService': 'IToolRegistryService',
+    'ContextMappingRepository': 'IContextMappingRepository',
   };
 
   if (specialMappings[key as string]) {
@@ -279,3 +286,9 @@ export const getStorageRecalculationApplicationService = createGetter('StorageRe
 
 // Audit application service getters
 export const getAuditApplicationService = createGetter('AuditApplicationService');
+
+// Context domain repository getters
+export const getContextMappingRepository = createGetter('ContextMappingRepository');
+
+// Context application service getters
+export const getContextMappingApplicationService = createGetter('ContextMappingApplicationService');

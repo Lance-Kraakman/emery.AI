@@ -1,0 +1,71 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ECR",
+      "Effect": "Allow",
+      "Action": "ecr:*",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": ["ap-southeast-2"]
+        }
+      }
+    },
+    {
+      "Sid": "ECS",
+      "Effect": "Allow",
+      "Action": "ecs:*",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": ["ap-southeast-2"]
+        }
+      }
+    },
+    {
+      "Sid": "RDS",
+      "Effect": "Allow",
+      "Action": "rds:*",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": ["ap-southeast-2"]
+        }
+      }
+    },
+    {
+      "Sid": "ElastiCache",
+      "Effect": "Allow",
+      "Action": "elasticache:*",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": ["ap-southeast-2"]
+        }
+      }
+    },
+    {
+      "Sid": "CodeDeploy",
+      "Effect": "Allow",
+      "Action": "codedeploy:*",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": ["ap-southeast-2"]
+        }
+      }
+    },
+    {
+      "Sid": "AutoScaling",
+      "Effect": "Allow",
+      "Action": "application-autoscaling:*",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": ["ap-southeast-2"]
+        }
+      }
+    }
+  ]
+}

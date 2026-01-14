@@ -55,6 +55,8 @@ import type { IAppRepository } from '@/ddd/domain/puck/repositories/app-reposito
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
 import type { AppApplicationService } from '@/ddd/application/services/puck/app-application-service';
 import type { PuckPageApplicationService } from '@/ddd/application/services/puck/puck-page-application-service';
+import type { IContextMappingRepository } from '@/ddd/domain/context/repositories/context-mapping-repository';
+import type { ContextMappingApplicationService } from '@/ddd/application/services/context/context-mapping-application-service';
 
 /**
  * Registry of all available repository interfaces and services in the DI container.
@@ -156,4 +158,10 @@ export interface RepositoryRegistry {
 
   // Audit application services
   AuditApplicationService: AuditApplicationService;
+
+  // Context domain repositories
+  IContextMappingRepository: IContextMappingRepository;
+
+  // Context application services
+  ContextMappingApplicationService: ContextMappingApplicationService;
 }

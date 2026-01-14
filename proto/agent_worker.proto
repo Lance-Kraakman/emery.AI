@@ -31,6 +31,7 @@ message TaskRequest {
   string agent_model = 11;         // Agent default model (overrides organization model in hierarchy)
   string organization_model = 12;  // Organization default model (fallback for agent model)
   repeated MessagePart input_content = 13; // Runtime input attachments for skill execution
+  ResolvedContextProto resolved_context = 14; // Context table mappings for this execution
 }
 
 // AIDEV-NOTE: Simplified for single-instruction execution (removed step_id and step_type)
@@ -588,4 +589,28 @@ message CancelMessageResponse {
 message ChatContext {
   string domain_type = 1;            // Domain type (tables, agents, files, teams, workflows)
   int32 domain_id = 2;               // Domain entity identifier
+}
+
+// =============================================================================
+// Context Mapping Types (for agent/skill/step context tables)
+// =============================================================================
+
+// Context table mapping for agent execution
+// Defines which tables are accessible and with what permissions
+message ContextMappingProto {
+  int32 table_id = 1;                // Table ID
+  string table_name = 2;             // Table name (for display/logging)
+  string access_mode = 3;            // "read", "write", or "readwrite"
+  string sync_mode = 4;              // "on_access", "on_save", or "realtime"
+  string target_type = 5;            // "agent", "skill", or "skill_step"
+  string target_id = 6;              // Target entity ID
+}
+
+// Resolved context mappings for execution
+// Contains merged mappings with hierarchy priority applied (step > skill > agent)
+message ResolvedContextProto {
+  repeated ContextMappingProto mappings = 1;           // All mappings (merged)
+  repeated ContextMappingProto agent_mappings = 2;     // Agent-level mappings
+  repeated ContextMappingProto skill_mappings = 3;     // Skill-level mappings
+  repeated ContextMappingProto step_mappings = 4;      // Step-level mappings
 }

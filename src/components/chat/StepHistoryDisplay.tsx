@@ -16,7 +16,7 @@ function StepHistoryItem({ step }: { step: ExecutionStep }) {
   const [showDetails, setShowDetails] = useState(false)
   const config = getStepConfig(step.type)
   const Icon = config.icon
-  const hasMetadata = step.metadata && (step.metadata.tool || step.metadata.arguments)
+  const hasMetadata = step.metadata && (step.metadata.tool || step.metadata.arguments || step.metadata.skill_name)
 
   return (
     <div className="pl-1 py-0.5">
@@ -53,6 +53,28 @@ function StepHistoryItem({ step }: { step: ExecutionStep }) {
               </summary>
               {showDetails && (
                 <div className="mt-2 p-2 bg-transparent rounded text-xs space-y-1">
+                  {step.metadata?.skill_name && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Skill:</span>
+                        <span>{step.metadata.skill_name}</span>
+                        {step.metadata.skill_status && (
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                            step.metadata.skill_status === 'completed' ? 'bg-green-500/20 text-green-600' :
+                            step.metadata.skill_status === 'failed' ? 'bg-red-500/20 text-red-600' :
+                            'bg-yellow-500/20 text-yellow-600'
+                          }`}>
+                            {step.metadata.skill_status}
+                          </span>
+                        )}
+                      </div>
+                      {step.metadata.skill_message && (
+                        <div className="text-muted-foreground whitespace-pre-wrap pl-2 border-l-2 border-muted">
+                          {step.metadata.skill_message}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {step.metadata?.tool && (
                     <div>
                       <span className="font-medium">Tool:</span> {step.metadata.tool}

@@ -91,6 +91,16 @@ interface ConnectedTable {
   dbName: string;
 }
 
+/** Data source mapping for inheritance display */
+interface DataSourceMapping {
+  id: number;
+  targetType: 'agent' | 'skill' | 'skill_step';
+  targetId: string;
+  tableId: number;
+  tableName: string;
+  accessMode: 'read' | 'write' | 'readwrite';
+}
+
 interface SkillConfigPanelProps {
   skill: {
     id: number;
@@ -109,6 +119,8 @@ interface SkillConfigPanelProps {
     tables?: Array<{ id: number; name: string }>;
   }>;
   connectedSkills?: Array<{ id: number; name: string }>;
+  /** Data sources inherited from parent agent */
+  agentDataSources?: DataSourceMapping[];
 }
 
 /** Get badge color based on execution type */
@@ -417,6 +429,7 @@ export function SkillConfigPanel({
   onOpenEditor,
   edges = [],
   databases = [],
+  agentDataSources = [],
 }: SkillConfigPanelProps) {
   const router = useRouter();
   const isOrgScoped = skill.agentId === null || skill.agentId === undefined;
@@ -849,6 +862,42 @@ export function SkillConfigPanel({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Data Sources Section - inherited from agent */}
+      {agentDataSources.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Data Sources
+            </Label>
+            <span className="text-[10px] text-muted-foreground">
+              {agentDataSources.length} {agentDataSources.length === 1 ? 'table' : 'tables'}
+            </span>
+          </div>
+          <div className="text-[10px] text-muted-foreground mb-1">
+            Inherited from: {agentName || `Agent #${skill.agentId}`}
+          </div>
+          <div className="space-y-1">
+            {agentDataSources.map((ds) => (
+              <div
+                key={ds.id}
+                className="flex items-center justify-between p-2 rounded-lg border bg-emerald-50/30 dark:bg-emerald-900/10"
+              >
+                <div className="flex items-center gap-1.5">
+                  <Table2 className="h-3.5 w-3.5 text-emerald-500" />
+                  <span className="text-xs font-medium">{ds.tableName}</span>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-1.5 py-0 h-5 bg-emerald-100/50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700"
+                >
+                  {ds.accessMode}
+                </Badge>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

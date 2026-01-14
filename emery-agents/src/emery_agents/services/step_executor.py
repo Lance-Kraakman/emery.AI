@@ -376,6 +376,8 @@ class StepExecutorService:
         self.tool_loader = tool_loader
         self.agent_factory = agent_factory
         self.skill_executor_callback = skill_executor_callback
+        # Lock for thread-safe access to execution_stack in parallel execution
+        self._execution_stack_lock = asyncio.Lock()
 
     async def execute_steps(
         self,
@@ -676,6 +678,24 @@ class StepExecutorService:
         # If all steps were disabled, nothing more to do
         if not active_batch:
             return
+
+        # Warn about potential output conflicts in parallel steps
+        # (parallel steps writing to same variable will overwrite each other)
+        if len(active_batch) > 1:
+            output_targets: Dict[str, List[str]] = {}
+            for step in active_batch:
+                output_mappings = step.outputs or {}
+                if step.output_defs:
+                    output_mappings = output_mappings or {d.name: d.name for d in step.output_defs}
+                for target_var in output_mappings.values():
+                    output_targets.setdefault(target_var, []).append(step.name)
+
+            conflicts = {var: steps for var, steps in output_targets.items() if len(steps) > 1}
+            if conflicts:
+                logger.warning(
+                    f"⚠️ Parallel steps have conflicting output targets (last write wins): "
+                    f"{conflicts}"
+                )
 
         # Yield running status for active steps
         for i, step in enumerate(active_batch):
@@ -1135,18 +1155,23 @@ class StepExecutorService:
         if not skill_config:
             raise ValueError(f"Skill {skill_id} not found in available skills")
 
-        if skill_id in execution_stack:
-            raise ValueError(
-                f"Circular dependency detected: skill {skill_id} ({skill_config.name}) "
-                f"is already executing in current chain"
-            )
+        # Use lock to make check-then-add atomic (prevents race in parallel execution)
+        async with self._execution_stack_lock:
+            if skill_id in execution_stack:
+                raise ValueError(
+                    f"Circular dependency detected: skill {skill_id} ({skill_config.name}) "
+                    f"is already executing in current chain"
+                )
+            execution_stack.add(skill_id)
 
         logger.info(f"🔗 Delegating to skill: {skill_config.name} (id={skill_id})")
 
         if not self.skill_executor_callback:
+            # Clean up before raising
+            async with self._execution_stack_lock:
+                execution_stack.discard(skill_id)
             raise ValueError("No skill executor callback configured for skill delegation")
 
-        execution_stack.add(skill_id)
         try:
             result = self.skill_executor_callback(
                 skill_config=skill_config,

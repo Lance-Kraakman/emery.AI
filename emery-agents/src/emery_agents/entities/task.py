@@ -10,6 +10,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from ..types import AgentId, OrganizationId, TaskId, OwnerId, InstructionConfig
+from ..models.context_mapping import ResolvedContext
 
 
 @dataclass
@@ -41,6 +42,7 @@ class TaskRequest:
     instruction_config: Optional[InstructionConfig] = None
     organization_model: Optional[str] = None  # For model selection
     agent_model: Optional[str] = None  # For model selection
+    resolved_context: Optional[ResolvedContext] = None  # Context table mappings
 
 
 @dataclass
