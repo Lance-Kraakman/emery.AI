@@ -743,20 +743,30 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     tool_provider=tool_provider,
                     org_model=org_model
                 )
-                research_agent = self._create_research_agent(
-                    tool_provider=tool_provider,
-                    org_model=org_model
-                )
+                # Research agent may fail if ddgs package is missing - make it optional
+                research_agent = None
+                try:
+                    research_agent = self._create_research_agent(
+                        tool_provider=tool_provider,
+                        org_model=org_model
+                    )
+                except ImportError as e:
+                    logger.warning(f"⚠️ Research agent unavailable (missing dependency): {e}")
 
                 # Create ToolCallingAgent with managed agents
                 # AIDEV-NOTE: InterruptAwareToolCallingAgent sets interrupt_switch=True
                 # when detecting interrupt from managed agent, breaking the loop
                 # Pass file_attachments so chat agent can see available files in session
+                # Filter None values in case research_agent failed to create
+                managed_agents = [a for a in [
+                    skill_builder_agent, document_builder_agent,
+                    table_builder_agent, schema_builder_agent, research_agent
+                ] if a is not None]
                 agent = self._create_agent_with_model_provider(
                     smolagents_tools,
                     org_model=org_model,
                     has_images=has_images,
-                    managed_agents=[skill_builder_agent, document_builder_agent, table_builder_agent, schema_builder_agent, research_agent],
+                    managed_agents=managed_agents,
                     session_attachments=file_attachments  # Current message files for initial agent context
                 )
 
