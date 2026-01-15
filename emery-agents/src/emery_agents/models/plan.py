@@ -202,6 +202,21 @@ class PlanStep:
             target_agent=agent_name,
         )
 
+    def with_parameters(self, parameters: Dict[str, Any]) -> "PlanStep":
+        """Return new PlanStep with updated parameters."""
+        return PlanStep(
+            step_id=self.step_id,
+            description=self.description,
+            tool_call=self.tool_call,
+            parameters=parameters,
+            context_tables=self.context_tables,
+            status=PlanStepStatus.PENDING.value,  # Reset to pending for retry
+            result=None,
+            error=None,
+            sub_plan=self.sub_plan,
+            target_agent=self.target_agent,
+        )
+
 
 @dataclass(frozen=True)
 class Plan:
@@ -482,3 +497,33 @@ def create_step(
         status=PlanStepStatus.PENDING.value,
         target_agent=target_agent,
     )
+
+
+@dataclass
+class RecoveryResult:
+    """
+    Result of recovery analysis for a failed step.
+
+    Contains corrected parameters and confidence level.
+    Used by PlanService.analyze_step_failure() and ExecutionCoordinator.
+    """
+
+    confidence: float  # 0.0-1.0
+    corrected_parameters: Dict[str, Any]  # Parameters to add/change
+    reasoning: str  # LLM's explanation
+    questions: List[str] = field(default_factory=list)  # Questions if low confidence
+
+    @property
+    def should_auto_fix(self) -> bool:
+        """High confidence - auto-execute the fix."""
+        return self.confidence >= 0.8
+
+    @property
+    def should_propose(self) -> bool:
+        """Medium confidence - propose fix for user approval."""
+        return 0.5 <= self.confidence < 0.8
+
+    @property
+    def should_ask_user(self) -> bool:
+        """Low confidence - ask user for guidance."""
+        return self.confidence < 0.5

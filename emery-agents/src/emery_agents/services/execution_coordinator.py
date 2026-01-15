@@ -14,7 +14,7 @@ from typing import List, Optional, Any, AsyncIterator, Dict, Callable, Tuple, TY
 from enum import Enum
 
 from ..agents.evaluator_agent import EvaluationTool
-from ..models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, SubPlan, create_plan
+from ..models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, SubPlan, RecoveryResult, create_plan
 from ..models.task_ledger import TaskLedger, create_ledger_from_plan, LedgerEventType
 from ..models.context_mapping import ResolvedContext
 from ..models.execution import StepExecutionResult, EvaluatorInput, ReplanContext
@@ -130,6 +130,38 @@ class ExecutionBlockedEvent:
     """Event emitted when execution is blocked."""
     plan_id: str
     reason: str
+
+
+# Recovery analysis events (confidence-based error recovery)
+@dataclass
+class RecoveryAnalysisEvent:
+    """Event emitted when recovery analysis completes."""
+    step_id: str
+    confidence: float  # 0.0-1.0
+
+
+@dataclass
+class AutoFixStartedEvent:
+    """Event emitted when auto-fix begins (high confidence ≥0.8)."""
+    step_id: str
+    fix_description: str
+    confidence: float
+
+
+@dataclass
+class AutoFixCompletedEvent:
+    """Event emitted when auto-fix completes successfully."""
+    step_id: str
+    result: str
+
+
+@dataclass
+class RecoveryPlanProposedEvent:
+    """Event emitted when recovery plan needs approval (medium confidence 0.5-0.8)."""
+    step_id: str
+    fix_description: str
+    confidence: float
+    gathered_context: Dict[str, Any]
 
 
 class CoordinatorMode(Enum):
@@ -255,6 +287,9 @@ class ExecutionCoordinator:
         self._task_classifier: Optional[TaskClassifier] = None
         if model_provider:
             self._task_classifier = TaskClassifier(model_provider)
+
+        # Store model_provider for recovery analysis (via plan_service)
+        self._model_provider = model_provider
 
     @classmethod
     def from_config(cls, config: ExecutionCoordinatorConfig) -> "ExecutionCoordinator":
@@ -703,8 +738,22 @@ class ExecutionCoordinator:
                         error=error_msg,
                     )
 
+                    # Attempt intelligent recovery
+                    recovery_succeeded = False
+                    async for recovery_event in self._handle_step_failure(step, error_msg, tools):
+                        yield recovery_event
+                        # If auto-fix completed, we can continue execution
+                        if isinstance(recovery_event, AutoFixCompletedEvent):
+                            recovery_succeeded = True
+
+                    if recovery_succeeded:
+                        # Recovery succeeded - continue to next step
+                        logger.info(f"✅ Recovery succeeded for step {step.step_id}")
+                        continue
+
+                    # Recovery didn't auto-fix (waiting for user input or low confidence)
                     success = False
-                    break  # Stop execution on failure
+                    break
 
             # After for loop: check if we should restart (replan) or exit
             if should_restart:
@@ -915,6 +964,163 @@ Analyze this state and call the report_evaluation tool with your assessment.
         # No executor and no tool_call - just mark as done
         logger.warning("No plan_step_executor configured, step not actually executed")
         return f"Step completed (no executor): {step.description}"
+
+    async def _handle_step_failure(
+        self,
+        step: PlanStep,
+        error: str,
+        tools: List[Any],
+    ) -> AsyncIterator[Any]:
+        """
+        Enhanced error handling with confidence-based recovery.
+
+        Uses PlanService.analyze_step_failure to:
+        1. Re-gather targeted context (LLM decides what to gather)
+        2. Assess if error can be auto-fixed with confidence scoring
+        3. Route based on confidence:
+           - HIGH (≥0.8): Auto-fix with notification
+           - MEDIUM (0.5-0.8): Propose fix for user approval
+           - LOW (<0.5): Ask clarifying questions
+
+        Args:
+            step: The step that failed
+            error: The error message
+            tools: Available tools for recovery
+
+        Yields:
+            RecoveryAnalysisEvent, AutoFixStartedEvent/CompletedEvent,
+            RecoveryPlanProposedEvent, or AwaitingClarificationEvent
+        """
+        if not self._ledger or not self._current_plan:
+            # No ledger or plan - fall back to blocking
+            logger.warning("No ledger or plan available, cannot attempt recovery")
+            return
+
+        logger.info(f"🔍 Attempting recovery analysis for step '{step.step_id}'")
+
+        try:
+            # Run recovery analysis via PlanService (LLM gathers context and analyzes)
+            recovery = self.plan_service.analyze_step_failure(
+                failed_step=step,
+                error_message=error,
+                plan=self._current_plan,
+                context_tools=self._context_tools,
+                ledger=self._ledger,
+            )
+
+            # Emit analysis result
+            yield RecoveryAnalysisEvent(
+                step_id=step.step_id,
+                confidence=recovery.confidence,
+            )
+
+            # Route based on confidence
+            if recovery.should_auto_fix:
+                # HIGH CONFIDENCE (≥0.8): Auto-fix with notification
+                logger.info(
+                    f"🔧 Auto-fixing step '{step.step_id}' "
+                    f"with {recovery.confidence:.0%} confidence"
+                )
+                yield AutoFixStartedEvent(
+                    step_id=step.step_id,
+                    fix_description=recovery.reasoning,
+                    confidence=recovery.confidence,
+                )
+
+                # Update the step's parameters and retry
+                recovery_result = await self._execute_recovery_action(
+                    step=step,
+                    recovery=recovery,
+                    tools=tools,
+                )
+
+                yield AutoFixCompletedEvent(
+                    step_id=step.step_id,
+                    result=recovery_result or "Recovery action completed",
+                )
+
+            elif recovery.should_propose:
+                # MEDIUM CONFIDENCE (0.5-0.8): Propose for approval
+                logger.info(
+                    f"📋 Proposing recovery for step '{step.step_id}' "
+                    f"with {recovery.confidence:.0%} confidence"
+                )
+                yield RecoveryPlanProposedEvent(
+                    step_id=step.step_id,
+                    fix_description=recovery.reasoning,
+                    confidence=recovery.confidence,
+                    gathered_context={"corrected_parameters": recovery.corrected_parameters},
+                )
+                # Execution stops here - user must approve via separate flow
+
+            else:
+                # LOW CONFIDENCE (<0.5): Ask clarifying questions
+                logger.info(
+                    f"❓ Low confidence ({recovery.confidence:.0%}) for step '{step.step_id}', "
+                    f"asking user for guidance"
+                )
+                questions = recovery.questions or [
+                    "What would you like to do about this error?",
+                    "Should we retry, skip this step, or try a different approach?",
+                ]
+                yield AwaitingClarificationEvent(
+                    questions=questions,
+                    reasoning=f"Error: {error}\n\n{recovery.reasoning}",
+                )
+                # Execution stops here - user must provide guidance
+
+        except Exception as e:
+            logger.error(f"❌ Recovery analysis failed: {e}")
+            # Fall back to asking user
+            yield AwaitingClarificationEvent(
+                questions=[
+                    "What would you like to do about this error?",
+                    "Should we retry, skip this step, or try a different approach?",
+                ],
+                reasoning=f"Recovery analysis failed: {e}\n\nOriginal error: {error}",
+            )
+
+    async def _execute_recovery_action(
+        self,
+        step: PlanStep,
+        recovery: RecoveryResult,
+        tools: List[Any],
+    ) -> Optional[str]:
+        """
+        Execute the recovery action by updating the step in place and retrying.
+
+        Updates the original step's parameters with LLM-corrected values and retries.
+        This is called when confidence is high enough for auto-fix.
+
+        Args:
+            step: Original failed step
+            recovery: RecoveryResult with corrected_parameters from LLM
+            tools: Available tools
+
+        Returns:
+            Result string from recovery execution
+        """
+        # Update the step's parameters in the original plan using with_parameters
+        updated_step = step.with_parameters(
+            {**(step.parameters or {}), **recovery.corrected_parameters}
+        )
+
+        # Update the plan with the corrected step
+        if self._current_plan:
+            self._current_plan = self._current_plan.update_step(
+                step.step_id, updated_step
+            )
+
+        logger.info(
+            f"🔧 Retrying step with corrected params: {recovery.corrected_parameters}"
+        )
+
+        try:
+            result = await self._execute_step(updated_step, tools)
+            return result
+        except Exception as e:
+            logger.error(f"Recovery step failed: {e}")
+            raise
 
     async def _handle_replan(
         self,

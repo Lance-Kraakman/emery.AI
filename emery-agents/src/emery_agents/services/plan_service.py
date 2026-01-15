@@ -19,9 +19,11 @@ from emery_agents.models.plan import (
     PlanStep,
     StepPlan,
     PlanStatus,
+    RecoveryResult,
     create_plan,
     create_step,
 )
+from emery_agents.models.task_ledger import TaskLedger
 from emery_agents.models.context_mapping import ResolvedContext
 from emery_agents.tools.plan_output_tool import PlanOutputTool
 from .protocols import ModelProvider, GRPCClient, Tool
@@ -411,6 +413,106 @@ class PlanService:
 
         logger.warning(f"Step {step_id} not found in plan {plan.id}")
         return plan
+
+    def analyze_step_failure(
+        self,
+        failed_step: PlanStep,
+        error_message: str,
+        plan: Plan,
+        context_tools: List[Any],
+        ledger: TaskLedger,
+    ) -> RecoveryResult:
+        """
+        Analyze a failed step and determine how to fix it.
+
+        Uses LLM with context_tools to:
+        1. Gather fresh context based on the error
+        2. Determine what parameters are missing or wrong
+        3. Return corrected parameters with confidence
+
+        Does NOT create a new plan - just returns corrected parameters
+        to update the original step.
+
+        Args:
+            failed_step: The step that failed
+            error_message: The error from execution
+            plan: The original plan (for context)
+            context_tools: Tools to gather fresh context
+            ledger: Current execution state
+
+        Returns:
+            RecoveryResult with corrected_parameters and confidence
+        """
+        if not self.model_provider:
+            logger.warning("No model_provider for recovery analysis")
+            return RecoveryResult(
+                confidence=0.1,
+                corrected_parameters={},
+                reasoning="No model provider available for analysis",
+                questions=["How would you like to fix this step?"],
+            )
+
+        from ..tools.recovery_output_tool import RecoveryOutputTool
+        from ..prompts import render_template
+
+        recovery_tool = RecoveryOutputTool()
+
+        # Build prompt using recovery template
+        prompt = render_template(
+            "planning/step_recovery.j2",
+            failed_step=failed_step,
+            error_message=error_message,
+            plan_goal=plan.goal,
+            plan_context=plan.context,
+            ledger_summary=ledger.to_json_summary(),
+        )
+
+        logger.info(f"🔧 Analyzing step failure for '{failed_step.step_id}'")
+        logger.debug(f"Error: {error_message[:200]}...")
+
+        try:
+            # LLM gathers context and analyzes
+            model = self.model_provider.get_model()
+            analyzer = ToolCallingAgent(
+                tools=[recovery_tool] + context_tools,
+                model=model,
+                max_steps=10,  # Allow multiple context tool calls
+            )
+            analyzer.run(prompt)
+
+            result = recovery_tool.get_result()
+            if result:
+                recovery = RecoveryResult(
+                    confidence=result["confidence"],
+                    corrected_parameters=result["corrected_parameters"],
+                    reasoning=result["reasoning"],
+                    questions=result.get("questions", []),
+                )
+                logger.info(
+                    f"✅ Recovery analysis: confidence={recovery.confidence:.0%}, "
+                    f"{len(recovery.corrected_parameters)} corrected params"
+                )
+                return recovery
+
+            # Tool not called - fallback
+            logger.warning("⚠️ Recovery tool not called, using fallback")
+            return self._fallback_recovery(error_message)
+
+        except Exception as e:
+            logger.error(f"❌ Recovery analysis failed: {e}")
+            return self._fallback_recovery(error_message)
+
+    def _fallback_recovery(self, error_message: str) -> RecoveryResult:
+        """Fallback recovery when analysis fails."""
+        return RecoveryResult(
+            confidence=0.2,
+            corrected_parameters={},
+            reasoning=f"Automatic analysis failed. Error: {error_message[:200]}",
+            questions=[
+                "What would you like to do about this error?",
+                "Should we retry, skip this step, or try a different approach?",
+            ],
+        )
 
 
 class PlanServiceFactory:
