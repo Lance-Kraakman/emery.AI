@@ -1,0 +1,64 @@
+Analyze this user task and classify how it should be handled.
+
+## User Task
+{{ task }}
+
+## Available Agents
+{% if available_agents %}
+{% for agent in available_agents %}
+- **{{ agent }}**: {% if agent == "schema_builder" %}Database structure, tables, fields, relationships{% elif agent == "skill_builder" %}AI skill configuration, instructions, inputs/outputs{% elif agent == "document_builder" %}Rich text documents, content editing{% elif agent == "table_builder" %}Quick single-field operations{% else %}General operations{% endif %}
+{% endfor %}
+{% else %}
+schema_builder, skill_builder, document_builder, table_builder
+{% endif %}
+
+## Current Context
+{{ context or "No specific context provided" }}
+
+## Classification Guidelines
+
+### Mode Selection
+
+**DIRECT** - Use when:
+- Simple, single-step command with all details provided
+- Examples: "add field 'email' to users table", "delete the status field"
+- The task specifies: WHAT to do, WHERE to do it (table/database name), and HOW (field type, etc.)
+
+**PLAN_AND_APPROVE** - Use when:
+- Complex task requiring multiple steps
+- Vague request without specific details
+- Task that should show a plan for user approval
+- Examples: "create a database", "help me design a schema"
+
+### Clarification Questions
+
+Set needs_clarification=True when:
+- The task is vague (e.g., "create a database" without table details)
+- Ambiguous (could mean create new OR modify existing)
+- Missing critical information (table names, field types, purpose)
+- User might regret the action if assumptions are wrong
+
+Do NOT ask clarifying questions when:
+- All necessary details are provided
+- The action is clearly specified and reversible
+- It's a simple query/read operation
+
+### Target Agent Selection
+
+- **schema_builder**: Database structure, tables, fields, relationships
+- **skill_builder**: AI skill configuration, instructions, inputs/outputs
+- **document_builder**: Rich text documents, content editing
+- **table_builder**: Quick single-field operations
+- **none**: Multiple agents needed or unclear which to use
+
+### Question Guidelines
+
+When asking questions:
+- Be specific and actionable
+- Ask about the most critical missing info first
+- Limit to 1-3 questions maximum
+- Phrase as choices when possible (e.g., "Do you want to A) create new or B) modify existing?")
+
+## Your Task
+
+Analyze the user's request and call report_task_classification with your analysis.

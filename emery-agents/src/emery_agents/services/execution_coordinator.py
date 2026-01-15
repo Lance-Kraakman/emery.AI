@@ -23,7 +23,8 @@ from ..tools.tool_modes import ToolMode, filter_tools_for_mode
 from .plan_service import PlanService
 from .plan_step_executor import PlanStepExecutor
 from .sub_agent_planner import SubAgentPlanner, SubAgentPlanningResult
-from .protocols import EvaluatorAgent, Tool
+from .protocols import EvaluatorAgent, Tool, ModelProvider, ManagedAgent
+from .task_classifier import TaskClassifier, TaskClassification
 
 logger = logging.getLogger(__name__)
 
@@ -135,13 +136,13 @@ class CoordinatorMode(Enum):
     """How coordinator handles the task."""
     PLAN_AND_APPROVE = "plan_and_approve"  # Full planning flow
     DIRECT = "direct"  # Execute immediately without plan
-    PASSTHROUGH = "passthrough"  # Let managed agent handle (has own HITL)
 
 
 @dataclass
-class PassthroughEvent:
-    """Event emitted when coordinator passes through to a managed agent."""
-    agent_name: str
+class AwaitingClarificationEvent:
+    """Event emitted when clarifying questions need to be asked before proceeding."""
+    questions: List[str]
+    reasoning: str
 
 
 @dataclass
@@ -184,6 +185,7 @@ class ExecutionCoordinatorConfig:
     """
 
     plan_service: PlanService
+    model_provider: Optional[ModelProvider] = None  # For TaskClassifier
     evaluator_factory: Optional[Callable[[], Tuple[EvaluatorAgent, EvaluationTool]]] = None
     plan_step_executor: Optional[PlanStepExecutor] = None
     evaluate_after_steps: int = 1
@@ -213,6 +215,7 @@ class ExecutionCoordinator:
     def __init__(
         self,
         plan_service: Optional[PlanService] = None,
+        model_provider: Optional[ModelProvider] = None,
         evaluator_factory: Optional[Callable[[], Tuple[EvaluatorAgent, EvaluationTool]]] = None,
         plan_step_executor: Optional[PlanStepExecutor] = None,
         evaluate_after_steps: int = 1,
@@ -225,6 +228,7 @@ class ExecutionCoordinator:
 
         Args:
             plan_service: Service for plan persistence
+            model_provider: Provider for LLM access (used by TaskClassifier)
             evaluator_factory: Factory for creating (agent, tool) tuples for evaluation
             plan_step_executor: Executor for plan steps using smolagents routing
             evaluate_after_steps: Run evaluation after this many steps (default: 1)
@@ -247,11 +251,17 @@ class ExecutionCoordinator:
         self._managed_agents: Optional[List[Any]] = None  # Stored from execute() for later use
         self._sub_planner: Optional[SubAgentPlanner] = None  # For cascading planning resume
 
+        # LLM-based task classifier (replaces string matching)
+        self._task_classifier: Optional[TaskClassifier] = None
+        if model_provider:
+            self._task_classifier = TaskClassifier(model_provider)
+
     @classmethod
     def from_config(cls, config: ExecutionCoordinatorConfig) -> "ExecutionCoordinator":
         """Create coordinator from config dataclass."""
         return cls(
             plan_service=config.plan_service,
+            model_provider=config.model_provider,
             evaluator_factory=config.evaluator_factory,
             plan_step_executor=config.plan_step_executor,
             evaluate_after_steps=config.evaluate_after_steps,
@@ -282,156 +292,109 @@ class ExecutionCoordinator:
         self,
         task: str,
         tools: List[Any],
-        managed_agents: Optional[List[Any]] = None,
+        managed_agents: Optional[List[ManagedAgent]] = None,
+        context: Optional[str] = None,
     ) -> AsyncIterator[Any]:
         """
-        Smart execution entry point - decides mode based on task analysis.
+        Smart execution entry point - decides mode based on LLM task analysis.
 
-        Modes:
-        - PLAN_AND_APPROVE: Complex multi-step task requiring user approval
-        - DIRECT: Simple task that can execute immediately
-        - PASSTHROUGH: Single managed agent task (agent has own HITL)
+        Uses TaskClassifier (LLM-based) to determine:
+        - Whether task is simple (DIRECT) or complex (PLAN_AND_APPROVE)
+        - Whether clarifying questions should be asked first
+        - Which agent should handle the task (if clear)
+
+        AIDEV-NOTE: Replaces brittle string matching patterns with intelligent
+        LLM-based classification. If needs_clarification is True, questions
+        are yielded before proceeding.
 
         Args:
             task: The user's task/request
             tools: Available tools
             managed_agents: Available managed agents
+            context: Additional context (e.g., existing databases)
 
         Yields:
-            Appropriate events based on mode
+            AwaitingClarificationEvent if questions needed
+            DirectExecutionStartedEvent for simple tasks
+            PlanCreatedEvent for complex tasks
         """
         # Store managed_agents for later use in execute_plan
         self._managed_agents = managed_agents
 
-        mode = self._determine_mode(task, tools, managed_agents or [])
-        logger.info(f"📋 Coordinator: Mode determined as {mode.value} for task: {task[:50]}...")
+        # Use LLM-based classification
+        classification = self._classify_task(task, managed_agents or [], context)
 
-        if mode == CoordinatorMode.PASSTHROUGH:
-            # Let managed agent handle - it has its own HITL
-            target_agent = self._get_target_agent(task, managed_agents or [])
-            if target_agent:
-                logger.info(f"📋 Coordinator: Passing through to {target_agent}")
-                yield PassthroughEvent(agent_name=target_agent)
-                return
-            # Fall through to PLAN_AND_APPROVE if no clear target
-            logger.warning("📋 Coordinator: PASSTHROUGH mode but no clear target, falling back to PLAN_AND_APPROVE")
-            mode = CoordinatorMode.PLAN_AND_APPROVE
-
-        elif mode == CoordinatorMode.DIRECT:
-            # Simple task - execute without showing a plan
-            logger.info("📋 Coordinator: Direct execution (no plan needed)")
-            yield DirectExecutionStartedEvent(task=task)
-            # Note: Actual execution happens in chat_processing_service
-            # This just signals the mode - the normal agent flow handles execution
+        # If clarification questions are needed, ask them first
+        if classification.needs_clarification and classification.clarification_questions:
+            logger.info(
+                f"📋 Coordinator: Task needs clarification - "
+                f"{len(classification.clarification_questions)} questions"
+            )
+            yield AwaitingClarificationEvent(
+                questions=classification.clarification_questions,
+                reasoning=classification.reasoning,
+            )
             return
 
-        else:  # PLAN_AND_APPROVE
-            # Complex task - full planning flow
-            logger.info("📋 Coordinator: Plan and approve mode (complex task)")
-            async for event in self.create_plan(
-                goal=task,
-                instructions=task,
-                tools=tools,
-            ):
-                yield event
-            # Session manager handles approval state
+        # Map classification mode to coordinator mode
+        if classification.mode == "DIRECT":
+            logger.info("📋 Coordinator: Direct execution (no plan needed)")
+            yield DirectExecutionStartedEvent(task=task)
+            return
 
-    def _determine_mode(
+        # PLAN_AND_APPROVE: Full planning flow
+        logger.info("📋 Coordinator: Plan and approve mode (complex task)")
+        async for event in self.create_plan(
+            goal=task,
+            instructions=task,
+            tools=tools,
+        ):
+            yield event
+        # Session manager handles approval state
+
+    def _classify_task(
         self,
         task: str,
-        tools: List[Any],
-        managed_agents: List[Any],
-    ) -> CoordinatorMode:
+        managed_agents: List[ManagedAgent],
+        context: Optional[str] = None,
+    ) -> TaskClassification:
         """
-        Determine execution mode based on task analysis.
+        Classify task using LLM-based TaskClassifier.
 
-        Priority:
-        1. PASSTHROUGH if task clearly targets a single managed agent with own HITL
-        2. PLAN_AND_APPROVE if task requires multiple agents/tools
-        3. DIRECT for simple operations
+        AIDEV-NOTE: Replaces brittle string matching (_get_target_agent,
+        _is_multi_step_task, _is_ambiguous_request) with intelligent LLM-based
+        classification. The LLM is much better at detecting ambiguity and
+        determining appropriate execution mode.
 
         Args:
             task: User's task text
-            tools: Available tools
-            managed_agents: Available managed agents
+            managed_agents: Available managed agents (typed via ManagedAgent protocol)
+            context: Additional context (e.g., existing databases)
 
         Returns:
-            Appropriate CoordinatorMode
+            TaskClassification with mode, clarification needs, and questions
         """
-        task_lower = task.lower()
+        if not self._task_classifier:
+            # Fallback if no classifier configured - default to PLAN_AND_APPROVE
+            logger.warning("📋 No TaskClassifier configured, defaulting to PLAN_AND_APPROVE")
+            return TaskClassification(
+                mode="PLAN_AND_APPROVE",
+                needs_clarification=False,
+                target_agent=None,
+                clarification_questions=[],
+                reasoning="No classifier configured",
+            )
 
-        # Check for single managed agent targeting
-        target_agent = self._get_target_agent(task, managed_agents)
-        if target_agent:
-            # Single agent with HITL capability
-            return CoordinatorMode.PASSTHROUGH
+        # Get agent names for classification context
+        # ManagedAgent protocol guarantees .name attribute exists
+        available_agent_names: List[str] = [a.name for a in managed_agents]
 
-        # Check for multi-agent or complex multi-tool scenarios
-        if self._is_multi_step_task(task_lower):
-            return CoordinatorMode.PLAN_AND_APPROVE
-
-        # Default: simple direct execution
-        return CoordinatorMode.DIRECT
-
-    def _get_target_agent(
-        self,
-        task: str,
-        managed_agents: List[Any],
-    ) -> Optional[str]:
-        """
-        Identify if task clearly targets a single managed agent.
-
-        Returns agent name if clear target, None otherwise.
-        """
-        task_lower = task.lower()
-
-        # Agent patterns - tasks that should route to specific agents
-        # These agents have their own HITL mechanisms
-        agent_patterns = {
-            "schema_builder": [
-                "create table", "design schema", "add tables",
-                "create a table", "design a schema", "new table",
-                "create database", "design database"
-            ],
-            "skill_builder": [
-                "update skill", "modify skill", "edit skill",
-                "change skill", "update the skill", "modify the skill"
-            ],
-        }
-
-        for agent_name, patterns in agent_patterns.items():
-            if any(pattern in task_lower for pattern in patterns):
-                # Verify this agent is available
-                for agent in managed_agents:
-                    if getattr(agent, 'name', None) == agent_name:
-                        return agent_name
-        return None
-
-    def _is_multi_step_task(self, task_lower: str) -> bool:
-        """
-        Detect if task requires multiple steps/agents.
-
-        Returns True if task should use full planning flow.
-        """
-        # Multiple action words joined by "and"
-        action_words = ["create", "add", "edit", "update", "delete", "modify", "remove", "change"]
-        if " and " in task_lower:
-            action_count = sum(1 for word in action_words if word in task_lower)
-            if action_count >= 2:
-                return True
-
-        # Explicit multi-resource keywords
-        multi_keywords = ["multiple", "several", "all", "each"]
-        if any(kw in task_lower for kw in multi_keywords):
-            if any(word in task_lower for word in action_words):
-                return True
-
-        # Explicit planning/design request
-        planning_phrases = ["plan out", "design", "architect", "help me plan"]
-        if any(phrase in task_lower for phrase in planning_phrases):
-            return True
-
-        return False
+        # Run LLM-based classification
+        return self._task_classifier.classify(
+            task=task,
+            available_agents=available_agent_names,
+            context=context,
+        )
 
     async def create_plan(
         self,

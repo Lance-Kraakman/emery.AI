@@ -20,7 +20,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Coordinator execution phases
-CoordinatorPhase = Literal["idle", "planning", "awaiting_approval", "executing"]
+# - idle: No active coordination, accepts new tasks
+# - planning: Coordinator is generating a plan
+# - awaiting_approval: Waiting for user to approve a plan
+# - awaiting_clarification: Waiting for user to answer clarifying questions
+# - executing: Plan is being executed
+CoordinatorPhase = Literal["idle", "planning", "awaiting_approval", "awaiting_clarification", "executing"]
 
 
 @dataclass

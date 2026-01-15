@@ -86,3 +86,19 @@ class Tool(Protocol):
     def forward(self, *args: Any, **kwargs: Any) -> Any:
         """Execute the tool."""
         ...
+
+
+@runtime_checkable
+class ManagedAgent(Protocol):
+    """
+    Protocol for managed agents that can be delegated to.
+
+    AIDEV-NOTE: Used for typing in ExecutionCoordinator and TaskClassifier
+    to avoid getattr() patterns. Any smolagents ManagedAgent or similar
+    class with name/description attributes satisfies this protocol.
+
+    Implementors: smolagents.ManagedAgent, StatefulManagedAgent
+    """
+
+    name: str
+    description: str

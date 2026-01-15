@@ -64,8 +64,8 @@ from ..services.execution_coordinator import (
     ExecutionBlockedEvent,
     GoalAchievedEvent,
     ExecutionCompletedEvent,
-    PassthroughEvent,
     DirectExecutionStartedEvent,
+    AwaitingClarificationEvent,
 )
 from ..agents.evaluator_agent import create_evaluator_factory
 from ..models.plan import Plan, PlanStatus, create_plan
@@ -1854,6 +1854,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             coordinator = ExecutionCoordinator(
                 plan_service=self.plan_service,
+                model_provider=self.model_provider,  # For LLM-based TaskClassifier
                 evaluator_factory=evaluator_factory,
                 plan_step_executor=plan_step_executor,
                 evaluate_after_steps=1,
@@ -1869,10 +1870,30 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 tools=tools,
                 managed_agents=managed_agents,
             ):
-                if isinstance(event, PassthroughEvent):
-                    # PASSTHROUGH: Let normal agent flow handle (managed agent has own HITL)
-                    logger.info(f"📋 Coordinator: PASSTHROUGH mode - delegating to {event.agent_name}")
-                    yield "FALL_THROUGH"
+                if isinstance(event, AwaitingClarificationEvent):
+                    # Clarification needed: Show questions to user before proceeding
+                    logger.info(f"📋 Coordinator: Task needs clarification - {len(event.questions)} questions")
+
+                    # Format questions as markdown
+                    questions_content = "Before proceeding, I'd like to clarify a few things:\n\n"
+                    for i, q in enumerate(event.questions, 1):
+                        questions_content += f"{i}. {q}\n"
+                    questions_content += f"\n*{event.reasoning}*"
+
+                    yield {
+                        "type": "awaiting_input",
+                        "data": {
+                            "input_type": "clarifying_questions",
+                            "title": "Clarification Needed",
+                            "content": questions_content,
+                            "options": [],  # Free-form response expected
+                            "plan_json": ""
+                        }
+                    }
+
+                    # Store that we're awaiting clarification (different from plan approval)
+                    if session_id:
+                        self.session_manager.set_coordinator_phase(session_id, "awaiting_clarification")
                     return
 
                 elif isinstance(event, DirectExecutionStartedEvent):
@@ -1987,6 +2008,18 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.warning("⚠️ Coordinator: Unexpected executing phase on new message")
             if session_id:
                 self.session_manager.clear_coordinator_state(session_id)
+
+        elif coordinator_phase == "awaiting_clarification":
+            # User responded to clarifying questions
+            # Clear phase and reprocess with the clarification as context
+            logger.info(f"📋 Coordinator: Received clarification response: {task[:100]}...")
+            if session_id:
+                self.session_manager.clear_coordinator_state(session_id)
+
+            # Fall through to reprocess - the clarification becomes part of context
+            # The next iteration will re-classify with the additional information
+            yield "FALL_THROUGH"
+            return
 
     def _is_approval_response(self, task: str) -> bool:
         """
