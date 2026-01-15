@@ -92,6 +92,11 @@ class ExecutionContext:
     # Called with step dicts: {'type': str, 'step_name': str, 'content': str, 'metadata': dict}
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
 
+    # Centralized tool provider (created once at top level)
+    # Provides tools with consistent auth configuration
+    # Import here to avoid circular dependency
+    tool_provider: Optional[Any] = None  # Type: Optional[ToolProvider]
+
     @property
     def is_autonomous(self) -> bool:
         """Check if execution is autonomous (skill-based, no HITL)."""
@@ -127,4 +132,5 @@ class ExecutionContext:
             use_coordinator=self.use_coordinator,
             resolved_context=self.resolved_context,
             tool_mode=self.tool_mode,
+            tool_provider=self.tool_provider,  # Shared reference (not copied)
         )

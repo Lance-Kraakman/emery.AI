@@ -25,8 +25,8 @@ from emery_agents.agents.document_builder_agent import create_document_builder_a
 from emery_agents.agents.table_builder_agent import create_table_builder_agent
 from emery_agents.agents.schema_builder_agent import create_schema_builder_agent
 from emery_agents.clients import HuggingFaceInferenceClient
-from emery_agents.tools.crud_tools import load_skill_crud, load_document_crud, load_database_crud
-from emery_agents.tools.table_tools import load_table_crud
+from emery_agents.tools.crud_tools import load_skill_crud, load_document_crud
+from emery_agents.services.tool_provider import ToolProvider
 from emery_agents.tools.skill_tool import SkillTool
 from emery_agents.tools.tool_executor import create_tool_executor
 from .generated import agent_worker_pb2, agent_worker_pb2_grpc
@@ -689,6 +689,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"🔍 [SESSION-DEBUG] Checking for existing session: {session_id}")
             logger.info(f"🔍 [SESSION-DEBUG] Conversation history length: {len(conversation_history) if conversation_history else 0}")
 
+            # Get effective API key BEFORE hot/cold path split
+            # This is needed for tool provider regardless of hot/cold path
+            effective_api_key = user_api_key or self._extract_user_api_key_from_tools(tools)
+            if effective_api_key:
+                logger.info(f"🔑 Using API key for tools (source: {'request' if user_api_key else 'tools'})")
+            else:
+                logger.warning("⚠️ No API key available for tools")
+
+            # Create centralized tool provider - creates tools lazily with consistent auth
+            tool_provider = ToolProvider(effective_api_key or "", org_id or 0)
+
             agent = self.session_manager.get_agent(session_id) if session_id else None
 
             if agent:
@@ -709,32 +720,21 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 # Agent doesn't exist - COLD PATH (create + restore from history)
                 logger.info(f"✨ [COLD-PATH] Creating new agent for session {session_id}")
 
-                # Use user API key from request for managed agents
-                effective_api_key = user_api_key or self._extract_user_api_key_from_tools(tools)
-                if effective_api_key:
-                    logger.info(f"🔑 Using API key for managed agents (source: {'request' if user_api_key else 'tools'})")
-                else:
-                    logger.warning("⚠️ No API key available for managed agents - skill_builder/document_builder may fail")
-
-                # Create managed agents (routes automatically via smolagents)
+                # Create managed agents using centralized tool provider (routes automatically via smolagents)
                 skill_builder_agent = self._create_skill_builder_agent(
-                    api_key=effective_api_key or "",
-                    org_id=org_id,
+                    tool_provider=tool_provider,
                     org_model=org_model
                 )
                 document_builder_agent = self._create_document_builder_agent(
-                    api_key=effective_api_key or "",
-                    org_id=org_id,
+                    tool_provider=tool_provider,
                     org_model=org_model
                 )
                 table_builder_agent = self._create_table_builder_agent(
-                    api_key=effective_api_key or "",
-                    org_id=org_id,
+                    tool_provider=tool_provider,
                     org_model=org_model
                 )
                 schema_builder_agent = self._create_schema_builder_agent(
-                    api_key=effective_api_key or "",
-                    org_id=org_id,
+                    tool_provider=tool_provider,
                     org_model=org_model
                 )
 
@@ -870,6 +870,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 session_attachments=session_attachments,  # All session files (for explicit lookup)
                 progress_callback=progress_callback,  # For nested skill step visibility
                 tool_mode=ToolMode.EXECUTION,  # Default: allow mutations
+                api_key=tool_provider.api_key,  # For any direct auth needs
+                organization_id=str(tool_provider.organization_id),  # For RLS context (str type)
+                tool_provider=tool_provider,  # Centralized tool creation
             )
             AgentExecutor.set_current_context(context)
             logger.info(f"📎 Set execution context: {len(file_attachments or [])} current, {len(session_attachments)} session files")
@@ -1264,8 +1267,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
     def _create_skill_builder_agent(
         self,
-        api_key: str,
-        org_id: Optional[int],
+        tool_provider: ToolProvider,
         org_model: Optional[str] = None
     ) -> ToolCallingAgent:
         """
@@ -1286,8 +1288,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         proper instructions. The sub-agent gets tool-specific docs from build_agent_instructions
         and executor rules from tool_executor.j2 template.
         """
-        # Create the CRUD tool (will be wrapped by tool_executor)
-        skill_crud_tool = load_skill_crud(None, api_key, org_id)
+        # Get tools from centralized provider
+        tools = tool_provider.get_skill_builder_tools()
+        skill_crud_tool = tools[0]  # skill_crud
 
         # Get model for the agent and sub-agent
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
@@ -1313,8 +1316,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
     def _create_document_builder_agent(
         self,
-        api_key: str,
-        org_id: Optional[int],
+        tool_provider: ToolProvider,
         org_model: Optional[str] = None
     ) -> ToolCallingAgent:
         """
@@ -1332,8 +1334,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         proper instructions. The sub-agent gets tool-specific docs from build_agent_instructions
         and executor rules from tool_executor.j2 template.
         """
-        # Create the CRUD tool (will be wrapped by tool_executor)
-        document_crud_tool = load_document_crud(None, api_key, org_id)
+        # Get tools from centralized provider
+        tools = tool_provider.get_document_builder_tools()
+        document_crud_tool = tools[0]  # document_crud
 
         # Get model for the agent and sub-agent
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
@@ -1359,8 +1362,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
     def _create_table_builder_agent(
         self,
-        api_key: str,
-        org_id: Optional[int],
+        tool_provider: ToolProvider,
         org_model: Optional[str] = None
     ) -> ToolCallingAgent:
         """
@@ -1372,11 +1374,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         AIDEV-NOTE: Unlike skill_builder/document_builder which use HITL workflow,
         table_builder is autonomous because single field operations are low-risk.
         """
-        from emery_agents.tools.crud_tools import load_field_crud, load_table_crud
-
-        # Load CRUD tools for table/field operations
-        field_crud_tool = load_field_crud(None, api_key, org_id)
-        table_crud_tool = load_table_crud(None, api_key, org_id)
+        # Get tools from centralized provider
+        tools = tool_provider.get_table_builder_tools()
+        table_crud_tool, field_crud_tool = tools[0], tools[1]
 
         # Get model for the agent and sub-agent
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
@@ -1400,8 +1400,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
     def _create_schema_builder_agent(
         self,
-        api_key: str,
-        org_id: Optional[int],
+        tool_provider: ToolProvider,
         org_model: Optional[str] = None
     ) -> ToolCallingAgent:
         """
@@ -1418,13 +1417,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         - step_callbacks: Interrupt after planning for user approval
         - reset=False: Memory preserved between messages for resumption
         """
-        from emery_agents.tools.crud_tools import load_field_crud, load_table_crud, load_database_crud
-
-        # Load CRUD tools for table/field/database operations
-        # database_crud needed for list_databases to find existing databases
-        field_crud_tool = load_field_crud(None, api_key, org_id)
-        table_crud_tool = load_table_crud(None, api_key, org_id)
-        database_crud_tool = load_database_crud(None, api_key, org_id)
+        # Get tools from centralized provider (database_crud for listing, table/field for mutations)
+        tools = tool_provider.get_schema_builder_tools()
+        database_crud_tool, table_crud_tool, field_crud_tool = tools[0], tools[1], tools[2]
 
         # Get model for the agent and sub-agent
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
@@ -1848,14 +1843,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 max_steps=10,
             )
 
-            # Create context-gathering tools for planner
+            # Get context-gathering tools from provider
             # These allow the planner to see existing databases/tables before creating a plan
-            api_key = context.api_key or ""
-            org_id = context.organization_id or 0
-            database_crud = load_database_crud(None, api_key, org_id)
-            table_crud = load_table_crud(None, api_key, org_id)
-            context_tools = [database_crud, table_crud]
-            logger.info(f"📋 Created {len(context_tools)} context-gathering tools for planner")
+            if context.tool_provider is None:
+                logger.error("❌ ToolProvider not set on context - cannot create context tools")
+                yield "FALL_THROUGH"
+                return
+            context_tools = context.tool_provider.get_context_tools()
+            logger.info(f"📋 Using {len(context_tools)} context tools from provider for planner")
 
             coordinator = ExecutionCoordinator(
                 plan_service=self.plan_service,
