@@ -49,6 +49,11 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                    data: Optional[Dict] = None, filters: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute table CRUD operation."""
 
+            # Check if mutation is allowed during planning phase
+            blocked = self._check_mutation_allowed(method)
+            if blocked:
+                return blocked
+
             # Pre-configured table_id takes priority over LLM-provided (for reference tools)
             effective_table_id = _preconfigured_table_id or table_id
 

@@ -17,14 +17,17 @@ This subclass fixes that by passing reset=False to preserve state.
 """
 
 import logging
-from typing import Any
+from typing import Any, Callable, Optional
 
 from jinja2 import Template, StrictUndefined
 from smolagents import CodeAgent
 from smolagents.agents import RunResult
+from smolagents.memory import ActionStep, PlanningStep, FinalAnswerStep
 from smolagents.utils import truncate_content
 
 from ..prompts import get_managed_agent_templates, get_planning_templates, get_hitl_templates
+from ..services.context_manager import get_current_context
+from ..utils.step_utils import step_to_progress_dict, RawProgressDict
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +63,18 @@ class StatefulManagedAgent(CodeAgent):
         # agent.__call__("yes proceed") -> executes with full context
     """
 
-    def __init__(self, *args, executor_type: str = "local", **kwargs):
+    def __init__(
+        self,
+        *args,
+        executor_type: str = "local",
+        progress_callback: Optional[Callable[[RawProgressDict], None]] = None,
+        **kwargs
+    ):
         super().__init__(*args, executor_type=executor_type, **kwargs)
         # Track HITL state
         self._waiting_for_approval = False
+        # Progress callback for streaming nested steps to parent
+        self._progress_callback = progress_callback
 
         # Override managed_agent templates to use plain text instead of verbose markdown
         # smolagents default forces "### 1. Task outcome (short version):" etc. which is too verbose
@@ -118,18 +129,51 @@ class StatefulManagedAgent(CodeAgent):
                 logger.info(f"📋 Disabled planning_interval for resume execution")
 
             try:
-                # KEY CHANGE: Pass reset=False to preserve memory
-                result = self.run(full_task, reset=False, **kwargs)
+                # KEY CHANGE: Use stream=True for progress streaming + reset=False for HITL
+                # AIDEV-NOTE: Get progress_callback from ExecutionContext (set by parent)
+                # This enables late binding - callback is set after agent is created
+                context = get_current_context()
+                active_callback = context.progress_callback if context else self._progress_callback
+
+                if active_callback:
+                    result = None
+                    step_index = 0
+                    logger.info(f"🔄 {self.name}: Starting streaming execution with progress callback")
+
+                    for step in self.run(full_task, reset=False, stream=True, **kwargs):
+                        # Emit progress callback for each step
+                        step_dict = self._step_to_progress_dict(step, step_index)
+                        if step_dict:
+                            active_callback(step_dict)
+                            logger.debug(f"📤 {self.name}: Emitted step {step_index}: {step_dict.get('step_name')}")
+
+                        # Capture final result
+                        if isinstance(step, FinalAnswerStep):
+                            result = step.output
+                        elif isinstance(step, RunResult):
+                            result = step.output
+
+                        step_index += 1
+
+                    # Fallback if no explicit final answer
+                    if result is None:
+                        result = self.memory.steps[-1] if self.memory.steps else ""
+                        logger.info(f"🔄 {self.name}: Using fallback result from memory")
+
+                    logger.info(f"✅ {self.name}: Completed streaming execution ({step_index} steps)")
+                    report = result
+                else:
+                    # Original non-streaming execution
+                    result = self.run(full_task, reset=False, **kwargs)
+                    # Format result same as smolagents
+                    if isinstance(result, RunResult):
+                        report = result.output
+                    else:
+                        report = result
             finally:
                 # Restore planning interval
                 if is_resumption:
                     self.planning_interval = original_planning_interval
-
-            # Format result same as smolagents
-            if isinstance(result, RunResult):
-                report = result.output
-            else:
-                report = result
 
             answer = populate_template(
                 self.prompt_templates["managed_agent"]["report"],
@@ -155,28 +199,15 @@ class StatefulManagedAgent(CodeAgent):
 
     def _is_approval_response(self, task: str) -> bool:
         """
-        Check if task is a user approval response.
+        Check if task is a structured approval response from UI button.
 
-        Returns True for responses like "yes", "proceed", "apply", etc.
+        AIDEV-NOTE: Only accepts structured response from AwaitingInputCard.
+        No natural language parsing - user must click "Approve" button
+        or type custom feedback which is NOT an approval.
         """
-        approval_words = {
-            "yes", "proceed", "apply", "approve", "ok", "okay", "go ahead",
-            "do it", "confirm", "continue", "execute", "approved"
-        }
-
-        # Extract just the user's task part (strip manager prompt boilerplate)
         task_lower = task.lower().strip()
-
-        # Check if task is just an approval word
-        if task_lower in approval_words:
-            return True
-
-        # Check if task starts with approval
-        for word in approval_words:
-            if task_lower.startswith(word):
-                return True
-
-        return False
+        # ONLY accept structured approval from button click
+        return task_lower == "approve"
 
     def _build_resume_task(self, approval: str) -> str:
         """
@@ -235,3 +266,7 @@ class StatefulManagedAgent(CodeAgent):
         self.memory.reset()
         self._waiting_for_approval = False
         logger.info(f"🔄 {self.name} state fully reset")
+
+    def _step_to_progress_dict(self, step: Any, index: int) -> Optional[RawProgressDict]:
+        """Delegate to shared utility for step-to-dict conversion."""
+        return step_to_progress_dict(step, index, self.name or "managed_agent")

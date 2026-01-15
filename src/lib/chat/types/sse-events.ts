@@ -54,6 +54,8 @@ export interface PlanApprovalRequestEvent {
   steps: PlanStepData[]
   estimatedActions?: number
   contextTables?: string[]
+  context?: string   // What was discovered (existing databases, tables, etc.)
+  analysis?: string  // Analysis/reasoning about what will be done
 }
 
 /**
@@ -71,6 +73,32 @@ export interface PlanStatusUpdateEvent {
 }
 
 /**
+ * Option for HITL questions/choices
+ */
+export interface InputOption {
+  id: string
+  label: string
+  description?: string
+}
+
+/**
+ * Awaiting input event - unified HITL mechanism
+ * Emitted when agent needs user input (plan approval or question)
+ *
+ * AIDEV-NOTE: This is the unified HITL event type that supports:
+ * - plan_approval: Agent has a plan and needs user to approve before execution
+ * - question: Agent is uncertain and needs user to choose from options
+ */
+export interface AwaitingInputEvent {
+  type: 'awaiting_input'
+  inputType: 'plan_approval' | 'question'
+  title: string
+  content: string
+  options: InputOption[]
+  planJson?: string  // Full plan JSON for plan_approval type
+}
+
+/**
  * Union type for all SSE chat events
  */
 export type SSEChatEvent =
@@ -79,6 +107,7 @@ export type SSEChatEvent =
   | MessageCompleteEvent
   | PlanApprovalRequestEvent
   | PlanStatusUpdateEvent
+  | AwaitingInputEvent
 
 /**
  * Type guards for event discrimination
@@ -101,4 +130,8 @@ export function isPlanApprovalRequestEvent(event: any): event is PlanApprovalReq
 
 export function isPlanStatusUpdateEvent(event: any): event is PlanStatusUpdateEvent {
   return event?.type === 'plan_status_update'
+}
+
+export function isAwaitingInputEvent(event: any): event is AwaitingInputEvent {
+  return event?.type === 'awaiting_input'
 }

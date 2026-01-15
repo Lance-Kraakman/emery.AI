@@ -43,6 +43,7 @@ import { fetchFileArtifactData, getFileDownloadUrl, getDocumentFieldValue, getDo
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import { StepProgressIndicator } from './StepProgressIndicator'
 import { StepHistoryDisplay } from './StepHistoryDisplay'
+import { ApprovalInputBar } from './ApprovalInputBar'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
 import type { ExecutionStep } from '@/app/dtos/chat.dto'
 import type { ChatMessage as EmeryChatMessage } from './types/extended-chat-handler'
@@ -344,18 +345,19 @@ function ChatContentWithCanvas({
                       message={message}
                       isLast={index === handler.messages.length - 1}
                       className={cn(
-                        "my-0.5 mx-4",
-                        message.role === 'assistant' && "rounded-md py-1.5 transition-colors"
+                        "my-0.5 mx-2",
+                        message.role === 'assistant' && "rounded-md py-1 transition-colors"
                       )}
                     >
                       <ChatMessage.Avatar />
                       <ChatMessage.Content
                         className={cn(
-                          "[&_p]:text-sm [&_p]:leading-snug [&_p]:my-0.5",
-                          message.role === 'user' && "rounded-md px-2.5 py-1 inline-block"
+                          message.role === 'user' && "rounded-md px-2 py-0.5 inline-block"
                         )}
                       >
-                        <ChatMessage.Part.Markdown />
+                        <ChatMessage.Part.Markdown
+                          className="text-sm leading-snug [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_pre]:my-1.5 [&_pre]:p-2 [&_code]:text-xs [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:mt-2 [&_h3]:mb-1 [&_blockquote]:my-1.5 [&_blockquote]:pl-3"
+                        />
                         <ChatMessage.Part.File className="my-2" />
                         <ChatMessage.Part.Source className="my-2" />
                       </ChatMessage.Content>
@@ -410,6 +412,15 @@ function ChatContentWithCanvas({
 
       {/* Input area */}
       <div className="flex-shrink-0 py-2 px-3 bg-card">
+        {/* HITL: Approval options - appears above chat input when awaiting response */}
+        {handler.awaitingInput && (
+          <ApprovalInputBar
+            awaitingInput={handler.awaitingInput}
+            onRespond={(response) => handler.respondToInput?.(response)}
+            disabled={handler.isLoading}
+          />
+        )}
+
         <UnifiedChatInput
           onSendMessage={async (message) => {
             // Send message with proper MessagePart format

@@ -575,35 +575,52 @@ export async function POST(req: NextRequest) {
     // 6. Set up streaming response
     let fullAssistantResponse = '';
     let collectedSteps: ExecutionStep[] = [];
+    let messagePlan: any = null; // Plan from completion metadata (for persistence)
+    let messageAwaitingInput: any = null; // HITL awaiting input state (for UI)
 
     const responseStream = new TransformStream({
       start() {
         console.log('[CHAT-GRPC-API] Starting response stream transform');
       },
-      
+
       transform(chunk: Uint8Array, controller) {
         // Pass through chunks directly to frontend
         controller.enqueue(chunk);
       },
-      
+
       flush() {
         console.log('[CHAT-GRPC-API] Response stream complete, saving assistant message');
-        
+
         // Save the complete assistant response asynchronously
         if (currentChatId && fullAssistantResponse.trim()) {
           const saveAssistantMessage = async () => {
             try {
+              // Build metadata with optional plan and awaitingInput
+              const messageMetadata: any = {
+                processingTime: Date.now() - startTime,
+                modelUsed: 'qwen-coder', // This will come from gRPC response
+                executionSteps: collectedSteps // Persist execution steps
+              };
+
+              // Add plan if present (from completion metadata)
+              if (messagePlan) {
+                messageMetadata.plan = messagePlan;
+                console.log(`[CHAT-GRPC-API] Including plan in message metadata: ${messagePlan.id}`);
+              }
+
+              // Add awaitingInput if present (for HITL resumption)
+              if (messageAwaitingInput) {
+                messageMetadata.awaitingInput = messageAwaitingInput;
+                console.log(`[CHAT-GRPC-API] Including awaitingInput in message metadata: ${messageAwaitingInput.type}`);
+              }
+
               const assistantMessageDTO: SendMessageDTO = {
                 chatId: currentChatId,
                 userId: userId,
                 organizationId: organizationId,
                 content: fullAssistantResponse.trim(),
                 role: 'assistant',
-                metadata: {
-                  processingTime: Date.now() - startTime,
-                  modelUsed: 'qwen-coder', // This will come from gRPC response
-                  executionSteps: collectedSteps // Persist execution steps
-                }
+                metadata: messageMetadata
               };
 
               await chatApplicationService.sendMessage(assistantMessageDTO);
@@ -751,8 +768,20 @@ export async function POST(req: NextRequest) {
                   model: response.complete.modelUsed,
                   tokens: response.complete.totalTokens,
                   processingTime: response.complete.processingTimeMs,
-                  tokenUsage: response.complete.tokenUsage
+                  tokenUsage: response.complete.tokenUsage,
+                  hasPlan: !!response.complete.metadata?.plan
                 });
+
+                // Extract plan from completion metadata (for persistence)
+                // AIDEV-NOTE: Plan sent as JSON string in metadata.plan field
+                if (response.complete.metadata?.plan) {
+                  try {
+                    messagePlan = JSON.parse(response.complete.metadata.plan);
+                    console.log(`[CHAT-GRPC-API] Extracted plan from completion: ${messagePlan.id}`);
+                  } catch (parseError) {
+                    console.error('[CHAT-GRPC-API] Failed to parse plan JSON:', parseError);
+                  }
+                }
 
                 // Record token usage for billing
                 if (response.complete.tokenUsage) {
@@ -791,6 +820,46 @@ export async function POST(req: NextRequest) {
 
                 controller.close();
                 
+              } else if (response.type === 'awaiting_input' && response.awaitingInput) {
+                // HITL: Agent needs user input (plan approval or question)
+                console.log(`[CHAT-GRPC-API] Agent awaiting input:`, {
+                  inputType: response.awaitingInput.inputType,
+                  title: response.awaitingInput.title,
+                  optionsCount: response.awaitingInput.options?.length || 0
+                });
+
+                // Store awaiting input state for message persistence
+                // AIDEV-NOTE: This allows UI to show approval/question UI on page reload
+                messageAwaitingInput = {
+                  type: response.awaitingInput.inputType,
+                  title: response.awaitingInput.title,
+                  content: response.awaitingInput.content,
+                  options: response.awaitingInput.options || []
+                };
+
+                // If plan_approval, parse and store the plan too
+                if (response.awaitingInput.inputType === 'plan_approval' && response.awaitingInput.planJson) {
+                  try {
+                    messagePlan = JSON.parse(response.awaitingInput.planJson);
+                    console.log(`[CHAT-GRPC-API] Extracted plan from awaiting_input: ${messagePlan.id}`);
+                  } catch (parseError) {
+                    console.error('[CHAT-GRPC-API] Failed to parse plan JSON from awaiting_input:', parseError);
+                  }
+                }
+
+                // Send awaiting_input event to frontend
+                const awaitingInputEvent = {
+                  type: 'awaiting_input',
+                  inputType: response.awaitingInput.inputType,
+                  title: response.awaitingInput.title,
+                  content: response.awaitingInput.content,
+                  options: response.awaitingInput.options || [],
+                  planJson: response.awaitingInput.planJson || null
+                };
+
+                controller.enqueue(encodeSSEEvent(awaitingInputEvent));
+                console.log(`[CHAT-GRPC-API] Sent awaiting_input event (type=${response.awaitingInput.inputType})`);
+
               } else if (response.type === 'error' && response.error) {
                 // AI processing error with user-friendly message
                 // Log technical details to console ONLY (never show to user)

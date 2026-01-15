@@ -1,12 +1,10 @@
 """Executes agent tasks with routing and tool loading."""
 
-import contextvars
 import logging
 import os
 import time
 import json
 import uuid
-from contextlib import contextmanager
 from typing import Dict, Any, List, Optional, Union, AsyncIterator
 
 import httpx
@@ -28,6 +26,11 @@ from ..tools.output_tool import OutputTool, build_target_field_metadata_from_map
 from ..clients import HuggingFaceInferenceClient, TaskResult
 from .skill_executor import SkillExecutorService
 from .step_executor import StepExecutorService
+from .context_manager import (
+    get_current_context as _get_context,
+    set_current_context as _set_context,
+    execution_scope as _execution_scope,
+)
 from ..entities.output_mapping import (
     OutputMappingConfig, FieldMapping, OutputMappingMode, RowAction,
     extract_field_value, get_extension_for_mime
@@ -57,26 +60,24 @@ logger = logging.getLogger(__name__)
 class AgentExecutor:
     """Executes agent tasks with async-safe context management.
 
-    SECURITY: Uses contextvars.ContextVar instead of threading.local()
-    to prevent context leakage between async requests.
-    """
+    SECURITY: Uses contextvars.ContextVar (via context_manager module) instead
+    of threading.local() to prevent context leakage between async requests.
 
-    # Async-safe context variable for ExecutionContext
-    _context_var: contextvars.ContextVar[Optional[ExecutionContext]] = \
-        contextvars.ContextVar('execution_context', default=None)
+    AIDEV-NOTE: Context management is delegated to context_manager.py module
+    to avoid circular imports with agents that need access to current context.
+    """
 
     @classmethod
     def set_current_context(cls, context: Optional[ExecutionContext]) -> None:
         """Store execution context for skill access in current async context."""
-        cls._context_var.set(context)
+        _set_context(context)
 
     @classmethod
     def get_current_context(cls) -> Optional[ExecutionContext]:
         """Get execution context for current async context (used by SkillTool)."""
-        return cls._context_var.get()
+        return _get_context()
 
     @classmethod
-    @contextmanager
     def execution_scope(cls, context: ExecutionContext):
         """Context manager ensuring proper cleanup of execution context.
 
@@ -89,11 +90,7 @@ class AgentExecutor:
                 pass
             # Context is automatically cleaned up
         """
-        token = cls._context_var.set(context)
-        try:
-            yield context
-        finally:
-            cls._context_var.reset(token)
+        return _execution_scope(context)
 
     def __init__(
         self,

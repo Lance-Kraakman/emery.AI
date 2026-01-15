@@ -35,13 +35,12 @@ services:
       # Override WORKER_ADDRESS for internal container network
       WORKER_ADDRESS: agent-chat-integration:50051
       GRPC_TOOLS_ADDRESS: agent-table-integration:50052    # Table operations (internal network)
-      # MinIO S3 configuration for integration tests (internal container network)
-      AWS_ENDPOINT_URL: http://minio-integration:9000
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin
       AWS_REGION: us-east-1
       S3_BUCKET_NAME: emery-files
       S3_FORCE_PATH_STYLE: true
+      S3_ENDPOINT_URL: http://minio-integration:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
       # Redis for caching (ioredis)
       REDIS_URL: redis://redis-integration:6379
     depends_on:

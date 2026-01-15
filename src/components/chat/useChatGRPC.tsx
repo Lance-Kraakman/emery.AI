@@ -21,9 +21,10 @@ import {
   isContentEvent,
   isMessageCompleteEvent,
   isPlanApprovalRequestEvent,
-  isPlanStatusUpdateEvent
+  isPlanStatusUpdateEvent,
+  isAwaitingInputEvent
 } from '@/lib/chat/types/sse-events'
-import type { PendingPlanApproval, ActivePlanExecution, PlanExecutionStatus } from './types/extended-chat-handler'
+import type { PendingPlanApproval, ActivePlanExecution, PlanExecutionStatus, AwaitingInputState } from './types/extended-chat-handler'
 
 const logger = createDebugLogger('ChatGRPC')
 
@@ -155,6 +156,9 @@ export function useChatGRPC(
   // Plan approval workflow state
   const [pendingPlanApproval, setPendingPlanApproval] = useState<PendingPlanApproval | null>(null)
   const [activePlanExecution, setActivePlanExecution] = useState<ActivePlanExecution | null>(null)
+
+  // Unified HITL awaiting input state (plan approval or questions)
+  const [awaitingInput, setAwaitingInput] = useState<AwaitingInputState | null>(null)
 
   // Generate domain-specific storage key for this chat session
   const chatStorageKey = `emery-chat-${contextOptions?.domainType || chatContext?.domainType || 'general'}-${contextOptions?.domainId || chatContext?.domainId || 'default'}`
@@ -545,7 +549,9 @@ export function useChatGRPC(
                 // Plan approval request - agent needs user confirmation before execution
                 logger.debug('Plan approval requested', {
                   planId: eventData.planId,
-                  stepCount: eventData.steps.length
+                  stepCount: eventData.steps.length,
+                  hasContext: !!eventData.context,
+                  hasAnalysis: !!eventData.analysis
                 })
 
                 setPendingPlanApproval({
@@ -553,7 +559,9 @@ export function useChatGRPC(
                   goal: eventData.goal,
                   steps: eventData.steps,
                   estimatedActions: eventData.estimatedActions,
-                  contextTables: eventData.contextTables
+                  contextTables: eventData.contextTables,
+                  context: eventData.context,
+                  analysis: eventData.analysis
                 })
 
                 // Initialize active plan execution in draft state
@@ -637,6 +645,46 @@ export function useChatGRPC(
                 logger.summary('Error received', {
                   code: eventData.errorCode,
                   canRetry: eventData.canRetry
+                });
+
+              } else if (isAwaitingInputEvent(eventData)) {
+                // Unified HITL: Agent needs user input (plan approval or question)
+                logger.debug('Awaiting input', {
+                  inputType: eventData.inputType,
+                  title: eventData.title,
+                  optionsCount: eventData.options?.length || 0
+                });
+
+                // Set awaiting input state for UI to render approval/question card
+                setAwaitingInput({
+                  inputType: eventData.inputType,
+                  title: eventData.title,
+                  content: eventData.content,
+                  options: eventData.options || [],
+                  planJson: eventData.planJson
+                });
+
+                // If it's a plan approval, also display the plan as part of the message
+                if (eventData.inputType === 'plan_approval' && eventData.content) {
+                  // Add plan content to assistant message for display
+                  const planMessage = `\n\n**${eventData.title}**\n\n${eventData.content}`;
+                  assistantMessage += planMessage;
+
+                  if (!messageCreated) {
+                    setMessages((prev) => [...prev, createTextMessage(assistantMessage, 'assistant', assistantId)]);
+                    messageCreated = true;
+                  } else {
+                    setMessages((prev) => prev.map((msg) =>
+                      msg.id === assistantId
+                        ? createTextMessage(assistantMessage, 'assistant', assistantId)
+                        : msg
+                    ));
+                  }
+                }
+
+                logger.summary('Awaiting input set', {
+                  inputType: eventData.inputType,
+                  title: eventData.title
                 });
               }
             } catch (e) {
@@ -846,6 +894,36 @@ export function useChatGRPC(
     }, 1500)
   }
 
+  // Unified HITL response function (for both plan approval and questions)
+  const respondToInput = async (response: string) => {
+    if (!awaitingInput) {
+      logger.debug('No awaiting input to respond to')
+      return
+    }
+
+    logger.debug('Responding to input', {
+      inputType: awaitingInput.inputType,
+      response
+    })
+
+    // Clear awaiting input state immediately
+    setAwaitingInput(null)
+
+    // Send the response as a user message to continue the conversation
+    // The agent will resume with reset=false to continue from where it left off
+    // AIDEV-NOTE: Must use 'parts' format, not 'content' - getMessageContent expects parts array
+    await append({
+      id: generateId(),
+      role: 'user',
+      parts: [{ type: 'text', text: response }]
+    })
+
+    logger.summary('Input response sent', {
+      inputType: awaitingInput.inputType,
+      response
+    })
+  }
+
   // Tool management functions
   const addTool = async (tool: ToolDTO) => {
     // No validation needed - domain objects are self-validating
@@ -927,6 +1005,9 @@ export function useChatGRPC(
     activePlanExecution,
     approvePlan,
     rejectPlan,
+    // Unified HITL awaiting input
+    awaitingInput,
+    respondToInput,
   }
 }
 

@@ -670,18 +670,44 @@ class ProcessMessageRequest(_message.Message):
     def __init__(self, message_parts: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., context: _Optional[_Union[ChatContext, _Mapping]] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., model: _Optional[str] = ..., message_id: _Optional[str] = ..., session_id: _Optional[str] = ..., user_api_key: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageResponse(_message.Message):
-    __slots__ = ("content_chunk", "complete", "error", "step_progress", "timestamp")
+    __slots__ = ("content_chunk", "complete", "error", "step_progress", "awaiting_input", "timestamp")
     CONTENT_CHUNK_FIELD_NUMBER: _ClassVar[int]
     COMPLETE_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
     STEP_PROGRESS_FIELD_NUMBER: _ClassVar[int]
+    AWAITING_INPUT_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     content_chunk: ContentChunk
     complete: ProcessingComplete
     error: ProcessingError
     step_progress: StepProgress
+    awaiting_input: AwaitingInput
     timestamp: int
-    def __init__(self, content_chunk: _Optional[_Union[ContentChunk, _Mapping]] = ..., complete: _Optional[_Union[ProcessingComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., step_progress: _Optional[_Union[StepProgress, _Mapping]] = ..., timestamp: _Optional[int] = ...) -> None: ...
+    def __init__(self, content_chunk: _Optional[_Union[ContentChunk, _Mapping]] = ..., complete: _Optional[_Union[ProcessingComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., step_progress: _Optional[_Union[StepProgress, _Mapping]] = ..., awaiting_input: _Optional[_Union[AwaitingInput, _Mapping]] = ..., timestamp: _Optional[int] = ...) -> None: ...
+
+class AwaitingInput(_message.Message):
+    __slots__ = ("input_type", "title", "content", "options", "plan_json")
+    INPUT_TYPE_FIELD_NUMBER: _ClassVar[int]
+    TITLE_FIELD_NUMBER: _ClassVar[int]
+    CONTENT_FIELD_NUMBER: _ClassVar[int]
+    OPTIONS_FIELD_NUMBER: _ClassVar[int]
+    PLAN_JSON_FIELD_NUMBER: _ClassVar[int]
+    input_type: str
+    title: str
+    content: str
+    options: _containers.RepeatedCompositeFieldContainer[InputOption]
+    plan_json: str
+    def __init__(self, input_type: _Optional[str] = ..., title: _Optional[str] = ..., content: _Optional[str] = ..., options: _Optional[_Iterable[_Union[InputOption, _Mapping]]] = ..., plan_json: _Optional[str] = ...) -> None: ...
+
+class InputOption(_message.Message):
+    __slots__ = ("id", "label", "description")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    LABEL_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    label: str
+    description: str
+    def __init__(self, id: _Optional[str] = ..., label: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
 
 class MessagePart(_message.Message):
     __slots__ = ("text", "image_url", "file")

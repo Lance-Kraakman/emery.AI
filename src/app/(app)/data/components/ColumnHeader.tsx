@@ -105,9 +105,9 @@ export function ColumnHeader({
   }
 
   return (
-    <div className="flex items-center justify-between w-full gap-1">
-      <div className="flex items-center gap-1.5 truncate flex-1">
-        <span className="truncate">{field.name}</span>
+    <div className="flex items-center w-full gap-1 min-w-0">
+      <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+        <span className="truncate min-w-0" title={field.name}>{field.name}</span>
         {isAutoField && (
           <div title={`Auto-generated ${field.type} field (read-only)`}>
             <Lock className="h-3 w-3 text-muted-foreground flex-shrink-0" />

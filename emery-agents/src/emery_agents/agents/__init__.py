@@ -18,6 +18,7 @@ from .document_builder_agent import (
     create_document_builder_agent,
 )
 from .evaluator_agent import (
+    EvaluationTool,
     create_evaluator_agent,
     create_evaluator_factory,
 )
@@ -28,6 +29,7 @@ __all__ = [
     "create_skill_builder_agent",
     "create_planning_callback",
     "create_document_builder_agent",
+    "EvaluationTool",
     "create_evaluator_agent",
     "create_evaluator_factory",
     "StatefulManagedAgent",

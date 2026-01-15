@@ -884,8 +884,41 @@ export interface ProcessMessageResponse {
   stepProgress?:
     | StepProgress
     | undefined;
+  /** HITL: Agent needs user approval/input */
+  awaitingInput?:
+    | AwaitingInput
+    | undefined;
   /** Response timestamp */
   timestamp: number;
+}
+
+/**
+ * HITL: Agent awaiting user input (plan approval or question)
+ * AIDEV-NOTE: Used for both plan approval and agent questions.
+ * - plan_approval: Shows plan + Approve/Reject/Modify buttons
+ * - question: Shows question + option buttons for user choice
+ */
+export interface AwaitingInput {
+  /** "plan_approval" or "question" */
+  inputType: string;
+  /** Display title */
+  title: string;
+  /** Plan markdown or question text */
+  content: string;
+  /** Available options for user to choose */
+  options: InputOption[];
+  /** Full plan JSON (for plan_approval type) */
+  planJson: string;
+}
+
+/** Option for HITL questions/choices */
+export interface InputOption {
+  /** Unique option identifier */
+  id: string;
+  /** Display text */
+  label: string;
+  /** Optional description */
+  description: string;
 }
 
 /**
@@ -6991,7 +7024,14 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
 };
 
 function createBaseProcessMessageResponse(): ProcessMessageResponse {
-  return { contentChunk: undefined, complete: undefined, error: undefined, stepProgress: undefined, timestamp: 0 };
+  return {
+    contentChunk: undefined,
+    complete: undefined,
+    error: undefined,
+    stepProgress: undefined,
+    awaitingInput: undefined,
+    timestamp: 0,
+  };
 }
 
 export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
@@ -7007,6 +7047,9 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     }
     if (message.stepProgress !== undefined) {
       StepProgress.encode(message.stepProgress, writer.uint32(42).fork()).join();
+    }
+    if (message.awaitingInput !== undefined) {
+      AwaitingInput.encode(message.awaitingInput, writer.uint32(58).fork()).join();
     }
     if (message.timestamp !== 0) {
       writer.uint32(48).int64(message.timestamp);
@@ -7053,6 +7096,14 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
           message.stepProgress = StepProgress.decode(reader, reader.uint32());
           continue;
         }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.awaitingInput = AwaitingInput.decode(reader, reader.uint32());
+          continue;
+        }
         case 6: {
           if (tag !== 48) {
             break;
@@ -7076,6 +7127,7 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
       complete: isSet(object.complete) ? ProcessingComplete.fromJSON(object.complete) : undefined,
       error: isSet(object.error) ? ProcessingError.fromJSON(object.error) : undefined,
       stepProgress: isSet(object.stepProgress) ? StepProgress.fromJSON(object.stepProgress) : undefined,
+      awaitingInput: isSet(object.awaitingInput) ? AwaitingInput.fromJSON(object.awaitingInput) : undefined,
       timestamp: isSet(object.timestamp) ? globalThis.Number(object.timestamp) : 0,
     };
   },
@@ -7093,6 +7145,9 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     }
     if (message.stepProgress !== undefined) {
       obj.stepProgress = StepProgress.toJSON(message.stepProgress);
+    }
+    if (message.awaitingInput !== undefined) {
+      obj.awaitingInput = AwaitingInput.toJSON(message.awaitingInput);
     }
     if (message.timestamp !== 0) {
       obj.timestamp = Math.round(message.timestamp);
@@ -7117,7 +7172,226 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     message.stepProgress = (object.stepProgress !== undefined && object.stepProgress !== null)
       ? StepProgress.fromPartial(object.stepProgress)
       : undefined;
+    message.awaitingInput = (object.awaitingInput !== undefined && object.awaitingInput !== null)
+      ? AwaitingInput.fromPartial(object.awaitingInput)
+      : undefined;
     message.timestamp = object.timestamp ?? 0;
+    return message;
+  },
+};
+
+function createBaseAwaitingInput(): AwaitingInput {
+  return { inputType: "", title: "", content: "", options: [], planJson: "" };
+}
+
+export const AwaitingInput: MessageFns<AwaitingInput> = {
+  encode(message: AwaitingInput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.inputType !== "") {
+      writer.uint32(10).string(message.inputType);
+    }
+    if (message.title !== "") {
+      writer.uint32(18).string(message.title);
+    }
+    if (message.content !== "") {
+      writer.uint32(26).string(message.content);
+    }
+    for (const v of message.options) {
+      InputOption.encode(v!, writer.uint32(34).fork()).join();
+    }
+    if (message.planJson !== "") {
+      writer.uint32(42).string(message.planJson);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AwaitingInput {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAwaitingInput();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.inputType = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.title = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.content = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.options.push(InputOption.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.planJson = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AwaitingInput {
+    return {
+      inputType: isSet(object.inputType) ? globalThis.String(object.inputType) : "",
+      title: isSet(object.title) ? globalThis.String(object.title) : "",
+      content: isSet(object.content) ? globalThis.String(object.content) : "",
+      options: globalThis.Array.isArray(object?.options) ? object.options.map((e: any) => InputOption.fromJSON(e)) : [],
+      planJson: isSet(object.planJson) ? globalThis.String(object.planJson) : "",
+    };
+  },
+
+  toJSON(message: AwaitingInput): unknown {
+    const obj: any = {};
+    if (message.inputType !== "") {
+      obj.inputType = message.inputType;
+    }
+    if (message.title !== "") {
+      obj.title = message.title;
+    }
+    if (message.content !== "") {
+      obj.content = message.content;
+    }
+    if (message.options?.length) {
+      obj.options = message.options.map((e) => InputOption.toJSON(e));
+    }
+    if (message.planJson !== "") {
+      obj.planJson = message.planJson;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AwaitingInput>, I>>(base?: I): AwaitingInput {
+    return AwaitingInput.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AwaitingInput>, I>>(object: I): AwaitingInput {
+    const message = createBaseAwaitingInput();
+    message.inputType = object.inputType ?? "";
+    message.title = object.title ?? "";
+    message.content = object.content ?? "";
+    message.options = object.options?.map((e) => InputOption.fromPartial(e)) || [];
+    message.planJson = object.planJson ?? "";
+    return message;
+  },
+};
+
+function createBaseInputOption(): InputOption {
+  return { id: "", label: "", description: "" };
+}
+
+export const InputOption: MessageFns<InputOption> = {
+  encode(message: InputOption, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.label !== "") {
+      writer.uint32(18).string(message.label);
+    }
+    if (message.description !== "") {
+      writer.uint32(26).string(message.description);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InputOption {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseInputOption();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.id = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.label = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.description = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InputOption {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      label: isSet(object.label) ? globalThis.String(object.label) : "",
+      description: isSet(object.description) ? globalThis.String(object.description) : "",
+    };
+  },
+
+  toJSON(message: InputOption): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.label !== "") {
+      obj.label = message.label;
+    }
+    if (message.description !== "") {
+      obj.description = message.description;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InputOption>, I>>(base?: I): InputOption {
+    return InputOption.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InputOption>, I>>(object: I): InputOption {
+    const message = createBaseInputOption();
+    message.id = object.id ?? "";
+    message.label = object.label ?? "";
+    message.description = object.description ?? "";
     return message;
   },
 };

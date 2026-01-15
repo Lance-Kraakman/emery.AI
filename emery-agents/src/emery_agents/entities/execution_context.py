@@ -6,9 +6,10 @@ Uses direct types (int, str) instead of wrapper classes.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Callable
 from ..types import AgentId, OrganizationId, ExecutionMode
 from ..models.context_mapping import ResolvedContext
+from ..tools.tool_modes import ToolMode
 
 # Import from generated protobuf
 from ..grpc.generated.agent_worker_pb2 import SkillConfig, ImageAttachment, FileAttachment
@@ -78,9 +79,18 @@ class ExecutionContext:
     # When True, enables HITL approval gates and evaluation loop
     use_coordinator: bool = False
 
+    # Tool mode for HITL enforcement - controls whether mutations are allowed
+    # EXECUTION: Full access (default - direct commands work immediately)
+    # PLANNING: Read-only operations only (enabled by coordinator for complex tasks)
+    tool_mode: ToolMode = ToolMode.EXECUTION
+
     # Resolved context table mappings for this execution
     # Contains merged mappings with hierarchy priority: step > skill > agent
     resolved_context: Optional[ResolvedContext] = None
+
+    # Progress callback for streaming nested skill execution steps to UI
+    # Called with step dicts: {'type': str, 'step_name': str, 'content': str, 'metadata': dict}
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
 
     @property
     def is_autonomous(self) -> bool:
@@ -116,4 +126,5 @@ class ExecutionContext:
             source_row_id=self.source_row_id,
             use_coordinator=self.use_coordinator,
             resolved_context=self.resolved_context,
+            tool_mode=self.tool_mode,
         )

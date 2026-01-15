@@ -84,7 +84,8 @@ def create_planning_callback() -> Callable[[PlanningStep, CodeAgent], None]:
 def create_schema_builder_agent(
     tools: List[Tool],
     model: Any,
-    max_steps: int = 20
+    max_steps: int = 20,
+    progress_callback: Any = None
 ) -> StatefulManagedAgent:
     """
     Create Schema Builder agent with proper native HITL workflow.
@@ -134,6 +135,7 @@ def create_schema_builder_agent(
         planning_interval=3,  # Plan at step 1, then step 4 (after 3 action steps)
         step_callbacks={PlanningStep: planning_callback},
         verbosity_level=LogLevel.OFF,
+        progress_callback=progress_callback,  # For streaming nested steps to parent
     )
 
     # Set attributes for ManagedAgent identification

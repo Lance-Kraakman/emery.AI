@@ -246,11 +246,20 @@ class SkillTool(Tool):
                 # Resolve input mappings (read table field values)
                 enriched_kwargs = run_async_in_thread(self._resolve_input_mappings(kwargs))
 
+                # Get progress_callback from execution context for nested step visibility
+                from ..services.agent_executor import AgentExecutor
+                parent_ctx = AgentExecutor.get_current_context()
+                progress_callback = parent_ctx.progress_callback if parent_ctx else None
+
                 # Check if we need to capture outputs for mapping
                 if self._has_output_mappings():
                     # Request output capture from skill executor
                     # Executor returns SkillExecutionResult when capture_outputs=True
-                    executor_result = self.skill_executor(self.skill_config, enriched_kwargs, capture_outputs=True)
+                    executor_result = self.skill_executor(
+                        self.skill_config, enriched_kwargs,
+                        capture_outputs=True,
+                        progress_callback=progress_callback
+                    )
 
                     # Type check using isinstance with dataclass
                     if isinstance(executor_result, SkillExecutionResult):
@@ -267,7 +276,10 @@ class SkillTool(Tool):
                         result = executor_result
                 else:
                     # Standard agent execution without output capture
-                    result = self.skill_executor(self.skill_config, enriched_kwargs)
+                    result = self.skill_executor(
+                        self.skill_config, enriched_kwargs,
+                        progress_callback=progress_callback
+                    )
 
             logger.info(f"✅ Skill {self.name} completed successfully")
             # Cache the result for memoization (prevents duplicate calls)

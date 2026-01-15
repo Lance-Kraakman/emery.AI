@@ -8,12 +8,19 @@ Sessions are identified by chat_id and maintain agent memory across messages.
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Any, List
+from typing import Dict, Optional, Any, List, Literal, TYPE_CHECKING
 from dataclasses import dataclass, field
 from smolagents import ToolCallingAgent
 from smolagents.memory import FinalAnswerStep
 
+if TYPE_CHECKING:
+    from .execution_coordinator import ExecutionCoordinator
+    from ..models.plan import Plan
+
 logger = logging.getLogger(__name__)
+
+# Coordinator execution phases
+CoordinatorPhase = Literal["idle", "planning", "awaiting_approval", "executing"]
 
 
 @dataclass
@@ -33,6 +40,10 @@ class SessionMetadata:
     last_error_timestamp: Optional[datetime] = None
     # File attachments accumulated during session (for skill context injection)
     attachments: List[Any] = field(default_factory=list)
+    # Coordinator state for two-phase execution (planning → approval → execution)
+    coordinator: Optional["ExecutionCoordinator"] = None
+    current_plan: Optional["Plan"] = None
+    coordinator_phase: CoordinatorPhase = "idle"
 
 
 class SessionManager:
@@ -558,3 +569,51 @@ class SessionManager:
         """
         reason = f"fatal_error:{error_type}"
         await self.remove_session(session_id, reason)
+
+    # ============================================================
+    # Coordinator State Management Methods
+    # ============================================================
+
+    def get_coordinator_phase(self, session_id: str) -> CoordinatorPhase:
+        """Get current coordinator phase for session."""
+        if session_id in self.metadata:
+            return self.metadata[session_id].coordinator_phase
+        return "idle"
+
+    def set_coordinator_phase(self, session_id: str, phase: CoordinatorPhase) -> None:
+        """Set coordinator phase for session."""
+        if session_id in self.metadata:
+            self.metadata[session_id].coordinator_phase = phase
+            logger.info(f"📊 Session {session_id} coordinator phase: {phase}")
+
+    def set_coordinator(
+        self,
+        session_id: str,
+        coordinator: "ExecutionCoordinator",
+        plan: Optional["Plan"] = None
+    ) -> None:
+        """Store coordinator and optional plan for session."""
+        if session_id in self.metadata:
+            self.metadata[session_id].coordinator = coordinator
+            self.metadata[session_id].current_plan = plan
+            logger.info(f"🎯 Session {session_id}: coordinator set, plan={'yes' if plan else 'no'}")
+
+    def get_coordinator(self, session_id: str) -> Optional["ExecutionCoordinator"]:
+        """Get coordinator for session if exists."""
+        if session_id in self.metadata:
+            return self.metadata[session_id].coordinator
+        return None
+
+    def get_current_plan(self, session_id: str) -> Optional["Plan"]:
+        """Get current plan for session if exists."""
+        if session_id in self.metadata:
+            return self.metadata[session_id].current_plan
+        return None
+
+    def clear_coordinator_state(self, session_id: str) -> None:
+        """Clear coordinator state after execution completes."""
+        if session_id in self.metadata:
+            self.metadata[session_id].coordinator = None
+            self.metadata[session_id].current_plan = None
+            self.metadata[session_id].coordinator_phase = "idle"
+            logger.info(f"🧹 Session {session_id}: coordinator state cleared")

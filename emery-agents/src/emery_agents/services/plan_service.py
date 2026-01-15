@@ -3,10 +3,16 @@ Plan Service
 
 Manages plan files - generation, storage, and retrieval.
 Plans are stored on agent/skill entities via gRPC.
+
+AIDEV-NOTE: Plan generation uses PlanOutputTool for structured capture.
+The planner calls submit_plan tool with goal and steps - no text parsing.
+Step execution uses ToolExecutor pattern - sub-agent resolves descriptions to tool calls.
 """
 
 import logging
 from typing import List, Optional, Any
+
+from smolagents import ToolCallingAgent
 
 from emery_agents.models.plan import (
     Plan,
@@ -17,6 +23,8 @@ from emery_agents.models.plan import (
     create_step,
 )
 from emery_agents.models.context_mapping import ResolvedContext
+from emery_agents.tools.plan_output_tool import PlanOutputTool
+from .protocols import ModelProvider, GRPCClient, Tool
 
 logger = logging.getLogger(__name__)
 
@@ -26,17 +34,23 @@ class PlanService:
     Manages plan files - generation, storage, retrieval via gRPC.
 
     Plans are detailed execution instructions generated from basic instructions.
-    They contain step-by-step tool calls for agent execution.
+    Uses LLM to generate text-only step descriptions that are executed via ToolExecutor.
     """
 
-    def __init__(self, grpc_client=None):
+    def __init__(
+        self,
+        grpc_client: Optional[GRPCClient] = None,
+        model_provider: Optional[ModelProvider] = None,
+    ):
         """
         Initialize plan service.
 
         Args:
             grpc_client: gRPC client for communication with Next.js server
+            model_provider: Model provider for LLM access and model resolution
         """
         self.grpc_client = grpc_client
+        self.model_provider = model_provider
 
     async def generate_plan(
         self,
@@ -44,41 +58,160 @@ class PlanService:
         context_tables: Optional[ResolvedContext] = None,
         available_tools: Optional[List[str]] = None,
         goal: Optional[str] = None,
+        org_model: Optional[str] = None,
+        tools: Optional[List[Tool]] = None,
+        managed_agents: Optional[List[Any]] = None,
+        context_tools: Optional[List[Any]] = None,
     ) -> Plan:
         """
-        Generate detailed plan from basic instructions.
+        Generate plan using context-first planning pattern.
 
-        This method creates a structured plan with step-by-step tool calls
-        based on the provided instructions. In a full implementation,
-        this would use an LLM to analyze the instructions and generate
-        the appropriate steps.
+        The planner:
+        1. Gathers context using database_list() and table_list()
+        2. Analyzes the request with gathered context
+        3. Calls submit_plan with context, analysis, goal, and steps
 
         Args:
             basic_instructions: Human-readable instructions to convert to plan
             context_tables: Resolved context mappings (tables available for the plan)
-            available_tools: Tools that can be used in plan steps
-            goal: Optional explicit goal (defaults to first line of instructions)
+            available_tools: Tool names as strings (for logging)
+            goal: Optional explicit goal (defaults to LLM-generated goal)
+            org_model: Organization model ID for model resolution hierarchy
+            tools: Actual tool objects (for prompt template)
+            managed_agents: Available managed agents (planner sees their descriptions)
+            context_tools: Optional context-gathering tools (database_list, table_list)
 
         Returns:
-            Plan object with generated steps
+            Plan object with generated steps, context, and analysis
         """
-        # context_tables is available for future use when planning with context
-        available_tools = available_tools or []
+        # Resolve model using model hierarchy
+        if not self.model_provider:
+            logger.warning("No model_provider for plan generation - returning empty plan")
+            fallback_goal = goal or self._summarize_task(basic_instructions)
+            return create_plan(goal=fallback_goal, basic_instructions=basic_instructions)
 
-        # Extract goal from instructions if not provided
-        if not goal:
-            goal = basic_instructions.split('\n')[0].strip()
-            if len(goal) > 100:
-                goal = goal[:97] + "..."
+        model_id = self.model_provider.resolve_model_selection(org_model=org_model)
+        model = self.model_provider.get_model(model_id=model_id)
 
-        # Create initial plan structure
-        plan = create_plan(
-            goal=goal,
-            basic_instructions=basic_instructions,
+        # Create plan output tool
+        plan_tool = PlanOutputTool()
+
+        # Build list of planner tools: context tools + submit_plan
+        planner_tools = []
+        if context_tools:
+            planner_tools.extend(context_tools)
+            logger.info(f"📋 Planner has {len(context_tools)} context-gathering tools")
+        planner_tools.append(plan_tool)
+
+        # Extract agent info for template (names + descriptions)
+        # We pass info to template but NOT actual agents to planner
+        # This prevents planner from trying to execute agents
+        agent_info = []
+        for agent in (managed_agents or []):
+            agent_info.append({
+                "name": getattr(agent, "name", "unknown"),
+                "description": getattr(agent, "description", ""),
+            })
+
+        # Build prompt using Jinja template
+        from ..prompts import render_template
+        prompt = render_template(
+            "planning/step_planner.j2",
+            task=basic_instructions,
+            tools=tools or [],
+            managed_agents=agent_info,  # Pass info, not actual agents
         )
 
-        logger.info(f"Generated plan {plan.id} for goal: {goal}")
+        logger.info(f"📋 Generating plan with context-first pattern...")
+        logger.debug(f"📋 Planning prompt ({len(prompt)} chars)")
+
+        # Generate plan via LLM with context tools + submit_plan
+        # max_steps allows: database_list + table_list + submit_plan + some thinking
+        plan_goal: Optional[str] = None
+        plan_context: Optional[str] = None
+        plan_analysis: Optional[str] = None
+        steps: List[PlanStep] = []
+
+        try:
+            planner = ToolCallingAgent(
+                tools=planner_tools,
+                model=model,
+                max_steps=6,  # Allow context gathering + submit_plan
+            )
+            planner.run(prompt)
+
+            # Get structured plan from tool
+            captured = plan_tool.get_plan()
+
+            if captured:
+                # Extract context and analysis
+                plan_context = captured.get("context")
+                plan_analysis = captured.get("analysis")
+
+                # Steps are now objects with description and optional target_agent
+                steps = []
+                for step_data in captured["steps"]:
+                    if isinstance(step_data, dict):
+                        steps.append(create_step(
+                            description=step_data.get("description", str(step_data)),
+                            tool_call=None,
+                            parameters=None,
+                            target_agent=step_data.get("target_agent"),
+                        ))
+                    else:
+                        # Legacy string format
+                        steps.append(create_step(
+                            description=str(step_data),
+                            tool_call=None,
+                            parameters=None,
+                        ))
+                # ALWAYS use captured goal - the LLM analyzed the task and summarized it
+                plan_goal = captured["goal"]
+                logger.info(f"✅ Generated {len(steps)} plan steps via submit_plan tool")
+                logger.info(f"📋 Captured goal: {plan_goal}")
+                if plan_context:
+                    logger.info(f"📋 Has context: {len(plan_context)} chars")
+                if plan_analysis:
+                    logger.info(f"📋 Has analysis: {len(plan_analysis)} chars")
+            else:
+                logger.warning("⚠️ Plan tool not called, using empty plan")
+
+        except Exception as e:
+            logger.error(f"❌ Plan generation failed: {e}")
+
+        # Fallback goal hierarchy: captured > explicit param > summarize
+        if not plan_goal:
+            plan_goal = goal or self._summarize_task(basic_instructions)
+
+        # Create plan with generated steps, context, and analysis
+        plan = create_plan(
+            goal=plan_goal,
+            basic_instructions=basic_instructions,
+            steps=steps,
+            context=plan_context,
+            analysis=plan_analysis,
+        )
+
+        logger.info(f"📋 Created plan {plan.id} with {len(steps)} steps for goal: {plan_goal}")
         return plan
+
+    def _summarize_task(self, task: str, max_length: int = 100) -> str:
+        """
+        Create a short summary of the task for display.
+
+        Takes first line and truncates if needed.
+
+        Args:
+            task: Full task text
+            max_length: Maximum length for summary
+
+        Returns:
+            Short summary string
+        """
+        first_line = task.split("\n")[0].strip()
+        if len(first_line) > max_length:
+            return first_line[: max_length - 3] + "..."
+        return first_line
 
     async def save_agent_plan(self, agent_id: int, plan: Plan) -> None:
         """
@@ -283,15 +416,24 @@ class PlanService:
 class PlanServiceFactory:
     """Factory for creating PlanService instances."""
 
-    def __init__(self, grpc_client=None):
+    def __init__(
+        self,
+        grpc_client: Optional[GRPCClient] = None,
+        model_provider: Optional[ModelProvider] = None,
+    ) -> None:
         """
         Initialize factory.
 
         Args:
             grpc_client: gRPC client to use for all plan services
+            model_provider: Model provider for LLM access
         """
         self.grpc_client = grpc_client
+        self.model_provider = model_provider
 
     def create(self) -> PlanService:
         """Create a PlanService instance."""
-        return PlanService(grpc_client=self.grpc_client)
+        return PlanService(
+            grpc_client=self.grpc_client,
+            model_provider=self.model_provider,
+        )

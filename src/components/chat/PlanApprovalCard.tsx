@@ -1,6 +1,7 @@
 'use client'
 
-import { Check, X, ClipboardList, Database } from 'lucide-react'
+import { Check, X, ClipboardList, Database, Eye, Lightbulb } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 import { Button } from '@/components/ui/button'
 import { PlanStepItem } from './PlanStepItem'
 import { PlanStatusBadge } from './PlanStatusBadge'
@@ -47,6 +48,32 @@ export function PlanApprovalCard({
           {plan.goal}
         </p>
       </div>
+
+      {/* Context Section - What Exists */}
+      {plan.context && (
+        <div className="px-4 py-3 border-b border-yellow-100 bg-gray-50">
+          <div className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+            <Eye className="h-3 w-3" />
+            Current State
+          </div>
+          <div className="text-sm text-gray-700 prose prose-sm max-w-none">
+            <ReactMarkdown>{plan.context}</ReactMarkdown>
+          </div>
+        </div>
+      )}
+
+      {/* Analysis Section - What Will Change */}
+      {plan.analysis && (
+        <div className="px-4 py-3 border-b border-yellow-100">
+          <div className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+            <Lightbulb className="h-3 w-3" />
+            Analysis
+          </div>
+          <div className="text-sm text-gray-800 prose prose-sm max-w-none">
+            <ReactMarkdown>{plan.analysis}</ReactMarkdown>
+          </div>
+        </div>
+      )}
 
       {/* Context Tables (if any) */}
       {plan.contextTables && plan.contextTables.length > 0 && (

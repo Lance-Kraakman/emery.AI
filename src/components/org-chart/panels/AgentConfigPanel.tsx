@@ -10,7 +10,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, ExternalLink, Settings, Plus, Check, X, Loader2, Database } from 'lucide-react';
+import { Bot, ExternalLink, Settings, Plus, Check, X, Loader2, Table2, MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,15 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { updateAgentFromClient } from '@/app/actions/agents';
 import { AutomationListItem } from '@/components/agents/shared';
-import { DataSourcePicker, DataSourceList } from '@/components/data-sources';
+import { DataSourcePicker } from '@/components/data-sources';
+import { Label } from '@/components/ui/label';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   getContextMappings,
   attachContextTable,
@@ -389,66 +397,110 @@ export function AgentConfigPanel({
         </div>
       </div>
 
-      {/* Data Sources section */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+      {/* Data Sources section - matching SkillConfigPanel style */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Data Sources
-          </label>
-          <span className="text-xs text-muted-foreground">
+          </Label>
+          <span className="text-[10px] text-muted-foreground">
             {dataSources.length} {dataSources.length === 1 ? 'table' : 'tables'}
           </span>
         </div>
 
         {isLoadingDataSources ? (
-          <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          <div className="flex items-center justify-center py-3 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
             Loading...
           </div>
         ) : dataSources.length === 0 ? (
-          <div className="text-center py-4 text-sm text-muted-foreground bg-muted/30 rounded-lg">
-            <Database className="h-6 w-6 mx-auto mb-1 text-muted-foreground/50" />
+          <div className="text-xs text-muted-foreground py-2">
             No data sources attached
           </div>
         ) : (
-          <DataSourceList
-            mappings={dataSources}
-            onUpdate={handleUpdateDataSource}
-            onRemove={handleRemoveDataSource}
-          />
+          <div className="space-y-1">
+            {dataSources.map((ds) => (
+              <div
+                key={ds.id}
+                className="flex items-center justify-between p-2 rounded-lg border bg-emerald-50/30 dark:bg-emerald-900/10"
+              >
+                <div className="flex items-center gap-1.5">
+                  <Table2 className="h-3.5 w-3.5 text-emerald-500" />
+                  <span className="text-xs font-medium">{ds.tableName}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0 h-5 bg-emerald-100/50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700"
+                  >
+                    {ds.accessMode}
+                  </Badge>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-5 w-5">
+                        <MoreVertical className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-32">
+                      <DropdownMenuItem
+                        onClick={() => handleUpdateDataSource(ds.id, { accessMode: 'read' })}
+                        disabled={ds.accessMode === 'read'}
+                      >
+                        Read only
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleUpdateDataSource(ds.id, { accessMode: 'write' })}
+                        disabled={ds.accessMode === 'write'}
+                      >
+                        Write only
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleUpdateDataSource(ds.id, { accessMode: 'readwrite' })}
+                        disabled={ds.accessMode === 'readwrite'}
+                      >
+                        Read & Write
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => handleRemoveDataSource(ds.id)}
+                        className="text-destructive"
+                      >
+                        Remove
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Add data source picker */}
-        <div className="mt-2">
-          <DataSourcePicker
-            selectedTableIds={dataSources.map((ds) => ds.tableId)}
-            onChange={() => {/* Handled by onTableSelect */}}
-            onTableSelect={async (table) => {
-              try {
-                const result = await attachContextTable({
-                  targetType: 'agent',
-                  targetId: String(agent.id),
-                  tableId: table.id,
-                  tableName: table.name,
-                  accessMode: 'read',
-                  syncMode: 'on_access',
-                });
+        <DataSourcePicker
+          onTableSelect={async (table) => {
+            try {
+              const result = await attachContextTable({
+                targetType: 'agent',
+                targetId: String(agent.id),
+                tableId: table.id,
+                tableName: table.name,
+                accessMode: 'read',
+                syncMode: 'on_access',
+              });
 
-                if (result.success && result.data) {
-                  setDataSources((prev) => [...prev, result.data!]);
-                  toast.success(`Added ${table.name} as data source`);
-                } else {
-                  toast.error(result.error || `Failed to add ${table.name}`);
-                }
-              } catch (error) {
-                toast.error(`Failed to add ${table.name}`);
+              if (result.success && result.data) {
+                setDataSources((prev) => [...prev, result.data!]);
+                toast.success(`Added ${table.name} as data source`);
+              } else {
+                toast.error(result.error || `Failed to add ${table.name}`);
               }
-            }}
-            excludeTableIds={dataSources.map((ds) => ds.tableId)}
-            placeholder="Add table..."
-            disabled={isLoadingDataSources}
-          />
-        </div>
+            } catch (error) {
+              toast.error(`Failed to add ${table.name}`);
+            }
+          }}
+          excludeTableIds={dataSources.map((ds) => ds.tableId)}
+          disabled={isLoadingDataSources}
+        />
       </div>
 
       {/* Automations section */}

@@ -9,15 +9,21 @@ Includes evaluation loop for goal detection and replanning.
 import json
 import logging
 import re
-from dataclasses import dataclass
-from typing import List, Optional, Any, AsyncIterator, Dict, Callable
+from dataclasses import dataclass, field
+from typing import List, Optional, Any, AsyncIterator, Dict, Callable, Tuple, TYPE_CHECKING
 from enum import Enum
 
-from ..models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, create_plan
-from ..models.task_ledger import TaskLedger, create_ledger_from_plan
+from ..agents.evaluator_agent import EvaluationTool
+from ..models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, SubPlan, create_plan
+from ..models.task_ledger import TaskLedger, create_ledger_from_plan, LedgerEventType
 from ..models.context_mapping import ResolvedContext
+from ..models.execution import StepExecutionResult, EvaluatorInput, ReplanContext
+from ..models.planning_questions import BatchedQuestions, QuestionAnswers
 from ..tools.tool_modes import ToolMode, filter_tools_for_mode
 from .plan_service import PlanService
+from .plan_step_executor import PlanStepExecutor
+from .sub_agent_planner import SubAgentPlanner, SubAgentPlanningResult
+from .protocols import EvaluatorAgent, Tool
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +131,73 @@ class ExecutionBlockedEvent:
     reason: str
 
 
+class CoordinatorMode(Enum):
+    """How coordinator handles the task."""
+    PLAN_AND_APPROVE = "plan_and_approve"  # Full planning flow
+    DIRECT = "direct"  # Execute immediately without plan
+    PASSTHROUGH = "passthrough"  # Let managed agent handle (has own HITL)
+
+
+@dataclass
+class PassthroughEvent:
+    """Event emitted when coordinator passes through to a managed agent."""
+    agent_name: str
+
+
+@dataclass
+class DirectExecutionStartedEvent:
+    """Event emitted when coordinator starts direct execution (no plan)."""
+    task: str
+
+
+# Cascading planning events
+@dataclass
+class SubPlanCreatedEvent:
+    """Event emitted when a sub-agent creates its detailed plan."""
+    plan_id: str
+    step_id: str
+    agent_name: str
+    sub_plan_goal: str
+    sub_plan_step_count: int
+
+
+@dataclass
+class QuestionsCollectedEvent:
+    """Event emitted when sub-agents have questions for user."""
+    plan_id: str
+    questions: BatchedQuestions
+
+
+@dataclass
+class CascadingPlanCompleteEvent:
+    """Event emitted when all planning (high-level + sub-agent) is complete."""
+    plan_id: str
+    total_sub_plans: int
+
+
+@dataclass
+class ExecutionCoordinatorConfig:
+    """
+    Configuration for ExecutionCoordinator with full type safety.
+
+    AIDEV-NOTE: Consolidates constructor params into a typed dataclass.
+    """
+
+    plan_service: PlanService
+    evaluator_factory: Optional[Callable[[], Tuple[EvaluatorAgent, EvaluationTool]]] = None
+    plan_step_executor: Optional[PlanStepExecutor] = None
+    evaluate_after_steps: int = 1
+    max_replans: int = 3
+    org_model: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        """Validate configuration."""
+        if self.evaluate_after_steps < 1:
+            raise ValueError("evaluate_after_steps must be >= 1")
+        if self.max_replans < 0:
+            raise ValueError("max_replans must be >= 0")
+
+
 class ExecutionCoordinator:
     """
     Coordinates planning → approval → execution flow.
@@ -140,31 +213,51 @@ class ExecutionCoordinator:
     def __init__(
         self,
         plan_service: Optional[PlanService] = None,
-        agent_factory: Optional[Any] = None,
-        evaluator_factory: Optional[Callable] = None,
+        evaluator_factory: Optional[Callable[[], Tuple[EvaluatorAgent, EvaluationTool]]] = None,
+        plan_step_executor: Optional[PlanStepExecutor] = None,
         evaluate_after_steps: int = 1,
         max_replans: int = 3,
+        org_model: Optional[str] = None,
+        context_tools: Optional[List[Any]] = None,
     ):
         """
         Initialize execution coordinator.
 
         Args:
             plan_service: Service for plan persistence
-            agent_factory: Factory for creating agents with tool restrictions
-            evaluator_factory: Factory for creating evaluator agents
+            evaluator_factory: Factory for creating (agent, tool) tuples for evaluation
+            plan_step_executor: Executor for plan steps using smolagents routing
             evaluate_after_steps: Run evaluation after this many steps (default: 1)
             max_replans: Maximum number of replans before stopping (default: 3)
+            org_model: Organization model ID for model resolution hierarchy
+            context_tools: Tools for context gathering during planning (database_crud, table_crud)
         """
         self.plan_service = plan_service or PlanService()
-        self.agent_factory = agent_factory
         self.evaluator_factory = evaluator_factory
+        self.plan_step_executor = plan_step_executor
         self.evaluate_after_steps = evaluate_after_steps
         self.max_replans = max_replans
+        self._org_model = org_model
+        self._context_tools = context_tools or []
         self._current_phase = ExecutionPhase.PLANNING
         self._current_plan: Optional[Plan] = None
         self._ledger: Optional[TaskLedger] = None
         self._replan_count: int = 0
         self._evaluation_count: int = 0
+        self._managed_agents: Optional[List[Any]] = None  # Stored from execute() for later use
+        self._sub_planner: Optional[SubAgentPlanner] = None  # For cascading planning resume
+
+    @classmethod
+    def from_config(cls, config: ExecutionCoordinatorConfig) -> "ExecutionCoordinator":
+        """Create coordinator from config dataclass."""
+        return cls(
+            plan_service=config.plan_service,
+            evaluator_factory=config.evaluator_factory,
+            plan_step_executor=config.plan_step_executor,
+            evaluate_after_steps=config.evaluate_after_steps,
+            max_replans=config.max_replans,
+            org_model=config.org_model,
+        )
 
     @property
     def current_phase(self) -> ExecutionPhase:
@@ -181,12 +274,172 @@ class ExecutionCoordinator:
         """Get current task ledger for evaluator access."""
         return self._ledger
 
+    # ============================================================
+    # Smart Execution - Adaptive Mode Selection
+    # ============================================================
+
+    async def execute(
+        self,
+        task: str,
+        tools: List[Any],
+        managed_agents: Optional[List[Any]] = None,
+    ) -> AsyncIterator[Any]:
+        """
+        Smart execution entry point - decides mode based on task analysis.
+
+        Modes:
+        - PLAN_AND_APPROVE: Complex multi-step task requiring user approval
+        - DIRECT: Simple task that can execute immediately
+        - PASSTHROUGH: Single managed agent task (agent has own HITL)
+
+        Args:
+            task: The user's task/request
+            tools: Available tools
+            managed_agents: Available managed agents
+
+        Yields:
+            Appropriate events based on mode
+        """
+        # Store managed_agents for later use in execute_plan
+        self._managed_agents = managed_agents
+
+        mode = self._determine_mode(task, tools, managed_agents or [])
+        logger.info(f"📋 Coordinator: Mode determined as {mode.value} for task: {task[:50]}...")
+
+        if mode == CoordinatorMode.PASSTHROUGH:
+            # Let managed agent handle - it has its own HITL
+            target_agent = self._get_target_agent(task, managed_agents or [])
+            if target_agent:
+                logger.info(f"📋 Coordinator: Passing through to {target_agent}")
+                yield PassthroughEvent(agent_name=target_agent)
+                return
+            # Fall through to PLAN_AND_APPROVE if no clear target
+            logger.warning("📋 Coordinator: PASSTHROUGH mode but no clear target, falling back to PLAN_AND_APPROVE")
+            mode = CoordinatorMode.PLAN_AND_APPROVE
+
+        elif mode == CoordinatorMode.DIRECT:
+            # Simple task - execute without showing a plan
+            logger.info("📋 Coordinator: Direct execution (no plan needed)")
+            yield DirectExecutionStartedEvent(task=task)
+            # Note: Actual execution happens in chat_processing_service
+            # This just signals the mode - the normal agent flow handles execution
+            return
+
+        else:  # PLAN_AND_APPROVE
+            # Complex task - full planning flow
+            logger.info("📋 Coordinator: Plan and approve mode (complex task)")
+            async for event in self.create_plan(
+                goal=task,
+                instructions=task,
+                tools=tools,
+            ):
+                yield event
+            # Session manager handles approval state
+
+    def _determine_mode(
+        self,
+        task: str,
+        tools: List[Any],
+        managed_agents: List[Any],
+    ) -> CoordinatorMode:
+        """
+        Determine execution mode based on task analysis.
+
+        Priority:
+        1. PASSTHROUGH if task clearly targets a single managed agent with own HITL
+        2. PLAN_AND_APPROVE if task requires multiple agents/tools
+        3. DIRECT for simple operations
+
+        Args:
+            task: User's task text
+            tools: Available tools
+            managed_agents: Available managed agents
+
+        Returns:
+            Appropriate CoordinatorMode
+        """
+        task_lower = task.lower()
+
+        # Check for single managed agent targeting
+        target_agent = self._get_target_agent(task, managed_agents)
+        if target_agent:
+            # Single agent with HITL capability
+            return CoordinatorMode.PASSTHROUGH
+
+        # Check for multi-agent or complex multi-tool scenarios
+        if self._is_multi_step_task(task_lower):
+            return CoordinatorMode.PLAN_AND_APPROVE
+
+        # Default: simple direct execution
+        return CoordinatorMode.DIRECT
+
+    def _get_target_agent(
+        self,
+        task: str,
+        managed_agents: List[Any],
+    ) -> Optional[str]:
+        """
+        Identify if task clearly targets a single managed agent.
+
+        Returns agent name if clear target, None otherwise.
+        """
+        task_lower = task.lower()
+
+        # Agent patterns - tasks that should route to specific agents
+        # These agents have their own HITL mechanisms
+        agent_patterns = {
+            "schema_builder": [
+                "create table", "design schema", "add tables",
+                "create a table", "design a schema", "new table",
+                "create database", "design database"
+            ],
+            "skill_builder": [
+                "update skill", "modify skill", "edit skill",
+                "change skill", "update the skill", "modify the skill"
+            ],
+        }
+
+        for agent_name, patterns in agent_patterns.items():
+            if any(pattern in task_lower for pattern in patterns):
+                # Verify this agent is available
+                for agent in managed_agents:
+                    if getattr(agent, 'name', None) == agent_name:
+                        return agent_name
+        return None
+
+    def _is_multi_step_task(self, task_lower: str) -> bool:
+        """
+        Detect if task requires multiple steps/agents.
+
+        Returns True if task should use full planning flow.
+        """
+        # Multiple action words joined by "and"
+        action_words = ["create", "add", "edit", "update", "delete", "modify", "remove", "change"]
+        if " and " in task_lower:
+            action_count = sum(1 for word in action_words if word in task_lower)
+            if action_count >= 2:
+                return True
+
+        # Explicit multi-resource keywords
+        multi_keywords = ["multiple", "several", "all", "each"]
+        if any(kw in task_lower for kw in multi_keywords):
+            if any(word in task_lower for word in action_words):
+                return True
+
+        # Explicit planning/design request
+        planning_phrases = ["plan out", "design", "architect", "help me plan"]
+        if any(phrase in task_lower for phrase in planning_phrases):
+            return True
+
+        return False
+
     async def create_plan(
         self,
         goal: str,
         instructions: str,
         tools: List[Any],
         context_tables: Optional[ResolvedContext] = None,
+        managed_agents: Optional[List[Any]] = None,
     ) -> AsyncIterator[Any]:
         """
         Phase 1: Create a plan using read-only tools.
@@ -199,12 +452,16 @@ class ExecutionCoordinator:
             instructions: Detailed instructions for planning
             tools: Available tools (will be filtered to read-only)
             context_tables: Resolved context mappings for available tables
+            managed_agents: Available managed agents (for routing decisions)
 
         Yields:
             PlanCreatedEvent when plan is ready for approval
         """
         self._current_phase = ExecutionPhase.PLANNING
         logger.info(f"Starting planning phase for goal: {goal}")
+
+        # Use passed managed_agents or fall back to stored ones
+        agents = managed_agents or self._managed_agents or []
 
         # Filter tools to read-only for planning
         planning_tools = filter_tools_for_mode(tools, ToolMode.PLANNING)
@@ -213,12 +470,18 @@ class ExecutionCoordinator:
             f"(filtered from {len(tools)} total)"
         )
 
-        # Generate plan using planning agent
+        # Generate plan using LLM
+        # Pass managed_agents so planner knows available agents for routing
+        # Pass context_tools so planner can list databases/tables before planning
         plan = await self.plan_service.generate_plan(
             basic_instructions=instructions,
             context_tables=context_tables,
             available_tools=[getattr(t, 'name', str(t)) for t in planning_tools],
             goal=goal,
+            org_model=self._org_model,
+            tools=planning_tools,
+            managed_agents=agents,
+            context_tools=self._context_tools,
         )
 
         self._current_plan = plan
@@ -271,6 +534,7 @@ class ExecutionCoordinator:
         self,
         plan_id: str,
         tools: List[Any],
+        managed_agents: Optional[List[Any]] = None,
     ) -> AsyncIterator[Any]:
         """
         Phase 2: Execute an approved plan with full tools.
@@ -281,10 +545,15 @@ class ExecutionCoordinator:
         Args:
             plan_id: ID of the approved plan to execute
             tools: All available tools (no filtering)
+            managed_agents: Available managed agents for delegation
 
         Yields:
             StepStartedEvent, StepCompletedEvent, StepFailedEvent, ExecutionCompletedEvent
         """
+        # Use stored managed_agents if not passed
+        if managed_agents is None:
+            managed_agents = self._managed_agents
+
         if not self._current_plan or self._current_plan.id != plan_id:
             raise ValueError(f"Plan {plan_id} not found or not current")
 
@@ -307,6 +576,7 @@ class ExecutionCoordinator:
         # The outer while loop allows restarting after a replan
         success = True
         should_restart = False
+        last_evaluation = None  # Track last evaluation for end-of-plan check
 
         while True:
             # Get pending steps (after replan, this will return new steps)
@@ -336,7 +606,7 @@ class ExecutionCoordinator:
                     )
 
                     # Execute the step
-                    result = await self._execute_step(step, tools)
+                    result = await self._execute_step(step, tools, managed_agents)
 
                     # Mark step as completed
                     self._current_plan = await self.plan_service.update_step_status(
@@ -360,6 +630,7 @@ class ExecutionCoordinator:
                     steps_since_eval += 1
                     if self.evaluator_factory and steps_since_eval >= self.evaluate_after_steps:
                         evaluation = await self._evaluate_progress()
+                        last_evaluation = evaluation  # Store for end-of-plan check
                         steps_since_eval = 0
                         self._evaluation_count += 1
 
@@ -428,12 +699,14 @@ class ExecutionCoordinator:
 
                             # Update ledger with replan info
                             if self._ledger:
-                                self._ledger.record_event({
-                                    "type": "replan",
-                                    "reason": evaluation.reason,
-                                    "replan_number": self._replan_count,
-                                    "new_step_count": new_pending_count,
-                                })
+                                self._ledger._record_event(
+                                    event_type=LedgerEventType.REPLAN_TRIGGERED,
+                                    data={
+                                        "reason": evaluation.reason,
+                                        "replan_number": self._replan_count,
+                                        "new_step_count": new_pending_count,
+                                    }
+                                )
 
                             logger.info(f"Replan complete ({self._replan_count}): {evaluation.reason}")
 
@@ -473,9 +746,50 @@ class ExecutionCoordinator:
             # After for loop: check if we should restart (replan) or exit
             if should_restart:
                 should_restart = False  # Reset flag
+                last_evaluation = None  # Reset evaluation
                 continue  # Restart with new pending steps
-            else:
-                break  # Exit the while loop
+
+            # Check if we should auto-replan: goal not achieved but no more steps
+            # This handles the case where evaluator says should_continue=True but needs_replan=False
+            # and we've run out of steps to execute
+            if (
+                last_evaluation
+                and not last_evaluation.goal_achieved
+                and last_evaluation.should_continue
+                and not last_evaluation.blocking_issues
+                and self._replan_count < self.max_replans
+            ):
+                logger.info(
+                    "Goal not achieved and should continue, but no more steps - auto-triggering replan"
+                )
+                self._replan_count += 1
+                yield ReplanTriggeredEvent(
+                    plan_id=plan_id,
+                    reason="Goal not yet achieved, adding steps to complete",
+                    replan_number=self._replan_count,
+                )
+
+                # Perform dynamic replanning
+                self._current_plan = await self._handle_replan(
+                    current_plan=self._current_plan,
+                    failed_step=None,
+                    reason="Goal not yet achieved after completing all steps",
+                    tools=tools,
+                )
+                new_pending_count = len(self._current_plan.get_pending_steps())
+
+                yield PlanUpdatedEvent(
+                    plan_id=plan_id,
+                    reason="Auto-replan: goal not achieved",
+                    added_steps=new_pending_count,
+                    removed_steps=0,
+                    replan_number=self._replan_count,
+                )
+
+                last_evaluation = None
+                continue  # Restart with new pending steps
+
+            break  # Exit the while loop
 
         # Mark plan as completed or failed
         if success:
@@ -517,6 +831,9 @@ class ExecutionCoordinator:
         """
         Run evaluator agent on current state.
 
+        Uses EvaluationTool pattern - the evaluator LLM calls report_evaluation
+        tool with structured output instead of returning raw JSON.
+
         Returns:
             EvaluationResult with goal status and recommendations
         """
@@ -530,7 +847,8 @@ class ExecutionCoordinator:
             )
 
         try:
-            evaluator = self.evaluator_factory()
+            # Factory returns (agent, tool) tuple
+            evaluator, eval_tool = self.evaluator_factory()
             ledger_data = self.get_ledger_for_evaluator() or {}
 
             # Build evaluation prompt
@@ -541,12 +859,32 @@ Goal: {goal}
 Ledger State:
 {json.dumps(ledger_data, indent=2, default=str)}
 
-Evaluate the current execution state and respond with JSON only.
+Analyze this state and call the report_evaluation tool with your assessment.
 """
 
-            # Run evaluator
-            result = evaluator.run(prompt)
-            return self._parse_evaluation(result)
+            # Run evaluator - it will call report_evaluation tool
+            evaluator.run(prompt)
+
+            # Get structured result from tool
+            result = eval_tool.get_result()
+            if result:
+                return EvaluationResult(
+                    goal_achieved=bool(result.get("goal_achieved", False)),
+                    blocking_issues=bool(result.get("blocking_issues", False)),
+                    should_continue=bool(result.get("should_continue", True)),
+                    needs_replan=bool(result.get("needs_replan", False)),
+                    reason=str(result.get("reason", "")),
+                )
+
+            # Fallback if tool wasn't called (shouldn't happen with proper instructions)
+            logger.warning("Evaluator did not call report_evaluation tool")
+            return EvaluationResult(
+                goal_achieved=False,
+                blocking_issues=True,
+                should_continue=False,
+                needs_replan=False,
+                reason="Evaluator did not call report_evaluation tool",
+            )
 
         except Exception as e:
             logger.error(f"Evaluation failed: {e}")
@@ -558,82 +896,62 @@ Evaluate the current execution state and respond with JSON only.
                 reason=f"Evaluation error: {e}",
             )
 
-    def _parse_evaluation(self, result: Any) -> EvaluationResult:
-        """
-        Parse evaluator response into EvaluationResult.
-
-        Args:
-            result: Raw response from evaluator agent
-
-        Returns:
-            Parsed EvaluationResult
-        """
-        try:
-            # Convert result to string if needed
-            result_str = str(result) if not isinstance(result, str) else result
-
-            # Extract JSON from response (evaluator may include extra text)
-            json_match = re.search(r'\{[^{}]*\}', result_str, re.DOTALL)
-            if json_match:
-                data = json.loads(json_match.group())
-                return EvaluationResult(
-                    goal_achieved=bool(data.get("goal_achieved", False)),
-                    blocking_issues=bool(data.get("blocking_issues", False)),
-                    should_continue=bool(data.get("should_continue", True)),
-                    needs_replan=bool(data.get("needs_replan", False)),
-                    reason=str(data.get("reason", "")),
-                )
-        except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse evaluation JSON: {e}")
-        except Exception as e:
-            logger.warning(f"Failed to parse evaluation: {e}")
-
-        # Default: STOP execution on parse error (safer than blindly continuing)
-        return EvaluationResult(
-            goal_achieved=False,
-            blocking_issues=True,  # Mark as blocked since we can't evaluate
-            should_continue=False,  # Stop - don't continue blindly
-            needs_replan=False,
-            reason="Evaluation parse error - stopping execution for safety",
-        )
-
     async def _execute_step(
         self,
         step: PlanStep,
         tools: List[Any],
+        managed_agents: Optional[List[Any]] = None,
     ) -> Optional[str]:
         """
-        Execute a single plan step.
+        Execute a single plan step using PlanStepExecutor.
+
+        Uses smolagents' native managed agent routing - the LLM reads
+        agent descriptions and automatically routes to the right agent.
+
+        The executor receives the Plan object and generates a prompt from it,
+        ensuring the sub-agent has proper context (goal, progress, agents).
 
         Args:
             step: The step to execute
             tools: Available tools
+            managed_agents: Available managed agents for delegation (unused - handled by executor)
 
         Returns:
             Result string from step execution
         """
-        logger.info(f"Executing step {step.step_id}: {step.description}")
+        logger.info(f"Executing step {step.step_id}: {step.description[:100]}...")
 
-        if not step.tool_call:
-            # No tool call specified, just mark as done
-            return f"Step completed: {step.description}"
+        # Use PlanStepExecutor - pass Plan object, executor generates prompt from it
+        if self.plan_step_executor and self._current_plan:
+            result = self.plan_step_executor.execute(
+                plan=self._current_plan,
+                current_step=step,
+            )
+            return result
 
-        # Find the tool
-        tool = None
-        for t in tools:
-            tool_name = getattr(t, 'name', str(t))
-            if tool_name.lower() == step.tool_call.lower().split(':')[0]:
-                tool = t
-                break
+        # Fallback: If there's a tool_call specified, use it directly
+        if step.tool_call:
+            tool = None
+            for t in tools:
+                tool_name = getattr(t, 'name', str(t))
+                if tool_name.lower() == step.tool_call.lower().split(':')[0]:
+                    tool = t
+                    break
 
-        if not tool:
-            raise ValueError(f"Tool not found: {step.tool_call}")
+            if not tool:
+                raise ValueError(f"Tool not found: {step.tool_call}")
 
-        # Execute the tool
-        # This is a placeholder - actual implementation would call the tool
-        # with the step parameters
-        logger.info(f"Would execute tool {step.tool_call} with params: {step.parameters}")
-        return f"Executed {step.tool_call}"
+            logger.info(f"Executing tool {step.tool_call} with params: {step.parameters}")
+            try:
+                result = tool.forward(**(step.parameters or {}))
+                return f"Executed {step.tool_call}: {result}"
+            except Exception as e:
+                logger.error(f"Tool execution failed: {e}")
+                raise
+
+        # No executor and no tool_call - just mark as done
+        logger.warning("No plan_step_executor configured, step not actually executed")
+        return f"Step completed (no executor): {step.description}"
 
     async def _handle_replan(
         self,
@@ -791,39 +1109,220 @@ Consider what has already been done and what still needs to happen.
                         yield exec_event
 
 
+    # ============================================================
+    # Cascading Planning - Sub-Agent Planning Before Execution
+    # ============================================================
+
+    async def create_cascading_plan(
+        self,
+        goal: str,
+        instructions: str,
+        tools: List[Any],
+        agent_factories: Dict[str, Callable[..., Any]],
+        context_tables: Optional[ResolvedContext] = None,
+    ) -> AsyncIterator[Any]:
+        """
+        Create hierarchical plan: high-level + sub-agent detailed plans.
+
+        Phase 1: Generate high-level plan (goal + steps)
+        Phase 2: For each step targeting a managed agent, run sub-agent planning
+        Phase 3: Collect questions from all sub-agents
+        Phase 4: Yield complete plan or questions for user
+
+        Args:
+            goal: High-level goal to achieve
+            instructions: Detailed instructions for planning
+            tools: Available tools
+            agent_factories: Dict mapping agent_name to factory function
+            context_tables: Resolved context mappings
+
+        Yields:
+            PlanCreatedEvent, SubPlanCreatedEvent, QuestionsCollectedEvent,
+            or CascadingPlanCompleteEvent
+        """
+        # Phase 1: High-level plan (existing flow)
+        async for event in self.create_plan(goal, instructions, tools, context_tables):
+            yield event
+
+        if not self._current_plan:
+            return
+
+        # Phase 2: Sub-agent planning
+        self._sub_planner = SubAgentPlanner(
+            agent_factories=agent_factories,
+            original_task=instructions,
+            model=None,  # Model passed via agent factories
+        )
+
+        updated_steps: List[PlanStep] = []
+        for step in self._current_plan.steps:
+            # Use target_agent from plan (set by LLM during planning)
+            target = step.target_agent
+
+            if target and target in agent_factories:
+                logger.info(f"📋 Running sub-agent planning for step: {step.description[:50]}...")
+
+                result = self._sub_planner.run_planning(step, target)
+
+                if result.success and result.sub_plan:
+                    updated_steps.append(step.with_sub_plan(result.sub_plan))
+                    yield SubPlanCreatedEvent(
+                        plan_id=self._current_plan.id,
+                        step_id=step.step_id,
+                        agent_name=target,
+                        sub_plan_goal=result.sub_plan.goal,
+                        sub_plan_step_count=len(result.sub_plan.steps),
+                    )
+                    logger.info(
+                        f"✅ Sub-plan created for {target}: "
+                        f"{len(result.sub_plan.steps)} steps"
+                    )
+                else:
+                    updated_steps.append(step.with_target_agent(target))
+                    if result.error:
+                        logger.warning(f"Sub-agent planning failed: {result.error}")
+            else:
+                updated_steps.append(step)
+
+        # Phase 3: Check for questions
+        all_questions = self._sub_planner.get_all_questions()
+        if not all_questions.is_empty:
+            logger.info(
+                f"📋 Questions collected: {len(all_questions.questions)} "
+                f"questions from sub-agents"
+            )
+            yield QuestionsCollectedEvent(
+                plan_id=self._current_plan.id,
+                questions=all_questions,
+            )
+            # Don't update plan yet - wait for answers via resume_cascading_plan
+            return
+
+        # Phase 4: Update plan with sub-plans and emit complete event
+        self._current_plan = self._current_plan.with_steps(updated_steps)
+        total_sub_plans = sum(1 for s in updated_steps if s.sub_plan)
+
+        logger.info(
+            f"📋 Cascading planning complete: {total_sub_plans} sub-plans created"
+        )
+        yield CascadingPlanCompleteEvent(
+            plan_id=self._current_plan.id,
+            total_sub_plans=total_sub_plans,
+        )
+
+    async def resume_cascading_plan(
+        self,
+        answers: QuestionAnswers,
+    ) -> AsyncIterator[Any]:
+        """
+        Resume cascading planning with user's answers to questions.
+
+        Called after QuestionsCollectedEvent when user provides answers.
+
+        Args:
+            answers: User's answers to the batched questions
+
+        Yields:
+            SubPlanCreatedEvent for completed sub-plans,
+            QuestionsCollectedEvent if more questions,
+            or CascadingPlanCompleteEvent when done
+        """
+        if not self._sub_planner or not self._current_plan:
+            logger.error("Cannot resume: no active cascading planning session")
+            return
+
+        # Get steps that need their sub-plans completed with answers
+        updated_steps: List[PlanStep] = []
+
+        for step in self._current_plan.steps:
+            if step.target_agent and not step.sub_plan:
+                # This step needs planning resumed with answers
+                step_answers = answers.get_answers_for_agent(
+                    step.target_agent,
+                    self._sub_planner.get_all_questions(),
+                )
+
+                if step_answers:
+                    result = self._sub_planner.resume_with_answers(
+                        step.step_id,
+                        step_answers,
+                    )
+
+                    if result.success and result.sub_plan:
+                        updated_steps.append(step.with_sub_plan(result.sub_plan))
+                        yield SubPlanCreatedEvent(
+                            plan_id=self._current_plan.id,
+                            step_id=step.step_id,
+                            agent_name=step.target_agent,
+                            sub_plan_goal=result.sub_plan.goal,
+                            sub_plan_step_count=len(result.sub_plan.steps),
+                        )
+                    else:
+                        updated_steps.append(step)
+                else:
+                    updated_steps.append(step)
+            else:
+                updated_steps.append(step)
+
+        # Clear questions for next round
+        self._sub_planner.clear_questions()
+
+        # Check if more questions arose
+        all_questions = self._sub_planner.get_all_questions()
+        if not all_questions.is_empty:
+            yield QuestionsCollectedEvent(
+                plan_id=self._current_plan.id,
+                questions=all_questions,
+            )
+            return
+
+        # Update plan and emit complete
+        self._current_plan = self._current_plan.with_steps(updated_steps)
+        total_sub_plans = sum(1 for s in updated_steps if s.sub_plan)
+
+        yield CascadingPlanCompleteEvent(
+            plan_id=self._current_plan.id,
+            total_sub_plans=total_sub_plans,
+        )
+
+
 class ExecutionCoordinatorFactory:
     """Factory for creating ExecutionCoordinator instances."""
 
     def __init__(
         self,
         plan_service: Optional[PlanService] = None,
-        agent_factory: Optional[Any] = None,
-        evaluator_factory: Optional[Callable] = None,
+        evaluator_factory: Optional[Callable[[], Tuple[EvaluatorAgent, EvaluationTool]]] = None,
+        plan_step_executor: Optional[PlanStepExecutor] = None,
         evaluate_after_steps: int = 1,
         max_replans: int = 3,
+        org_model: Optional[str] = None,
     ):
         """
         Initialize factory.
 
         Args:
             plan_service: Plan service for persistence
-            agent_factory: Agent factory for creating agents
-            evaluator_factory: Factory for creating evaluator agents
+            evaluator_factory: Factory for creating (agent, tool) tuples for evaluation
+            plan_step_executor: Executor for plan steps using smolagents routing
             evaluate_after_steps: Run evaluation after this many steps
             max_replans: Maximum number of replans before stopping
+            org_model: Organization model ID for model resolution hierarchy
         """
         self.plan_service = plan_service
-        self.agent_factory = agent_factory
         self.evaluator_factory = evaluator_factory
+        self.plan_step_executor = plan_step_executor
         self.evaluate_after_steps = evaluate_after_steps
         self.max_replans = max_replans
+        self.org_model = org_model
 
     def create(self) -> ExecutionCoordinator:
         """Create a new ExecutionCoordinator instance."""
         return ExecutionCoordinator(
             plan_service=self.plan_service,
-            agent_factory=self.agent_factory,
             evaluator_factory=self.evaluator_factory,
+            plan_step_executor=self.plan_step_executor,
             evaluate_after_steps=self.evaluate_after_steps,
             max_replans=self.max_replans,
+            org_model=self.org_model,
         )

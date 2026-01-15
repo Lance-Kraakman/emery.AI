@@ -22,7 +22,8 @@ import type {
   ProcessingComplete,
   ProcessingError,
   StepProgress,
-  MessagePart
+  MessagePart,
+  AwaitingInput
 } from './generated/agent_worker';
 import { toProtoMessageParts } from './mappers/message-part-mapper';
 import { mapSkillToProto } from './proto-mappers';
@@ -50,12 +51,13 @@ export interface ChatProcessingOptions {
 }
 
 export interface StreamingChatResponse {
-  type: 'content' | 'complete' | 'error' | 'step_progress';
+  type: 'content' | 'complete' | 'error' | 'step_progress' | 'awaiting_input';
   content?: string;
   sequence?: number;
   complete?: ProcessingComplete;
   error?: ProcessingError;
   stepProgress?: StepProgress;
+  awaitingInput?: AwaitingInput;  // HITL: Plan approval or question
   timestamp: number;
 }
 
@@ -202,6 +204,7 @@ export class ChatProcessingClient {
           hasComplete: !!response.complete,
           hasError: !!response.error,
           hasStepProgress: !!response.stepProgress,
+          hasAwaitingInput: !!response.awaitingInput,
           timestamp: response.timestamp
         });
 
@@ -214,6 +217,13 @@ export class ChatProcessingClient {
           streamingResponse = {
             type: 'step_progress',
             stepProgress: response.stepProgress,
+            timestamp: response.timestamp
+          };
+        } else if (response.awaitingInput) {
+          // HITL: Agent needs user input (plan approval or question)
+          streamingResponse = {
+            type: 'awaiting_input',
+            awaitingInput: response.awaitingInput,
             timestamp: response.timestamp
           };
         } else if (response.contentChunk) {

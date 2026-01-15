@@ -64,7 +64,8 @@ def create_planning_callback() -> Callable[[PlanningStep, CodeAgent], None]:
 def create_skill_builder_agent(
     tools: List[Tool],
     model: Any,
-    max_steps: int = 10
+    max_steps: int = 10,
+    progress_callback: Any = None
 ) -> StatefulManagedAgent:
     """
     Create a Skill Builder agent with native planning and step callbacks.
@@ -112,6 +113,7 @@ def create_skill_builder_agent(
         planning_interval=2,  # Plan after 2 steps (more informed - gathers context first)
         step_callbacks={PlanningStep: planning_callback},
         verbosity_level=LogLevel.OFF,
+        progress_callback=progress_callback,  # For streaming nested steps to parent
     )
 
     # Set attributes for ManagedAgent identification

@@ -488,9 +488,29 @@ message ProcessMessageResponse {
     ProcessingComplete complete = 3;   // Processing finished marker
     ProcessingError error = 4;        // Processing error
     StepProgress step_progress = 5;   // Real-time step execution progress
+    AwaitingInput awaiting_input = 7; // HITL: Agent needs user approval/input
   }
 
   int64 timestamp = 6;               // Response timestamp
+}
+
+// HITL: Agent awaiting user input (plan approval or question)
+// AIDEV-NOTE: Used for both plan approval and agent questions.
+// - plan_approval: Shows plan + Approve/Reject/Modify buttons
+// - question: Shows question + option buttons for user choice
+message AwaitingInput {
+  string input_type = 1;             // "plan_approval" or "question"
+  string title = 2;                  // Display title
+  string content = 3;                // Plan markdown or question text
+  repeated InputOption options = 4;  // Available options for user to choose
+  string plan_json = 5;              // Full plan JSON (for plan_approval type)
+}
+
+// Option for HITL questions/choices
+message InputOption {
+  string id = 1;                     // Unique option identifier
+  string label = 2;                  // Display text
+  string description = 3;            // Optional description
 }
 
 // Multimodal message part (text, image, or file attachment)

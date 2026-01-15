@@ -1,7 +1,9 @@
 """Stateful gRPC chat service. DB operations handled by Next.js."""
 
+import json
 import logging
 import os
+import re
 import time
 import asyncio
 import concurrent.futures
@@ -23,7 +25,8 @@ from emery_agents.agents.document_builder_agent import create_document_builder_a
 from emery_agents.agents.table_builder_agent import create_table_builder_agent
 from emery_agents.agents.schema_builder_agent import create_schema_builder_agent
 from emery_agents.clients import HuggingFaceInferenceClient
-from emery_agents.tools.crud_tools import load_skill_crud, load_document_crud
+from emery_agents.tools.crud_tools import load_skill_crud, load_document_crud, load_database_crud
+from emery_agents.tools.table_tools import load_table_crud
 from emery_agents.tools.skill_tool import SkillTool
 from emery_agents.tools.tool_executor import create_tool_executor
 from .generated import agent_worker_pb2, agent_worker_pb2_grpc
@@ -47,8 +50,28 @@ from ..services.agent_factory import AgentFactory, AgentConfig
 from ..services.token_usage_extractor import TokenUsageExtractor
 from ..services.agent_executor import AgentExecutor
 from ..services.skill_executor import SkillExecutorService
+from ..services.plan_service import PlanService
+from ..services.plan_step_executor import PlanStepExecutor
+from ..services.execution_coordinator import (
+    ExecutionCoordinator,
+    CoordinatorMode,
+    PlanCreatedEvent,
+    StepStartedEvent,
+    StepCompletedEvent,
+    StepFailedEvent,
+    EvaluationCompletedEvent,
+    ReplanTriggeredEvent,
+    ExecutionBlockedEvent,
+    GoalAchievedEvent,
+    ExecutionCompletedEvent,
+    PassthroughEvent,
+    DirectExecutionStartedEvent,
+)
+from ..agents.evaluator_agent import create_evaluator_factory
+from ..models.plan import Plan, PlanStatus, create_plan
 from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode
+from ..tools.tool_modes import ToolMode, filter_tools_for_mode
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -66,6 +89,12 @@ class StepMetadata(TypedDict, total=False):
     skill_name: str  # Name of executing skill/managed agent
     skill_status: str  # "executing" | "completed" | "failed"
     skill_message: str  # Detailed message about skill execution (can be multi-line)
+    # Coordinator-specific metadata
+    step_id: str  # ID of the step being executed
+    result: str  # Result of step execution
+    type: str  # Type of coordinator event (goal_achieved, replan, etc.)
+    replan_number: str  # Number of replans (as string for protobuf map)
+    success: str  # Whether execution was successful (as string)
 
 class StepProgressDict(TypedDict):
     """Typed structure for step progress events."""
@@ -111,8 +140,30 @@ class InterruptedResponseDict(TypedDict):
     message: str
 
 
+class InputOptionDict(TypedDict, total=False):
+    """Option for awaiting input questions."""
+    id: str
+    label: str
+    description: str
+
+
+class AwaitingInputDataDict(TypedDict, total=False):
+    """Data structure for awaiting input response."""
+    input_type: str  # "plan_approval" or "question"
+    title: str
+    content: str
+    options: List[InputOptionDict]
+    plan_json: str
+
+
+class AwaitingInputResponseDict(TypedDict):
+    """Typed structure for awaiting_input HITL events (plan approval or questions)."""
+    type: Literal["awaiting_input"]
+    data: AwaitingInputDataDict
+
+
 # Union type for all possible stream response types
-StreamResponseDict = StepProgressDict | ContentChunkDict | ErrorResponseDict | InterruptedResponseDict
+StreamResponseDict = StepProgressDict | ContentChunkDict | ErrorResponseDict | InterruptedResponseDict | AwaitingInputResponseDict
 
 
 # Type variable for generic async function return type
@@ -213,6 +264,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             )
             logger.info("✅ SkillExecutorService initialized successfully")
 
+            # PlanService for goal/plan tracking and persistence
+            # AIDEV-NOTE: Plans track complex task execution with nested sub-goals
+            self.plan_service = PlanService(
+                grpc_client=None,  # TODO: Wire gRPC client for persistence
+                model_provider=self.model_provider,
+            )
+            logger.info("✅ PlanService initialized (in-memory mode)")
+
             # Inference client for operation skills (lazy initialization)
             self._inference_client: Optional[HuggingFaceInferenceClient] = None
 
@@ -291,6 +350,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # 3. Generate AI Response using ToolCallingAgent (always)
             sequence = 0
             total_content = ""
+            current_plan_data: Dict[str, Any] | None = None  # Plan metadata from _stream_tool_calling_agent_response
 
             # Extract tools from AgentConfig
             tools_to_use = []
@@ -454,6 +514,43 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         # Don't break - let it fall through to completion marker
                         # Session remains active for user to respond and resume
 
+                    elif response_type == "awaiting_input":
+                        # HITL: Agent needs user input (plan approval or question)
+                        # AIDEV-NOTE: This is the unified HITL mechanism for all agents
+                        awaiting_resp = response_dict  # type: AwaitingInputResponseDict
+                        data = awaiting_resp["data"]
+                        logger.info(f"⏸️ Agent awaiting input: type={data.get('input_type')}, title={data.get('title')}")
+
+                        # Build InputOption messages for proto
+                        input_options = []
+                        for opt in data.get("options", []):
+                            input_options.append(agent_worker_pb2.InputOption(
+                                id=opt.get("id", ""),
+                                label=opt.get("label", ""),
+                                description=opt.get("description", "")
+                            ))
+
+                        # Send AwaitingInput response
+                        awaiting_input_response = agent_worker_pb2.ProcessMessageResponse(
+                            awaiting_input=agent_worker_pb2.AwaitingInput(
+                                input_type=data.get("input_type", "question"),
+                                title=data.get("title", ""),
+                                content=data.get("content", ""),
+                                options=input_options,
+                                plan_json=data.get("plan_json", "")
+                            ),
+                            timestamp=int(time.time() * 1000)
+                        )
+                        yield awaiting_input_response
+                        # Don't break - session remains active for user response
+
+                    elif response_type == "plan_metadata":
+                        # Capture plan metadata yielded from _stream_tool_calling_agent_response
+                        # AIDEV-NOTE: Plan is defined inside the generator, so it yields plan data
+                        # for inclusion in completion metadata
+                        current_plan_data = response_dict.get("plan")
+                        logger.info(f"📋 Captured plan metadata: {current_plan_data.get('id') if current_plan_data else 'None'}")
+
                     else:
                         # Unknown response type - log warning
                         logger.warning(f"⚠️ Unknown response type: {response_type}, ignoring")
@@ -467,16 +564,26 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # Get model name from token usage if available
             model_used = getattr(self.last_token_usage, 'model_name', '') if self.last_token_usage else ''
 
+            # Build completion metadata
+            completion_metadata = {
+                'content_length': str(len(total_content)),
+                'domain_type': request.context.domain_type if request.context else 'none'
+            }
+
+            # Include plan JSON if plan was created (for UI persistence)
+            # AIDEV-NOTE: Plan stored in message metadata for history/audit trail
+            # current_plan_data was captured from plan_metadata response yielded by _stream_tool_calling_agent_response
+            if current_plan_data:
+                completion_metadata['plan'] = json.dumps(current_plan_data)
+                logger.info(f"📋 Including plan {current_plan_data.get('id')} in completion metadata")
+
             complete_response = agent_worker_pb2.ProcessMessageResponse(
                 complete=agent_worker_pb2.ProcessingComplete(
                     model_used=model_used,
                     total_tokens=sequence,
                     processing_time_ms=processing_time,
                     token_usage=token_usage_proto,
-                    metadata={
-                        'content_length': str(len(total_content)),
-                        'domain_type': request.context.domain_type if request.context else 'none'
-                    }
+                    metadata=completion_metadata
                 ),
                 timestamp=int(time.time() * 1000)
             )
@@ -718,6 +825,21 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             step_index = 0
             final_answer_text = ""
 
+            # Check coordinator phase FIRST to avoid creating plans for approval messages
+            # Coordinator internally decides mode: PASSTHROUGH, DIRECT, or PLAN_AND_APPROVE
+            coordinator_phase = self.session_manager.get_coordinator_phase(session_id) if session_id else "idle"
+
+            # Create Plan for tracking this execution
+            # AIDEV-NOTE: Plan provides visibility into complex task progress and enables HITL
+            # Only create for new tasks (idle phase), not for approvals or ongoing execution
+            current_plan: Plan | None = None
+            if agent.managed_agents and coordinator_phase == "idle":  # Only for new tasks
+                current_plan = create_plan(
+                    goal=current_task[:200] if len(current_task) > 200 else current_task,
+                    basic_instructions=current_task
+                )
+                logger.info(f"📋 Created plan {current_plan.id} for task: {current_plan.goal[:100]}...")
+
             # Set execution context for skill tools to access file attachments
             # This enables _inject_context_inputs() in SkillTool to inject audio/image bytes
             #
@@ -728,6 +850,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # When LLM doesn't specify a filename → uses current message file
             # When LLM specifies a filename → searches session_attachments by name
             session_attachments = self.session_manager.get_attachments(session_id) if session_id else []
+
+            # Collect nested skill steps for streaming to UI after skill completes
+            # AIDEV-NOTE: Steps collected during synchronous skill execution, yielded after
+            collected_nested_steps: List[Dict[str, Any]] = []
+
+            def progress_callback(step_dict: Dict[str, Any]) -> None:
+                """Callback for nested skill progress - collects steps for later yielding."""
+                step_dict['nested'] = True  # Mark as nested for UI rendering
+                collected_nested_steps.append(step_dict)
+                logger.info(f"📥 Collected nested step: {step_dict.get('step_name', 'unknown')}")
+
             context = ExecutionContext(
                 mode=ExecutionMode.INTERACTIVE,  # Chat = interactive (with HITL)
                 task=current_task,
@@ -735,9 +868,39 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 images=[],  # Images already passed via smolagents images param
                 attachments=file_attachments or [],  # Current message files (default)
                 session_attachments=session_attachments,  # All session files (for explicit lookup)
+                progress_callback=progress_callback,  # For nested skill step visibility
+                tool_mode=ToolMode.EXECUTION,  # Default: allow mutations
             )
             AgentExecutor.set_current_context(context)
             logger.info(f"📎 Set execution context: {len(file_attachments or [])} current, {len(session_attachments)} session files")
+
+            # Get managed agents for coordinator's mode detection
+            # (coordinator_phase already set earlier, before plan creation)
+            # Extract agent objects (values) from the managed_agents dict, not keys
+            managed_agents = []
+            if hasattr(agent, 'managed_agents') and agent.managed_agents:
+                managed_agents = list(agent.managed_agents.values())
+
+            # Coordinator handles all execution paths
+            should_fall_through = False
+            async for event in self._stream_coordinator_response(
+                context=context,
+                tools=smolagents_tools,
+                task=current_task,
+                session_id=session_id,
+                org_model=org_model,
+                coordinator_phase=coordinator_phase,
+                managed_agents=managed_agents,
+            ):
+                if isinstance(event, dict):
+                    # Regular event - yield it
+                    yield event
+                elif event == "FALL_THROUGH":
+                    # Signal to continue with normal agent flow
+                    should_fall_through = True
+
+            if not should_fall_through:
+                return  # Coordinator handled everything
 
             # Use stream=True for real-time step-by-step progress
             # Pass images via official smolagents API (images parameter)
@@ -759,8 +922,31 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     logger.info(f"🧠 Planning: {step_data['content'][:100]}...")
 
                 elif isinstance(step, ActionStep):
+                    # Skip showing final_answer tool call - it's internal machinery
+                    # The FinalAnswerStep will show the actual content
+                    if step.tool_calls and len(step.tool_calls) > 0:
+                        if step.tool_calls[0].name == "final_answer":
+                            step_index += 1
+                            continue
+
                     step_data = self._extract_action_step(step, step_index)
                     logger.info(f"🔧 Action: {step_data['step_name']}")
+
+                    # Yield collected nested steps from skill execution (if any)
+                    # AIDEV-NOTE: Nested steps were collected during synchronous skill.forward()
+                    if collected_nested_steps:
+                        logger.info(f"📤 Yielding {len(collected_nested_steps)} nested steps from skill execution")
+                        for nested_step in collected_nested_steps:
+                            nested_step_data: StepProgressDict = {
+                                "type": "step_progress",
+                                "step_type": nested_step.get('type', 'ACTION').upper(),
+                                "step_name": nested_step.get('step_name', 'Nested step'),
+                                "content": nested_step.get('content', ''),
+                                "metadata": nested_step.get('metadata', {}),
+                                "step_index": step_index  # Use parent step index for ordering
+                            }
+                            yield nested_step_data
+                        collected_nested_steps.clear()
 
                 elif isinstance(step, (FinalAnswerStep, AgentText)):
                     # Extract final step indicator
@@ -818,6 +1004,35 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             logger.info(f"✅ Completed streaming with {step_index} steps")
 
+            # Yield plan metadata for ProcessMessage to include in completion
+            # AIDEV-NOTE: current_plan is defined in this method but completion code
+            # is in ProcessMessage - yield it as a special response type
+            if current_plan:
+                # AIDEV-NOTE: Plan.status and PlanStep.status are already strings (not enums)
+                # See models/plan.py: status: str = PlanStatus.DRAFT.value
+                plan_metadata: Dict[str, Any] = {
+                    "type": "plan_metadata",
+                    "plan": {
+                        'id': current_plan.id,
+                        'goal': current_plan.goal,
+                        'status': current_plan.status,
+                        'steps': [
+                            {
+                                'id': step.step_id,
+                                'description': step.description,
+                                'status': step.status,
+                                'tool_call': step.tool_call,
+                                'result': step.result
+                            }
+                            for step in current_plan.steps
+                        ],
+                        'generated_at': current_plan.generated_at.isoformat() if current_plan.generated_at else None,
+                        'approved_at': current_plan.approved_at.isoformat() if current_plan.approved_at else None
+                    }
+                }
+                yield plan_metadata
+                logger.info(f"📋 Yielded plan metadata for {current_plan.id}")
+
         except Exception as e:
             # ============================================================
             # Check for HITL Interrupt (not an error - pause for user approval)
@@ -850,19 +1065,22 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         if plan_content:
                             break
 
-                # Build descriptive message with plan content
-                if plan_content:
-                    message = f"## Proposed Plan\n\n{plan_content}\n\n---\n\n**Reply 'yes' or 'approve' to proceed, or provide feedback.**"
-                else:
-                    logger.warning("⚠️ No plan found in agent memory for interrupt message")
-                    message = "Waiting for your approval to proceed."
-
-                # Session preserved with reset=False for resumption on next message
-                interrupted_response: InterruptedResponseDict = {
-                    "type": "interrupted",
-                    "message": message
+                # Build structured awaiting_input response for UI
+                # AIDEV-NOTE: Use awaiting_input instead of interrupted to render
+                # structured approval UI with keyboard navigation
+                awaiting_input_response: AwaitingInputResponseDict = {
+                    "type": "awaiting_input",
+                    "data": {
+                        "input_type": "plan_approval",
+                        "title": "Proposed Plan",
+                        "content": plan_content or "Waiting for your approval to proceed.",
+                        "options": [
+                            {"id": "approve", "label": "Approve", "description": "Execute the plan as-is"}
+                        ],
+                        "plan_json": ""
+                    }
                 }
-                yield interrupted_response
+                yield awaiting_input_response
                 return
 
             # ============================================================
@@ -1485,14 +1703,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         Extracts meaningful information from tool arguments and observations
         to provide user-friendly progress messages.
         """
-        import json as json_module
-
         messages = []
 
         # Try to parse tool_args as JSON for structured extraction
         try:
-            args = json_module.loads(tool_args) if tool_args and tool_args != "{}" else {}
-        except json_module.JSONDecodeError:
+            args = json.loads(tool_args) if tool_args and tool_args != "{}" else {}
+        except json.JSONDecodeError:
             args = {}
 
         # Build message based on tool type
@@ -1573,3 +1789,366 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
     def _extract_token_usage_from_agent(self, agent) -> Optional[Any]:
         """Extract accumulated token usage from agent's memory steps using shared utility."""
         return TokenUsageExtractor.extract_from_agent_memory(agent=agent)
+
+    # ============================================================
+    # ExecutionCoordinator Integration - Two-Phase Execution
+    # ============================================================
+
+    async def _stream_coordinator_response(
+        self,
+        context: ExecutionContext,
+        tools: List[Any],
+        task: str,
+        session_id: Optional[str],
+        org_model: Optional[str],
+        coordinator_phase: str,
+        managed_agents: Optional[List[Any]] = None,
+    ) -> AsyncIterator[Any]:
+        """
+        Coordinator-driven execution path.
+
+        The coordinator internally decides the mode:
+        - PASSTHROUGH: Single managed agent task (agent has own HITL)
+        - DIRECT: Simple task, execute without plan
+        - PLAN_AND_APPROVE: Complex task, create plan and await approval
+
+        Args:
+            context: Execution context with tool_mode
+            tools: Available smolagents tools
+            task: Current user message/task
+            session_id: Session ID for state persistence
+            org_model: Organization model for evaluator
+            coordinator_phase: Current phase from session
+            managed_agents: Available managed agents for mode detection
+        """
+        if coordinator_phase == "idle":
+            # === NEW REQUEST - Let coordinator determine mode ===
+            logger.info("📋 Coordinator: Analyzing task to determine execution mode...")
+
+            # Create coordinator with evaluator and step executor
+            # PlanService already has model_provider, org_model passed for hierarchy resolution
+            model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+            evaluator_factory = create_evaluator_factory(model)
+
+            # Get managed agents as list for step executor
+            # managed_agents may be a dict {name: agent} or already a list
+            if managed_agents:
+                if isinstance(managed_agents, dict):
+                    managed_agents_list = list(managed_agents.values())
+                else:
+                    managed_agents_list = list(managed_agents)
+            else:
+                managed_agents_list = []
+
+            # Create step executor with smolagents native routing
+            plan_step_executor = PlanStepExecutor(
+                tools=tools,
+                managed_agents=managed_agents_list,
+                model=model,
+                max_steps=10,
+            )
+
+            # Create context-gathering tools for planner
+            # These allow the planner to see existing databases/tables before creating a plan
+            api_key = context.api_key or ""
+            org_id = context.organization_id or 0
+            database_crud = load_database_crud(None, api_key, org_id)
+            table_crud = load_table_crud(None, api_key, org_id)
+            context_tools = [database_crud, table_crud]
+            logger.info(f"📋 Created {len(context_tools)} context-gathering tools for planner")
+
+            coordinator = ExecutionCoordinator(
+                plan_service=self.plan_service,
+                evaluator_factory=evaluator_factory,
+                plan_step_executor=plan_step_executor,
+                evaluate_after_steps=1,
+                max_replans=3,
+                org_model=org_model,
+                context_tools=context_tools,
+            )
+
+            # Use smart execute to determine mode and handle accordingly
+            plan: Optional[Plan] = None
+            async for event in coordinator.execute(
+                task=task,
+                tools=tools,
+                managed_agents=managed_agents,
+            ):
+                if isinstance(event, PassthroughEvent):
+                    # PASSTHROUGH: Let normal agent flow handle (managed agent has own HITL)
+                    logger.info(f"📋 Coordinator: PASSTHROUGH mode - delegating to {event.agent_name}")
+                    yield "FALL_THROUGH"
+                    return
+
+                elif isinstance(event, DirectExecutionStartedEvent):
+                    # DIRECT: Simple task, let normal agent flow handle
+                    logger.info("📋 Coordinator: DIRECT mode - executing without plan")
+                    yield "FALL_THROUGH"
+                    return
+
+                elif isinstance(event, PlanCreatedEvent):
+                    # PLAN_AND_APPROVE: Complex task, show plan for approval
+                    plan = event.plan
+                    logger.info(f"📋 Coordinator: PLAN_AND_APPROVE mode - plan {plan.id} with {len(plan.steps)} steps")
+
+            if plan and session_id:
+                # Store coordinator and plan in session
+                self.session_manager.set_coordinator(session_id, coordinator, plan)
+                self.session_manager.set_coordinator_phase(session_id, "awaiting_approval")
+
+                # Send plan for approval via awaiting_input
+                yield self._create_awaiting_input_for_plan(plan)
+            elif plan is None:
+                # No plan created - this shouldn't happen for PLAN_AND_APPROVE
+                logger.warning("📋 Coordinator: No plan created, falling through to normal flow")
+                yield "FALL_THROUGH"
+
+        elif coordinator_phase == "awaiting_approval":
+            # === CHECK FOR APPROVAL ===
+            if self._is_approval_response(task):
+                # User approved - switch to execution mode
+                context.tool_mode = ToolMode.EXECUTION
+                AgentExecutor.set_current_context(context)
+                logger.info("✅ Coordinator: User approved, starting execution phase")
+
+                # Get coordinator and plan from session
+                coordinator_from_session: Optional[ExecutionCoordinator] = self.session_manager.get_coordinator(session_id) if session_id else None
+                plan_from_session: Optional[Plan] = self.session_manager.get_current_plan(session_id) if session_id else None
+
+                if not coordinator_from_session or not plan_from_session:
+                    logger.error("📋 Coordinator: No coordinator/plan found in session")
+                    yield self._create_error_response(
+                        "SESSION_STATE_ERROR",
+                        "Session state lost. Please start over.",
+                    )
+                    if session_id:
+                        self.session_manager.clear_coordinator_state(session_id)
+                    return
+
+                # Update phase
+                if session_id:
+                    self.session_manager.set_coordinator_phase(session_id, "executing")
+
+                # Approve the plan
+                try:
+                    await coordinator_from_session.approve_plan(plan_from_session.id)
+                except Exception as e:
+                    logger.error(f"📋 Coordinator: Plan approval failed: {e}")
+                    yield self._create_error_response(
+                        "PLAN_APPROVAL_FAILED",
+                        f"Failed to approve plan: {e}",
+                    )
+                    return
+
+                # === PHASE 2: EXECUTION ===
+                step_index = 0
+                last_step_result: Optional[str] = None
+                execution_success = False
+
+                async for event in coordinator_from_session.execute_plan(plan_from_session.id, tools):
+                    converted = self._convert_coordinator_event(event, step_index)
+                    if converted:
+                        yield converted
+                        step_index += 1
+
+                    # Capture step results for final summary
+                    if isinstance(event, StepCompletedEvent) and event.result:
+                        last_step_result = event.result
+                    elif isinstance(event, ExecutionCompletedEvent):
+                        execution_success = event.success
+
+                # Send final summary as content_chunk so user sees a message
+                # AIDEV-NOTE: This is critical - without this, user only sees step progress
+                if execution_success:
+                    summary = last_step_result or f"Plan executed successfully with {step_index} steps."
+                    yield {
+                        "type": "content_chunk",
+                        "content": f"\n\n✅ **Execution Complete**\n\n{summary}"
+                    }
+                else:
+                    yield {
+                        "type": "content_chunk",
+                        "content": "\n\n⚠️ **Execution completed with issues.** Some steps may have failed."
+                    }
+
+                # Clear coordinator state
+                if session_id:
+                    self.session_manager.clear_coordinator_state(session_id)
+                logger.info("✅ Coordinator: Execution complete, state cleared")
+
+            else:
+                # Feedback (not approval) - clear coordinator state and reprocess as new request
+                logger.info("📝 Coordinator: Feedback received (not approval), clearing state and reprocessing")
+                if session_id:
+                    self.session_manager.clear_coordinator_state(session_id)
+
+                # Fall through to normal agent processing
+                # This treats the feedback as a new task that will trigger re-planning
+                yield "FALL_THROUGH"
+                return
+
+        elif coordinator_phase == "executing":
+            # Execution is typically synchronous, but handle edge cases
+            logger.warning("⚠️ Coordinator: Unexpected executing phase on new message")
+            if session_id:
+                self.session_manager.clear_coordinator_state(session_id)
+
+    def _is_approval_response(self, task: str) -> bool:
+        """
+        Check if the user response is an approval.
+
+        Only accepts structured 'approve' from UI button.
+        Any other text is feedback that routes to orchestrator.
+        """
+        return task.lower().strip() == "approve"
+
+    def _create_awaiting_input_for_plan(self, plan: Plan) -> AwaitingInputResponseDict:
+        """Create awaiting_input event for plan approval."""
+        # Format plan steps as markdown
+        plan_content = f"## Plan: {plan.goal}\n\n"
+
+        # Include context section if available
+        if plan.context:
+            plan_content += f"### Current State\n{plan.context}\n\n"
+
+        # Include analysis section if available
+        if plan.analysis:
+            plan_content += f"### Analysis\n{plan.analysis}\n\n"
+
+        # Add steps
+        plan_content += "### Steps\n"
+        for i, step in enumerate(plan.steps, 1):
+            plan_content += f"{i}. {step.description}\n"
+            if step.tool_call:
+                plan_content += f"   - Tool: `{step.tool_call}`\n"
+
+        return {
+            "type": "awaiting_input",
+            "data": {
+                "input_type": "plan_approval",
+                "title": "Review Plan",
+                "content": plan_content,
+                "options": [
+                    {"id": "approve", "label": "Approve", "description": "Execute the plan"}
+                ],
+                "plan_json": json.dumps({
+                    "id": plan.id,
+                    "goal": plan.goal,
+                    "context": plan.context,
+                    "analysis": plan.analysis,
+                    "steps": [
+                        {"step_id": s.step_id, "description": s.description, "tool_call": s.tool_call}
+                        for s in plan.steps
+                    ]
+                })
+            }
+        }
+
+    def _convert_coordinator_event(self, event: Any, step_index: int) -> Optional[StreamResponseDict]:
+        """Convert ExecutionCoordinator events to frontend SSE events."""
+
+        if isinstance(event, StepStartedEvent):
+            return {
+                "type": "step_progress",
+                "step_type": "ACTION",
+                "step_name": f"Executing: {event.step_description[:50]}...",
+                "content": event.step_description,
+                "metadata": {"step_id": event.step_id},
+                "step_index": step_index
+            }
+
+        elif isinstance(event, StepCompletedEvent):
+            return {
+                "type": "step_progress",
+                "step_type": "ACTION",
+                "step_name": f"Completed: Step {step_index + 1}",
+                "content": str(event.result) if event.result else "Step completed",
+                "metadata": {"result": str(event.result) if event.result else ""},
+                "step_index": step_index
+            }
+
+        elif isinstance(event, StepFailedEvent):
+            return {
+                "type": "step_progress",
+                "step_type": "ACTION",
+                "step_name": f"Failed: Step {step_index + 1}",
+                "content": event.error,
+                "metadata": {"error": event.error},
+                "step_index": step_index
+            }
+
+        elif isinstance(event, EvaluationCompletedEvent):
+            if event.evaluation.goal_achieved:
+                return {
+                    "type": "step_progress",
+                    "step_type": "FINAL",
+                    "step_name": "Goal Achieved",
+                    "content": event.evaluation.reason,
+                    "metadata": {"type": "goal_achieved"},
+                    "step_index": 999
+                }
+            # Don't show intermediate evaluations
+            return None
+
+        elif isinstance(event, ReplanTriggeredEvent):
+            return {
+                "type": "step_progress",
+                "step_type": "REASONING",
+                "step_name": f"Replanning (attempt {event.replan_number})",
+                "content": event.reason,
+                "metadata": {"type": "replan", "replan_number": str(event.replan_number)},
+                "step_index": step_index
+            }
+
+        elif isinstance(event, GoalAchievedEvent):
+            return {
+                "type": "step_progress",
+                "step_type": "FINAL",
+                "step_name": "Goal Achieved",
+                "content": event.reason,
+                "metadata": {"type": "goal_achieved"},
+                "step_index": 999
+            }
+
+        elif isinstance(event, ExecutionBlockedEvent):
+            return {
+                "type": "error",
+                "error": {
+                    "error_code": "EXECUTION_BLOCKED",
+                    "error_message": event.reason,
+                    "error_details": {"severity": "recoverable"},
+                    "hint": "The plan encountered a blocking issue. You may need to provide more information.",
+                    "can_retry": True,
+                    "auto_retry": False,
+                    "session_reset": False
+                }
+            }
+
+        elif isinstance(event, ExecutionCompletedEvent):
+            status = "successfully" if event.success else "with errors"
+            return {
+                "type": "step_progress",
+                "step_type": "FINAL",
+                "step_name": "Execution Complete",
+                "content": f"All steps completed {status}",
+                "metadata": {"success": str(event.success)},
+                "step_index": 999
+            }
+
+        return None  # Unknown event type
+
+    def _create_error_response(self, error_code: str, error_message: str) -> ErrorResponseDict:
+        """Create a typed error response dict."""
+        return {
+            "type": "error",
+            "error": {
+                "error_code": error_code,
+                "error_message": error_message,
+                "error_details": {"severity": "recoverable"},
+                "hint": "",
+                "can_retry": True,
+                "auto_retry": False,
+                "session_reset": False
+            }
+        }
+

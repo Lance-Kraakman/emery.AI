@@ -104,3 +104,28 @@ tool_executor(tool="field_crud", task="create field 'has_power_of_attorney' of t
 - Creation fails partway → Report which succeeded/failed
 - Database not found → List available databases
 - Table exists → Offer to add fields to existing
+
+---
+
+### Output Format (REQUIRED)
+
+**After creating schemas, ALWAYS report a detailed summary:**
+
+```
+Created table '[TableName]' (ID: X) with fields:
+- field_name: TYPE (required/optional) [options if select]
+- field_name: TYPE (required/optional)
+...
+
+Example:
+Created table 'Clients' (ID: 42) with fields:
+- id: UUID (primary key)
+- name: TEXT (required)
+- email: EMAIL (optional)
+- status: SINGLE-SELECT (required) [Active, Pending, Closed]
+- services_needed: MULTI-SELECT (optional) [Legal, Financial, Medical]
+- has_power_of_attorney: BOOLEAN (optional)
+- created_at: DATE (required)
+```
+
+**Never give a generic response like "I created the schema"** - always list the actual tables and fields with their types.

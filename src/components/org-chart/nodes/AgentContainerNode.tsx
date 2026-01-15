@@ -9,10 +9,10 @@
  */
 
 import React, { memo, useMemo } from 'react';
-import { NodeResizer } from '@xyflow/react';
+import { NodeResizer, Handle, Position } from '@xyflow/react';
 import { cn } from '@/lib/utils';
 import { Bot, ChevronDown, ChevronRight, Sparkles, Database, Plus } from 'lucide-react';
-import { orgChartNodeTheme, orgChartNodeSizes } from '../theme';
+import { orgChartNodeTheme, orgChartNodeSizes, orgChartHandles } from '../theme';
 import { getAgentSectionLayout } from '../utils';
 import { useOrgChartDragSafe } from '../context';
 import type { AgentContainerNodeData } from '../types';
@@ -90,6 +90,22 @@ export const AgentContainerNode = memo(function AgentContainerNode({
         isVisible={selected}
         lineClassName="!border-primary"
         handleClassName="!w-2 !h-2 !bg-primary !border-primary"
+      />
+
+      {/* Connection handles for data source edges */}
+      <Handle
+        id="right-source"
+        type="source"
+        position={Position.Right}
+        className={orgChartHandles.referenceSource.className}
+        style={{ top: 32 }}
+      />
+      <Handle
+        id="left-target"
+        type="target"
+        position={Position.Left}
+        className={orgChartHandles.referenceTarget.className}
+        style={{ top: 32 }}
       />
 
       <div
