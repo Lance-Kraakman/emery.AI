@@ -24,13 +24,12 @@ def create_research_agent(
     model: Any,
     additional_tools: Optional[List[Tool]] = None,
     max_steps: int = 10,
-    progress_callback: Any = None,
 ) -> ToolCallingAgent:
     """
     Create research agent for web search and information gathering.
 
     This agent is designed for the interactive planning loop.
-    It uses read-only tools (web_search, visit_webpage) to gather
+    It uses read-only tools (web_search, web_fetch) to gather
     information that helps other agents create better plans.
 
     AIDEV-NOTE: Uses ToolCallingAgent (not CodeAgent) because research
@@ -38,9 +37,8 @@ def create_research_agent(
 
     Args:
         model: The LLM model to use
-        additional_tools: Extra tools to include
+        additional_tools: Extra tools to include (e.g., file_reader)
         max_steps: Maximum agent steps (default 10)
-        progress_callback: Optional callback for streaming nested steps
 
     Returns:
         Configured ToolCallingAgent for research tasks
