@@ -215,7 +215,7 @@ def render_capabilities(agent_type: str) -> str:
         return ""
 
 
-def get_managed_agent_templates() -> dict:
+def get_managed_agent_templates() -> Dict[str, str]:
     """
     Get managed agent task/report templates for smolagents.
 
@@ -231,7 +231,7 @@ def get_managed_agent_templates() -> dict:
     }
 
 
-def get_planning_templates() -> dict:
+def get_planning_templates() -> Dict[str, str]:
     """
     Get planning templates for smolagents.
 
@@ -253,7 +253,7 @@ def get_planning_templates() -> dict:
     }
 
 
-def get_hitl_templates() -> dict:
+def get_hitl_templates() -> Dict[str, str]:
     """
     Get Human-in-the-Loop resume templates.
 
@@ -415,12 +415,12 @@ def render_output_instructions(
 
 
 def build_agent_instructions(
-    tools: List[Any] = None,
+    tools: Optional[List[Any]] = None,
     agent_type: str = "default",
     context_type: str = "interactive",
-    skill_outputs: List[Any] = None,
-    session_attachments: List[Any] = None,
-    **kwargs
+    skill_outputs: Optional[List[Any]] = None,
+    session_attachments: Optional[List[Any]] = None,
+    **kwargs: Any
 ) -> str:
     """
     Build agent instructions from Jinja2 templates.

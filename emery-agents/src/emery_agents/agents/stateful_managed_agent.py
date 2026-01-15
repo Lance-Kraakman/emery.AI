@@ -17,7 +17,7 @@ This subclass fixes that by passing reset=False to preserve state.
 """
 
 import logging
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Dict, Union, cast
 
 from jinja2 import Template, StrictUndefined
 from smolagents import CodeAgent
@@ -32,13 +32,13 @@ from ..utils.step_utils import step_to_progress_dict, RawProgressDict
 logger = logging.getLogger(__name__)
 
 
-def populate_template(template: str, variables: dict[str, Any]) -> str:
+def populate_template(template: str, variables: Dict[str, Any]) -> str:
     """Render a Jinja2 template with variables."""
     compiled_template = Template(template, undefined=StrictUndefined)
     return compiled_template.render(**variables)
 
 
-class StatefulManagedAgent(CodeAgent):
+class StatefulManagedAgent(CodeAgent):  # type: ignore[misc]
     """
     A managed agent that preserves memory between calls for HITL workflows.
 
@@ -65,11 +65,11 @@ class StatefulManagedAgent(CodeAgent):
 
     def __init__(
         self,
-        *args,
+        *args: Any,
         executor_type: str = "local",
         progress_callback: Optional[Callable[[RawProgressDict], None]] = None,
-        **kwargs
-    ):
+        **kwargs: Any
+    ) -> None:
         super().__init__(*args, executor_type=executor_type, **kwargs)
         # Track HITL state
         self._waiting_for_approval = False
@@ -94,7 +94,7 @@ class StatefulManagedAgent(CodeAgent):
         logger.info(f"📋 {self.__class__.__name__} system_prompt length: {len(self.system_prompt)}")
         logger.info(f"📋 System prompt preview (first 500 chars):\n{self.system_prompt[:500]}")
 
-    def __call__(self, task: str, **kwargs):
+    def __call__(self, task: str, **kwargs: Any) -> str:
         """
         Override to preserve memory between calls (reset=False) and inject
         resume context when user approves a plan.
@@ -123,7 +123,7 @@ class StatefulManagedAgent(CodeAgent):
 
         try:
             # Disable planning on resume to prevent re-planning
-            original_planning_interval = self.planning_interval
+            original_planning_interval: Optional[int] = self.planning_interval  # type: ignore[has-type]
             if is_resumption:
                 self.planning_interval = None
                 logger.info(f"📋 Disabled planning_interval for resume execution")
@@ -144,7 +144,7 @@ class StatefulManagedAgent(CodeAgent):
                         # Emit progress callback for each step
                         step_dict = self._step_to_progress_dict(step, step_index)
                         if step_dict:
-                            active_callback(step_dict)
+                            active_callback(step_dict)  # type: ignore[arg-type]
                             logger.debug(f"📤 {self.name}: Emitted step {step_index}: {step_dict.get('step_name')}")
 
                         # Capture final result
@@ -253,10 +253,10 @@ class StatefulManagedAgent(CodeAgent):
             # Check for PlanningStep (has 'plan' attribute)
             if hasattr(step, 'plan') and step.plan:
                 logger.info(f"📋 Found plan in memory ({len(step.plan)} chars)")
-                return step.plan
+                return step.plan  # type: ignore[no-any-return]
         return None
 
-    def reset_state(self):
+    def reset_state(self) -> None:
         """
         Manually reset agent state and memory.
 

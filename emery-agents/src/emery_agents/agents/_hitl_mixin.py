@@ -1,7 +1,7 @@
 """HITL state management mixin for interrupt-aware agents."""
 
 import logging
-from typing import Optional, Generator
+from typing import Optional, Generator, Any, Dict, TYPE_CHECKING, Protocol
 
 from smolagents.utils import AgentError
 from smolagents.memory import FinalAnswerStep
@@ -13,12 +13,22 @@ from ..tools.tool_modes import ToolMode
 logger = logging.getLogger(__name__)
 
 
-class HITLMixin:
+if TYPE_CHECKING:
+    class _HITLMixinBase(Protocol):
+        """Protocol for attributes expected from the class this mixin is mixed into."""
+        managed_agents: Dict[str, Any]
+        logger: Any
+        interrupt_switch: bool
+else:
+    _HITLMixinBase = object
+
+
+class HITLMixin(_HITLMixinBase):
     """Tracks interrupted agent state and handles approval-based resume."""
 
     _interrupted_agent_name: Optional[str] = None
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialize HITL state. Passes args/kwargs through for cooperative MI."""
         super().__init__(*args, **kwargs)
         self._interrupted_agent_name = None
