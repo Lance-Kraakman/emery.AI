@@ -18,7 +18,7 @@ from typing import List, Any
 from smolagents import Tool, CodeAgent
 from smolagents.monitoring import LogLevel
 
-from ..prompts import build_agent_instructions
+from ..prompts import build_agent_instructions, render_capabilities
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +73,7 @@ def create_table_builder_agent(
         "Use for quick schema changes to a specific table. "
         "Does NOT design schemas - use schema_builder for complex design."
     )
-    agent.capabilities = (
-        "- Quick single-field operations (add field, delete field, rename)\n"
-        "- Autonomous execution (no approval needed for simple changes)\n"
-        "- Use for targeted changes to existing tables\n"
-        "- Does NOT design schemas - delegates complex work to schema_builder"
-    )
+    agent.capabilities = render_capabilities("table_builder")
 
     logger.info(f"✨ Created Table Builder agent (autonomous CodeAgent)")
     logger.info(f"   Tools: {[t.name for t in tools]}")

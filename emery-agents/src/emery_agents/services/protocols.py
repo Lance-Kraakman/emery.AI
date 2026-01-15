@@ -95,11 +95,14 @@ class ManagedAgent(Protocol):
 
     AIDEV-NOTE: Used for typing in ExecutionCoordinator and TaskClassifier
     to avoid getattr() patterns. Any smolagents ManagedAgent or similar
-    class with name/description/capabilities attributes satisfies this protocol.
+    class with name/description attributes satisfies this protocol.
+
+    Optional attributes (accessed via getattr with fallback):
+    - capabilities: Detailed capabilities for planner context
 
     Implementors: smolagents.ManagedAgent, StatefulManagedAgent
     """
 
     name: str
     description: str
-    capabilities: str  # Detailed capabilities for planner context
+    # Note: capabilities is optional, accessed via getattr(agent, "capabilities", "")

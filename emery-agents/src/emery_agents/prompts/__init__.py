@@ -183,6 +183,38 @@ def list_templates(pattern: str = "**/*.j2") -> List[str]:
     return get_loader().list_templates(pattern)
 
 
+def render_capabilities(agent_type: str) -> str:
+    """
+    Render just the capabilities block from an agent template.
+
+    Agent templates can define a {% block capabilities %}...{% endblock %}
+    section that summarizes the agent's key abilities for planner context.
+
+    Args:
+        agent_type: Agent type (e.g., "schema_builder", "skill_builder")
+
+    Returns:
+        Rendered capabilities string, or empty string if not found
+    """
+    template_name = f"agents/{agent_type}.j2"
+    try:
+        loader = get_loader()
+        template = loader.env.get_template(template_name)
+
+        # Access the capabilities block if it exists
+        if "capabilities" in template.blocks:
+            # Render the block with an empty context
+            ctx = template.new_context()
+            content = "".join(template.blocks["capabilities"](ctx))
+            return content.strip()
+
+        logger.debug(f"📝 No capabilities block in {template_name}")
+        return ""
+    except Exception as e:
+        logger.warning(f"⚠️ Could not load capabilities for {agent_type}: {e}")
+        return ""
+
+
 def get_managed_agent_templates() -> dict:
     """
     Get managed agent task/report templates for smolagents.

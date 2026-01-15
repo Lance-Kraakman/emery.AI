@@ -28,7 +28,7 @@ from smolagents.memory import PlanningStep
 from smolagents.monitoring import LogLevel
 
 from .stateful_managed_agent import StatefulManagedAgent
-from ..prompts import build_agent_instructions
+from ..prompts import build_agent_instructions, render_capabilities
 
 logger = logging.getLogger(__name__)
 
@@ -122,12 +122,7 @@ def create_document_builder_agent(
         "add sections, format text, or restructure documents. "
         "ALWAYS use this for any document-related task."
     )
-    agent.capabilities = (
-        "- Creates and edits rich text documents stored in table fields\n"
-        "- Handles markdown formatting and structure\n"
-        "- Works with document-type fields in tables\n"
-        "- Can add sections, reformat content, and restructure documents"
-    )
+    agent.capabilities = render_capabilities("document_builder")
 
     logger.info(f"✨ Created Document Builder agent (CodeAgent) with planning_interval=2")
     logger.info(f"   Tools: {[t.name for t in tools]}")
