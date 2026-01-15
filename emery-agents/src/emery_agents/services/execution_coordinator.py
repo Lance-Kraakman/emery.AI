@@ -424,11 +424,12 @@ class ExecutionCoordinator:
         # ManagedAgent protocol guarantees .name attribute exists
         available_agent_names: List[str] = [a.name for a in managed_agents]
 
-        # Run LLM-based classification
+        # Run LLM-based classification with resolved model
         return self._task_classifier.classify(
             task=task,
             available_agents=available_agent_names,
             context=context,
+            org_model=self._org_model,
         )
 
     async def create_plan(
@@ -1006,6 +1007,7 @@ Analyze this state and call the report_evaluation tool with your assessment.
                 plan=self._current_plan,
                 context_tools=self._context_tools,
                 ledger=self._ledger,
+                org_model=self._org_model,
             )
 
             # Emit analysis result

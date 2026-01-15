@@ -422,6 +422,7 @@ class PlanService:
         plan: Plan,
         context_tools: List[Any],
         ledger: TaskLedger,
+        org_model: Optional[str] = None,
     ) -> RecoveryResult:
         """
         Analyze a failed step and determine how to fix it.
@@ -440,6 +441,7 @@ class PlanService:
             plan: The original plan (for context)
             context_tools: Tools to gather fresh context
             ledger: Current execution state
+            org_model: Organization model ID for model resolution hierarchy
 
         Returns:
             RecoveryResult with corrected_parameters and confidence
@@ -469,8 +471,9 @@ class PlanService:
         logger.debug(f"Error: {error_message[:200]}...")
 
         try:
-            # LLM gathers context and analyzes
-            model = self.model_provider.get_model()
+            # LLM gathers context and analyzes using resolved model
+            model_id = self.model_provider.resolve_model_selection(org_model=org_model)
+            model = self.model_provider.get_model(model_id=model_id)
             analyzer = ToolCallingAgent(
                 tools=[recovery_tool] + context_tools,
                 model=model,

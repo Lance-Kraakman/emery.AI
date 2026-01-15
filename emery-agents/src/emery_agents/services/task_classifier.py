@@ -65,6 +65,7 @@ class TaskClassifier:
         task: str,
         available_agents: Optional[List[str]] = None,
         context: Optional[str] = None,
+        org_model: Optional[str] = None,
     ) -> TaskClassification:
         """
         Classify a task to determine execution mode and questions.
@@ -76,6 +77,7 @@ class TaskClassifier:
             task: The user's task/request text
             available_agents: Names of available managed agents
             context: Additional context (e.g., existing databases)
+            org_model: Organization model ID for model resolution hierarchy
 
         Returns:
             TaskClassification with mode, clarification needs, and questions
@@ -86,8 +88,9 @@ class TaskClassifier:
         tool = TaskClassifierTool()
 
         try:
-            # Use ToolCallingAgent for structured output
-            model = self.model_provider.get_model()
+            # Use resolved model from organization hierarchy
+            model_id = self.model_provider.resolve_model_selection(org_model=org_model)
+            model = self.model_provider.get_model(model_id=model_id)
             classifier = ToolCallingAgent(
                 tools=[tool],
                 model=model,
@@ -135,15 +138,14 @@ class TaskClassifier:
         """
         Fallback classification when LLM fails.
 
-        Defaults to PLAN_AND_APPROVE with a generic clarification question
-        to ensure we don't make assumptions.
+        Defaults to PLAN_AND_APPROVE without clarification questions.
+        Classification is an optimization, not a requirement - if it fails,
+        we should proceed with planning rather than blocking the user.
         """
         return TaskClassification(
             mode="PLAN_AND_APPROVE",
-            needs_clarification=True,
+            needs_clarification=False,
             target_agent=None,
-            clarification_questions=[
-                "Could you provide more details about what you'd like to do?"
-            ],
-            reasoning="Fallback classification due to LLM error",
+            clarification_questions=[],
+            reasoning="Proceeding with planning (classification unavailable)",
         )
