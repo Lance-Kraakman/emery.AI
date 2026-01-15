@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { usePublicAppAuth } from "@/components/providers/PublicAppAuthProvider";
 import { SignInButton } from "@/components/auth/SignInButton";
 import { EmailSignInForm } from "@/components/auth/EmailSignInForm";
@@ -9,17 +9,21 @@ import { CheckCircle } from "lucide-react";
 import { useLinkContext, useTheme } from "@/components/puck/contexts/PageContext";
 import { resolveLinkAction } from "@/components/puck/utils/resolve-link-action";
 import type { LinkActionConfig } from "@/components/puck/custom-fields/link-action-field";
+import type { RoleSelectorFieldValue } from "@/components/puck/custom-fields/role-selector-field";
 import type { FourCornerRadius } from "@/components/puck/types/spacing-types";
 import { computeFourCornerRadiusShorthand } from "@/components/puck/utils/spacing";
 import { useInterpolatedText } from "@/components/puck/hooks/useInterpolatedText";
+import { assignSignUpRole } from "@/app/actions/signup-role";
 
 export interface LoginBlockProps {
+  mode: 'sign_in' | 'sign_up';
   title: string;
   description: string;
   showGithub: boolean;
   showGoogle: boolean;
   showEmail: boolean;
   redirectAction: LinkActionConfig;
+  defaultSignUpRole: RoleSelectorFieldValue | null;
   backgroundColor?: string;
   textColor?: string;
   buttonColor?: string;
@@ -29,12 +33,14 @@ export interface LoginBlockProps {
 }
 
 export function LoginBlock({
+  mode,
   title,
   description,
   showGithub,
   showGoogle,
   showEmail,
   redirectAction,
+  defaultSignUpRole,
   backgroundColor,
   textColor,
   buttonColor,
@@ -42,16 +48,61 @@ export function LoginBlock({
   borderColor,
   radius,
 }: LoginBlockProps) {
+  // Determine if this is sign-up mode for different UI text
+  const isSignUp = mode === 'sign_up';
   const theme = useTheme();
+
+  // Get the signUpRoleId for auth components
+  const signUpRoleId = isSignUp && defaultSignUpRole ? defaultSignUpRole.id : undefined;
   // Interpolate variables in title and description
   const interpolatedTitle = useInterpolatedText(title);
   const interpolatedDescription = useInterpolatedText(description);
 
   // Compute borderRadius shorthand string for CSS and child components
   const borderRadius = radius ? computeFourCornerRadiusShorthand(radius, theme) : undefined;
-  const { isAuthenticated, isLoading, user, appId } = usePublicAppAuth();
+  const { isAuthenticated, isLoading, user, appId, orgSlug } = usePublicAppAuth();
   const isPreviewMode = appId === 0;
   const linkContext = useLinkContext();
+
+  // Track if we've already processed the signup role assignment
+  const roleAssignmentProcessed = useRef(false);
+
+  // Handle role assignment after successful auth redirect
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (roleAssignmentProcessed.current) return;
+    if (!isAuthenticated || isLoading || isPreviewMode) return;
+
+    // Check for signupRole in URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    const signupRoleParam = urlParams.get('signupRole');
+
+    if (signupRoleParam && orgSlug) {
+      roleAssignmentProcessed.current = true;
+      const roleId = parseInt(signupRoleParam, 10);
+
+      if (!isNaN(roleId)) {
+        // Call the server action to assign the role
+        assignSignUpRole(roleId, orgSlug)
+          .then((result) => {
+            if (!result.success && result.error) {
+              console.warn('[LoginBlock] Role assignment failed:', result.error);
+            }
+          })
+          .catch((error) => {
+            console.error('[LoginBlock] Role assignment error:', error);
+          })
+          .finally(() => {
+            // Clean up the URL param
+            urlParams.delete('signupRole');
+            const newUrl = urlParams.toString()
+              ? `${window.location.pathname}?${urlParams.toString()}`
+              : window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+          });
+      }
+    }
+  }, [isAuthenticated, isLoading, isPreviewMode, orgSlug]);
 
   // Show loading state (but not in preview mode)
   if (isLoading && !isPreviewMode) {
@@ -149,6 +200,8 @@ export function LoginBlock({
               buttonTextColor={buttonTextColor}
               borderColor={borderColor}
               borderRadius={borderRadius}
+              isSignUp={isSignUp}
+              signUpRoleId={signUpRoleId}
             />
           )}
           {showGoogle && (
@@ -159,6 +212,8 @@ export function LoginBlock({
               buttonTextColor={buttonTextColor}
               borderColor={borderColor}
               borderRadius={borderRadius}
+              isSignUp={isSignUp}
+              signUpRoleId={signUpRoleId}
             />
           )}
 
@@ -194,6 +249,8 @@ export function LoginBlock({
               borderColor={borderColor}
               borderRadius={borderRadius}
               textColor={textColor}
+              isSignUp={isSignUp}
+              signUpRoleId={signUpRoleId}
             />
           )}
 

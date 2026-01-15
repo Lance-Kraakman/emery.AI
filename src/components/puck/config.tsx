@@ -17,12 +17,11 @@ import TableBlockConfig from "./blocks/TableBlock";
 import MetricBlockConfig from "./blocks/MetricBlock";
 import ChartBlockConfig from "./blocks/ChartBlock";
 import { FormBlockConfig } from "./blocks/FormBlock";
-import { LoginBlock } from "./blocks/LoginBlock";
+import { SignInSignUpBlock as LoginBlock } from "./blocks/LoginBlock";
 import { SignOutBlock } from "./blocks/SignOutBlock";
 import { LinkBlockConfig } from "./blocks/LinkBlock";
 import { DataBlockConfig } from "./blocks/DataBlock";
 import { ConditionalBlock } from "./blocks/ConditionalBlock";
-import { DialogBlock } from "./blocks/DialogBlock";
 import TextFieldConfig from "./blocks/TextField";
 import ImageFieldConfig from "./blocks/ImageField";
 import DateFieldConfig from "./blocks/DateField";
@@ -64,7 +63,7 @@ export const config: UserConfig = {
     },
     logic: {
       title: "Logic",
-      components: ["ConditionalBlock", "DialogBlock"],
+      components: ["ConditionalBlock"],
     },
     content: {
       title: "Content",
@@ -98,7 +97,6 @@ export const config: UserConfig = {
     FooterBlock,
     DataBlock: DataBlockConfig,
     ConditionalBlock,
-    DialogBlock,
     TableBlock: TableBlockConfig,
     MetricBlock: MetricBlockConfig,
     ChartBlock: ChartBlockConfig,

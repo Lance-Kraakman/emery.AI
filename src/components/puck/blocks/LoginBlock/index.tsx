@@ -9,16 +9,19 @@ import {
   borderColorField,
   borderRadiusField
 } from "@/components/puck/fields/standard-fields";
-import { createLinkActionField, createVariableTextField, type LinkActionConfig } from "@/components/puck/custom-fields";
+import { createLinkActionField, createVariableTextField, createRoleSelectorField, type LinkActionConfig, type RoleSelectorFieldValue } from "@/components/puck/custom-fields";
 import type { FourCornerRadius } from "@/components/puck/types/spacing-types";
 
 export type LoginBlockProps = {
+  mode: 'sign_in' | 'sign_up';
   title: string;
   description: string;
   showGithub: boolean;
   showGoogle: boolean;
   showEmail: boolean;
   redirectAction: LinkActionConfig;
+  // Sign-up role assignment
+  defaultSignUpRole: RoleSelectorFieldValue | null;
   // Theme fields
   backgroundColor?: string;
   textColor?: string;
@@ -28,9 +31,17 @@ export type LoginBlockProps = {
   radius?: FourCornerRadius;
 };
 
-export const LoginBlock: ComponentConfig<LoginBlockProps> = {
-  label: "Login",
+export const SignInSignUpBlock: ComponentConfig<LoginBlockProps> = {
+  label: "Sign In / Sign Up",
   fields: {
+    mode: {
+      type: "radio",
+      label: "Mode",
+      options: [
+        { label: "Sign In", value: "sign_in" },
+        { label: "Sign Up", value: "sign_up" },
+      ],
+    },
     title: createVariableTextField({ label: 'Title' }),
     description: createVariableTextField({ label: 'Description', multiline: true }),
     showGithub: {
@@ -62,6 +73,9 @@ export const LoginBlock: ComponentConfig<LoginBlockProps> = {
       allowedActionTypes: ['none', 'page', 'url'],
       defaultActionType: 'none',
     }),
+    defaultSignUpRole: createRoleSelectorField({
+      placeholder: "Select default role for new sign-ups",
+    }),
     backgroundColor: backgroundColorField,
     textColor: textColorField,
     buttonColor: {
@@ -76,6 +90,7 @@ export const LoginBlock: ComponentConfig<LoginBlockProps> = {
     radius: borderRadiusField,
   },
   defaultProps: {
+    mode: 'sign_in',
     title: "Sign In",
     description: "Sign in to access this content",
     showGithub: true,
@@ -84,6 +99,7 @@ export const LoginBlock: ComponentConfig<LoginBlockProps> = {
     redirectAction: {
       actionType: 'none',
     },
+    defaultSignUpRole: null,
     backgroundColor: undefined,
     textColor: undefined,
     buttonColor: undefined,

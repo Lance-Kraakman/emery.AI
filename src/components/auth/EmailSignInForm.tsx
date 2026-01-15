@@ -11,6 +11,10 @@ interface EmailSignInFormProps {
   borderColor?: string
   borderRadius?: string
   textColor?: string
+  // Sign-up mode changes button text
+  isSignUp?: boolean
+  // Default role ID for sign-up mode
+  signUpRoleId?: number
 }
 
 export function EmailSignInForm({
@@ -19,7 +23,9 @@ export function EmailSignInForm({
   buttonTextColor,
   borderColor,
   borderRadius,
-  textColor
+  textColor,
+  isSignUp = false,
+  signUpRoleId
 }: EmailSignInFormProps) {
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
@@ -30,11 +36,19 @@ export function EmailSignInForm({
     setLoading(true)
     setMessage("")
 
+    // If signUpRoleId is provided, append it to the callback URL
+    let finalCallbackUrl = callbackUrl;
+    if (signUpRoleId && typeof window !== 'undefined') {
+      const url = new URL(callbackUrl, window.location.origin);
+      url.searchParams.set('signupRole', String(signUpRoleId));
+      finalCallbackUrl = url.pathname + url.search;
+    }
+
     try {
       const result = await signIn("email", {
         email,
         redirect: false,
-        callbackUrl,
+        callbackUrl: finalCallbackUrl,
       })
 
       if (result?.ok) {
@@ -78,7 +92,7 @@ export function EmailSignInForm({
           border: borderColor ? `1px solid ${borderColor}` : 'none',
         }}
       >
-        {loading ? "Sending..." : "Sign in with Email"}
+        {loading ? "Sending..." : isSignUp ? "Sign up with Email" : "Sign in with Email"}
       </button>
       {message && (
         <p
