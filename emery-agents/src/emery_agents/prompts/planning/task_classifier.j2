@@ -6,16 +6,24 @@ Analyze this user task and classify how it should be handled.
 ## Available Agents
 {% if available_agents %}
 {% for agent in available_agents %}
-- **{{ agent }}**: {% if agent == "schema_builder" %}Database structure, tables, fields, relationships{% elif agent == "skill_builder" %}AI skill configuration, instructions, inputs/outputs{% elif agent == "document_builder" %}Rich text documents, content editing{% elif agent == "table_builder" %}Quick single-field operations{% else %}General operations{% endif %}
+- **{{ agent.name }}**: {{ agent.description }}
 {% endfor %}
 {% else %}
-schema_builder, skill_builder, document_builder, table_builder
+No agents configured.
 {% endif %}
 
-## Current Context
-{{ context or "No specific context provided" }}
+## Step 1: Gather Context (Required)
 
-## Classification Guidelines
+Before classifying, understand what exists by calling:
+1. `database_crud(method="list")` - See all databases
+2. `table_crud(method="list_tables")` - See all tables
+
+This helps you determine:
+- If the request references something that already exists
+- If clarification is actually needed (e.g., only one database = no need to ask which)
+- What the user is likely referring to
+
+## Step 2: Classify the Task
 
 ### Mode Selection
 
@@ -33,23 +41,25 @@ schema_builder, skill_builder, document_builder, table_builder
 ### Clarification Questions
 
 Set needs_clarification=True when:
-- The task is vague (e.g., "create a database" without table details)
-- Ambiguous (could mean create new OR modify existing)
-- Missing critical information (table names, field types, purpose)
+- The task is extremely vague (e.g., just "create a database" with zero context)
+- Ambiguous AND context doesn't resolve it (e.g., multiple tables with similar names)
 - User might regret the action if assumptions are wrong
 
 Do NOT ask clarifying questions when:
+- Context shows only one matching resource (e.g., one database, one table with that name)
+- The user provides detailed content (questionnaire, form, document) - proceed with planning
+- Details can be reasonably inferred from the gathered context
 - All necessary details are provided
 - The action is clearly specified and reversible
 - It's a simple query/read operation
 
+**Use the gathered context and agent descriptions to make informed decisions.** Don't ask questions when the answer is obvious from what exists.
+
 ### Target Agent Selection
 
-- **schema_builder**: Database structure, tables, fields, relationships
-- **skill_builder**: AI skill configuration, instructions, inputs/outputs
-- **document_builder**: Rich text documents, content editing
-- **table_builder**: Quick single-field operations
-- **none**: Multiple agents needed or unclear which to use
+Use the agent names from "Available Agents" above. Set target_agent to:
+- The agent name if the task clearly matches one agent's domain
+- null/none if multiple agents are needed or it's unclear which to use
 
 ### Question Guidelines
 
@@ -61,4 +71,5 @@ When asking questions:
 
 ## Your Task
 
-Analyze the user's request and call report_task_classification with your analysis.
+1. First gather context using the tools above
+2. Then call report_task_classification with your analysis

@@ -13,7 +13,7 @@ The classifier determines:
 
 import logging
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from smolagents import ToolCallingAgent
 
@@ -51,19 +51,25 @@ class TaskClassifier:
     to the user before proceeding with execution.
     """
 
-    def __init__(self, model_provider: ModelProvider):
+    def __init__(
+        self,
+        model_provider: ModelProvider,
+        context_tools: Optional[List[Any]] = None,
+    ):
         """
         Initialize the task classifier.
 
         Args:
             model_provider: Provider for LLM access
+            context_tools: Tools for gathering context (database_crud, table_crud)
         """
         self.model_provider = model_provider
+        self.context_tools = context_tools or []
 
     def classify(
         self,
         task: str,
-        available_agents: Optional[List[str]] = None,
+        available_agents: Optional[List[Dict[str, Any]]] = None,
         context: Optional[str] = None,
         org_model: Optional[str] = None,
     ) -> TaskClassification:
@@ -75,7 +81,7 @@ class TaskClassifier:
 
         Args:
             task: The user's task/request text
-            available_agents: Names of available managed agents
+            available_agents: Agent info dicts with 'name' and 'description' keys
             context: Additional context (e.g., existing databases)
             org_model: Organization model ID for model resolution hierarchy
 
@@ -91,10 +97,15 @@ class TaskClassifier:
             # Use resolved model from organization hierarchy
             model_id = self.model_provider.resolve_model_selection(org_model=org_model)
             model = self.model_provider.get_model(model_id=model_id)
+
+            # Build tools list: context tools + classifier tool
+            tools = list(self.context_tools) + [tool]
+            logger.info(f"🔍 Classifier has {len(self.context_tools)} context tools")
+
             classifier = ToolCallingAgent(
-                tools=[tool],
+                tools=tools,
                 model=model,
-                max_steps=2,  # Plan + tool call
+                max_steps=4,  # Allow context gathering + classify
             )
             classifier.run(prompt)
 
@@ -123,7 +134,7 @@ class TaskClassifier:
     def _build_prompt(
         self,
         task: str,
-        available_agents: Optional[List[str]],
+        available_agents: Optional[List[Dict[str, Any]]],
         context: Optional[str],
     ) -> str:
         """Build the classification prompt using jinja template."""

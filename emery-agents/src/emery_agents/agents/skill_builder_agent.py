@@ -124,6 +124,13 @@ def create_skill_builder_agent(
         "Use when user wants to update skill name, description, instructions, "
         "inputs, outputs, tools, or model. Proposes changes and waits for approval."
     )
+    agent.capabilities = (
+        "- Configures AI skills (agent definitions) with instructions, inputs, outputs, tools\n"
+        "- Reads existing skills to understand current configuration\n"
+        "- Updates skill settings (name, description, instructions, model)\n"
+        "- Manages input/output definitions\n"
+        "- Proposes changes and waits for user approval before applying"
+    )
 
     logger.info(f"✨ Created Skill Builder agent (CodeAgent) with planning_interval=2")
     logger.info(f"   Tools: {[t.name for t in tools]}")

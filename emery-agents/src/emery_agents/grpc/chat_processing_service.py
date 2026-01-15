@@ -1888,7 +1888,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     yield {
                         "type": "awaiting_input",
                         "data": {
-                            "input_type": "clarifying_questions",
+                            "input_type": "question",  # Use 'question' - frontend doesn't have 'clarifying_questions'
                             "title": "Clarification Needed",
                             "content": questions_content,
                             "options": [],  # Free-form response expected

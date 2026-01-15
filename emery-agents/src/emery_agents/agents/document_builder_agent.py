@@ -122,6 +122,12 @@ def create_document_builder_agent(
         "add sections, format text, or restructure documents. "
         "ALWAYS use this for any document-related task."
     )
+    agent.capabilities = (
+        "- Creates and edits rich text documents stored in table fields\n"
+        "- Handles markdown formatting and structure\n"
+        "- Works with document-type fields in tables\n"
+        "- Can add sections, reformat content, and restructure documents"
+    )
 
     logger.info(f"✨ Created Document Builder agent (CodeAgent) with planning_interval=2")
     logger.info(f"   Tools: {[t.name for t in tools]}")

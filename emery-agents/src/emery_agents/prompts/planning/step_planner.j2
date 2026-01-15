@@ -20,7 +20,14 @@ Emery is a dynamic database and workflow platform. Users can:
 
 {% if managed_agents %}
 {% for agent in managed_agents %}
-- **{{ agent.name }}**: {{ agent.description }}
+### {{ agent.name }}
+{{ agent.description }}
+{% if agent.capabilities %}
+
+**Capabilities:**
+{{ agent.capabilities }}
+{% endif %}
+
 {% endfor %}
 {% else %}
 | Agent | Use For |

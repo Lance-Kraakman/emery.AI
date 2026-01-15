@@ -286,7 +286,10 @@ class ExecutionCoordinator:
         # LLM-based task classifier (replaces string matching)
         self._task_classifier: Optional[TaskClassifier] = None
         if model_provider:
-            self._task_classifier = TaskClassifier(model_provider)
+            self._task_classifier = TaskClassifier(
+                model_provider=model_provider,
+                context_tools=self._context_tools,
+            )
 
         # Store model_provider for recovery analysis (via plan_service)
         self._model_provider = model_provider
@@ -420,14 +423,17 @@ class ExecutionCoordinator:
                 reasoning="No classifier configured",
             )
 
-        # Get agent names for classification context
-        # ManagedAgent protocol guarantees .name attribute exists
-        available_agent_names: List[str] = [a.name for a in managed_agents]
+        # Get agent info for classification context
+        # ManagedAgent protocol guarantees .name and .description attributes exist
+        available_agents_info: List[Dict[str, str]] = [
+            {"name": a.name, "description": a.description}
+            for a in managed_agents
+        ]
 
         # Run LLM-based classification with resolved model
         return self._task_classifier.classify(
             task=task,
-            available_agents=available_agent_names,
+            available_agents=available_agents_info,
             context=context,
             org_model=self._org_model,
         )

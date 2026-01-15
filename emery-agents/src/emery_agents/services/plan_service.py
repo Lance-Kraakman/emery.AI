@@ -107,7 +107,7 @@ class PlanService:
             logger.info(f"📋 Planner has {len(context_tools)} context-gathering tools")
         planner_tools.append(plan_tool)
 
-        # Extract agent info for template (names + descriptions)
+        # Extract agent info for template (names + descriptions + capabilities)
         # We pass info to template but NOT actual agents to planner
         # This prevents planner from trying to execute agents
         agent_info = []
@@ -115,6 +115,7 @@ class PlanService:
             agent_info.append({
                 "name": getattr(agent, "name", "unknown"),
                 "description": getattr(agent, "description", ""),
+                "capabilities": getattr(agent, "capabilities", ""),
             })
 
         # Build prompt using Jinja template

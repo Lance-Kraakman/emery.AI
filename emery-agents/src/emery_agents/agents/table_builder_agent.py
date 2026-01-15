@@ -73,6 +73,12 @@ def create_table_builder_agent(
         "Use for quick schema changes to a specific table. "
         "Does NOT design schemas - use schema_builder for complex design."
     )
+    agent.capabilities = (
+        "- Quick single-field operations (add field, delete field, rename)\n"
+        "- Autonomous execution (no approval needed for simple changes)\n"
+        "- Use for targeted changes to existing tables\n"
+        "- Does NOT design schemas - delegates complex work to schema_builder"
+    )
 
     logger.info(f"✨ Created Table Builder agent (autonomous CodeAgent)")
     logger.info(f"   Tools: {[t.name for t in tools]}")

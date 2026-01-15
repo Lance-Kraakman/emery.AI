@@ -146,6 +146,14 @@ def create_schema_builder_agent(
         "Gathers context first, creates detailed field-by-field plan, "
         "waits for approval, then batch creates. Use for complex schema design."
     )
+    agent.capabilities = (
+        "- Interprets forms, questionnaires, and documents into structured schemas\n"
+        "- Knows field types: boolean (yes/no questions), single-select (pick one from list), "
+        "multi-select (pick multiple), text, number, date, email, phone, relation\n"
+        "- Gathers context first (lists existing databases/tables)\n"
+        "- Creates detailed field-by-field plan for user approval\n"
+        "- Handles batch creation after approval"
+    )
 
     logger.info(f"✨ Created Schema Builder agent (native HITL)")
     logger.info(f"   planning_interval=3 (plan at steps 1, 4, 7...)")
