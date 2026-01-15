@@ -66,6 +66,11 @@ from ..services.execution_coordinator import (
     ExecutionCompletedEvent,
     DirectExecutionStartedEvent,
     AwaitingClarificationEvent,
+    # Recovery events (confidence-based error handling)
+    RecoveryAnalysisEvent,
+    AutoFixStartedEvent,
+    AutoFixCompletedEvent,
+    RecoveryPlanProposedEvent,
 )
 from ..agents.evaluator_agent import create_evaluator_factory
 from ..models.plan import Plan, PlanStatus, create_plan
@@ -2161,6 +2166,67 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 "content": f"All steps completed {status}",
                 "metadata": {"success": str(event.success)},
                 "step_index": 999
+            }
+
+        # Recovery events (confidence-based error handling)
+        elif isinstance(event, RecoveryAnalysisEvent):
+            confidence_pct = f"{event.confidence:.0%}"
+            return {
+                "type": "step_progress",
+                "step_type": "REASONING",
+                "step_name": f"Recovery Analysis ({confidence_pct} confidence)",
+                "content": f"Analyzing error for step {event.step_id}",
+                "metadata": {
+                    "type": "recovery_analysis",
+                    "step_id": event.step_id,
+                    "confidence": str(event.confidence),
+                },
+                "step_index": step_index
+            }
+
+        elif isinstance(event, AutoFixStartedEvent):
+            confidence_pct = f"{event.confidence:.0%}"
+            return {
+                "type": "step_progress",
+                "step_type": "ACTION",
+                "step_name": f"Auto-fixing ({confidence_pct} confidence)",
+                "content": event.fix_description,
+                "metadata": {
+                    "type": "auto_fix_started",
+                    "step_id": event.step_id,
+                    "confidence": str(event.confidence),
+                },
+                "step_index": step_index
+            }
+
+        elif isinstance(event, AutoFixCompletedEvent):
+            return {
+                "type": "step_progress",
+                "step_type": "ACTION",
+                "step_name": "Auto-fix Completed",
+                "content": event.result,
+                "metadata": {
+                    "type": "auto_fix_completed",
+                    "step_id": event.step_id,
+                },
+                "step_index": step_index
+            }
+
+        elif isinstance(event, RecoveryPlanProposedEvent):
+            # Medium confidence: Show recovery plan for user approval
+            confidence_pct = f"{event.confidence:.0%}"
+            return {
+                "type": "awaiting_input",
+                "data": {
+                    "input_type": "recovery_approval",
+                    "title": f"Recovery Plan ({confidence_pct} confidence)",
+                    "content": f"**Proposed fix:** {event.fix_description}\n\nDo you want to proceed with this fix?",
+                    "options": [
+                        {"id": "approve", "label": "Approve Fix", "description": "Execute the recovery action"},
+                        {"id": "skip", "label": "Skip", "description": "Skip this step and continue"},
+                    ],
+                    "plan_json": ""
+                }
             }
 
         return None  # Unknown event type

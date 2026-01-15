@@ -26,6 +26,8 @@ from emery_agents.models.plan import (
 from emery_agents.models.task_ledger import TaskLedger
 from emery_agents.models.context_mapping import ResolvedContext
 from emery_agents.tools.plan_output_tool import PlanOutputTool
+from emery_agents.tools.recovery_output_tool import RecoveryOutputTool
+from emery_agents.prompts import render_template
 from .protocols import ModelProvider, GRPCClient, Tool
 
 logger = logging.getLogger(__name__)
@@ -116,7 +118,6 @@ class PlanService:
             })
 
         # Build prompt using Jinja template
-        from ..prompts import render_template
         prompt = render_template(
             "planning/step_planner.j2",
             task=basic_instructions,
@@ -451,9 +452,6 @@ class PlanService:
                 reasoning="No model provider available for analysis",
                 questions=["How would you like to fix this step?"],
             )
-
-        from ..tools.recovery_output_tool import RecoveryOutputTool
-        from ..prompts import render_template
 
         recovery_tool = RecoveryOutputTool()
 
