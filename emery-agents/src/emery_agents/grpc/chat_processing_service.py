@@ -24,6 +24,7 @@ from emery_agents.agents.skill_builder_agent import create_skill_builder_agent
 from emery_agents.agents.document_builder_agent import create_document_builder_agent
 from emery_agents.agents.table_builder_agent import create_table_builder_agent
 from emery_agents.agents.schema_builder_agent import create_schema_builder_agent
+from emery_agents.agents.research_agent import create_research_agent
 from emery_agents.clients import HuggingFaceInferenceClient
 from emery_agents.tools.crud_tools import load_skill_crud, load_document_crud
 from emery_agents.services.tool_provider import ToolProvider
@@ -742,6 +743,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     tool_provider=tool_provider,
                     org_model=org_model
                 )
+                research_agent = self._create_research_agent(
+                    tool_provider=tool_provider,
+                    org_model=org_model
+                )
 
                 # Create ToolCallingAgent with managed agents
                 # AIDEV-NOTE: InterruptAwareToolCallingAgent sets interrupt_switch=True
@@ -751,7 +756,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     smolagents_tools,
                     org_model=org_model,
                     has_images=has_images,
-                    managed_agents=[skill_builder_agent, document_builder_agent, table_builder_agent, schema_builder_agent],
+                    managed_agents=[skill_builder_agent, document_builder_agent, table_builder_agent, schema_builder_agent, research_agent],
                     session_attachments=file_attachments  # Current message files for initial agent context
                 )
 
@@ -1445,6 +1450,29 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         logger.info("✨ Created Schema Builder agent (HITL) with ToolExecutor sub-agent")
         return schema_builder
+
+    def _create_research_agent(
+        self,
+        tool_provider: ToolProvider,
+        org_model: Optional[str] = None,
+    ) -> ToolCallingAgent:
+        """
+        Create Research agent for web search and information gathering.
+
+        Research agent is READ-ONLY - no HITL approval needed.
+        Uses DuckDuckGoSearchTool and VisitWebpageTool.
+        """
+        model = self.model_provider.get_model(
+            self.model_provider.resolve_model_selection(org_model=org_model)
+        )
+
+        research_agent = create_research_agent(
+            model=model,
+            max_steps=10,
+        )
+
+        logger.info("✨ Created Research agent (read-only)")
+        return research_agent
 
     def _extract_user_api_key_from_tools(self, tools: List['agent_worker_pb2.ToolConfig']) -> Optional[str]:
         """

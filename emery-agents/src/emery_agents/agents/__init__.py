@@ -22,6 +22,7 @@ from .evaluator_agent import (
     create_evaluator_agent,
     create_evaluator_factory,
 )
+from .research_agent import create_research_agent
 from .stateful_managed_agent import StatefulManagedAgent
 from .interrupt_aware_agent import InterruptAwareToolCallingAgent, InterruptAwareCodeAgent
 
@@ -32,6 +33,7 @@ __all__ = [
     "EvaluationTool",
     "create_evaluator_agent",
     "create_evaluator_factory",
+    "create_research_agent",
     "StatefulManagedAgent",
     "InterruptAwareToolCallingAgent",
     "InterruptAwareCodeAgent",
