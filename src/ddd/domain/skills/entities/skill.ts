@@ -81,6 +81,59 @@ export interface LoopConfig {
   maxIterations?: number;                // Safety limit to prevent infinite loops (default: 100)
 }
 
+// =============================================================================
+// Stored Plan Types (for autonomous execution)
+// =============================================================================
+
+/**
+ * Stored sub-plan from cascading planning
+ * Generated when a managed agent creates detailed execution steps
+ */
+export interface StoredSubPlan {
+  agentName: string;
+  goal: string;
+  steps: StoredPlanStep[];
+  planningObservations?: string;
+}
+
+/**
+ * Individual step within a stored plan
+ * Contains execution details without runtime state (status, result, error)
+ */
+export interface StoredPlanStep {
+  stepId: string;
+  description: string;
+  toolCall?: string;           // e.g., "row_crud:read", "tool_executor"
+  parameters?: Record<string, any>;
+  contextTables?: string[];
+  targetAgent?: string;        // Managed agent for routing
+  subPlan?: StoredSubPlan;     // From cascading planning
+}
+
+/**
+ * Stored execution plan for autonomous execution
+ *
+ * Contains the execution blueprint from a successful HITL planning session.
+ * When present on an agentic node, execution skips HITL and runs autonomously.
+ *
+ * Matches Python Plan model structure (without runtime fields like status, result, error)
+ */
+export interface StoredPlan {
+  id: string;
+  goal: string;
+  basicInstructions: string;
+  context?: string;            // Discovered databases, tables
+  analysis?: string;           // LLM reasoning about what to do
+  steps: StoredPlanStep[];
+  version: number;
+  generatedAt: string;
+  approvedAt?: string;
+}
+
+// =============================================================================
+// Step Configuration Types
+// =============================================================================
+
 /**
  * Agentic Step Configuration
  * Used when nodeType is 'agentic' - LLM with tools (smolagents)
@@ -90,6 +143,8 @@ export interface AgenticStepConfig {
   tools: ToolConfig[];
   agentType?: 'tool_calling' | 'code_agent';
   model?: string | null;
+  /** Stored execution plan for autonomous execution */
+  plan?: StoredPlan;
 }
 
 /**

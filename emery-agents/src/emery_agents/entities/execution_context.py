@@ -97,6 +97,11 @@ class ExecutionContext:
     # Import here to avoid circular dependency
     tool_provider: Optional[Any] = None  # Type: Optional[ToolProvider]
 
+    # Stored plan for autonomous execution (passed by entry point)
+    # When set with mode=AUTONOMOUS, coordinator executes this plan directly
+    # Type: Optional[Plan] - using Any to avoid circular import
+    plan: Optional[Any] = None
+
     @property
     def is_autonomous(self) -> bool:
         """Check if execution is autonomous (skill-based, no HITL)."""
@@ -133,4 +138,5 @@ class ExecutionContext:
             resolved_context=self.resolved_context,
             tool_mode=self.tool_mode,
             tool_provider=self.tool_provider,  # Shared reference (not copied)
+            plan=self.plan,  # Shared reference (not copied)
         )

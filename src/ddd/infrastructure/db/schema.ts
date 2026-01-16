@@ -1081,6 +1081,10 @@ export const skills = pgTable("skills", {
     }>;
   }>(),
 
+  // NOTE: Stored plans for autonomous execution are stored in steps[].agenticConfig.plan
+  // When saving a plan to executionType='agentic' skills, they are auto-converted to
+  // single-node DAGs (executionType='agent') with the plan in the agentic step.
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

@@ -253,6 +253,47 @@ class Plan:
             "analysis": self.analysis,
         }
 
+    def to_stored_dict(self) -> Dict[str, Any]:
+        """Convert Plan to StoredPlan format for persistence.
+
+        Strips runtime fields (status, result, error) keeping only
+        the execution blueprint. Used when saving plans to skills.
+        """
+        return {
+            "id": self.id,
+            "goal": self.goal,
+            "basicInstructions": self.basic_instructions,
+            "context": self.context,
+            "analysis": self.analysis,
+            "steps": [self._step_to_stored(s) for s in self.steps],
+            "version": self.version,
+            "generatedAt": self.generated_at.isoformat() if self.generated_at else None,
+            "approvedAt": self.approved_at.isoformat() if self.approved_at else None,
+        }
+
+    def _step_to_stored(self, step: PlanStep) -> Dict[str, Any]:
+        """Convert PlanStep to stored format (no runtime fields)."""
+        result = {
+            "stepId": step.step_id,
+            "description": step.description,
+        }
+        if step.tool_call:
+            result["toolCall"] = step.tool_call
+        if step.parameters:
+            result["parameters"] = step.parameters
+        if step.context_tables:
+            result["contextTables"] = step.context_tables
+        if step.target_agent:
+            result["targetAgent"] = step.target_agent
+        if step.sub_plan:
+            result["subPlan"] = {
+                "agentName": step.sub_plan.agent_name,
+                "goal": step.sub_plan.goal,
+                "steps": [self._step_to_stored(s) for s in step.sub_plan.steps],
+                "planningObservations": step.sub_plan.planning_observations,
+            }
+        return result
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Plan":
         """Create from dictionary."""

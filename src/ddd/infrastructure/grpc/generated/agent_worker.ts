@@ -520,6 +520,8 @@ export interface SkillStep {
     | undefined;
   /** UI state */
   isDisabled: boolean;
+  /** Agentic step configuration (for nodeType='agentic') */
+  agenticConfig: AgenticStepConfig | undefined;
 }
 
 export interface SkillStep_InputsEntry {
@@ -530,6 +532,90 @@ export interface SkillStep_InputsEntry {
 export interface SkillStep_OutputsEntry {
   key: string;
   value: string;
+}
+
+/**
+ * Configuration for agentic step execution (nodeType='agentic')
+ * AIDEV-NOTE: plan field enables autonomous execution - when present, HITL is bypassed
+ */
+export interface AgenticStepConfig {
+  /** Instructions for the agent */
+  instructions: string;
+  /** Tools available for this agentic step */
+  tools: ToolConfig[];
+  /** "tool_calling" (default) or "code_agent" */
+  agentType: string;
+  /** Optional model override */
+  model: string;
+  /** Stored execution plan for autonomous execution */
+  plan: StoredPlan | undefined;
+}
+
+/**
+ * Stored execution plan for autonomous execution
+ * AIDEV-NOTE: When present on agentic step, execution skips HITL and runs autonomously.
+ * Contains execution blueprint from successful HITL planning session.
+ */
+export interface StoredPlan {
+  /** Plan identifier */
+  id: string;
+  /** High-level goal from user request */
+  goal: string;
+  /** Original instructions */
+  basicInstructions: string;
+  /** Discovered context (databases, tables) */
+  context: string;
+  /** LLM reasoning about approach */
+  analysis: string;
+  /** Execution steps */
+  steps: StoredPlanStep[];
+  /** Plan version */
+  version: number;
+  /** When plan was generated (ISO timestamp) */
+  generatedAt: string;
+  /** When plan was approved (ISO timestamp) */
+  approvedAt: string;
+}
+
+/**
+ * Individual step within a stored plan
+ * Contains execution details without runtime state (status, result, error)
+ */
+export interface StoredPlanStep {
+  /** Step identifier */
+  stepId: string;
+  /** Step description */
+  description: string;
+  /** Tool to call (e.g., "row_crud:read") */
+  toolCall: string;
+  /** Tool parameters */
+  parameters: { [key: string]: string };
+  /** Tables this step needs access to */
+  contextTables: string[];
+  /** Managed agent for routing (e.g., "schema_builder") */
+  targetAgent: string;
+  /** Sub-plan from cascading planning */
+  subPlan: StoredSubPlan | undefined;
+}
+
+export interface StoredPlanStep_ParametersEntry {
+  key: string;
+  value: string;
+}
+
+/**
+ * Sub-plan from cascading planning
+ * Generated when a managed agent creates detailed execution steps
+ */
+export interface StoredSubPlan {
+  /** Target agent name */
+  agentName: string;
+  /** Sub-goal for this agent */
+  goal: string;
+  /** Sub-plan steps */
+  steps: StoredPlanStep[];
+  /** Observations from planning phase */
+  planningObservations: string;
 }
 
 /** Configuration for operation execution (direct model invocation without LLM orchestration) */
@@ -3568,6 +3654,7 @@ function createBaseSkillStep(): SkillStep {
     toolExecutionConfig: undefined,
     taskModelConfig: undefined,
     isDisabled: false,
+    agenticConfig: undefined,
   };
 }
 
@@ -3635,6 +3722,9 @@ export const SkillStep: MessageFns<SkillStep> = {
     }
     if (message.isDisabled !== false) {
       writer.uint32(168).bool(message.isDisabled);
+    }
+    if (message.agenticConfig !== undefined) {
+      AgenticStepConfig.encode(message.agenticConfig, writer.uint32(178).fork()).join();
     }
     return writer;
   },
@@ -3820,6 +3910,14 @@ export const SkillStep: MessageFns<SkillStep> = {
           message.isDisabled = reader.bool();
           continue;
         }
+        case 22: {
+          if (tag !== 178) {
+            break;
+          }
+
+          message.agenticConfig = AgenticStepConfig.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3870,6 +3968,7 @@ export const SkillStep: MessageFns<SkillStep> = {
         : undefined,
       taskModelConfig: isSet(object.taskModelConfig) ? TaskModelConfig.fromJSON(object.taskModelConfig) : undefined,
       isDisabled: isSet(object.isDisabled) ? globalThis.Boolean(object.isDisabled) : false,
+      agenticConfig: isSet(object.agenticConfig) ? AgenticStepConfig.fromJSON(object.agenticConfig) : undefined,
     };
   },
 
@@ -3950,6 +4049,9 @@ export const SkillStep: MessageFns<SkillStep> = {
     if (message.isDisabled !== false) {
       obj.isDisabled = message.isDisabled;
     }
+    if (message.agenticConfig !== undefined) {
+      obj.agenticConfig = AgenticStepConfig.toJSON(message.agenticConfig);
+    }
     return obj;
   },
 
@@ -4003,6 +4105,9 @@ export const SkillStep: MessageFns<SkillStep> = {
       ? TaskModelConfig.fromPartial(object.taskModelConfig)
       : undefined;
     message.isDisabled = object.isDisabled ?? false;
+    message.agenticConfig = (object.agenticConfig !== undefined && object.agenticConfig !== null)
+      ? AgenticStepConfig.fromPartial(object.agenticConfig)
+      : undefined;
     return message;
   },
 };
@@ -4155,6 +4260,706 @@ export const SkillStep_OutputsEntry: MessageFns<SkillStep_OutputsEntry> = {
     const message = createBaseSkillStep_OutputsEntry();
     message.key = object.key ?? "";
     message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseAgenticStepConfig(): AgenticStepConfig {
+  return { instructions: "", tools: [], agentType: "", model: "", plan: undefined };
+}
+
+export const AgenticStepConfig: MessageFns<AgenticStepConfig> = {
+  encode(message: AgenticStepConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.instructions !== "") {
+      writer.uint32(10).string(message.instructions);
+    }
+    for (const v of message.tools) {
+      ToolConfig.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.agentType !== "") {
+      writer.uint32(26).string(message.agentType);
+    }
+    if (message.model !== "") {
+      writer.uint32(34).string(message.model);
+    }
+    if (message.plan !== undefined) {
+      StoredPlan.encode(message.plan, writer.uint32(42).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgenticStepConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAgenticStepConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.instructions = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.tools.push(ToolConfig.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.agentType = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.model = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.plan = StoredPlan.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AgenticStepConfig {
+    return {
+      instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
+      tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
+      agentType: isSet(object.agentType) ? globalThis.String(object.agentType) : "",
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
+      plan: isSet(object.plan) ? StoredPlan.fromJSON(object.plan) : undefined,
+    };
+  },
+
+  toJSON(message: AgenticStepConfig): unknown {
+    const obj: any = {};
+    if (message.instructions !== "") {
+      obj.instructions = message.instructions;
+    }
+    if (message.tools?.length) {
+      obj.tools = message.tools.map((e) => ToolConfig.toJSON(e));
+    }
+    if (message.agentType !== "") {
+      obj.agentType = message.agentType;
+    }
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
+    if (message.plan !== undefined) {
+      obj.plan = StoredPlan.toJSON(message.plan);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AgenticStepConfig>, I>>(base?: I): AgenticStepConfig {
+    return AgenticStepConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgenticStepConfig>, I>>(object: I): AgenticStepConfig {
+    const message = createBaseAgenticStepConfig();
+    message.instructions = object.instructions ?? "";
+    message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
+    message.agentType = object.agentType ?? "";
+    message.model = object.model ?? "";
+    message.plan = (object.plan !== undefined && object.plan !== null)
+      ? StoredPlan.fromPartial(object.plan)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseStoredPlan(): StoredPlan {
+  return {
+    id: "",
+    goal: "",
+    basicInstructions: "",
+    context: "",
+    analysis: "",
+    steps: [],
+    version: 0,
+    generatedAt: "",
+    approvedAt: "",
+  };
+}
+
+export const StoredPlan: MessageFns<StoredPlan> = {
+  encode(message: StoredPlan, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.goal !== "") {
+      writer.uint32(18).string(message.goal);
+    }
+    if (message.basicInstructions !== "") {
+      writer.uint32(26).string(message.basicInstructions);
+    }
+    if (message.context !== "") {
+      writer.uint32(34).string(message.context);
+    }
+    if (message.analysis !== "") {
+      writer.uint32(42).string(message.analysis);
+    }
+    for (const v of message.steps) {
+      StoredPlanStep.encode(v!, writer.uint32(50).fork()).join();
+    }
+    if (message.version !== 0) {
+      writer.uint32(56).int32(message.version);
+    }
+    if (message.generatedAt !== "") {
+      writer.uint32(66).string(message.generatedAt);
+    }
+    if (message.approvedAt !== "") {
+      writer.uint32(74).string(message.approvedAt);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StoredPlan {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStoredPlan();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.id = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.goal = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.basicInstructions = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.context = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.analysis = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.steps.push(StoredPlanStep.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.version = reader.int32();
+          continue;
+        }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.generatedAt = reader.string();
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.approvedAt = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StoredPlan {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      goal: isSet(object.goal) ? globalThis.String(object.goal) : "",
+      basicInstructions: isSet(object.basicInstructions) ? globalThis.String(object.basicInstructions) : "",
+      context: isSet(object.context) ? globalThis.String(object.context) : "",
+      analysis: isSet(object.analysis) ? globalThis.String(object.analysis) : "",
+      steps: globalThis.Array.isArray(object?.steps) ? object.steps.map((e: any) => StoredPlanStep.fromJSON(e)) : [],
+      version: isSet(object.version) ? globalThis.Number(object.version) : 0,
+      generatedAt: isSet(object.generatedAt) ? globalThis.String(object.generatedAt) : "",
+      approvedAt: isSet(object.approvedAt) ? globalThis.String(object.approvedAt) : "",
+    };
+  },
+
+  toJSON(message: StoredPlan): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.goal !== "") {
+      obj.goal = message.goal;
+    }
+    if (message.basicInstructions !== "") {
+      obj.basicInstructions = message.basicInstructions;
+    }
+    if (message.context !== "") {
+      obj.context = message.context;
+    }
+    if (message.analysis !== "") {
+      obj.analysis = message.analysis;
+    }
+    if (message.steps?.length) {
+      obj.steps = message.steps.map((e) => StoredPlanStep.toJSON(e));
+    }
+    if (message.version !== 0) {
+      obj.version = Math.round(message.version);
+    }
+    if (message.generatedAt !== "") {
+      obj.generatedAt = message.generatedAt;
+    }
+    if (message.approvedAt !== "") {
+      obj.approvedAt = message.approvedAt;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StoredPlan>, I>>(base?: I): StoredPlan {
+    return StoredPlan.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StoredPlan>, I>>(object: I): StoredPlan {
+    const message = createBaseStoredPlan();
+    message.id = object.id ?? "";
+    message.goal = object.goal ?? "";
+    message.basicInstructions = object.basicInstructions ?? "";
+    message.context = object.context ?? "";
+    message.analysis = object.analysis ?? "";
+    message.steps = object.steps?.map((e) => StoredPlanStep.fromPartial(e)) || [];
+    message.version = object.version ?? 0;
+    message.generatedAt = object.generatedAt ?? "";
+    message.approvedAt = object.approvedAt ?? "";
+    return message;
+  },
+};
+
+function createBaseStoredPlanStep(): StoredPlanStep {
+  return {
+    stepId: "",
+    description: "",
+    toolCall: "",
+    parameters: {},
+    contextTables: [],
+    targetAgent: "",
+    subPlan: undefined,
+  };
+}
+
+export const StoredPlanStep: MessageFns<StoredPlanStep> = {
+  encode(message: StoredPlanStep, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.stepId !== "") {
+      writer.uint32(10).string(message.stepId);
+    }
+    if (message.description !== "") {
+      writer.uint32(18).string(message.description);
+    }
+    if (message.toolCall !== "") {
+      writer.uint32(26).string(message.toolCall);
+    }
+    Object.entries(message.parameters).forEach(([key, value]) => {
+      StoredPlanStep_ParametersEntry.encode({ key: key as any, value }, writer.uint32(34).fork()).join();
+    });
+    for (const v of message.contextTables) {
+      writer.uint32(42).string(v!);
+    }
+    if (message.targetAgent !== "") {
+      writer.uint32(50).string(message.targetAgent);
+    }
+    if (message.subPlan !== undefined) {
+      StoredSubPlan.encode(message.subPlan, writer.uint32(58).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StoredPlanStep {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStoredPlanStep();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.stepId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.description = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.toolCall = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          const entry4 = StoredPlanStep_ParametersEntry.decode(reader, reader.uint32());
+          if (entry4.value !== undefined) {
+            message.parameters[entry4.key] = entry4.value;
+          }
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.contextTables.push(reader.string());
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.targetAgent = reader.string();
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.subPlan = StoredSubPlan.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StoredPlanStep {
+    return {
+      stepId: isSet(object.stepId) ? globalThis.String(object.stepId) : "",
+      description: isSet(object.description) ? globalThis.String(object.description) : "",
+      toolCall: isSet(object.toolCall) ? globalThis.String(object.toolCall) : "",
+      parameters: isObject(object.parameters)
+        ? Object.entries(object.parameters).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+          acc[key] = String(value);
+          return acc;
+        }, {})
+        : {},
+      contextTables: globalThis.Array.isArray(object?.contextTables)
+        ? object.contextTables.map((e: any) => globalThis.String(e))
+        : [],
+      targetAgent: isSet(object.targetAgent) ? globalThis.String(object.targetAgent) : "",
+      subPlan: isSet(object.subPlan) ? StoredSubPlan.fromJSON(object.subPlan) : undefined,
+    };
+  },
+
+  toJSON(message: StoredPlanStep): unknown {
+    const obj: any = {};
+    if (message.stepId !== "") {
+      obj.stepId = message.stepId;
+    }
+    if (message.description !== "") {
+      obj.description = message.description;
+    }
+    if (message.toolCall !== "") {
+      obj.toolCall = message.toolCall;
+    }
+    if (message.parameters) {
+      const entries = Object.entries(message.parameters);
+      if (entries.length > 0) {
+        obj.parameters = {};
+        entries.forEach(([k, v]) => {
+          obj.parameters[k] = v;
+        });
+      }
+    }
+    if (message.contextTables?.length) {
+      obj.contextTables = message.contextTables;
+    }
+    if (message.targetAgent !== "") {
+      obj.targetAgent = message.targetAgent;
+    }
+    if (message.subPlan !== undefined) {
+      obj.subPlan = StoredSubPlan.toJSON(message.subPlan);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StoredPlanStep>, I>>(base?: I): StoredPlanStep {
+    return StoredPlanStep.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StoredPlanStep>, I>>(object: I): StoredPlanStep {
+    const message = createBaseStoredPlanStep();
+    message.stepId = object.stepId ?? "";
+    message.description = object.description ?? "";
+    message.toolCall = object.toolCall ?? "";
+    message.parameters = Object.entries(object.parameters ?? {}).reduce<{ [key: string]: string }>(
+      (acc, [key, value]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.String(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    message.contextTables = object.contextTables?.map((e) => e) || [];
+    message.targetAgent = object.targetAgent ?? "";
+    message.subPlan = (object.subPlan !== undefined && object.subPlan !== null)
+      ? StoredSubPlan.fromPartial(object.subPlan)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseStoredPlanStep_ParametersEntry(): StoredPlanStep_ParametersEntry {
+  return { key: "", value: "" };
+}
+
+export const StoredPlanStep_ParametersEntry: MessageFns<StoredPlanStep_ParametersEntry> = {
+  encode(message: StoredPlanStep_ParametersEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StoredPlanStep_ParametersEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStoredPlanStep_ParametersEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StoredPlanStep_ParametersEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: StoredPlanStep_ParametersEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StoredPlanStep_ParametersEntry>, I>>(base?: I): StoredPlanStep_ParametersEntry {
+    return StoredPlanStep_ParametersEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StoredPlanStep_ParametersEntry>, I>>(
+    object: I,
+  ): StoredPlanStep_ParametersEntry {
+    const message = createBaseStoredPlanStep_ParametersEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseStoredSubPlan(): StoredSubPlan {
+  return { agentName: "", goal: "", steps: [], planningObservations: "" };
+}
+
+export const StoredSubPlan: MessageFns<StoredSubPlan> = {
+  encode(message: StoredSubPlan, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentName !== "") {
+      writer.uint32(10).string(message.agentName);
+    }
+    if (message.goal !== "") {
+      writer.uint32(18).string(message.goal);
+    }
+    for (const v of message.steps) {
+      StoredPlanStep.encode(v!, writer.uint32(26).fork()).join();
+    }
+    if (message.planningObservations !== "") {
+      writer.uint32(34).string(message.planningObservations);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StoredSubPlan {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStoredSubPlan();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.agentName = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.goal = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.steps.push(StoredPlanStep.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.planningObservations = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StoredSubPlan {
+    return {
+      agentName: isSet(object.agentName) ? globalThis.String(object.agentName) : "",
+      goal: isSet(object.goal) ? globalThis.String(object.goal) : "",
+      steps: globalThis.Array.isArray(object?.steps) ? object.steps.map((e: any) => StoredPlanStep.fromJSON(e)) : [],
+      planningObservations: isSet(object.planningObservations) ? globalThis.String(object.planningObservations) : "",
+    };
+  },
+
+  toJSON(message: StoredSubPlan): unknown {
+    const obj: any = {};
+    if (message.agentName !== "") {
+      obj.agentName = message.agentName;
+    }
+    if (message.goal !== "") {
+      obj.goal = message.goal;
+    }
+    if (message.steps?.length) {
+      obj.steps = message.steps.map((e) => StoredPlanStep.toJSON(e));
+    }
+    if (message.planningObservations !== "") {
+      obj.planningObservations = message.planningObservations;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StoredSubPlan>, I>>(base?: I): StoredSubPlan {
+    return StoredSubPlan.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StoredSubPlan>, I>>(object: I): StoredSubPlan {
+    const message = createBaseStoredSubPlan();
+    message.agentName = object.agentName ?? "";
+    message.goal = object.goal ?? "";
+    message.steps = object.steps?.map((e) => StoredPlanStep.fromPartial(e)) || [];
+    message.planningObservations = object.planningObservations ?? "";
     return message;
   },
 };

@@ -111,6 +111,44 @@ export interface ExecutionSkill {
       queryLimit?: number;
       fieldMappings: ReadFieldMapping[];
     };
+    // Agentic step configuration (for nodeType='agentic')
+    agenticConfig?: {
+      instructions: string;
+      tools: Array<{ name: string; config?: Record<string, any> }>;
+      agentType?: string;
+      model?: string | null;
+      plan?: {
+        id: string;
+        goal: string;
+        basicInstructions: string;
+        context?: string;
+        analysis?: string;
+        steps: Array<{
+          stepId: string;
+          description: string;
+          toolCall?: string;
+          parameters?: Record<string, any>;
+          contextTables?: string[];
+          targetAgent?: string;
+          subPlan?: {
+            agentName: string;
+            goal: string;
+            steps: Array<{
+              stepId: string;
+              description: string;
+              toolCall?: string;
+              parameters?: Record<string, any>;
+              contextTables?: string[];
+              targetAgent?: string;
+            }>;
+            planningObservations?: string;
+          };
+        }>;
+        version: number;
+        generatedAt: string;
+        approvedAt?: string;
+      };
+    };
     // UI state
     isDisabled?: boolean;  // Step can be disabled without deletion
   }>;

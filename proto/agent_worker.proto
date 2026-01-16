@@ -251,6 +251,58 @@ message SkillStep {
   TaskModelConfig task_model_config = 19; // For operation steps
   // UI state
   bool is_disabled = 21;               // Step can be disabled without deletion
+  // Agentic step configuration (for nodeType='agentic')
+  AgenticStepConfig agentic_config = 22;
+}
+
+// Configuration for agentic step execution (nodeType='agentic')
+// AIDEV-NOTE: plan field enables autonomous execution - when present, HITL is bypassed
+message AgenticStepConfig {
+  string instructions = 1;             // Instructions for the agent
+  repeated ToolConfig tools = 2;       // Tools available for this agentic step
+  string agent_type = 3;               // "tool_calling" (default) or "code_agent"
+  string model = 4;                    // Optional model override
+  StoredPlan plan = 5;                 // Stored execution plan for autonomous execution
+}
+
+// =============================================================================
+// Stored Plan Types (for autonomous execution)
+// =============================================================================
+
+// Stored execution plan for autonomous execution
+// AIDEV-NOTE: When present on agentic step, execution skips HITL and runs autonomously.
+// Contains execution blueprint from successful HITL planning session.
+message StoredPlan {
+  string id = 1;                       // Plan identifier
+  string goal = 2;                     // High-level goal from user request
+  string basic_instructions = 3;       // Original instructions
+  string context = 4;                  // Discovered context (databases, tables)
+  string analysis = 5;                 // LLM reasoning about approach
+  repeated StoredPlanStep steps = 6;   // Execution steps
+  int32 version = 7;                   // Plan version
+  string generated_at = 8;             // When plan was generated (ISO timestamp)
+  string approved_at = 9;              // When plan was approved (ISO timestamp)
+}
+
+// Individual step within a stored plan
+// Contains execution details without runtime state (status, result, error)
+message StoredPlanStep {
+  string step_id = 1;                  // Step identifier
+  string description = 2;              // Step description
+  string tool_call = 3;                // Tool to call (e.g., "row_crud:read")
+  map<string, string> parameters = 4;  // Tool parameters
+  repeated string context_tables = 5;  // Tables this step needs access to
+  string target_agent = 6;             // Managed agent for routing (e.g., "schema_builder")
+  StoredSubPlan sub_plan = 7;          // Sub-plan from cascading planning
+}
+
+// Sub-plan from cascading planning
+// Generated when a managed agent creates detailed execution steps
+message StoredSubPlan {
+  string agent_name = 1;               // Target agent name
+  string goal = 2;                     // Sub-goal for this agent
+  repeated StoredPlanStep steps = 3;   // Sub-plan steps
+  string planning_observations = 4;    // Observations from planning phase
 }
 
 // Configuration for operation execution (direct model invocation without LLM orchestration)
