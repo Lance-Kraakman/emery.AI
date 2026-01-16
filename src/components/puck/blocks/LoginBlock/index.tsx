@@ -13,7 +13,7 @@ import { createLinkActionField, createVariableTextField, createRoleSelectorField
 import type { FourCornerRadius } from "@/components/puck/types/spacing-types";
 
 export type LoginBlockProps = {
-  mode: 'sign_in' | 'sign_up';
+  mode: 'sign_in' | 'sign_up' | 'dual';
   title: string;
   description: string;
   showGithub: boolean;
@@ -40,6 +40,7 @@ export const SignInSignUpBlock: ComponentConfig<LoginBlockProps> = {
       options: [
         { label: "Sign In", value: "sign_in" },
         { label: "Sign Up", value: "sign_up" },
+        { label: "Dual (with toggle)", value: "dual" },
       ],
     },
     title: createVariableTextField({ label: 'Title' }),

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { usePublicAppAuth } from "@/components/providers/PublicAppAuthProvider";
 import { SignInButton } from "@/components/auth/SignInButton";
 import { EmailSignInForm } from "@/components/auth/EmailSignInForm";
@@ -16,7 +16,7 @@ import { useInterpolatedText } from "@/components/puck/hooks/useInterpolatedText
 import { assignSignUpRole } from "@/app/actions/signup-role";
 
 export interface LoginBlockProps {
-  mode: 'sign_in' | 'sign_up';
+  mode: 'sign_in' | 'sign_up' | 'dual';
   title: string;
   description: string;
   showGithub: boolean;
@@ -48,14 +48,24 @@ export function LoginBlock({
   borderColor,
   radius,
 }: LoginBlockProps) {
+  // State for dual mode toggle
+  const [currentView, setCurrentView] = useState<'sign_in' | 'sign_up'>('sign_in');
+
   // Determine if this is sign-up mode for different UI text
-  const isSignUp = mode === 'sign_up';
+  const isSignUp = mode === 'sign_up' || (mode === 'dual' && currentView === 'sign_up');
   const theme = useTheme();
 
   // Get the signUpRoleId for auth components
   const signUpRoleId = isSignUp && defaultSignUpRole ? defaultSignUpRole.id : undefined;
+
+  // Use mode-aware default title when title is a default value
+  const defaultTitle = isSignUp ? "Create Account" : "Sign In";
+  const displayTitle = (title === "Sign In" || title === "Create Account" || !title)
+    ? defaultTitle
+    : title;
+
   // Interpolate variables in title and description
-  const interpolatedTitle = useInterpolatedText(title);
+  const interpolatedTitle = useInterpolatedText(displayTitle);
   const interpolatedDescription = useInterpolatedText(description);
 
   // Compute borderRadius shorthand string for CSS and child components
@@ -261,6 +271,40 @@ export function LoginBlock({
               style={{ color: 'var(--theme-text-muted, #64748b)' }}
             >
               No login providers configured. Please enable at least one login option.
+            </p>
+          )}
+
+          {/* Toggle link for dual mode */}
+          {mode === 'dual' && (
+            <p
+              className="text-center text-sm mt-4"
+              style={{ color: 'var(--theme-text-muted, #64748b)' }}
+            >
+              {currentView === 'sign_in' ? (
+                <>
+                  Don't have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView('sign_up')}
+                    className="font-medium hover:underline"
+                    style={{ color: buttonColor || 'var(--theme-primary, #2563eb)' }}
+                  >
+                    Sign up
+                  </button>
+                </>
+              ) : (
+                <>
+                  Already have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView('sign_in')}
+                    className="font-medium hover:underline"
+                    style={{ color: buttonColor || 'var(--theme-primary, #2563eb)' }}
+                  >
+                    Sign in
+                  </button>
+                </>
+              )}
             </p>
           )}
         </div>
