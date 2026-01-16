@@ -101,19 +101,19 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
         {/* Mode Toggle - non-destructive switching */}
         <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-lg h-8">
           <Button
-            variant={formData.executionType !== 'agent' ? 'secondary' : 'ghost'}
+            variant={formData.executionType !== 'agent' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setFormData({ ...formData, executionType: 'agentic' })}
-            className="h-7 px-2 gap-1"
+            className="h-7 px-2.5 gap-1.5"
           >
             <Sparkles className="h-3.5 w-3.5" />
             Agentic
           </Button>
           <Button
-            variant={formData.executionType === 'agent' ? 'secondary' : 'ghost'}
+            variant={formData.executionType === 'agent' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setFormData({ ...formData, executionType: 'agent' })}
-            className="h-7 px-2 gap-1"
+            className="h-7 px-2.5 gap-1.5"
           >
             <GitBranch className="h-3.5 w-3.5" />
             Workflow

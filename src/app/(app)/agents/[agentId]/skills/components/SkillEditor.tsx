@@ -6,7 +6,7 @@ import { X, Settings2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { InputDefinition, OutputDefinition, ToolConfigDTO } from '@/app/mappers/skill-mapper';
-import type { SkillStep, CanvasMetadata, SkillExecutionType } from '@/ddd/domain/skills/entities/skill';
+import type { SkillStep, CanvasMetadata, SkillExecutionType, StoredPlan } from '@/ddd/domain/skills/entities/skill';
 import type { FlowToStepsResult } from '@/components/workflow-canvas/utils/flow-converters';
 import type { WorkflowNode, WorkflowNodeData, WorkflowEdge } from '@/components/workflow-canvas/types';
 import type { WorkflowVariable } from '@/components/workflow-canvas/WorkflowVariableInput';
@@ -35,6 +35,8 @@ export interface SkillFormData {
   instructions?: string;
   tools?: ToolConfigDTO[];
   agentType?: string | null;
+  // Stored plan (for autonomous execution)
+  plan?: StoredPlan;
 }
 
 interface SkillEditorProps {
